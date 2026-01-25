@@ -1,8 +1,12 @@
+# StableProjectorz
+
 <p align="center">
   <img src="Assets/_gm/Art/Previews/StableProjectorz-opensource-preview-wide.png" width="100%" alt="StableProjectorz Banner" />
 </p>
 
-# 📘 StableProjectorz
+<p align="center">
+  <img src="Assets/_gm/Art/Previews/Github-title.png" width="100%" alt="StableProjectorz Banner" />
+</p>
 
 **StableProjectorz** is a tool for texturing 3D models using StableDiffusion.<br>
 It also supports generating 3D models from 2D images.<br>
