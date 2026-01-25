@@ -1,4 +1,4 @@
-<h1 align="center">StableProjectorz: Generation of 3D and textures via StableDiffusion</h1>
+<h1 align="center">StableProjectorz: A free tool for making 3D and textures via StableDiffusion</h1>
 
 <p align="center">
   <img src="Assets/_gm/Art/Previews/StableProjectorz-opensource-preview-wide.png" width="100%" alt="StableProjectorz Banner" />
