@@ -70,6 +70,7 @@ namespace spz {
 	        "Assets/_gm/Features/Camera/Projections/Tool_MultiprojMask_TextMaker.unity",
 	        "Assets/_gm/Features/StableDiffusion/Input Panel/Tool_PromptColorHighlighter.unity",
 	        "Assets/_gm/Features/3D Generate/Tool_Gen3D_MGR+Gen3D_API.unity",
+	        "Assets/_gm/Features/AddonSystem/Tool_AddonSystem.unity",
 	        "Assets/_gm/Features/Save Load Import Export/Tool_ImagesImportHelper.unity",
         
 	        // WebUI Data Fetchers

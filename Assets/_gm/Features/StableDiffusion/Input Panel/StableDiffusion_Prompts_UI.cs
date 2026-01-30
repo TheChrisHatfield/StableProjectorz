@@ -133,6 +133,25 @@ namespace spz {
 
 	    public string positivePrompt => StripColorTags(_positive_input.text);
 	    public string negativePrompt => StripColorTags(_negative_input.text);
+	    
+	    /// <summary>
+	    /// Set positive prompt (for add-on API)
+	    /// </summary>
+	    public void SetPositivePrompt(string prompt) {
+	        if (string.IsNullOrEmpty(prompt)) return;
+	        _positive_input.text = prompt;
+	        _posChanged_thisFrame = true;
+	    }
+	    
+	    /// <summary>
+	    /// Set negative prompt (for add-on API)
+	    /// </summary>
+	    public void SetNegativePrompt(string prompt) {
+	        if (_negative_input == null) return;
+	        if (string.IsNullOrEmpty(prompt)) return;
+	        _negative_input.text = prompt;
+	        _negChanged_thisFrame = true;
+	    }
 
 	    public Action<string,bool> Act_onTextTyped { get; set; } = null;//message,isPositive
 	    bool _invoking_onTextTyped_now = false;//helps avoid infinite recursion.

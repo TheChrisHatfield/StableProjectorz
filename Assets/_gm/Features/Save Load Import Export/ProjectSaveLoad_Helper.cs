@@ -19,6 +19,11 @@ namespace spz {
 	    // What user used, to save the project. 
 	    // We can re-use it for the next saving, so user doesn't have to type it again.
 	    string _last_saveFilepath = "";
+	    
+	    /// <summary>
+	    /// Get last saved project filepath (for add-on API)
+	    /// </summary>
+	    public string GetLastSaveFilepath() => _last_saveFilepath;
 
 
 	    public void SaveProject( Action<string> saveFinalTex,  Action<string> onResultMessage){

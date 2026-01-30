@@ -27,6 +27,14 @@ namespace spz {
 
 	    public int numTotalUnitsExisting() => _controlNet_units.Count;
 	    public int numActiveUnits() => _controlNet_units.Count(u => u.isActivated);
+	    
+	    /// <summary>
+	    /// Get ControlNet unit by index (for add-on API)
+	    /// </summary>
+	    public ControlNetUnit_UI GetUnit(int index) {
+	        if (index < 0 || index >= _controlNet_units.Count) return null;
+	        return _controlNet_units[index];
+	    }
 	    public bool Has_Active_Inpainting_CTRLUnit() =>  _controlNet_units.Any( u=> u.isActivated && u.isForInpaint() );
 
 	    public bool Has_Depth_CTRLUnit(bool onlyActive, bool only_if_validModel){
