@@ -74,7 +74,14 @@ The add-on system starts automatically when you launch StableProjectorz. You sho
 
 ```
 [Addon_SocketServer] Started listening on port 5555
-[Addon_HttpServer] Started HTTP server on port 5557
+[Addon_MGR] Python server started on port 5555
+[HTTP Server] Starting FastAPI server on http://127.0.0.1:5557
+[HTTP Server] API docs available at http://127.0.0.1:5557/docs
+```
+
+**Note:** The HTTP server is powered by FastAPI (Python). Make sure FastAPI dependencies are installed:
+```bash
+pip install -r StreamingAssets/AddonSystem/requirements.txt
 ```
 
 ### Step 2: Choose Your Method
@@ -236,6 +243,16 @@ except Exception as e:
 ```
 
 ## HTTP REST API Guide
+
+The HTTP REST API is powered by **FastAPI** (Python) and provides automatic interactive documentation. It's perfect for web dashboards, JavaScript applications, and integration with other tools.
+
+**Installation:** Install FastAPI dependencies:
+```bash
+pip install -r StreamingAssets/AddonSystem/requirements.txt
+```
+
+**Base URL:** `http://localhost:5557/api/v1`  
+**Interactive Docs:** `http://localhost:5557/docs` (Swagger UI) or `http://localhost:5557/redoc` (ReDoc)
 
 ### Base URL
 
