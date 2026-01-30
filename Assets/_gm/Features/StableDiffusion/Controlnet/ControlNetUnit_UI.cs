@@ -72,6 +72,22 @@ namespace spz {
 	    }
 
 	    public bool isForInpaint() => _dropdowns.HasString("inpaint");//does this unit help to reproduce image in masked areas.
+	    
+	    /// <summary>
+	    /// Get control weight (for add-on API)
+	    /// </summary>
+	    public float GetControlWeight() {
+	        return _controlWeight_slider != null ? _controlWeight_slider.value : 1f;
+	    }
+	    
+	    /// <summary>
+	    /// Set control weight (for add-on API)
+	    /// </summary>
+	    public void SetControlWeight(float weight) {
+	        if (_controlWeight_slider != null) {
+	            _controlWeight_slider.SetSliderValue(weight, invokeCallback: true);
+	        }
+	    }
 	    public bool isForDepth() => _dropdowns.HasString("depth") || _imgsDisplay._whatImageToSend ==WhatImageToSend_CTRLNET.Depth;
 	    public bool isForNormals() => _dropdowns.HasString("norm")|| _imgsDisplay._whatImageToSend==WhatImageToSend_CTRLNET.Normals;
 	    public bool isForColors() => _dropdowns.HasString("vert");
