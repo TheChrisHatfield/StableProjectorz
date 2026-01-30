@@ -1,0 +1,9 @@
+# StableProjectorz Add-on System Requirements
+# Install with: pip install -r requirements.txt
+
+# FastAPI and server
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# Optional: For better performance
+# orjson>=3.9.0  # Faster JSON parsing (optional)

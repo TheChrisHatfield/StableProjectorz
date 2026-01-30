@@ -18,7 +18,8 @@ namespace spz {
 		[SerializeField] int _serverPort = 5555;
 		[SerializeField] int _httpServerPort = 5557;
 		[SerializeField] int _webSocketPort = 5558;
-		[SerializeField] bool _enableHttpServer = true;
+		[SerializeField] bool _enableHttpServer = true; // FastAPI in Python (recommended)
+		[SerializeField] bool _enableCSharpHttpServer = false; // Legacy C# HttpListener (deprecated)
 		[SerializeField] bool _enableWebSocketServer = false;
 		
 		private Process _pythonProcess;
@@ -50,13 +51,14 @@ namespace spz {
 			// Discover add-ons
 			DiscoverAddons();
 			
-			// Start Python server
+			// Start Python server (includes FastAPI HTTP server if enabled)
 			StartPythonServer();
 			
-			// Start HTTP server if enabled
-			if (_enableHttpServer && Addon_HttpServer.instance == null) {
+			// Start legacy C# HTTP server if enabled (deprecated - use FastAPI instead)
+			if (_enableCSharpHttpServer && Addon_HttpServer.instance == null) {
 				GameObject httpServerObj = new GameObject("Addon_HttpServer");
 				httpServerObj.AddComponent<Addon_HttpServer>();
+				UnityEngine.Debug.LogWarning("[Addon_MGR] Using legacy C# HTTP server. Consider using FastAPI instead (enabled by default in Python server).");
 			}
 		}
 		
@@ -103,10 +105,17 @@ namespace spz {
 			}
 			
 			try {
+				string arguments = $"\"{serverScriptPath}\" --port {_serverPort}";
+				if (_enableHttpServer) {
+					arguments += $" --http-port {_httpServerPort}";
+				} else {
+					arguments += " --no-http";
+				}
+				
 				_pythonProcess = new Process {
 					StartInfo = new ProcessStartInfo {
 						FileName = "python",
-						Arguments = $"\"{serverScriptPath}\" --port {_serverPort}",
+						Arguments = arguments,
 						UseShellExecute = false,
 						RedirectStandardOutput = true,
 						RedirectStandardError = true,

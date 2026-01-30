@@ -1,15 +1,31 @@
 # REST API Documentation
 
 ## Overview
-The StableProjectorz Add-on System provides a REST API for web and remote clients. The API runs on port 5557 by default and uses standard HTTP methods (GET, POST) with JSON responses.
+The StableProjectorz Add-on System provides a REST API for web and remote clients. The API is powered by **FastAPI** (running in the Python add-on server) and uses standard HTTP methods (GET, POST) with JSON responses.
 
 **Base URL:** `http://localhost:5557/api/v1`
+
+**Interactive API Documentation:** `http://localhost:5557/docs` (Swagger UI)
+
+**Alternative Docs:** `http://localhost:5557/redoc` (ReDoc)
+
+## Installation
+The HTTP server requires FastAPI and uvicorn. Install dependencies:
+
+```bash
+pip install -r StreamingAssets/AddonSystem/requirements.txt
+```
+
+Or manually:
+```bash
+pip install fastapi uvicorn
+```
 
 ## Authentication
 Currently, the API has no authentication (localhost only). Future versions may add API keys or tokens.
 
 ## CORS
-CORS is enabled by default, allowing cross-origin requests from web browsers. Configure allowed origins in the Unity inspector.
+CORS is enabled by default, allowing cross-origin requests from web browsers. The FastAPI server includes CORS middleware configured for all origins.
 
 ## Endpoints
 
