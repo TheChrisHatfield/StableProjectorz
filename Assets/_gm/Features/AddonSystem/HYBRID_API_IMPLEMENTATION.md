@@ -15,23 +15,27 @@ The hybrid approach has been implemented, providing multiple communication proto
 - `Addon_SocketServer.cs` - TCP server implementation
 - `spz.py` - Python client library
 
-### 2. HTTP REST API Server ✅
-**Status:** ✅ **NEWLY IMPLEMENTED**  
+### 2. HTTP REST API Server (FastAPI) ✅
+**Status:** ✅ **IMPLEMENTED**  
 **Port:** 5557 (default)  
 **Protocol:** HTTP/HTTPS with REST endpoints  
 **Use Case:** Web clients, remote control, integration with other applications
 
 **Files:**
-- `Addon_HttpServer.cs` - HTTP REST API server
+- `http_server.py` - FastAPI HTTP REST API server (Python)
 - `REST_API_DOCUMENTATION.md` - Complete API documentation
+- `Addon_HttpServer.cs` - Legacy C# HTTP server (deprecated, optional)
 
 **Features:**
 - ✅ RESTful endpoints (`/api/v1/{resource}/{id}/{action}`)
-- ✅ CORS support for web browsers
-- ✅ Maps REST endpoints to existing JSON-RPC methods
-- ✅ JSON request/response format
+- ✅ CORS support for web browsers (via FastAPI middleware)
+- ✅ Maps REST endpoints to existing JSON-RPC methods via `spz` client
+- ✅ JSON request/response format with Pydantic validation
 - ✅ Standard HTTP status codes (200, 400, 404, 500)
 - ✅ All existing API methods exposed via REST
+- ✅ **Interactive API documentation** at `/docs` (Swagger UI) and `/redoc` (ReDoc)
+- ✅ **High performance** - FastAPI is one of the fastest Python frameworks
+- ✅ **Type safety** - Automatic request/response validation
 
 **Example Endpoints:**
 ```
@@ -63,8 +67,9 @@ POST /api/v1/sd/generate
 └─────────────────┘              │
                                  ├──► Addon_SocketServer
 ┌─────────────────┐              │   (JSON-RPC Dispatcher)
-│  Web Clients    │──HTTP (5557)─┤
-│  Remote Apps    │              │
+│  Web Clients    │──HTTP (5557)─┤   └──► FastPath_API
+│  Remote Apps    │              │       (Unity API)
+│  (FastAPI)      │              │
 └─────────────────┘              │
                                  │
 ┌─────────────────┐              │
@@ -77,17 +82,27 @@ POST /api/v1/sd/generate
 ### Addon_MGR Settings
 ```csharp
 [SerializeField] int _serverPort = 5555;          // TCP JSON-RPC
-[SerializeField] int _httpServerPort = 5557;     // HTTP REST API
+[SerializeField] int _httpServerPort = 5557;     // HTTP REST API (FastAPI)
 [SerializeField] int _webSocketPort = 5558;      // WebSocket (future)
-[SerializeField] bool _enableHttpServer = true;   // Enable HTTP server
+[SerializeField] bool _enableHttpServer = true;   // Enable FastAPI HTTP server (Python)
+[SerializeField] bool _enableCSharpHttpServer = false; // Legacy C# HTTP server (deprecated)
 [SerializeField] bool _enableWebSocketServer = false; // Enable WebSocket (future)
 ```
 
-### HTTP Server Settings
-```csharp
-[SerializeField] bool _enableCors = true;
-[SerializeField] string _allowedOrigins = "*"; // Or specific origins
+### FastAPI HTTP Server
+The FastAPI server is automatically started by the Python add-on server. Install dependencies:
+```bash
+pip install -r StreamingAssets/AddonSystem/requirements.txt
 ```
+
+Or manually:
+```bash
+pip install fastapi uvicorn
+```
+
+The server includes CORS middleware configured for all origins by default. Access interactive docs at:
+- Swagger UI: `http://localhost:5557/docs`
+- ReDoc: `http://localhost:5557/redoc`
 
 ## Usage Examples
 
@@ -178,14 +193,18 @@ fetch('http://localhost:5557/api/v1/scene/info')
 ## Files Created/Modified
 
 **New Files:**
-- `Addon_HttpServer.cs` - HTTP REST API server
+- `http_server.py` - FastAPI HTTP REST API server (Python)
+- `requirements.txt` - Python dependencies (FastAPI, uvicorn)
 - `REST_API_DOCUMENTATION.md` - API documentation
 - `HYBRID_API_IMPLEMENTATION.md` - This file
 
 **Modified Files:**
-- `Addon_SocketServer.cs` - Added `ProcessRequestDirect()` method
-- `Addon_MGR.cs` - Added HTTP server configuration and initialization
-- `Tool_AddonSystem.unity` - Added HTTP server GameObject
+- `addon_server.py` - Added FastAPI server startup and HTTP port configuration
+- `Addon_MGR.cs` - Added HTTP server port configuration, disabled C# HTTP server by default
+- `Addon_HttpServer.cs` - Legacy C# HTTP server (deprecated, optional)
+
+**Deprecated:**
+- `Addon_HttpServer.cs` - Still available but not recommended. Use FastAPI instead.
 
 ## Summary
 

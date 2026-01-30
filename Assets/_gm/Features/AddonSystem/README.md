@@ -196,6 +196,13 @@ In Unity Inspector (`Addon_MGR` component):
 
 ### CORS Settings
 
+**FastAPI HTTP Server (Recommended):**
+- Automatically started by the Python add-on server
+- Default port: 5557
+- Interactive docs: `http://localhost:5557/docs`
+- Install dependencies: `pip install -r StreamingAssets/AddonSystem/requirements.txt`
+
+**Legacy C# HTTP Server (Deprecated):**
 In Unity Inspector (`Addon_HttpServer` component):
 - `_enableCors` - Enable CORS (default: true)
 - `_allowedOrigins` - Allowed origins (default: "*" for all)
@@ -246,7 +253,8 @@ Found a bug or want to add a feature? Check the codebase structure:
 
 - `FastPath_API.cs` - Core API implementation
 - `Addon_SocketServer.cs` - TCP JSON-RPC server
-- `Addon_HttpServer.cs` - HTTP REST API server
+- `http_server.py` - FastAPI HTTP REST API server (Python)
+- `Addon_HttpServer.cs` - Legacy C# HTTP server (deprecated)
 - `spz.py` - Python client library
 
 ## 📝 License
