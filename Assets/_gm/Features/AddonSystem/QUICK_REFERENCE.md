@@ -39,7 +39,9 @@ api.project.get_path()
 
 ## HTTP REST API - Common Endpoints
 
-**Base URL:** `http://localhost:5557/api/v1`
+**Base URL:** `http://localhost:5557/api/v1`  
+**Interactive Docs:** `http://localhost:5557/docs` (FastAPI Swagger UI)  
+**Powered by:** FastAPI (Python)
 
 ### GET Requests (Read Data)
 ```bash
