@@ -61,10 +61,11 @@ Welcome! This guide will help you find the right documentation for your needs.
 2. **[GETTING_STARTED.md](GETTING_STARTED.md)** - Beginner-friendly introduction
 3. **[USER_GUIDE.md](USER_GUIDE.md)** - Comprehensive user guide
 4. **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Quick reference card
-5. **[REST_API_DOCUMENTATION.md](REST_API_DOCUMENTATION.md)** - Complete HTTP API reference
-6. **[HYBRID_API_IMPLEMENTATION.md](HYBRID_API_IMPLEMENTATION.md)** - Architecture and implementation
-7. **[EDGE_CASES_ANALYSIS.md](EDGE_CASES_ANALYSIS.md)** - Error handling and validation
-8. **[API_ENDPOINTS_ANALYSIS.md](API_ENDPOINTS_ANALYSIS.md)** - API design analysis
+5. **[ADDON_INSTALLATION.md](ADDON_INSTALLATION.md)** - Add-on installation guide (Blender-style)
+6. **[REST_API_DOCUMENTATION.md](REST_API_DOCUMENTATION.md)** - Complete HTTP API reference
+7. **[HYBRID_API_IMPLEMENTATION.md](HYBRID_API_IMPLEMENTATION.md)** - Architecture and implementation
+8. **[EDGE_CASES_ANALYSIS.md](EDGE_CASES_ANALYSIS.md)** - Error handling and validation
+9. **[API_ENDPOINTS_ANALYSIS.md](API_ENDPOINTS_ANALYSIS.md)** - API design analysis
 
 ## 🎯 Recommended Reading Path
 
