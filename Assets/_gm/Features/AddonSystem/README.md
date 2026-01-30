@@ -66,7 +66,17 @@ curl -X POST http://localhost:5557/api/v1/cameras/0/position \
 
 ## 📦 Installation
 
-### Python
+### Installing Add-ons
+
+StableProjectorz includes a **Blender-style add-on installation system**:
+
+- **Drag-and-Drop:** Simply drag a zip file into the window to install
+- **File Browser:** Use "Install from File" button in Add-on Manager
+- **Management:** Enable/disable/remove add-ons from the Add-on Manager panel
+
+See [Add-on Installation Guide](ADDON_INSTALLATION.md) for complete details.
+
+### Python API Library
 
 1. Copy `spz.py` from `Assets/StreamingAssets/AddonSystem/spz.py` to your project
 2. That's it! No dependencies required.

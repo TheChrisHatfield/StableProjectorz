@@ -107,7 +107,30 @@ If you get a response, you're connected! 🎉
 
 ## Python API Guide
 
-### Installation
+### Installing Add-ons
+
+StableProjectorz makes it easy to install add-ons:
+
+**Drag-and-Drop Installation:**
+1. Create a zip file containing your add-on (with `__init__.py`)
+2. Drag the zip file into the StableProjectorz window
+3. Wait for the success message - that's it!
+
+**File Browser Installation:**
+1. Open Add-on Manager panel
+2. Click "Install from File"
+3. Select your zip file
+4. Installation happens automatically
+
+**Managing Add-ons:**
+- View all installed add-ons in the Add-on Manager
+- Enable/disable add-ons with toggles
+- Remove add-ons with confirmation dialog
+- Refresh the list to see newly installed add-ons
+
+See [Add-on Installation Guide](ADDON_INSTALLATION.md) for detailed information.
+
+### Python API Library Installation
 
 1. Find `spz.py` in `Assets/StreamingAssets/AddonSystem/spz.py`
 2. Copy it to your Python project folder
