@@ -176,6 +176,40 @@ namespace spz {
 		}
 		
 		/// <summary>
+		/// Enables an add-on (loads it via Python server)
+		/// </summary>
+		public void EnableAddon(string addonId) {
+			if (!_registeredAddons.ContainsKey(addonId)) {
+				UnityEngine.Debug.LogWarning($"[Addon_MGR] Add-on '{addonId}' not found");
+				return;
+			}
+			
+			_registeredAddons[addonId].isEnabled = true;
+			UnityEngine.Debug.Log($"[Addon_MGR] Enabled add-on: {addonId}");
+			// Note: Actual loading happens via Python server when it calls register()
+		}
+		
+		/// <summary>
+		/// Disables an add-on (unloads it)
+		/// </summary>
+		public void DisableAddon(string addonId) {
+			if (!_registeredAddons.ContainsKey(addonId)) {
+				UnityEngine.Debug.LogWarning($"[Addon_MGR] Add-on '{addonId}' not found");
+				return;
+			}
+			
+			UnloadAddon(addonId);
+		}
+		
+		/// <summary>
+		/// Forces a re-scan of the Addons directory
+		/// </summary>
+		public void RefreshAddons() {
+			_registeredAddons.Clear();
+			DiscoverAddons();
+		}
+		
+		/// <summary>
 		/// Gets the server port
 		/// </summary>
 		public int GetServerPort() {
