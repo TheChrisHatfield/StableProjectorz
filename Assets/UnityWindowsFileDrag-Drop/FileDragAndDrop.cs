@@ -55,6 +55,21 @@ public class FileDragAndDrop : MonoBehaviour
             return; // Imported all the files, now return.
         }
 
+        if (AllFilesZip(aFiles)){// Handle zip files (add-ons)
+            if (AddonInstaller_MGR.instance != null) {
+                AddonInstaller_MGR.instance.InstallAddonFromZip(aFiles[0], (success, message, addonId) => {
+                    if (success) {
+                        Viewport_StatusText.instance.ShowStatusText($"Add-on '{addonId}' installed successfully!", true, 3, false);
+                    } else {
+                        Viewport_StatusText.instance.ShowStatusText($"Installation failed: {message}", false, 4, false);
+                    }
+                });
+            } else {
+                Viewport_StatusText.instance.ShowStatusText("Add-on installer not available", false, 3, false);
+            }
+            return;
+        }
+
         string msg = "Drag-and-drop contains unsupported file types.";
         Viewport_StatusText.instance.ShowStatusText(msg, false, 4, false);
     }
@@ -79,6 +94,15 @@ public class FileDragAndDrop : MonoBehaviour
                    extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase) ||
                    extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase) ||
                    extension.Equals(".tga", StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
+    bool AllFilesZip(List<string> files)
+    {
+        return files.Count == 1 && files.All(file =>
+        {
+            string extension = Path.GetExtension(file).ToLowerInvariant();
+            return extension.Equals(".zip", StringComparison.OrdinalIgnoreCase);
         });
     }
 }
