@@ -85,7 +85,11 @@ Managed by `Gen3D_MGR`.
 
 ## 🔌 9. Add-on System (Fully Fleshed Out!)
 
-StableProjectorz includes a **comprehensive add-on system** that allows you to control and automate the entire application from external programs, scripts, and web applications. This is a production-ready API system with extensive capabilities.
+StableProjectorz includes a **comprehensive add-on system** with two powerful capabilities:
+
+**External Control API** - Control and automate StableProjectorz from external programs, scripts, and web applications via Python API or HTTP REST API. This is a production-ready API system with extensive capabilities.
+
+**Internal Add-ons** - Install and manage add-ons that work within StableProjectorz itself (Blender-style). Simply drag-and-drop zip files to install, or use the Add-on Manager panel. Enable/disable add-ons, create custom tools, and extend functionality directly within the application.
 
 ### 🚀 Two Ways to Connect
 
