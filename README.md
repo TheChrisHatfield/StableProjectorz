@@ -153,15 +153,25 @@ curl http://localhost:5557/api/v1/scene/info
 
 ### 🎯 Use Cases
 
+**External Control:**
 *   **Automation** - Automate repetitive workflows and batch operations
 *   **Custom Tools** - Build your own control panels and dashboards
 *   **Integration** - Connect StableProjectorz with other tools and pipelines
 *   **Remote Control** - Control StableProjectorz from another computer or device
 *   **Scripting** - Write Python scripts for complex multi-step operations
 
+**Internal Add-ons:**
+*   **Extend Functionality** - Install add-ons that add new features directly to StableProjectorz
+*   **Custom Workflows** - Create add-ons for specialized workflows
+*   **UI Extensions** - Add custom panels, buttons, and tools within the application
+*   **Easy Installation** - Drag-and-drop zip files or use the Add-on Manager (just like Blender!)
+
 ### 📦 What's Included
 
 *   **Python Client Library** (`Assets/StreamingAssets/AddonSystem/spz.py`) - Ready to use
+*   **HTTP REST API Server** - Built-in web server for remote access
+*   **Add-on Installation System** - Drag-and-drop zip installation (Blender-style)
+*   **Add-on Manager UI** - Manage, enable/disable, and remove add-ons
 *   **Example Add-ons** (`Assets/StreamingAssets/Addons/`) - Learn from working examples
 *   **Full Documentation** - Multiple guides for all skill levels
 *   **Production Ready** - Validated, error-handled, and performance-optimized
