@@ -82,3 +82,10 @@ Managed by `Gen3D_MGR`.
 *   **`KeyMousePenInput`:** Static helper class.
 *   **Abstraction:** Unifies Mouse clicks and Tablet Pen pressure into a single API.
 *   **Coords:** Tracks cursor in Screen Pixels and Viewport Space (0–1).
+
+## 🔌 9. Add-on System
+*   **Python API:** Control StableProjectorz from Python scripts (Port 5555)
+*   **HTTP REST API:** Control from web pages and other applications (Port 5557)
+*   **Features:** Camera control, mesh operations, SD generation, project management, and more
+*   **Documentation:** See `Assets/_gm/Features/AddonSystem/README.md` for complete documentation
+*   **Quick Start:** Copy `spz.py` and start scripting, or use HTTP requests - no installation needed!
