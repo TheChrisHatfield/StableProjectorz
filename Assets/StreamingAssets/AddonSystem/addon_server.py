@@ -4,6 +4,7 @@ StableProjectorz Add-on Server
 
 This server manages all add-ons and provides communication between
 Python add-ons and the Unity application.
+Also runs a FastAPI HTTP server for REST API access.
 """
 
 import sys
@@ -11,6 +12,7 @@ import os
 import argparse
 import importlib.util
 import time
+import threading
 from pathlib import Path
 
 # Add the AddonSystem directory to path so we can import spz
@@ -22,6 +24,16 @@ try:
 except ImportError:
     print("Error: Could not import spz module. Make sure spz.py is in the AddonSystem directory.")
     sys.exit(1)
+
+# Try to import FastAPI (optional - will fall back if not available)
+try:
+    from fastapi import FastAPI
+    import uvicorn
+    FASTAPI_AVAILABLE = True
+except ImportError:
+    FASTAPI_AVAILABLE = False
+    print("Warning: FastAPI not available. Install with: pip install fastapi uvicorn")
+    print("HTTP REST API will not be available.")
 
 
 def discover_addons(addons_dir):
@@ -88,7 +100,9 @@ def load_addon(addon_info):
 def main():
     parser = argparse.ArgumentParser(description="StableProjectorz Add-on Server")
     parser.add_argument("--port", type=int, default=5555, help="Port to connect to Unity (default: 5555)")
+    parser.add_argument("--http-port", type=int, default=5557, help="Port for HTTP REST API (default: 5557)")
     parser.add_argument("--addons-dir", type=str, default=None, help="Path to Addons directory")
+    parser.add_argument("--no-http", action="store_true", help="Disable HTTP REST API server")
     args = parser.parse_args()
     
     # Determine addons directory
@@ -147,6 +161,25 @@ def main():
             loaded_count += 1
     
     print(f"Loaded {loaded_count}/{len(addons)} add-on(s)")
+    
+    # Start HTTP server if FastAPI is available and not disabled
+    http_thread = None
+    if FASTAPI_AVAILABLE and not args.no_http:
+        try:
+            from http_server import start_server, set_api_instance
+            set_api_instance(api)
+            
+            # Start HTTP server in background thread
+            http_thread = threading.Thread(
+                target=start_server,
+                args=("127.0.0.1", args.http_port),
+                daemon=True
+            )
+            http_thread.start()
+            print(f"[Add-on Server] HTTP REST API available on port {args.http_port}")
+            print(f"[Add-on Server] API docs: http://127.0.0.1:{args.http_port}/docs")
+        except Exception as e:
+            print(f"[Add-on Server] Warning: Could not start HTTP server: {e}")
     
     # Keep server running
     print("Add-on server running. Press Ctrl+C to stop.")
