@@ -74,7 +74,29 @@ That's it! You're controlling StableProjectorz from Python.
 
 ## Installation
 
-### For Python Users
+### Installing Add-ons (New!)
+
+StableProjectorz supports easy add-on installation, just like Blender:
+
+**Method 1: Drag-and-Drop (Easiest!)**
+1. Create a zip file of your add-on (must contain `__init__.py`)
+2. Drag the zip file into the StableProjectorz window
+3. Done! The add-on is automatically installed
+
+**Method 2: File Browser**
+1. Open the Add-on Manager (via Settings or menu)
+2. Click "Install from File"
+3. Select your zip file
+4. The add-on will be installed automatically
+
+**Method 3: Manual Installation**
+1. Extract your add-on to `StreamingAssets/Addons/YourAddonName/`
+2. Make sure it contains `__init__.py`
+3. Restart StableProjectorz or click "Refresh" in Add-on Manager
+
+See [Add-on Installation Guide](ADDON_INSTALLATION.md) for more details.
+
+### For Python Users (Using the API)
 
 1. **Copy the Python library:**
    - The `spz.py` file is located at: `Assets/StreamingAssets/AddonSystem/spz.py`
