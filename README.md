@@ -83,9 +83,83 @@ Managed by `Gen3D_MGR`.
 *   **Abstraction:** Unifies Mouse clicks and Tablet Pen pressure into a single API.
 *   **Coords:** Tracks cursor in Screen Pixels and Viewport Space (0–1).
 
-## 🔌 9. Add-on System
-*   **Python API:** Control StableProjectorz from Python scripts (Port 5555)
-*   **HTTP REST API:** Control from web pages and other applications (Port 5557)
-*   **Features:** Camera control, mesh operations, SD generation, project management, and more
-*   **Documentation:** See `Assets/_gm/Features/AddonSystem/README.md` for complete documentation
-*   **Quick Start:** Copy `spz.py` and start scripting, or use HTTP requests - no installation needed!
+## 🔌 9. Add-on System (Fully Fleshed Out!)
+
+StableProjectorz includes a **comprehensive add-on system** that allows you to control and automate the entire application from external programs, scripts, and web applications. This is a production-ready API system with extensive capabilities.
+
+### 🚀 Two Ways to Connect
+
+**Python API (TCP JSON-RPC)** - Port 5555
+*   Fast, efficient for Python scripts and automation
+*   Persistent connections with full bidirectional communication
+*   Use the included `spz.py` library - no installation needed!
+
+**HTTP REST API** - Port 5557
+*   Standard HTTP protocol - works with any language or tool
+*   Perfect for web dashboards, JavaScript, and remote control
+*   CORS enabled for web applications
+*   No library needed - just make HTTP requests!
+
+### ✨ Complete Feature Set
+
+The add-on system provides programmatic access to:
+
+*   **Camera Control** - Move, rotate, adjust FOV, get all camera info
+*   **Mesh Operations** - Position, rotation, scale, visibility, selection (with batch operations)
+*   **Scene Information** - Mesh counts, IDs, bounds, selection status
+*   **Stable Diffusion** - Set prompts, trigger generation, check status, stop generation
+*   **3D Generation** - Trigger 3D model generation, check status
+*   **Projection Cameras** - Control projection camera positions and rotations
+*   **Project Management** - Save/load projects, get project info (path, version, data directory)
+*   **ControlNet** - Enable/disable units, set weights, get/set models
+*   **Background/Skybox** - Set/get skybox colors, check gradient status
+*   **Export Operations** - Export 3D models with textures, projection textures, view textures
+*   **Workflow Control** - Get/set workflow mode
+*   **Dynamic UI Creation** - Create panels, sliders, text inputs, dropdowns from add-ons
+
+### 📚 Comprehensive Documentation
+
+*   **[Getting Started Guide](Assets/_gm/Features/AddonSystem/GETTING_STARTED.md)** - Beginner-friendly 5-minute quick start
+*   **[User Guide](Assets/_gm/Features/AddonSystem/USER_GUIDE.md)** - Complete guide with examples and troubleshooting
+*   **[Quick Reference](Assets/_gm/Features/AddonSystem/QUICK_REFERENCE.md)** - Cheat sheet for common commands
+*   **[REST API Documentation](Assets/_gm/Features/AddonSystem/REST_API_DOCUMENTATION.md)** - Complete HTTP API reference
+*   **[Documentation Index](Assets/_gm/Features/AddonSystem/DOCUMENTATION_INDEX.md)** - Find the right docs for your needs
+
+### 💡 Quick Examples
+
+**Python:**
+```python
+import spz
+api = spz.get_api()
+api.cameras.set_pos(0, 1.0, 2.0, 3.0)
+api.sd.trigger_generation()
+```
+
+**HTTP/JavaScript:**
+```javascript
+fetch('http://localhost:5557/api/v1/scene/info')
+  .then(r => r.json())
+  .then(console.log);
+```
+
+**cURL:**
+```bash
+curl http://localhost:5557/api/v1/scene/info
+```
+
+### 🎯 Use Cases
+
+*   **Automation** - Automate repetitive workflows and batch operations
+*   **Custom Tools** - Build your own control panels and dashboards
+*   **Integration** - Connect StableProjectorz with other tools and pipelines
+*   **Remote Control** - Control StableProjectorz from another computer or device
+*   **Scripting** - Write Python scripts for complex multi-step operations
+
+### 📦 What's Included
+
+*   **Python Client Library** (`Assets/StreamingAssets/AddonSystem/spz.py`) - Ready to use
+*   **Example Add-ons** (`Assets/StreamingAssets/Addons/`) - Learn from working examples
+*   **Full Documentation** - Multiple guides for all skill levels
+*   **Production Ready** - Validated, error-handled, and performance-optimized
+
+**See [Add-on System Documentation](Assets/_gm/Features/AddonSystem/README.md) for complete details!**
