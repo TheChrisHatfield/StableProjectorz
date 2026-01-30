@@ -4,12 +4,13 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 
 // The 'using' directives for editor scripts must be within the #if UNITY_EDITOR block
+// Fixed: #endif moved outside namespace to resolve build error
 #if UNITY_EDITOR
 using UnityEditor;
 using UnityEditor.SceneManagement;
-namespace spz {
+#endif
 
-	#endif
+namespace spz {
 
 	// Loads all necessary additive scenes at startup. The scene list is hard-coded
 	// in this script for easier version control merging.
