@@ -74,7 +74,14 @@ namespace spz {
 	    }
     
 	    void OnButton_Gen3D(){
-	        if( !isCanStart_make_meshes_and_tex() ){ return; }
+	        Trigger3DGeneration();
+	    }
+	    
+	    /// <summary>
+	    /// Public method to trigger 3D generation (for add-on API)
+	    /// </summary>
+	    public bool Trigger3DGeneration(){
+	        if( !isCanStart_make_meshes_and_tex() ){ return false; }
 	        GenerateButtons_UI.OnConfirmed_StartedGenerate();
 	        Dictionary<string,object> all_values = gather_all_ui_inputs();
 	        all_values.Add("generate_what", "make_meshes_and_tex");
@@ -86,6 +93,7 @@ namespace spz {
 	            onDataDownloaded = Gen_OnMeshReady,
 	        };
 	        Gen3D_API.instance.StartGeneration(Gen3D_API.GenerateWhat.make_meshes_and_tex, all_values, callbacks);
+	        return true;
 	    }
 
 
