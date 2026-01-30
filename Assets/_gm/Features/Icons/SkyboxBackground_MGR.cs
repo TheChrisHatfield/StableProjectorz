@@ -30,6 +30,16 @@ namespace spz {
 	    public bool isGradientColorClear => _currentTopColor==Color.clear;
 	    Color _currentTopColor    = Color.clear;
 	    Color _currentBottomColor = Color.clear;
+	    
+	    /// <summary>
+	    /// Get current top gradient color (for add-on API)
+	    /// </summary>
+	    public Color GetTopColor() => _currentTopColor;
+	    
+	    /// <summary>
+	    /// Get current bottom gradient color (for add-on API)
+	    /// </summary>
+	    public Color GetBottomColor() => _currentBottomColor;
 	    public void SetTopOrBottomColor(bool isTop, Color col){
 	        string msg = "";
 	        if(isTop){ 
