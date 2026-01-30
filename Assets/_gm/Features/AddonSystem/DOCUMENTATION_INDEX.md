@@ -102,8 +102,8 @@ Welcome! This guide will help you find the right documentation for your needs.
 ## 📝 Quick Links
 
 - **Python API:** Use `spz.py` library (included)
-- **HTTP API:** `http://localhost:5557/api/v1`
-- **Ports:** 5555 (Python), 5557 (HTTP)
+- **HTTP API:** `http://localhost:5557/api/v1` (FastAPI, interactive docs at `/docs`)
+- **Ports:** 5555 (Python), 5557 (HTTP/FastAPI)
 - **Example Add-ons:** `Assets/StreamingAssets/Addons/`
 
 ---
