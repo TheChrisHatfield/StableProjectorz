@@ -87,7 +87,10 @@ namespace spz {
 			
 			// Normalize quaternion
 			var quat = new Quaternion(x, y, z, w);
-			if (quat.magnitude < 0.01f) return false; // Invalid quaternion
+			// Check if quaternion is approximately zero (Quaternion doesn't have .magnitude)
+			if (Mathf.Abs(quat.x) < 0.01f && Mathf.Abs(quat.y) < 0.01f && Mathf.Abs(quat.z) < 0.01f && Mathf.Abs(quat.w) < 0.01f) {
+				return false; // Invalid quaternion
+			}
 			quat.Normalize();
 			
 			camera.transform.rotation = quat;
@@ -237,7 +240,10 @@ namespace spz {
 			}
 			
 			var quat = new Quaternion(x, y, z, w);
-			if (quat.magnitude < 0.01f) return false;
+			// Check if quaternion is approximately zero
+			if (Mathf.Abs(quat.x) < 0.01f && Mathf.Abs(quat.y) < 0.01f && Mathf.Abs(quat.z) < 0.01f && Mathf.Abs(quat.w) < 0.01f) {
+				return false;
+			}
 			quat.Normalize();
 			
 			mesh.transform.rotation = quat;
@@ -340,7 +346,8 @@ namespace spz {
 				var rot = rotations[i];
 				if (!IsValidFloat(rot.x) || !IsValidFloat(rot.y) || !IsValidFloat(rot.z) || !IsValidFloat(rot.w)) continue;
 				
-				if (rot.magnitude < 0.01f) continue;
+				// Check if quaternion is approximately zero
+				if (Mathf.Abs(rot.x) < 0.01f && Mathf.Abs(rot.y) < 0.01f && Mathf.Abs(rot.z) < 0.01f && Mathf.Abs(rot.w) < 0.01f) continue;
 				rot.Normalize();
 				
 				mesh.transform.rotation = rot;
@@ -1046,7 +1053,7 @@ namespace spz {
 			if (unit == null) return false;
 			
 			if (unit.isActivated != enabled) {
-				unit._collapsableSection.OpenOrCloseSelf();
+				unit.ToggleSection();
 			}
 			return true;
 		}
@@ -1321,7 +1328,10 @@ namespace spz {
 			}
 			
 			var quat = new Quaternion(x, y, z, w);
-			if (quat.magnitude < 0.01f) return false;
+			// Check if quaternion is approximately zero
+			if (Mathf.Abs(quat.x) < 0.01f && Mathf.Abs(quat.y) < 0.01f && Mathf.Abs(quat.z) < 0.01f && Mathf.Abs(quat.w) < 0.01f) {
+				return false;
+			}
 			quat.Normalize();
 			
 			projCam.transform.rotation = quat;
