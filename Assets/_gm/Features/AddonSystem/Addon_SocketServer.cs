@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
@@ -143,9 +144,6 @@ namespace spz {
 				client.Close();
 			}
 		}
-		
-		// Dictionary to store pending responses by request ID
-		private ConcurrentDictionary<string, JObject> _pendingResponses = new ConcurrentDictionary<string, JObject>();
 		
 		/// <summary>
 		/// Processes a JSON-RPC request and queues the command for main thread execution
@@ -667,17 +665,17 @@ namespace spz {
 						var meshIdsJson = @params["mesh_ids"] as JArray;
 						var positionsJson = @params["positions"] as JArray;
 						if (meshIdsJson != null && positionsJson != null) {
-							var meshIds = new List<ushort>();
-							var positions = new List<Vector3>();
+							var meshIdsList = new List<ushort>();
+							var positionsList = new List<Vector3>();
 							
 							foreach (var id in meshIdsJson) {
-								meshIds.Add(id.ToObject<ushort>());
+								meshIdsList.Add(id.ToObject<ushort>());
 							}
 							
-							foreach (var pos in positionsJson) {
-								var posObj = pos as JObject;
+							foreach (var posItem in positionsJson) {
+								var posObj = posItem as JObject;
 								if (posObj != null) {
-									positions.Add(new Vector3(
+									positionsList.Add(new Vector3(
 										posObj["x"]?.ToObject<float>() ?? 0f,
 										posObj["y"]?.ToObject<float>() ?? 0f,
 										posObj["z"]?.ToObject<float>() ?? 0f
@@ -685,9 +683,9 @@ namespace spz {
 								}
 							}
 							
-							int successCount = fastPath.SetMeshPositions(meshIds, positions);
+							int successCountPos = fastPath.SetMeshPositions(meshIdsList, positionsList);
 							result["success"] = true;
-							result["count"] = successCount;
+							result["count"] = successCountPos;
 						} else {
 							result["success"] = false;
 						}
@@ -697,17 +695,17 @@ namespace spz {
 						meshIdsJson = @params["mesh_ids"] as JArray;
 						var rotationsJson = @params["rotations"] as JArray;
 						if (meshIdsJson != null && rotationsJson != null) {
-							meshIds = new List<ushort>();
-							var rotations = new List<Quaternion>();
+							var meshIdsRot = new List<ushort>();
+							var rotationsList = new List<Quaternion>();
 							
 							foreach (var id in meshIdsJson) {
-								meshIds.Add(id.ToObject<ushort>());
+								meshIdsRot.Add(id.ToObject<ushort>());
 							}
 							
-							foreach (var rot in rotationsJson) {
-								var rotObj = rot as JObject;
+							foreach (var rotItem in rotationsJson) {
+								var rotObj = rotItem as JObject;
 								if (rotObj != null) {
-									rotations.Add(new Quaternion(
+									rotationsList.Add(new Quaternion(
 										rotObj["x"]?.ToObject<float>() ?? 0f,
 										rotObj["y"]?.ToObject<float>() ?? 0f,
 										rotObj["z"]?.ToObject<float>() ?? 0f,
@@ -716,9 +714,9 @@ namespace spz {
 								}
 							}
 							
-							successCount = fastPath.SetMeshRotations(meshIds, rotations);
+							int successCountRot = fastPath.SetMeshRotations(meshIdsRot, rotationsList);
 							result["success"] = true;
-							result["count"] = successCount;
+							result["count"] = successCountRot;
 						} else {
 							result["success"] = false;
 						}
@@ -728,17 +726,17 @@ namespace spz {
 						meshIdsJson = @params["mesh_ids"] as JArray;
 						var scalesJson = @params["scales"] as JArray;
 						if (meshIdsJson != null && scalesJson != null) {
-							meshIds = new List<ushort>();
-							var scales = new List<Vector3>();
+							var meshIdsScale = new List<ushort>();
+							var scalesList = new List<Vector3>();
 							
 							foreach (var id in meshIdsJson) {
-								meshIds.Add(id.ToObject<ushort>());
+								meshIdsScale.Add(id.ToObject<ushort>());
 							}
 							
-							foreach (var scale in scalesJson) {
-								var scaleObj = scale as JObject;
+							foreach (var scaleItem in scalesJson) {
+								var scaleObj = scaleItem as JObject;
 								if (scaleObj != null) {
-									scales.Add(new Vector3(
+									scalesList.Add(new Vector3(
 										scaleObj["x"]?.ToObject<float>() ?? 1f,
 										scaleObj["y"]?.ToObject<float>() ?? 1f,
 										scaleObj["z"]?.ToObject<float>() ?? 1f
@@ -746,9 +744,9 @@ namespace spz {
 								}
 							}
 							
-							successCount = fastPath.SetMeshScales(meshIds, scales);
+							int successCountScale = fastPath.SetMeshScales(meshIdsScale, scalesList);
 							result["success"] = true;
-							result["count"] = successCount;
+							result["count"] = successCountScale;
 						} else {
 							result["success"] = false;
 						}
@@ -818,11 +816,11 @@ namespace spz {
 						var allPositions = fastPath.GetAllCameraPositions();
 						result["success"] = true;
 						var posArray = new JArray();
-						foreach (var pos in allPositions) {
+						foreach (var posItem in allPositions) {
 							posArray.Add(new JObject {
-								["x"] = pos.x,
-								["y"] = pos.y,
-								["z"] = pos.z
+								["x"] = posItem.x,
+								["y"] = posItem.y,
+								["z"] = posItem.z
 							});
 						}
 						result["positions"] = posArray;

@@ -49,6 +49,15 @@ namespace spz {
 
 	    public bool isActivated => _collapsableSection._isExpanded;
 
+	    /// <summary>
+	    /// Toggle the collapsable section open/closed
+	    /// </summary>
+	    public void ToggleSection() {
+		    if (!_isForPreviewOnly) {
+			    _collapsableSection.OpenOrCloseSelf(!isActivated, dur: 0.2f);
+		    }
+	    }
+
 	    //When StableProjectorz was launched for the first time, there are no models at all (user needs to download them)
 	    //Other scripts will query this static value, and can refuse to do things while it's false.
 	    public static bool hasAtLeastSomeModel => ControlNetUnit_Dropdowns.hasAtLeastSomeModel;

@@ -65,7 +65,7 @@ namespace spz {
 		/// <summary>
 		/// Scans StreamingAssets/Addons/ for add-on directories
 		/// </summary>
-		void DiscoverAddons() {
+		public void DiscoverAddons() {
 			string addonsPath = Path.Combine(Application.streamingAssetsPath, "Addons");
 			
 			if (!Directory.Exists(addonsPath)) {
