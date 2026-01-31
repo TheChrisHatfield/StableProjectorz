@@ -99,6 +99,13 @@ namespace spz {
 
 
 
+	    /// <summary>
+	    /// Public method to trigger generation (wrapper for OnGenerateButton)
+	    /// </summary>
+	    public void Generate(bool isMakingBackgrounds) {
+		    OnGenerateButton(isMakingBackgrounds);
+	    }
+
 	    void OnGenerateButton(bool isMakingBackgrounds){
 	        if( DenyWithMessage_ifCantGenerate(allow_without_controlnets:isMakingBackgrounds) ){ return; }
 

@@ -1,0 +1,146 @@
+[Licensing::Module] Trying to connect to existing licensing client channel...
+Built from '6000.2/respin/6000.2.6f2-cc51a95c03' branch; Version is '6000.2.6f2 (4a4dcaec6541) revision 4869578'; Using compiler version '194234433'; Build Type 'Release'
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-YoDaddy" at "2026-01-31T00:32:16.6369691Z"
+OS: 'Windows 11  (10.0.22631) 64bit Professional' Language: 'en' Physical Memory: 65194 MB
+BatchMode: 1, IsHumanControllingUs: 0, StartBugReporterOnCrash: 0, Is64bit: 1
+Date: 2026-01-31T00:32:16Z
+
+COMMAND LINE ARGUMENTS:
+D:\PROGRAM_FILES\UNITY\Editor\Unity.exe
+-batchmode
+-quit
+-projectPath
+D:\DRIVE_DOWNLOADS\Stable_Projectoz_Dev_Build\StableProjectorz
+-logFile
+D:\DRIVE_DOWNLOADS\Stable_Projectoz_Dev_Build\StableProjectorz\compile_check.txt
+Successfully changed project path to: D:\DRIVE_DOWNLOADS\Stable_Projectoz_Dev_Build\StableProjectorz
+D:/DRIVE_DOWNLOADS/Stable_Projectoz_Dev_Build/StableProjectorz
+It looks like another Unity instance is running with this project open.
+
+Multiple Unity instances cannot open the same project.
+
+Project: D:/DRIVE_DOWNLOADS/Stable_Projectoz_Dev_Build/StableProjectorz
+Fatal Error! It looks like another Unity instance is running with this project open.
+
+Multiple Unity instances cannot open the same project.
+
+Project: D:/DRIVE_DOWNLOADS/Stable_Projectoz_Dev_Build/StableProjectorz
+Crash!!!
+SymInit: Symbol-SearchPath: 'D:/PROGRAM_FILES/UNITY/Editor/Data/Mono;.;D:\DRIVE_DOWNLOADS\Stable_Projectoz_Dev_Build\StableProjectorz;D:\DRIVE_DOWNLOADS\Stable_Projectoz_Dev_Build\StableProjectorz\Library\BurstCache\JIT;D:\PROGRAM_FILES\UNITY\Editor;C:\Windows;C:\Windows\system32;', symOptions: 534, UserName: 'YoDaddy'
+OS-Version: 10.0.0
+D:\PROGRAM_FILES\UNITY\Editor\Unity.exe:Unity.exe (00007FF61B830000), size: 290816 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 6000.2.6.19914
+C:\Windows\SYSTEM32\ntdll.dll:ntdll.dll (00007FFBD21D0000), size: 2195456 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.6060
+C:\Windows\System32\KERNEL32.DLL:KERNEL32.DLL (00007FFBD0570000), size: 802816 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.5415
+C:\Windows\System32\KERNELBASE.dll:KERNELBASE.dll (00007FFBCF400000), size: 4009984 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.6060
+C:\Windows\System32\USER32.dll:USER32.dll (00007FFBD1BC0000), size: 1777664 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.6199
+C:\Windows\System32\win32u.dll:win32u.dll (00007FFBCFDC0000), size: 155648 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.6199
+C:\Windows\System32\GDI32.dll:GDI32.dll (00007FFBD2140000), size: 167936 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.5697
+C:\Windows\System32\gdi32full.dll:gdi32full.dll (00007FFBCFC70000), size: 1159168 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.6133
+C:\Windows\System32\msvcp_win.dll:msvcp_win.dll (00007FFBCF2E0000), size: 630784 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.3374
+C:\Windows\System32\ucrtbase.dll:ucrtbase.dll (00007FFBCFB50000), size: 1118208 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.3593
+C:\Windows\System32\IMM32.DLL:IMM32.DLL (00007FFBD1F60000), size: 200704 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.5697
+D:\PROGRAM_FILES\UNITY\Editor\Unity.dll:Unity.dll (00007FFA858C0000), size: 87699456 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 6000.2.6.19914
+C:\Windows\System32\CRYPT32.dll:CRYPT32.dll (00007FFBCF7E0000), size: 1474560 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.5983
+C:\Windows\System32\ADVAPI32.dll:ADVAPI32.dll (00007FFBD1950000), size: 724992 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.5909
+C:\Windows\System32\msvcrt.dll:msvcrt.dll (00007FFBD1770000), size: 684032 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 7.0.22621.2506
+D:\PROGRAM_FILES\UNITY\Editor\s3tcompress.dll:s3tcompress.dll (00007FFB64850000), size: 180224 (result: 0), SymType: '-deferred-', PDB: ''
+C:\Windows\System32\sechost.dll:sechost.dll (00007FFBD1FA0000), size: 688128 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.5909
+D:\PROGRAM_FILES\UNITY\Editor\libfbxsdk.dll:libfbxsdk.dll (00007FFA85110000), size: 8019968 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 2020.3.7.0
+C:\Windows\System32\bcrypt.dll:bcrypt.dll (00007FFBCFD90000), size: 163840 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.4746
+D:\PROGRAM_FILES\UNITY\Editor\ispc_texcomp.dll:ispc_texcomp.dll (00007FFA922C0000), size: 1826816 (result: 0), SymType: '-deferred-', PDB: ''
+C:\Windows\System32\RPCRT4.dll:RPCRT4.dll (00007FFBCFE70000), size: 1146880 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.5840
+D:\PROGRAM_FILES\UNITY\Editor\etccompress.dll:etccompress.dll (00007FFAB5BB0000), size: 5070848 (result: 0), SymType: '-deferred-', PDB: ''
+D:\PROGRAM_FILES\UNITY\Editor\compress_bc7e.dll:compress_bc7e.dll (00007FFB0A2C0000), size: 1433600 (result: 0), SymType: '-deferred-', PDB: ''
+D:\PROGRAM_FILES\UNITY\Editor\FreeImage.dll:FreeImage.dll (0000000180000000), size: 5783552 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 3.18.0.0
+C:\Windows\System32\ole32.dll:ole32.dll (00007FFBD1A10000), size: 1708032 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.6199
+C:\Windows\System32\WS2_32.dll:WS2_32.dll (00007FFBD1E90000), size: 462848 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.4746
+C:\Windows\System32\combase.dll:combase.dll (00007FFBD0060000), size: 3739648 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.6133
+D:\PROGRAM_FILES\UNITY\Editor\WinPixEventRuntime.dll:WinPixEventRuntime.dll (00007FFBAE740000), size: 57344 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 1.0.2403.8001
+C:\Windows\System32\SETUPAPI.dll:SETUPAPI.dll (00007FFBD0EE0000), size: 4669440 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.2506
+D:\PROGRAM_FILES\UNITY\Editor\umbraoptimizer64.dll:umbraoptimizer64.dll (00007FFAB5A80000), size: 1187840 (result: 0), SymType: '-deferred-', PDB: ''
+C:\Windows\System32\SHELL32.dll:SHELL32.dll (00007FFBD0640000), size: 9027584 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.6133
+C:\Windows\SYSTEM32\MSVCP140.dll:MSVCP140.dll (00007FFBA9980000), size: 557056 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 14.50.35719.0
+C:\Windows\System32\wintypes.dll:wintypes.dll (00007FFBCF950000), size: 1306624 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.6133
+C:\Windows\System32\SHLWAPI.dll:SHLWAPI.dll (00007FFBD15F0000), size: 430080 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.5983
+C:\Windows\SYSTEM32\VCRUNTIME140_1.dll:VCRUNTIME140_1.dll (00007FFBA9920000), size: 45056 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 14.50.35719.0
+C:\Windows\SYSTEM32\VCRUNTIME140.dll:VCRUNTIME140.dll (00007FFBA9CA0000), size: 122880 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 14.50.35719.0
+C:\Windows\System32\OLEAUT32.dll:OLEAUT32.dll (00007FFBD2050000), size: 884736 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.5697
+C:\Windows\System32\WINTRUST.dll:WINTRUST.dll (00007FFBCF380000), size: 507904 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.6060
+C:\Windows\WinSxS\amd64_microsoft.windows.common-controls_6595b64144ccf1df_6.0.22621.6060_none_2712eda17382d24b\COMCTL32.dll:COMCTL32.dll (00007FFBBED50000), size: 2736128 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 6.10.22621.6060
+C:\Windows\SYSTEM32\dwmapi.dll:dwmapi.dll (00007FFBCC600000), size: 176128 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.5697
+C:\Windows\SYSTEM32\dxgi.dll:dxgi.dll (00007FFBCCE20000), size: 1011712 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.5415
+C:\Windows\SYSTEM32\d3d11.dll:d3d11.dll (00007FFBCCBB0000), size: 2453504 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.5415
+C:\Windows\SYSTEM32\HID.DLL:HID.DLL (00007FFBCDA80000), size: 57344 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.1
+C:\Windows\SYSTEM32\d3d12.dll:d3d12.dll (00007FFBCA980000), size: 155648 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.5415
+C:\Windows\SYSTEM32\IPHLPAPI.DLL:IPHLPAPI.DLL (00007FFBCDCE0000), size: 184320 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.1
+C:\Windows\SYSTEM32\OPENGL32.dll:OPENGL32.dll (00007FFB702A0000), size: 1048576 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.5415
+C:\Windows\SYSTEM32\WINMM.dll:WINMM.dll (00007FFBC7FF0000), size: 212992 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.5415
+C:\Windows\SYSTEM32\GLU32.dll:GLU32.dll (00007FFB70270000), size: 184320 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.2506
+C:\Windows\SYSTEM32\WINHTTP.dll:WINHTTP.dll (00007FFBC88D0000), size: 1228800 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.4830
+D:\PROGRAM_FILES\UNITY\Editor\SketchUpAPI.dll:SketchUpAPI.dll (00007FFA84870000), size: 8990720 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 23.0.0.0
+D:\PROGRAM_FILES\UNITY\Editor\NativeProxyHelper.dll:NativeProxyHelper.dll (00007FFA92100000), size: 1789952 (result: 0), SymType: '-deferred-', PDB: ''
+C:\Windows\SYSTEM32\VERSION.dll:VERSION.dll (00007FFBC7930000), size: 40960 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.1
+C:\Windows\SYSTEM32\WSOCK32.dll:WSOCK32.dll (00007FFBA9E00000), size: 36864 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.1
+D:\PROGRAM_FILES\UNITY\Editor\SketchUpCommonPreferences.dll:SketchUpCommonPreferences.dll (00007FFB1C3E0000), size: 499712 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 23.0.0.0
+C:\Windows\SYSTEM32\dxcore.dll:dxcore.dll (00007FFBCC400000), size: 225280 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.5415
+C:\Windows\SYSTEM32\Secur32.dll:Secur32.dll (00007FFBCE070000), size: 49152 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.1
+C:\Windows\SYSTEM32\SSPICLI.DLL:SSPICLI.DLL (00007FFBCE4E0000), size: 274432 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.5909
+D:\PROGRAM_FILES\UNITY\Editor\OpenRL.dll:OpenRL.dll (000001C90E7F0000), size: 12779520 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 1.5.0.2907
+C:\Windows\SYSTEM32\MSVCR100.dll:MSVCR100.dll (0000000057670000), size: 860160 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.40219.325
+C:\Windows\SYSTEM32\MSVCP100.dll:MSVCP100.dll (00000000575D0000), size: 622592 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.40219.325
+D:\PROGRAM_FILES\UNITY\Editor\embree.dll:embree.dll (00007FFA83880000), size: 16711680 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 2.14.0.0
+C:\Windows\SYSTEM32\cfgmgr32.DLL:cfgmgr32.DLL (00007FFBCEFF0000), size: 319488 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.2506
+D:\PROGRAM_FILES\UNITY\Editor\tbb.dll:tbb.dll (00007FFB1C1A0000), size: 303104 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 2020.3.2022.1111
+C:\Windows\SYSTEM32\MSWSOCK.DLL:MSWSOCK.DLL (00007FFBCE740000), size: 430080 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.5413
+D:\PROGRAM_FILES\UNITY\Editor\OpenRL_pthread.dll:OpenRL_pthread.dll (000001C90F440000), size: 61440 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 2.9.0.0
+C:\Windows\SYSTEM32\MSASN1.dll:MSASN1.dll (00007FFBCEF80000), size: 73728 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.2506
+C:\Windows\System32\bcryptprimitives.dll:bcryptprimitives.dll (00007FFBCFDF0000), size: 503808 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.4317
+C:\Windows\SYSTEM32\kernel.appcore.dll:kernel.appcore.dll (00007FFBCE220000), size: 98304 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.3958
+C:\Windows\system32\uxtheme.dll:uxtheme.dll (00007FFBCBA30000), size: 733184 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.5983
+C:\Windows\SYSTEM32\windows.storage.dll:windows.storage.dll (00007FFBCD160000), size: 9543680 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.6133
+C:\Windows\System32\SHCORE.dll:SHCORE.dll (00007FFBD1D80000), size: 1064960 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.6133
+C:\Windows\SYSTEM32\profapi.dll:profapi.dll (00007FFBCF210000), size: 151552 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.5840
+C:\Windows\SYSTEM32\CRYPTSP.dll:CRYPTSP.dll (00007FFBCEB00000), size: 110592 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.6060
+C:\Windows\system32\rsaenh.dll:rsaenh.dll (00007FFBCE1E0000), size: 225280 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.5624
+C:\Windows\system32\IconCodecService.dll:IconCodecService.dll (00007FFBA3CF0000), size: 36864 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.1
+C:\Windows\SYSTEM32\CRYPTBASE.dll:CRYPTBASE.dll (00007FFBCEA70000), size: 49152 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.4746
+C:\Windows\SYSTEM32\WindowsCodecs.dll:WindowsCodecs.dll (00007FFBCB810000), size: 1777664 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.6133
+C:\Windows\System32\imagehlp.dll:imagehlp.dll (00007FFBCFF90000), size: 126976 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.1
+C:\Windows\System32\clbcatq.dll:clbcatq.dll (00007FFBD1820000), size: 720896 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 2001.12.10941.16384
+C:\Windows\System32\netprofm.dll:netprofm.dll (00007FFBCA590000), size: 491520 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.3527
+C:\Windows\SYSTEM32\dbghelp.dll:dbghelp.dll (00007FFBCC730000), size: 2306048 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 10.0.22621.5471
+
+========== OUTPUTTING STACK TRACE ==================
+
+0x00007FFBCF46055C (KERNELBASE) RaiseException
+[Licensing::Client] Code 10 while verifying Licensing Client signature (process Id: 5448, path: "D:/PROGRAM_FILES/UNITY/Editor/Data/Resources/Licensing/Client/Unity.Licensing.Client.exe")
+[Licensing::Module] LicensingClient has failed validation; ignoring
+[Licensing::Client] Handshaking with LicensingClient:
+  Version:                 1.17.2+ff71f16
+  Session Id:              5aca68e7c60e485da3e56a3ea6c72df1
+  Correlation Id:          4eba3b50f9dd10794e661f6379221361
+  External correlation Id: 2596916503191083379
+  Machine Id:              0J41IgvZ3ZzoWn2WiHEj4My4LGc=
+[Licensing::Module] Successfully connected to LicensingClient on channel: "LicenseClient-YoDaddy" (connect: 0.00s, validation: 0.00s, handshake: 0.09s)
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-YoDaddy-notifications" at "2026-01-31T00:32:16.7303214Z"
+[Licensing::Module] Error: Access token is unavailable; failed to update
+[Licensing::Client] Error: Code 404 while processing request (status: Found 0 entitlement groups and 0 free entitlements matching requested entitlement ids)
+[Licensing::Client] Successfully updated license, isAsync: False, time: 0.01
+[Licensing::Client] Error: Code 404 while processing request (status: Found 0 entitlement groups and 0 free entitlements matching requested entitlement ids)
+[Licensing::Module] Error: 'com.unity.editor.headless' was not found.
+[Licensing::Module] Licensing Background thread has ended after 0.12s
+0x00007FFA874D4599 (Unity) EditorMonoConsole::LogToConsoleImplementation
+0x00007FFA874D5280 (Unity) EditorMonoConsole::LogToConsoleImplementation
+0x00007FFA8817FB1D (Unity) DebugStringToFilePostprocessedStacktrace
+0x00007FFA8817EE99 (Unity) DebugStringToFile
+0x00007FFA875CE3B5 (Unity) HandleProjectAlreadyOpenInAnotherInstance
+0x00007FFA875D020D (Unity) Application::InitializeProject
+0x00007FFA87BB4935 (Unity) UnityMain
+0x00007FF61B832F2A (Unity) __scrt_common_main_seh
+0x00007FFBD058259D (KERNEL32) BaseThreadInitThunk
+0x00007FFBD222AF78 (ntdll) RtlUserThreadStart
+
+========== END OF STACKTRACE ===========
+
+A crash has been intercepted by the crash handler. For call stack and other details, see the latest crash report generated in:
+ * C:/Users/YoDaddy/AppData/Local/Temp/Unity/Editor/Crashes
