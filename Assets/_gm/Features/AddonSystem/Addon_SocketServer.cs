@@ -21,8 +21,16 @@ namespace spz {
 		
 		private TcpListener _listener;
 		private Thread _listenerThread;
-		private bool _isRunning = false;
+		private volatile bool _isRunning = false; // Volatile for thread safety
 		private int _port = 5555;
+		
+		// Connection limit to prevent resource exhaustion
+		private const int MAX_CONCURRENT_CONNECTIONS = 50;
+		private int _activeConnections = 0;
+		private readonly object _connectionLock = new object();
+		
+		// Maximum message size to prevent memory exhaustion (10MB)
+		private const int MAX_MESSAGE_SIZE = 10 * 1024 * 1024;
 		
 		// Thread-safe queue for commands from background thread to main thread
 		private ConcurrentQueue<Action> _mainThreadQueue = new ConcurrentQueue<Action>();
@@ -81,8 +89,26 @@ namespace spz {
 						continue;
 					}
 					
+					// Check connection limit
+					lock (_connectionLock) {
+						if (_activeConnections >= MAX_CONCURRENT_CONNECTIONS) {
+							UnityEngine.Debug.LogWarning($"[Addon_SocketServer] Connection limit reached ({MAX_CONCURRENT_CONNECTIONS}), rejecting new connection");
+							Thread.Sleep(100); // Wait before checking again
+							continue;
+						}
+						_activeConnections++;
+					}
+					
 					TcpClient client = _listener.AcceptTcpClient();
-					Thread clientThread = new Thread(() => HandleClient(client)) {
+					Thread clientThread = new Thread(() => {
+						try {
+							HandleClient(client);
+						} finally {
+							lock (_connectionLock) {
+								_activeConnections--;
+							}
+						}
+					}) {
 						IsBackground = true
 					};
 					clientThread.Start();
@@ -99,41 +125,65 @@ namespace spz {
 		/// Handles a single client connection
 		/// </summary>
 		void HandleClient(TcpClient client) {
+			NetworkStream stream = null;
 			try {
-				NetworkStream stream = client.GetStream();
+				stream = client.GetStream();
 				byte[] buffer = new byte[4096];
+				StringBuilder messageBuffer = new StringBuilder(); // Buffer for incomplete messages
 				
 				while (client.Connected && _isRunning) {
-					int bytesRead = stream.Read(buffer, 0, buffer.Length);
+					int bytesRead = 0;
+					try {
+						bytesRead = stream.Read(buffer, 0, buffer.Length);
+					} catch (System.Net.Sockets.SocketException) {
+						// Client disconnected
+						break;
+					} catch (System.IO.IOException) {
+						// Stream closed
+						break;
+					}
+					
 					if (bytesRead == 0) break;
 					
-					string message = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-					
-					// Parse JSON-RPC request
-					try {
-						var request = JObject.Parse(message);
-						var response = ProcessRequest(request);
-						
-						// Send response back to client
-						string responseJson = JsonConvert.SerializeObject(response);
-						byte[] responseBytes = Encoding.UTF8.GetBytes(responseJson + "\n");
-						stream.Write(responseBytes, 0, responseBytes.Length);
+					// Check message buffer size to prevent memory exhaustion
+					if (messageBuffer.Length + bytesRead > MAX_MESSAGE_SIZE) {
+						UnityEngine.Debug.LogError($"[Addon_SocketServer] Message buffer exceeded maximum size ({MAX_MESSAGE_SIZE} bytes), closing connection");
+						break;
 					}
-					catch (Exception e) {
-						UnityEngine.Debug.LogError($"[Addon_SocketServer] Error processing request: {e.Message}");
+					
+					// Append to message buffer (handles split messages)
+					messageBuffer.Append(Encoding.UTF8.GetString(buffer, 0, bytesRead));
+					
+					// Process complete messages (delimited by newline)
+					string remaining = messageBuffer.ToString();
+					messageBuffer.Clear();
+					
+					// Check if remaining ends with newline (all messages complete)
+					bool endsWithNewline = remaining.EndsWith("\n");
+					
+					// Split by newline, but keep empty entries to detect incomplete messages
+					string[] messages = remaining.Split(new[] { '\n' }, StringSplitOptions.None);
+					
+					if (endsWithNewline) {
+						// All messages are complete, process all (including empty ones from trailing newlines)
+						foreach (string message in messages) {
+							if (!string.IsNullOrWhiteSpace(message)) {
+								ProcessMessage(message, stream);
+							}
+						}
+					} else if (messages.Length > 0) {
+						// Last message is incomplete, keep it in buffer
+						string lastMessage = messages[messages.Length - 1];
+						if (!string.IsNullOrEmpty(lastMessage)) {
+							messageBuffer.Append(lastMessage);
+						}
 						
-						// Send error response
-						var errorResponse = new JObject {
-							["jsonrpc"] = "2.0",
-							["error"] = new JObject {
-								["code"] = -32700,
-								["message"] = "Parse error"
-							},
-							["id"] = null
-						};
-						string errorJson = JsonConvert.SerializeObject(errorResponse);
-						byte[] errorBytes = Encoding.UTF8.GetBytes(errorJson + "\n");
-						stream.Write(errorBytes, 0, errorBytes.Length);
+						// Process all but the last message
+						for (int i = 0; i < messages.Length - 1; i++) {
+							if (!string.IsNullOrWhiteSpace(messages[i])) {
+								ProcessMessage(messages[i], stream);
+							}
+						}
 					}
 				}
 			}
@@ -141,7 +191,79 @@ namespace spz {
 				UnityEngine.Debug.LogError($"[Addon_SocketServer] Error handling client: {e.Message}");
 			}
 			finally {
-				client.Close();
+				// Properly dispose resources
+				try {
+					stream?.Close();
+					stream?.Dispose();
+				} catch { }
+				try {
+					client?.Close();
+					client?.Dispose();
+				} catch { }
+			}
+		}
+		
+		/// <summary>
+		/// Processes a single JSON-RPC message
+		/// </summary>
+		void ProcessMessage(string message, NetworkStream stream) {
+			// Validate message size before parsing
+			if (message.Length > MAX_MESSAGE_SIZE) {
+				UnityEngine.Debug.LogError($"[Addon_SocketServer] Message too large ({message.Length} bytes), maximum is {MAX_MESSAGE_SIZE}");
+				SendErrorResponse(stream, null, -32600, "Message too large");
+				return;
+			}
+			
+			try {
+				var request = JObject.Parse(message);
+				var requestId = request["id"]?.ToString();
+				var response = ProcessRequest(request);
+				
+				// Send response back to client
+				string responseJson = JsonConvert.SerializeObject(response);
+				byte[] responseBytes = Encoding.UTF8.GetBytes(responseJson + "\n");
+				try {
+					stream.Write(responseBytes, 0, responseBytes.Length);
+					stream.Flush(); // Ensure data is sent immediately
+				} catch (System.Net.Sockets.SocketException) {
+					// Client disconnected, ignore
+				} catch (System.IO.IOException) {
+					// Stream closed, ignore
+				}
+			}
+			catch (Exception e) {
+				UnityEngine.Debug.LogError($"[Addon_SocketServer] Error processing request: {e.Message}");
+				
+				// Try to extract request ID from message
+				JToken requestId = null;
+				try {
+					var request = JObject.Parse(message);
+					requestId = request["id"];
+				} catch { }
+				
+				SendErrorResponse(stream, requestId, -32700, "Parse error");
+			}
+		}
+		
+		/// <summary>
+		/// Sends an error response to the client
+		/// </summary>
+		void SendErrorResponse(NetworkStream stream, JToken requestId, int errorCode, string errorMessage) {
+			var errorResponse = new JObject {
+				["jsonrpc"] = "2.0",
+				["error"] = new JObject {
+					["code"] = errorCode,
+					["message"] = errorMessage
+				},
+				["id"] = requestId ?? JValue.CreateNull()
+			};
+			string errorJson = JsonConvert.SerializeObject(errorResponse);
+			byte[] errorBytes = Encoding.UTF8.GetBytes(errorJson + "\n");
+			try {
+				stream.Write(errorBytes, 0, errorBytes.Length);
+				stream.Flush();
+			} catch {
+				// Stream may be closed, ignore
 			}
 		}
 		
@@ -172,18 +294,24 @@ namespace spz {
 			});
 			
 			// Wait for command to execute (with timeout)
-			int timeout = 1000; // 1 second
+			// Note: This blocks the background thread, but is necessary for synchronous response
+			// Consider using async/await pattern in future for better scalability
+			int timeout = 5000; // Increased to 5 seconds for complex operations
 			int elapsed = 0;
+			int checkInterval = 50; // Check every 50ms instead of 10ms to reduce CPU usage
+			
 			while (elapsed < timeout) {
 				if (_pendingResponses.TryGetValue(id, out JObject response) && response != null) {
 					_pendingResponses.TryRemove(id, out _);
 					return response;
 				}
-				Thread.Sleep(10);
-				elapsed += 10;
+				Thread.Sleep(checkInterval);
+				elapsed += checkInterval;
 			}
 			
+			// Cleanup on timeout
 			_pendingResponses.TryRemove(id, out _);
+			UnityEngine.Debug.LogWarning($"[Addon_SocketServer] Command '{method}' timed out after {timeout}ms");
 			return CreateErrorResponse(-32603, "Command execution timeout", JToken.FromObject(id));
 		}
 		
@@ -1023,12 +1151,56 @@ namespace spz {
 				}
 				processed++;
 			}
+			
+			// Periodic cleanup of stale pending responses (older than 10 seconds)
+			// This prevents memory leaks if responses are never retrieved
+			if (Time.frameCount % 300 == 0) { // Every ~5 seconds at 60fps
+				CleanupStaleResponses();
+			}
+		}
+		
+		/// <summary>
+		/// Cleans up stale pending responses to prevent memory leaks
+		/// </summary>
+		void CleanupStaleResponses() {
+			// Note: This is a simple cleanup. In production, you might want to track timestamps
+			// For now, if dictionary grows too large, clear it (shouldn't happen in normal operation)
+			if (_pendingResponses.Count > 1000) {
+				UnityEngine.Debug.LogWarning($"[Addon_SocketServer] Too many pending responses ({_pendingResponses.Count}), clearing stale entries");
+				// Remove all null entries (pending but not completed)
+				var keysToRemove = new List<string>();
+				foreach (var kvp in _pendingResponses) {
+					if (kvp.Value == null) {
+						keysToRemove.Add(kvp.Key);
+					}
+				}
+				foreach (var key in keysToRemove) {
+					_pendingResponses.TryRemove(key, out _);
+				}
+			}
 		}
 		
 		void OnDestroy() {
 			_isRunning = false;
-			_listener?.Stop();
-			_listenerThread?.Join(1000);
+			
+			// Stop accepting new connections
+			try {
+				_listener?.Stop();
+			} catch { }
+			
+			// Wait for listener thread to finish
+			if (_listenerThread != null && _listenerThread.IsAlive) {
+				_listenerThread.Join(2000); // Wait up to 2 seconds
+				if (_listenerThread.IsAlive) {
+					UnityEngine.Debug.LogWarning("[Addon_SocketServer] Listener thread did not terminate gracefully");
+				}
+			}
+			
+			// Clear pending responses
+			_pendingResponses.Clear();
+			
+			// Clear command queue
+			while (_mainThreadQueue.TryDequeue(out _)) { }
 		}
 	}
 }

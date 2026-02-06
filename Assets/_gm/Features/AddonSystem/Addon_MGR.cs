@@ -242,9 +242,29 @@ namespace spz {
 		}
 		
 		void OnDestroy() {
-			if (_pythonProcess != null && !_pythonProcess.HasExited) {
-				_pythonProcess.Kill();
-				_pythonProcess.Dispose();
+			if (_pythonProcess != null) {
+				// Cancel async read operations to prevent event handlers from firing
+				try {
+					_pythonProcess.CancelOutputRead();
+					_pythonProcess.CancelErrorRead();
+				} catch {
+					// Already cancelled or process exited, ignore
+				}
+				
+				if (!_pythonProcess.HasExited) {
+					try {
+						_pythonProcess.Kill();
+					} catch {
+						// Process may have already exited, ignore
+					}
+				}
+				
+				try {
+					_pythonProcess.Dispose();
+				} catch {
+					// Already disposed, ignore
+				}
+				_pythonProcess = null;
 			}
 		}
 	}
