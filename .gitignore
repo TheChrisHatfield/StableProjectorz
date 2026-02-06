@@ -7,7 +7,10 @@
 /[Oo]bj/
 /[Bb]uild/
 /[Bb]uilds/
+/[Bb]uild_IL2CPP/
 /[Ll]ogs/
+build_*.txt
+build_*.txt
 /[Uu]ser[Ss]ettings/
 /stable-fast-3d*
 /Shadow_R*

@@ -377,6 +377,17 @@ namespace spz {
 	        if (autoScroll != null) autoScroll.ScrollToEnd(0.35f, false);
 	    }
 
+	    void OnButton_OpenAddonManager() {
+	        Debug.Log("[Settings_MGR] OnButton_OpenAddonManager called");
+	        if (AddonManager_UI.instance != null) {
+	            Debug.Log("[Settings_MGR] AddonManager_UI.instance found, calling OpenPanel()");
+	            AddonManager_UI.instance.OpenPanel();
+	        } else {
+	            Debug.Log("[Settings_MGR] AddonManager_UI.instance is null, invoking StaticEvent");
+	            StaticEvents.Invoke("AddonManager:OpenPanel");
+	        }
+	    }
+
 
 	    void OnButton_RestoreDefaults() {
 	        string confirmMsg = $"Restore default settings?\n<b>This will delete ALL the Art icons.</b>";
@@ -479,6 +490,7 @@ namespace spz {
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_viewport_in_center", set_viewport_in_center);
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_viewport_isSwapVerticalRibbons", set_viewport_isSwapVerticalRibbons);
 	        StaticEvents.SubscribeUnique("Settings:OnButton_RestoreDefaults", OnButton_RestoreDefaults);
+	        StaticEvents.SubscribeUnique("Settings:OnButton_OpenAddonManager", OnButton_OpenAddonManager);
 	        StaticEvents.SubscribeUnique<float>("Settings:set_noiseSpeed", set_noiseSpeed);
 	        StaticEvents.SubscribeUnique("Settings:OnButton_NoiseColor", OnButton_NoiseColor);
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_layout_askServerOften", set_layout_askServerOften);

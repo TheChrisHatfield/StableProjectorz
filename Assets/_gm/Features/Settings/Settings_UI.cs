@@ -30,6 +30,7 @@ namespace spz {
 	    [SerializeField] SliderUI_Snapping _shadowR_chunkSize_slider;
 	    [SerializeField] TextMeshProUGUI _shadowR_chunkSize_descript;
 	    [SerializeField] Button _restoreDefaults_button;
+	    [SerializeField] Button _openAddonManager_button;
 	    [SerializeField] SliderUI_Snapping _uvWarpSpeed_slider;
 	    [Space(10)]
 	    [SerializeField] SliderUI_Snapping _bgNoiseSpeed_slider;
@@ -46,6 +47,16 @@ namespace spz {
 	        EventsBinder.Bind_Clickable_to_event("Settings:OnButton_WireframeColor", _wireframeColor_button);
 	        EventsBinder.Bind_Clickable_to_event("Settings:OnButton_NoiseColor", _noiseColor_button);
 	        EventsBinder.Bind_Clickable_to_event("Settings:OnButton_RestoreDefaults", _restoreDefaults_button);
+	        EventsBinder.Bind_Clickable_to_event("Settings:OnButton_OpenAddonManager", _openAddonManager_button);
+	        
+	        // Force center alignment for Add-on Manager button text
+	        if (_openAddonManager_button != null) {
+	            var text = _openAddonManager_button.GetComponentInChildren<TMPro.TextMeshProUGUI>();
+	            if (text != null) {
+	                text.horizontalAlignment = TMPro.HorizontalAlignmentOptions.Center;
+	                text.verticalAlignment = TMPro.VerticalAlignmentOptions.Middle;
+	            }
+	        }
 
 	        // Toggles
 	        EventsBinder.Bind_Clickable_to_event("Settings:set_brushPrecision_res", _brushPrecision_4k_toggle);

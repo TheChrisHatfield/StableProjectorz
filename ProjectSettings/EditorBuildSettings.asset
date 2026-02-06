@@ -171,6 +171,9 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/_gm/Features/3D Generate/UI_3D_Generation Input_Panel (Left).unity
     guid: d1e0745e48703034cbc06f2f76dc310c
+  - enabled: 1
+    path: Assets/_gm/Features/AddonSystem/Tool_AddonSystem.unity
+    guid: a63187e0bf23601449bb776dc5a37d4b
   m_configObjects:
     com.unity.input.settings: {fileID: 11400000, guid: 87ce37f76ea685247ba04872ac5d518d, type: 2}
   m_UseUCBPForAssetBundles: 0
