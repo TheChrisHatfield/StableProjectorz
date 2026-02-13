@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.Networking;
 using System.Diagnostics;
 
 namespace spz {
@@ -53,6 +54,11 @@ namespace spz {
 			
 			// Start Python server (includes FastAPI HTTP server if enabled)
 			StartPythonServer();
+			
+			// Request Python to load each enabled addon (server exposes POST /load_addon)
+			if (_enableHttpServer) {
+				StartCoroutine(RequestLoadEnabledAddonsAfterDelay());
+			}
 			
 			// Start legacy C# HTTP server if enabled (deprecated - use FastAPI instead)
 			if (_enableCSharpHttpServer && Addon_HttpServer.instance == null) {
@@ -211,6 +217,31 @@ namespace spz {
 			}
 		}
 		
+		IEnumerator RequestLoadEnabledAddonsAfterDelay() {
+			yield return new WaitForSeconds(2.5f);
+			foreach (var kvp in _registeredAddons) {
+				if (kvp.Value.isEnabled) {
+					yield return RequestLoadAddon(kvp.Key);
+				}
+			}
+		}
+		
+		IEnumerator RequestLoadAddon(string addonId) {
+			string url = $"http://127.0.0.1:{_httpServerPort}/load_addon";
+			string body = "{\"addon_id\":\"" + addonId + "\"}";
+			using (var req = new UnityWebRequest(url, "POST")) {
+				req.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(body));
+				req.downloadHandler = new DownloadHandlerBuffer();
+				req.SetRequestHeader("Content-Type", "application/json");
+				yield return req.SendWebRequest();
+				if (req.result == UnityWebRequest.Result.Success) {
+					UnityEngine.Debug.Log($"[Addon_MGR] Requested load addon: {addonId}");
+				} else {
+					UnityEngine.Debug.LogWarning($"[Addon_MGR] load_addon failed for {addonId}: {req.error}");
+				}
+			}
+		}
+		
 		/// <summary>
 		/// Registers UI elements created by an add-on
 		/// </summary>
@@ -248,7 +279,7 @@ namespace spz {
 		}
 		
 		/// <summary>
-		/// Enables an add-on (loads it via Python server)
+		/// Enables an add-on and requests Python server to load it (so panel appears).
 		/// </summary>
 		public void EnableAddon(string addonId) {
 			if (!_registeredAddons.ContainsKey(addonId)) {
@@ -258,7 +289,9 @@ namespace spz {
 			
 			_registeredAddons[addonId].isEnabled = true;
 			UnityEngine.Debug.Log($"[Addon_MGR] Enabled add-on: {addonId}");
-			// Note: Actual loading happens via Python server when it calls register()
+			if (_enableHttpServer) {
+				StartCoroutine(RequestLoadAddon(addonId));
+			}
 		}
 		
 		/// <summary>

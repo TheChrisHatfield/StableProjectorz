@@ -27,6 +27,14 @@ def set_api_instance(api_instance):
     global _api
     _api = api_instance
 
+# Callback to load an addon by id (set by addon_server.py)
+_load_addon_callback = None
+
+def set_load_addon_callback(callback):
+    """Set the callback used by POST /load_addon. Signature: (addon_id: str) -> bool"""
+    global _load_addon_callback
+    _load_addon_callback = callback
+
 # FastAPI app
 app = FastAPI(
     title="StableProjectorz API",
@@ -61,6 +69,9 @@ class Prompt(BaseModel):
 
 class ProjectPath(BaseModel):
     filepath: str
+
+class LoadAddonRequest(BaseModel):
+    addon_id: str
 
 # Helper function to call Unity API
 def call_unity(method: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -315,6 +326,22 @@ async def load_project(project_path: ProjectPath):
         "filepath": project_path.filepath
     })
     return result
+
+# ============================================
+# ============================================
+# Addon loading (Unity calls this when user enables an addon or at startup)
+# ============================================
+
+@app.post("/load_addon")
+async def load_addon(req: LoadAddonRequest):
+    """Load a single addon by id. Called by Unity when an addon is enabled."""
+    if _load_addon_callback is None:
+        raise HTTPException(status_code=503, detail="Addon loader not registered")
+    try:
+        ok = _load_addon_callback(req.addon_id)
+        return {"success": ok, "addon_id": req.addon_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================
 # Health Check
