@@ -8,7 +8,8 @@
 It also supports generating 3D models from 2D images.<br>
 
 Official page: [StableProjectorz](https://stableprojectorz.com/) <br>
-Our Discord server: [here](https://discord.gg/aWbnX2qan2)
+Our Discord server: [here](https://discord.gg/aWbnX2qan2)  
+**License:** [AGPL-3.0](LICENSE)
 
 <p align="center">
   <img src="Assets/_gm/Art/Previews/Github-title.png" width="100%" alt="StableProjectorz Banner" />
