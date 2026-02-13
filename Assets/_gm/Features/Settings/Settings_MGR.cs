@@ -377,16 +377,13 @@ namespace spz {
 	        if (autoScroll != null) autoScroll.ScrollToEnd(0.35f, false);
 	    }
 
-	    void OnButton_OpenAddonManager() {
-	        Debug.Log("[Settings_MGR] OnButton_OpenAddonManager called");
-	        if (AddonManager_UI.instance != null) {
-	            Debug.Log("[Settings_MGR] AddonManager_UI.instance found, calling OpenPanel()");
-	            AddonManager_UI.instance.OpenPanel();
-	        } else {
-	            Debug.Log("[Settings_MGR] AddonManager_UI.instance is null, invoking StaticEvent");
-	            StaticEvents.Invoke("AddonManager:OpenPanel");
-	        }
-	    }
+    void OnButton_OpenAddonManager() {
+        if (AddonManager_UI.instance != null) {
+            AddonManager_UI.instance.OpenPanel();
+        } else {
+            StaticEvents.Invoke("AddonManager:OpenPanel");
+        }
+    }
 
 
 	    void OnButton_RestoreDefaults() {

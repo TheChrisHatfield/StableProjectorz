@@ -66,28 +66,77 @@ namespace spz {
 		/// Scans StreamingAssets/Addons/ for add-on directories
 		/// </summary>
 		public void DiscoverAddons() {
-			string addonsPath = Path.Combine(Application.streamingAssetsPath, "Addons");
-			
-			if (!Directory.Exists(addonsPath)) {
-				Directory.CreateDirectory(addonsPath);
-				UnityEngine.Debug.Log($"[Addon_MGR] Created Addons directory at {addonsPath}");
-				return;
-			}
-			
-			var addonDirs = Directory.GetDirectories(addonsPath);
-			foreach (var dir in addonDirs) {
-				string initFile = Path.Combine(dir, "__init__.py");
-				if (File.Exists(initFile)) {
-					string addonId = Path.GetFileName(dir);
-					if (!_registeredAddons.ContainsKey(addonId)) {
-						_registeredAddons[addonId] = new AddonInfo {
-							id = addonId,
-							path = dir,
-							isEnabled = false
-						};
-						UnityEngine.Debug.Log($"[Addon_MGR] Discovered add-on: {addonId}");
+			try {
+				string addonsPath = Path.Combine(Application.streamingAssetsPath, "Addons");
+				
+				if (string.IsNullOrEmpty(addonsPath)) {
+					UnityEngine.Debug.LogError("[Addon_MGR] StreamingAssets path is null or empty");
+					return;
+				}
+				
+				if (!Directory.Exists(addonsPath)) {
+					try {
+						Directory.CreateDirectory(addonsPath);
+						UnityEngine.Debug.Log($"[Addon_MGR] Created Addons directory at {addonsPath}");
+					} catch (System.Exception e) {
+						UnityEngine.Debug.LogError($"[Addon_MGR] Failed to create Addons directory: {e.Message}");
+						return;
+					}
+					return;
+				}
+				
+				string[] addonDirs = null;
+				try {
+					addonDirs = Directory.GetDirectories(addonsPath);
+				} catch (System.Exception e) {
+					UnityEngine.Debug.LogError($"[Addon_MGR] Failed to get directories from {addonsPath}: {e.Message}");
+					return;
+				}
+				
+				UnityEngine.Debug.Log($"[Addon_MGR] Scanning for addons in: {addonsPath}");
+				UnityEngine.Debug.Log($"[Addon_MGR] Found {addonDirs.Length} directories");
+				
+				var foundIds = new HashSet<string>();
+				foreach (var dir in addonDirs) {
+					try {
+						string initFile = Path.Combine(dir, "__init__.py");
+						string addonId = Path.GetFileName(dir);
+						
+						if (string.IsNullOrEmpty(addonId)) {
+							continue;
+						}
+						
+						if (File.Exists(initFile)) {
+							foundIds.Add(addonId);
+							// Update existing or add new; preserve enabled state when re-discovering
+							bool wasEnabled = _registeredAddons.ContainsKey(addonId) ? _registeredAddons[addonId].isEnabled : false;
+							_registeredAddons[addonId] = new AddonInfo {
+								id = addonId,
+								path = dir,
+								isEnabled = wasEnabled
+							};
+							UnityEngine.Debug.Log($"[Addon_MGR] Discovered add-on: {addonId} (enabled: {wasEnabled})");
+						} else {
+							UnityEngine.Debug.LogWarning($"[Addon_MGR] Directory '{addonId}' found but missing __init__.py, skipping");
+						}
+					} catch (System.Exception e) {
+						UnityEngine.Debug.LogWarning($"[Addon_MGR] Error processing directory '{dir}': {e.Message}");
+						continue;
 					}
 				}
+				
+				// Remove addons that are no longer on disk (uninstalled)
+				var toRemove = new List<string>();
+				foreach (var key in _registeredAddons.Keys) {
+					if (!foundIds.Contains(key)) toRemove.Add(key);
+				}
+				foreach (var key in toRemove) {
+					_registeredAddons.Remove(key);
+				}
+				
+				UnityEngine.Debug.Log($"[Addon_MGR] Total addons discovered: {_registeredAddons.Count}");
+			} catch (System.Exception e) {
+				UnityEngine.Debug.LogError($"[Addon_MGR] Fatal error in DiscoverAddons(): {e.Message}\n{e.StackTrace}");
 			}
 		}
 		
@@ -97,9 +146,23 @@ namespace spz {
 		void StartPythonServer() {
 			if (_isServerRunning) return;
 			
-			string serverScriptPath = Path.Combine(Application.streamingAssetsPath, "AddonSystem", _pythonServerScript);
+			string serverScriptPath = null;
+			try {
+				serverScriptPath = Path.Combine(Application.streamingAssetsPath, "AddonSystem", _pythonServerScript);
+			} catch (System.Exception e) {
+				UnityEngine.Debug.LogError($"[Addon_MGR] Failed to construct server script path: {e.Message}");
+				return;
+			}
 			
-			if (!File.Exists(serverScriptPath)) {
+			bool fileExists = false;
+			try {
+				fileExists = File.Exists(serverScriptPath);
+			} catch (System.Exception e) {
+				UnityEngine.Debug.LogError($"[Addon_MGR] Failed to check if server script exists: {e.Message}");
+				return;
+			}
+			
+			if (!fileExists) {
 				UnityEngine.Debug.LogError($"[Addon_MGR] Python server script not found at {serverScriptPath}");
 				return;
 			}
@@ -211,10 +274,9 @@ namespace spz {
 		}
 		
 		/// <summary>
-		/// Forces a re-scan of the Addons directory
+		/// Forces a re-scan of the Addons directory. Preserves enabled state for addons that are still present.
 		/// </summary>
 		public void RefreshAddons() {
-			_registeredAddons.Clear();
 			DiscoverAddons();
 		}
 		

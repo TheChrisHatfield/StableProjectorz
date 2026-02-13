@@ -25,14 +25,63 @@ namespace spz {
 		/// <param name="zipFilePath">Path to the zip file</param>
 		/// <param name="onComplete">Callback with (success, message, addonId)</param>
 		public void InstallAddonFromZip(string zipFilePath, Action<bool, string, string> onComplete) {
-			if (!File.Exists(zipFilePath)) {
+			if (string.IsNullOrEmpty(zipFilePath)) {
+				onComplete?.Invoke(false, "Invalid zip file path", null);
+				return;
+			}
+			
+			bool fileExists = false;
+			try {
+				fileExists = File.Exists(zipFilePath);
+			} catch (Exception e) {
+				UnityEngine.Debug.LogError($"[AddonInstaller] Failed to check if zip file exists: {e.Message}");
+				onComplete?.Invoke(false, $"Failed to check zip file: {e.Message}", null);
+				return;
+			}
+			
+			if (!fileExists) {
 				onComplete?.Invoke(false, "Zip file not found", null);
 				return;
 			}
 			
-			string addonsPath = Path.Combine(Application.streamingAssetsPath, "Addons");
-			if (!Directory.Exists(addonsPath)) {
-				Directory.CreateDirectory(addonsPath);
+			// Check if streamingAssetsPath is valid first
+			if (string.IsNullOrEmpty(Application.streamingAssetsPath)) {
+				UnityEngine.Debug.LogError("[AddonInstaller] Application.streamingAssetsPath is null or empty");
+				onComplete?.Invoke(false, "StreamingAssets path is not available", null);
+				return;
+			}
+			
+			string addonsPath = null;
+			try {
+				addonsPath = Path.Combine(Application.streamingAssetsPath, "Addons");
+			} catch (Exception e) {
+				UnityEngine.Debug.LogError($"[AddonInstaller] Failed to combine paths: {e.Message}");
+				onComplete?.Invoke(false, $"Failed to construct addons path: {e.Message}", null);
+				return;
+			}
+			
+			if (string.IsNullOrEmpty(addonsPath)) {
+				onComplete?.Invoke(false, "Addons path is null or empty", null);
+				return;
+			}
+			
+			bool dirExists = false;
+			try {
+				dirExists = Directory.Exists(addonsPath);
+			} catch (Exception e) {
+				UnityEngine.Debug.LogError($"[AddonInstaller] Failed to check if addons directory exists: {e.Message}");
+				onComplete?.Invoke(false, $"Failed to check addons directory: {e.Message}", null);
+				return;
+			}
+			
+			if (!dirExists) {
+				try {
+					Directory.CreateDirectory(addonsPath);
+				} catch (Exception e) {
+					UnityEngine.Debug.LogError($"[AddonInstaller] Failed to create addons directory: {e.Message}");
+					onComplete?.Invoke(false, $"Failed to create addons directory: {e.Message}", null);
+					return;
+				}
 			}
 			
 			StartCoroutine(InstallAddonCoroutine(zipFilePath, addonsPath, onComplete));
@@ -40,15 +89,56 @@ namespace spz {
 		
 		IEnumerator InstallAddonCoroutine(string zipFilePath, string addonsPath, Action<bool, string, string> onComplete) {
 			string tempExtractPath = null;
+			string targetPath = null; // Track for cleanup on partial install failure
+			string backupPath = null; // If we moved existing addon here, restore on failure
 			string addonId = null;
+			bool installSucceeded = false;
 			
 			try {
 				// Create temporary extraction directory
-				tempExtractPath = Path.Combine(Path.GetTempPath(), $"spz_addon_{Guid.NewGuid()}");
-				Directory.CreateDirectory(tempExtractPath);
+				string tempPath = null;
+				try {
+					tempPath = Path.GetTempPath();
+				} catch (Exception e) {
+					UnityEngine.Debug.LogError($"[AddonInstaller] Failed to get temp path: {e.Message}");
+					onComplete?.Invoke(false, $"Failed to get temp path: {e.Message}", null);
+					yield break;
+				}
+				
+				if (string.IsNullOrEmpty(tempPath)) {
+					onComplete?.Invoke(false, "Temp path is null or empty", null);
+					yield break;
+				}
+				
+				try {
+					tempExtractPath = Path.Combine(tempPath, $"spz_addon_{Guid.NewGuid()}");
+				} catch (Exception e) {
+					UnityEngine.Debug.LogError($"[AddonInstaller] Failed to combine temp paths: {e.Message}");
+					onComplete?.Invoke(false, $"Failed to construct temp extract path: {e.Message}", null);
+					yield break;
+				}
+				
+				if (string.IsNullOrEmpty(tempExtractPath)) {
+					onComplete?.Invoke(false, "Temp extract path is null or empty", null);
+					yield break;
+				}
+				
+				try {
+					Directory.CreateDirectory(tempExtractPath);
+				} catch (Exception e) {
+					UnityEngine.Debug.LogError($"[AddonInstaller] Failed to create temp directory: {e.Message}");
+					onComplete?.Invoke(false, $"Failed to create temp directory: {e.Message}", null);
+					yield break;
+				}
 				
 				// Extract zip to temp directory
-				ZipFile.ExtractToDirectory(zipFilePath, tempExtractPath, true);
+				try {
+					ZipFile.ExtractToDirectory(zipFilePath, tempExtractPath, true);
+				} catch (Exception e) {
+					UnityEngine.Debug.LogError($"[AddonInstaller] Failed to extract zip file: {e.Message}");
+					onComplete?.Invoke(false, $"Failed to extract zip file: {e.Message}", null);
+					yield break;
+				}
 				
 				// Find the add-on directory (could be root of zip or in a subdirectory)
 				string addonRoot = FindAddonRoot(tempExtractPath);
@@ -62,27 +152,82 @@ namespace spz {
 				addonId = GetAddonId(addonRoot);
 				
 				if (string.IsNullOrEmpty(addonId)) {
-					addonId = Path.GetFileName(addonRoot);
+					try {
+						addonId = Path.GetFileName(addonRoot);
+					} catch (Exception e) {
+						UnityEngine.Debug.LogWarning($"[AddonInstaller] Failed to get filename from addon root: {e.Message}");
+					}
+					
 					if (string.IsNullOrEmpty(addonId)) {
 						addonId = $"Addon_{DateTime.Now:yyyyMMdd_HHmmss}";
 					}
 				}
 				
 				// Check if add-on already exists
-				string targetPath = Path.Combine(addonsPath, addonId);
-				if (Directory.Exists(targetPath)) {
+				try {
+					targetPath = Path.Combine(addonsPath, addonId);
+				} catch (Exception e) {
+					UnityEngine.Debug.LogError($"[AddonInstaller] Failed to combine target path: {e.Message}");
+					onComplete?.Invoke(false, $"Failed to construct target path: {e.Message}", null);
+					yield break;
+				}
+				
+				if (string.IsNullOrEmpty(targetPath)) {
+					onComplete?.Invoke(false, "Target path is null or empty", null);
+					yield break;
+				}
+				
+				bool targetExists = false;
+				try {
+					targetExists = Directory.Exists(targetPath);
+				} catch (Exception e) {
+					UnityEngine.Debug.LogError($"[AddonInstaller] Failed to check if target directory exists: {e.Message}");
+					onComplete?.Invoke(false, $"Cannot install: failed to check if addon already exists ({e.Message}). Refusing to overwrite without backup.", null);
+					yield break;
+				}
+				
+				if (targetExists) {
 					// Ask user if they want to overwrite (for now, we'll create a backup)
-					string backupPath = $"{targetPath}_backup_{DateTime.Now:yyyyMMdd_HHmmss}";
-					Directory.Move(targetPath, backupPath);
-					UnityEngine.Debug.Log($"[AddonInstaller] Backed up existing add-on to {backupPath}");
+					backupPath = $"{targetPath}_backup_{DateTime.Now:yyyyMMdd_HHmmss}";
+					try {
+						Directory.Move(targetPath, backupPath);
+						UnityEngine.Debug.Log($"[AddonInstaller] Backed up existing add-on to {backupPath}");
+					} catch (Exception e) {
+						UnityEngine.Debug.LogError($"[AddonInstaller] Failed to backup existing add-on: {e.Message}");
+						onComplete?.Invoke(false, $"Failed to backup existing add-on: {e.Message}", null);
+						yield break;
+					}
 				}
 				
 				// Copy to final location
-				CopyDirectory(addonRoot, targetPath);
+				try {
+					CopyDirectory(addonRoot, targetPath);
+				} catch (Exception e) {
+					UnityEngine.Debug.LogError($"[AddonInstaller] Failed to copy directory: {e.Message}");
+					onComplete?.Invoke(false, $"Failed to copy add-on files: {e.Message}", null);
+					yield break;
+				}
 				
 				// Verify installation
-				string initFile = Path.Combine(targetPath, "__init__.py");
-				if (!File.Exists(initFile)) {
+				string initFile = null;
+				try {
+					initFile = Path.Combine(targetPath, "__init__.py");
+				} catch (Exception e) {
+					UnityEngine.Debug.LogError($"[AddonInstaller] Failed to combine init file path: {e.Message}");
+					onComplete?.Invoke(false, $"Failed to construct init file path: {e.Message}", null);
+					yield break;
+				}
+				
+				bool initExists = false;
+				try {
+					initExists = File.Exists(initFile);
+				} catch (Exception e) {
+					UnityEngine.Debug.LogError($"[AddonInstaller] Failed to check if init file exists: {e.Message}");
+					onComplete?.Invoke(false, $"Failed to verify installation: {e.Message}", null);
+					yield break;
+				}
+				
+				if (!initExists) {
 					onComplete?.Invoke(false, "Installation failed: __init__.py not found after extraction", null);
 					yield break;
 				}
@@ -92,6 +237,7 @@ namespace spz {
 					Addon_MGR.instance.DiscoverAddons();
 				}
 				
+				installSucceeded = true;
 				onComplete?.Invoke(true, $"Add-on '{addonId}' installed successfully", addonId);
 				
 			} catch (Exception e) {
@@ -106,6 +252,36 @@ namespace spz {
 						UnityEngine.Debug.LogWarning($"[AddonInstaller] Could not delete temp directory: {e.Message}");
 					}
 				}
+				// Clean up partially-installed target directory on failure (e.g. CopyDirectory threw)
+				if (!installSucceeded && targetPath != null && Directory.Exists(targetPath)) {
+					try {
+						Directory.Delete(targetPath, true);
+						UnityEngine.Debug.Log($"[AddonInstaller] Removed partial install at {targetPath}");
+					} catch (Exception e) {
+						UnityEngine.Debug.LogWarning($"[AddonInstaller] Could not remove partial install directory: {e.Message}");
+					}
+				}
+				// Restore original addon from backup if we had moved it and install failed
+				if (!installSucceeded && backupPath != null && targetPath != null && Directory.Exists(backupPath)) {
+					// If partial targetPath still exists (delete above failed), try once more so Move can succeed
+					if (Directory.Exists(targetPath)) {
+						try {
+							Directory.Delete(targetPath, true);
+						} catch (Exception e) {
+							UnityEngine.Debug.LogWarning($"[AddonInstaller] Could not remove partial install before restore: {e.Message}");
+						}
+					}
+					if (!Directory.Exists(targetPath)) {
+						try {
+							Directory.Move(backupPath, targetPath);
+							UnityEngine.Debug.Log($"[AddonInstaller] Restored original addon from backup to {targetPath}");
+						} catch (Exception e) {
+							UnityEngine.Debug.LogWarning($"[AddonInstaller] Could not restore addon from backup: {e.Message}. Original remains at {backupPath}");
+						}
+					} else {
+						UnityEngine.Debug.LogWarning($"[AddonInstaller] Could not restore addon: target path still in use. Original remains at {backupPath}");
+					}
+				}
 			}
 		}
 		
@@ -114,15 +290,61 @@ namespace spz {
 		/// Handles cases where zip contains the add-on directly or in a subdirectory
 		/// </summary>
 		string FindAddonRoot(string extractPath) {
+			if (string.IsNullOrEmpty(extractPath)) {
+				return null;
+			}
+			
 			// Check root
-			if (File.Exists(Path.Combine(extractPath, "__init__.py"))) {
+			string rootInitFile = null;
+			try {
+				rootInitFile = Path.Combine(extractPath, "__init__.py");
+			} catch (Exception e) {
+				UnityEngine.Debug.LogWarning($"[AddonInstaller] Failed to combine root init file path: {e.Message}");
+				return null;
+			}
+			
+			bool rootInitExists = false;
+			try {
+				rootInitExists = File.Exists(rootInitFile);
+			} catch (Exception e) {
+				UnityEngine.Debug.LogWarning($"[AddonInstaller] Failed to check root init file: {e.Message}");
+			}
+			
+			if (rootInitExists) {
 				return extractPath;
 			}
 			
 			// Check subdirectories (common case: zip contains a folder with the add-on name)
-			var subdirs = Directory.GetDirectories(extractPath);
+			string[] subdirs = null;
+			try {
+				subdirs = Directory.GetDirectories(extractPath);
+			} catch (Exception e) {
+				UnityEngine.Debug.LogWarning($"[AddonInstaller] Failed to get subdirectories: {e.Message}");
+				return null;
+			}
+			
+			if (subdirs == null) {
+				return null;
+			}
+			
 			foreach (var subdir in subdirs) {
-				if (File.Exists(Path.Combine(subdir, "__init__.py"))) {
+				string subdirInitFile = null;
+				try {
+					subdirInitFile = Path.Combine(subdir, "__init__.py");
+				} catch (Exception e) {
+					UnityEngine.Debug.LogWarning($"[AddonInstaller] Failed to combine subdir init file path: {e.Message}");
+					continue;
+				}
+				
+				bool subdirInitExists = false;
+				try {
+					subdirInitExists = File.Exists(subdirInitFile);
+				} catch (Exception e) {
+					UnityEngine.Debug.LogWarning($"[AddonInstaller] Failed to check subdir init file: {e.Message}");
+					continue;
+				}
+				
+				if (subdirInitExists) {
 					return subdir;
 				}
 			}
@@ -135,8 +357,31 @@ namespace spz {
 		/// Falls back to directory name if not found
 		/// </summary>
 		string GetAddonId(string addonRoot) {
-			string initFile = Path.Combine(addonRoot, "__init__.py");
-			if (!File.Exists(initFile)) return null;
+			if (string.IsNullOrEmpty(addonRoot)) {
+				return null;
+			}
+			
+			string initFile = null;
+			try {
+				initFile = Path.Combine(addonRoot, "__init__.py");
+			} catch (Exception e) {
+				UnityEngine.Debug.LogWarning($"[AddonInstaller] Failed to combine init file path in GetAddonId: {e.Message}");
+				return null;
+			}
+			
+			if (string.IsNullOrEmpty(initFile)) {
+				return null;
+			}
+			
+			bool initExists = false;
+			try {
+				initExists = File.Exists(initFile);
+			} catch (Exception e) {
+				UnityEngine.Debug.LogWarning($"[AddonInstaller] Failed to check init file in GetAddonId: {e.Message}");
+				return null;
+			}
+			
+			if (!initExists) return null;
 			
 			try {
 				string[] lines = File.ReadAllLines(initFile);
@@ -164,18 +409,88 @@ namespace spz {
 		/// Copies a directory recursively
 		/// </summary>
 		void CopyDirectory(string sourceDir, string destDir) {
-			Directory.CreateDirectory(destDir);
-			
-			foreach (string file in Directory.GetFiles(sourceDir)) {
-				string fileName = Path.GetFileName(file);
-				string destFile = Path.Combine(destDir, fileName);
-				File.Copy(file, destFile, true);
+			if (string.IsNullOrEmpty(sourceDir) || string.IsNullOrEmpty(destDir)) {
+				throw new ArgumentException("Source or destination directory is null or empty");
 			}
 			
-			foreach (string subdir in Directory.GetDirectories(sourceDir)) {
-				string dirName = Path.GetFileName(subdir);
-				string destSubdir = Path.Combine(destDir, dirName);
-				CopyDirectory(subdir, destSubdir);
+			try {
+				Directory.CreateDirectory(destDir);
+			} catch (Exception e) {
+				UnityEngine.Debug.LogError($"[AddonInstaller] Failed to create destination directory: {e.Message}");
+				throw;
+			}
+			
+			string[] files = null;
+			try {
+				files = Directory.GetFiles(sourceDir);
+			} catch (Exception e) {
+				UnityEngine.Debug.LogError($"[AddonInstaller] Failed to get files from source directory: {e.Message}");
+				throw;
+			}
+			
+			if (files != null) {
+				foreach (string file in files) {
+					string fileName = null;
+					try {
+						fileName = Path.GetFileName(file);
+					} catch (Exception e) {
+						UnityEngine.Debug.LogWarning($"[AddonInstaller] Failed to get filename: {e.Message}");
+						continue;
+					}
+					
+					if (string.IsNullOrEmpty(fileName)) {
+						continue;
+					}
+					
+					string destFile = null;
+					try {
+						destFile = Path.Combine(destDir, fileName);
+					} catch (Exception e) {
+						UnityEngine.Debug.LogWarning($"[AddonInstaller] Failed to combine dest file path: {e.Message}");
+						continue;
+					}
+					
+					try {
+						File.Copy(file, destFile, true);
+					} catch (Exception e) {
+						UnityEngine.Debug.LogError($"[AddonInstaller] Failed to copy file '{file}' to '{destFile}': {e.Message}");
+						throw;
+					}
+				}
+			}
+			
+			string[] subdirs = null;
+			try {
+				subdirs = Directory.GetDirectories(sourceDir);
+			} catch (Exception e) {
+				UnityEngine.Debug.LogError($"[AddonInstaller] Failed to get subdirectories from source: {e.Message}");
+				throw;
+			}
+			
+			if (subdirs != null) {
+				foreach (string subdir in subdirs) {
+					string dirName = null;
+					try {
+						dirName = Path.GetFileName(subdir);
+					} catch (Exception e) {
+						UnityEngine.Debug.LogWarning($"[AddonInstaller] Failed to get subdir name: {e.Message}");
+						continue;
+					}
+					
+					if (string.IsNullOrEmpty(dirName)) {
+						continue;
+					}
+					
+					string destSubdir = null;
+					try {
+						destSubdir = Path.Combine(destDir, dirName);
+					} catch (Exception e) {
+						UnityEngine.Debug.LogWarning($"[AddonInstaller] Failed to combine dest subdir path: {e.Message}");
+						continue;
+					}
+					
+					CopyDirectory(subdir, destSubdir);
+				}
 			}
 		}
 		
@@ -188,9 +503,37 @@ namespace spz {
 				return;
 			}
 			
-			string addonPath = Path.Combine(Application.streamingAssetsPath, "Addons", addonId);
+			// Check if streamingAssetsPath is valid first
+			if (string.IsNullOrEmpty(Application.streamingAssetsPath)) {
+				UnityEngine.Debug.LogError("[AddonInstaller] Application.streamingAssetsPath is null or empty");
+				onComplete?.Invoke(false, "StreamingAssets path is not available");
+				return;
+			}
 			
-			if (!Directory.Exists(addonPath)) {
+			string addonPath = null;
+			try {
+				addonPath = Path.Combine(Application.streamingAssetsPath, "Addons", addonId);
+			} catch (Exception e) {
+				UnityEngine.Debug.LogError($"[AddonInstaller] Failed to combine addon path: {e.Message}");
+				onComplete?.Invoke(false, $"Failed to construct addon path: {e.Message}");
+				return;
+			}
+			
+			if (string.IsNullOrEmpty(addonPath)) {
+				onComplete?.Invoke(false, "Addon path is null or empty");
+				return;
+			}
+			
+			bool dirExists = false;
+			try {
+				dirExists = Directory.Exists(addonPath);
+			} catch (Exception e) {
+				UnityEngine.Debug.LogError($"[AddonInstaller] Failed to check if addon directory exists: {e.Message}");
+				onComplete?.Invoke(false, $"Failed to check addon directory: {e.Message}");
+				return;
+			}
+			
+			if (!dirExists) {
 				onComplete?.Invoke(false, $"Add-on '{addonId}' not found");
 				return;
 			}
@@ -202,7 +545,12 @@ namespace spz {
 				}
 				
 				// Delete directory
-				Directory.Delete(addonPath, true);
+				try {
+					Directory.Delete(addonPath, true);
+				} catch (Exception e) {
+					UnityEngine.Debug.LogError($"[AddonInstaller] Failed to delete addon directory: {e.Message}");
+					throw;
+				}
 				
 				// Refresh discovery
 				if (Addon_MGR.instance != null) {
