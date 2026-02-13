@@ -27,6 +27,12 @@ namespace spz {
 		
 		private Dictionary<string, GameObject> _addonUIItems = new Dictionary<string, GameObject>();
 		
+		// Filter state: 0 = All, 1 = Enabled, 2 = Disabled
+		private int _filterState = 0;
+		private Toggle _filterAllToggle;
+		private Toggle _filterEnabledToggle;
+		private Toggle _filterDisabledToggle;
+		
 		void Awake() {
 			if (instance != null) { DestroyImmediate(this); return; }
 			instance = this;
@@ -227,7 +233,48 @@ namespace spz {
 		refreshBtnText.raycastTarget = false; // Don't block button clicks
 		_refresh_button = refreshBtn;
 		
-		// Create scroll view for addon list
+		// Create filter bar with radio buttons (All, Enabled, Disabled)
+		GameObject filterBarObj = new GameObject("FilterBar");
+		filterBarObj.transform.SetParent(panelObj.transform, false);
+		var filterBarRect = filterBarObj.AddComponent<RectTransform>();
+		filterBarRect.sizeDelta = new Vector2(0, 35);
+		var filterBarLayout = filterBarObj.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+		filterBarLayout.spacing = 10f;
+		filterBarLayout.childControlWidth = false;
+		filterBarLayout.childControlHeight = true;
+		filterBarLayout.padding = new RectOffset(10, 10, 5, 5);
+		
+		// Filter label
+		var filterLabelObj = new GameObject("FilterLabel");
+		filterLabelObj.transform.SetParent(filterBarObj.transform, false);
+		var filterLabelRect = filterLabelObj.AddComponent<RectTransform>();
+		filterLabelRect.sizeDelta = new Vector2(60, 0);
+		var filterLabelText = filterLabelObj.AddComponent<TextMeshProUGUI>();
+		filterLabelText.text = "Filter:";
+		filterLabelText.fontSize = 14;
+		filterLabelText.color = Color.white;
+		filterLabelText.alignment = TextAlignmentOptions.Left;
+		
+		// Create toggle group for radio buttons (mutually exclusive)
+		var toggleGroup = filterBarObj.AddComponent<ToggleGroup>();
+		toggleGroup.allowSwitchOff = false; // Radio button behavior
+		
+		// All filter button (radio) — do not set isOn yet; listener would call RefreshAddonsList() before _addonsListParent exists
+		var filterAllObj = CreateFilterToggle("All", filterBarObj.transform, toggleGroup, 0);
+		_filterAllToggle = filterAllObj.GetComponent<Toggle>();
+		
+		// Enabled filter button (radio)
+		var filterEnabledObj = CreateFilterToggle("Enabled", filterBarObj.transform, toggleGroup, 1);
+		_filterEnabledToggle = filterEnabledObj.GetComponent<Toggle>();
+		
+		// Disabled filter button (radio)
+		var filterDisabledObj = CreateFilterToggle("Disabled", filterBarObj.transform, toggleGroup, 2);
+		_filterDisabledToggle = filterDisabledObj.GetComponent<Toggle>();
+		
+			Debug.Log("[AddonManager_UI] Filter bar created with All/Enabled/Disabled toggles");
+			
+			// Create scroll view for addon list
+			Debug.Log("[AddonManager_UI] Creating scroll view and content area...");
 		GameObject scrollViewObj = new GameObject("ScrollView");
 		scrollViewObj.transform.SetParent(panelObj.transform, false);
 		var scrollViewRect = scrollViewObj.AddComponent<RectTransform>();
@@ -237,6 +284,7 @@ namespace spz {
 		var scrollView = scrollViewObj.AddComponent<UnityEngine.UI.ScrollRect>();
 		scrollView.horizontal = false;
 		scrollView.vertical = true;
+		scrollView.scrollSensitivity = 20f; // Make scrolling more responsive
 		var scrollViewImage = scrollViewObj.AddComponent<UnityEngine.UI.Image>();
 		scrollViewImage.color = new Color(0.15f, 0.15f, 0.15f, 1f);
 		scrollViewImage.raycastTarget = true; // Block clicks
@@ -273,6 +321,10 @@ namespace spz {
 		contentSizeFitter.verticalFit = UnityEngine.UI.ContentSizeFitter.FitMode.PreferredSize;
 		scrollView.content = contentRect;
 		_addonsListParent = contentRect;
+		Debug.Log($"[AddonManager_UI] Set _addonsListParent to {contentRect.name} (active: {contentRect.gameObject.activeSelf})");
+		
+		// Set default filter selection after _addonsListParent exists so RefreshAddonsList() in the listener can run
+		_filterAllToggle.isOn = true;
 		
 		// Status text
 		GameObject statusObj = new GameObject("StatusText");
@@ -287,6 +339,7 @@ namespace spz {
 		_statusText = statusText;
 		
 		_panel.SetActive(false);
+		Debug.Log("[AddonManager_UI] Panel creation completed, set inactive initially");
 	}
 		
 		/// <summary>
@@ -295,10 +348,20 @@ namespace spz {
 		public void OpenPanel() {
 			Debug.Log("[AddonManager_UI] OpenPanel() called");
 			
-			// Ensure panel exists
+			// Ensure panel exists and has filter bar (recreate if missing)
 			if (_panel == null) {
 				Debug.Log("[AddonManager_UI] Panel is null, creating it...");
 				CreatePanelIfNeeded();
+			} else {
+				// Check if filter bar exists (for panels created before filter feature was added)
+				var filterBar = _panel.transform.Find("FilterBar");
+				if (filterBar == null) {
+					Debug.Log("[AddonManager_UI] Panel exists but missing FilterBar, recreating panel...");
+					Destroy(_panel);
+					_panel = null;
+					_addonsListParent = null; // Will be set in CreatePanelIfNeeded
+					CreatePanelIfNeeded();
+				}
 			}
 			
 			if (_panel != null) {
@@ -314,6 +377,13 @@ namespace spz {
 					Debug.LogWarning("[AddonManager_UI] No Canvas found for panel!");
 				}
 				
+				// Force refresh of addons before showing list
+				if (Addon_MGR.instance != null) {
+					Addon_MGR.instance.RefreshAddons();
+					Debug.Log("[AddonManager_UI] Refreshed addon discovery");
+				}
+				
+				Debug.Log($"[AddonManager_UI] About to call RefreshAddonsList, _addonsListParent: {_addonsListParent?.name}");
 				RefreshAddonsList();
 			} else {
 				Debug.LogError("[AddonManager_UI] Failed to open panel: _panel is null and could not be created.");
@@ -371,10 +441,66 @@ namespace spz {
 		}
 		
 		/// <summary>
-		/// Refreshes the list of add-ons
+		/// Creates a filter toggle button (radio button style)
+		/// </summary>
+		GameObject CreateFilterToggle(string label, Transform parent, ToggleGroup toggleGroup, int filterValue) {
+			var toggleObj = new GameObject($"Filter_{label}");
+			toggleObj.transform.SetParent(parent, false);
+			var toggleRect = toggleObj.AddComponent<RectTransform>();
+			toggleRect.sizeDelta = new Vector2(80, 25);
+			
+			// Toggle background
+			var toggleBg = toggleObj.AddComponent<UnityEngine.UI.Image>();
+			toggleBg.color = new Color(0.25f, 0.25f, 0.25f, 1f);
+			toggleBg.raycastTarget = true;
+			
+			// Toggle component
+			var toggle = toggleObj.AddComponent<Toggle>();
+			toggle.group = toggleGroup;
+			toggle.targetGraphic = toggleBg;
+			
+			// Toggle label
+			var labelObj = new GameObject("Label");
+			labelObj.transform.SetParent(toggleObj.transform, false);
+			var labelRect = labelObj.AddComponent<RectTransform>();
+			labelRect.anchorMin = Vector2.zero;
+			labelRect.anchorMax = Vector2.one;
+			labelRect.sizeDelta = Vector2.zero;
+			var labelText = labelObj.AddComponent<TextMeshProUGUI>();
+			labelText.text = label;
+			labelText.fontSize = 12;
+			labelText.color = Color.white;
+			labelText.alignment = TextAlignmentOptions.Center;
+			labelText.raycastTarget = false;
+			
+			// Update label color based on toggle state
+			toggle.onValueChanged.AddListener((isOn) => {
+				labelText.color = isOn ? new Color(0.4f, 1f, 0.4f) : Color.white;
+				toggleBg.color = isOn ? new Color(0.35f, 0.35f, 0.35f, 1f) : new Color(0.25f, 0.25f, 0.25f, 1f);
+				if (isOn) {
+					_filterState = filterValue;
+					RefreshAddonsList(); // Refresh when filter changes
+				}
+			});
+			
+			// Set initial state
+			labelText.color = toggle.isOn ? new Color(0.4f, 1f, 0.4f) : Color.white;
+			toggleBg.color = toggle.isOn ? new Color(0.35f, 0.35f, 0.35f, 1f) : new Color(0.25f, 0.25f, 0.25f, 1f);
+			
+			return toggleObj;
+		}
+		
+		/// <summary>
+		/// Refreshes the list of add-ons with current filter applied
 		/// </summary>
 		public void RefreshAddonsList() {
-			if (_addonsListParent == null) return;
+			if (_addonsListParent == null) {
+				Debug.LogError("[AddonManager_UI] RefreshAddonsList: _addonsListParent is null! Cannot create items.");
+				ShowStatus("Error: List parent not initialized", false);
+				return;
+			}
+			
+			Debug.Log($"[AddonManager_UI] RefreshAddonsList: _addonsListParent = {_addonsListParent.name}, active = {_addonsListParent.gameObject.activeSelf}");
 			
 			// Clear existing items
 			foreach (var item in _addonUIItems.Values) {
@@ -387,28 +513,68 @@ namespace spz {
 			// Get list of add-ons
 			if (Addon_MGR.instance == null) {
 				ShowStatus("Add-on manager not available", false);
+				Debug.LogError("[AddonManager_UI] Addon_MGR.instance is null!");
 				return;
 			}
 			
 			var addons = Addon_MGR.instance.GetAddons();
 			
+			Debug.Log($"[AddonManager_UI] Found {addons.Count} addon(s) in registry, filter: {_filterState}");
+			
 			if (addons.Count == 0) {
-				ShowStatus("No add-ons installed", true);
+				ShowStatus("No add-ons installed. Add-ons should be in StreamingAssets/Addons/", false);
+				Debug.LogWarning("[AddonManager_UI] No addons found. Check StreamingAssets/Addons/ directory.");
 				return;
 			}
 			
-			// Create UI item for each add-on
+			// Filter addons based on current filter state
+			var filteredAddons = new List<KeyValuePair<string, Addon_MGR.AddonInfo>>();
+			int enabledCount = 0;
+			int disabledCount = 0;
+			
 			foreach (var kvp in addons) {
+				if (kvp.Value.isEnabled) enabledCount++;
+				else disabledCount++;
+				
+				// Apply filter
+				bool shouldShow = false;
+				if (_filterState == 0) { // All
+					shouldShow = true;
+				} else if (_filterState == 1) { // Enabled
+					shouldShow = kvp.Value.isEnabled;
+				} else if (_filterState == 2) { // Disabled
+					shouldShow = !kvp.Value.isEnabled;
+				}
+				
+				if (shouldShow) {
+					filteredAddons.Add(kvp);
+				}
+			}
+			
+			Debug.Log($"[AddonManager_UI] After filtering: {filteredAddons.Count} addon(s) to display (filter state: {_filterState})");
+			
+			// Create UI item for each filtered add-on
+			foreach (var kvp in filteredAddons) {
+				Debug.Log($"[AddonManager_UI] Creating UI item for addon: {kvp.Key}");
 				CreateAddonListItem(kvp.Key, kvp.Value);
 			}
 			
-			ShowStatus($"Found {addons.Count} add-on(s)", true);
+			Debug.Log($"[AddonManager_UI] Created {_addonUIItems.Count} UI items");
+			
+			// Update status message with filter info
+			string filterText = _filterState == 0 ? "All" : (_filterState == 1 ? "Enabled" : "Disabled");
+			ShowStatus($"Showing {filteredAddons.Count} of {addons.Count} add-on(s) ({enabledCount} enabled, {disabledCount} disabled) - Filter: {filterText}", true);
 		}
 		
 		/// <summary>
 		/// Creates a UI item for an add-on in the list
 		/// </summary>
 		void CreateAddonListItem(string addonId, Addon_MGR.AddonInfo addonInfo) {
+			if (_addonsListParent == null) {
+				Debug.LogError($"[AddonManager_UI] CreateAddonListItem: _addonsListParent is null for addon {addonId}");
+				return;
+			}
+			
 			// Remove existing item if it exists (shouldn't happen, but safety check)
 			if (_addonUIItems.ContainsKey(addonId)) {
 				var existingItem = _addonUIItems[addonId];
@@ -422,10 +588,12 @@ namespace spz {
 			
 			if (_addonItemPrefab != null) {
 				itemObj = Instantiate(_addonItemPrefab, _addonsListParent);
+				Debug.Log($"[AddonManager_UI] Created item from prefab for {addonId}");
 			} else {
 				// Create basic UI item if no prefab
 				itemObj = new GameObject($"AddonItem_{addonId}");
 				itemObj.transform.SetParent(_addonsListParent, false);
+				Debug.Log($"[AddonManager_UI] Creating dynamic UI item for {addonId}, parent: {_addonsListParent.name}");
 				
 				var rectTransform = itemObj.AddComponent<RectTransform>();
 				rectTransform.sizeDelta = new Vector2(0, 40);
@@ -436,41 +604,97 @@ namespace spz {
 				horizontalLayout.childControlWidth = false;
 				horizontalLayout.childControlHeight = true;
 				
-				// Add name label
+				// Add name label with status indicator (Blender-style)
 				var nameObj = new GameObject("Name");
 				nameObj.transform.SetParent(itemObj.transform, false);
 				var nameRect = nameObj.AddComponent<RectTransform>();
-				nameRect.sizeDelta = new Vector2(200, 0);
+				var nameLayoutElement = nameObj.AddComponent<LayoutElement>();
+				nameLayoutElement.flexibleWidth = 1; // Take remaining space
+				nameRect.sizeDelta = new Vector2(0, 0);
 				var nameText = nameObj.AddComponent<TextMeshProUGUI>();
-				nameText.text = addonId;
+				// Show addon name with status indicator (✓ for enabled, ○ for disabled)
+				string statusIcon = addonInfo.isEnabled ? "✓" : "○";
+				nameText.text = $"{statusIcon} {addonId}";
 				nameText.fontSize = 14;
-				nameText.color = Color.white;
+				nameText.color = addonInfo.isEnabled ? new Color(0.4f, 1f, 0.4f) : Color.white; // Green if enabled, white if disabled
+				nameText.alignment = TextAlignmentOptions.Left;
 				
-				// Add enable/disable toggle
+				// Add enable/disable toggle with label
+				var toggleContainerObj = new GameObject("ToggleContainer");
+				toggleContainerObj.transform.SetParent(itemObj.transform, false);
+				var toggleContainerRect = toggleContainerObj.AddComponent<RectTransform>();
+				toggleContainerRect.sizeDelta = new Vector2(120, 0);
+				var toggleContainerLayout = toggleContainerObj.AddComponent<HorizontalLayoutGroup>();
+				toggleContainerLayout.spacing = 5;
+				toggleContainerLayout.childControlWidth = false;
+				toggleContainerLayout.childControlHeight = true;
+				
+				// Toggle label
+				var toggleLabelObj = new GameObject("ToggleLabel");
+				toggleLabelObj.transform.SetParent(toggleContainerObj.transform, false);
+				var toggleLabelRect = toggleLabelObj.AddComponent<RectTransform>();
+				toggleLabelRect.sizeDelta = new Vector2(60, 0);
+				var toggleLabelText = toggleLabelObj.AddComponent<TextMeshProUGUI>();
+				toggleLabelText.text = addonInfo.isEnabled ? "Enabled" : "Disabled";
+				toggleLabelText.fontSize = 12;
+				toggleLabelText.color = addonInfo.isEnabled ? new Color(0.4f, 1f, 0.4f) : new Color(0.7f, 0.7f, 0.7f);
+				toggleLabelText.alignment = TextAlignmentOptions.Left;
+				
+				// Toggle switch
 				var toggleObj = new GameObject("Toggle");
-				toggleObj.transform.SetParent(itemObj.transform, false);
+				toggleObj.transform.SetParent(toggleContainerObj.transform, false);
 				var toggleRect = toggleObj.AddComponent<RectTransform>();
-				toggleRect.sizeDelta = new Vector2(100, 0);
+				toggleRect.sizeDelta = new Vector2(50, 20);
+				
+				// Toggle background
+				var toggleBg = toggleObj.AddComponent<UnityEngine.UI.Image>();
+				toggleBg.color = new Color(0.3f, 0.3f, 0.3f, 1f);
+				toggleBg.raycastTarget = true;
+				
+				// Toggle checkmark
+				var toggleCheckmarkObj = new GameObject("Checkmark");
+				toggleCheckmarkObj.transform.SetParent(toggleObj.transform, false);
+				var toggleCheckmarkRect = toggleCheckmarkObj.AddComponent<RectTransform>();
+				toggleCheckmarkRect.anchorMin = Vector2.zero;
+				toggleCheckmarkRect.anchorMax = Vector2.one;
+				toggleCheckmarkRect.sizeDelta = Vector2.zero;
+				var toggleCheckmark = toggleCheckmarkObj.AddComponent<UnityEngine.UI.Image>();
+				toggleCheckmark.color = new Color(0.2f, 0.8f, 0.2f, 1f);
+				
 				var toggle = toggleObj.AddComponent<Toggle>();
-				toggle.isOn = addonInfo.isEnabled;
+				toggle.targetGraphic = toggleBg;
+				toggle.graphic = toggleCheckmark;
+				toggle.isOn = addonInfo.isEnabled; // Set after graphic so visibility is correct
 				toggle.onValueChanged.AddListener((enabled) => {
 					if (Addon_MGR.instance == null) {
 						Debug.LogWarning("[AddonManager_UI] Addon_MGR.instance is null, cannot enable/disable addon");
 						return;
 					}
+					string id = addonId; // Capture for closure; avoid using item UI refs after refresh
 					if (enabled) {
-						Addon_MGR.instance.EnableAddon(addonId);
+						Addon_MGR.instance.EnableAddon(id);
 					} else {
-						Addon_MGR.instance.DisableAddon(addonId);
+						Addon_MGR.instance.DisableAddon(id);
 					}
+					// Refresh list (recreates all items with correct state). Do not touch toggleLabelText/itemObj
+					// after this—they are destroyed; touching them would cause null refs.
+					RefreshAddonsList();
 				});
 				
-				// Add remove button
+				// Add remove/uninstall button (Blender-style)
 				var removeBtnObj = new GameObject("RemoveButton");
 				removeBtnObj.transform.SetParent(itemObj.transform, false);
 				var removeBtnRect = removeBtnObj.AddComponent<RectTransform>();
-				removeBtnRect.sizeDelta = new Vector2(80, 30);
+				removeBtnRect.sizeDelta = new Vector2(90, 30);
+				
+				// Button background (reddish for destructive action)
+				var removeBtnImage = removeBtnObj.AddComponent<UnityEngine.UI.Image>();
+				removeBtnImage.color = new Color(0.5f, 0.2f, 0.2f, 1f);
+				removeBtnImage.raycastTarget = true;
+				
 				var removeBtn = removeBtnObj.AddComponent<Button>();
+				removeBtn.targetGraphic = removeBtnImage;
+				
 				var removeBtnText = new GameObject("Text");
 				removeBtnText.transform.SetParent(removeBtnObj.transform, false);
 				var removeBtnTextRect = removeBtnText.AddComponent<RectTransform>();
@@ -478,15 +702,25 @@ namespace spz {
 				removeBtnTextRect.anchorMax = Vector2.one;
 				removeBtnTextRect.sizeDelta = Vector2.zero;
 				var removeBtnTextComp = removeBtnText.AddComponent<TextMeshProUGUI>();
-				removeBtnTextComp.text = "Remove";
+				removeBtnTextComp.text = "Uninstall";
 				removeBtnTextComp.fontSize = 12;
 				removeBtnTextComp.alignment = TextAlignmentOptions.Center;
+				removeBtnTextComp.color = Color.white;
+				removeBtnTextComp.raycastTarget = false;
 				removeBtn.onClick.AddListener(() => {
 					OnRemoveAddon(addonId);
 				});
 			}
 			
+			// Ensure item is active and visible
+			itemObj.SetActive(true);
+			var itemRect = itemObj.GetComponent<RectTransform>();
+			if (itemRect != null) {
+				itemRect.localScale = Vector3.one;
+			}
+			
 			_addonUIItems[addonId] = itemObj;
+			Debug.Log($"[AddonManager_UI] Successfully created and registered UI item for {addonId}, active: {itemObj.activeSelf}, parent: {itemObj.transform.parent?.name}");
 		}
 		
 		/// <summary>

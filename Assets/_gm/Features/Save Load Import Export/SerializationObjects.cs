@@ -325,7 +325,7 @@ namespace spz {
 	}
 
 
-	[SerializeField]
+	[Serializable]
 	public class IconsList_Header_SL{
 	    public int numIcons_inGrid;
 	    public bool bakeAO_withBlur;

@@ -142,7 +142,7 @@ namespace spz {
 	}
 
 
-	[SerializeField]
+	[Serializable]
 	public class SD_ControlnetDetect_Response{
 	    public string[] images;//Base64 image strings
 	}

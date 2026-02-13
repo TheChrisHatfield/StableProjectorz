@@ -1,0 +1,13 @@
+<Solution>
+  <Project Path="Assembly-CSharp.csproj" />
+  <Project Path="VX.Util.Runtime.csproj" />
+  <Project Path="VX.AI.Runtime.BigtreeAlgorithm.csproj" />
+  <Project Path="VX.NLP.Runtime.VoxellNLP.csproj" />
+  <Project Path="VX.NLP.Runtime.SharpEntropy.csproj" />
+  <Project Path="VX.Util.Editor.csproj" />
+  <Project Path="SimpleFileBrowser.Runtime.csproj" />
+  <Project Path="Assembly-CSharp-Editor.csproj" />
+  <Project Path="VX.NLP.Runtime.SharpWordNet.csproj" />
+  <Project Path="VX.NLP.Runtime.csproj" />
+  <Project Path="VX.Util.Tests.Editor.csproj" />
+</Solution>
