@@ -97,6 +97,16 @@ def load_addon(addon_info):
         return False
 
 
+def load_addon_by_id(addon_id, addons_dir):
+    """Load a single addon by id. Used when Unity enables an addon or at startup."""
+    addons = discover_addons(addons_dir)
+    for info in addons:
+        if info["id"] == addon_id:
+            return load_addon(info)
+    print(f"Add-on not found: {addon_id}")
+    return False
+
+
 def main():
     parser = argparse.ArgumentParser(description="StableProjectorz Add-on Server")
     parser.add_argument("--port", type=int, default=5555, help="Port to connect to Unity (default: 5555)")
@@ -146,30 +156,21 @@ def main():
     
     print("Connected to Unity!")
     
-    # Discover and load add-ons
+    # Discover add-ons (Unity will request load via POST /load_addon for each enabled addon)
     addons = discover_addons(addons_dir)
-    
     if not addons:
         print("No add-ons found")
-        return 0
+    else:
+        print(f"Discovered {len(addons)} add-on(s). Unity will request load for enabled addons.")
     
-    print(f"Loading {len(addons)} add-on(s)...")
-    
-    loaded_count = 0
-    for addon_info in addons:
-        if load_addon(addon_info):
-            loaded_count += 1
-    
-    print(f"Loaded {loaded_count}/{len(addons)} add-on(s)")
-    
-    # Start HTTP server if FastAPI is available and not disabled
+    # Start HTTP server first so Unity can call /load_addon for each enabled addon
     http_thread = None
     if FASTAPI_AVAILABLE and not args.no_http:
         try:
-            from http_server import start_server, set_api_instance
+            from http_server import start_server, set_api_instance, set_load_addon_callback
             set_api_instance(api)
+            set_load_addon_callback(lambda addon_id: load_addon_by_id(addon_id, addons_dir))
             
-            # Start HTTP server in background thread
             http_thread = threading.Thread(
                 target=start_server,
                 args=("127.0.0.1", args.http_port),
@@ -180,6 +181,12 @@ def main():
             print(f"[Add-on Server] API docs: http://127.0.0.1:{args.http_port}/docs")
         except Exception as e:
             print(f"[Add-on Server] Warning: Could not start HTTP server: {e}")
+    
+    # If HTTP server is disabled, load all addons at startup (legacy behavior)
+    if not (FASTAPI_AVAILABLE and not args.no_http) and addons:
+        print(f"Loading {len(addons)} add-on(s)...")
+        for addon_info in addons:
+            load_addon(addon_info)
     
     # Keep server running
     print("Add-on server running. Press Ctrl+C to stop.")

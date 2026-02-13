@@ -39,11 +39,9 @@ namespace spz {
 		/// </summary>
 		public string CreatePanel(string addonId, string title) {
 			if (_addonPanelsParent == null) {
-				// Try to find the right panel
+				// Try serialized parent, then right panel, then any canvas, then create dedicated canvas
 				var commandRibbon = CommandRibbon_UI.instance;
 				if (commandRibbon != null) {
-					// Find a suitable parent in the right panel
-					// This is a placeholder - you may need to adjust based on actual UI structure
 					var rightPanel = GameObject.Find("UI_Global_Right_Panel");
 					if (rightPanel != null) {
 						var canvas = rightPanel.GetComponentInChildren<Canvas>();
@@ -52,10 +50,45 @@ namespace spz {
 						}
 					}
 				}
-				
 				if (_addonPanelsParent == null) {
-					UnityEngine.Debug.LogError("[AddonUI_MGR] No parent found for add-on panels");
-					return null;
+					var existing = GameObject.Find("AddonPanelsRoot");
+					if (existing != null) {
+						var rt = existing.transform as RectTransform;
+						if (rt != null) { _addonPanelsParent = rt; }
+					}
+				}
+				if (_addonPanelsParent == null) {
+					var canvas = UnityEngine.Object.FindObjectOfType<Canvas>();
+					if (canvas != null) {
+						var root = new GameObject("AddonPanelsRoot");
+						root.transform.SetParent(canvas.transform, false);
+						var rt = root.AddComponent<RectTransform>();
+						rt.anchorMin = new Vector2(0.5f, 0f);
+						rt.anchorMax = new Vector2(0.5f, 1f);
+						rt.pivot = new Vector2(0.5f, 0.5f);
+						rt.sizeDelta = new Vector2(320f, 0f);
+						rt.anchoredPosition = new Vector2(160f, 0f);
+						_addonPanelsParent = rt;
+						UnityEngine.Debug.Log("[AddonUI_MGR] Created AddonPanelsRoot under existing Canvas");
+					}
+				}
+				if (_addonPanelsParent == null) {
+					var canvasObj = new GameObject("AddonPanels_Canvas");
+					canvasObj.layer = 5;
+					var c = canvasObj.AddComponent<Canvas>();
+					c.renderMode = RenderMode.ScreenSpaceOverlay;
+					c.sortingOrder = 1000;
+					canvasObj.AddComponent<UnityEngine.UI.CanvasScaler>();
+					canvasObj.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+					var content = new GameObject("Content");
+					content.transform.SetParent(canvasObj.transform, false);
+					var rt = content.AddComponent<RectTransform>();
+					rt.anchorMin = new Vector2(0.5f, 0f);
+					rt.anchorMax = new Vector2(0.5f, 1f);
+					rt.sizeDelta = new Vector2(320f, 0f);
+					rt.anchoredPosition = new Vector2(160f, 0f);
+					_addonPanelsParent = rt;
+					UnityEngine.Debug.Log("[AddonUI_MGR] Created dedicated AddonPanels_Canvas for add-on panels");
 				}
 			}
 			

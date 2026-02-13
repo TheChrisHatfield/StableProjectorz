@@ -32,6 +32,7 @@ namespace spz {
 		private Toggle _filterAllToggle;
 		private Toggle _filterEnabledToggle;
 		private Toggle _filterDisabledToggle;
+		private GameObject _blocker; // full-screen click blocker, shown/hidden with panel
 		
 		void Awake() {
 			if (instance != null) { DestroyImmediate(this); return; }
@@ -70,23 +71,41 @@ namespace spz {
 	void CreatePanelIfNeeded() {
 		if (_panel != null) return;
 		
-		// Find or create Canvas - prefer existing UI Canvas
-		Canvas canvas = FindObjectOfType<Canvas>();
-		if (canvas == null) {
-			GameObject canvasObj = new GameObject("AddonManager_Canvas");
-			canvas = canvasObj.AddComponent<Canvas>();
-			canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-			canvas.sortingOrder = 1000; // Ensure it's on top
-			canvasObj.AddComponent<UnityEngine.UI.CanvasScaler>();
-			canvasObj.AddComponent<UnityEngine.UI.GraphicRaycaster>();
-		} else {
-			// Use existing canvas but ensure it's on top
-			canvas.sortingOrder = Mathf.Max(canvas.sortingOrder, 1000);
-		}
+		// Use a dedicated canvas so the panel is always on top and blocks input (no click-through to viewport)
+		const int UILayer = 5; // Unity "UI" layer so Canvas and children render
+		GameObject canvasObj = new GameObject("AddonManager_Canvas");
+		canvasObj.layer = UILayer;
+		Canvas canvas = canvasObj.AddComponent<Canvas>();
+		canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+		canvas.sortingOrder = 32767; // Topmost so Add-on Manager captures input
+		canvas.pixelPerfect = false;
+		var scaler = canvasObj.AddComponent<UnityEngine.UI.CanvasScaler>();
+		scaler.uiScaleMode = UnityEngine.UI.CanvasScaler.ScaleMode.ScaleWithScreenSize;
+		scaler.referenceResolution = new Vector2(1920, 1080);
+		scaler.matchWidthOrHeight = 0.5f;
+		canvasObj.AddComponent<UnityEngine.UI.GraphicRaycaster>();
 		
-		// Create panel
+		// Full-screen blocker: panel is a CHILD so every click hits blocker or panel, nothing passes through
+		GameObject blockerObj = new GameObject("Blocker");
+		blockerObj.layer = UILayer;
+		blockerObj.transform.SetParent(canvas.transform, false);
+		var blockerRect = blockerObj.AddComponent<RectTransform>();
+		blockerRect.anchorMin = Vector2.zero;
+		blockerRect.anchorMax = Vector2.one;
+		blockerRect.sizeDelta = Vector2.zero;
+		blockerRect.anchoredPosition = Vector2.zero;
+		var blockerImage = blockerObj.AddComponent<UnityEngine.UI.Image>();
+		blockerImage.color = new Color(0f, 0f, 0f, 0.01f);
+		blockerImage.raycastTarget = true;
+		var blockerCanvasGroup = blockerObj.AddComponent<CanvasGroup>();
+		blockerCanvasGroup.blocksRaycasts = true;
+		blockerCanvasGroup.interactable = true;
+		blockerObj.SetActive(false);
+		
+		// Panel as child of blocker so all input is under the blocker
 		GameObject panelObj = new GameObject("AddonManager_Panel");
-		panelObj.transform.SetParent(canvas.transform, false);
+		panelObj.layer = UILayer;
+		panelObj.transform.SetParent(blockerObj.transform, false);
 		_panel = panelObj;
 		
 		var rectTransform = panelObj.AddComponent<RectTransform>();
@@ -99,46 +118,70 @@ namespace spz {
 		image.color = new Color(0.1f, 0.1f, 0.1f, 0.95f);
 		image.raycastTarget = true; // Block clicks from passing through
 		
+		var canvasGroup = panelObj.AddComponent<CanvasGroup>();
+		canvasGroup.blocksRaycasts = true;
+		canvasGroup.interactable = true;
+		
+		// Typographic grid: base unit for consistent spacing (8px grid)
+		const float Grid = 8f;
+		const float PanelPadding = Grid * 3;   // 24
+		const float SectionSpacing = Grid * 2; // 16
+		const float RowSpacing = Grid * 1;    // 8
+		
 		var verticalLayout = panelObj.AddComponent<UnityEngine.UI.VerticalLayoutGroup>();
-		verticalLayout.spacing = 15f; // Increased spacing for better organization
-		verticalLayout.padding = new RectOffset(25, 25, 25, 25); // More padding
+		verticalLayout.spacing = SectionSpacing;
+		verticalLayout.padding = new RectOffset((int)PanelPadding, (int)PanelPadding, (int)PanelPadding, (int)PanelPadding);
 		verticalLayout.childControlHeight = false;
 		verticalLayout.childControlWidth = true;
 		verticalLayout.childForceExpandHeight = false;
 		verticalLayout.childForceExpandWidth = true;
 		
-		// Create header with title and close button
+		// Header: title left, Close right — grid padding so title is never covered
 		GameObject headerObj = new GameObject("Header");
 		headerObj.transform.SetParent(panelObj.transform, false);
 		var headerRect = headerObj.AddComponent<RectTransform>();
-		headerRect.sizeDelta = new Vector2(0, 50); // Taller header
+		headerRect.sizeDelta = new Vector2(0, 48);
+		var headerLE = headerObj.AddComponent<LayoutElement>();
+		headerLE.preferredHeight = 48;
+		headerLE.minHeight = 40;
 		var headerLayout = headerObj.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
-		headerLayout.childControlWidth = false;
+		headerLayout.childControlWidth = true;
 		headerLayout.childControlHeight = true;
 		headerLayout.childForceExpandWidth = false;
 		headerLayout.childForceExpandHeight = true;
-		headerLayout.spacing = 10f;
+		headerLayout.spacing = Grid * 2;
 		headerLayout.padding = new RectOffset(0, 0, 0, 0);
 		
-		// Title
+		// Title — takes all space left of Close; min width so "Add-on Manager" is never clipped
 		GameObject titleObj = new GameObject("Title");
 		titleObj.transform.SetParent(headerObj.transform, false);
 		var titleRect = titleObj.AddComponent<RectTransform>();
-		titleRect.sizeDelta = new Vector2(0, 0); // Let it expand
-		var layoutElement = titleObj.AddComponent<UnityEngine.UI.LayoutElement>();
-		layoutElement.flexibleWidth = 1; // Take remaining space
+		titleRect.anchorMin = Vector2.zero;
+		titleRect.anchorMax = Vector2.one;
+		titleRect.sizeDelta = Vector2.zero;
+		var titleLE = titleObj.AddComponent<LayoutElement>();
+		titleLE.minWidth = 180f;
+		titleLE.flexibleWidth = 1;
 		var titleText = titleObj.AddComponent<TextMeshProUGUI>();
 		titleText.text = "Add-on Manager";
-		titleText.fontSize = 24; // Larger title
+		titleText.fontSize = 22;
 		titleText.color = Color.white;
 		titleText.fontStyle = FontStyles.Bold;
 		titleText.alignment = TextAlignmentOptions.Left;
+		titleText.enableWordWrapping = false;
+		titleText.overflowMode = TMPro.TextOverflowModes.Overflow;
+		titleText.raycastTarget = false;
 		
-		// Close button
+		// Close button — fixed width on the right, never overlaps title
 		GameObject closeBtnObj = new GameObject("CloseButton");
 		closeBtnObj.transform.SetParent(headerObj.transform, false);
 		var closeBtnRect = closeBtnObj.AddComponent<RectTransform>();
-		closeBtnRect.sizeDelta = new Vector2(100, 30);
+		var closeBtnLE = closeBtnObj.AddComponent<LayoutElement>();
+		closeBtnLE.preferredWidth = 88f;
+		closeBtnLE.minWidth = 72f;
+		closeBtnLE.flexibleWidth = 0;
+		closeBtnLE.preferredHeight = 32f;
+		closeBtnRect.sizeDelta = new Vector2(88, 32);
 		
 		// Button Image (background)
 		var closeBtnImage = closeBtnObj.AddComponent<UnityEngine.UI.Image>();
@@ -164,18 +207,20 @@ namespace spz {
 		closeBtnText.raycastTarget = false; // Don't block button clicks
 		_closePanel_button = closeBtn;
 		
-		// Create button bar
+		// Button bar — grid spacing
 		GameObject buttonBarObj = new GameObject("ButtonBar");
 		buttonBarObj.transform.SetParent(panelObj.transform, false);
 		var buttonBarRect = buttonBarObj.AddComponent<RectTransform>();
-		buttonBarRect.sizeDelta = new Vector2(0, 45); // Taller button bar
+		var buttonBarLE = buttonBarObj.AddComponent<LayoutElement>();
+		buttonBarLE.preferredHeight = 40;
+		buttonBarLE.minHeight = 36;
 		var buttonBarLayout = buttonBarObj.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
-		buttonBarLayout.spacing = 15f; // More spacing between buttons
+		buttonBarLayout.spacing = Grid * 2;
 		buttonBarLayout.childControlWidth = false;
 		buttonBarLayout.childControlHeight = true;
 		buttonBarLayout.childForceExpandWidth = false;
 		buttonBarLayout.childForceExpandHeight = true;
-		buttonBarLayout.padding = new RectOffset(0, 0, 5, 5);
+		buttonBarLayout.padding = new RectOffset(0, 0, 0, 0);
 		
 		// Install from File button
 		GameObject installBtnObj = new GameObject("InstallButton");
@@ -233,27 +278,32 @@ namespace spz {
 		refreshBtnText.raycastTarget = false; // Don't block button clicks
 		_refresh_button = refreshBtn;
 		
-		// Create filter bar with radio buttons (All, Enabled, Disabled)
+		// Filter bar — grid spacing
 		GameObject filterBarObj = new GameObject("FilterBar");
 		filterBarObj.transform.SetParent(panelObj.transform, false);
 		var filterBarRect = filterBarObj.AddComponent<RectTransform>();
-		filterBarRect.sizeDelta = new Vector2(0, 35);
+		var filterBarLE = filterBarObj.AddComponent<LayoutElement>();
+		filterBarLE.preferredHeight = 36;
+		filterBarLE.minHeight = 32;
 		var filterBarLayout = filterBarObj.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
-		filterBarLayout.spacing = 10f;
+		filterBarLayout.spacing = Grid * 2;
 		filterBarLayout.childControlWidth = false;
 		filterBarLayout.childControlHeight = true;
-		filterBarLayout.padding = new RectOffset(10, 10, 5, 5);
+		filterBarLayout.padding = new RectOffset(0, 0, 0, 0);
 		
-		// Filter label
+		// Filter label — fixed width for alignment
 		var filterLabelObj = new GameObject("FilterLabel");
 		filterLabelObj.transform.SetParent(filterBarObj.transform, false);
 		var filterLabelRect = filterLabelObj.AddComponent<RectTransform>();
-		filterLabelRect.sizeDelta = new Vector2(60, 0);
+		var filterLabelLE = filterLabelObj.AddComponent<LayoutElement>();
+		filterLabelLE.preferredWidth = 48;
+		filterLabelLE.minWidth = 40;
 		var filterLabelText = filterLabelObj.AddComponent<TextMeshProUGUI>();
 		filterLabelText.text = "Filter:";
 		filterLabelText.fontSize = 14;
 		filterLabelText.color = Color.white;
 		filterLabelText.alignment = TextAlignmentOptions.Left;
+		filterLabelText.raycastTarget = false;
 		
 		// Create toggle group for radio buttons (mutually exclusive)
 		var toggleGroup = filterBarObj.AddComponent<ToggleGroup>();
@@ -273,52 +323,54 @@ namespace spz {
 		
 			Debug.Log("[AddonManager_UI] Filter bar created with All/Enabled/Disabled toggles");
 			
-			// Create scroll view for addon list
-			Debug.Log("[AddonManager_UI] Creating scroll view and content area...");
+			// Scroll area: same pattern as 3D GENERATION PANEL BUILDER + Scroll Rect — viewport = scroll container (self), Content = direct child
+			const float scrollAreaHeight = 280f;
 		GameObject scrollViewObj = new GameObject("ScrollView");
+		scrollViewObj.layer = UILayer;
 		scrollViewObj.transform.SetParent(panelObj.transform, false);
 		var scrollViewRect = scrollViewObj.AddComponent<RectTransform>();
+		scrollViewRect.anchorMin = new Vector2(0, 0);
+		scrollViewRect.anchorMax = new Vector2(1, 1);
 		scrollViewRect.sizeDelta = Vector2.zero;
+		scrollViewRect.pivot = new Vector2(0.5f, 0.5f);
 		var layoutElementScroll = scrollViewObj.AddComponent<UnityEngine.UI.LayoutElement>();
-		layoutElementScroll.flexibleHeight = 1; // Take remaining vertical space
+		layoutElementScroll.preferredHeight = scrollAreaHeight;
+		layoutElementScroll.minHeight = scrollAreaHeight;
+		var scrollViewImage = scrollViewObj.AddComponent<UnityEngine.UI.Image>();
+		scrollViewImage.color = new Color(0.2f, 0.2f, 0.2f, 1f);
+		scrollViewImage.raycastTarget = true;
+		var scrollViewMask = scrollViewObj.AddComponent<UnityEngine.UI.Mask>();
+		scrollViewMask.showMaskGraphic = false;
 		var scrollView = scrollViewObj.AddComponent<UnityEngine.UI.ScrollRect>();
 		scrollView.horizontal = false;
 		scrollView.vertical = true;
-		scrollView.scrollSensitivity = 20f; // Make scrolling more responsive
-		var scrollViewImage = scrollViewObj.AddComponent<UnityEngine.UI.Image>();
-		scrollViewImage.color = new Color(0.15f, 0.15f, 0.15f, 1f);
-		scrollViewImage.raycastTarget = true; // Block clicks
+		scrollView.scrollSensitivity = 20f;
+		scrollView.movementType = ScrollRect.MovementType.Clamped;
+		scrollView.inertia = true;
+		scrollView.decelerationRate = 0.135f;
+		scrollView.viewport = scrollViewRect; // viewport = self (like 3D panel prefab)
+		scrollView.content = null; // set below
 		
-		// Viewport
-		GameObject viewportObj = new GameObject("Viewport");
-		viewportObj.transform.SetParent(scrollViewObj.transform, false);
-		var viewportRect = viewportObj.AddComponent<RectTransform>();
-		viewportRect.anchorMin = Vector2.zero;
-		viewportRect.anchorMax = Vector2.one;
-		viewportRect.sizeDelta = Vector2.zero;
-		viewportRect.anchoredPosition = Vector2.zero;
-		var viewportMask = viewportObj.AddComponent<UnityEngine.UI.Mask>();
-		viewportMask.showMaskGraphic = false;
-		var viewportImage = viewportObj.AddComponent<UnityEngine.UI.Image>();
-		viewportImage.color = Color.clear;
-		scrollView.viewport = viewportRect;
-		
-		// Content
+		// Content = direct child of ScrollView; height grows with addon count so list scrolls when many addons
 		GameObject contentObj = new GameObject("Content");
-		contentObj.transform.SetParent(viewportObj.transform, false);
+		contentObj.layer = UILayer;
+		contentObj.transform.SetParent(scrollViewObj.transform, false);
 		var contentRect = contentObj.AddComponent<RectTransform>();
 		contentRect.anchorMin = new Vector2(0, 1);
 		contentRect.anchorMax = new Vector2(1, 1);
-		contentRect.pivot = new Vector2(0.5f, 1);
+		contentRect.pivot = new Vector2(0.5f, 1f);
 		contentRect.sizeDelta = new Vector2(0, 0);
 		contentRect.anchoredPosition = Vector2.zero;
 		var contentLayout = contentObj.AddComponent<UnityEngine.UI.VerticalLayoutGroup>();
-		contentLayout.spacing = 5f;
-		contentLayout.padding = new RectOffset(10, 10, 10, 10);
+		contentLayout.spacing = RowSpacing;
+		contentLayout.padding = new RectOffset((int)Grid, (int)Grid, (int)Grid, (int)Grid);
 		contentLayout.childControlHeight = false;
 		contentLayout.childControlWidth = true;
+		contentLayout.childForceExpandHeight = false;
+		contentLayout.childForceExpandWidth = true; // rows get full width so grid aligns
 		var contentSizeFitter = contentObj.AddComponent<UnityEngine.UI.ContentSizeFitter>();
 		contentSizeFitter.verticalFit = UnityEngine.UI.ContentSizeFitter.FitMode.PreferredSize;
+		contentSizeFitter.horizontalFit = UnityEngine.UI.ContentSizeFitter.FitMode.Unconstrained;
 		scrollView.content = contentRect;
 		_addonsListParent = contentRect;
 		Debug.Log($"[AddonManager_UI] Set _addonsListParent to {contentRect.name} (active: {contentRect.gameObject.activeSelf})");
@@ -326,20 +378,44 @@ namespace spz {
 		// Set default filter selection after _addonsListParent exists so RefreshAddonsList() in the listener can run
 		_filterAllToggle.isOn = true;
 		
-		// Status text
+		// Status row — aligned to typographic grid (same left inset as scroll content = Grid)
 		GameObject statusObj = new GameObject("StatusText");
 		statusObj.transform.SetParent(panelObj.transform, false);
 		var statusRect = statusObj.AddComponent<RectTransform>();
-		statusRect.sizeDelta = new Vector2(0, 35); // Taller status bar
-		var statusText = statusObj.AddComponent<TextMeshProUGUI>();
+		var statusLE = statusObj.AddComponent<LayoutElement>();
+		statusLE.preferredHeight = 32;
+		statusLE.minHeight = 28;
+		var statusLayout = statusObj.AddComponent<HorizontalLayoutGroup>();
+		statusLayout.padding = new RectOffset((int)Grid, 0, (int)Grid, 0);
+		statusLayout.childControlWidth = true;
+		statusLayout.childControlHeight = true;
+		statusLayout.childForceExpandWidth = true;
+		statusLayout.childForceExpandHeight = true;
+		statusLayout.spacing = 0;
+		GameObject statusTextObj = new GameObject("Text");
+		statusTextObj.transform.SetParent(statusObj.transform, false);
+		var statusTextRect = statusTextObj.AddComponent<RectTransform>();
+		statusTextRect.anchorMin = Vector2.zero;
+		statusTextRect.anchorMax = Vector2.one;
+		statusTextRect.sizeDelta = Vector2.zero;
+		var statusText = statusTextObj.AddComponent<TextMeshProUGUI>();
 		statusText.text = "Ready";
-		statusText.fontSize = 14; // Larger font
-		statusText.color = Color.green;
+		statusText.fontSize = 13;
+		statusText.color = new Color(0.4f, 1f, 0.45f);
 		statusText.alignment = TextAlignmentOptions.Left;
+		statusText.raycastTarget = false;
 		_statusText = statusText;
 		
+		SetLayerRecursively(_panel.transform, UILayer);
 		_panel.SetActive(false);
+		_blocker = blockerObj;
 		Debug.Log("[AddonManager_UI] Panel creation completed, set inactive initially");
+	}
+	
+	static void SetLayerRecursively(Transform t, int layer) {
+		t.gameObject.layer = layer;
+		for (int i = 0; i < t.childCount; i++)
+			SetLayerRecursively(t.GetChild(i), layer);
 	}
 		
 		/// <summary>
@@ -366,15 +442,31 @@ namespace spz {
 			
 			if (_panel != null) {
 				Debug.Log($"[AddonManager_UI] Panel found, setting active. Panel name: {_panel.name}, Active: {_panel.activeSelf}");
+				if (_blocker != null) _blocker.SetActive(true);
 				_panel.SetActive(true);
 				
-				// Ensure panel is on top
+				// Ensure panel canvas is on top so it captures input (no click-through)
 				Canvas canvas = _panel.GetComponentInParent<Canvas>();
 				if (canvas != null) {
-					canvas.sortingOrder = 1000; // Put it on top
-					Debug.Log($"[AddonManager_UI] Canvas found, sorting order set to {canvas.sortingOrder}");
-				} else {
-					Debug.LogWarning("[AddonManager_UI] No Canvas found for panel!");
+					canvas.sortingOrder = 32767;
+					canvas.enabled = true;
+				}
+				
+				// Force layout then enforce scroll container size (HTML: div with height + overflow:auto must have explicit size)
+				const float scrollAreaHeight = 280f;
+				var panelRect = _panel.GetComponent<RectTransform>();
+				if (panelRect != null) {
+					LayoutRebuilder.ForceRebuildLayoutImmediate(panelRect);
+					Canvas.ForceUpdateCanvases();
+					var scrollViewTr = _panel.transform.Find("ScrollView");
+					if (scrollViewTr != null) {
+						var scrollViewRect = scrollViewTr.GetComponent<RectTransform>();
+						if (scrollViewRect != null) {
+							LayoutRebuilder.ForceRebuildLayoutImmediate(scrollViewRect);
+							// Ensure scroll container always has height (like CSS height: 280px) so viewport clips and scrolls
+							scrollViewRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, scrollAreaHeight);
+						}
+					}
 				}
 				
 				// Force refresh of addons before showing list
@@ -394,9 +486,8 @@ namespace spz {
 		/// Closes the add-on manager panel
 		/// </summary>
 		public void ClosePanel() {
-			if (_panel != null) {
-				_panel.SetActive(false);
-			}
+			if (_blocker != null) _blocker.SetActive(false);
+			if (_panel != null) _panel.SetActive(false);
 		}
 		
 		/// <summary>
@@ -559,6 +650,12 @@ namespace spz {
 				CreateAddonListItem(kvp.Key, kvp.Value);
 			}
 			
+			// Force layout rebuild so scroll content height updates and list items are visible
+			if (_addonsListParent != null) {
+				UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_addonsListParent);
+				Canvas.ForceUpdateCanvases();
+			}
+			
 			Debug.Log($"[AddonManager_UI] Created {_addonUIItems.Count} UI items");
 			
 			// Update status message with filter info
@@ -593,52 +690,79 @@ namespace spz {
 				// Create basic UI item if no prefab
 				itemObj = new GameObject($"AddonItem_{addonId}");
 				itemObj.transform.SetParent(_addonsListParent, false);
+				itemObj.layer = _addonsListParent.gameObject.layer;
 				Debug.Log($"[AddonManager_UI] Creating dynamic UI item for {addonId}, parent: {_addonsListParent.name}");
 				
 				var rectTransform = itemObj.AddComponent<RectTransform>();
 				rectTransform.sizeDelta = new Vector2(0, 40);
+				var itemLayout = itemObj.AddComponent<LayoutElement>();
+				itemLayout.preferredHeight = 40;
+				itemLayout.minHeight = 40;
+				itemLayout.minWidth = 440f; // ensure row has width so text gets horizontal space
 				
+				// Grid-style row: [Name 220] [Toggle 120] [Uninstall 90] — fixed widths, grid padding
 				var horizontalLayout = itemObj.AddComponent<HorizontalLayoutGroup>();
-				horizontalLayout.spacing = 10;
-				horizontalLayout.padding = new RectOffset(10, 10, 5, 5);
-				horizontalLayout.childControlWidth = false;
+				horizontalLayout.spacing = 12f;
+				horizontalLayout.padding = new RectOffset(8, 6, 8, 6);
+				horizontalLayout.childControlWidth = true;
 				horizontalLayout.childControlHeight = true;
+				horizontalLayout.childForceExpandWidth = false;
+				horizontalLayout.childForceExpandHeight = true;
 				
-				// Add name label with status indicator (Blender-style)
+				// Column 1: Addon name — fixed width cell, stretch so text has proper boundary
+				const float colNameWidth = 220f;
 				var nameObj = new GameObject("Name");
 				nameObj.transform.SetParent(itemObj.transform, false);
 				var nameRect = nameObj.AddComponent<RectTransform>();
+				nameRect.anchorMin = Vector2.zero;
+				nameRect.anchorMax = Vector2.one;
+				nameRect.sizeDelta = Vector2.zero;
+				nameRect.offsetMin = nameRect.offsetMax = Vector2.zero;
 				var nameLayoutElement = nameObj.AddComponent<LayoutElement>();
-				nameLayoutElement.flexibleWidth = 1; // Take remaining space
-				nameRect.sizeDelta = new Vector2(0, 0);
+				nameLayoutElement.preferredWidth = colNameWidth;
+				nameLayoutElement.minWidth = colNameWidth;
 				var nameText = nameObj.AddComponent<TextMeshProUGUI>();
-				// Show addon name with status indicator (✓ for enabled, ○ for disabled)
 				string statusIcon = addonInfo.isEnabled ? "✓" : "○";
 				nameText.text = $"{statusIcon} {addonId}";
 				nameText.fontSize = 14;
-				nameText.color = addonInfo.isEnabled ? new Color(0.4f, 1f, 0.4f) : Color.white; // Green if enabled, white if disabled
+				nameText.color = addonInfo.isEnabled ? new Color(0.4f, 1f, 0.4f) : new Color(0.95f, 0.95f, 0.95f);
 				nameText.alignment = TextAlignmentOptions.Left;
+				nameText.enableWordWrapping = false;
+				nameText.overflowMode = TMPro.TextOverflowModes.Ellipsis;
+				nameText.raycastTarget = false;
 				
-				// Add enable/disable toggle with label
+				// Column 2: Toggle container
+				const float colToggleWidth = 120f;
 				var toggleContainerObj = new GameObject("ToggleContainer");
 				toggleContainerObj.transform.SetParent(itemObj.transform, false);
 				var toggleContainerRect = toggleContainerObj.AddComponent<RectTransform>();
-				toggleContainerRect.sizeDelta = new Vector2(120, 0);
+				var toggleContainerLE = toggleContainerObj.AddComponent<LayoutElement>();
+				toggleContainerLE.preferredWidth = colToggleWidth;
+				toggleContainerLE.minWidth = colToggleWidth;
+				toggleContainerRect.sizeDelta = new Vector2(colToggleWidth, 0);
 				var toggleContainerLayout = toggleContainerObj.AddComponent<HorizontalLayoutGroup>();
 				toggleContainerLayout.spacing = 5;
 				toggleContainerLayout.childControlWidth = false;
 				toggleContainerLayout.childControlHeight = true;
 				
-				// Toggle label
+				// Toggle label — fixed width so text stays horizontal
 				var toggleLabelObj = new GameObject("ToggleLabel");
 				toggleLabelObj.transform.SetParent(toggleContainerObj.transform, false);
 				var toggleLabelRect = toggleLabelObj.AddComponent<RectTransform>();
-				toggleLabelRect.sizeDelta = new Vector2(60, 0);
+				toggleLabelRect.anchorMin = Vector2.zero;
+				toggleLabelRect.anchorMax = Vector2.one;
+				toggleLabelRect.sizeDelta = Vector2.zero;
+				var toggleLabelLE = toggleLabelObj.AddComponent<LayoutElement>();
+				toggleLabelLE.preferredWidth = 56f;
+				toggleLabelLE.minWidth = 56f;
 				var toggleLabelText = toggleLabelObj.AddComponent<TextMeshProUGUI>();
 				toggleLabelText.text = addonInfo.isEnabled ? "Enabled" : "Disabled";
 				toggleLabelText.fontSize = 12;
 				toggleLabelText.color = addonInfo.isEnabled ? new Color(0.4f, 1f, 0.4f) : new Color(0.7f, 0.7f, 0.7f);
 				toggleLabelText.alignment = TextAlignmentOptions.Left;
+				toggleLabelText.enableWordWrapping = false;
+				toggleLabelText.overflowMode = TMPro.TextOverflowModes.Ellipsis;
+				toggleLabelText.raycastTarget = false;
 				
 				// Toggle switch
 				var toggleObj = new GameObject("Toggle");
@@ -681,11 +805,16 @@ namespace spz {
 					RefreshAddonsList();
 				});
 				
-				// Add remove/uninstall button (Blender-style)
+				// Column 3: Uninstall button — fixed width for grid alignment
+				const float colButtonWidth = 90f;
 				var removeBtnObj = new GameObject("RemoveButton");
 				removeBtnObj.transform.SetParent(itemObj.transform, false);
 				var removeBtnRect = removeBtnObj.AddComponent<RectTransform>();
-				removeBtnRect.sizeDelta = new Vector2(90, 30);
+				var removeBtnLE = removeBtnObj.AddComponent<LayoutElement>();
+				removeBtnLE.preferredWidth = colButtonWidth;
+				removeBtnLE.minWidth = colButtonWidth;
+				removeBtnLE.preferredHeight = 30;
+				removeBtnRect.sizeDelta = new Vector2(colButtonWidth, 30);
 				
 				// Button background (reddish for destructive action)
 				var removeBtnImage = removeBtnObj.AddComponent<UnityEngine.UI.Image>();
