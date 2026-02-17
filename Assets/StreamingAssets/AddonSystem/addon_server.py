@@ -11,6 +11,7 @@ import sys
 import os
 import argparse
 import importlib.util
+import tempfile
 import time
 import threading
 from pathlib import Path
@@ -34,6 +35,10 @@ except ImportError:
     FASTAPI_AVAILABLE = False
     print("Warning: FastAPI not available. Install with: pip install fastapi uvicorn")
     print("HTTP REST API will not be available.")
+
+
+# Registry of loaded addon modules by id (for invoking callbacks from Unity)
+_loaded_addon_modules = {}
 
 
 def discover_addons(addons_dir):
@@ -77,20 +82,27 @@ def load_addon(addon_info):
         sys.modules[f"addon_{addon_id}"] = module
         spec.loader.exec_module(module)
         
+        # Store module so we can invoke button callbacks from Unity
+        _loaded_addon_modules[addon_id] = module
+
         # Call register() if it exists
         if hasattr(module, "register"):
             try:
+                print(f"[Addon Server] Calling register() for {addon_id} (this will send create_panel to Unity over socket)...")
                 module.register()
-                print(f"Registered add-on: {addon_id}")
+                print(f"[Addon Server] Registered add-on: {addon_id}")
                 return True
             except Exception as e:
                 print(f"Error registering add-on {addon_id}: {e}")
+                _loaded_addon_modules.pop(addon_id, None)
                 return False
         else:
             print(f"Warning: Add-on {addon_id} has no register() function")
+            _loaded_addon_modules.pop(addon_id, None)
             return False
             
     except Exception as e:
+        _loaded_addon_modules.pop(addon_id, None)  # avoid broken module staying in registry
         print(f"Error loading add-on {addon_id}: {e}")
         import traceback
         traceback.print_exc()
@@ -99,12 +111,35 @@ def load_addon(addon_info):
 
 def load_addon_by_id(addon_id, addons_dir):
     """Load a single addon by id. Used when Unity enables an addon or at startup."""
+    print(f"[Addon Server] load_addon_by_id requested: {addon_id}")
     addons = discover_addons(addons_dir)
     for info in addons:
         if info["id"] == addon_id:
-            return load_addon(info)
-    print(f"Add-on not found: {addon_id}")
+            ok = load_addon(info)
+            print(f"[Addon Server] load_addon({addon_id}) returned {ok}")
+            return ok
+    print(f"[Addon Server] Add-on not found: {addon_id}")
     return False
+
+
+def invoke_addon_callback(addon_id, callback_name):
+    """Invoke a named function in a loaded addon. Called by Unity when user clicks an addon button."""
+    module = _loaded_addon_modules.get(addon_id)
+    if module is None:
+        print(f"[Addon Server] Addon not loaded: {addon_id}")
+        return False
+    func = getattr(module, callback_name, None)
+    if not callable(func):
+        print(f"[Addon Server] Callback not found or not callable: {addon_id}.{callback_name}")
+        return False
+    try:
+        func()
+        return True
+    except Exception as e:
+        print(f"[Addon Server] Error invoking {addon_id}.{callback_name}: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 
 def main():
@@ -125,52 +160,40 @@ def main():
     
     print(f"StableProjectorz Add-on Server")
     print(f"Addons directory: {addons_dir}")
-    print(f"Connecting to Unity on port {args.port}...")
     
-    # Initialize API connection
+    # So the API client connects to the same port Unity is listening on (127.0.0.1 by default)
+    os.environ["SPZ_PORT"] = str(args.port)
+    os.environ.setdefault("SPZ_HOST", "127.0.0.1")
+    
+    # Initialize API connection (Python connects to Unity's socket at 127.0.0.1:args.port)
     api = spz.get_api()
     
-    # Wait for connection (Unity might not be ready yet)
-    max_retries = 30
-    retry_count = 0
-    connected = False
-    
-    while retry_count < max_retries:
-        try:
-            # Try a simple request to test connection
-            api.cameras.get_pos(0)
-            connected = True
-            break
-        except Exception as e:
-            retry_count += 1
-            if retry_count < max_retries:
-                print(f"Waiting for Unity connection... ({retry_count}/{max_retries})")
-                time.sleep(1)
-            else:
-                print(f"Failed to connect to Unity: {e}")
-                return 1
-    
-    if not connected:
-        print("Could not establish connection to Unity")
-        return 1
-    
-    print("Connected to Unity!")
-    
-    # Discover add-ons (Unity will request load via POST /load_addon for each enabled addon)
+    # Start HTTP server *before* waiting for Unity so port 5557 is listening when Unity calls /load_addon
     addons = discover_addons(addons_dir)
-    if not addons:
-        print("No add-ons found")
-    else:
-        print(f"Discovered {len(addons)} add-on(s). Unity will request load for enabled addons.")
-    
-    # Start HTTP server first so Unity can call /load_addon for each enabled addon
     http_thread = None
+    # Shared flag: set when Python has connected to Unity (socket 5555). Kept in sync by connection_ready_callback so it resets if the socket drops.
+    _connected_to_unity = [False]  # list so closure can assign
+    _connection_lock = threading.Lock()  # synchronize access across connection_loop, _check_connection_ready, and main wait
+
+    def _check_connection_ready():
+        """Probe Unity socket; return True only if we can reach Unity. Resets _connected_to_unity if connection is dead."""
+        try:
+            api.cameras.get_pos(0)
+            with _connection_lock:
+                _connected_to_unity[0] = True
+            return True
+        except Exception:
+            with _connection_lock:
+                _connected_to_unity[0] = False
+            return False
+
     if FASTAPI_AVAILABLE and not args.no_http:
         try:
-            from http_server import start_server, set_api_instance, set_load_addon_callback
+            from http_server import start_server, set_api_instance, set_load_addon_callback, set_invoke_callback, set_connection_ready_callback
             set_api_instance(api)
             set_load_addon_callback(lambda addon_id: load_addon_by_id(addon_id, addons_dir))
-            
+            set_invoke_callback(invoke_addon_callback)
+            set_connection_ready_callback(_check_connection_ready)
             http_thread = threading.Thread(
                 target=start_server,
                 args=("127.0.0.1", args.http_port),
@@ -181,6 +204,70 @@ def main():
             print(f"[Add-on Server] API docs: http://127.0.0.1:{args.http_port}/docs")
         except Exception as e:
             print(f"[Add-on Server] Warning: Could not start HTTP server: {e}")
+    else:
+        if not addons:
+            print("No add-ons found")
+        else:
+            print(f"Discovered {len(addons)} add-on(s). Unity will request load for enabled addons.")
+    
+    # File-based handshake: wait for Unity to write the ready marker (so we know the socket is bound before connecting).
+    marker_name = f"spz_addon_{args.port}_ready.txt"
+    marker_path = os.path.join(tempfile.gettempdir(), marker_name)
+    marker_timeout = 90  # seconds to wait for game to load and bind
+    print(f"Waiting for Unity socket ready marker (up to {marker_timeout}s): {marker_path}")
+    for wait in range(marker_timeout):
+        if os.path.isfile(marker_path):
+            print(f"Unity socket ready marker found (game has bound port {args.port}). Connecting...")
+            break
+        if wait < marker_timeout - 1:
+            if wait % 10 == 0 and wait > 0:
+                print(f"  ... still waiting for game to start and bind ({wait}s)")
+            time.sleep(1)
+    else:
+        print("")
+        print("Unity NEVER created the ready marker file. So:")
+        print("  - The addon scene did not load, OR the socket server did not start in the build.")
+        print("  - Start the GAME first and wait until the main window is fully visible, then run this script.")
+        print("  - Rebuild the game so Tool_AddonSystem and Addon_SocketServer are in the build.")
+        print("  - Check Player.log for: [Addon_SocketServer] Started listening on 127.0.0.1:5555")
+        print("     If that line never appears, the socket server is not running in your build.")
+        return 1
+
+    # Connect to Unity: Python (client) -> Unity Addon_SocketServer at 127.0.0.1:args.port.
+    max_retries = 30  # usually immediate once marker exists
+    print(f"Connecting to Unity at 127.0.0.1:{args.port} (up to {max_retries} tries)...")
+    def connection_loop():
+        for retry in range(max_retries):
+            try:
+                api.cameras.get_pos(0)
+                with _connection_lock:
+                    _connected_to_unity[0] = True
+                return
+            except Exception as e:
+                if retry < max_retries - 1:
+                    print(f"Waiting for Unity connection... ({retry + 1}/{max_retries})")
+                    time.sleep(1)
+                else:
+                    print(f"Failed to connect to Unity: {e}")
+    conn_thread = threading.Thread(target=connection_loop, daemon=True)
+    conn_thread.start()
+    while True:
+        with _connection_lock:
+            connected = _connected_to_unity[0]
+        if connected or not conn_thread.is_alive():
+            break
+        time.sleep(0.3)
+    with _connection_lock:
+        if not _connected_to_unity[0]:
+            print("Could not establish connection to Unity (marker was present but socket connect failed).")
+            print("  Check firewall or try restarting the game and this script.")
+            return 1
+    print("Connected to Unity!")
+    if FASTAPI_AVAILABLE and not args.no_http:
+        if addons:
+            print(f"Discovered {len(addons)} add-on(s). Unity will request load for enabled addons.")
+        else:
+            print("No add-ons found.")
     
     # If HTTP server is disabled, load all addons at startup (legacy behavior)
     if not (FASTAPI_AVAILABLE and not args.no_http) and addons:

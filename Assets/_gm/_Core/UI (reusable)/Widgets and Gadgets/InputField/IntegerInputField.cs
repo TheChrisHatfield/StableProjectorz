@@ -17,18 +17,29 @@ namespace spz {
 	    [SerializeField] int _max_val = int.MaxValue;
 
 	    bool _valueNeverChangedYet = true;
+	    bool _endEditListenerAdded;
 
 	    int _recentVal = 0;
 	    public int recentVal => _recentVal;
-	    public void SetMin(int min){ _min_val=min; if(_recentVal>_max_val){SetValueWithoutNotify($"{_max_val}"); }}
-	    public void SetMax(int max){ _max_val=max; if(_recentVal<_min_val){SetValueWithoutNotify($"{_min_val}"); }}
+	    public void SetMin(int min){ _min_val=min; if(_recentVal<_min_val){SetValueWithoutNotify($"{_min_val}"); }}
+	    public void SetMax(int max){ _max_val=max; if(_recentVal>_max_val){SetValueWithoutNotify($"{_max_val}"); }}
+
+	    /// <summary>Assign input field at runtime (e.g. when building Settings SD GPU row in code). Call before or in Awake.</summary>
+	    public void SetInputField(TMP_InputField field) {
+	        _inputField = field;
+	        EnsureEndEditListener();
+	    }
 
 	    public IntEvent onValidInput = new IntEvent();
 
+	    void EnsureEndEditListener() {
+	        if (_inputField == null || _endEditListenerAdded) return;
+	        _inputField.onEndEdit.AddListener(ValidateAndInvoke);
+	        _endEditListenerAdded = true;
+	    }
 
 	    private void Awake(){
-	        _inputField?.onEndEdit.AddListener(ValidateAndInvoke);
-
+	        EnsureEndEditListener();
 	        if (_valueNeverChangedYet){
 	            SetValueWithoutNotify( _default.ToString() );
 	        }
@@ -58,7 +69,7 @@ namespace spz {
 
 	    public bool SetValueWithoutNotify(string text){
 	        _valueNeverChangedYet = false;
-
+	        if (_inputField == null) return false;
 	        if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int result)){
 	            result = Mathf.Clamp(result, _min_val, _max_val);
 	            _inputField.SetTextWithoutNotify(result.ToString());
@@ -67,6 +78,12 @@ namespace spz {
 	        }
 	        _inputField.text = "";
 	        return false;
+	    }
+
+	    /// <summary>Commit current text (parse, clamp, invoke onValidInput). Call before reading recentVal or when "Apply" is clicked so the value is saved even if the user did not tab out.</summary>
+	    public void CommitCurrentText() {
+	        if (_inputField != null)
+	            ValidateAndInvoke(_inputField.text);
 	    }
 	}
 }//end namespace

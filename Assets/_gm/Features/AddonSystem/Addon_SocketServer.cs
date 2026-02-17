@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -16,8 +17,12 @@ namespace spz {
 	/// TCP JSON-RPC server that receives commands from Python add-ons
 	/// and marshals them to the Unity main thread for execution.
 	/// </summary>
+	[DefaultExecutionOrder(0)]  // Run after Addon_MGR (-100) so port is set and socket binds before Python starts next frame
 	public class Addon_SocketServer : MonoBehaviour {
 		public static Addon_SocketServer instance { get; private set; }
+		
+		/// <summary>True once the TCP listener has been started (port 5555 bound). Addon_MGR waits for this before starting Python.</summary>
+		public bool IsListening => _isRunning;
 		
 		private TcpListener _listener;
 		private Thread _listenerThread;
@@ -44,15 +49,14 @@ namespace spz {
 		void Awake() {
 			if (instance != null) { DestroyImmediate(this); return; }
 			instance = this;
+			// Bind immediately (Addon_MGR runs first via DefaultExecutionOrder -100 so port is available)
+			if (Addon_MGR.instance != null)
+				_port = Addon_MGR.instance.GetServerPort();
+			StartServer();
 		}
 		
 		void Start() {
-			// Get port from Addon_MGR
-			if (Addon_MGR.instance != null) {
-				_port = Addon_MGR.instance.GetServerPort();
-			}
-			
-			StartServer();
+			// Socket already bound in Awake; Start() no-op for listener (kept for any future init)
 		}
 		
 		/// <summary>
@@ -71,12 +75,24 @@ namespace spz {
 				};
 				_listenerThread.Start();
 				
-				UnityEngine.Debug.Log($"[Addon_SocketServer] Started listening on port {_port}");
+				UnityEngine.Debug.Log($"[Addon_SocketServer] Started listening on 127.0.0.1:{_port} (loopback only; Python connects here)");
+				
+				// File-based handshake: Python waits for this file before connecting (breaks "connection refused" loop).
+				try {
+					string markerPath = Path.Combine(Path.GetTempPath(), "spz_addon_" + _port + "_ready.txt");
+					File.WriteAllText(markerPath, _port.ToString());
+					UnityEngine.Debug.Log($"[Addon_SocketServer] Ready marker written: {markerPath}");
+				} catch (Exception ex) {
+					UnityEngine.Debug.LogWarning($"[Addon_SocketServer] Could not write ready marker file: {ex.Message}");
+				}
 			}
 			catch (Exception e) {
 				UnityEngine.Debug.LogError($"[Addon_SocketServer] Failed to start server: {e.Message}");
 			}
 		}
+		
+		/// <summary>Path to the ready marker file (same as Python checks). Remove on shutdown.</summary>
+		static string GetReadyMarkerPath(int port) => Path.Combine(Path.GetTempPath(), "spz_addon_" + port + "_ready.txt");
 		
 		/// <summary>
 		/// Background thread loop that accepts connections
@@ -993,6 +1009,7 @@ namespace spz {
 		/// Executes UI commands (delegates to AddonUI_MGR)
 		/// </summary>
 		JObject ExecuteUICommand(string method, JObject @params) {
+			UnityEngine.Debug.Log($"[Addon_SocketServer] Executing UI Command: {method} with params: {@params?.ToString(Formatting.None)}");
 			if (AddonUI_MGR.instance == null) {
 				return new JObject { ["success"] = false, ["error"] = "AddonUI_MGR not available" };
 			}
@@ -1005,12 +1022,15 @@ namespace spz {
 					case "spz.ui.create_panel":
 						string addonId = @params["addon_id"]?.ToString() ?? "";
 						string title = @params["title"]?.ToString() ?? "Add-on Panel";
+						UnityEngine.Debug.Log($"[Addon_SocketServer] create_panel from Python: addonId={addonId}, title={title}");
 						string panelId = uiMgr.CreatePanel(addonId, title);
 						if (panelId != null) {
 							result["success"] = true;
 							result["panel_id"] = panelId;
+							UnityEngine.Debug.Log($"[Addon_SocketServer] create_panel OK: panel_id={panelId}");
 						} else {
 							result["error"] = "Failed to create panel";
+							UnityEngine.Debug.LogWarning($"[Addon_SocketServer] create_panel FAILED for {addonId} (CreatePanel returned null)");
 						}
 						break;
 						
@@ -1201,6 +1221,13 @@ namespace spz {
 			
 			// Clear command queue
 			while (_mainThreadQueue.TryDequeue(out _)) { }
+			
+			// Remove ready marker so next run doesn't see stale file
+			try {
+				string markerPath = GetReadyMarkerPath(_port);
+				if (File.Exists(markerPath))
+					File.Delete(markerPath);
+			} catch { }
 		}
 	}
 }
