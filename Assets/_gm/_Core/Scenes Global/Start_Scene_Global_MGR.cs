@@ -27,6 +27,7 @@ namespace spz {
 	        "Assets/_gm/_Core/UI (reusable)/Widgets and Gadgets/UI_ConfirmPopup_YesNo/UI_ConfirmPopup_YesNo.unity",
 	        "Assets/_gm/Features/Settings/Tool_Settings.unity",
 	        "Assets/_gm/_Core/Scenes Global/Managers_Global.unity", // Renamed from GlobalManagers
+	        "Assets/_gm/Features/AddonSystem/Tool_AddonSystem.unity", // Socket server (5555) must be up before Python connects
 	    };
 
 	    // EDIT THIS LIST
@@ -71,7 +72,6 @@ namespace spz {
 	        "Assets/_gm/Features/Camera/Projections/Tool_MultiprojMask_TextMaker.unity",
 	        "Assets/_gm/Features/StableDiffusion/Input Panel/Tool_PromptColorHighlighter.unity",
 	        "Assets/_gm/Features/3D Generate/Tool_Gen3D_MGR+Gen3D_API.unity",
-	        "Assets/_gm/Features/AddonSystem/Tool_AddonSystem.unity",
 	        "Assets/_gm/Features/Save Load Import Export/Tool_ImagesImportHelper.unity",
         
 	        // WebUI Data Fetchers
@@ -123,13 +123,14 @@ namespace spz {
 	                Debug.LogError($"Skipping scene '{scenePath}' because it is not in the Build Settings.");
 	                continue;
 	            }
-	            asyncOperations.Add(SceneManager.LoadSceneAsync(scenePath, LoadSceneMode.Additive));
+	            var op = SceneManager.LoadSceneAsync(scenePath, LoadSceneMode.Additive);
+	            op.allowSceneActivation = true; // Ensure scene activates (default is true; set explicitly so no stall at 0.9)
+	            asyncOperations.Add(op);
 	        }
 
 	        foreach (var operation in asyncOperations){
 	            yield return operation;
 	            Debug.Log("completed scene ");
-	            operation.allowSceneActivation = true;
 	        }
 	    }
 
