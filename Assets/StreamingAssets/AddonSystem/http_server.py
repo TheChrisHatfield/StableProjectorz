@@ -35,6 +35,22 @@ def set_load_addon_callback(callback):
     global _load_addon_callback
     _load_addon_callback = callback
 
+# Callback: True when Python has connected to Unity socket (set by addon_server.py)
+_connection_ready_callback = None
+
+def set_connection_ready_callback(callback):
+    """Set the callback for GET /ready. Signature: () -> bool. Unity should wait for ready before POST /load_addon."""
+    global _connection_ready_callback
+    _connection_ready_callback = callback
+
+# Callback to invoke an addon function by name (set by addon_server.py)
+_invoke_callback = None
+
+def set_invoke_callback(callback):
+    """Set the callback for POST /invoke_callback. Signature: (addon_id: str, callback_name: str) -> bool"""
+    global _invoke_callback
+    _invoke_callback = callback
+
 # FastAPI app
 app = FastAPI(
     title="StableProjectorz API",
@@ -72,6 +88,11 @@ class ProjectPath(BaseModel):
 
 class LoadAddonRequest(BaseModel):
     addon_id: str
+
+
+class InvokeCallbackRequest(BaseModel):
+    addon_id: str
+    callback: str
 
 # Helper function to call Unity API
 def call_unity(method: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -276,17 +297,17 @@ async def set_sd_prompt(prompt: Prompt):
 @app.post("/api/v1/sd/generate")
 async def trigger_sd_generation():
     """Trigger Stable Diffusion generation"""
-    result = call_unity("spz.cmd.trigger_generation", {})
+    result = call_unity("spz.cmd.trigger_texture_generation", {})
     return result
 
 @app.get("/api/v1/sd/status")
 async def get_sd_status():
     """Get Stable Diffusion status"""
     is_generating = call_unity("spz.cmd.is_generating", {})
-    is_connected = call_unity("spz.cmd.is_connected", {})
+    is_connected = call_unity("spz.cmd.is_sd_connected", {})
     return {
-        "generating": is_generating.get("is_generating", False),
-        "connected": is_connected.get("is_connected", False)
+        "generating": is_generating.get("generating", False),
+        "connected": is_connected.get("connected", False)
     }
 
 @app.post("/api/v1/sd/stop")
@@ -332,14 +353,46 @@ async def load_project(project_path: ProjectPath):
 # Addon loading (Unity calls this when user enables an addon or at startup)
 # ============================================
 
+@app.get("/ready")
+async def ready():
+    """Returns ready=True when Python has connected to Unity (socket 5555). Unity should poll this before POST /load_addon so create_panel works."""
+    if _connection_ready_callback is None:
+        return {"ready": False, "reason": "no callback"}
+    try:
+        ready_val = _connection_ready_callback()
+        return {"ready": bool(ready_val)}
+    except Exception as e:
+        return {"ready": False, "reason": str(e)}
+
+
 @app.post("/load_addon")
 async def load_addon(req: LoadAddonRequest):
     """Load a single addon by id. Called by Unity when an addon is enabled."""
     if _load_addon_callback is None:
         raise HTTPException(status_code=503, detail="Addon loader not registered")
+    if _connection_ready_callback is None:
+        raise HTTPException(status_code=503, detail="Connection readiness not available; server may not be fully initialized")
+    if not _connection_ready_callback():
+        raise HTTPException(status_code=503, detail="Not connected to Unity yet; wait for GET /ready")
     try:
         ok = _load_addon_callback(req.addon_id)
         return {"success": ok, "addon_id": req.addon_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/invoke_callback")
+async def invoke_callback(req: InvokeCallbackRequest):
+    """Invoke an addon function by name. Called by Unity when user clicks an addon panel button."""
+    if _invoke_callback is None:
+        raise HTTPException(status_code=503, detail="Invoke callback not registered")
+    if _connection_ready_callback is None:
+        raise HTTPException(status_code=503, detail="Connection readiness not available; server may not be fully initialized")
+    if not _connection_ready_callback():
+        raise HTTPException(status_code=503, detail="Not connected to Unity yet; wait for GET /ready")
+    try:
+        ok = _invoke_callback(req.addon_id, req.callback)
+        return {"success": ok, "addon_id": req.addon_id, "callback": req.callback}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -370,7 +423,7 @@ async def health():
         return {"status": "disconnected", "unity": False}
 
 def start_server(host: str = "127.0.0.1", port: int = 5557):
-    """Start the FastAPI server"""
+    """Start the FastAPI server. Binds to 127.0.0.1 by default (Unity on same machine calls /load_addon, /ready, etc.)."""
     print(f"[HTTP Server] Starting FastAPI server on http://{host}:{port}")
     print(f"[HTTP Server] API docs available at http://{host}:{port}/docs")
     uvicorn.run(app, host=host, port=port, log_level="info")

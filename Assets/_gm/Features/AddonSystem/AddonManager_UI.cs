@@ -39,6 +39,14 @@ namespace spz {
 			instance = this;
 		}
 		
+	void OnEnable() {
+		Addon_MGR.OnAddonEnabledStateChanged += OnAddonEnabledStateChanged;
+	}
+
+	void OnDisable() {
+		Addon_MGR.OnAddonEnabledStateChanged -= OnAddonEnabledStateChanged;
+	}
+
 	void Start() {
 		if (_openPanel_button != null) {
 			_openPanel_button.onClick.AddListener(OpenPanel);
@@ -278,6 +286,54 @@ namespace spz {
 		refreshBtnText.raycastTarget = false; // Don't block button clicks
 		_refresh_button = refreshBtn;
 		
+		// Load addons now — request Python to load all enabled addons
+		GameObject loadNowBtnObj = new GameObject("LoadAddonsNowButton");
+		loadNowBtnObj.transform.SetParent(buttonBarObj.transform, false);
+		var loadNowBtnRect = loadNowBtnObj.AddComponent<RectTransform>();
+		loadNowBtnRect.sizeDelta = new Vector2(130, 30);
+		var loadNowBtnImage = loadNowBtnObj.AddComponent<UnityEngine.UI.Image>();
+		loadNowBtnImage.color = new Color(0.25f, 0.45f, 0.25f, 1f);
+		loadNowBtnImage.raycastTarget = true;
+		var loadNowBtn = loadNowBtnObj.AddComponent<UnityEngine.UI.Button>();
+		loadNowBtn.targetGraphic = loadNowBtnImage;
+		loadNowBtn.onClick.AddListener(OnLoadAddonsNow);
+		var loadNowBtnTextObj = new GameObject("Text");
+		loadNowBtnTextObj.transform.SetParent(loadNowBtnObj.transform, false);
+		var loadNowBtnTextRect = loadNowBtnTextObj.AddComponent<RectTransform>();
+		loadNowBtnTextRect.anchorMin = Vector2.zero;
+		loadNowBtnTextRect.anchorMax = Vector2.one;
+		loadNowBtnTextRect.sizeDelta = Vector2.zero;
+		var loadNowBtnText = loadNowBtnTextObj.AddComponent<TextMeshProUGUI>();
+		loadNowBtnText.text = "Load addons now";
+		loadNowBtnText.fontSize = 13;
+		loadNowBtnText.alignment = TextAlignmentOptions.Center;
+		loadNowBtnText.color = new Color(0.95f, 0.95f, 0.95f, 1f);
+		loadNowBtnText.raycastTarget = false;
+		
+		// Run with addons — same pattern as Run_noQuickEdit for WebUI: launch Run_with_Addons.bat then quit
+		GameObject runWithAddonsBtnObj = new GameObject("RunWithAddonsButton");
+		runWithAddonsBtnObj.transform.SetParent(buttonBarObj.transform, false);
+		var runWithAddonsRect = runWithAddonsBtnObj.AddComponent<RectTransform>();
+		runWithAddonsRect.sizeDelta = new Vector2(150, 30);
+		var runWithAddonsImg = runWithAddonsBtnObj.AddComponent<UnityEngine.UI.Image>();
+		runWithAddonsImg.color = new Color(0.2f, 0.5f, 0.6f, 1f);
+		runWithAddonsImg.raycastTarget = true;
+		var runWithAddonsBtn = runWithAddonsBtnObj.AddComponent<UnityEngine.UI.Button>();
+		runWithAddonsBtn.targetGraphic = runWithAddonsImg;
+		runWithAddonsBtn.onClick.AddListener(OnRestartWithAddons);
+		var runWithAddonsTextObj = new GameObject("Text");
+		runWithAddonsTextObj.transform.SetParent(runWithAddonsBtnObj.transform, false);
+		var runWithAddonsTextRect = runWithAddonsTextObj.AddComponent<RectTransform>();
+		runWithAddonsTextRect.anchorMin = Vector2.zero;
+		runWithAddonsTextRect.anchorMax = Vector2.one;
+		runWithAddonsTextRect.sizeDelta = Vector2.zero;
+		var runWithAddonsText = runWithAddonsTextObj.AddComponent<TextMeshProUGUI>();
+		runWithAddonsText.text = "Restart with addons";
+		runWithAddonsText.fontSize = 13;
+		runWithAddonsText.alignment = TextAlignmentOptions.Center;
+		runWithAddonsText.color = new Color(0.95f, 0.95f, 0.95f, 1f);
+		runWithAddonsText.raycastTarget = false;
+		
 		// Filter bar — grid spacing
 		GameObject filterBarObj = new GameObject("FilterBar");
 		filterBarObj.transform.SetParent(panelObj.transform, false);
@@ -491,6 +547,28 @@ namespace spz {
 		}
 		
 		/// <summary>
+		/// Requests Python to load all enabled addons so their panels appear (e.g. in the ctrl tab). No save needed — enable then click this.
+		/// </summary>
+		void OnLoadAddonsNow() {
+			if (_statusText != null) _statusText.text = "Loading addons...";
+			if (Addon_MGR.instance != null) {
+				Addon_MGR.instance.RequestLoadAllEnabledAddonsNow(() => {
+					if (_statusText != null) _statusText.text = "Ready";
+					RefreshAddonsList();
+				});
+			} else {
+				if (_statusText != null) _statusText.text = "Ready";
+			}
+		}
+
+		/// <summary>
+		/// Launches Run_with_Addons.bat (same way Run_noQuickEdit runs for WebUI) then quits so the bat starts the game with Python on PATH.
+		/// </summary>
+		void OnRestartWithAddons() {
+			Launch_Addons_Bat_File.RestartWithAddons();
+		}
+
+		/// <summary>
 		/// Opens file browser to select a zip file for installation
 		/// </summary>
 		void OnInstallFromFile() {
@@ -662,6 +740,10 @@ namespace spz {
 			string filterText = _filterState == 0 ? "All" : (_filterState == 1 ? "Enabled" : "Disabled");
 			ShowStatus($"Showing {filteredAddons.Count} of {addons.Count} add-on(s) ({enabledCount} enabled, {disabledCount} disabled) - Filter: {filterText}", true);
 		}
+
+		void OnAddonEnabledStateChanged(string addonId) {
+			RefreshAddonsList();
+		}
 		
 		/// <summary>
 		/// Creates a UI item for an add-on in the list
@@ -789,13 +871,18 @@ namespace spz {
 				toggle.targetGraphic = toggleBg;
 				toggle.graphic = toggleCheckmark;
 				toggle.isOn = addonInfo.isEnabled; // Set after graphic so visibility is correct
-				toggle.onValueChanged.AddListener((enabled) => {
+				toggle.onValueChanged.AddListener((_) => {
 					if (Addon_MGR.instance == null) {
 						Debug.LogWarning("[AddonManager_UI] Addon_MGR.instance is null, cannot enable/disable addon");
 						return;
 					}
 					string id = addonId; // Capture for closure; avoid using item UI refs after refresh
-					if (enabled) {
+					bool desired = toggle.isOn; // Use actual toggle state after click (reliable; param can be stale)
+					var addons = Addon_MGR.instance.GetAddons();
+					if (addons.TryGetValue(id, out var info) && info.isEnabled == desired) {
+						return; // Already in desired state (e.g. programmatic change or double-fire)
+					}
+					if (desired) {
 						Addon_MGR.instance.EnableAddon(id);
 					} else {
 						Addon_MGR.instance.DisableAddon(id);

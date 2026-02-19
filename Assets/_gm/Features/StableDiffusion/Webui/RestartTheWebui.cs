@@ -88,14 +88,17 @@ namespace spz {
 	            Print_Webui_NotFound();
 	            return; 
 	        }
+	        LaunchWebUIBatFile.TryCloseLastLaunchedWebUi();
 	        full_path = OnWillLaunchWebui_AdjustArgs(full_path);
-	        uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(full_path, isJustFile:true, 
-	                                                                       Directory.GetParent(full_path).FullName);
+	        string workingDir;
+	        string launchPath = LaunchWebUIBatFile.GetLaunchPathWithGpuSetting(full_path, out workingDir);
+	        uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(launchPath, isJustFile:true, workingDir);
 	        if (pid == 0){
 	            Debug.LogError("Failed to launch the file. Consider launching StableProjectorz as Admin.");
 	            return;
 	        }
-	        string message = "Webui Restarted.  Always ensure only 1 webui is open, to save VRAM.";
+	        LaunchWebUIBatFile.SetLastLaunchedWebUiPid(pid);
+	        string message = "WebUI restarted with current GPU setting.";
 	        Viewport_StatusText.instance.ShowStatusText(message, false, 3, false);
 	        OnClicked?.Invoke();
 	    }

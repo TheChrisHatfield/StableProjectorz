@@ -47,6 +47,8 @@ namespace spz {
 		private const int MAX_COMMANDS_PER_FRAME = 10;
 		
 		void Awake() {
+			// Diagnostic: if you search "Addon_SocketServer" in Player.log and never see this line, the scene/GameObject/script is not running (scene not loaded, GO disabled, or script missing).
+			UnityEngine.Debug.Log("[Addon_SocketServer] Awake (component running; will bind to port next).");
 			if (instance != null) { DestroyImmediate(this); return; }
 			instance = this;
 			// Bind immediately (Addon_MGR runs first via DefaultExecutionOrder -100 so port is available)
@@ -87,7 +89,7 @@ namespace spz {
 				}
 			}
 			catch (Exception e) {
-				UnityEngine.Debug.LogError($"[Addon_SocketServer] Failed to start server: {e.Message}");
+				UnityEngine.Debug.LogError($"[Addon_SocketServer] Failed to start server (no listener on 5555, no ready file): {e.Message}\n{e.StackTrace}");
 			}
 		}
 		

@@ -26,14 +26,18 @@ echo Output: %BUILD_PATH%
 echo Log: %LOG_FILE%
 echo.
 
-REM Remove old Data (and backup) so Unity does a full rebuild; keep exe so if build fails you still have one
+REM Optional: remove old Data for a clean rebuild. Skipping by default so a failed build leaves a runnable exe+Data.
 set BUILD_DIR=%PROJECT_PATH%Build_IL2CPP
-if exist "%BUILD_DIR%\StableProjectorz_Data" (
-    echo Removing old Data folder so scripts and assets are rebuilt...
-    rd /s /q "%BUILD_DIR%\StableProjectorz_Data" 2>nul
-)
-if exist "%BUILD_DIR%\StableProjectorz_BackUpThisFolder_ButDontShipItWithYourGame" (
-    rd /s /q "%BUILD_DIR%\StableProjectorz_BackUpThisFolder_ButDontShipItWithYourGame" 2>nul
+if /i "%~1"=="clean" (
+    if exist "%BUILD_DIR%\StableProjectorz_Data" (
+        echo Removing old Data folder for clean rebuild...
+        rd /s /q "%BUILD_DIR%\StableProjectorz_Data" 2>nul
+    )
+    if exist "%BUILD_DIR%\StableProjectorz_BackUpThisFolder_ButDontShipItWithYourGame" (
+        rd /s /q "%BUILD_DIR%\StableProjectorz_BackUpThisFolder_ButDontShipItWithYourGame" 2>nul
+    )
+) else (
+    echo Keeping existing Data folder; use "build_for_testing.bat clean" for a full clean rebuild.
 )
 
 REM Remove project lock file so batch mode can open the project (fixes exit code 1 when no Editor is open)
@@ -49,8 +53,8 @@ echo.
 echo Launching Unity in batch mode ^(no window - check Task Manager for Unity.exe if unsure^)...
 echo.
 
-REM Use path without trailing backslash and temp log so we always get a fresh log (avoids "file in use" and path issues)
-"%UNITY_EXE%" -batchmode -quit -projectPath "%PROJECT_PATH_NO_TRAIL%" -buildTarget Win64 -buildWindows64Player "%BUILD_PATH%" -logFile "%LOG_FILE_TEMP%"
+REM Unity 6: use -executeMethod (build script) instead of deprecated -buildWindows64Player to avoid exit code 1
+"%UNITY_EXE%" -batchmode -quit -projectPath "%PROJECT_PATH_NO_TRAIL%" -executeMethod BuildForTesting.BuildWin64 -logFile "%LOG_FILE_TEMP%"
 set UNITY_EXIT=%ERRORLEVEL%
 
 if exist "%LOG_FILE_TEMP%" (
@@ -62,10 +66,21 @@ echo.
 echo Unity process finished. Exit code: %UNITY_EXIT%
 
 REM Unity sometimes returns non-zero even when build succeeded; if exe exists, treat as success
+set "DATA_FOLDER=%BUILD_DIR%\StableProjectorz_Data"
 if exist "%BUILD_PATH%" (
     echo.
     echo Build succeeded: %BUILD_PATH%
     for %%F in ("%BUILD_PATH%") do echo Exe timestamp: %%~tF  ^(run this exe to test^)
+    if not exist "%DATA_FOLDER%" (
+        echo.
+        echo WARNING: StableProjectorz_Data folder is missing next to the exe.
+        echo The game will show "Data folder not found" until you run a full rebuild.
+        echo Close Unity Editor and run this script again to get a complete build.
+    ) else (
+        echo Data folder: %DATA_FOLDER%  ^(OK^)
+        echo Run the exe from: %BUILD_DIR%
+        echo For addons: use Run_with_Addons.bat so Python is on PATH when the game starts.
+    )
     if %UNITY_EXIT% NEQ 0 (
         echo Unity exit code was %UNITY_EXIT% ^(exe was still created^)
     )

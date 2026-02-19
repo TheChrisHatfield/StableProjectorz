@@ -14,4 +14,10 @@
     <type fullname="System.IO.File" preserve="all"/>
     <type fullname="System.IO.Directory" preserve="all"/>
   </assembly>
+  <assembly fullname="Assembly-CSharp">
+    <type fullname="spz.Addon_MGR" preserve="all"/>
+    <type fullname="spz.Addon_SocketServer" preserve="all"/>
+  </assembly>
+  <!-- Unity Web Request: keep so HTTP calls (addon /ready, load_addon, SD API, etc.) work in IL2CPP build -->
+  <assembly fullname="UnityEngine.UnityWebRequestModule" preserve="all"/>
 </linker>

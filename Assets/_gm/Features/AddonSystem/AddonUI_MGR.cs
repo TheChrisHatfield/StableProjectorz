@@ -1,8 +1,11 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Networking;
 using UnityEngine.UI;
 using TMPro;
+using Newtonsoft.Json.Linq;
 
 namespace spz {
 
@@ -38,68 +41,75 @@ namespace spz {
 		/// Creates a panel for an add-on
 		/// </summary>
 		public string CreatePanel(string addonId, string title) {
-			if (_addonPanelsParent == null) {
-				// Try serialized parent, then right panel, then any canvas, then create dedicated canvas
-				var commandRibbon = CommandRibbon_UI.instance;
-				if (commandRibbon != null) {
+			UnityEngine.Debug.Log($"[AddonUI_MGR] CreatePanel requested for addon: {addonId}, title: {title}");
+			RectTransform parentForThisAddon = null;
+			var commandRibbon = CommandRibbon_UI.instance;
+			if (commandRibbon == null) {
+				commandRibbon = UnityEngine.Object.FindObjectOfType<CommandRibbon_UI>(true);
+				UnityEngine.Debug.Log($"[AddonUI_MGR] CommandRibbon_UI.instance was null, FindObjectOfType(incl.Inactive)={commandRibbon != null}");
+			}
+			if (commandRibbon != null) {
+				parentForThisAddon = commandRibbon.GetOrCreatePanelForAddon(addonId, title);
+				if (parentForThisAddon != null)
+					UnityEngine.Debug.Log($"[AddonUI_MGR] Got ribbon panel parent for: {title}");
+				else
+					UnityEngine.Debug.LogWarning($"[AddonUI_MGR] GetOrCreatePanelForAddon returned null for: {addonId}. Tab will not appear in ribbon.");
+			} else {
+				UnityEngine.Debug.LogWarning("[AddonUI_MGR] CommandRibbon_UI not found (even incl. inactive). Using fallback parent.");
+			}
+			if (parentForThisAddon == null) {
+				if (_addonPanelsParent == null) {
 					var rightPanel = GameObject.Find("UI_Global_Right_Panel");
 					if (rightPanel != null) {
 						var canvas = rightPanel.GetComponentInChildren<Canvas>();
+						if (canvas != null) _addonPanelsParent = canvas.transform as RectTransform;
+					}
+					if (_addonPanelsParent == null) {
+						var existing = GameObject.Find("AddonPanelsRoot");
+						if (existing != null) { var rt = existing.transform as RectTransform; if (rt != null) _addonPanelsParent = rt; }
+					}
+					if (_addonPanelsParent == null) {
+						var canvas = UnityEngine.Object.FindObjectOfType<Canvas>();
 						if (canvas != null) {
-							_addonPanelsParent = canvas.transform as RectTransform;
+							var root = new GameObject("AddonPanelsRoot");
+							root.transform.SetParent(canvas.transform, false);
+							var rt = root.AddComponent<RectTransform>();
+							rt.anchorMin = new Vector2(0.5f, 0f); rt.anchorMax = new Vector2(0.5f, 1f);
+							rt.pivot = new Vector2(0.5f, 0.5f); rt.sizeDelta = new Vector2(320f, 0f); rt.anchoredPosition = new Vector2(160f, 0f);
+							_addonPanelsParent = rt;
 						}
 					}
-				}
-				if (_addonPanelsParent == null) {
-					var existing = GameObject.Find("AddonPanelsRoot");
-					if (existing != null) {
-						var rt = existing.transform as RectTransform;
-						if (rt != null) { _addonPanelsParent = rt; }
-					}
-				}
-				if (_addonPanelsParent == null) {
-					var canvas = UnityEngine.Object.FindObjectOfType<Canvas>();
-					if (canvas != null) {
-						var root = new GameObject("AddonPanelsRoot");
-						root.transform.SetParent(canvas.transform, false);
-						var rt = root.AddComponent<RectTransform>();
-						rt.anchorMin = new Vector2(0.5f, 0f);
-						rt.anchorMax = new Vector2(0.5f, 1f);
-						rt.pivot = new Vector2(0.5f, 0.5f);
-						rt.sizeDelta = new Vector2(320f, 0f);
-						rt.anchoredPosition = new Vector2(160f, 0f);
+					if (_addonPanelsParent == null) {
+						var canvasObj = new GameObject("AddonPanels_Canvas");
+						canvasObj.layer = 5;
+						var c = canvasObj.AddComponent<Canvas>();
+						c.renderMode = RenderMode.ScreenSpaceOverlay; c.sortingOrder = 1000;
+						canvasObj.AddComponent<UnityEngine.UI.CanvasScaler>();
+						canvasObj.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+						var content = new GameObject("Content");
+						content.transform.SetParent(canvasObj.transform, false);
+						var rt = content.AddComponent<RectTransform>();
+						rt.anchorMin = new Vector2(0.5f, 0f); rt.anchorMax = new Vector2(0.5f, 1f);
+						rt.sizeDelta = new Vector2(320f, 0f); rt.anchoredPosition = new Vector2(160f, 0f);
 						_addonPanelsParent = rt;
-						UnityEngine.Debug.Log("[AddonUI_MGR] Created AddonPanelsRoot under existing Canvas");
 					}
 				}
-				if (_addonPanelsParent == null) {
-					var canvasObj = new GameObject("AddonPanels_Canvas");
-					canvasObj.layer = 5;
-					var c = canvasObj.AddComponent<Canvas>();
-					c.renderMode = RenderMode.ScreenSpaceOverlay;
-					c.sortingOrder = 1000;
-					canvasObj.AddComponent<UnityEngine.UI.CanvasScaler>();
-					canvasObj.AddComponent<UnityEngine.UI.GraphicRaycaster>();
-					var content = new GameObject("Content");
-					content.transform.SetParent(canvasObj.transform, false);
-					var rt = content.AddComponent<RectTransform>();
-					rt.anchorMin = new Vector2(0.5f, 0f);
-					rt.anchorMax = new Vector2(0.5f, 1f);
-					rt.sizeDelta = new Vector2(320f, 0f);
-					rt.anchoredPosition = new Vector2(160f, 0f);
-					_addonPanelsParent = rt;
-					UnityEngine.Debug.Log("[AddonUI_MGR] Created dedicated AddonPanels_Canvas for add-on panels");
-				}
+				parentForThisAddon = _addonPanelsParent;
 			}
-			
+			if (parentForThisAddon == null) {
+				UnityEngine.Debug.LogError("[AddonUI_MGR] No parent found for add-on panels (ribbon and fallbacks failed). Returning null.");
+				return null;
+			}
+			UnityEngine.Debug.Log($"[AddonUI_MGR] Creating panel content under: {parentForThisAddon.name}");
+
 			// Create panel GameObject
 			GameObject panelObj;
 			if (_panelPrefab != null) {
-				panelObj = Instantiate(_panelPrefab, _addonPanelsParent);
+				panelObj = Instantiate(_panelPrefab, parentForThisAddon);
 			} else {
 				// Create basic panel if no prefab
 				panelObj = new GameObject($"AddonPanel_{addonId}_{title}");
-				panelObj.transform.SetParent(_addonPanelsParent, false);
+				panelObj.transform.SetParent(parentForThisAddon, false);
 				
 				var rectTransform = panelObj.AddComponent<RectTransform>();
 				rectTransform.anchorMin = new Vector2(0, 0);
@@ -217,12 +227,43 @@ namespace spz {
 		}
 		
 		/// <summary>
-		/// Sends a callback event to the Python server
+		/// Sends a callback event to the Python server (HTTP POST /invoke_callback). Runs the addon's function by name.
 		/// </summary>
 		void SendCallbackToPython(string addonId, string callbackName) {
-			// This will be handled by the socket server
-			// For now, just log it
-			UnityEngine.Debug.Log($"[AddonUI_MGR] Callback: {addonId}.{callbackName}");
+			UnityEngine.Debug.Log($"[AddonUI_MGR] Invoking addon callback: {addonId}.{callbackName}");
+			StartCoroutine(SendCallbackToPythonCrtn(addonId, callbackName));
+		}
+
+		IEnumerator SendCallbackToPythonCrtn(string addonId, string callbackName) {
+			int port = Addon_MGR.instance != null ? Addon_MGR.instance.GetHttpServerPort() : 5557;
+			string url = $"http://127.0.0.1:{port}/invoke_callback";
+			string body = $"{{\"addon_id\":\"{JsonEscape(addonId)}\",\"callback\":\"{JsonEscape(callbackName)}\"}}";
+			using (var req = new UnityWebRequest(url, "POST")) {
+				req.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(body));
+				req.downloadHandler = new DownloadHandlerBuffer();
+				req.SetRequestHeader("Content-Type", "application/json");
+				yield return req.SendWebRequest();
+				if (req.result != UnityWebRequest.Result.Success) {
+					UnityEngine.Debug.LogWarning($"[AddonUI_MGR] invoke_callback failed: {req.error}");
+					yield break;
+				}
+				bool callbackSucceeded = false;
+				try {
+					var json = JObject.Parse(req.downloadHandler?.text ?? "{}");
+					callbackSucceeded = json["success"]?.Value<bool>() ?? false;
+				} catch {
+					// Response not valid JSON or missing success
+				}
+				if (callbackSucceeded)
+					UnityEngine.Debug.Log($"[AddonUI_MGR] Callback invoked: {addonId}.{callbackName}");
+				else
+					UnityEngine.Debug.LogWarning($"[AddonUI_MGR] Addon callback failed or not found: {addonId}.{callbackName}");
+			}
+		}
+		
+		static string JsonEscape(string s) {
+			if (string.IsNullOrEmpty(s)) return "";
+			return s.Replace("\\", "\\\\").Replace("\"", "\\\"");
 		}
 		
 		/// <summary>

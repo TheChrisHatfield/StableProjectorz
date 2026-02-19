@@ -3,6 +3,13 @@ Mesh Tools Add-on
 
 Example add-on demonstrating expanded mesh operations, scene information,
 and Stable Diffusion integration.
+
+Required structure for true enabling (tab + working buttons):
+- register() must call api.ui.create_panel(addon_id, title) and panel.add_button(label, callback_name).
+- Button callback_name must match a module-level function name (e.g. center_selected_meshes).
+- Unity enables via Add-on Manager; "Load addons now" or enable toggle triggers Python load;
+  Python register() creates the tab/panel in Unity; button clicks POST to /invoke_callback
+  so this module's functions run by name.
 """
 
 import sys
