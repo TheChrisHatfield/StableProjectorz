@@ -166,11 +166,26 @@ namespace spz {
 	        return uMesh;
 	    }
 
+	    /// <summary>Get a shader suitable for imported materials. "Standard" is built-in only; use fallbacks for URP or when stripped.</summary>
+	    private static Shader GetDefaultLitShader()
+	    {
+	        Shader s = Shader.Find("Standard");
+	        if (s != null) return s;
+	        s = Shader.Find("Universal Render Pipeline/Lit");
+	        if (s != null) return s;
+	        s = Shader.Find("Shader Graphs/Lit");
+	        if (s != null) return s;
+	        s = Shader.Find("Unlit/Texture");
+	        if (s != null) return s;
+	        return Shader.Find("Hidden/InternalErrorShader"); // Unity built-in, always present
+	    }
+
 	    private UnityMat ConvertMaterial(Assimp.Material aMat, Scene scene)
 	    {
 	        if (_loadedMaterials.ContainsKey(aMat.Name)) return _loadedMaterials[aMat.Name];
 
-	        UnityMat mat = new UnityMat(Shader.Find("Standard"));
+	        Shader shader = GetDefaultLitShader();
+	        UnityMat mat = new UnityMat(shader);
 	        mat.name = aMat.Name;
 
 	        // Albedo

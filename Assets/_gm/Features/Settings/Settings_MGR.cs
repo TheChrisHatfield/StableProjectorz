@@ -16,24 +16,38 @@ namespace spz {
 	    int _idleFramerate = 2; //when the window isn't focused. 5 was too much
 	    bool _hasFocus = true;
 
-
+	    /// <summary>When true, PresentFrame is throttled to monitor refresh (helps AMD FirePro / Alienware and reduces GPU load).</summary>
+	    bool _useVSync = true;
+	    public bool get_useVSync() => _useVSync;
+	    public void set_useVSync(bool use) {
+	        _useVSync = use;
+	        PlayerPrefs.SetInt("UseVSync", _useVSync ? 1 : 0);
+	        PlayerPrefs.Save();
+	        QualitySettings.vSyncCount = _useVSync ? 1 : 0;
+	        Application.targetFrameRate = _useVSync ? 0 : _targetFrameRate; // 0 = let VSync drive; else use cap
+	        var toggle = EventsBinder.FindComponent<Toggle>("Settings:set_useVSync");
+	        if (toggle != null) toggle.SetIsOnWithoutNotify(_useVSync);
+	    }
+	    void tryLoad_useVSync() {
+	        set_useVSync(PlayerPrefs.GetInt("UseVSync", 1) == 1);
+	    }
 
 	    //allows for smooth fps after user drag-and-drops some file, etc.
 	    float _dontThrottle_any_FPS_until = -1;
 	    public void dontThrottle_any_FPS_until(float timestamp) => _dontThrottle_any_FPS_until = timestamp;
 
-	    int _targetFrameRate = 70;
+	    int _targetFrameRate = 60; // lowered from 70 to reduce Gfx.PresentFrame on weak/workstation GPUs (e.g. AMD FirePro W2100)
 	    public int get_targetFrameRate() => _targetFrameRate;
 	    public void set_targetFrameRate(int fps) {
 	        _targetFrameRate = fps;
 	        PlayerPrefs.SetInt("_targetFrameRate", _targetFrameRate); PlayerPrefs.Save();
-	        // Set UI value via binder
 	        var inputField = EventsBinder.FindComponent<IntegerInputField>("Settings:set_targetFrameRate");
 	        if (inputField != null) inputField.SetValueWithoutNotify(fps.ToString());
-	        Application.targetFrameRate = _targetFrameRate;
+	        QualitySettings.vSyncCount = _useVSync ? 1 : 0;
+	        Application.targetFrameRate = _useVSync ? 0 : _targetFrameRate;
 	    }
 	    void tryLoad_targetFrameRate() {
-	        set_targetFrameRate(PlayerPrefs.GetInt("_targetFrameRate", 70));
+	        set_targetFrameRate(PlayerPrefs.GetInt("_targetFrameRate", 60));
 	    }
 
 
@@ -118,7 +132,17 @@ namespace spz {
 	    void tryLoad_avoid_NSFW_generations()
 	        => set_avoid_NSFW_generations(PlayerPrefs.GetInt("_avoid_NSFW_generations", 1) == 1);
 
-
+	    // Stable Diffusion GPU: -1 = default (auto), 0/1/2... = use that CUDA device (sets CUDA_VISIBLE_DEVICES when launching WebUI).
+	    int _sdGpuDeviceId = -1;
+	    public int get_sdGpuDeviceId() => _sdGpuDeviceId;
+	    void set_sdGpuDeviceId(int id) {
+	        _sdGpuDeviceId = id < 0 ? -1 : id;
+	        PlayerPrefs.SetInt("SD_GPU_DeviceId", _sdGpuDeviceId); PlayerPrefs.Save();
+	        var inputField = EventsBinder.FindComponent<IntegerInputField>("Settings:set_sdGpuDeviceId");
+	        if (inputField != null) inputField.SetValueWithoutNotify(_sdGpuDeviceId.ToString());
+	    }
+	    void tryLoad_sdGpuDeviceId()
+	        => set_sdGpuDeviceId(PlayerPrefs.GetInt("SD_GPU_DeviceId", -1));
 
 	    public static Action<bool> _Act_viewportInCenterChanged { get; set; } = null;
 	    bool _viewport_in_center = true;
@@ -377,6 +401,13 @@ namespace spz {
 	        if (autoScroll != null) autoScroll.ScrollToEnd(0.35f, false);
 	    }
 
+	    void OnButton_OpenHelpSettingsPanel() {
+	        var panel = EventsBinder.FindComponent<RectTransform>("Settings:SettingsPanel");
+	        if (panel != null) panel.gameObject.SetActive(true);
+	        var autoScroll = EventsBinder.FindComponent<ScrollRect_AutoScroll>("Settings:AutoScroll");
+	        if (autoScroll != null) autoScroll.ScrollToEnd(0.35f, false);
+	    }
+
     void OnButton_OpenAddonManager() {
         if (AddonManager_UI.instance != null) {
             AddonManager_UI.instance.OpenPanel();
@@ -390,7 +421,8 @@ namespace spz {
 	        string confirmMsg = $"Restore default settings?\n<b>This will delete ALL the Art icons.</b>";
 	        ConfirmPopup_UI.instance.Show(confirmMsg, OnYes, OnNo);
 	        void OnYes() {
-	            set_targetFrameRate(70);
+	            set_useVSync(true);
+	            set_targetFrameRate(60);
 	            set_brushPrecision_res(1024, skipConfirmPopup: true);
 	            set_prompt_textHighlight(true);
 	            set_isAllowTooltips(true);
@@ -406,33 +438,38 @@ namespace spz {
 	            set_layout_askServerOften(false);
 	            set_ignoreCtrl_if_clickSelectingMeshes(false);
 	            set_useCtrlScroll_for_WorkflowMode_swaps(false);
+	            set_sdGpuDeviceId(-1);
 	        }
 	        void OnNo() { }
 	    }
 
 
 	    void AdjustTargetFramerate() {
-        
 	        bool canReduce_FPS = Performance_MGR.instance != null &&
 	                             Performance_MGR.instance.isThrottleFPS_whenGenerating() &&
 	                             GenerateButtons_UI.isGenerating &&
 	                             GenerateButtons_UI.isGeneratingPaused == false;
-	        if (canReduce_FPS){
+	        if (canReduce_FPS) {
 	            Application.targetFrameRate = _idleFramerate;
 	            return;
 	        }
-	        if (Time.time < 15){
-	            Application.targetFrameRate = _targetFrameRate;
+	        if (Time.time < 15) {
+	            Application.targetFrameRate = _useVSync ? 0 : _targetFrameRate;
 	            return;
 	        }
 	        bool dontThrottle = Time.time < _dontThrottle_any_FPS_until;
-	        Application.targetFrameRate = _hasFocus || dontThrottle ? _targetFrameRate : _idleFramerate;
+	        if (_useVSync) {
+	            // Keep targetFrameRate 0 so monitor refresh drives frame rate; do not set _idleFramerate or we bypass VSync.
+	            Application.targetFrameRate = 0;
+	        } else {
+	            Application.targetFrameRate = _hasFocus || dontThrottle ? _targetFrameRate : _idleFramerate;
+	        }
 	    }
 
 
 	    void Update() {
 	        int targ = Application.targetFrameRate;
-	        if (targ != _targetFrameRate && targ != _idleFramerate) {
+	        if (targ != _targetFrameRate && targ != _idleFramerate && !(_useVSync && targ == 0)) {
 	            Debug.LogError("Something changed the target frame rate. Only Settings_MGR should do it");
 	        }
 	        AdjustTargetFramerate();
@@ -471,6 +508,7 @@ namespace spz {
 	        // UIEventBinder.Bind("Settings:set_ShadowR_chunkSize_descript_text", _shadowR_chunkSize_descript);
 
 	        StaticEvents.SubscribeUnique("Settings:OpenSettingsPanel", OnButton_OpenSettingsPanel);
+	        StaticEvents.SubscribeUnique("Settings:OpenHelpSettingsPanel", OnButton_OpenHelpSettingsPanel);
 	        StaticEvents.SubscribeUnique<int>("Settings:set_targetFrameRate", set_targetFrameRate);
 	        StaticEvents.SubscribeUnique<float>("Settings:set_prompt_textSize", set_prompt_textSize);
 	        StaticEvents.SubscribeUnique("Settings:OnButton_WireframeColor", OnButton_WireframeColor);
@@ -480,6 +518,7 @@ namespace spz {
 	        // Special lambda handler for brush precision
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_brushPrecision_res", val => set_brushPrecision_res(val ? 4096 : 2048));
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_prompt_textHighlight", set_prompt_textHighlight);
+	        StaticEvents.SubscribeUnique<bool>("Settings:set_useVSync", set_useVSync);
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_isAllowTooltips", set_isAllowTooltips);
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_isShow_CameraInfoText", set_isShow_CameraInfoText);
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_isAlwaysFocusCameraPivot", set_isAlwaysFocusCameraPivot);
@@ -493,7 +532,9 @@ namespace spz {
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_layout_askServerOften", set_layout_askServerOften);
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_useCtrlScroll_for_WorkflowMode_swaps", set_useCtrlScroll_for_WorkflowMode_swaps);
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_ignoreCtrl_if_clickSelectingMeshes", set_ignoreCtrl_if_clickSelectingMeshes);
+	        StaticEvents.SubscribeUnique<int>("Settings:set_sdGpuDeviceId", set_sdGpuDeviceId);
 
+	        tryLoad_useVSync();
 	        tryLoad_targetFrameRate();
 	        tryLoad_brushPrecision_res();
 	        tryLoad_prompt_textHighlight();
@@ -513,12 +554,13 @@ namespace spz {
 	        tryLoad_layout_askServerOften();
 	        tryLoad_useCtrlScroll_for_WorkflowMode_swaps();
 	        tryLoad_ignoreCtrl_if_clickSelectingMeshes();
+	        tryLoad_sdGpuDeviceId();
 	        isLaunchFastWebui = PlayerPrefs.GetInt("isLaunchFastWebui", 0) > 0;
 	    }
 
 	    void Start() {
-	        QualitySettings.vSyncCount = 0;
-	        Application.targetFrameRate = _targetFrameRate;
+	        QualitySettings.vSyncCount = _useVSync ? 1 : 0;
+	        Application.targetFrameRate = _useVSync ? 0 : _targetFrameRate;
 	    }
 
 	    void OnApplicationFocus(bool hasFocus) {
@@ -539,6 +581,7 @@ namespace spz {
 	        // Note: A dedicated method should be used for the lambda subscription to enable unsubscribing.
 	        // For now, this demonstrates the required pattern.
 	        StaticEvents.Unsubscribe("Settings:OpenSettingsPanel", OnButton_OpenSettingsPanel);
+	        StaticEvents.Unsubscribe("Settings:OpenHelpSettingsPanel", OnButton_OpenHelpSettingsPanel);
 	        StaticEvents.Unsubscribe<int>("Settings:set_targetFrameRate", set_targetFrameRate);
 	        StaticEvents.Unsubscribe<float>("Settings:set_prompt_textSize", set_prompt_textSize);
 	        StaticEvents.Unsubscribe("Settings:OnButton_WireframeColor", OnButton_WireframeColor);
@@ -546,6 +589,7 @@ namespace spz {
 	        StaticEvents.Unsubscribe<float>("Settings:set_uvWarpSpeed01", set_uvWarpSpeed01);
 	        StaticEvents.Unsubscribe<float>("Settings:set_ShadowR_chunkSize", set_ShadowR_chunkSize);
 	        StaticEvents.Unsubscribe<bool>("Settings:set_prompt_textHighlight", set_prompt_textHighlight);
+	        StaticEvents.Unsubscribe<bool>("Settings:set_useVSync", set_useVSync);
 	        StaticEvents.Unsubscribe<bool>("Settings:set_isAllowTooltips", set_isAllowTooltips);
 	        StaticEvents.Unsubscribe<bool>("Settings:set_isShow_CameraInfoText", set_isShow_CameraInfoText);
 	        StaticEvents.Unsubscribe<bool>("Settings:set_isAlwaysFocusCameraPivot", set_isAlwaysFocusCameraPivot);
@@ -558,6 +602,7 @@ namespace spz {
 	        StaticEvents.Unsubscribe<bool>("Settings:set_layout_askServerOften", set_layout_askServerOften);
 	        StaticEvents.Unsubscribe<bool>("Settings:set_useCtrlScroll_for_WorkflowMode_swaps", set_useCtrlScroll_for_WorkflowMode_swaps);
 	        StaticEvents.Unsubscribe<bool>("Settings:set_ignoreCtrl_if_clickSelectingMeshes", set_ignoreCtrl_if_clickSelectingMeshes);
+	        StaticEvents.Unsubscribe<int>("Settings:set_sdGpuDeviceId", set_sdGpuDeviceId);
 	    }
 	}
 }//end namespace

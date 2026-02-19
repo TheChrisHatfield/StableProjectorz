@@ -61,6 +61,9 @@ namespace Lavender.Systems
 	    [DllImport("kernel32.dll", SetLastError = true)]
 	    static extern bool FreeConsole();
 
+	    [DllImport("kernel32.dll", SetLastError = true)]
+	    static extern uint GetCurrentProcessId();
+
 
 	    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
 	    struct STARTUPINFO{
@@ -116,8 +119,9 @@ namespace Lavender.Systems
 	    }
 
 
+	    /// <param name="attachToConsole">If true (default), attach to child's console. If false, child keeps its own visible console window.</param>
 	    public static uint Run_Bat_or_Shortcut_or_Command( string filepath_or_command,  bool isJustFile,  string workingDir, 
-	                                                        bool keepWindow=false,  bool hidden = false ){
+	                                                        bool keepWindow=false,  bool hidden = false, bool attachToConsole = true ){
 	        string fileToLaunch = "C:\\Windows\\System32\\cmd.exe";
 	        string arguments = "";
 
@@ -125,7 +129,11 @@ namespace Lavender.Systems
 	            var extension = Path.GetExtension(filepath_or_command).ToLowerInvariant();
 	            if (extension == ".lnk"){
 	                arguments = $"/C start \"\" \"{filepath_or_command}\"";
-	            }else{
+	            } else if (extension == ".bat" || extension == ".cmd"){
+	                // CreateProcessW cannot run .bat/.cmd directly; must run via cmd.exe
+	                string prefix = keepWindow ? "/K " : "/C ";
+	                arguments = $"{prefix}\"{filepath_or_command}\"";
+	            } else {
 	                fileToLaunch = filepath_or_command;
 	            }
 	        }else{// For complex commands, we'll use cmd.exe with /C to execute the command
@@ -162,7 +170,7 @@ namespace Lavender.Systems
 	        CloseHandle(pi.hProcess);
 	        CloseHandle(pi.hThread);
 
-	        AttachConsole(pi.dwProcessId);
+	        if (attachToConsole) AttachConsole(pi.dwProcessId);
 	        return pi.dwProcessId;
 	    }
 
@@ -176,6 +184,9 @@ namespace Lavender.Systems
 	        CloseHandle(hProcess);
 	        return result;
 	    }
+
+	    /// <summary>Current process ID (Unity/game exe). Use to avoid killing self when freeing ports.</summary>
+	    public static uint GetCurrentPid() => GetCurrentProcessId();
 
 	    public static bool IsProcessRunning(uint processId){
 	        IntPtr hProcess = OpenProcess(PROCESS_ALL_ACCESS, false, processId);

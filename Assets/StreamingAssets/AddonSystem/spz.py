@@ -5,6 +5,7 @@ This module provides a Python interface to communicate with StableProjectorz
 via JSON-RPC over TCP.
 """
 
+import os
 import socket
 import json
 import threading
@@ -90,10 +91,12 @@ _client = None
 
 
 def _get_client():
-    """Get or create the global client instance"""
+    """Get or create the global client instance. Uses SPZ_HOST and SPZ_PORT env vars if set (e.g. by addon_server from --port)."""
     global _client
     if _client is None:
-        _client = SPZClient()
+        host = os.environ.get("SPZ_HOST", "127.0.0.1")
+        port = int(os.environ.get("SPZ_PORT", "5555"))
+        _client = SPZClient(host=host, port=port)
     return _client
 
 

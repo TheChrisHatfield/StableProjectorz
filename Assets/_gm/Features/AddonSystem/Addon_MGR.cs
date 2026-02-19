@@ -5,13 +5,71 @@ using System.IO;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.Networking;
+#if UNITY_EDITOR
 using System.Diagnostics;
+#endif
 using Newtonsoft.Json.Linq;
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
 using Lavender.Systems;
 #endif
 
 namespace spz {
+
+	/// <summary>Kill any process listening on the given port (Windows). Avoids [Errno 10048] when starting FastAPI on 5557.</summary>
+	internal static class AddonPortHelper
+	{
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+		/// <summary>Finds PIDs listening on the port via netstat -ano, then taskkill /PID x /F. Uses StartExternalProcess so it works in IL2CPP build.</summary>
+		public static void TryKillProcessesOnPort(int port)
+		{
+			string tempFile = Path.Combine(Path.GetTempPath(), "spz_netstat_" + port + "_" + Guid.NewGuid().ToString("N") + ".txt");
+			string workDir = Path.GetTempPath();
+			try
+			{
+				string cmd = "netstat -ano | find \"" + port + "\" > \"" + tempFile + "\"";
+				uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(cmd, isJustFile: false, workDir, keepWindow: false, hidden: true, attachToConsole: false);
+				if (pid == 0) return;
+				StartExternalProcess.WaitForProcessExit(pid, 2000);
+				if (!File.Exists(tempFile)) return;
+				string output = File.ReadAllText(tempFile);
+				// netstat -ano line e.g. "  TCP    127.0.0.1:5557    0.0.0.0:0    LISTENING    12345" -> last column is PID
+				var pids = new HashSet<uint>();
+				foreach (string line in output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+				{
+					string trimmed = line.Trim();
+					if (string.IsNullOrEmpty(trimmed) || !trimmed.Contains("LISTENING")) continue;
+					string[] parts = trimmed.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+					if (parts.Length >= 1 && uint.TryParse(parts[parts.Length - 1], out uint p))
+						pids.Add(p);
+				}
+				uint currentPid = StartExternalProcess.GetCurrentPid();
+				foreach (uint p in pids)
+				{
+					if (p == currentPid)
+					{
+						UnityEngine.Debug.Log($"[Addon_MGR] Skipping current process PID {p} (Unity/game window); not killing self.");
+						continue;
+					}
+					string killCmd = "taskkill /PID " + p + " /F";
+					uint killPid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(killCmd, isJustFile: false, workDir, keepWindow: false, hidden: true, attachToConsole: false);
+					if (killPid != 0)
+					{
+						StartExternalProcess.WaitForProcessExit(killPid, 1500);
+						UnityEngine.Debug.Log($"[Addon_MGR] Freed port {port}: killed process PID {p} (was holding 127.0.0.1:{port}).");
+					}
+				}
+			}
+			catch (Exception e)
+			{
+				UnityEngine.Debug.LogWarning($"[Addon_MGR] Could not free port {port}: {e.Message}");
+			}
+			finally
+			{
+				try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
+			}
+		}
+#endif
+	}
 
 	/// <summary>
 	/// Manages add-on discovery, lifecycle, and Python server process.
@@ -31,7 +89,9 @@ namespace spz {
 		[SerializeField] bool _enableCSharpHttpServer = false; // Legacy C# HttpListener (deprecated)
 		[SerializeField] bool _enableWebSocketServer = false;
 		
+#if UNITY_EDITOR
 		private Process _pythonProcess;
+#endif
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
 		private uint _pythonServerPid; // When started via StartExternalProcess (IL2CPP-safe path)
 #endif
@@ -46,8 +106,15 @@ namespace spz {
 		}
 		
 		void Awake() {
+			UnityEngine.Debug.Log("[Addon_MGR] Awake (Tool_AddonSystem scene loaded).");
 			if (instance != null) { DestroyImmediate(this); return; }
 			instance = this;
+			// If the scene's Addon_SocketServer is missing (e.g. broken script ref in build), create it at runtime so Python can always connect.
+			if (Addon_SocketServer.instance == null) {
+				var go = new GameObject("Addon_SocketServer_Runtime");
+				go.AddComponent<Addon_SocketServer>();
+				UnityEngine.Debug.Log("[Addon_MGR] Addon_SocketServer was missing in scene; created at runtime so listener can bind.");
+			}
 			if (GetComponent<AddonDebugCapture>() == null)
 				gameObject.AddComponent<AddonDebugCapture>();
 			if (GetComponent<Launch_Addons_Bat_File>() == null)
@@ -239,7 +306,13 @@ namespace spz {
 		/// </summary>
 		void StartPythonServer() {
 			if (_isServerRunning) return;
-			
+
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+			// Free port so FastAPI can bind: [Errno 10048] = "only one usage of each socket address is normally permitted"
+			if (_enableHttpServer)
+				AddonPortHelper.TryKillProcessesOnPort(_httpServerPort);
+#endif
+
 			string serverScriptPath = null;
 			try {
 				serverScriptPath = Path.Combine(Application.streamingAssetsPath, "AddonSystem", _pythonServerScript);
@@ -287,7 +360,7 @@ namespace spz {
 			} catch (Exception e) {
 				UnityEngine.Debug.LogError($"[Addon_MGR] Failed to start Python server: {e.Message}");
 			}
-#else
+#elif UNITY_EDITOR
 			try {
 				string addonsPath = Path.Combine(Application.streamingAssetsPath, "Addons");
 				string arguments = $"\"{serverScriptPath}\" --port {_serverPort} --addons-dir \"{addonsPath}\"";
@@ -296,7 +369,6 @@ namespace spz {
 				} else {
 					arguments += " --no-http";
 				}
-				
 				_pythonProcess = new Process {
 					StartInfo = new ProcessStartInfo {
 						FileName = pythonExe,
@@ -308,29 +380,22 @@ namespace spz {
 						WorkingDirectory = Path.GetDirectoryName(serverScriptPath)
 					}
 				};
-				
 				_pythonProcess.OutputDataReceived += (sender, e) => {
-					if (!string.IsNullOrEmpty(e.Data)) {
-						UnityEngine.Debug.Log($"[Python Server] {e.Data}");
-					}
+					if (!string.IsNullOrEmpty(e.Data)) UnityEngine.Debug.Log($"[Python Server] {e.Data}");
 				};
-				
 				_pythonProcess.ErrorDataReceived += (sender, e) => {
-					if (!string.IsNullOrEmpty(e.Data)) {
-						UnityEngine.Debug.LogError($"[Python Server Error] {e.Data}");
-					}
+					if (!string.IsNullOrEmpty(e.Data)) UnityEngine.Debug.LogError($"[Python Server Error] {e.Data}");
 				};
-				
 				_pythonProcess.Start();
 				_pythonProcess.BeginOutputReadLine();
 				_pythonProcess.BeginErrorReadLine();
-				
 				_isServerRunning = true;
 				UnityEngine.Debug.Log($"[Addon_MGR] Python server started on port {_serverPort}");
-			}
-			catch (Exception e) {
+			} catch (Exception e) {
 				UnityEngine.Debug.LogError($"[Addon_MGR] Failed to start Python server: {e.Message}");
 			}
+#else
+			UnityEngine.Debug.LogWarning("[Addon_MGR] Python server auto-start not supported on this platform in build; start addon server manually.");
 #endif
 		}
 		
@@ -538,30 +603,19 @@ namespace spz {
 		}
 		
 		void OnDestroy() {
+#if UNITY_EDITOR
 			if (_pythonProcess != null) {
-				// Cancel async read operations to prevent event handlers from firing
 				try {
 					_pythonProcess.CancelOutputRead();
 					_pythonProcess.CancelErrorRead();
-				} catch {
-					// Already cancelled or process exited, ignore
-				}
-				
+				} catch { }
 				if (!_pythonProcess.HasExited) {
-					try {
-						_pythonProcess.Kill();
-					} catch {
-						// Process may have already exited, ignore
-					}
+					try { _pythonProcess.Kill(); } catch { }
 				}
-				
-				try {
-					_pythonProcess.Dispose();
-				} catch {
-					// Already disposed, ignore
-				}
+				try { _pythonProcess.Dispose(); } catch { }
 				_pythonProcess = null;
 			}
+#endif
 		}
 	}
 }

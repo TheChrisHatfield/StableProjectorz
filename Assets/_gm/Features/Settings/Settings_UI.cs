@@ -41,11 +41,14 @@ namespace spz {
 	    [SerializeField] Toggle _layout_askServerOften_toggle;//helpful if we are developing a ui layout txt document.
 	    [SerializeField] Toggle _useCtrlScroll_WorkflowMode_swaps_toggle;//ProjMask ->Color -> No Color.
 	    [SerializeField] Toggle _ignoreCtrl_if_clickSelectMeshes_toggle;//holding ctrl will not activate the 'ClickSelect_Meshes mode'.
+	    [SerializeField] Toggle _useVSync_toggle; // Optional: assign in scene; otherwise created at runtime.
 
 	    void Start(){
+	        EnsureUseVSyncRowExists();
 	        EnsureSDGpuRowExists();
-	        // Buttons
-	        EventsBinder.Bind_Clickable_to_event("Settings:OpenHelpSettingsPanel", _openHelpSettingsPanel_button);
+	        // Buttons (guard null so binding is safe when reference not assigned in scene)
+	        if (_openHelpSettingsPanel_button != null)
+	            EventsBinder.Bind_Clickable_to_event("Settings:OpenHelpSettingsPanel", _openHelpSettingsPanel_button);
 	        EventsBinder.Bind_Clickable_to_event("Settings:OpenSettingsPanel", _openSettingsPanel_button);
 	        EventsBinder.Bind_Clickable_to_event("Settings:OnButton_WireframeColor", _wireframeColor_button);
 	        EventsBinder.Bind_Clickable_to_event("Settings:OnButton_NoiseColor", _noiseColor_button);
@@ -73,6 +76,8 @@ namespace spz {
 	        EventsBinder.Bind_Clickable_to_event("Settings:set_layout_askServerOften", _layout_askServerOften_toggle);
 	        EventsBinder.Bind_Clickable_to_event("Settings:set_useCtrlScroll_for_WorkflowMode_swaps", _useCtrlScroll_WorkflowMode_swaps_toggle);
 	        EventsBinder.Bind_Clickable_to_event("Settings:set_ignoreCtrl_if_clickSelectingMeshes", _ignoreCtrl_if_clickSelectMeshes_toggle);
+	        if (_useVSync_toggle != null)
+	            EventsBinder.Bind_Clickable_to_event("Settings:set_useVSync", _useVSync_toggle);
 
 	        // Custom Sliders
 	        EventsBinder.Bind_Clickable_to_event("Settings:set_prompt_textSize", _prompt_textSize_slider);
@@ -93,6 +98,55 @@ namespace spz {
 	        EventsBinder.Bind_Clickable_to_event("Settings:set_ShadowR_chunkSize_descript_text", _shadowR_chunkSize_descript);
 	    }
 
+	    /// <summary>Creates "Use VSync" row at runtime (or uses scene-assigned toggle). Reduces Gfx.PresentFrame; helps AMD FirePro / Alienware.</summary>
+	    void EnsureUseVSyncRowExists() {
+	        if (_useVSync_toggle != null) return;
+	        if (_settingsPanel_go == null) return;
+	        var scrollRect = _settingsPanel_go.GetComponentInChildren<UnityEngine.UI.ScrollRect>(true);
+	        RectTransform content = scrollRect != null ? scrollRect.content : null;
+	        if (content == null) content = _settingsPanel_go.transform as RectTransform;
+	        if (content == null) return;
+
+	        var row = new GameObject("Row_UseVSync");
+	        row.transform.SetParent(content, false);
+	        var rowRect = row.AddComponent<RectTransform>();
+	        rowRect.sizeDelta = new Vector2(0, 28f);
+	        var rowLayout = row.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+	        rowLayout.spacing = 8f;
+	        rowLayout.padding = new RectOffset(4, 4, 2, 2);
+	        rowLayout.childAlignment = TextAnchor.MiddleLeft;
+	        rowLayout.childControlWidth = true;
+	        rowLayout.childControlHeight = true;
+	        rowLayout.childForceExpandWidth = false;
+	        rowLayout.childForceExpandHeight = false;
+
+	        var labelGo = new GameObject("Label");
+	        labelGo.transform.SetParent(row.transform, false);
+	        var labelLE = labelGo.AddComponent<UnityEngine.UI.LayoutElement>();
+	        labelLE.preferredWidth = 320f;
+	        labelLE.preferredHeight = 24f;
+	        var labelText = labelGo.AddComponent<TMPro.TextMeshProUGUI>();
+	        labelText.text = "Use VSync (reduces Gfx.PresentFrame, helps AMD FirePro / Alienware):";
+	        labelText.fontSize = 14;
+	        labelText.color = new Color(0.9f, 0.9f, 0.9f, 1f);
+
+	        var toggleGo = new GameObject("Toggle_UseVSync");
+	        toggleGo.transform.SetParent(row.transform, false);
+	        var toggleRect = toggleGo.AddComponent<RectTransform>();
+	        var toggleLE = toggleGo.AddComponent<UnityEngine.UI.LayoutElement>();
+	        toggleLE.preferredWidth = 24f;
+	        toggleLE.preferredHeight = 24f;
+	        var toggleBg = toggleGo.AddComponent<UnityEngine.UI.Image>();
+	        toggleBg.color = new Color(0.25f, 0.25f, 0.25f, 1f);
+	        toggleBg.raycastTarget = true;
+	        var toggle = toggleGo.AddComponent<Toggle>();
+	        toggle.targetGraphic = toggleBg;
+	        toggle.isOn = UnityEngine.PlayerPrefs.GetInt("UseVSync", 1) == 1;
+
+	        _useVSync_toggle = toggle;
+	        EventsBinder.Bind_Clickable_to_event("Settings:set_useVSync", _useVSync_toggle);
+	    }
+
 	    /// <summary>Creates "SD GPU" row in Settings panel at runtime so it acts as remote control for which GPU Stable Diffusion uses when launched.</summary>
 	    void EnsureSDGpuRowExists() {
 	        if (_sdGpuDeviceId_input != null) return;
@@ -102,6 +156,8 @@ namespace spz {
 	        if (content == null) content = _settingsPanel_go.transform as RectTransform;
 	        if (content == null) return;
 	        int current = UnityEngine.PlayerPrefs.GetInt("SD_GPU_DeviceId", -1);
+	        string deviceList = LaunchWebUIBatFile.GetCudaDeviceListString();
+	        string labelBase = string.IsNullOrEmpty(deviceList) ? "SD GPU (-1=default, 0/1/2=index):" : "SD GPU (" + deviceList + "):";
 	        var row = new GameObject("Row_SD_GPU");
 	        row.transform.SetParent(content, false);
 	        var rowRect = row.AddComponent<RectTransform>();
@@ -121,7 +177,7 @@ namespace spz {
 	        labelLE.preferredWidth = 280f;
 	        labelLE.preferredHeight = 24f;
 	        var labelText = labelGo.AddComponent<TMPro.TextMeshProUGUI>();
-	        labelText.text = "SD GPU (-1=default, 0/1/2=index):";
+	        labelText.text = labelBase;
 	        labelText.fontSize = 14;
 	        labelText.color = new Color(0.9f, 0.9f, 0.9f, 1f);
 	        var inputGo = new GameObject("Input");
@@ -178,10 +234,14 @@ namespace spz {
 	    }
 
 	    void OnRestartWebUI_ApplyGPU() {
-	        // Commit the GPU input so the value is saved even if the user didn't tab out (IntegerInputField only saves on EndEdit).
-	        var gpuInput = EventsBinder.FindComponent<IntegerInputField>("Settings:set_sdGpuDeviceId");
-	        if (gpuInput != null)
+	        // Commit the GPU input and force-save to PlayerPrefs so the next launch uses the visible value.
+	        var gpuInput = _sdGpuDeviceId_input != null ? _sdGpuDeviceId_input : EventsBinder.FindComponent<IntegerInputField>("Settings:set_sdGpuDeviceId");
+	        if (gpuInput != null) {
 	            gpuInput.CommitCurrentText();
+	            int deviceId = gpuInput.recentVal;
+	            UnityEngine.PlayerPrefs.SetInt("SD_GPU_DeviceId", deviceId);
+	            UnityEngine.PlayerPrefs.Save();
+	        }
 	        if (LaunchWebUIBatFile.instance != null) {
 	            LaunchWebUIBatFile.instance.LaunchWebui_Manually(printStatusText_ifNotFound: true);
 	            if (Viewport_StatusText.instance != null)

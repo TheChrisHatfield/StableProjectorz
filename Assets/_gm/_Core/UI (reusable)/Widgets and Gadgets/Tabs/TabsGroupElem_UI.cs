@@ -14,8 +14,9 @@ namespace spz {
 	    [SerializeField] GameObject _dividerLeft;// Dividers are a separation-line between inactive tabs.
 	    [SerializeField] GameObject _dividerRight;
 
-	               public string title => _title;
 	    [SerializeField] string _title;
+	    string _runtimeTitle; // set via InitForRuntime so runtime-created tabs have a title
+	    public string title => !string.IsNullOrEmpty(_runtimeTitle) ? _runtimeTitle : _title;
 
 	    bool _isInvoking_onClicked = false;//prevents recursive stack overflow
 	    public Action<TabsGroupElem_UI> onClicked { get; set; }
@@ -45,14 +46,18 @@ namespace spz {
 	        }else{
 	            if(_dividerRight!=null){ _dividerRight?.SetActive(false); }
 	        }
-	    }//end()
+	    }
 
+	    /// <summary>Init a tab created at runtime (title and button ref).</summary>
+	    public void InitForRuntime(string tabTitle, Button btn){
+	        _runtimeTitle = tabTitle;
+	        _button = btn;
+	    }
 
 	    void OnClicked() => Toggle(true);
 
-
 	    void Start(){
-	        _button.onClick.AddListener( OnClicked );
+	        if(_button != null) _button.onClick.AddListener( OnClicked );
 	    }
 	}
 }//end namespace
