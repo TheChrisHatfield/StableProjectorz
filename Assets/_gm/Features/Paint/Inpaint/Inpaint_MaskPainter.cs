@@ -1,9 +1,11 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.InputSystem;
+using UnityEngine.Rendering;
 
 namespace spz {
 
@@ -27,10 +29,38 @@ namespace spz {
 	    RenderTexture _latestBrushStroke_ref;//doesn't belong to us, belongs to parent class
 
 	    Material _blitApplyEntireColorLayer_mat;
-
+	    RenderUdims _layerStackCompositeTemp; // when using layer stack, composite output for blit
 
 	    public bool isPaintMaskEmpty { get; private set; } = true;
+	    /// <summary>Single-layer paint target (when PaintLayerStack_MGR is not used). When layer stack is used, paint goes to active layer. </summary>
 	    public RenderUdims _ObjectUV_brushedColorRGBA { get; private set; }
+
+	    bool _subscribedActiveLayerChanged;
+	    bool _loggedDisplaySourceOnce;
+
+	    /// <summary>Paint target: active layer Content directly. Compute shader writes strokes into the same
+	    /// texture the renderer reads, so GPU command serialization guarantees strokes are visible on the same
+	    /// frame they're painted (no Data/Content timing gap). Ensures scene is injected before use.</summary>
+	    RenderUdims GetPaintTarget()
+	    {
+		    var stack = PaintLayerStack_MGR.instance;
+		    if (stack != null && !_subscribedActiveLayerChanged)
+		    {
+			    _subscribedActiveLayerChanged = true;
+			    stack.OnActiveLayerChanged += OnActiveLayerChanged_EnsureContent;
+		    }
+		    if (stack != null && stack.ActiveLayer != null && stack.ActiveLayerRenderUdims == null)
+		    {
+			    var res = maskResolution();
+			    if (res.x > 0 && res.y > 0 && res.z > 0)
+				    stack.EnsureResolution(res);
+		    }
+		    EnsureSceneInjectedIntoActiveLayer();
+		    var layerContent = stack?.ActiveLayerRenderUdims;
+		    if (layerContent != null)
+			    return layerContent;
+		    return _ObjectUV_brushedColorRGBA;
+	    }
 	    public static Action Act_OnPaintStrokeEnd { get; set; } = null;
 
 
@@ -51,40 +81,95 @@ namespace spz {
 	    // This is typically done as the final step during projection-cams-renders (not during painting).
 	    public void ApplyColorLayer_To_UV_Textures( RenderUdims ontoHere ){
         
+	        if (_blitApplyEntireColorLayer_mat == null)
+	        {
+		        Debug.LogError("[Inpaint] _blitApplyEntireColorLayer_mat is null – Awake likely crashed. Cannot display paint.");
+		        return;
+	        }
 	        bool isColorless  = WorkflowRibbon_UI.instance.currentMode() == WorkflowRibbon_CurrMode.Inpaint_NoColor;
 	        bool willSendToSD = StableDiffusion_Hub.instance._finalPreparations_beforeGen;
 	        if(isColorless && willSendToSD){ return; }//Don't blit, keep as is.
 	        if(Save_MGR.instance._isSaving){ return; }//Never blit colors if saving. Or merging icons into one, because no ctrl+z.
 
+	        // Scene is injected into active layer for painting. Display: when 2+ layers use composite of all visible (so layer 1 stays visible on layer 2); when 1 layer use active Content so paint never disappears (no composite timing gap).
+	        EnsureSceneInjectedIntoActiveLayer();
+	        RenderUdims source = null;
+	        float layerOpacity01 = 1f;
+	        var stack = PaintLayerStack_MGR.instance;
+	        bool useComposite = stack != null && _ObjectUV_brushedColorRGBA != null && stack.Layers != null && stack.Layers.Count > 1;
+	        if (useComposite)
+	        {
+		        EnsureLayerStackCompositeTemp(_ObjectUV_brushedColorRGBA);
+		        if (_layerStackCompositeTemp != null)
+		        {
+			        stack.CompositeToOnTopOfBase(_ObjectUV_brushedColorRGBA, _layerStackCompositeTemp);
+			        source = _layerStackCompositeTemp;
+			        layerOpacity01 = 1f;
+		        }
+	        }
+	        if (source == null && stack != null && stack.ActiveLayer?.Content != null && _ObjectUV_brushedColorRGBA != null)
+	        {
+		        var activeContent = stack.ActiveLayer.Content;
+		        if (activeContent.width == _ObjectUV_brushedColorRGBA.width && activeContent.height == _ObjectUV_brushedColorRGBA.height && activeContent.UdimsCount == _ObjectUV_brushedColorRGBA.UdimsCount)
+			        source = activeContent;
+	        }
+	        if (source == null)
+	        {
+		        source = _ObjectUV_brushedColorRGBA;
+		        layerOpacity01 = 1f;
+	        }
+
+	        if (source == null)
+	        {
+		        Debug.LogWarning("[Inpaint] Paint not shown on mesh: no paint source (color buffer and layer stack empty or null). Load a 3D model and paint in the viewport.");
+		        return;
+	        }
+
+	        if (!_loggedDisplaySourceOnce)
+	        {
+		        _loggedDisplaySourceOnce = true;
+		        bool usedComposite = (stack != null && source == _layerStackCompositeTemp);
+		        UnityEngine.Debug.Log($"[Inpaint_MaskPainter] Display source: {(usedComposite ? "COMPOSITE (all visible layers)" : (stack != null && stack.ActiveLayer?.Content == source ? "ACTIVE LAYER ONLY" : "FALLBACK (_ObjectUV_brushedColorRGBA)"))}. Stack={stack != null}, Layers={(stack?.Layers?.Count ?? 0)}, ActiveIdx={(stack?.ActiveLayerIndex ?? -1)}.");
+	        }
+
+	        _blitApplyEntireColorLayer_mat.SetTexture("_SrcTex", source.texArray);
 	        RenderUdims.SetNumUdims( ontoHere, _blitApplyEntireColorLayer_mat );
 
-	        // If we are still dragging mouse (painting), we must submit latest brush stroke texture as well.
-	        // This is important, because color blending (lerp) can't be "baked in" at each frame.
-	        // We have to keep applying it (without affecting original maks) until the mouse is released.
-	        // We "bake it in" only when the mouse is released, once.
-	        // Otherwise brush path becomes non-smooth, due to repetitive lerp() accross consecutive frames.
 	        TextureTools_SPZ.SetKeyword_Material(_blitApplyEntireColorLayer_mat, "APPLY_LATEST_BRUSH_TOO", _isPainting);
 	        _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", _latestBrushStroke_ref);
-	        _blitApplyEntireColorLayer_mat.SetColor("_CurrBrushColor", SD_WorkflowOptionsRibbon_UI.instance.brushColor);
+	        Color brushCol = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.brushColor : Color.black;
+	        _blitApplyEntireColorLayer_mat.SetColor("_CurrBrushColor", brushCol);
 	        float sign = Mathf.Sign(_prevStrength);
 	        _blitApplyEntireColorLayer_mat.SetFloat("_Sign", sign);
-	        _blitApplyEntireColorLayer_mat.SetFloat("_MaxPossibleBrushStrength01", SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity);
+	        float maxStrength = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity : 1f;
+	        _blitApplyEntireColorLayer_mat.SetFloat("_MaxPossibleBrushStrength01", maxStrength);
 
 	        _blitApplyEntireColorLayer_mat.SetInteger("_isColorlessMask", isColorless?1:0);
 	        if(isColorless){  _blitApplyEntireColorLayer_mat.SetTexture("_ColorlessCheckerTex", _colorlessMaskChecker_tex); }
 
-	        _blitApplyEntireColorLayer_mat.SetFloat("_TotalOpacity01", 1);
+	        _blitApplyEntireColorLayer_mat.SetFloat("_TotalOpacity01", layerOpacity01);
 
-	        TextureTools_SPZ.Blit( _ObjectUV_brushedColorRGBA.texArray,  ontoHere.texArray,  
-	                              _blitApplyEntireColorLayer_mat );
+	        TextureTools_SPZ.Blit( source.texArray,  ontoHere.texArray,  _blitApplyEntireColorLayer_mat );
+	    }
+
+	    void EnsureLayerStackCompositeTemp(RenderUdims sameSizeAs)
+	    {
+		    if (sameSizeAs == null) return;
+		    if (_layerStackCompositeTemp != null && _layerStackCompositeTemp.width == sameSizeAs.width &&
+		        _layerStackCompositeTemp.height == sameSizeAs.height && _layerStackCompositeTemp.UdimsCount == sameSizeAs.UdimsCount)
+			    return;
+		    _layerStackCompositeTemp?.Dispose();
+		    _layerStackCompositeTemp = new RenderUdims( sameSizeAs.udims_sectors, sameSizeAs.widthHeight,
+			    GenData_Masks.colorBrushFormat, GenData_Masks.colorBrushFilter, Color.clear, 0 );
 	    }
 
 
 	    // expensive! only use during manual baking/extraction of colors, not every frame
 	    public List<Texture2D> ExtractColorLayer_as_UV_texture2D(out List<UDIM_Sector> udims_sectors_){
-	        udims_sectors_ = _ObjectUV_brushedColorRGBA.udims_sectors.ToList();//ToList() makes a copy
-	        List<Texture2D> textures = TextureTools_SPZ.TextureArray_to_Texture2DList(_ObjectUV_brushedColorRGBA.texArray );
-	        return textures;
+	        RenderUdims src = GetLayerCompositeOrFallback();
+	        if (src == null) { udims_sectors_ = new List<UDIM_Sector>(); return new List<Texture2D>(); }
+	        udims_sectors_ = src.udims_sectors.ToList();
+	        return TextureTools_SPZ.TextureArray_to_Texture2DList(src.texArray);
 	    }
 
 
@@ -96,8 +181,9 @@ namespace spz {
 	    // Returns two textures, without anti-edge (sent to stableDiffusion, to avoid showing it colors through the gaps).
 	    // and with anti-edge (used internally in stableProjectorz during projections)
 	    public void GetDisposable_ScreenMask( bool forceFullWhite, out Texture2D skipAntiEdge_, out Texture2D withAntiEdge_ ){
-	        //force render the mask again, just in case:
-	        _inpaintScreenMasker.RenderScreenMask_maybe(_ObjectUV_brushedColorRGBA, mustRender:true);
+	        RenderUdims forMask = GetLayerCompositeOrFallback();
+	        if (forMask == null) { skipAntiEdge_ = null; withAntiEdge_ = null; return; }
+	        _inpaintScreenMasker.RenderScreenMask_maybe(forMask, mustRender:true);
 
 	        RenderTexture skipAntiEdgeRT = ScreenMask_ContentRT_ref(withAntiEdge: false);
 	        RenderTexture antiEdgeRT     = ScreenMask_ContentRT_ref(withAntiEdge: true);
@@ -108,6 +194,12 @@ namespace spz {
 
 	    public override void ResetPaintMask(){
 	        base.ResetPaintMask();
+	        if (PaintLayerStack_MGR.instance != null && PaintLayerStack_MGR.instance.ActiveLayer != null)
+	        {
+		        var al = PaintLayerStack_MGR.instance.ActiveLayer;
+		        al.Content?.ClearTheTextures(Color.clear);
+		        al.Data?.ClearTheTextures(Color.clear);
+	        }
 	        _ObjectUV_brushedColorRGBA?.ClearTheTextures(Color.clear);
 	        isPaintMaskEmpty=true;
 	    }
@@ -116,13 +208,17 @@ namespace spz {
 	    protected override void OnBucketFill_button(){
 	        if(MainViewport_UI.instance.showing != MainViewport_UI.Showing.UsualView){ return; }
 	        if(WorkflowRibbon_UI.instance.isMode_using_img2img() == false){ return; }
+	        var target = GetPaintTarget();
+	        if (target == null) return;
 	        Color col = SD_WorkflowOptionsRibbon_UI.instance.brushColor;
-	        OnBucketFill_orDelete_button( col, _ObjectUV_brushedColorRGBA.texArray,  visibilTex:null );
+	        OnBucketFill_orDelete_button( col, target.texArray,  visibilTex:null );
 	        isPaintMaskEmpty = false;
 	    }
 	    protected override void OnDelete_button(){//different to ResetPaintMask(), might be only for some isolated mesh.
 	        if(MainViewport_UI.instance.showing != MainViewport_UI.Showing.UsualView){ return; }
-	        OnBucketFill_orDelete_button( Color.clear, _ObjectUV_brushedColorRGBA.texArray,  visibilTex:null );
+	        var target = GetPaintTarget();
+	        if (target == null) return;
+	        OnBucketFill_orDelete_button( Color.clear, target.texArray,  visibilTex:null );
 	    }
 
 	    protected override bool isAllowedToShow_BrushCursorNow()
@@ -133,7 +229,7 @@ namespace spz {
 	        bool isAllowed =  MainViewport_UI.instance?.showing == MainViewport_UI.Showing.UsualView;
 	             isAllowed &= DimensionMode_MGR.instance?._dimensionMode == DimensionMode.dim_sd;
 	             isAllowed &= WorkflowRibbon_UI.instance?.isMode_using_img2img() ?? false;
-	             isAllowed &= MultiView_Ribbon_UI.instance?._isEditingMode ?? false;
+	             // Inpaint brush does not require multi-view edit mode; that is for projection-mask editing. Allow painting on active layer whenever view/workflow are correct.
 	             isAllowed &= !SD_WorkflowOptionsRibbon_UI.instance?.IsEyeDropperMagnified ?? false;
 	             isAllowed &= !ClickSelect_Meshes_MGR.instance?._isSelectMode?? false;
 	             isAllowed &= !GlobalClickBlocker.isLocked();
@@ -150,8 +246,9 @@ namespace spz {
 	        =>MainViewport_UI.instance.cursorMainViewportPos01;
 
 	    protected override Vector3Int maskResolution(){
+	        if (ModelsHandler_3D.instance == null) return new Vector3Int(GenData_Masks.COLOR_BRUSH_RESOLUTION, GenData_Masks.COLOR_BRUSH_RESOLUTION, 0);
 	        IReadOnlyList<UDIM_Sector> allUdims = ModelsHandler_3D.instance._allKnownUdims;
-	        int numSlices = allUdims.Count;
+	        int numSlices = allUdims != null ? allUdims.Count : 0;
 	        return new Vector3Int( GenData_Masks.COLOR_BRUSH_RESOLUTION,  GenData_Masks.COLOR_BRUSH_RESOLUTION,  numSlices);
 	    }
 
@@ -163,36 +260,72 @@ namespace spz {
 
 	    protected override void InitTextures( int width,  int height,  int numSlices, 
 	                                          out RenderTexture prevBrushPath_,  out RenderTexture currBrushPath_){
-        
+	        prevBrushPath_ = null;
+	        currBrushPath_ = null;
+	        if (numSlices <= 0 || width <= 0 || height <= 0)
+		        return;
+
 	        prevBrushPath_ = TextureTools_SPZ.CreateTextureArray( new Vector2Int(width,height), GraphicsFormat.R8_UNorm, 
 	                                                             FilterMode.Bilinear, numSlices, depthBits:0);
 
 	        currBrushPath_ = TextureTools_SPZ.CreateTextureArray( new Vector2Int(width,height), GraphicsFormat.R8_UNorm, 
 	                                                             FilterMode.Bilinear, numSlices, depthBits:0);
-	        //MODIF ..maybe .Release() these when lowFPS is toggled? and prevent paiting until untoggled.
 	        TextureTools_SPZ.ClearRenderTexture(prevBrushPath_, Color.black);
 	        TextureTools_SPZ.ClearRenderTexture(currBrushPath_, Color.black);
-	        _ObjectUV_brushedColorRGBA?.Dispose();
-	        _ObjectUV_brushedColorRGBA =  new RenderUdims( UDIMs_Helper._allKnownUdims, new Vector2Int(width,height),
-	                                                       GenData_Masks.colorBrushFormat,  GenData_Masks.masksFilter,
-	                                                       Color.clear,  depthBits:0 );
+
+	        if (PaintLayerStack_MGR.instance != null)
+		        PaintLayerStack_MGR.instance.EnsureResolution(new Vector3Int(width, height, numSlices));
+
+	        // Guarantee single-layer color buffer when we have a model: use same UDIM source as maskResolution()
+	        // so GetPaintTarget() always has a fallback and strokes never commit to null.
+	        if (numSlices > 0)
+	        {
+		        bool needColorBuf = _ObjectUV_brushedColorRGBA == null
+			        || _ObjectUV_brushedColorRGBA.width != width || _ObjectUV_brushedColorRGBA.height != height
+			        || _ObjectUV_brushedColorRGBA.UdimsCount != numSlices;
+		        if (needColorBuf)
+		        {
+			        _ObjectUV_brushedColorRGBA?.Dispose();
+			        // Same source as maskResolution() so Count is always equal to numSlices when model is loaded.
+			        IReadOnlyList<UDIM_Sector> allUdims = ModelsHandler_3D.instance != null ? ModelsHandler_3D.instance._allKnownUdims : null;
+			        if (allUdims != null && allUdims.Count == numSlices)
+			        {
+				        _ObjectUV_brushedColorRGBA = new RenderUdims( allUdims, new Vector2Int(width, height),
+				                                                      GenData_Masks.colorBrushFormat,  GenData_Masks.masksFilter,
+				                                                      Color.clear,  depthBits:0 );
+			        }
+			        else
+				        Debug.LogWarning("[Inpaint] Could not create paint color buffer: UDIM count mismatch (numSlices=" + numSlices + ", udims=" + (allUdims?.Count ?? -1) + "). Ensure a 3D model is loaded.");
+		        }
+	        }
+	        // Scene buffer now exists; inject into any layers that were auto-created before it existed (Layer 1 from Awake).
+	        InjectSceneIntoAllExistingLayers();
 	    }
 
 
 	    protected override void OnRenderIntoCurrTex_please( RenderTexture prevBrushStroke_R8, RenderTexture currBrushStroke_R8,
 	                                                        bool isFirstFrameOfStroke, float suggested_brushStrength ){
+	        var target = GetPaintTarget();
+	        if (target == null)
+	        {
+		        Debug.LogWarning("[Inpaint] Paint target is null. Ensure a 3D model is loaded. LayerStack="
+		                         + (PaintLayerStack_MGR.instance != null) + " ActiveLayer="
+		                         + (PaintLayerStack_MGR.instance?.ActiveLayerRenderUdims != null)
+		                         + " ColorBuf=" + (_ObjectUV_brushedColorRGBA != null));
+		        return;
+	        }
 	        isPaintMaskEmpty = false;
-	        //very important when painting with mouse instead of tablet (starts large)
 	        if(isFirstFrameOfStroke){ _prevStrength = suggested_brushStrength; }
         
-	        RenderUdims.SetNumUdims(_ObjectUV_brushedColorRGBA, _brushMaterial);
+	        RenderUdims.SetNumUdims(target, _brushMaterial);
 
-	        _brushMaterial.SetFloat("_ExtraVisibility", 1); //we don't have texture, so ensure it's full visibility.
+	        _brushMaterial.SetFloat("_ExtraVisibility", 1);
+	        _brushMaterial.SetFloat("_FadeByNormal", 0);
 	        _brushMaterial.SetTexture("_PrevBrushPathTex", prevBrushStroke_R8);
-	        _brushMaterial.SetTexture("_BrushStamp", SD_WorkflowOptionsRibbon_UI.instance._brushHardnessTex); 
+	        Texture2D stamp = BrushAlphas_MGR.GetCurrentBrushStampTexOrFallback();
+	        _brushMaterial.SetTexture("_BrushStamp", stamp); 
 	        _brushMaterial.SetVector("_BrushStrength", new Vector4(_prevStrength,suggested_brushStrength,0,0));
 
-	        //Apply material on the 3d meshes, and render, to alter the mask, painting it:
 	        var selectedMeshes = ModelsHandler_3D.instance.selectedMeshes;
 	        Objects_Renderer_MGR.instance.EquipMaterial_on_Specific( selectedMeshes, _brushMaterial );
 
@@ -205,18 +338,53 @@ namespace spz {
 
 	    protected override void OnFinal_ApplyIncomingVals_intoMask( RenderTexture prevBrushStroke_R8, 
 	                                                                RenderTexture currBrushStroke_R8 ){
-	        // Only Apply (bake) the brush stroke into our RGB texture at the end.
-	        // This is important, because color blending (lerp) can't be "baked in" at each frame.
-	        // We have to keep applying it (without affecting original maks) until the mouse is released.
-	        // We "bake it in" only when the mouse is released, once.
-	        // Otherwise brush path becomes non-smooth, due to repetitive lerp() accross consecutive frames.
+	        var target = GetPaintTarget();
+	        if (target == null)
+	            target = _ObjectUV_brushedColorRGBA;
+	        if (target == null) {
+	            Debug.LogWarning("Inpaint_MaskPainter: no paint target. Ensure a 3D model is loaded and click in viewport to paint.");
+	            return;
+	        }
+	        if (_applyBrushStroke_toUvMask == null)
+	            _applyBrushStroke_toUvMask = FindObjectOfType<ApplyBrushStroke_ToUvMask>(true);
+	        if (_applyBrushStroke_toUvMask == null)
+	        {
+	            Debug.LogError("Inpaint_MaskPainter: ApplyBrushStroke_ToUvMask not found. Brush strokes will not persist on the model.");
+	            return;
+	        }
 	        float sign =  Mathf.Sign(_prevStrength);
-	        float maxStrength = SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity;
+	        float maxStrength = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity : 1f;
 
-	        _applyBrushStroke_toUvMask.Apply_into_ColorBrushTex( prevBrushStroke_R8, currBrushStroke_R8, sign,  maxStrength,  
-	                                                              _ObjectUV_brushedColorRGBA );
+	        _applyBrushStroke_toUvMask.Apply_into_ColorBrushTex( prevBrushStroke_R8, currBrushStroke_R8, sign,  maxStrength,  target );
+	        // Compute writes to Content. When we use composite (2+ layers), the composite can be built before the GPU finishes; defer re-render so stroke appears.
 	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	        RequestReRenderAfterGpuCommit(target);
+	        var activeLayer = PaintLayerStack_MGR.instance?.ActiveLayer;
+	        if (activeLayer != null && target == activeLayer.Content)
+		        StartCoroutine(DeferredReRenderAfterStroke());
 	        Act_OnPaintStrokeEnd?.Invoke();
+	    }
+
+	    /// <summary>When painting into a layer, request re-render again after 2 frames so the composite (if used) is rebuilt after the compute has finished; fixes paint disappearing with 2+ layers.</summary>
+	    IEnumerator DeferredReRenderAfterStroke()
+	    {
+		    yield return null;
+		    yield return null;
+		    if (Objects_Renderer_MGR.instance != null)
+			    Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	    }
+
+	    /// <summary>After the GPU finishes the compute dispatch, request another re-render to guarantee
+	    /// the display is fully up-to-date (covers edge cases where the initial re-render is processed
+	    /// before the GPU finishes the compute work on some drivers).</summary>
+	    void RequestReRenderAfterGpuCommit(RenderUdims writtenTarget) {
+	        if (writtenTarget?.texArray == null) return;
+	        RenderTexture rt = writtenTarget.texArray;
+	        AsyncGPUReadback.Request(rt, 0, req => {
+	            if (req.hasError) return;
+	            if (Objects_Renderer_MGR.instance != null)
+	                Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	        });
 	    }
 
     
@@ -226,14 +394,27 @@ namespace spz {
 	      #endif
 	        if(instance != null){ DestroyImmediate(this); return; }
 	        instance = this;
+	        UnityEngine.Debug.Log("[Inpaint_MaskPainter] Awake: instance set, subscribing to events.");
+	        if (_applyBrushStroke_toUvMask == null)
+	            _applyBrushStroke_toUvMask = FindObjectOfType<ApplyBrushStroke_ToUvMask>(true);
 
-	        if (Pen.current != null  &&  Pen.current.deviceId != Pen.InvalidDeviceId){
-	            Viewport_StatusText.instance.ShowStatusText($"Drawing Tablet '{Pen.current.displayName}' detected, "
-	                                                        +$"will use pressure when brushing.", false, 5, progressVisibility:false );
+	        try {
+	            if (Pen.current != null  &&  Pen.current.deviceId != Pen.InvalidDeviceId){
+	                if (Viewport_StatusText.instance != null)
+	                    Viewport_StatusText.instance.ShowStatusText($"Drawing Tablet '{Pen.current.displayName}' detected, "
+	                                                            +$"will use pressure when brushing.", false, 5, progressVisibility:false );
+	                else
+	                    UnityEngine.Debug.Log($"[Inpaint_MaskPainter] Drawing Tablet '{Pen.current.displayName}' detected (StatusText not yet ready).");
+	            }
+	        } catch (System.Exception e) {
+	            UnityEngine.Debug.LogWarning("[Inpaint_MaskPainter] Pen detection failed (non-fatal): " + e.Message);
 	        }
 	        _blitApplyEntireColorLayer_mat = new Material(_blitApplyEntireColorLayer_shader);
 
 	        base.Awake();
+
+	        PaintLayerStack_MGR.OnLayerAdded += OnLayerAdded_InjectScene;
+	        UnityEngine.Debug.Log("[Inpaint_MaskPainter] Awake complete: OnLayerAdded subscribed, material created.");
 
 	        if (SystemInfo.supportsConservativeRaster == false){
 	            DestroyImmediate(base._brushMaterial); //secretly swap the parent's material with a more suitable one
@@ -241,8 +422,87 @@ namespace spz {
 	        }
 	    }
 
+	    /// <summary>Blit static scene (_ObjectUV_brushedColorRGBA) into a layer's Content if dimensions match.
+	    /// Sets HasReceivedSceneInject so we never overwrite user paint. Does NOT touch Data (strokes go
+	    /// directly into Content, so Data is not part of the paint path).</summary>
+	    bool TryInjectSceneIntoLayer(PaintLayer layer)
+	    {
+		    if (layer == null || _ObjectUV_brushedColorRGBA == null) return false;
+		    if (layer.Content == null) return false;
+		    if (_ObjectUV_brushedColorRGBA.width != layer.Content.width || _ObjectUV_brushedColorRGBA.height != layer.Content.height || _ObjectUV_brushedColorRGBA.UdimsCount != layer.Content.UdimsCount) return false;
+		    Graphics.Blit(_ObjectUV_brushedColorRGBA.texArray, layer.Content.texArray);
+		    layer.HasReceivedSceneInject = true;
+		    UnityEngine.Debug.Log($"[Inpaint_MaskPainter] TryInject: injected static scene into layer '{layer.Name}' ({layer.Content.width}x{layer.Content.height}).");
+		    return true;
+	    }
+
+	    /// <summary>Ensure static scene is in the active layer (container). Injects only when the layer has not yet received scene (HasReceivedSceneInject), so user paint is never wiped. Called when active layer changes and before painting.</summary>
+	    void EnsureSceneInjectedIntoActiveLayer()
+	    {
+		    var stack = PaintLayerStack_MGR.instance;
+		    if (stack?.ActiveLayer == null || _ObjectUV_brushedColorRGBA == null) return;
+		    if (stack.ActiveLayer.Content == null) return;
+		    if (stack.ActiveLayer.HasReceivedSceneInject) return;
+		    TryInjectSceneIntoLayer(stack.ActiveLayer);
+	    }
+
+	    void InjectSceneIntoActiveLayer()
+	    {
+		    EnsureSceneInjectedIntoActiveLayer();
+	    }
+
+	    /// <summary>When user clicks/selects a layer, ensure that layer has scene data (container = scene + strokes). No "on top" logic.</summary>
+	    void OnActiveLayerChanged_EnsureContent()
+	    {
+		    InjectSceneIntoActiveLayer();
+	    }
+
+	    /// <summary>When a new layer is added, inject scene data into it if dimensions match. Never calls EnsureResolution so existing layers with paint are never wiped. Layer stays empty if dimensions don't match (display falls back to scene buffer).</summary>
+	    void OnLayerAdded_InjectScene(PaintLayer newLayer)
+	    {
+	        UnityEngine.Debug.Log($"[Inpaint_MaskPainter] OnLayerAdded_InjectScene fired for '{newLayer?.Name}' – attempting injection.");
+	        TryInjectSceneIntoLayer(newLayer);
+	    }
+
+	    /// <summary>Returns the display source: composite of all visible layers when 2+ layers (matches viewport), else active Content or scene fallback.</summary>
+	    public RenderUdims GetLayerCompositeOrFallback()
+	    {
+		    var stack = PaintLayerStack_MGR.instance;
+		    if (stack != null && _ObjectUV_brushedColorRGBA != null && stack.Layers != null && stack.Layers.Count > 1)
+		    {
+			    EnsureLayerStackCompositeTemp(_ObjectUV_brushedColorRGBA);
+			    if (_layerStackCompositeTemp != null)
+			    {
+				    stack.CompositeToOnTopOfBase(_ObjectUV_brushedColorRGBA, _layerStackCompositeTemp);
+				    return _layerStackCompositeTemp;
+			    }
+		    }
+		    if (stack != null && stack.ActiveLayer?.Content != null && _ObjectUV_brushedColorRGBA != null)
+		    {
+			    var activeContent = stack.ActiveLayer.Content;
+			    if (activeContent.width == _ObjectUV_brushedColorRGBA.width && activeContent.height == _ObjectUV_brushedColorRGBA.height && activeContent.UdimsCount == _ObjectUV_brushedColorRGBA.UdimsCount)
+				    return activeContent;
+		    }
+		    return _ObjectUV_brushedColorRGBA;
+	    }
+
+	    /// <summary>After InitTextures creates the scene buffer, inject scene into ALL existing layers that have matching Content. This catches Layer 1 which was auto-created in PaintLayerStack_MGR.Awake before the scene buffer existed.</summary>
+	    void InjectSceneIntoAllExistingLayers()
+	    {
+		    if (_ObjectUV_brushedColorRGBA == null) { UnityEngine.Debug.Log("[Inpaint_MaskPainter] InjectSceneIntoAllExisting: sceneBuf is null, skipping."); return; }
+		    var stack = PaintLayerStack_MGR.instance;
+		    if (stack == null) { UnityEngine.Debug.Log("[Inpaint_MaskPainter] InjectSceneIntoAllExisting: stack is null, skipping."); return; }
+		    UnityEngine.Debug.Log($"[Inpaint_MaskPainter] InjectSceneIntoAllExisting: {stack.Layers.Count} layers to process.");
+		    foreach (var layer in stack.Layers)
+			    TryInjectSceneIntoLayer(layer);
+	    }
+
 
 	    protected override void OnDestroy(){
+	        if (PaintLayerStack_MGR.instance != null)
+		        PaintLayerStack_MGR.instance.OnActiveLayerChanged -= OnActiveLayerChanged_EnsureContent;
+	        PaintLayerStack_MGR.OnLayerAdded -= OnLayerAdded_InjectScene;
+	        _layerStackCompositeTemp?.Dispose();
 	        DestroyImmediate(_blitApplyEntireColorLayer_mat);
 	        base.OnDestroy();
 	    }

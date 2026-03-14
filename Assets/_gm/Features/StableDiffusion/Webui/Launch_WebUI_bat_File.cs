@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 #if UNITY_EDITOR
 using System.Diagnostics;
 #endif
@@ -8,10 +9,22 @@ using Lavender.Systems;
 
 namespace spz {
 
+	/// <summary>
+	/// When the built exe runs, this component auto-launches the WebUI batch file (run_noQuickEdit.bat).
+	/// Aggressive: env SPZ_WEBUI_RUN_PATH, then search exe dir + dataPath + CurrentDirectory, each up to 10 parent levels.
+	/// Retries at 0.5s, 1.5s, 3s, 6s, 12s until bat is found and launched.
+	/// </summary>
 	public class LaunchWebUIBatFile : MonoBehaviour{
 	    public static LaunchWebUIBatFile instance { get; private set; } = null;
 
-	    /// <summary>Last PID from launching WebUI (bat or wrapper). Used to auto-close previous launcher when restarting (e.g. after GPU change).</summary>
+	    public const string WebuiFolderName = "stable-diffusion-webui-forge";
+	    public static readonly string[] WebuiLaunchFileNames = new string[] { "run_noQuickEdit.bat", "run.bat", "run_forge.bat", "run_noQuickEdit.lnk" };
+
+	    /// <summary>Search up to this many parent levels from each root. Aggressive so bat is found even if exe is deep.</summary>
+	    const int MaxParentDepth = 10;
+	    /// <summary>Retry delays in seconds: first at 0.5s, then 1.5, 3, 6, 12.</summary>
+	    static readonly float[] AutoLaunchRetryDelays = new float[] { 0.5f, 1.5f, 3f, 6f, 12f };
+
 	    static uint _lastLaunchedWebUiPid;
 
 	    /// <summary>Attempts to close the previously launched WebUI process (and its tree on Windows). Call before launching a new instance so the old window closes automatically.</summary>
@@ -113,75 +126,85 @@ namespace spz {
 	        }
 	    }
 
-    string GetWebuiFilePath( bool printStatusText_ifNotFound = false){
-        // Fallback: environment variable (e.g. set locally or in editor for development)
-        const string envVarName = "SPZ_WEBUI_RUN_PATH";
+    const string EnvVarWebuiPath = "SPZ_WEBUI_RUN_PATH";
+
+    /// <summary>Aggressive search: env var, then exe dir + dataPath + CurrentDirectory, each up to MaxParentDepth levels.</summary>
+    string GetWebuiFilePath(bool printStatusText_ifNotFound = false) {
+        return GetWebuiFilePathAggressive(printStatusText_ifNotFound);
+    }
+
+    /// <summary>Static aggressive search so it works without the component. Env var first, then multiple roots, 10 levels each.</summary>
+    public static string GetWebuiFilePathStatic(bool printStatusTextIfNotFound = false) {
+        return GetWebuiFilePathAggressiveStatic(printStatusTextIfNotFound);
+    }
+
+    static string GetWebuiFilePathAggressive(bool printStatusText_ifNotFound) {
+        return GetWebuiFilePathAggressiveStatic(printStatusText_ifNotFound);
+    }
+
+    static string GetWebuiFilePathAggressiveStatic(bool printStatusText_ifNotFound) {
         try {
-            string envPath = Environment.GetEnvironmentVariable(envVarName);
+            string envPath = Environment.GetEnvironmentVariable(EnvVarWebuiPath);
             if (!string.IsNullOrWhiteSpace(envPath)) {
                 string trimmed = envPath.Trim();
                 if (File.Exists(trimmed)) {
-                    UnityEngine.Debug.Log($"Webui file found via {envVarName}: {trimmed}");
+                    UnityEngine.Debug.Log($"[LaunchWebUI] Found via {EnvVarWebuiPath}: {trimmed}");
                     return trimmed;
                 }
             }
         } catch (Exception e) {
-            UnityEngine.Debug.LogWarning($"[LaunchWebUI] Could not check {envVarName}: {e.Message}");
+            UnityEngine.Debug.LogWarning($"[LaunchWebUI] Env check failed: {e.Message}");
         }
 
-        string exeDirectory = Directory.GetParent(Application.dataPath).FullName;
-        
-        // Prefer .bat over .lnk so we can pass --gpu-device-id when user selects a specific GPU.
-        string[] possiblePaths = new string[] {
-            Path.Combine(exeDirectory, "stable-diffusion-webui-forge", "run_noQuickEdit.bat"),
-            Path.Combine(exeDirectory, "stable-diffusion-webui-forge", "run.bat"),
-            Path.Combine(exeDirectory, "stable-diffusion-webui-forge", "run_forge.bat"),
-            Path.Combine(exeDirectory, "stable-diffusion-webui-forge", "run_noQuickEdit.lnk"),
-            Path.Combine(exeDirectory, "..", "stable-diffusion-webui-forge", "run_noQuickEdit.bat"),
-            Path.Combine(exeDirectory, "..", "stable-diffusion-webui-forge", "run.bat"),
-            Path.Combine(exeDirectory, "..", "stable-diffusion-webui-forge", "run_noQuickEdit.lnk"),
-        };
+        var roots = new System.Collections.Generic.List<string>();
+        try {
+            string exeDir = Directory.GetParent(Application.dataPath).FullName;
+            if (!string.IsNullOrEmpty(exeDir)) roots.Add(Path.GetFullPath(exeDir));
+        } catch { }
+        try {
+            if (!string.IsNullOrEmpty(Application.dataPath)) roots.Add(Path.GetFullPath(Application.dataPath));
+        } catch { }
+        try {
+            string cur = Environment.CurrentDirectory;
+            if (!string.IsNullOrEmpty(cur)) roots.Add(Path.GetFullPath(cur));
+        } catch { }
 
-        // Try each possible path
-        foreach(string filePath in possiblePaths){
-            try{
-                string fullPath = Path.GetFullPath(filePath);
-                if(File.Exists(fullPath)){
-                    UnityEngine.Debug.Log($"Webui file found, launching it automatically: {fullPath}");
-                    return fullPath;
-                }
-            }catch{
-                // Skip invalid paths
-                continue;
-            }
-        }
+        UnityEngine.Debug.Log($"[LaunchWebUI] Application.dataPath = {Application.dataPath}");
+        UnityEngine.Debug.Log($"[LaunchWebUI] Search roots: " + string.Join(" | ", roots));
 
-        // Also try searching in parent directories (like RestartTheWebui does)
-        string[] searchFiles = new string[] { "run_noQuickEdit.bat", "run.bat", "run_forge.bat", "run_noQuickEdit.lnk" };
-        string currentDir = exeDirectory;
-        for(int i = 0; i < 3; i++){ // Search up to 3 levels up
-            foreach(string filename in searchFiles){
-                try {
-                    string attemptPath = Path.Combine(currentDir, "stable-diffusion-webui-forge", filename);
-                    if(File.Exists(attemptPath)){
-                        UnityEngine.Debug.Log($"Webui file found (searched parent dirs), launching it automatically: {attemptPath}");
-                        return attemptPath;
+        var checkedPaths = new System.Collections.Generic.List<string>();
+        foreach (string root in roots) {
+            string currentDir = root;
+            for (int depth = 0; depth < MaxParentDepth; depth++) {
+                if (string.IsNullOrEmpty(currentDir)) break;
+                string forgeDir = Path.Combine(currentDir, WebuiFolderName);
+                bool exists = false;
+                try { exists = Directory.Exists(forgeDir); } catch { }
+                UnityEngine.Debug.Log($"[LaunchWebUI] Search [{depth}] {forgeDir} → {(exists ? "EXISTS" : "not found")}");
+                if (exists) {
+                    foreach (string name in WebuiLaunchFileNames) {
+                        try {
+                            string full = Path.GetFullPath(Path.Combine(forgeDir, name));
+                            checkedPaths.Add(full);
+                            if (File.Exists(full)) {
+                                UnityEngine.Debug.Log($"[LaunchWebUI] FOUND: {full}");
+                                return full;
+                            }
+                        } catch { }
                     }
-                } catch {
-                    // Skip invalid paths (e.g. ArgumentException from invalid path characters)
-                    continue;
                 }
+                try {
+                    var parent = Directory.GetParent(currentDir);
+                    if (parent == null) break;
+                    currentDir = parent.FullName;
+                } catch { break; }
             }
-            DirectoryInfo parentDir = Directory.GetParent(currentDir);
-            if (parentDir == null) break;
-            currentDir = parentDir.FullName;
         }
 
-        string msg = $"Webui file not found, can't launch it automatically. User will have to launch their own. Searched in: {exeDirectory}. (Optional: set {envVarName} to the full path to run.bat for a dev fallback.)";
-        if (printStatusText_ifNotFound){
-            Viewport_StatusText.instance.ShowStatusText(msg, textIsETA_number: false, 10, false);
-        }
-        UnityEngine.Debug.Log(msg);
+        string msg = $"[LaunchWebUI] Bat NOT FOUND. Roots: [{string.Join(", ", roots)}]. Up to {MaxParentDepth} levels each. Set {EnvVarWebuiPath} to full bat path.";
+        UnityEngine.Debug.LogWarning(msg);
+        if (printStatusText_ifNotFound && Viewport_StatusText.instance != null)
+            Viewport_StatusText.instance.ShowStatusText(msg, false, 10, false);
         return "";
     }
 
@@ -199,6 +222,8 @@ namespace spz {
 	                if (int.TryParse(s, out int fileId) && fileId >= 0) gpuId = fileId;
 	            } catch { }
 	        }
+	        if (gpuId >= 0)
+	            gpuId = Mathf.Clamp(gpuId, 0, 31);
 	        UnityEngine.Debug.Log($"[LaunchWebUI] SD_GPU_DeviceId = {gpuId} (from Settings; file used only when Settings = default).");
 	        if (gpuId >= 0)
 	            WriteSdDeviceToForgeFolder(workingDir, gpuId);
@@ -241,40 +266,65 @@ namespace spz {
 	        return GetLaunchPathWithGpuSetting(webuiFilePath, out workingDir);
 	    }
 
-	    public void LaunchWebui_Manually( bool printStatusText_ifNotFound = false){
+	    public void LaunchWebui_Manually(bool printStatusText_ifNotFound = false) {
 	        string filePath = GetWebuiFilePath(printStatusText_ifNotFound);
-	        if(filePath==""){ return; }
+	        if (string.IsNullOrEmpty(filePath)) {
+	            UnityEngine.Debug.Log("[LaunchWebUI] No bat file path; skipping launch (see above for search path).");
+	            return;
+	        }
 
+	        UnityEngine.Debug.Log($"[LaunchWebUI] Bat found, launching: {filePath}");
 	        TryCloseLastLaunchedWebUi();
 
 	        string workingDir;
 	        string launchPath = GetLaunchPathAndWorkingDir(filePath, out workingDir);
-	        try{
-	            uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(launchPath, isJustFile:true, workingDir);
-	            if (pid != 0){
+	        if (string.IsNullOrEmpty(workingDir))
+	            workingDir = Path.GetDirectoryName(filePath);
+	        if (string.IsNullOrEmpty(workingDir))
+	            workingDir = Path.GetTempPath();
+
+	        try {
+	            uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(launchPath, isJustFile: true, workingDir, keepWindow: true, hidden: false, attachToConsole: false);
+	            if (pid != 0) {
 	                SetLastLaunchedWebUiPid(pid);
-	                UnityEngine.Debug.Log($"Process launched successfully with PID: {pid}");
-	            }else{
-	                UnityEngine.Debug.LogError("Failed to launch process.");
+	                UnityEngine.Debug.Log($"[LaunchWebUI] Process launched successfully with PID: {pid}");
+	            } else {
+	                UnityEngine.Debug.LogError("[LaunchWebUI] Failed to launch process (PID 0).");
 	            }
-	        }
-	        catch (Exception e){
-	            UnityEngine.Debug.LogError($"Error launching process: {e.Message}");
+	        } catch (Exception e) {
+	            UnityEngine.Debug.LogError($"[LaunchWebUI] Error launching process: {e.Message}");
 	        }
 	    }
 
-
-	    void Start(){
-	        #if UNITY_EDITOR
-	        return; //else keeps bothering me
-	        #endif
-	        bool printStatusText_ifNotFound = true;
-	        LaunchWebui_Manually(printStatusText_ifNotFound);
+	    /// <summary>When the exe runs, auto-launch WebUI. Aggressive retries at 0.5s, 1.5s, 3s, 6s, 12s until bat is found and launched.</summary>
+	    void Start() {
+#if UNITY_EDITOR
+	        return;
+#endif
+	        UnityEngine.Debug.Log("[LaunchWebUI] Auto-launch aggressive: retries at 0.5s, 1.5s, 3s, 6s, 12s.");
+	        StartCoroutine(AggressiveAutoLaunchLoop());
 	    }
 
-	    void Awake(){
-	        if (instance != null){ DestroyImmediate(this); return; }
+	    IEnumerator AggressiveAutoLaunchLoop() {
+	        bool showStatus = true;
+	        for (int i = 0; i < AutoLaunchRetryDelays.Length; i++) {
+	            yield return new WaitForSecondsRealtime(AutoLaunchRetryDelays[i]);
+	            if (_lastLaunchedWebUiPid != 0) yield break;
+	            if (i > 0)
+	                UnityEngine.Debug.Log($"[LaunchWebUI] Retry {i + 1}/{AutoLaunchRetryDelays.Length} (after {AutoLaunchRetryDelays[i]}s).");
+	            try {
+	                LaunchWebui_Manually(showStatus);
+	            } catch (Exception e) {
+	                UnityEngine.Debug.LogError($"[LaunchWebUI] Auto-launch attempt failed: {e.Message}");
+	            }
+	            if (_lastLaunchedWebUiPid != 0) yield break;
+	        }
+	    }
+
+	    void Awake() {
+	        if (instance != null) { DestroyImmediate(this); return; }
 	        instance = this;
+	        UnityEngine.Debug.Log("[LaunchWebUI] Awake: instance set. Aggressive auto-launch (run_noQuickEdit.bat) will run from Start().");
 	    }
 	}
 }//end namespace
