@@ -91,65 +91,70 @@ namespace spz {
 	        if(isColorless && willSendToSD){ return; }//Don't blit, keep as is.
 	        if(Save_MGR.instance._isSaving){ return; }//Never blit colors if saving. Or merging icons into one, because no ctrl+z.
 
-	        // Scene is injected into active layer for painting. Display: when 2+ layers use composite of all visible (so layer 1 stays visible on layer 2); when 1 layer use active Content so paint never disappears (no composite timing gap).
+	        // Scene is injected into active layer for painting. Display: when 2+ layers blit each visible layer directly to accumulation (same blend as 1-layer path). When 1 layer use active Content.
 	        EnsureSceneInjectedIntoActiveLayer();
+	        var stack = PaintLayerStack_MGR.instance;
+	        bool multiLayer = stack != null && stack.Layers != null && stack.Layers.Count > 1;
+	        if (multiLayer)
+		        EnsureSceneBufferForDisplay();
+
+	        Color brushCol = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.brushColor : Color.black;
+	        float sign = Mathf.Sign(_prevStrength);
+	        float maxStrength = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity : 1f;
+
+	        // Multi-layer: blit each visible layer in order to ontoHere. Same shader/blend as single-layer so paint is visible.
+	        if (multiLayer && stack != null)
+	        {
+		        int activeIdx = stack.ActiveLayerIndex;
+		        for (int i = 0; i < stack.Layers.Count; i++)
+		        {
+			        var layer = stack.Layers[i];
+			        if (!layer.Visible || layer.Content == null) continue;
+			        float opacity = Mathf.Clamp01(layer.Opacity);
+			        bool isActiveLayer = (i == activeIdx);
+			        _blitApplyEntireColorLayer_mat.SetTexture("_SrcTex", layer.Content.texArray);
+			        RenderUdims.SetNumUdims(ontoHere, _blitApplyEntireColorLayer_mat);
+			        TextureTools_SPZ.SetKeyword_Material(_blitApplyEntireColorLayer_mat, "APPLY_LATEST_BRUSH_TOO", isActiveLayer && _isPainting);
+			        _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", _latestBrushStroke_ref);
+			        _blitApplyEntireColorLayer_mat.SetColor("_CurrBrushColor", brushCol);
+			        _blitApplyEntireColorLayer_mat.SetFloat("_Sign", sign);
+			        _blitApplyEntireColorLayer_mat.SetFloat("_MaxPossibleBrushStrength01", maxStrength);
+			        _blitApplyEntireColorLayer_mat.SetInteger("_isColorlessMask", isColorless ? 1 : 0);
+			        if (isColorless) _blitApplyEntireColorLayer_mat.SetTexture("_ColorlessCheckerTex", _colorlessMaskChecker_tex);
+			        _blitApplyEntireColorLayer_mat.SetFloat("_TotalOpacity01", opacity);
+			        TextureTools_SPZ.Blit(layer.Content.texArray, ontoHere.texArray, _blitApplyEntireColorLayer_mat);
+		        }
+		        return;
+	        }
+
+	        // Single layer (or no stack): one blit from source
 	        RenderUdims source = null;
 	        float layerOpacity01 = 1f;
-	        var stack = PaintLayerStack_MGR.instance;
-	        bool useComposite = stack != null && _ObjectUV_brushedColorRGBA != null && stack.Layers != null && stack.Layers.Count > 1;
-	        if (useComposite)
-	        {
-		        EnsureLayerStackCompositeTemp(_ObjectUV_brushedColorRGBA);
-		        if (_layerStackCompositeTemp != null)
-		        {
-			        stack.CompositeToOnTopOfBase(_ObjectUV_brushedColorRGBA, _layerStackCompositeTemp);
-			        source = _layerStackCompositeTemp;
-			        layerOpacity01 = 1f;
-		        }
-	        }
-	        if (source == null && stack != null && stack.ActiveLayer?.Content != null && _ObjectUV_brushedColorRGBA != null)
+	        if (stack != null && stack.Layers != null && stack.Layers.Count <= 1 && stack.ActiveLayer?.Content != null && _ObjectUV_brushedColorRGBA != null)
 	        {
 		        var activeContent = stack.ActiveLayer.Content;
 		        if (activeContent.width == _ObjectUV_brushedColorRGBA.width && activeContent.height == _ObjectUV_brushedColorRGBA.height && activeContent.UdimsCount == _ObjectUV_brushedColorRGBA.UdimsCount)
 			        source = activeContent;
 	        }
 	        if (source == null)
-	        {
 		        source = _ObjectUV_brushedColorRGBA;
-		        layerOpacity01 = 1f;
-	        }
-
 	        if (source == null)
 	        {
-		        Debug.LogWarning("[Inpaint] Paint not shown on mesh: no paint source (color buffer and layer stack empty or null). Load a 3D model and paint in the viewport.");
+		        Debug.LogWarning("[Inpaint] Paint not shown on mesh: no paint source. Load a 3D model and paint in the viewport.");
 		        return;
 	        }
 
-	        if (!_loggedDisplaySourceOnce)
-	        {
-		        _loggedDisplaySourceOnce = true;
-		        bool usedComposite = (stack != null && source == _layerStackCompositeTemp);
-		        UnityEngine.Debug.Log($"[Inpaint_MaskPainter] Display source: {(usedComposite ? "COMPOSITE (all visible layers)" : (stack != null && stack.ActiveLayer?.Content == source ? "ACTIVE LAYER ONLY" : "FALLBACK (_ObjectUV_brushedColorRGBA)"))}. Stack={stack != null}, Layers={(stack?.Layers?.Count ?? 0)}, ActiveIdx={(stack?.ActiveLayerIndex ?? -1)}.");
-	        }
-
 	        _blitApplyEntireColorLayer_mat.SetTexture("_SrcTex", source.texArray);
-	        RenderUdims.SetNumUdims( ontoHere, _blitApplyEntireColorLayer_mat );
-
+	        RenderUdims.SetNumUdims(ontoHere, _blitApplyEntireColorLayer_mat);
 	        TextureTools_SPZ.SetKeyword_Material(_blitApplyEntireColorLayer_mat, "APPLY_LATEST_BRUSH_TOO", _isPainting);
 	        _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", _latestBrushStroke_ref);
-	        Color brushCol = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.brushColor : Color.black;
 	        _blitApplyEntireColorLayer_mat.SetColor("_CurrBrushColor", brushCol);
-	        float sign = Mathf.Sign(_prevStrength);
 	        _blitApplyEntireColorLayer_mat.SetFloat("_Sign", sign);
-	        float maxStrength = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity : 1f;
 	        _blitApplyEntireColorLayer_mat.SetFloat("_MaxPossibleBrushStrength01", maxStrength);
-
-	        _blitApplyEntireColorLayer_mat.SetInteger("_isColorlessMask", isColorless?1:0);
-	        if(isColorless){  _blitApplyEntireColorLayer_mat.SetTexture("_ColorlessCheckerTex", _colorlessMaskChecker_tex); }
-
+	        _blitApplyEntireColorLayer_mat.SetInteger("_isColorlessMask", isColorless ? 1 : 0);
+	        if (isColorless) _blitApplyEntireColorLayer_mat.SetTexture("_ColorlessCheckerTex", _colorlessMaskChecker_tex);
 	        _blitApplyEntireColorLayer_mat.SetFloat("_TotalOpacity01", layerOpacity01);
-
-	        TextureTools_SPZ.Blit( source.texArray,  ontoHere.texArray,  _blitApplyEntireColorLayer_mat );
+	        TextureTools_SPZ.Blit(source.texArray, ontoHere.texArray, _blitApplyEntireColorLayer_mat);
 	    }
 
 	    void EnsureLayerStackCompositeTemp(RenderUdims sameSizeAs)
@@ -456,16 +461,24 @@ namespace spz {
 		    return _ObjectUV_brushedColorRGBA;
 	    }
 
-	    /// <summary>Ensure the bottom layer (index 0) has scene so it has a base. Upper layers are delta-only—we do not inject scene into them; they are streamed at display via composite to save RAM.</summary>
+	    /// <summary>Inject scene into the current active layer when it needs a base (no index check). When user adds or selects a layer, that layer becomes active and gets scene so behavior is adaptable, not fixed to bottom.</summary>
 	    void EnsureSceneInjectedIntoActiveLayer()
 	    {
 		    var stack = PaintLayerStack_MGR.instance;
 		    if (stack?.ActiveLayer == null || _ObjectUV_brushedColorRGBA == null) return;
-		    // Only the bottom layer gets the scene buffer; layers 2+ stay empty (stream at display).
-		    if (stack.ActiveLayerIndex != 0) return;
 		    if (stack.ActiveLayer.Content == null) return;
 		    if (stack.ActiveLayer.HasReceivedSceneInject) return;
 		    TryInjectSceneIntoLayer(stack.ActiveLayer);
+	    }
+
+	    /// <summary>Before compositing, ensure the bottom layer (index 0) has scene injected so it appears in the composite. Called from display path when 2+ layers.</summary>
+	    void EnsureBottomLayerHasSceneForComposite()
+	    {
+		    var stack = PaintLayerStack_MGR.instance;
+		    if (stack == null || _ObjectUV_brushedColorRGBA == null || stack.Layers == null || stack.Layers.Count == 0) return;
+		    var bottom = stack.Layers[0];
+		    if (bottom.Content == null || bottom.HasReceivedSceneInject) return;
+		    TryInjectSceneIntoLayer(bottom);
 	    }
 
 	    void InjectSceneIntoActiveLayer()
@@ -482,53 +495,110 @@ namespace spz {
 		    InjectSceneIntoActiveLayer();
 	    }
 
-	    /// <summary>When user clicks New Layer: ensure the new layer has a Content buffer (allocated, clear). We do NOT copy the layer below—display streams it by compositing at render time (saves RAM, scales better).</summary>
+	    /// <summary>When user clicks New Layer: ensure the new layer has Content, then inject the composite of (scene + all layers below) into it. Data is in the layer — no empty override; display still composites all visible layers.</summary>
 	    void OnLayerAdded_InjectScene(PaintLayer newLayer)
 	    {
 		    if (newLayer == null) return;
 		    var stack = PaintLayerStack_MGR.instance;
 		    if (stack == null) return;
 
-		    UnityEngine.Debug.Log($"[Inpaint_MaskPainter] OnLayerAdded_InjectScene: new layer '{newLayer.Name}' (stream-by-composite, no copy). activeIdx={stack.ActiveLayerIndex}, totalLayers={stack.Layers?.Count ?? 0}.");
+		    int newIndex = -1;
+		    for (int i = 0; i < stack.Layers.Count; i++)
+			    if (stack.Layers[i] == newLayer) { newIndex = i; break; }
+		    if (newIndex < 0) return;
 
-		    // Ensure new layer has a Content buffer (empty). No data copy—layer below is streamed at display via CompositeToOnTopOfBase.
+		    UnityEngine.Debug.Log($"[Inpaint_MaskPainter] OnLayerAdded_InjectScene: new layer '{newLayer.Name}' index={newIndex}, injecting composite below into layer (no empty override).");
+
 		    stack.EnsureContentForLayerIfNeeded(newLayer);
 		    if (newLayer.Content == null)
 		    {
-			    UnityEngine.Debug.LogWarning("[Inpaint_MaskPainter] OnLayerAdded_InjectScene: new layer has no Content (resolution not set). Deferring buffer allocation.");
+			    UnityEngine.Debug.LogWarning("[Inpaint_MaskPainter] OnLayerAdded_InjectScene: new layer has no Content (resolution not set). Deferring.");
 			    StartCoroutine(DeferredEnsureContentForNewLayer(newLayer));
 			    return;
 		    }
-		    // New layer Content is clear; paint on this layer will write only deltas. Composite = base + layer1 + layer2 (streamed).
+
+		    // Inject scene + all layers below into this layer so the layer has the data (solved earlier: injection into layer, not overwrite on active).
+		    if (_ObjectUV_brushedColorRGBA != null && newIndex > 0)
+		    {
+			    SyncStackResolutionFromSceneBuffer(stack, _ObjectUV_brushedColorRGBA);
+			    stack.CompositeBelowInto(_ObjectUV_brushedColorRGBA, newLayer.Content, newIndex);
+			    newLayer.HasReceivedSceneInject = true;
+		    }
+
 		    if (Objects_Renderer_MGR.instance != null)
 			    Objects_Renderer_MGR.instance.ReRenderAll_soon();
 	    }
 
-	    /// <summary>Retry ensuring new layer has Content next frame (edge case: resolution not set yet). Still no copy—stream at display.</summary>
+	    /// <summary>Retry ensuring new layer has Content next frame, then inject composite below into it (same as OnLayerAdded_InjectScene).</summary>
 	    IEnumerator DeferredEnsureContentForNewLayer(PaintLayer newLayer)
 	    {
 		    yield return null;
 		    var stack = PaintLayerStack_MGR.instance;
 		    if (stack == null || newLayer == null) yield break;
 		    stack.EnsureContentForLayerIfNeeded(newLayer);
-		    if (newLayer.Content != null && Objects_Renderer_MGR.instance != null)
+		    if (newLayer.Content == null) yield break;
+		    int newIndex = -1;
+		    for (int i = 0; i < stack.Layers.Count; i++)
+			    if (stack.Layers[i] == newLayer) { newIndex = i; break; }
+		    if (newIndex > 0 && _ObjectUV_brushedColorRGBA != null)
+		    {
+			    SyncStackResolutionFromSceneBuffer(stack, _ObjectUV_brushedColorRGBA);
+			    stack.CompositeBelowInto(_ObjectUV_brushedColorRGBA, newLayer.Content, newIndex);
+			    newLayer.HasReceivedSceneInject = true;
+		    }
+		    if (Objects_Renderer_MGR.instance != null)
 			    Objects_Renderer_MGR.instance.ReRenderAll_soon();
 	    }
 
-	    /// <summary>Returns the display source: composite of all visible layers when 2+ layers (matches viewport), else active Content or scene fallback.</summary>
+	    /// <summary>Ensure stack resolution matches scene buffer so CompositeToOnTopOfBase can create temps; prevents first layer disappearing when 2+ layers.</summary>
+	    static void SyncStackResolutionFromSceneBuffer(PaintLayerStack_MGR stack, RenderUdims sceneBuffer)
+	    {
+		    if (stack == null || sceneBuffer == null) return;
+		    int w = sceneBuffer.width;
+		    int h = sceneBuffer.height;
+		    int slices = sceneBuffer.UdimsCount;
+		    if (w <= 0 || h <= 0 || slices <= 0) return;
+		    stack.EnsureResolution(new Vector3Int(w, h, slices));
+	    }
+
+	    /// <summary>When we have 2+ layers but no scene buffer yet (e.g. user added layer before first paint), create scene buffer and sync stack so we can composite all layers. Do not inject into layer 0 here (buffer is empty); first paint will run InitTextures and inject then.</summary>
+	    void EnsureSceneBufferForDisplay()
+	    {
+		    var stack = PaintLayerStack_MGR.instance;
+		    if (stack == null || stack.Layers == null || stack.Layers.Count == 0) return;
+		    if (_ObjectUV_brushedColorRGBA != null) return;
+		    var res = maskResolution();
+		    if (res.x <= 0 || res.y <= 0 || res.z <= 0) return;
+		    var allUdims = ModelsHandler_3D.instance != null ? ModelsHandler_3D.instance._allKnownUdims : null;
+		    if (allUdims == null || allUdims.Count != res.z) return;
+		    _ObjectUV_brushedColorRGBA = new RenderUdims(allUdims, new Vector2Int(res.x, res.y),
+			    GenData_Masks.colorBrushFormat, GenData_Masks.masksFilter, Color.clear, 0);
+		    if (stack != null)
+			    stack.EnsureResolution(new Vector3Int(res.x, res.y, res.z));
+	    }
+
+	    /// <summary>Returns the display source: composite of all visible layers when 2+ layers (never active-only); else active Content or scene fallback.</summary>
 	    public RenderUdims GetLayerCompositeOrFallback()
 	    {
 		    var stack = PaintLayerStack_MGR.instance;
-		    if (stack != null && _ObjectUV_brushedColorRGBA != null && stack.Layers != null && stack.Layers.Count > 1)
+		    if (stack != null && stack.Layers != null && stack.Layers.Count > 1)
 		    {
-			    EnsureLayerStackCompositeTemp(_ObjectUV_brushedColorRGBA);
-			    if (_layerStackCompositeTemp != null)
+			    if (_ObjectUV_brushedColorRGBA != null)
+				    SyncStackResolutionFromSceneBuffer(stack, _ObjectUV_brushedColorRGBA);
+			    RenderUdims sizeRef = _ObjectUV_brushedColorRGBA ?? stack.Layers[0]?.Content;
+			    if (sizeRef != null)
 			    {
-				    stack.CompositeToOnTopOfBase(_ObjectUV_brushedColorRGBA, _layerStackCompositeTemp);
-				    return _layerStackCompositeTemp;
+				    EnsureLayerStackCompositeTemp(sizeRef);
+				    if (_layerStackCompositeTemp != null)
+				    {
+					    stack.CompositeTo(_layerStackCompositeTemp);
+					    return _layerStackCompositeTemp;
+				    }
 			    }
+			    if (stack.Layers.Count > 0 && stack.Layers[0].Visible && stack.Layers[0].Content != null)
+				    return stack.Layers[0].Content;
 		    }
-		    if (stack != null && stack.ActiveLayer?.Content != null && _ObjectUV_brushedColorRGBA != null)
+		    if (stack != null && stack.Layers != null && stack.Layers.Count <= 1 && stack.ActiveLayer?.Content != null && _ObjectUV_brushedColorRGBA != null)
 		    {
 			    var activeContent = stack.ActiveLayer.Content;
 			    if (activeContent.width == _ObjectUV_brushedColorRGBA.width && activeContent.height == _ObjectUV_brushedColorRGBA.height && activeContent.UdimsCount == _ObjectUV_brushedColorRGBA.UdimsCount)
@@ -537,15 +607,24 @@ namespace spz {
 		    return _ObjectUV_brushedColorRGBA;
 	    }
 
-	    /// <summary>After InitTextures creates the scene buffer, inject scene only into the bottom layer (index 0). Upper layers are left empty and streamed at display time.</summary>
+	    /// <summary>After InitTextures creates the scene buffer, inject scene into the current active layer so it has a base (adaptable). If active already has scene or has no Content, fall back to bottom so the composite always has at least one layer with scene.</summary>
 	    void InjectSceneIntoAllExistingLayers()
 	    {
 		    if (_ObjectUV_brushedColorRGBA == null) { UnityEngine.Debug.Log("[Inpaint_MaskPainter] InjectSceneIntoAllExisting: sceneBuf is null, skipping."); return; }
 		    var stack = PaintLayerStack_MGR.instance;
 		    if (stack == null || stack.Layers == null || stack.Layers.Count == 0) return;
+		    // Prefer active layer (e.g. newly added layer is active); otherwise ensure bottom has scene for composite.
+		    if (stack.ActiveLayer != null && stack.ActiveLayer.Content != null && !stack.ActiveLayer.HasReceivedSceneInject)
+		    {
+			    UnityEngine.Debug.Log($"[Inpaint_MaskPainter] InjectSceneIntoAllExisting: injecting scene into active layer '{stack.ActiveLayer.Name}' (index={stack.ActiveLayerIndex}).");
+			    if (TryInjectSceneIntoLayer(stack.ActiveLayer)) return;
+		    }
 		    var bottom = stack.Layers[0];
-		    UnityEngine.Debug.Log("[Inpaint_MaskPainter] InjectSceneIntoAllExisting: injecting scene into bottom layer only (stream-by-composite for rest).");
-		    TryInjectSceneIntoLayer(bottom);
+		    if (bottom != null && bottom.Content != null && !bottom.HasReceivedSceneInject)
+		    {
+			    UnityEngine.Debug.Log("[Inpaint_MaskPainter] InjectSceneIntoAllExisting: injecting scene into bottom layer (fallback so composite has base).");
+			    TryInjectSceneIntoLayer(bottom);
+		    }
 	    }
 
 
