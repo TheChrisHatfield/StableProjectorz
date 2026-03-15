@@ -53,5 +53,18 @@ if exist "%REQ%" (
 REM So the exe can avoid auto-restart loop when it was already launched by this bat
 set "SPZ_ADDONS_LAUNCHED=1"
 echo Starting StableProjectorz...
+if /i "%~1"=="wait" (
+    echo Running and waiting for exit ^(to see crash code^)...
+    "%EXE%"
+    set EXIT_CODE=%ERRORLEVEL%
+    if %EXIT_CODE% NEQ 0 (
+        echo.
+        echo Process exited with code %EXIT_CODE%. Check Player.log for crash details:
+        echo   %%USERPROFILE%%\AppData\LocalLow\StableProjectorz\...\Player.log
+    )
+    pause
+    endlocal
+    exit /b %EXIT_CODE%
+)
 start "" "%EXE%"
 endlocal

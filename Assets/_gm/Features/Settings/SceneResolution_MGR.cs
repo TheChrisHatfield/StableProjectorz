@@ -146,6 +146,7 @@ namespace spz {
 	    }
 
 	    public void Load(StableProjectorz_SL spz){
+	        if (spz.sceneResolution == null) return;
 	        int newRes = spz.sceneResolution.scene_texResolution;
 	        bool isIncreaseRes =  newRes>= resultTexQuality;
 	        OnAdd_texResolutionQuality(isIncreaseRes, force_pickThisRes:newRes);

@@ -322,7 +322,8 @@ namespace spz {
 	    }
 
 	    public override void Load(StableProjectorz_SL spz){
-	        _header.Load( spz.art2D_iconList.header );
+	        if (spz.art2D_iconList == null) return;
+	        if (spz.art2D_iconList.header != null) _header.Load( spz.art2D_iconList.header );
 	        base.OnLoadCommonStuff( spz.art2D_iconList );
 	    }
 
@@ -331,6 +332,7 @@ namespace spz {
 	        if(instance != null){ DestroyImmediate(this); return; }
 	        instance = this;
 	        base.Awake();
+	        _header.onImportToLayerButton += OnImportToLayerButton;
 	        ModelsHandler_3D.Act_onWillLoadModel += On_will_import_3d_model;
 	        CallbackEveryFrame_MGR.onUpdate += OnUpdate_evenIfDisabled;
 	        WorkflowRibbon_UI.Act_onBakeColors_button += OnBakeColorsButton;
@@ -338,9 +340,59 @@ namespace spz {
 	    }
 
 	    protected override void OnDestroy(){
+	        if (_header != null) _header.onImportToLayerButton -= OnImportToLayerButton;
 	        ModelsHandler_3D.Act_onWillLoadModel -= On_will_import_3d_model;
 	        CallbackEveryFrame_MGR.onUpdate -= OnUpdate_evenIfDisabled;
 	        base.OnDestroy();
+	    }
+
+	    /// <summary>Call from ART tab header or from Art icon context menu to open file dialog and add selected image(s) to a new paint layer. </summary>
+	    public void TriggerImportToLayer()
+	    {
+	        OnImportToLayerButton();
+	    }
+
+	    void OnImportToLayerButton()
+	    {
+	        if (UDIMs_Helper._allKnownUdims == null || UDIMs_Helper._allKnownUdims.Count == 0)
+	        {
+	            if (Viewport_StatusText.instance != null)
+	                Viewport_StatusText.instance.ShowStatusText("Load a 3D model first so paint layers know the UV layout.", false, 4f, false);
+	            return;
+	        }
+	        FileBrowser.SetFilters(true, new FileBrowser.Filter("Images", "png", "jpg", "jpeg", "tga"));
+	        FileBrowser.SetDefaultFilter("png");
+	        FileBrowser.ShowLoadDialog((paths) => {
+	            if (paths == null || paths.Length == 0) return;
+	            var textures = new List<Texture2D>();
+	            foreach (string path in paths)
+	            {
+	                if (string.IsNullOrEmpty(path) || !File.Exists(path)) continue;
+	                var tex = new Texture2D(2, 2);
+	                if (tex.LoadImage(File.ReadAllBytes(path)))
+	                    textures.Add(tex);
+	                else
+	                    Texture.DestroyImmediate(tex);
+	            }
+	            if (textures.Count == 0)
+	            {
+	                if (Viewport_StatusText.instance != null)
+	                    Viewport_StatusText.instance.ShowStatusText("No valid images could be loaded.", false, 3f, false);
+	                return;
+	            }
+	            if (PaintLayerStack_MGR.instance == null)
+	            {
+	                var go = new GameObject("PaintLayerStack_MGR_Runtime");
+	                go.AddComponent<PaintLayerStack_MGR>();
+	            }
+	            if (PaintLayerStack_MGR.instance.AddLayerFromTextures(textures, true, "From Image"))
+	            {
+	                if (Viewport_StatusText.instance != null)
+	                    Viewport_StatusText.instance.ShowStatusText("Image(s) added to new paint layer. Switch to Paint tab to edit.", false, 3f, false);
+	            }
+	            else if (Viewport_StatusText.instance != null)
+	                Viewport_StatusText.instance.ShowStatusText("Could not add layer. Check that a 3D model is loaded.", false, 3f, false);
+	        }, () => { }, FileBrowser.PickMode.Files, true, null, null, "Import image(s) to new layer", "Import");
 	    }
 
 	}

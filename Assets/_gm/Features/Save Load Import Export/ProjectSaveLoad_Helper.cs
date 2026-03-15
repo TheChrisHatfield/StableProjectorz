@@ -87,6 +87,10 @@ namespace spz {
 
 	        WorkflowRibbon_UI.instance.Save(spz);
 	        SD_WorkflowOptionsRibbon_UI.instance.Save(spz);
+	        if (BrushRibbon_UI.instance != null)
+	            BrushRibbon_UI.instance.Save(spz);
+	        if (ColorPalette_MGR.instance != null)
+	            ColorPalette_MGR.instance.Save(spz);
 	        Gen3D_WorkflowOptionsRibbon_UI.instance.Save(spz);
 
 	        GenData2D_Archive.instance.Save(spz);
@@ -97,6 +101,8 @@ namespace spz {
 	        Art2D_IconsUI_List.instance.Save(spz);
 	        ArtBG_IconsUI_List.instance.Save(spz);
 	        Connection_MGR.instance.Save(spz);
+	        if (PaintLayerStack_MGR.instance != null)
+	            PaintLayerStack_MGR.instance.Save(spz);
 
 	        // DataFolder should be relative to filepath of the project-file
 	        string resultMessage;
@@ -162,7 +168,7 @@ namespace spz {
 	            StableProjectorz_SL spz = StableProjectorz_SL.CreateFromJSON(json, out resultMessage_);
 	            spz?.update_dataDir_toCurrent(spzFilepath);
 	            if(spz == null){
-	                onResult?.Invoke("Error loading the project file. The file is corrupted, or an unsupported version");
+	                onResult?.Invoke(resultMessage_ ?? "Error loading the project file. The file is corrupted, or an unsupported version");
 	                return;
 	            }
 	            Performance_MGR.instance.Load(spz);
@@ -173,13 +179,18 @@ namespace spz {
 	            ModelsHandler_3D_UI.instance.Load(spz);
 	            ProjectorCameras_MGR.instance.Load(spz);
 	            SD_InputPanel_UI.instance.Load(spz);
-	            StableDiffusion_Prompts_UI.instance.Load( spz.sd_genSettingsInput );
+	            if (spz.sd_genSettingsInput != null)
+	                StableDiffusion_Prompts_UI.instance.Load( spz.sd_genSettingsInput );
 
 	            //Jan 2025 not saving for now, because the layout is dynamically created from a text string
 	            //TrellisInputTabs_MGR_UI.instance.Load(spz.generate3D_inputs, spz.filepath_dataDir);
 
 	            WorkflowRibbon_UI.instance.Load(spz);
 	            SD_WorkflowOptionsRibbon_UI.instance.Load(spz);
+	            if (BrushRibbon_UI.instance != null && spz.brush_MGR != null)
+	                BrushRibbon_UI.instance.Load(spz);
+	            if (ColorPalette_MGR.instance != null && spz.colorPalette != null)
+	                ColorPalette_MGR.instance.Load(spz);
 	            Gen3D_WorkflowOptionsRibbon_UI.instance.Load(spz);
 
 	            GenData2D_Archive.instance.Load(spz);
@@ -188,6 +199,15 @@ namespace spz {
 	            Art2D_IconsUI_List.instance.Load(spz);
 	            ArtBG_IconsUI_List.instance.Load(spz);
 	            Connection_MGR.instance.Load(spz);
+	            if (spz.paintLayerStack != null)
+	            {
+	                if (PaintLayerStack_MGR.instance == null)
+	                {
+	                    var go = new GameObject("PaintLayerStack_MGR_Runtime");
+	                    go.AddComponent<PaintLayerStack_MGR>();
+	                }
+	                PaintLayerStack_MGR.instance.Load(spz);
+	            }
 	            //2D BACKGROUND mgr?
 
 	            UserCameras_MGR.instance.OnAfter_AllLoaded();

@@ -133,6 +133,26 @@ namespace spz {
 	    void OnCloneButton()
 	        => Act_OnSomeIconCloneSelf?.Invoke(this, _genData.kind);
 
+	    void OnMoveToLayerButton(){
+	        if (PaintLayerStack_MGR.instance == null){
+	            if (Viewport_StatusText.instance != null)
+	                Viewport_StatusText.instance.ShowStatusText("Paint layers not available. Add PaintLayerStack_MGR to the scene.", false, 4f, false);
+	            return;
+	        }
+	        if (PaintLayerStack_MGR.instance.AddLayerFromArtIcon(this)){
+	            if (Viewport_StatusText.instance != null)
+	                Viewport_StatusText.instance.ShowStatusText("Image moved to paint layer. Switch to Paint tab to edit.", false, 3f, false);
+	            if (CommandRibbon_UI.instance != null)
+	                CommandRibbon_UI.instance.clickPaint_toggle_manual();
+	        } else {
+	            if (Viewport_StatusText.instance != null)
+	                Viewport_StatusText.instance.ShowStatusText("Could not add to paint layer.", false, 2f, false);
+	        }
+	    }
+
+	    void OnImportToLayerButton(){
+	        Art2D_IconsUI_List.instance?.TriggerImportToLayer();
+	    }
 
 	    void OnMightUpscale_Button(float possible_upscaleFactor) 
 	        => SD_Upscalers.instance.PlayAttentionAnim();
@@ -203,6 +223,8 @@ namespace spz {
 	            _art_contextMenu.Act_OnDeleteButton += OnDeleteButton;
 	            _art_contextMenu.Act_OnCopySeed_button += OnCopySeedButton;
 	            _art_contextMenu.Act_OnCloneButton += OnCloneButton;
+	            _art_contextMenu.Act_OnMoveToLayerButton += OnMoveToLayerButton;
+	            _art_contextMenu.Act_OnImportToLayerButton += OnImportToLayerButton;
 
 	            _art_contextMenu.Act_OnDelight_ShadowR_button += OnDelight_ShadowR_Button;
 

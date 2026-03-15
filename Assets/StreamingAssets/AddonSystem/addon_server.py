@@ -41,6 +41,7 @@ except ImportError:
 _loaded_addon_modules = {}
 
 
+
 def discover_addons(addons_dir):
     """Discover all add-ons in the Addons directory"""
     addons = []
@@ -194,14 +195,40 @@ def main():
             set_load_addon_callback(lambda addon_id: load_addon_by_id(addon_id, addons_dir))
             set_invoke_callback(invoke_addon_callback)
             set_connection_ready_callback(_check_connection_ready)
+            _http_alive = [False]
+            def _http_wrapper(host, port):
+                _http_alive[0] = True
+                try:
+                    start_server(host, port)
+                except Exception as e:
+                    print(f"[Add-on Server] HTTP server died: {e}")
+                finally:
+                    _http_alive[0] = False
             http_thread = threading.Thread(
-                target=start_server,
+                target=_http_wrapper,
                 args=("127.0.0.1", args.http_port),
                 daemon=True
             )
             http_thread.start()
-            print(f"[Add-on Server] HTTP REST API available on port {args.http_port}")
-            print(f"[Add-on Server] API docs: http://127.0.0.1:{args.http_port}/docs")
+            time.sleep(1.0)
+            if http_thread.is_alive():
+                print(f"[Add-on Server] HTTP REST API running on port {args.http_port}")
+                print(f"[Add-on Server] API docs: http://127.0.0.1:{args.http_port}/docs")
+            else:
+                print(f"[Add-on Server] ERROR: HTTP server failed to start on port {args.http_port} (port likely still in use).")
+                print(f"[Add-on Server] Retrying in 2s...")
+                time.sleep(2.0)
+                http_thread = threading.Thread(
+                    target=_http_wrapper,
+                    args=("127.0.0.1", args.http_port),
+                    daemon=True
+                )
+                http_thread.start()
+                time.sleep(1.0)
+                if http_thread.is_alive():
+                    print(f"[Add-on Server] HTTP REST API running on port {args.http_port} (retry succeeded)")
+                else:
+                    print(f"[Add-on Server] ERROR: HTTP server still cannot bind port {args.http_port}. Addons will not load.")
         except Exception as e:
             print(f"[Add-on Server] Warning: Could not start HTTP server: {e}")
     else:
@@ -213,6 +240,11 @@ def main():
     # File-based handshake: wait for Unity to write the ready marker (so we know the socket is bound before connecting).
     marker_name = f"spz_addon_{args.port}_ready.txt"
     marker_path = os.path.join(tempfile.gettempdir(), marker_name)
+    if os.environ.get("SPZ_SOCKET_BOUND") == "0":
+        print("")
+        print("Game could not bind the addon socket (Unity Editor is likely running and has port 5555).")
+        print("This addon server was started by the game but cannot connect. Close the Editor and run the game alone, or run addons from the Editor.")
+        sys.exit(1)
     marker_timeout = 90  # seconds to wait for game to load and bind
     print(f"Waiting for Unity socket ready marker (up to {marker_timeout}s): {marker_path}")
     for wait in range(marker_timeout):

@@ -117,6 +117,7 @@ namespace spz {
 	    }
 
 	    public void Load(StableProjectorz_SL spz){
+	        if (spz.controlNetUnits_panel == null || spz.controlNetUnits_panel.ctrl_units == null) return;
 	        //remove any old unit:
 	        EnsureExact_num_CTRLnets(0, instantDestroy_excess:true);
 	        //load new units:

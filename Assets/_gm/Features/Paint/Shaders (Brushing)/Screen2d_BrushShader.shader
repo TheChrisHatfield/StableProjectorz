@@ -9,6 +9,8 @@ Shader "Custom/Screen2d_BrushShader"{
         _BrushStrength ("Brush Strength [-1,1] (x:prev, y:new, zw:0)", Vector) = (1,1,0,0)
         _PrevNewBrushScreenCoord ("Stroke Coordinates (prev, new)", Vector) = (0,0,0,0)
         _BrushSize_andFirstFrameFlag("BrushSize (prev, new, isFirstFrame, 0)", Vector) = (1,1,0,0)
+        _BrushAngleRad("Brush angle (radians)", Float) = 0
+        _BrushRoundness01("Brush roundness 0-1", Float) = 1
     }
     SubShader{
         Tags { "RenderType"="Opaque" } 
@@ -35,6 +37,10 @@ Shader "Custom/Screen2d_BrushShader"{
             float4 _BrushStrength;
             float4 _PrevNewBrushScreenCoord;
             float4 _BrushSize_andFirstFrameFlag;
+            float _BrushAngleRad;
+            float _BrushRoundness01;
+            float4 _StampPosSizeStr[64];
+            int _StampCount;
 
             float _ScreenAspectRatio;
 
@@ -66,12 +72,14 @@ Shader "Custom/Screen2d_BrushShader"{
                 pibs_input.BrushSizes_andFirstFrameFlag = _BrushSize_andFirstFrameFlag;
                 pibs_input.BrushStamp      = _BrushStamp;
                 pibs_input.brushStampStronger    = 0;
-                // Sample the obj-mask-texture with the texture space UVs:
+                pibs_input.brushAngleRad = _BrushAngleRad;
+                pibs_input.brushRoundness01 = _BrushRoundness01;
                 pibs_input.BrushStrength01 = abs(_BrushStrength.xy);
                 pibs_input.currentBrushPath01 =  SAMPLE_TEXTURE_OR_ARRAY(_PrevBrushPathTex, float3(i.uv,0));
                 pibs_input.normalDotView = 1.0;
 
-                return PaintInBrushStroke(pibs_input); //[0,1]
+                float strokeVal = _StampCount > 0 ? PaintInBrushStroke_Splotches(pibs_input, _StampPosSizeStr, _StampCount) : PaintInBrushStroke(pibs_input);
+                return strokeVal; //[0,1]
             }
 
             ENDCG

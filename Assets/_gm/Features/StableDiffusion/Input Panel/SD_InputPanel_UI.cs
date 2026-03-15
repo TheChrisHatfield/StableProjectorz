@@ -110,6 +110,7 @@ namespace spz {
 	    }
 
 	    public void Load( StableProjectorz_SL spz ){
+	        if (spz.sd_genSettingsInput == null) return;
 	        models.Load(spz.sd_genSettingsInput);
 	        samplers.Load(spz.sd_genSettingsInput);
 	        sd_upscaler.Load(spz.sd_genSettingsInput);

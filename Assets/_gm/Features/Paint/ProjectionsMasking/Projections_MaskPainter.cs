@@ -25,6 +25,8 @@ namespace spz {
 	        GenData2D genData = getGenData_currentIcon();
 	        if(genData==null){ return; }
 	        if(genData._masking_utils == null){ return; }
+	        if (_applyBrushStroke_toUvMask == null) _applyBrushStroke_toUvMask = FindObjectOfType<ApplyBrushStroke_ToUvMask>(true);
+	        if (_applyBrushStroke_toUvMask == null){ return; }
 
 	        for(int i=0;  i<genData._masking_utils._ObjectUV_brushedMaskR8.Count;  ++i){
 	            RenderUdims br  = genData._masking_utils._ObjectUV_brushedMaskR8[i];
@@ -110,13 +112,16 @@ namespace spz {
 
 	    protected override void InitTextures( int width,  int height,  int numSlices, 
 	                                          out RenderTexture prevBrushPath_,  out RenderTexture currBrushPath_){
-        
+	        prevBrushPath_ = null;
+	        currBrushPath_ = null;
+	        if (numSlices <= 0 || width <= 0 || height <= 0)
+		        return;
+
 	        prevBrushPath_ = TextureTools_SPZ.CreateTextureArray( new Vector2Int(width,height), GraphicsFormat.R8_UNorm, 
 	                                                             FilterMode.Bilinear, numSlices, depthBits:0);
 
 	        currBrushPath_ = TextureTools_SPZ.CreateTextureArray( new Vector2Int(width,height), GraphicsFormat.R8_UNorm, 
 	                                                             FilterMode.Bilinear, numSlices, depthBits:0);
-	        //MODIF ..maybe .Release() these when lowFPS is toggled? and prevent paiting until untoggled.
 	        TextureTools_SPZ.ClearRenderTexture(prevBrushPath_, Color.black);
 	        TextureTools_SPZ.ClearRenderTexture(currBrushPath_, Color.black);
 	    }
@@ -126,41 +131,41 @@ namespace spz {
 	                                                        bool isFirstFrameOfStroke, float suggested_brushStrength ){
 	        GenData2D genData = getGenData_currentIcon();
 	        if(genData==null){ return; }
+	        if(genData._masking_utils==null){ return; }
 
-	        //very important when painting with mouse instead of tablet (starts large)
 	        if(isFirstFrameOfStroke){ _prevStrength = suggested_brushStrength; }
         
 	        int povIx =  MultiView_Ribbon_UI.instance.currentPovIx;
+	        if (povIx < 0 || povIx >= genData._masking_utils._ObjectUV_visibilityR8G8.Count) return;
         
 	        RenderUdims visibil =  genData._masking_utils._ObjectUV_visibilityR8G8[povIx];
+	        if (visibil == null) return;
 	        RenderUdims.SetNumUdims(visibil, _brushMaterial);
 
-	        //assign the visibility texture, so we can see where our mask is visible to its Projection camera.
-	        //Even if we see a texel, we won't paint it, if not visible to its Projection Camera.
 	        _brushMaterial.SetTexture("_ProjVisibility", visibil.texArray );
 	        _brushMaterial.SetTexture("_PrevBrushPathTex", prevBrushStroke_R8);
-	        _brushMaterial.SetTexture("_BrushStamp", SD_WorkflowOptionsRibbon_UI.instance._brushHardnessTex); 
+	        Texture2D stamp = BrushAlphas_MGR.GetCurrentBrushStampTexOrFallback();
+	        _brushMaterial.SetTexture("_BrushStamp", stamp); 
 	        _brushMaterial.SetVector("_BrushStrength", new Vector4(_prevStrength,suggested_brushStrength,0,0));
 	        bool isErasing = suggested_brushStrength < 0;
-	        _brushMaterial.SetFloat("_BrushStampStronger", isErasing? 2 : 0.0f);//for erasing we want to make brush fatter.
-	                                                                            //Else it looks thinner than when erasing colors
-	                                                                            //(because colors uses different blending, etc)
+	        _brushMaterial.SetFloat("_BrushStampStronger", isErasing? 2 : 0.0f);
 
-	        // When positive, prevent brushing on surfaces that face away from camera.
-	        // When negative, allow to erase even if surfaces are facing away from us (more comfortable).
-	        // But only if NOT multi-view, else is confusing. User might not understand why it's not brushing, and swap to another camera.
 	        bool isMultiView = genData._masking_utils.numPOV>1;
 	        bool fadeByNormal = !isMultiView && SD_WorkflowOptionsRibbon_UI.instance.isPositive;
 	        _brushMaterial.SetFloat("_FadeByNormal", fadeByNormal? 1 : 0);
 
-	        //Apply material on the 3d meshes, and render, to alter the mask, painting it:
 	        var selectedMeshes = ModelsHandler_3D.instance.selectedMeshes;
 	        Objects_Renderer_MGR.instance.EquipMaterial_on_Specific( selectedMeshes, _brushMaterial );
 
 	        UserCameras_MGR.instance._curr_viewCamera.RenderImmediate_Arr( renderIntoHere:currBrushStroke_R8,  ignore_nonSelected_meshes:true,
 	                                                                       _brushMaterial,  useClearingColor:false,  Color.clear, dontFrustumCull:true);
 	        float sign = Mathf.Sign(suggested_brushStrength);
-	        _applyBrushStroke_toUvMask.Apply_into_MaskUtils(prevBrushStroke_R8, currBrushStroke_R8,  sign,  genData._masking_utils, povIx);
+	        if (_applyBrushStroke_toUvMask == null)
+	            _applyBrushStroke_toUvMask = FindObjectOfType<ApplyBrushStroke_ToUvMask>(true);
+	        if (_applyBrushStroke_toUvMask != null)
+	            _applyBrushStroke_toUvMask.Apply_into_MaskUtils(prevBrushStroke_R8, currBrushStroke_R8,  sign,  genData._masking_utils, povIx);
+	        else
+	            Debug.LogWarning("[Projections_MaskPainter] ApplyBrushStroke_ToUvMask not found. Mask will not persist.");
 
 	        _prevStrength = suggested_brushStrength;
 	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
@@ -189,6 +194,8 @@ namespace spz {
 	      #endif
 	        if(instance != null){ DestroyImmediate(this); return; }
 	        instance = this;
+	        if (_applyBrushStroke_toUvMask == null)
+	            _applyBrushStroke_toUvMask = FindObjectOfType<ApplyBrushStroke_ToUvMask>(true);
 
 	        BrushRibbon_UI_InvertMask.onClicked += OnMaskInvert_button;
 	        BrushRibbon_UI_BucketFill._Act_onClicked += OnBucketFill_button;

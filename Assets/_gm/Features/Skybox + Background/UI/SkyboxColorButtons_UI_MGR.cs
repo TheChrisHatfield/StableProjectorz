@@ -89,6 +89,7 @@ namespace spz {
 	    }
 
 	    public void Load(StableProjectorz_SL spz){
+	        if (spz.skyboxColorButtons == null) return;
 	        OnColorChanged(isTop:false, spz.skyboxColorButtons.color_bot);
 	        OnColorChanged(isTop:true,  spz.skyboxColorButtons.color_top);
 	    }

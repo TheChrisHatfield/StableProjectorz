@@ -12,6 +12,9 @@
     //if user wants to paint on 3d model to further mask the projected art:
     DECLARE_TEXTURE_OR_ARRAY(_uvMask);
 
+    #ifdef USE_BRUSH_COLOR
+    float4 _BrushColor;
+    #endif
 
     struct appdata {
         float4 vertex : POSITION;
@@ -51,8 +54,18 @@
                 
         // [0,1] --> [0,2]. Anything above 1 would be for fighting the invisibility.
         // Custom uv textures don't have invisibility, they wrap around all object, unlike projections.
-        float uvFinetuneMask =  SAMPLE_TEXTURE_OR_ARRAY(_uvMask, uv_withSliceIx).r * 2; 
+        float maskR = SAMPLE_TEXTURE_OR_ARRAY(_uvMask, uv_withSliceIx).r;
+        float uvFinetuneMask = maskR * 2;
 
+        #ifdef USE_BRUSH_COLOR
+        col.rgb = _BrushColor.rgb;
+        float brushAlpha = (maskR > 0.52) ? saturate((maskR - 0.5) * 2.0) * _BrushColor.a : 0.0;
+        col.a = brushAlpha;
+        #elif defined(BRUSH_ONLY_WHERE_PAINTED)
+        // Brush pass: mask default is 0.5 (unpainted). Only show brush where mask > 0.5 so we don't fill the whole object.
+        col.a *= saturate((maskR - 0.5) * 2.0);
+        #else
         col.a *= uvFinetuneMask;
+        #endif
         return col;
     }

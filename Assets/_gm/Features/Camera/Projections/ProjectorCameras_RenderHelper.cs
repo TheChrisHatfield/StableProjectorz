@@ -40,7 +40,7 @@ namespace spz {
 	            SinglePOV_Set_UvMasks(pMat, masks);
 	        }
 
-	        Set_ScreenArt_and_Mask(pMat, pcam, isHighlight);
+	        if (!Set_ScreenArt_and_Mask(pMat, pcam, isHighlight)) return;
 	        Set_HSVC_vars(pMat, pcam, pcamIx, isHighlight);
 
 	        Objects_Renderer_MGR.instance.EquipMaterial_on_ALL( pMat );
@@ -111,7 +111,8 @@ namespace spz {
 	                 showPreview &= !Save_MGR.instance._isSaving;//<--to avoid baking-in the brush-peek-preview.
 	                 showPreview &= WorkflowRibbon_UI.instance.isMode_using_img2img()==false;
         
-	        Texture brushStamp = showPreview ? oRib._brushHardnessTex : Texture2D.blackTexture;
+	        Texture brushStamp = showPreview ? BrushAlphas_MGR.GetCurrentBrushStampTexOrFallback() : Texture2D.blackTexture;
+	        if (brushStamp == null) brushStamp = Texture2D.blackTexture;
 	                int povIx  = showPreview ?  mvRib.currentPovIx : -1;
 
 	        putHere.SetTexture("_BrushStamp", brushStamp);
@@ -121,7 +122,8 @@ namespace spz {
 	    }
 
     
-	    void Set_ScreenArt_and_Mask(Material mat, ProjectorCamera pcam, bool isHighlight){
+	    /// <returns>false when no art is available and the projection should be skipped entirely.</returns>
+	    bool Set_ScreenArt_and_Mask(Material mat, ProjectorCamera pcam, bool isHighlight){
 	        var byproducts = pcam._myGenData._byproductsOfRequest;
 
 	        Texture screenMaskInpaint = null;
@@ -134,7 +136,9 @@ namespace spz {
 
 	        Texture art2D =  isHighlight? _checkerTexture  :  pcam.myIconUI?.texture0()?.tex2D ?? null;
 	                art2D =  _showOrderOfProjections? Texture2D.whiteTexture  :  art2D;
+	        if (art2D == null) return false;
 	        mat.SetTexture("_ScreenArtTexture", art2D);
+	        return true;
 	    }
 
 
@@ -196,6 +200,7 @@ namespace spz {
 
 	        if(isPaiting_in_myGeneration && hoveredPovIx>=0){
 	            Texture2D art2D =  pcam.myIconUI?.texture0()?.tex2D ?? null;
+	            if (art2D == null) return;
 	            pMat.SetTexture("_ScreenArtTexture", art2D);
 	            pMat.SetTexture("_ObjectUVmasks_AtlasTexture", Texture2D.whiteTexture);
 	            pMat.SetColor("_TintColorCurrProjection", Color.white);//make hoveredPOV fully visible.

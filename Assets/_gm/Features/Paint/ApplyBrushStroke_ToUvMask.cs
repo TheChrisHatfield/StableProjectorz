@@ -36,7 +36,8 @@ namespace spz {
 
 	        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "BLEND_RGBA_ONCE", true);
 
-	        _brushStroke_intoMask.SetVector("_PaintColor", SD_WorkflowOptionsRibbon_UI.instance.brushColor);
+	        Color paintColor = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.brushColor : Color.black;
+	        _brushStroke_intoMask.SetVector("_PaintColor", paintColor);
 	        _brushStroke_intoMask.SetTexture(kernel, "_CurrBrushStroke_R8", currBrushStroke_R8);//only 'curr', 'previous' is not needed.
 
 	        _brushStroke_intoMask.SetFloat("_Sign", sign); //to know if erasing or adding.

@@ -75,7 +75,9 @@ namespace spz {
 	        _dontShowOnStartup.SetValueWithoutNotify( isDontShowPressed==1 );
 	        _dontShowOnStartup.onClick += OnDontShowOnStartupToggle;
 
-	        _canvas.gameObject.SetActive(false);
+	        // Only disable canvas if it is not this GameObject (otherwise we disable ourselves and the Show coroutine never runs; black box quick guide would never appear on EXE launch)
+	        if (_canvas != null && _canvas.gameObject != gameObject)
+	            _canvas.gameObject.SetActive(false);
 
 	        bool hidden = DisablePanel_ifDontShowOnStartup();
 	        if (!hidden){ Show(delay:1.5f); }
@@ -90,7 +92,9 @@ namespace spz {
 	        string prefsKey =  "cmdDontShowOnStartup" + CheckForUpdates_MGR.CURRENT_VERSION_HERE;
 	        int isDontShow = PlayerPrefs.GetInt(prefsKey, defaultValue:0);
 	        if(isDontShow>0){
-	            _canvas.gameObject.SetActive(false);//entire canvas, not just panel
+	            // Do not disable when canvas is this GameObject (would disable the manager and break future Show() calls)
+	            if (_canvas != null && _canvas.gameObject != gameObject)
+	                _canvas.gameObject.SetActive(false);
 	            return true;
 	        }
 	        return false;

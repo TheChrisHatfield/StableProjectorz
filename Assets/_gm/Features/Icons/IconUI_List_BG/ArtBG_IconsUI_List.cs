@@ -147,7 +147,8 @@ namespace spz {
 	    }
 
 	    public override void Load( StableProjectorz_SL spz ){
-	        _header.Load( spz.artBG_iconList.header );
+	        if (spz.artBG_iconList == null) return;
+	        if (spz.artBG_iconList.header != null) _header.Load( spz.artBG_iconList.header );
 	        base.OnLoadCommonStuff( spz.artBG_iconList );
 	        _isPretendNoBackground = spz.artBG_iconList.isPretendNoBackground;
 	    }

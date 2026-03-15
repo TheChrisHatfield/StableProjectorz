@@ -167,6 +167,7 @@ namespace spz {
 	    }
 
 	    public void Load(StableProjectorz_SL spz){
+	        if (spz.gen3D_WorkflowOptionsRibbon == null) return;
 	        _rembg_backgroundThresh.SetSliderValue(spz.gen3D_WorkflowOptionsRibbon.rembg_backgroundThresh, true);
 	        _rembg_foregroundThresh.SetSliderValue(spz.gen3D_WorkflowOptionsRibbon.rembg_foregroundThresh, true);
 	    }

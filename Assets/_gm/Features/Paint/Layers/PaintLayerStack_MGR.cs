@@ -94,7 +94,7 @@ namespace spz {
 			AddLayer("Layer 1");
 		}
 
-		/// <summary>Add a new layer. New layer is active and empty; layer panel UI is add/delete only (no visibility/opacity/active toggles). </summary>
+		/// <summary>Add a new layer. New layer is set active. Scene/data injection runs via OnLayerAdded (e.g. Inpaint_MaskPainter).</summary>
 		public PaintLayer AddLayer(string name = null)
 		{
 			int count = _layers.Count;
@@ -114,6 +114,17 @@ namespace spz {
 			OnActiveLayerChanged?.Invoke();
 			OnLayerAdded?.Invoke(layer);
 			return layer;
+		}
+
+		/// <summary>Ensure a single layer has Content when stack resolution is set (e.g. new layer added before first paint). Does not touch other layers.</summary>
+		public void EnsureContentForLayerIfNeeded(PaintLayer layer)
+		{
+			if (layer == null || layer.Content != null) return;
+			if (_resolution.x <= 0 || _udimsCount <= 0) return;
+			var udims = UDIMs_Helper._allKnownUdims;
+			if (udims == null || udims.Count != _udimsCount) return;
+			layer.EnsureContent(udims, _resolution, GenData_Masks.colorBrushFormat, GenData_Masks.colorBrushFilter);
+			UnityEngine.Debug.Log($"[PaintLayerStack] EnsureContentForLayerIfNeeded: gave Content to layer '{layer.Name}' ({_resolution.x}x{_resolution.y}x{_udimsCount}).");
 		}
 
 		/// <summary>Add a new paint layer filled with the art icon's image(s). Uses icon resolution if stack has none; otherwise scales into current resolution. </summary>

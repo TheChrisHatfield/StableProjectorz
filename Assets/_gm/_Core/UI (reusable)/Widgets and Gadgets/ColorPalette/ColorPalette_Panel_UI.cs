@@ -2,6 +2,7 @@ using TMPro;
 using System;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.InputSystem;
 
 namespace spz {
 
@@ -25,6 +26,8 @@ namespace spz {
 	    [Space(10)]
 	    [SerializeField] Image _icon; //will add the color to "recent colors" queue of UI elements.
 	    [SerializeField] Button _finalColor_button;
+	    [Tooltip("Optional. If set, clicking it commits the current color and closes the picker. If null, a Commit button is created at runtime.")]
+	    [SerializeField] Button _commitButton;
 
 	    bool _init = false;
 	    public bool _isShowing => gameObject.activeSelf;
@@ -117,6 +120,13 @@ namespace spz {
 	        gameObject.SetActive(false);
 	    }
 
+	    /// <summary> Applies the current color (invokes callback) and closes the picker. Used by Commit button and Enter key. </summary>
+	    public void CommitAndClose(){
+	        if(!_isShowing){ return; }
+	        _OnColorChanged?.Invoke(Get_CurrentColor());
+	        Hide();
+	    }
+
 
 
 	    void Start(){
@@ -139,6 +149,42 @@ namespace spz {
 	        _init = true;
 
 	        _hexColor_inputText.onEndEdit.AddListener(OnHexColorInput_EndedEdit);
+
+	        EnsureCommitButton();
+	        if(_commitButton != null)
+	            _commitButton.onClick.AddListener(CommitAndClose);
+	    }
+
+	    void EnsureCommitButton(){
+	        if(_commitButton != null) return;
+	        var rt = transform as RectTransform;
+	        if(rt == null) return;
+	        var commitGo = new GameObject("CommitButton");
+	        commitGo.transform.SetParent(transform, false);
+	        var commitRect = commitGo.AddComponent<RectTransform>();
+	        commitRect.anchorMin = new Vector2(0.5f, 0f);
+	        commitRect.anchorMax = new Vector2(0.5f, 0f);
+	        commitRect.pivot = new Vector2(0.5f, 0f);
+	        commitRect.anchoredPosition = new Vector2(0f, 8f);
+	        commitRect.sizeDelta = new Vector2(100f, 28f);
+	        var img = commitGo.AddComponent<Image>();
+	        img.color = new Color(0.2f, 0.45f, 0.3f, 1f);
+	        img.raycastTarget = true;
+	        _commitButton = commitGo.AddComponent<Button>();
+	        _commitButton.targetGraphic = img;
+	        var txtGo = new GameObject("Text");
+	        txtGo.transform.SetParent(commitGo.transform, false);
+	        var txtRect = txtGo.AddComponent<RectTransform>();
+	        txtRect.anchorMin = Vector2.zero;
+	        txtRect.anchorMax = Vector2.one;
+	        txtRect.offsetMin = Vector2.zero;
+	        txtRect.offsetMax = Vector2.zero;
+	        var txt = txtGo.AddComponent<TextMeshProUGUI>();
+	        txt.text = "Commit";
+	        txt.fontSize = 14;
+	        txt.color = Color.white;
+	        txt.alignment = TextAlignmentOptions.Center;
+	        txt.raycastTarget = false;
 	    }
 
 
@@ -184,6 +230,13 @@ namespace spz {
 
 	    void Update(){
 	        if(!_isShowing){return; }
+
+	        // Enter key: commit current color and close picker
+	        if(Keyboard.current != null && Keyboard.current.enterKey.wasPressedThisFrame)
+	        {
+	            CommitAndClose();
+	            return;
+	        }
 
 	        DetectPress();
 	        if(!_currPress){ return; }

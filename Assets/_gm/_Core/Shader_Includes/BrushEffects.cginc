@@ -9,28 +9,30 @@ struct SegmentResult {
 
 
 //  Returns point on segment and also interpolated size and strength
-// (from two values at the ends of the segment).
+// (from two values at the ends of the segment). Handles degenerate segment (A==B) as single point.
 SegmentResult nearestPointOnSegment(float2 fromPoint, float2 segmentPointA, float2 segmentPointB, 
                                     float2 sizeA, float2 sizeB, float strengthA, float strengthB, float aspect){
-    // Normalize points based on aspect ratio
     float2 normSegmentPointA = float2(segmentPointA.x * aspect, segmentPointA.y);
     float2 normSegmentPointB = float2(segmentPointB.x * aspect, segmentPointB.y);
     float2 normP = float2(fromPoint.x*aspect, fromPoint.y);
 
     float2 ab = normSegmentPointB - normSegmentPointA;
     float2 ap = normP - normSegmentPointA;
+    float ab2 = dot(ab, ab);
 
-    // Compute the projection scalar, and then clamp it between 0 and 1
-    float t = dot(ap, ab) / dot(ab, ab);
-    t = saturate(t);
-
-    // Calculate the nearest point and revert to original aspect
     SegmentResult result;
+    if (ab2 < 1e-8) {
+        result.nearestPoint = segmentPointA;
+        result.interpolatedSize = sizeA;
+        result.interpolatedStrength = strengthA;
+        return result;
+    }
+    float t = dot(ap, ab) / ab2;
+    t = saturate(t);
     float2 normNearestPoint = normSegmentPointA + t * ab;
     result.nearestPoint = float2(normNearestPoint.x / aspect, normNearestPoint.y);
     result.interpolatedSize = lerp(sizeA, sizeB, t);
     result.interpolatedStrength = lerp(strengthA, strengthB, t);
-
     return result;
 }
 
@@ -62,10 +64,12 @@ struct PaintInBrushStroke_Input{
     float currentBrushPath01; 
     
     // we'll diminish brushing for surfaces that face away from the camera.
-    // Helpful to prevent accidentally painting sides of the mesh, leaving ugly stretches.
-    // To use this correctly, your mesh needs to have 180-degree auto-smoothed normals.
-    // Set to 1 if not used.
     float normalDotView;
+
+    // Brush angle in radians (0 = no rotation). For directional alphas.
+    float brushAngleRad;
+    // Brush roundness 0-1 (1 = circle). For elliptical tips.
+    float brushRoundness01;
 };
 
 
@@ -75,11 +79,34 @@ float invLerp(float a, float b, float x){
     return (x-a)/(b-a);
 }
 
+// Rotate 2D vector by angle (radians).
+float2 rotate2d(float2 v, float rad){
+    float c = cos(rad), s = sin(rad);
+    return float2(v.x*c - v.y*s, v.x*s + v.y*c);
+}
 
-//Helps to draw a continuous line between previous position and new position.
-//Otherwise we would be placing dots if brush moves too quickly.
+// Compute brush stamp UV from fragment position, center, size, with angle and roundness. Returns UV in [0,1].
+float2 brushStampUV(float2 fragUV, float2 center, float2 size, float aspect, float angleRad, float roundness01){
+    float2 d = fragUV - center;
+    d = rotate2d(d, -angleRad);
+    size.x /= aspect;
+    float ry = max(0.01, roundness01);
+    size.y = size.x * ry;
+    float2 uv = (d + 0.5*size) / size;
+    return clamp(uv, 0.0, 1.0);
+}
+
+// Single-stamp sample with angle/roundness and strength curve.
+float sampleBrushStamp(PaintInBrushStroke_Input i, float2 uv, float strength){
+    float brushStamp = tex2D(i.BrushStamp, uv).r;
+    brushStamp = 1.0 - pow(1.0 - brushStamp, 1.0 + i.brushStampStronger);
+    brushStamp = saturate(brushStamp);
+    float normDotView = saturate(invLerp(0.2, 0.5, i.normalDotView));
+    return brushStamp * strength * normDotView;
+}
+
+// Continuous segment (worm) between prev and new position. Uses angle and roundness for stamp shape.
 float PaintInBrushStroke(PaintInBrushStroke_Input i){
-	// Calculate the brush texture coordinate
     float2 brushPrevPos =  i.PrevNewBrushScreenCoord.xy;
     float2 brushNewPos =   i.PrevNewBrushScreenCoord.zw;
     float2 brushPrevSize = i.BrushSizes_andFirstFrameFlag.xx; 
@@ -93,38 +120,41 @@ float PaintInBrushStroke(PaintInBrushStroke_Input i){
     float2 brushNearSize = segResult.interpolatedSize;
     float brushNearStrength = segResult.interpolatedStrength;
 
-    brushNearSize.x /= i.screenAspectRatio;
-    fixed2 brushUV_curr =  (i.fragScreenSpaceUV - brushNearPos);
-           brushUV_curr =  (brushUV_curr + 0.5f*brushNearSize) / brushNearSize;
-           brushUV_curr =  clamp(brushUV_curr, 0.0f, 1.0f);
-                 
-    float brushStamp = tex2D(i.BrushStamp, brushUV_curr).r; // Sample the brush texture
-    brushStamp = 1-pow(1-brushStamp, 1+i.brushStampStronger);
-    brushStamp = saturate(brushStamp);
-    
-    //fade out the brush stroke the more the surface is turned away from the camera, based on dot product:
-    float normDotView = saturate(invLerp(0.2, 0.5, i.normalDotView));
+    float angleRad = i.brushAngleRad;
+    float roundness01 = i.brushRoundness01 > 0.0 ? i.brushRoundness01 : 1.0;
+    float2 brushUV_curr = brushStampUV(i.fragScreenSpaceUV, brushNearPos, brushNearSize, i.screenAspectRatio, angleRad, roundness01);
+    float wanted = sampleBrushStamp(i, brushUV_curr, brushNearStrength);
+    return max(wanted, i.currentBrushPath01);
+}
 
-    float wanted  = brushStamp * brushNearStrength * normDotView;
-    float final   = max(wanted, i.currentBrushPath01);
-    return final;//range is [0,1]
+// Splotch mode: discrete stamps along the path. stampPosSizeStr[k] = (pos.x, pos.y, size, strength). stampCount 0 = use segment.
+float PaintInBrushStroke_Splotches(PaintInBrushStroke_Input i, float4 stampPosSizeStr[64], int stampCount){
+    if (stampCount <= 0)
+        return PaintInBrushStroke(i);
+    float angleRad = i.brushAngleRad;
+    float roundness01 = i.brushRoundness01 > 0.0 ? i.brushRoundness01 : 1.0;
+    float accum = i.currentBrushPath01;
+    for (int k = 0; k < stampCount; k++){
+        float2 center = stampPosSizeStr[k].xy;
+        float size = stampPosSizeStr[k].z;
+        float strength = stampPosSizeStr[k].w;
+        float2 size2 = float2(size, size);
+        float2 uv = brushStampUV(i.fragScreenSpaceUV, center, size2, i.screenAspectRatio, angleRad, roundness01);
+        float w = sampleBrushStamp(i, uv, strength);
+        accum = max(accum, w);
+    }
+    return accum;
 }
 
 
-//0 everywhere on screen except inside the brush stamp
+// Cursor mask at current brush position (with angle/roundness).
 float Mask_by_CurrBrushCursor(PaintInBrushStroke_Input i){
-    // Calculate the brush texture coordinate
-    float2 brushPrevPos =  i.PrevNewBrushScreenCoord.xy;
-    float2 brushNewPos =   i.PrevNewBrushScreenCoord.zw;
-    float2 brushPrevSize = i.BrushSizes_andFirstFrameFlag.xx; 
-    float2 brushNewSize =  i.BrushSizes_andFirstFrameFlag.yy;
-
-     brushNewSize.x /= i.screenAspectRatio;
-    fixed2 brushUV_curr =  (i.fragScreenSpaceUV - brushNewPos);
-           brushUV_curr =  (brushUV_curr + 0.5f*brushNewSize) / brushNewSize;
-           brushUV_curr =  clamp(brushUV_curr, 0.0f, 1.0f);
-                 
-    return tex2D(i.BrushStamp, brushUV_curr).r; // Sample the brush texture
+    float2 brushNewPos = i.PrevNewBrushScreenCoord.zw;
+    float2 brushNewSize = i.BrushSizes_andFirstFrameFlag.yy;
+    float angleRad = i.brushAngleRad;
+    float roundness01 = i.brushRoundness01 > 0.0 ? i.brushRoundness01 : 1.0;
+    float2 brushUV_curr = brushStampUV(i.fragScreenSpaceUV, brushNewPos, brushNewSize, i.screenAspectRatio, angleRad, roundness01);
+    return tex2D(i.BrushStamp, brushUV_curr).r;
 }
 
 #endif

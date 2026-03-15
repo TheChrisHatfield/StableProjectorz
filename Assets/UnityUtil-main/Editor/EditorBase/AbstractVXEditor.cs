@@ -3,7 +3,7 @@ using UnityEditor;
 
 namespace Voxell.Inspector
 {
-  public abstract class AbstractVXEditor : Editor
+  public abstract class AbstractVXEditor : UnityEditor.Editor
   {
     public abstract void OnEnable();
 

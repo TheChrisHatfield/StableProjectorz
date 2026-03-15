@@ -15,31 +15,64 @@ using Lavender.Systems;
 
 namespace spz {
 
-	/// <summary>Kill any process listening on the given port (Windows). Avoids [Errno 10048] when starting FastAPI on 5557.</summary>
+	/// <summary>Kill any process listening on the given port (Windows). Avoids [Errno 10048] when starting FastAPI on 5557. Never kills Unity.exe or Unity Hub.</summary>
 	internal static class AddonPortHelper
 	{
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
-		/// <summary>Finds PIDs listening on the port via netstat -ano, then taskkill /PID x /F. Uses StartExternalProcess so it works in IL2CPP build.</summary>
+		/// <summary>Returns true if the process for this PID is one we must never kill: Unity.exe, Unity Hub.exe, or StableProjectorz.exe (our own game).
+		/// Returns true on ANY failure (fail-safe: when in doubt, don't kill).</summary>
+		static bool IsProcessUnityOrHub(uint processId)
+		{
+			string tempFile = Path.Combine(Path.GetTempPath(), "spz_tasklist_" + processId + "_" + Guid.NewGuid().ToString("N") + ".txt");
+			string workDir = Path.GetTempPath();
+			try
+			{
+				string cmd = "tasklist /FI \"PID eq " + processId + "\" > \"" + tempFile + "\"";
+				uint cmdPid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(cmd, isJustFile: false, workDir, keepWindow: false, hidden: true, attachToConsole: false);
+				if (cmdPid == 0) return true;
+				StartExternalProcess.WaitForProcessExit(cmdPid, 1500);
+				if (!File.Exists(tempFile)) return true;
+				string output = File.ReadAllText(tempFile);
+				if (output.IndexOf("Unity.exe", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+				if (output.IndexOf("Unity Hub.exe", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+				if (output.IndexOf("StableProjectorz.exe", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+				return false;
+			}
+			catch { return true; }
+			finally { try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { } }
+		}
+
+		/// <summary>Finds PIDs listening on the port via netstat -ano, then taskkill /PID x /F. Never kills Unity.exe or Unity Hub. Uses StartExternalProcess so it works in IL2CPP build.</summary>
 		public static void TryKillProcessesOnPort(int port)
 		{
+			// Port 5555 is the Unity/addon socket; never free it from here (Editor may be using it; we never kill Unity).
+			if (port == 5555) return;
 			string tempFile = Path.Combine(Path.GetTempPath(), "spz_netstat_" + port + "_" + Guid.NewGuid().ToString("N") + ".txt");
 			string workDir = Path.GetTempPath();
 			try
 			{
-				string cmd = "netstat -ano | find \"" + port + "\" > \"" + tempFile + "\"";
+				// Use colon prefix ":{port}" so we match the port in the address column (e.g. "127.0.0.1:5557")
+				// and never false-positive on PIDs that happen to contain the port number as a substring.
+				string cmd = "netstat -ano | find \":" + port + "\" > \"" + tempFile + "\"";
 				uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(cmd, isJustFile: false, workDir, keepWindow: false, hidden: true, attachToConsole: false);
 				if (pid == 0) return;
 				StartExternalProcess.WaitForProcessExit(pid, 2000);
 				if (!File.Exists(tempFile)) return;
 				string output = File.ReadAllText(tempFile);
-				// netstat -ano line e.g. "  TCP    127.0.0.1:5557    0.0.0.0:0    LISTENING    12345" -> last column is PID
+				// netstat -ano line e.g. "  TCP    127.0.0.1:5557    0.0.0.0:0    LISTENING    12345"
+				// parts[1] = local address (e.g. "127.0.0.1:5557"), parts[last] = PID
+				string portSuffix = ":" + port;
 				var pids = new HashSet<uint>();
 				foreach (string line in output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
 				{
 					string trimmed = line.Trim();
 					if (string.IsNullOrEmpty(trimmed) || !trimmed.Contains("LISTENING")) continue;
 					string[] parts = trimmed.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
-					if (parts.Length >= 1 && uint.TryParse(parts[parts.Length - 1], out uint p))
+					if (parts.Length < 4) continue;
+					// Verify the local address column actually ends with the exact port
+					// (prevents matching port 55570 when looking for 5557)
+					if (!parts[1].EndsWith(portSuffix)) continue;
+					if (uint.TryParse(parts[parts.Length - 1], out uint p))
 						pids.Add(p);
 				}
 				uint currentPid = StartExternalProcess.GetCurrentPid();
@@ -48,6 +81,12 @@ namespace spz {
 					if (p == currentPid)
 					{
 						UnityEngine.Debug.Log($"[Addon_MGR] Skipping current process PID {p} (Unity/game window); not killing self.");
+						continue;
+					}
+					// Never kill Unity Editor or Unity Hub, regardless of port (safeguard against any matching bug)
+					if (IsProcessUnityOrHub(p))
+					{
+						UnityEngine.Debug.Log($"[Addon_MGR] Skipping PID {p} (Unity/Unity Hub); will not kill Editor.");
 						continue;
 					}
 					string killCmd = "taskkill /PID " + p + " /F";
@@ -114,6 +153,14 @@ namespace spz {
 				var go = new GameObject("Addon_SocketServer_Runtime");
 				go.AddComponent<Addon_SocketServer>();
 				UnityEngine.Debug.Log("[Addon_MGR] Addon_SocketServer was missing in scene; created at runtime so listener can bind.");
+			}
+			if (AddonUI_MGR.instance == null) {
+				var uiMgr = FindObjectOfType<AddonUI_MGR>(true);
+				if (uiMgr == null) {
+					var go = new GameObject("AddonUI_MGR_Runtime");
+					go.AddComponent<AddonUI_MGR>();
+					UnityEngine.Debug.Log("[Addon_MGR] AddonUI_MGR was missing in scene; created at runtime so addon panels can be built.");
+				}
 			}
 			if (GetComponent<AddonDebugCapture>() == null)
 				gameObject.AddComponent<AddonDebugCapture>();
@@ -307,12 +354,6 @@ namespace spz {
 		void StartPythonServer() {
 			if (_isServerRunning) return;
 
-#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
-			// Free port so FastAPI can bind: [Errno 10048] = "only one usage of each socket address is normally permitted"
-			if (_enableHttpServer)
-				AddonPortHelper.TryKillProcessesOnPort(_httpServerPort);
-#endif
-
 			string serverScriptPath = null;
 			try {
 				serverScriptPath = Path.Combine(Application.streamingAssetsPath, "AddonSystem", _pythonServerScript);
@@ -346,7 +387,9 @@ namespace spz {
 				string workDir = Path.GetDirectoryName(serverScriptPath);
 				string batPath = Path.Combine(workDir, "StartAddonServer.bat");
 				string httpArg = _enableHttpServer ? $"--http-port {_httpServerPort}" : "--no-http";
-				string batContent = "@echo off\r\ncd /d \"" + workDir + "\"\r\n\"" + pythonExe.Replace("\"", "\"\"") + "\" \"" + serverScriptPath.Replace("\"", "\"\"") + "\" --port " + _serverPort + " --addons-dir \"" + addonsPath.Replace("\"", "\"\"") + "\" " + httpArg + "\r\n";
+				// Tell Python whether we bound 5555: if not (Editor has it), Python must NOT kill anything on 5557 or it may kill the Editor.
+				string socketBound = (Addon_SocketServer.instance != null && Addon_SocketServer.instance.IsListening) ? "1" : "0";
+				string batContent = "@echo off\r\ncd /d \"" + workDir + "\"\r\nset SPZ_SOCKET_BOUND=" + socketBound + "\r\n\"" + pythonExe.Replace("\"", "\"\"") + "\" \"" + serverScriptPath.Replace("\"", "\"\"") + "\" --port " + _serverPort + " --addons-dir \"" + addonsPath.Replace("\"", "\"\"") + "\" " + httpArg + "\r\n";
 				File.WriteAllText(batPath, batContent);
 				UnityEngine.Debug.Log("[Addon_MGR] Addon server console will open; any Python errors (e.g. missing uvicorn/fastapi) appear there.");
 				uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(batPath, isJustFile: true, workDir, keepWindow: true, hidden: false, attachToConsole: false);
@@ -435,13 +478,25 @@ namespace spz {
 		
 		/// <summary>Polls GET /ready until Python has connected to Unity (socket 5555), so create_panel works when we POST /load_addon. Same pattern as SD: Unity is HTTP client, confirms connection by getting a successful response.</summary>
 		IEnumerator WaitForAddonServerReady(int maxAttempts = 60, float interval = 0.5f) {
+			if (!_isServerRunning) {
+				UnityEngine.Debug.LogWarning("[Addon_MGR] Python server not running; attempting to start it now...");
+				StartPythonServer();
+				if (!_isServerRunning) {
+					UnityEngine.Debug.LogError("[Addon_MGR] Could not start Python server. Check python is installed and on PATH. Addon load aborted.");
+					yield break;
+				}
+				yield return new WaitForSeconds(2f);
+			}
+
 			string readyUrl = $"http://127.0.0.1:{_httpServerPort}/ready";
 			bool loggedHttpReachable = false;
+			int consecutiveConnectionErrors = 0;
 			for (int i = 0; i < maxAttempts; i++) {
 				using (var req = new UnityWebRequest(readyUrl)) {
 					req.downloadHandler = new DownloadHandlerBuffer();
 					yield return req.SendWebRequest();
 					if (req.result == UnityWebRequest.Result.Success) {
+						consecutiveConnectionErrors = 0;
 						if (!loggedHttpReachable) {
 							loggedHttpReachable = true;
 							UnityEngine.Debug.Log($"[Addon_MGR] Addon HTTP server (FastAPI) responding on port {_httpServerPort} (Unity connected to FastAPI, same role as Unity→SD).");
@@ -453,6 +508,11 @@ namespace spz {
 								yield break;
 							}
 						} catch { }
+					} else {
+						consecutiveConnectionErrors++;
+						if (consecutiveConnectionErrors >= 10 && !loggedHttpReachable) {
+							UnityEngine.Debug.LogWarning($"[Addon_MGR] Cannot reach Python HTTP server after {consecutiveConnectionErrors} attempts. Is Python running? Error: {req.error}");
+						}
 					}
 				}
 				yield return new WaitForSeconds(interval);

@@ -133,10 +133,11 @@ namespace spz {
 	        => set_avoid_NSFW_generations(PlayerPrefs.GetInt("_avoid_NSFW_generations", 1) == 1);
 
 	    // Stable Diffusion GPU: -1 = default (auto), 0/1/2... = use that CUDA device (sets CUDA_VISIBLE_DEVICES when launching WebUI).
+	    const int SD_GPU_ID_MAX = 31; // reasonable upper bound for GPU index
 	    int _sdGpuDeviceId = -1;
 	    public int get_sdGpuDeviceId() => _sdGpuDeviceId;
 	    void set_sdGpuDeviceId(int id) {
-	        _sdGpuDeviceId = id < 0 ? -1 : id;
+	        _sdGpuDeviceId = id < 0 ? -1 : Mathf.Clamp(id, 0, SD_GPU_ID_MAX);
 	        PlayerPrefs.SetInt("SD_GPU_DeviceId", _sdGpuDeviceId); PlayerPrefs.Save();
 	        var inputField = EventsBinder.FindComponent<IntegerInputField>("Settings:set_sdGpuDeviceId");
 	        if (inputField != null) inputField.SetValueWithoutNotify(_sdGpuDeviceId.ToString());
@@ -533,7 +534,6 @@ namespace spz {
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_useCtrlScroll_for_WorkflowMode_swaps", set_useCtrlScroll_for_WorkflowMode_swaps);
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_ignoreCtrl_if_clickSelectingMeshes", set_ignoreCtrl_if_clickSelectingMeshes);
 	        StaticEvents.SubscribeUnique<int>("Settings:set_sdGpuDeviceId", set_sdGpuDeviceId);
-
 	        tryLoad_useVSync();
 	        tryLoad_targetFrameRate();
 	        tryLoad_brushPrecision_res();

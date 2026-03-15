@@ -40,41 +40,44 @@ class SPZClient:
                 raise ConnectionError(f"Failed to connect to StableProjectorz: {e}")
     
     def _send_request(self, method, params=None):
-        """Send a JSON-RPC request and return the response"""
-        self._connect()
-        
-        request = {
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params or {},
-            "id": self._get_next_id()
-        }
-        
-        request_json = json.dumps(request) + "\n"
-        
-        try:
-            self.socket.sendall(request_json.encode('utf-8'))
+        """Send a JSON-RPC request and return the response (thread-safe)."""
+        with self._lock:
+            self._connect()
             
-            # Receive response
-            response_data = b""
-            while True:
-                chunk = self.socket.recv(4096)
-                if not chunk:
-                    break
-                response_data += chunk
-                if b"\n" in response_data:
-                    break
+            self._request_id += 1
+            req_id = self._request_id
             
-            response_str = response_data.decode('utf-8').strip()
-            response = json.loads(response_str)
+            request = {
+                "jsonrpc": "2.0",
+                "method": method,
+                "params": params or {},
+                "id": req_id
+            }
             
-            if "error" in response:
-                raise RuntimeError(f"Server error: {response['error'].get('message', 'Unknown error')}")
+            request_json = json.dumps(request) + "\n"
             
-            return response.get("result", {})
-        except Exception as e:
-            self.socket = None  # Reset connection on error
-            raise
+            try:
+                self.socket.sendall(request_json.encode('utf-8'))
+                
+                response_data = b""
+                while True:
+                    chunk = self.socket.recv(4096)
+                    if not chunk:
+                        break
+                    response_data += chunk
+                    if b"\n" in response_data:
+                        break
+                
+                response_str = response_data.decode('utf-8').strip()
+                response = json.loads(response_str)
+                
+                if "error" in response:
+                    raise RuntimeError(f"Server error: {response['error'].get('message', 'Unknown error')}")
+                
+                return response.get("result", {})
+            except Exception as e:
+                self.socket = None
+                raise
     
     def close(self):
         """Close the connection"""

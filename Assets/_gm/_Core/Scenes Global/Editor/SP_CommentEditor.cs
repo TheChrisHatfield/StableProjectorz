@@ -4,7 +4,7 @@ using UnityEditor;
 namespace spz {
 
 	[CustomEditor(typeof(SP_Comment))]
-	public class SP_CommentEditor : Editor{
+	public class SP_CommentEditor : UnityEditor.Editor{
 	    public override void OnInspectorGUI(){
 	        SP_Comment comment = (SP_Comment)target;
 

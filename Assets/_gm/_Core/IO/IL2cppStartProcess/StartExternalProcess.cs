@@ -128,7 +128,9 @@ namespace Lavender.Systems
 	        if (isJustFile){
 	            var extension = Path.GetExtension(filepath_or_command).ToLowerInvariant();
 	            if (extension == ".lnk"){
-	                arguments = $"/C start \"\" \"{filepath_or_command}\"";
+	                // keepWindow: use /K so the CMD window stays open; user sees it and "start" opens the .lnk in another window
+	                string prefix = keepWindow ? "/K " : "/C ";
+	                arguments = $"{prefix}start \"\" \"{filepath_or_command}\"";
 	            } else if (extension == ".bat" || extension == ".cmd"){
 	                // CreateProcessW cannot run .bat/.cmd directly; must run via cmd.exe
 	                string prefix = keepWindow ? "/K " : "/C ";

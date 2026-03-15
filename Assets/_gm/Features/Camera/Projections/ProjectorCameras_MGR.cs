@@ -102,7 +102,8 @@ namespace spz {
 	    }
 
 	    public void Load( StableProjectorz_SL spz ){
-        
+	        if (spz.projectorCameras == null || spz.projectorCameras.projCameras == null) return;
+
 	        _projCameras.ForEach(pc=>DestroyImmediate(pc));
 	        _projCameras.Clear();
 
