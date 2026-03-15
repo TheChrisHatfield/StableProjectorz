@@ -40,6 +40,9 @@ build_*.txt
 # Cursor IDE (rules, settings — local only)
 .cursor/
 
+# Dev-only docs (audits, design notes, phase summaries — not needed to build or for user instruction)
+/continual-learning/
+
 # Visual Studio cache directory
 .vs/
 
