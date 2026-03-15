@@ -80,6 +80,18 @@ Managed by `Gen3D_MGR`.
 3.  **Generates:** Submits a request to the Webui, with the inputs as JSON.
 4.  **Import:** waits for resulting GLB mesh and feeds it to `ModelsHandler_3D`.
 
+## 🖌️ 7. Paint Tab
+
+The **Paint tab** lets you paint on your model’s UV layout (masks for inpainting, details, or vertex colors). The UI uses a **Krita-style** layout: **Layers**, **Brush** (size, hardness, custom shapes), **Color** / palettes, and **Brush Presets**.
+
+**Quick usage:**
+*   **Open:** Click the **Paint** tab in the main UI.
+*   **Layers:** The bottom layer holds the scene; **+ Layer** adds a new layer and sets it active. **Click a layer row** to make it active (blue highlight). Use the eye icon to show/hide, and the red button to delete.
+*   **Brush:** Set size and hardness (soft/medium/hard round), or pick a **custom brush shape** from the alpha picker (see [Custom Brush Alphas](Assets/_gm/Features/Paint/BrushAlphas_README.md)).
+*   **Color:** Choose a color; load palettes from **ACO**, **ASE**, or **GPL** files via **Load palette…** or by placing files in the `StableProjectorz/Palettes` folder (under your app data path).
+
+**Full guide:** [**How to Use the Paint Tab**](Assets/_gm/Features/Paint/PAINT_TAB_USER_GUIDE.md) — layers, brush, color, palettes, and tips.
+
 ## 🖱️ 8. Input System
 *   **`KeyMousePenInput`:** Static helper class.
 *   **Abstraction:** Unifies Mouse clicks and Tablet Pen pressure into a single API.
@@ -129,7 +141,6 @@ The add-on system provides programmatic access to:
 *   **[User Guide](Assets/_gm/Features/AddonSystem/USER_GUIDE.md)** - Complete guide with examples and troubleshooting
 *   **[Quick Reference](Assets/_gm/Features/AddonSystem/QUICK_REFERENCE.md)** - Cheat sheet for common commands
 *   **[REST API Documentation](Assets/_gm/Features/AddonSystem/REST_API_DOCUMENTATION.md)** - Complete HTTP API reference
-*   **[Documentation Index](Assets/_gm/Features/AddonSystem/DOCUMENTATION_INDEX.md)** - Find the right docs for your needs
 
 ### 💡 Quick Examples
 
