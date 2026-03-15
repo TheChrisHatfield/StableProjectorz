@@ -152,6 +152,7 @@ namespace spz {
 	        }
 	    }
 
+	    /// <summary>Linear 0–1 depth at the cursor (0 = camera, 1 = far). Must match shader's Linear01Depth() for depth-limit falloff.</summary>
 	    float SampleDepthAtCursor(Vector2 viewportPos01)
 	    {
 	        Camera cam = UserCameras_MGR.instance?._curr_viewCamera?.myCamera;
@@ -159,10 +160,10 @@ namespace spz {
 	        Ray ray = cam.ViewportPointToRay(new Vector3(viewportPos01.x, viewportPos01.y, 0));
 	        if (Physics.Raycast(ray, out RaycastHit hit, cam.farClipPlane))
 	        {
-	            // WorldToViewportPoint.z gives eye-space depth along forward axis,
-	            // matching Linear01Depth() used in the shader.
-	            float eyeDepth = cam.WorldToViewportPoint(hit.point).z;
-	            return eyeDepth / cam.farClipPlane;
+	            // Unity: WorldToViewportPoint().z is "world units from the camera" = linear distance.
+	            // Divide by farClipPlane to get linear 0–1 depth matching shader Linear01Depth().
+	            float distFromCam = cam.WorldToViewportPoint(hit.point).z;
+	            return Mathf.Clamp01(distFromCam / cam.farClipPlane);
 	        }
 	        return 0f;
 	    }
