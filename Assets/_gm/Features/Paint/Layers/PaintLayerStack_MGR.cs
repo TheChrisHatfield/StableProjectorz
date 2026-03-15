@@ -7,9 +7,9 @@ using UnityEngine.Experimental.Rendering;
 namespace spz {
 
 	/// <summary>
-	/// Layer stack: each layer is a container (scene injected into it + strokes). Display shows the active layer's Content only (no "scene base + layers on top").
-	/// Only the active layer receives new paint. Ordering: index 0 = bottom, last index = top.
-	/// Layer panel UI is add/delete only; visibility/opacity exist in data for save/load but are not exposed in the minimal UI.
+	/// Layer stack: each layer is a container (scene + strokes). Display uses composite of all visible layers (never "active layer only" — that would override and hide others).
+	/// Only the active layer receives new paint. When a new layer is added, we inject the composite of (scene + all layers below) into that layer so its data is in the layer instead of an empty override.
+	/// Ordering: index 0 = bottom, last index = top.
 	/// </summary>
 	public class PaintLayerStack_MGR : MonoBehaviour
 	{
@@ -94,7 +94,7 @@ namespace spz {
 			AddLayer("Layer 1");
 		}
 
-		/// <summary>Add a new layer. New layer is set active. Scene/data injection runs via OnLayerAdded (e.g. Inpaint_MaskPainter).</summary>
+		/// <summary>Add a new layer. New layer is set active. Existing layers (including layer 0) are unchanged and remain visible. Scene/data injection runs via OnLayerAdded (e.g. Inpaint_MaskPainter).</summary>
 		public PaintLayer AddLayer(string name = null)
 		{
 			int count = _layers.Count;
@@ -223,7 +223,34 @@ namespace spz {
 			OnLayersChanged?.Invoke();
 		}
 
-		/// <summary>Composite all visible layers over a base. Used only for legacy paths; display now uses active layer Content only (container = scene + strokes).</summary>
+		/// <summary>Build composite of base + layers [0..layerIndexExclusive-1] into dest. Use to inject into a new layer so it starts with scene + everything below (no empty override).</summary>
+		public void CompositeBelowInto(RenderUdims baseLayer, RenderUdims dest, int layerIndexExclusive)
+		{
+			if (dest == null || baseLayer == null) return;
+			if (_compositeBlendMat == null) { Graphics.Blit(baseLayer.texArray, dest.texArray); return; }
+			RenderUdims.assertSameSize(dest, baseLayer);
+			RenderUdims a = GetOrCreateCompositeTemp(ref _compositeTempA);
+			RenderUdims b = GetOrCreateCompositeTemp(ref _compositeTempB);
+			if (a == null || b == null)
+			{
+				Graphics.Blit(baseLayer.texArray, dest.texArray);
+				return;
+			}
+			Graphics.Blit(baseLayer.texArray, a.texArray);
+			for (int i = 0; i < layerIndexExclusive && i < _layers.Count; i++)
+			{
+				var l = _layers[i];
+				if (!l.Visible || l.Content == null) continue;
+				_compositeBlendMat.SetTexture("_Background", a.texArray);
+				_compositeBlendMat.SetFloat("_Opacity", Mathf.Clamp01(l.Opacity));
+				RenderUdims.SetNumUdims(a, _compositeBlendMat);
+				Graphics.Blit(l.Content.texArray, b.texArray, _compositeBlendMat);
+				var t = a; a = b; b = t;
+			}
+			Graphics.Blit(a.texArray, dest.texArray);
+		}
+
+		/// <summary>Composite all visible layers over a base. Uses stack resolution for temps when set; otherwise creates temps from baseLayer so display still shows all layers (fixes blank when 2+ layers).</summary>
 		public void CompositeToOnTopOfBase(RenderUdims baseLayer, RenderUdims dest)
 		{
 			if (dest == null || baseLayer == null) return;
@@ -231,7 +258,18 @@ namespace spz {
 			RenderUdims.assertSameSize(dest, baseLayer);
 			RenderUdims a = GetOrCreateCompositeTemp(ref _compositeTempA);
 			RenderUdims b = GetOrCreateCompositeTemp(ref _compositeTempB);
-			if (a == null || b == null) { Graphics.Blit(baseLayer.texArray, dest.texArray); return; }
+			if (a == null || b == null)
+			{
+				// Fallback: create temps from baseLayer so we can still composite when stack resolution/UDIMs weren't set (visibility fix for 2+ layers).
+				a = GetOrCreateCompositeTempFromBase(ref _compositeTempA, baseLayer);
+				b = GetOrCreateCompositeTempFromBase(ref _compositeTempB, baseLayer);
+			}
+			if (a == null || b == null)
+			{
+				UnityEngine.Debug.LogWarning("[PaintLayerStack] CompositeToOnTopOfBase: composite temps null (resolution not set?). Call EnsureResolution before composite so first layer stays visible. Blitting base only.");
+				Graphics.Blit(baseLayer.texArray, dest.texArray);
+				return;
+			}
 			Graphics.Blit(baseLayer.texArray, a.texArray);
 			foreach (var l in _layers)
 			{
@@ -273,6 +311,11 @@ namespace spz {
 			RenderUdims.assertSameSize(dest, first);
 			RenderUdims a = GetOrCreateCompositeTemp(ref _compositeTempA);
 			RenderUdims b = GetOrCreateCompositeTemp(ref _compositeTempB);
+			if (a == null || b == null)
+			{
+				a = GetOrCreateCompositeTempFromBase(ref _compositeTempA, first);
+				b = GetOrCreateCompositeTempFromBase(ref _compositeTempB, first);
+			}
 			if (a == null || b == null) return;
 			a.ClearTheTextures(Color.clear);
 			Graphics.Blit(first.texArray, a.texArray);
@@ -303,6 +346,17 @@ namespace spz {
 			var udims = UDIMs_Helper._allKnownUdims;
 			if (udims == null || _resolution.x <= 0) return null;
 			field = new RenderUdims(udims, _resolution, GenData_Masks.colorBrushFormat, GenData_Masks.colorBrushFilter, Color.clear, 0);
+			return field;
+		}
+
+		/// <summary>Create or reuse composite temps matching baseLayer size/udims when stack resolution isn't set. Ensures 2+ layers can still composite for display.</summary>
+		RenderUdims GetOrCreateCompositeTempFromBase(ref RenderUdims field, RenderUdims baseLayer)
+		{
+			if (baseLayer?.udims_sectors == null || baseLayer.udims_sectors.Count == 0) return null;
+			if (field != null && field.width == baseLayer.width && field.height == baseLayer.height && field.UdimsCount == baseLayer.UdimsCount)
+				return field;
+			field?.Dispose();
+			field = new RenderUdims(baseLayer.udims_sectors, baseLayer.widthHeight, GenData_Masks.colorBrushFormat, GenData_Masks.colorBrushFilter, Color.clear, 0);
 			return field;
 		}
 
