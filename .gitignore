@@ -10,7 +10,6 @@
 /[Bb]uild_IL2CPP/
 /[Ll]ogs/
 build_*.txt
-build_*.txt
 /[Uu]ser[Ss]ettings/
 /stable-fast-3d*
 /Shadow_R*
@@ -96,3 +95,16 @@ TestDownloadsIntoHere/
 # But don't ignore the directories inside InnoSetup
 !/InnoSetup/*/
 *.zip
+
+# --- Local only (keep for working, do not upload to GitHub) ---
+.DS_Store
+Thumbs.db
+*.stackdump
+*.log
+.env
+.env.local
+*.local
+*.bak
+*~
+/[Ll]ocal/
+/[Pp]layer_[Ll]ogs/

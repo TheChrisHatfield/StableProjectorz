@@ -1,0 +1,12 @@
+---
+description: Build stability: follow patterns in continual-learning; avoid build script and batch-mode failures
+alwaysApply: true
+---
+
+# Build stability
+
+Canonical learning is stored in **`continual-learning/`**:
+
+- **[continual-learning/build-stability.md](../continual-learning/build-stability.md)** — Pattern-based learning for the build pipeline (invocation surface, batch mode guards, layers of failure). When the build fails, classify by layer, apply the matching pattern, and add new instances there with a **→ Pattern:** line.
+
+Apply those patterns when changing build scripts (.bat, .ps1) or C# that could run during `-batchmode`; prefer generalizing over one-off fixes.

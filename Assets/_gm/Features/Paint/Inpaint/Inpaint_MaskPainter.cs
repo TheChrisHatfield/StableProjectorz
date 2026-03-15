@@ -427,20 +427,42 @@ namespace spz {
 	    /// directly into Content, so Data is not part of the paint path).</summary>
 	    bool TryInjectSceneIntoLayer(PaintLayer layer)
 	    {
-		    if (layer == null || _ObjectUV_brushedColorRGBA == null) return false;
+		    return TryInjectIntoLayer(layer, _ObjectUV_brushedColorRGBA);
+	    }
+
+	    /// <summary>Blit source into layer's Content if dimensions match. Sets HasReceivedSceneInject. Used for new layers so they get the same base as the previous layer or scene.</summary>
+	    bool TryInjectIntoLayer(PaintLayer layer, RenderUdims source)
+	    {
+		    if (layer == null || source == null) return false;
 		    if (layer.Content == null) return false;
-		    if (_ObjectUV_brushedColorRGBA.width != layer.Content.width || _ObjectUV_brushedColorRGBA.height != layer.Content.height || _ObjectUV_brushedColorRGBA.UdimsCount != layer.Content.UdimsCount) return false;
-		    Graphics.Blit(_ObjectUV_brushedColorRGBA.texArray, layer.Content.texArray);
+		    if (source.width != layer.Content.width || source.height != layer.Content.height || source.UdimsCount != layer.Content.UdimsCount) return false;
+		    Graphics.Blit(source.texArray, layer.Content.texArray);
 		    layer.HasReceivedSceneInject = true;
-		    UnityEngine.Debug.Log($"[Inpaint_MaskPainter] TryInject: injected static scene into layer '{layer.Name}' ({layer.Content.width}x{layer.Content.height}).");
+		    UnityEngine.Debug.Log($"[Inpaint_MaskPainter] TryInjectIntoLayer: injected into '{layer.Name}' ({layer.Content.width}x{layer.Content.height}), source={(source == _ObjectUV_brushedColorRGBA ? "scene" : "layer")}.");
 		    return true;
 	    }
 
-	    /// <summary>Ensure static scene is in the active layer (container). Injects only when the layer has not yet received scene (HasReceivedSceneInject), so user paint is never wiped. Called when active layer changes and before painting.</summary>
+	    /// <summary>Optional: source to copy into a layer (e.g. duplicate layer). Add Layer does not use this—new layers stay empty and we stream the layer below at display time (CompositeToOnTopOfBase) to save RAM.</summary>
+	    RenderUdims GetInjectionSourceForNewLayer(PaintLayerStack_MGR stack, PaintLayer newLayer)
+	    {
+		    if (stack == null || newLayer == null) return _ObjectUV_brushedColorRGBA;
+		    if (stack.Layers == null || stack.Layers.Count < 2) return _ObjectUV_brushedColorRGBA;
+		    int newIndex = -1;
+		    for (int i = 0; i < stack.Layers.Count; i++)
+			    if (stack.Layers[i] == newLayer) { newIndex = i; break; }
+		    if (newIndex <= 0) return _ObjectUV_brushedColorRGBA;
+		    var previous = stack.Layers[newIndex - 1];
+		    if (previous?.Content != null) return previous.Content;
+		    return _ObjectUV_brushedColorRGBA;
+	    }
+
+	    /// <summary>Ensure the bottom layer (index 0) has scene so it has a base. Upper layers are delta-only—we do not inject scene into them; they are streamed at display via composite to save RAM.</summary>
 	    void EnsureSceneInjectedIntoActiveLayer()
 	    {
 		    var stack = PaintLayerStack_MGR.instance;
 		    if (stack?.ActiveLayer == null || _ObjectUV_brushedColorRGBA == null) return;
+		    // Only the bottom layer gets the scene buffer; layers 2+ stay empty (stream at display).
+		    if (stack.ActiveLayerIndex != 0) return;
 		    if (stack.ActiveLayer.Content == null) return;
 		    if (stack.ActiveLayer.HasReceivedSceneInject) return;
 		    TryInjectSceneIntoLayer(stack.ActiveLayer);
@@ -451,17 +473,46 @@ namespace spz {
 		    EnsureSceneInjectedIntoActiveLayer();
 	    }
 
-	    /// <summary>When user clicks/selects a layer, ensure that layer has scene data (container = scene + strokes). No "on top" logic.</summary>
+	    /// <summary>When user clicks/selects a layer, ensure that layer has Content and (for bottom layer) scene data. Fallback: ensure Content is allocated before injecting.</summary>
 	    void OnActiveLayerChanged_EnsureContent()
 	    {
+		    var stack = PaintLayerStack_MGR.instance;
+		    if (stack?.ActiveLayer != null && stack.ActiveLayer.Content == null)
+			    stack.EnsureContentForLayerIfNeeded(stack.ActiveLayer);
 		    InjectSceneIntoActiveLayer();
 	    }
 
-	    /// <summary>When a new layer is added, inject scene data into it if dimensions match. Never calls EnsureResolution so existing layers with paint are never wiped. Layer stays empty if dimensions don't match (display falls back to scene buffer).</summary>
+	    /// <summary>When user clicks New Layer: ensure the new layer has a Content buffer (allocated, clear). We do NOT copy the layer below—display streams it by compositing at render time (saves RAM, scales better).</summary>
 	    void OnLayerAdded_InjectScene(PaintLayer newLayer)
 	    {
-	        UnityEngine.Debug.Log($"[Inpaint_MaskPainter] OnLayerAdded_InjectScene fired for '{newLayer?.Name}' – attempting injection.");
-	        TryInjectSceneIntoLayer(newLayer);
+		    if (newLayer == null) return;
+		    var stack = PaintLayerStack_MGR.instance;
+		    if (stack == null) return;
+
+		    UnityEngine.Debug.Log($"[Inpaint_MaskPainter] OnLayerAdded_InjectScene: new layer '{newLayer.Name}' (stream-by-composite, no copy). activeIdx={stack.ActiveLayerIndex}, totalLayers={stack.Layers?.Count ?? 0}.");
+
+		    // Ensure new layer has a Content buffer (empty). No data copy—layer below is streamed at display via CompositeToOnTopOfBase.
+		    stack.EnsureContentForLayerIfNeeded(newLayer);
+		    if (newLayer.Content == null)
+		    {
+			    UnityEngine.Debug.LogWarning("[Inpaint_MaskPainter] OnLayerAdded_InjectScene: new layer has no Content (resolution not set). Deferring buffer allocation.");
+			    StartCoroutine(DeferredEnsureContentForNewLayer(newLayer));
+			    return;
+		    }
+		    // New layer Content is clear; paint on this layer will write only deltas. Composite = base + layer1 + layer2 (streamed).
+		    if (Objects_Renderer_MGR.instance != null)
+			    Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	    }
+
+	    /// <summary>Retry ensuring new layer has Content next frame (edge case: resolution not set yet). Still no copy—stream at display.</summary>
+	    IEnumerator DeferredEnsureContentForNewLayer(PaintLayer newLayer)
+	    {
+		    yield return null;
+		    var stack = PaintLayerStack_MGR.instance;
+		    if (stack == null || newLayer == null) yield break;
+		    stack.EnsureContentForLayerIfNeeded(newLayer);
+		    if (newLayer.Content != null && Objects_Renderer_MGR.instance != null)
+			    Objects_Renderer_MGR.instance.ReRenderAll_soon();
 	    }
 
 	    /// <summary>Returns the display source: composite of all visible layers when 2+ layers (matches viewport), else active Content or scene fallback.</summary>
@@ -486,15 +537,15 @@ namespace spz {
 		    return _ObjectUV_brushedColorRGBA;
 	    }
 
-	    /// <summary>After InitTextures creates the scene buffer, inject scene into ALL existing layers that have matching Content. This catches Layer 1 which was auto-created in PaintLayerStack_MGR.Awake before the scene buffer existed.</summary>
+	    /// <summary>After InitTextures creates the scene buffer, inject scene only into the bottom layer (index 0). Upper layers are left empty and streamed at display time.</summary>
 	    void InjectSceneIntoAllExistingLayers()
 	    {
 		    if (_ObjectUV_brushedColorRGBA == null) { UnityEngine.Debug.Log("[Inpaint_MaskPainter] InjectSceneIntoAllExisting: sceneBuf is null, skipping."); return; }
 		    var stack = PaintLayerStack_MGR.instance;
-		    if (stack == null) { UnityEngine.Debug.Log("[Inpaint_MaskPainter] InjectSceneIntoAllExisting: stack is null, skipping."); return; }
-		    UnityEngine.Debug.Log($"[Inpaint_MaskPainter] InjectSceneIntoAllExisting: {stack.Layers.Count} layers to process.");
-		    foreach (var layer in stack.Layers)
-			    TryInjectSceneIntoLayer(layer);
+		    if (stack == null || stack.Layers == null || stack.Layers.Count == 0) return;
+		    var bottom = stack.Layers[0];
+		    UnityEngine.Debug.Log("[Inpaint_MaskPainter] InjectSceneIntoAllExisting: injecting scene into bottom layer only (stream-by-composite for rest).");
+		    TryInjectSceneIntoLayer(bottom);
 	    }
 
 

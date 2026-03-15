@@ -86,6 +86,7 @@ namespace spz {
 	            DisposeGenerationData(guid);
 	        }
 	        //now, load:
+	        if (spz.generations_MGR == null || spz.generations_MGR.guid_to_genData == null) return;
 	        foreach(var kvp in spz.generations_MGR.guid_to_genData){
 	            Guid guid = new Guid(kvp.Key);
 	            GenData2D_SL genSL = kvp.Value;

@@ -149,6 +149,7 @@ namespace spz {
 
 	    public void Load( StableProjectorz_SL spz ){
 	        MainViewWindow_ToolsRibbon_SL trSL = spz.mainViewWindow_ToolsRibbon;
+	        if (trSL == null) return;
 	        _toggleWireframe.ForceSameValueAs( trSL.isShowWireframe );
         
 	        _depthContrast_slider.SetSliderValue( trSL.depthContrast, true);

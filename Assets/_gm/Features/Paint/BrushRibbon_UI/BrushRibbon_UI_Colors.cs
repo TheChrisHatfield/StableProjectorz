@@ -50,6 +50,11 @@ namespace spz {
 
 	        if(invokeCallback){  _onBrushColorUpdated?.Invoke(wantedColor); }
 	    }
+
+	    /// <summary> Set brush color from palette swatch or external source (switches to Inpaint Color and notifies). </summary>
+	    public void SetBrushColorFromPalette(Color c){
+	        ChangeBrushColor(c, ensureInpaint:true, invokeCallback:true);
+	    }
     
 
 	    // check if it's not possible to interpret RMB 
@@ -121,6 +126,8 @@ namespace spz {
 	    }
 
 	    void OnDestroy(){
+	        BrushRibbon_UI_BucketFill._Act_onClicked -= OnBucketFill;
+	        BrushRibbon_UI_EyeDropperTool._onResult -= OnEyeDropperTool_Sampled;
 	        Update_callbacks_MGR.general_UI -= OnUpdate;
 	    }
 
@@ -130,7 +137,8 @@ namespace spz {
 	    }
 
 	    public void Load(BrushRibbon_UI_SL trSL){
-	        ChangeBrushColor(trSL.maskBrush_color);
+	        if (trSL.maskBrush_color != null)
+	            ChangeBrushColor(trSL.maskBrush_color);
 	    }
 	}
 }//end namespace

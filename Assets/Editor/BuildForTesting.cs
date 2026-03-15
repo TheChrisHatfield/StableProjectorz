@@ -11,7 +11,9 @@ using Debug = UnityEngine.Debug;
 ///
 /// WebUI Forge: After a successful build, if stable-diffusion-webui-forge is missing in project root we
 /// automatically clone it (git clone), then copy it into Build_IL2CPP so run_noQuickEdit.bat is present for auto-launch.
-/// Requires Git installed. In batch mode the entire Build_IL2CPP folder is deleted before building.
+/// Requires Git installed.
+/// Clean step: When cleaning before build, Build_IL2CPP contents are removed EXCEPT stable-diffusion-webui-forge
+/// so venv/models/user data in that folder are never overwritten or deleted. The folder is only referenced; we do not write into it during build beyond updating the launcher bat when the folder already exists.
 /// </summary>
 public static class BuildForTesting
 {
@@ -59,12 +61,12 @@ public static class BuildForTesting
 		{
 			try
 			{
-				Directory.Delete(outputDir, true);
-				Debug.Log("[BuildForTesting] Deleted " + outputDir + " (CleanBeforeBuild).");
+				DeleteBuildOutputExceptForgeFolder(outputDir);
+				Debug.Log("[BuildForTesting] Cleaned " + outputDir + " (preserved " + WebuiForgeFolderName + ").");
 			}
 			catch (System.Exception e)
 			{
-				Debug.LogWarning("[BuildForTesting] Could not delete output folder (close StableProjectorz.exe and try again): " + e.Message);
+				Debug.LogWarning("[BuildForTesting] Could not clean output folder (close StableProjectorz.exe and try again): " + e.Message);
 			}
 		}
 		if (!Directory.Exists(outputDir))
@@ -171,6 +173,32 @@ public static class BuildForTesting
 		}
 	}
 
+	/// <summary>Delete all contents of the build output directory except stable-diffusion-webui-forge so venv/models/user data are never overwritten or deleted by the build.</summary>
+	static void DeleteBuildOutputExceptForgeFolder(string outputDir)
+	{
+		if (!Directory.Exists(outputDir)) return;
+		foreach (string path in Directory.GetFileSystemEntries(outputDir))
+		{
+			string name = Path.GetFileName(path);
+			if (string.Equals(name, WebuiForgeFolderName, System.StringComparison.OrdinalIgnoreCase))
+			{
+				// Preserve this folder; do not delete or write into it during clean.
+				continue;
+			}
+			try
+			{
+				if (Directory.Exists(path))
+					Directory.Delete(path, true);
+				else
+					File.Delete(path);
+			}
+			catch (System.Exception e)
+			{
+				Debug.LogWarning("[BuildForTesting] Could not delete " + path + ": " + e.Message);
+			}
+		}
+	}
+
 	static string FindGitExe()
 	{
 		string path = System.Environment.GetEnvironmentVariable("PATH");
@@ -187,7 +215,7 @@ public static class BuildForTesting
 		return null;
 	}
 
-	/// <summary>Ensure stable-diffusion-webui-forge in build output so run_noQuickEdit.bat is present. If dest folder already exists, only copy launcher bat file(s) so venv/models/data are not overwritten.</summary>
+	/// <summary>Ensure stable-diffusion-webui-forge in build output so run_noQuickEdit.bat is present. We never overwrite or write into Build_IL2CPP/stable-diffusion-webui-forge when it already exists—only update the launcher bat so venv/models/user data are preserved. Full copy from project root only when the folder does not exist.</summary>
 	static void CopyWebuiForgeFolderIntoBuild(string projectRoot, string buildOutputDir)
 	{
 		string sourceForge = Path.Combine(projectRoot, WebuiForgeFolderName);

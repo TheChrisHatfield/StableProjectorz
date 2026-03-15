@@ -1,0 +1,37 @@
+---
+description: Keep runtime tab+panel pairs connected; avoid "panel without tab" or "tab without panel"
+globs: **/CommandRibbon*.cs,**/TabsGroup*.cs,**/Layouts/**/*.cs
+alwaysApply: false
+---
+
+# Runtime Tab + Panel Connectivity
+
+*(See also the general rule: connectivity-and-setup — same ideas apply to any paired pieces, not just tabs/panels.)*
+
+When adding or fixing UI that has **both a tab button** (in a strip) and **a content panel**:
+
+## Lesson from Paint tab not appearing
+
+- **Symptom**: User had a Paint panel assigned (or created) but no "Paint" tab in the ribbon, so the panel was inaccessible.
+- **Cause**: Code returned early when `_Paint_Panel != null`, so the **tab was never created** if the panel already existed (e.g. from prefab or prior run).
+- **Connectivity**: The tab is the only way to open the panel. If the panel reference is set but the tab is missing, the feature is broken.
+
+## Rules
+
+1. **Don’t skip creation based on panel alone.**  
+   Only skip when **both** exist: panel ref is set **and** the tab exists in the group (e.g. `HasTab("paint")`). Otherwise always ensure the **tab** is created when missing, even if the panel is already assigned.
+
+2. **Resolve refs before deciding to skip.**  
+   Resolve `_tabGroup`, tab strip, panels parent, etc. **first**. Then check “panel exists and tab exists” to skip. If you bail early on null refs, you might never create the tab on a later run.
+
+3. **Assign panel only when the tab exists.**  
+   When creating both in one flow: create the panel, create the tab, **then** assign the panel reference (e.g. `_Paint_Panel = panelRect`) **after** the tab is added to the group. That way you never store a panel ref without a corresponding tab.
+
+4. **Support “tab missing, panel exists”.**  
+   If the prefab/scene has the panel assigned but no tab in the TabsGroup list, create **only the tab** at runtime and wire it to the existing panel. Use something like `HasTab(id)` to avoid adding a duplicate tab.
+
+## Relevant code patterns
+
+- `TabsGroup_UI.HasTab(string)` — use to see if a tab already exists before creating one.
+- `GetTabStripTransform()` — resolve before creating the tab; if it’s null, don’t assign the panel.
+- Early return: `if (_Panel != null && _tabGroup.HasTab("id")) return;` then create panel if null, then create tab if `!HasTab("id")`.

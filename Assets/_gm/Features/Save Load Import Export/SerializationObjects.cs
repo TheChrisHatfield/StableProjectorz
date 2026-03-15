@@ -1,12 +1,43 @@
 using JetBrains.Annotations;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using UnityEngine;
 
 
 namespace spz {
+
+	/// <summary>
+	/// Handles old SPZ files where $type was written without the 'spz.' namespace prefix.
+	/// Falls back to searching Assembly-CSharp for the type in the spz namespace.
+	/// </summary>
+	class BackwardCompatBinder : ISerializationBinder
+	{
+	    readonly DefaultSerializationBinder _default = new DefaultSerializationBinder();
+
+	    public Type BindToType(string assemblyName, string typeName)
+	    {
+	        try { return _default.BindToType(assemblyName, typeName); }
+	        catch { /* type not found with original name, try with namespace */ }
+
+	        string namespacedName = "spz." + typeName;
+	        var asm = Assembly.GetExecutingAssembly();
+	        Type t = asm.GetType(namespacedName);
+	        if (t != null) return t;
+
+	        throw new JsonSerializationException(
+	            $"Could not resolve type '{typeName}' in assembly '{assemblyName}'.");
+	    }
+
+	    public void BindToName(Type serializedType, out string assemblyName, out string typeName)
+	    {
+	        _default.BindToName(serializedType, out assemblyName, out typeName);
+	    }
+	}
+
 
 	//contains the information about the whole project.
 	//Use it when saving the project. 
@@ -29,18 +60,25 @@ namespace spz {
 	    public SceneResolution_SL sceneResolution;
 	    public MainViewWindow_ToolsRibbon_SL mainViewWindow_ToolsRibbon;
 	    public BrushRibbon_UI_SL brush_MGR;
+	    public ColorPalette_SL colorPalette;
+	    public PaintLayerStack_SL paintLayerStack;
 	    public UserCameras_MGR_SL camerasMGR;
 	    public ControlNetUnits_Panel_SL controlNetUnits_panel;
 	    public ConnectionPanel_SL connectionPanel;
 	    public StableProjectorz_SL(){ version = CheckForUpdates_MGR.CURRENT_VERSION_HERE; }
 
+	    static readonly BackwardCompatBinder _binder = new BackwardCompatBinder();
+
 	    public static StableProjectorz_SL CreateFromJSON(string jsonString, out string resultMessage_){
 	        try{
-	            // Use class-type information, to support inheritance of objects:
-	            var settings = new JsonSerializerSettings{ TypeNameHandling = TypeNameHandling.Auto, };
+	            var settings = new JsonSerializerSettings{
+	                TypeNameHandling = TypeNameHandling.Auto,
+	                SerializationBinder = _binder,
+	            };
 	            resultMessage_ = "Loaded OK";
 	            return JsonConvert.DeserializeObject<StableProjectorz_SL>( jsonString, settings);
-	        }catch (Exception ex){ // Catching a more general exception
+	        }catch (Exception ex){
+	            Debug.LogError("[SPZ Load] " + ex);
 	            resultMessage_ = "Couldn't load - " + ex.Message;
 	            return null;
 	        }
@@ -244,6 +282,28 @@ namespace spz {
 	    public List<UDIM_Sector> udim_coords;//which squares of uv space the udims operate on.
 	}
 
+	[Serializable]
+	public class PaintLayerStack_SL
+	{
+	    public int activeLayerIndex;
+	    public int resolutionWidth;
+	    public int resolutionHeight;
+	    public int udimsCount;
+	    /// <summary>Next cardinal number for default "Layer N" names (persists across save/load). </summary>
+	    public int nextLayerNumber;
+	    public List<PaintLayer_SL> layers;
+	}
+
+	[Serializable]
+	public class PaintLayer_SL
+	{
+	    public string name;
+	    public bool visible = true;
+	    public float opacity = 1f;
+	    public int blendMode; // PaintLayerBlendMode as int
+	    public RenderUdims_SL content; // null if layer has no content or is empty
+	}
+
 
 
 	[Serializable]
@@ -394,12 +454,29 @@ namespace spz {
 	[Serializable]
 	public class BrushRibbon_UI_SL {
 	    public int maskBrush_hardnessIx;
+	    /// <summary> Custom brush alpha index in BrushAlphas folder (0-based). -1 = use built-in round (hardnessIx). </summary>
+	    public int maskBrush_customAlphaIx = -1;
 	    public ColorSerializable maskBrush_color;
 	    public float maskBrush_opacity01;
 	    public bool maskBrush_autoReset;
 	    public float maskBrush_size01;
+	    /// <summary> Brush spacing 0–1 (0 = continuous stroke). 1 = 100% (one stamp per diameter). From ABR when available. </summary>
+	    public float maskBrush_spacing01;
+	    /// <summary> Brush angle in degrees (0–360). For directional alphas. </summary>
+	    public float maskBrush_angleDeg;
+	    /// <summary> Brush roundness 0–1 (1 = circle). For elliptical tips. </summary>
+	    public float maskBrush_roundness01;
 	    public bool maskBrush_showText;
 	    public bool isColorlessMask;
+	}
+
+	[Serializable]
+	public class ColorPalette_SL
+	{
+	    /// <summary> Display name (e.g. filename or "Palette + other.ase"). </summary>
+	    public string paletteName;
+	    /// <summary> Swatch colors (saved so palette is restored with project). </summary>
+	    public List<ColorSerializable> colors;
 	}
 
 	[Serializable]

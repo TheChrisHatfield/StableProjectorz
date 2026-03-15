@@ -48,6 +48,13 @@ namespace spz {
 	        return transform;
 	    }
 
+	    /// <summary>True if the group already has a tab with the given title (case-insensitive).</summary>
+	    public bool HasTab(string tabTitle){
+	        if (_tabs == null || string.IsNullOrEmpty(tabTitle)) return false;
+	        string nameLower = tabTitle.ToLower();
+	        return _tabs.Any(t => t != null && t.title != null && t.title.ToLower() == nameLower);
+	    }
+
 	    public void SwitchTab(string tabName){
 	        _tabsSwitched_atLeastOnce = true;
 	        if (_tabs == null) return;

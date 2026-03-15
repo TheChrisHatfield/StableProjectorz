@@ -130,7 +130,7 @@ namespace spz {
 	        }
 
 	        if (include_paintedMask){
-	            RenderUdims painted_renderUdims = Inpaint_MaskPainter.instance._ObjectUV_brushedColorRGBA;
+	            RenderUdims painted_renderUdims = Inpaint_MaskPainter.instance.GetLayerCompositeOrFallback();
 	            RenderTexture painted_texArray  = painted_renderUdims.texArray;
 	            List<Texture2D> maskTextures = TextureTools_SPZ.TextureArray_to_Texture2DList(painted_texArray);
 	            var base64_imgs = new List<string>();

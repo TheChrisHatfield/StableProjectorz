@@ -59,7 +59,11 @@ namespace spz {
 	    }//end()
 
 
-	    void OnUpdate() => RenderScreenMask_maybe( Inpaint_MaskPainter.instance._ObjectUV_brushedColorRGBA, mustRender:false );
+	    void OnUpdate()
+	    {
+		    if (Inpaint_MaskPainter.instance == null) return;
+		    RenderScreenMask_maybe( Inpaint_MaskPainter.instance.GetLayerCompositeOrFallback(), mustRender:false );
+	    }
 
 	    void Start() => Update_callbacks_MGR.calc_inpaintScreenMask += OnUpdate;
 	    void OnDestroy() => Update_callbacks_MGR.calc_inpaintScreenMask -= OnUpdate;

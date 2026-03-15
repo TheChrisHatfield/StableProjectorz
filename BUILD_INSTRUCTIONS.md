@@ -62,12 +62,15 @@ If you can locate Unity.exe, you can build from command line:
 
 ### If Unity Editor Won't Open:
 - Make sure no other Unity instance is running
-- Check that Unity 6000.2.6f2 is properly installed
+- Check that Unity 6 (6000.x) is properly installed
 - Try opening from Unity Hub instead of directly
+
+### If you see "License error" / "No valid Unity Editor license found":
+- Unity Personal is free (students, hobbyists, small devs). Open this project once in the Editor (Hub → Open), let it load fully, then close. That activates your license; after that, builds (including `build_for_testing.bat`) should work.
 
 ## Build Requirements Checklist
 
-- ✅ Unity 6000.2.6f2 installed
+- ✅ Unity 6 (6000.x) installed
 - ✅ IL2CPP module installed (you said this is resolved)
 - ✅ Visual Studio 2022 with C++ Build Tools
 - ✅ Project configured for IL2CPP (already done)

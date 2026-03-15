@@ -24,11 +24,22 @@ namespace spz {
 	    Vector2 _prevPaintPosition;//only updated during painting
 	    float _lastBrushSize;
 	    bool _isFirstFrameOfStroke = true;
-    
+
+	    /// <summary>Linear01 depth at the click point. Used for depth-distance brush falloff so paint doesn't bleed to far surfaces. </summary>
+	    float _clickDepth01 = 0f;
+	    static readonly int _ClickDepth01_ID = Shader.PropertyToID("_ClickDepth01");
+	    static readonly int _DepthFalloffRange_ID = Shader.PropertyToID("_DepthFalloffRange");
+	    static readonly int _StampPosSizeStr_ID = Shader.PropertyToID("_StampPosSizeStr");
+	    static readonly int _StampCount_ID = Shader.PropertyToID("_StampCount");
+	    static readonly int _BrushAngleRad_ID = Shader.PropertyToID("_BrushAngleRad");
+	    static readonly int _BrushRoundness01_ID = Shader.PropertyToID("_BrushRoundness01");
+
+	    const int MaxSplotchStamps = 64;
+	    readonly Vector4[] _stampPosSizeStr = new Vector4[MaxSplotchStamps];
 
 	    public float visibleBrushSize(){
 	        if(_isPainting){ return _lastBrushSize; }
-	        return _brushSizeScale.Evaluate(SD_WorkflowOptionsRibbon_UI.instance.brushSize01);
+	        return _brushSizeScale.Evaluate(BrushRibbon_UI_Size.GetBrushSize01());
 	    }
 
 	    public bool _isPainting { get; private set; } = false;//is mouse currently pressed and are we dragging (painting).
@@ -84,30 +95,40 @@ namespace spz {
 	    // updates position of the UI element ("outline" of the brush)
 	    // This helps the user to see where the brush is about to paint.
 	    void CursorPreviewUI_Reposition(){
-	        var orib = SD_WorkflowOptionsRibbon_UI.instance;
+	        float size01 = BrushRibbon_UI_Size.GetBrushSize01();
 	        if(KeyMousePenInput.isKey_Shift_pressed()){
 	            Vector2 delta =  KeyMousePenInput.delta_while_RMBpressed( normalizeByScreenDiagonal:true );
 	            float predominantAxisValue   = Mathf.Abs(delta.x) > Mathf.Abs(delta.y) ? delta.x : delta.y;
 	            float mouseMovementMagnitude = Mathf.Abs(predominantAxisValue);
 	            float resizeDir   = predominantAxisValue >= 0 ? 1 : -1;
 	            float brushResize = mouseMovementMagnitude * resizeDir * _brushResizeDrag_speed;
-	            float sliderVal   = Mathf.Clamp(orib.brushSize01 + brushResize, 0.001f, 1);
-	            orib.SetBrushSize(sliderVal);
+	            float sliderVal   = Mathf.Clamp(size01 + brushResize, 0.001f, 1);
+	            if (BrushRibbon_UI_Size.instance != null) BrushRibbon_UI_Size.instance.SetBrushSize(sliderVal);
+	            else if (SD_WorkflowOptionsRibbon_UI.instance != null) SD_WorkflowOptionsRibbon_UI.instance.SetBrushSize(sliderVal);
 	        }
-	        Cursor_UI.instance.SetCursorThickness(orib.brushSize01);
-	        Cursor_UI.instance.PositionCursor( _brushSizeScale.Evaluate(orib.brushSize01) );
+	        Cursor_UI.instance.SetCursorThickness(BrushRibbon_UI_Size.GetBrushSize01());
+	        Cursor_UI.instance.PositionCursor( _brushSizeScale.Evaluate(BrushRibbon_UI_Size.GetBrushSize01()) );
 	    }
 
 
 	    void OnPointerDown_maybe(){
 	        if(!KeyMousePenInput.isLMBpressedThisFrame()){ return; }
 	        if(isDoingSomethingElse()){ return; }
-	        _isPainting = true;
 
 	        Vector3Int textureRes = maskResolution();
+	        if (textureRes.z <= 0)
+	        {
+		        return;
+	        }
+	        _isPainting = true;
 	        initTextures_Maybe(textureRes.x, textureRes.y, textureRes.z);
+	        if (_currBrushPath_R8 == null)
+	        {
+		        _isPainting = false;
+		        return;
+	        }
         
-	        float brushSize    = _brushSizeScale.Evaluate(SD_WorkflowOptionsRibbon_UI.instance.brushSize01 );
+	        float brushSize    = _brushSizeScale.Evaluate(BrushRibbon_UI_Size.GetBrushSize01());
 	        float brushOpacity = SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity;
 
 	        AffectByPressure(ref brushSize, ref brushOpacity);
@@ -127,7 +148,23 @@ namespace spz {
 	            _lastBrushSize = brushSize;
 	            TextureTools_SPZ.ClearRenderTexture(_prevBrushPath_R8, Color.black);
 	            TextureTools_SPZ.ClearRenderTexture(_currBrushPath_R8, Color.black);//Might be textureArray!
+	            _clickDepth01 = SampleDepthAtCursor(pointInViewport01);
 	        }
+	    }
+
+	    float SampleDepthAtCursor(Vector2 viewportPos01)
+	    {
+	        Camera cam = UserCameras_MGR.instance?._curr_viewCamera?.myCamera;
+	        if (cam == null) return 0f;
+	        Ray ray = cam.ViewportPointToRay(new Vector3(viewportPos01.x, viewportPos01.y, 0));
+	        if (Physics.Raycast(ray, out RaycastHit hit, cam.farClipPlane))
+	        {
+	            // WorldToViewportPoint.z gives eye-space depth along forward axis,
+	            // matching Linear01Depth() used in the shader.
+	            float eyeDepth = cam.WorldToViewportPoint(hit.point).z;
+	            return eyeDepth / cam.farClipPlane;
+	        }
+	        return 0f;
 	    }
 
 
@@ -183,12 +220,11 @@ namespace spz {
 	    }
 
 	    bool isDoingSomethingElse(){
-	        if (KeyMousePenInput.isKey_alt_pressed()){ return true; }//maybe orbiting
-	        if (KeyMousePenInput.isKey_CtrlOrCommand_pressed()){ return true; }//maybe zooming
-	        if (Images_ImportHelper.instance.isImporting){ return true; }//prevent start paint when actually clicking some file.
-	        // DON't CHECK IS HOVERING VIEWPORT - might want to keep painting
-	        // even if cursor went outside the viewport momentarily.
-	        // Useful when adjusting the backgrounds near the viewport border.
+	        if (KeyMousePenInput.isKey_alt_pressed()){ return true; }
+	        if (KeyMousePenInput.isKey_CtrlOrCommand_pressed()){ return true; }
+	        if (Images_ImportHelper.instance != null && Images_ImportHelper.instance.isImporting){ return true; }
+	        if (WorkflowRibbon_UI.instance == null || MainViewport_UI.instance == null || SD_WorkflowOptionsRibbon_UI.instance == null)
+		        return true;
 
 	        bool is_img2img        = WorkflowRibbon_UI.instance.isMode_using_img2img();
 	        bool isProjectionsMask = WorkflowRibbon_UI.instance.currentMode() == WorkflowRibbon_CurrMode.ProjectionsMasking;
@@ -208,7 +244,7 @@ namespace spz {
 	    void PaintOnTexture(){
 	        var orib = SD_WorkflowOptionsRibbon_UI.instance;
 
-	        float brushSize =  _brushSizeScale.Evaluate(orib.brushSize01);
+	        float brushSize =  _brushSizeScale.Evaluate(BrushRibbon_UI_Size.GetBrushSize01());
 	        float suggested_brushOpacity = getBrushStrength();
         
 	        AffectByPressure(ref brushSize, ref suggested_brushOpacity);
@@ -217,10 +253,46 @@ namespace spz {
         
 	        var brushSizeVec =  new Vector4(_lastBrushSize,brushSize,0,0) * getBrushExtraScaling_due_viewport();
 	        if (_isFirstFrameOfStroke){  brushSizeVec.z = 1.0f;  }
-        
+
+	        float spacing01 = BrushRibbon_UI_Size.GetBrushSpacing01();
+	        float angleDeg = BrushRibbon_UI_Size.GetBrushAngleDeg();
+	        float roundness01 = BrushRibbon_UI_Size.GetBrushRoundness01();
+	        _brushMaterial.SetFloat(_BrushAngleRad_ID, angleDeg * Mathf.Deg2Rad);
+	        _brushMaterial.SetFloat(_BrushRoundness01_ID, roundness01 > 0f ? roundness01 : 1f);
+
+	        int stampCount = 0;
+	        if (spacing01 > 0.001f && !_isFirstFrameOfStroke)
+	        {
+	            float scale = getBrushExtraScaling_due_viewport();
+	            float step = spacing01 * brushSize * scale;
+	            if (step < 0.001f) step = 0.001f;
+	            Vector2 from = _prevPaintPosition;
+	            Vector2 to = pointInViewport01;
+	            float dist = Vector2.Distance(from, to);
+	            if (dist >= step)
+	            {
+	                int n = Mathf.Min(MaxSplotchStamps, Mathf.FloorToInt(dist / step) + 1);
+	                for (int k = 0; k < n && stampCount < MaxSplotchStamps; k++)
+	                {
+	                    float t = (n > 1) ? (k / (float)n) : 0f;
+	                    Vector2 pos = Vector2.Lerp(from, to, t);
+	                    float sizeK = Mathf.Lerp(_lastBrushSize, brushSize, t) * scale;
+	                    _stampPosSizeStr[stampCount] = new Vector4(pos.x, pos.y, sizeK, Mathf.Abs(suggested_brushOpacity));
+	                    stampCount++;
+	                }
+	            }
+	        }
+	        _brushMaterial.SetVectorArray(_StampPosSizeStr_ID, _stampPosSizeStr);
+	        _brushMaterial.SetInt(_StampCount_ID, stampCount);
+
 	        _brushMaterial.SetVector("_PrevNewBrushScreenCoord", new Vector4(_prevPaintPosition.x, _prevPaintPosition.y, pointInViewport01.x, pointInViewport01.y)); 
 	        _brushMaterial.SetVector("_BrushSize_andFirstFrameFlag", brushSizeVec );
 	        _brushMaterial.SetFloat("_ScreenAspectRatio", getViewportSize().x/getViewportSize().y);
+	        _brushMaterial.SetFloat(_ClickDepth01_ID, _clickDepth01);
+	        float depthRange = SD_WorkflowOptionsRibbon_UI.instance != null
+	            ? SD_WorkflowOptionsRibbon_UI.instance.brushDepthLimit01
+	            : 0f;
+	        _brushMaterial.SetFloat(_DepthFalloffRange_ID, depthRange);
         
 	        OnRenderIntoCurrTex_please( _prevBrushPath_R8, _currBrushPath_R8, _isFirstFrameOfStroke, suggested_brushOpacity);
 
@@ -242,12 +314,20 @@ namespace spz {
 	        bool all_ok =  _currBrushPath_R8 != null 
 	                       && _currBrushPath_R8.width==width  &&  _currBrushPath_R8.height==height
 	                       && _currBrushPath_R8.volumeDepth==numSlices;
-	        if(all_ok){ return false; }
+	        if (all_ok)
+	        {
+		        OnAfterInitTexturesMaybe(width, height, numSlices);
+		        return false;
+	        }
 	        TextureTools_SPZ.Dispose_RT(ref _prevBrushPath_R8, isTemporary:false);
 	        TextureTools_SPZ.Dispose_RT(ref _currBrushPath_R8, isTemporary:false);
 	        InitTextures(width, height, numSlices, out _prevBrushPath_R8, out _currBrushPath_R8);
+	        OnAfterInitTexturesMaybe(width, height, numSlices);
 	        return true;
 	    }
+
+	    /// <summary>Called after initTextures_Maybe (whether textures were (re)created or not). Override to e.g. sync layer stack resolution so the default layer has content before first stroke.</summary>
+	    protected virtual void OnAfterInitTexturesMaybe(int width, int height, int numSlices) { }
 
 	    protected abstract void InitTextures( int width,  int height,  int numSlices, 
 	                                          out RenderTexture prevBrushPath_,  out RenderTexture currBrushPath_);
@@ -264,6 +344,10 @@ namespace spz {
 
 	    //fill, but only uv chunks of currently selected (isolated) meshes.
 	    protected void OnBucketFill_orDelete_button( Color fillColor, RenderTexture dest, RenderTexture visibilTex=null){
+	        if (dest == null) return;
+	        if (UserCameras_MGR.instance?._curr_viewCamera == null || TextureDilation_MGR.instance == null || Objects_Renderer_MGR.instance == null)
+	            return;
+
 	        _fillUVchunks_mat.SetColor("_COL_UVCH_Color", fillColor);
 	        _fillUVchunks_mat.SetTexture("_ProjVisibility", visibilTex);
 	        TextureTools_SPZ.SetKeyword_Material(_fillUVchunks_mat, "USE_VISIBIL_TEX", visibilTex!=null);
@@ -272,21 +356,21 @@ namespace spz {
 	        RenderUdims.SetNumUdims(UDIMs_Helper._allSelectedUdims, _fillUVchunks_mat);
 
 	        //render into temp, dilate it (expand borders), and paste into dest:
-	        RenderTexture destTemp = new RenderTexture(dest.descriptor); 
+	        RenderTexture destTemp = new RenderTexture(dest.descriptor);
 	        TextureTools_SPZ.ClearRenderTexture(destTemp, Color.clear);
 
 	        // NOT using clear color;  Ignore non-selected.
 	        // NOT using frustum cull: even if camera is looking at the object, remember that we are going to render into UVs.
 	        // This would likely cause the camera to ignore the object.
-	        UserCameras_MGR.instance._curr_viewCamera.RenderImmediate_Arr( destTemp,  ignore_nonSelected_meshes:true, 
+	        UserCameras_MGR.instance._curr_viewCamera.RenderImmediate_Arr( destTemp,  ignore_nonSelected_meshes:true,
 	                                                                       _fillUVchunks_mat,  useClearingColor:false,//NOT clearing.
 	                                                                       Color.clear,  dontFrustumCull:true );
-	        var dilRule = TextureTools_SPZ.GetChannelCount(dest)==4? DilateByChannel.A 
+	        var dilRule = TextureTools_SPZ.GetChannelCount(dest)==4? DilateByChannel.A
 	                                                              : DilateByChannel.R;
 	        // ONLY DILATE BY 1 TEXEL.
 	        // 2 is already too much, it would creep through seams of nearby uv islands
 	        // and be on various objects in Catacombs mesh (Oct 2024)
-	        var dilArg  = new DilationArg( destTemp,  numberOfTexelsExpand:1, 
+	        var dilArg  = new DilationArg( destTemp,  numberOfTexelsExpand:1,
 	                                       dilRule,  null,  isRunInstantly:true );
 	        TextureDilation_MGR.instance.Dillate(dilArg);
 
@@ -315,6 +399,9 @@ namespace spz {
 
 
 	    protected virtual void OnDestroy(){
+	        BrushRibbon_UI_BucketFill._Act_onClicked -= OnBucketFill_button;
+	        BrushRibbon_UI_DeleteButton.onClicked    -= OnDelete_button;
+
 	        DestroyImmediate(_brushMaterial);
 	        DestroyImmediate(_fillUVchunks_mat);
 	        TextureTools_SPZ.Dispose_RT(ref _prevBrushPath_R8, isTemporary:false);

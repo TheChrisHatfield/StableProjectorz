@@ -90,7 +90,7 @@ namespace spz {
 	        // proceeding only if the UV texture is outtdated and everything needs to be re-rendered.
 	        // Or if we are in the editing mode (to show the multiprojection brush preview, etc)
 	        bool renderNow =  _renderAll_ASAP;
-	             renderNow |= MultiView_Ribbon_UI.instance._isEditingMode;
+	             renderNow |= (MultiView_Ribbon_UI.instance != null && MultiView_Ribbon_UI.instance._isEditingMode);
 
 	        if(!renderNow){ OnUpdateComplete(); return; }
 	        _renderAll_ASAP = false;
@@ -233,7 +233,8 @@ namespace spz {
 
 	    void Apply_InpaintSketch_ColorLayer(){
 	        if(MainViewport_UI.instance.showing != MainViewport_UI.Showing.UsualView){ return; }
-	        if(WorkflowRibbon_UI.instance.allowed_to_showBrushMask() == false){ return; }
+	        if(WorkflowRibbon_UI.instance == null || WorkflowRibbon_UI.instance.allowed_to_showBrushMask() == false){ return; }
+	        if(Inpaint_MaskPainter.instance == null){ return; }
 	        Inpaint_MaskPainter.instance.ApplyColorLayer_To_UV_Textures( _accumulation_uv_RT );
 	    }
 

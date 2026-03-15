@@ -63,6 +63,10 @@ namespace spz {
 	    [SerializeField] Button _load_button;//allows to load custom image into the projection.
 	    [SerializeField] Button _button_clone;
 	    [SerializeField] Button _button_restoreCamera;
+	    [Tooltip("Move this art image into a paint layer (Paint tab). Shown when hovering/context menu.")]
+	    [SerializeField] Button _button_moveToLayer;
+	    [Tooltip("Import image file(s) from disk into a new paint layer. Shown when hovering/context menu.")]
+	    [SerializeField] Button _button_importToLayer;
 	    [Space(10)]
 	    [SerializeField] ButtonToggle_UI _showDepth_toggle;
 	    [SerializeField] Button _copySeed_button;
@@ -83,6 +87,8 @@ namespace spz {
 	    public Action Act_OnLoadButton { get; set; }
 	    public Action Act_OnCopySeed_button { get; set; }
 	    public Action Act_OnCloneButton { get; set; }
+	    public Action Act_OnMoveToLayerButton { get; set; }
+	    public Action Act_OnImportToLayerButton { get; set; }
 	    public Action<bool> Act_OnDepthButton { get; set; } //arg is 'isOn'
 	    public Action Act_OnProjBlendsSliders { get; set; } = null;//when one of Projection-cam related params changes.
 	    public Action Act_OnBgBlendsSliders { get; set; } = null; //when one of Background-related parameters changes.
@@ -162,6 +168,14 @@ namespace spz {
 	        Act_OnCloneButton?.Invoke();
 	    }
 
+	    void OnMoveToLayerButton(){
+	        Act_OnMoveToLayerButton?.Invoke();
+	    }
+
+	    void OnImportToLayerButtonClick(){
+	        Act_OnImportToLayerButton?.Invoke();
+	    }
+
 	    void OnDepthButton(bool isOn){
 	        Act_OnDepthButton?.Invoke(isOn);
 	        //so that we can see the depth in the thumbnail, without obstructing by sliders:
@@ -207,9 +221,80 @@ namespace spz {
 	        _showDepth_toggle.onClick += OnDepthButton;
 	        _button_restoreCamera.onClick.AddListener(OnRestoreCameraButton);
 	        _button_clone.onClick.AddListener(OnCloneButton);
+	        if (_button_moveToLayer != null) _button_moveToLayer.onClick.AddListener(OnMoveToLayerButton);
+	        EnsureImportToLayerButton();
+	        if (_button_importToLayer != null) _button_importToLayer.onClick.AddListener(OnImportToLayerButtonClick);
 
 	        if(!_alreadyShown){ gameObject.SetActive(false); }
 	        _StartInvoked = true;
+	    }
+
+	    void EnsureImportToLayerButton()
+	    {
+	        if (_button_importToLayer != null) return;
+	        Transform parent = _button_moveToLayer != null ? _button_moveToLayer.transform.parent : transform;
+	        int sibIx = _button_moveToLayer != null ? _button_moveToLayer.transform.GetSiblingIndex() + 1 : parent.childCount;
+
+	        var go = new GameObject("ImportToLayerBtn");
+	        go.transform.SetParent(parent, false);
+	        go.transform.SetSiblingIndex(sibIx);
+	        var rect = go.AddComponent<RectTransform>();
+	        rect.sizeDelta = new Vector2(28, 28);
+	        var le = go.AddComponent<LayoutElement>();
+	        le.preferredWidth = 28; le.preferredHeight = 28;
+	        var bg = go.AddComponent<Image>();
+	        bg.color = new Color(0.22f, 0.22f, 0.22f, 0.9f);
+	        bg.sprite = CreateImportToLayerSprite();
+	        bg.type = Image.Type.Simple;
+	        bg.preserveAspect = true;
+	        _button_importToLayer = go.AddComponent<Button>();
+	        var colors = _button_importToLayer.colors;
+	        colors.highlightedColor = new Color(0.35f, 0.55f, 0.7f, 1f);
+	        _button_importToLayer.colors = colors;
+	    }
+
+	    static Sprite _cachedImportToLayerSprite;
+	    static Sprite CreateImportToLayerSprite()
+	    {
+	        if (_cachedImportToLayerSprite != null) return _cachedImportToLayerSprite;
+	        int sz = 32;
+	        var tex = new Texture2D(sz, sz, TextureFormat.RGBA32, false);
+	        tex.filterMode = FilterMode.Point;
+	        var clear = new Color(0, 0, 0, 0);
+	        var fg = new Color(0.85f, 0.85f, 0.85f, 1f);
+	        var pixels = new Color[sz * sz];
+	        for (int i = 0; i < pixels.Length; i++) pixels[i] = clear;
+
+	        void Line(int x0, int y0, int x1, int y1, Color c) {
+	            int dx = Mathf.Abs(x1 - x0), dy = Mathf.Abs(y1 - y0);
+	            int sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+	            int err = dx - dy;
+	            while (true) {
+	                if (x0 >= 0 && x0 < sz && y0 >= 0 && y0 < sz) pixels[y0 * sz + x0] = c;
+	                if (x0 == x1 && y0 == y1) break;
+	                int e2 = 2 * err;
+	                if (e2 > -dy) { err -= dy; x0 += sx; }
+	                if (e2 < dx)  { err += dx; y0 += sy; }
+	            }
+	        }
+	        void Rect(int x, int y, int w, int h, Color c) {
+	            Line(x, y, x + w - 1, y, c); Line(x, y + h - 1, x + w - 1, y + h - 1, c);
+	            Line(x, y, x, y + h - 1, c); Line(x + w - 1, y, x + w - 1, y + h - 1, c);
+	        }
+
+	        // Two layer rectangles (bottom half)
+	        Rect(6, 3, 20, 6, fg);    // back layer
+	        Rect(8, 1, 20, 6, fg);    // front layer (offset)
+
+	        // Down arrow (upper half): shaft + arrowhead
+	        Line(16, 28, 16, 14, fg);  // shaft
+	        Line(16, 14, 12, 18, fg);  // left barb
+	        Line(16, 14, 20, 18, fg);  // right barb
+
+	        tex.SetPixels(pixels);
+	        tex.Apply();
+	        _cachedImportToLayerSprite = Sprite.Create(tex, new UnityEngine.Rect(0, 0, sz, sz), new Vector2(0.5f, 0.5f), sz);
+	        return _cachedImportToLayerSprite;
 	    }
 
 
@@ -220,6 +305,8 @@ namespace spz {
 	        bool isProj =  _myIcon._genData.kind == GenerationData_Kind.SD_ProjTextures;
 	        _slider_BG_blurStrength.gameObject.SetActive(isBG);
 	        _slider_visibility.gameObject.SetActive(isProj);
+	        if (_button_moveToLayer != null) _button_moveToLayer.gameObject.SetActive(PaintLayerStack_MGR.instance != null);
+	        if (_button_importToLayer != null) _button_importToLayer.gameObject.SetActive(PaintLayerStack_MGR.instance != null);
 	        _slider_projCam_BlurStride.gameObject.SetActive(isProj);
 	        _slider_projCam_BlurPow.gameObject.SetActive(isProj);
 	        //_slider_multiProj_BlendStr.gameObject.SetActive(isProj); //not used right now

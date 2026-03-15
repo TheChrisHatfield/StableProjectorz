@@ -785,6 +785,7 @@ namespace spz {
 			MakeToolButton(rowGo.transform, "Clear Mask", "Ctrl+E", new Color(0.5f, 0.28f, 0.28f, 1f),
 				() => { BrushRibbon_UI_DeleteButton.onClicked?.Invoke(); ShowToolFeedback("Clear Mask"); });
 			MakeDepthLimitToggle(rowGo.transform);
+			MakeDepthLimitSlider(rowGo.transform);
 		}
 
 		static void ShowToolFeedback(string toolName)
@@ -830,7 +831,6 @@ namespace spz {
 
 		static void MakeDepthLimitToggle(Transform parent)
 		{
-			bool isOn = false;
 			Color offCol = new Color(0.3f, 0.3f, 0.3f, 1f);
 			Color onCol = new Color(0.2f, 0.55f, 0.35f, 1f);
 
@@ -850,22 +850,148 @@ namespace spz {
 			txtRect.offsetMin = new Vector2(4, 0);
 			txtRect.offsetMax = new Vector2(-4, 0);
 			var txt = txtGo.AddComponent<TextMeshProUGUI>();
-			txt.text = "Depth Limit\n<size=8>OFF</size>";
 			txt.fontSize = 10;
 			txt.color = Color.white;
 			txt.alignment = TextAlignmentOptions.Center;
 			txt.raycastTarget = false;
 			txt.enableWordWrapping = true;
 
-			btn.onClick.AddListener(() =>
+			System.Action refreshButtonState = () =>
 			{
-				isOn = !isOn;
-				float val = isOn ? 0.005f : 0f;
-				SD_WorkflowOptionsRibbon_UI.instance?.SetBrushDepthLimit(val);
+				var ribbon = SD_WorkflowOptionsRibbon_UI.instance;
+				bool isOn = ribbon != null && ribbon.brushDepthLimit01 > 0f;
 				img.color = isOn ? onCol : offCol;
 				txt.text = isOn ? "Depth Limit\n<size=8>ON</size>" : "Depth Limit\n<size=8>OFF</size>";
-				ShowToolFeedback(isOn ? "Depth limit ON — brush won't bleed to far surfaces" : "Depth limit OFF — classic painting");
+			};
+			refreshButtonState();
+
+			btn.onClick.AddListener(() =>
+			{
+				var ribbon = SD_WorkflowOptionsRibbon_UI.instance;
+				if (ribbon == null) return;
+				bool isOn = ribbon.brushDepthLimit01 > 0f;
+				if (isOn)
+				{
+					ribbon.SetBrushDepthLimit(0f);
+					ShowToolFeedback("Depth limit OFF — classic painting");
+				}
+				else
+				{
+					ribbon.SetBrushDepthLimit(SD_WorkflowOptionsRibbon_UI.DepthLimitDefaultRange);
+					ShowToolFeedback("Depth limit ON — adjust slider for tight/loose");
+				}
+				refreshButtonState();
+				SyncDepthLimitSliderFromRibbon(parent);
 			});
+		}
+
+		/// <summary>Find the Depth Limit slider in the same tool row and set its value from ribbon (for toggle or init).</summary>
+		static void SyncDepthLimitSliderFromRibbon(Transform toolRowTransform)
+		{
+			var ribbon = SD_WorkflowOptionsRibbon_UI.instance;
+			if (ribbon == null) return;
+			var slider = toolRowTransform.GetComponentInChildren<Slider>(true);
+			if (slider != null && slider.gameObject.name.Contains("DepthLimit"))
+			{
+				slider.SetValueWithoutNotify(ribbon.GetBrushDepthLimitSlider01());
+			}
+		}
+
+		/// <summary>Depth limit range slider: 0 = off, 0.01–1 = tight to loose. Gives user flexibility.</summary>
+		static void MakeDepthLimitSlider(Transform parent)
+		{
+			var go = new GameObject("DepthLimitSlider");
+			go.transform.SetParent(parent, false);
+			go.AddComponent<RectTransform>();
+			var le = go.AddComponent<LayoutElement>();
+			le.minWidth = 80;
+			le.preferredWidth = 80;
+
+			var bg = go.AddComponent<Image>();
+			bg.color = new Color(0.22f, 0.28f, 0.35f, 0.95f);
+			bg.raycastTarget = true;
+
+			var slider = go.AddComponent<Slider>();
+			slider.minValue = 0f;
+			slider.maxValue = 1f;
+			slider.wholeNumbers = false;
+			slider.fillRect = null;
+			slider.handleRect = null;
+			slider.direction = Slider.Direction.LeftToRight;
+			slider.transition = Selectable.Transition.None;
+
+			var fillArea = new GameObject("Fill Area");
+			fillArea.transform.SetParent(go.transform, false);
+			var fillAreaRect = fillArea.AddComponent<RectTransform>();
+			fillAreaRect.anchorMin = new Vector2(0, 0.25f);
+			fillAreaRect.anchorMax = new Vector2(1, 0.75f);
+			fillAreaRect.offsetMin = new Vector2(4, 0);
+			fillAreaRect.offsetMax = new Vector2(-4, 0);
+			var fill = new GameObject("Fill");
+			fill.transform.SetParent(fillArea.transform, false);
+			var fillRect = fill.AddComponent<RectTransform>();
+			fillRect.anchorMin = Vector2.zero;
+			fillRect.anchorMax = Vector2.one;
+			fillRect.offsetMin = Vector2.zero;
+			fillRect.offsetMax = Vector2.zero;
+			var fillImg = fill.AddComponent<Image>();
+			fillImg.color = new Color(0.2f, 0.5f, 0.35f, 0.8f);
+			slider.fillRect = fillRect;
+			var handleArea = new GameObject("Handle Slide Area");
+			handleArea.transform.SetParent(go.transform, false);
+			var handleAreaRect = handleArea.AddComponent<RectTransform>();
+			handleAreaRect.anchorMin = new Vector2(0, 0);
+			handleAreaRect.anchorMax = new Vector2(1, 1);
+			handleAreaRect.offsetMin = new Vector2(4, 0);
+			handleAreaRect.offsetMax = new Vector2(-4, 0);
+			var handle = new GameObject("Handle");
+			handle.transform.SetParent(handleArea.transform, false);
+			var handleRect = handle.AddComponent<RectTransform>();
+			handleRect.sizeDelta = new Vector2(8, 20);
+			var handleImg = handle.AddComponent<Image>();
+			handleImg.color = Color.white;
+			slider.handleRect = handleRect;
+			slider.targetGraphic = handleImg;
+
+			var labelGo = new GameObject("Label");
+			labelGo.transform.SetParent(go.transform, false);
+			var labelRect = labelGo.AddComponent<RectTransform>();
+			labelRect.anchorMin = Vector2.zero;
+			labelRect.anchorMax = Vector2.one;
+			labelRect.offsetMin = new Vector2(2, 0);
+			labelRect.offsetMax = new Vector2(-2, 0);
+			var label = labelGo.AddComponent<TextMeshProUGUI>();
+			label.text = "Depth";
+			label.fontSize = 9;
+			label.color = new Color(0.9f, 0.9f, 0.9f, 1f);
+			label.alignment = TextAlignmentOptions.Left;
+			label.raycastTarget = false;
+
+			var ribbon = SD_WorkflowOptionsRibbon_UI.instance;
+			if (ribbon != null)
+				slider.SetValueWithoutNotify(ribbon.GetBrushDepthLimitSlider01());
+
+			slider.onValueChanged.AddListener((float v) =>
+			{
+				SD_WorkflowOptionsRibbon_UI.instance?.SetBrushDepthLimitFromSlider01(v);
+				SyncDepthLimitButtonState(parent);
+			});
+		}
+
+		static void SyncDepthLimitButtonState(Transform toolRowTransform)
+		{
+			foreach (var btn in toolRowTransform.GetComponentsInChildren<Button>(true))
+			{
+				if (!btn.gameObject.name.Contains("Btn_DepthLimit")) continue;
+				var img = btn.GetComponent<Image>();
+				var txt = btn.GetComponentInChildren<TextMeshProUGUI>();
+				if (img == null || txt == null) continue;
+				var ribbon = SD_WorkflowOptionsRibbon_UI.instance;
+				bool isOn = ribbon != null && ribbon.brushDepthLimit01 > 0f;
+				img.color = isOn ? new Color(0.2f, 0.55f, 0.35f, 1f) : new Color(0.3f, 0.3f, 0.3f, 1f);
+				txt.text = isOn ? "Depth Limit\n<size=8>ON</size>" : "Depth Limit\n<size=8>OFF</size>";
+				break;
+			}
 		}
 
 		static void EnsureLayoutElement(RectTransform rect, float flexibleWidth)

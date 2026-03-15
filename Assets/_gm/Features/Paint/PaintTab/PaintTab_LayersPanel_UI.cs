@@ -108,8 +108,10 @@ namespace spz {
 		// Visibility button colors: discernible on/off
 		static readonly Color VisibilityOnColor  = new Color(0.18f, 0.35f, 0.58f, 1f);   // dark blue when visible
 		static readonly Color VisibilityOffColor = new Color(0.55f, 0.6f, 0.7f, 0.95f); // light when hidden
+		static readonly Color RowBgDefault      = new Color(0, 0, 0, 0.2f);
+		static readonly Color RowBgActive       = new Color(0.2f, 0.38f, 0.55f, 0.45f);  // blue tint so user sees which layer is active
 
-		/// <summary>One row: visibility toggle (dark blue = on, light = off) + layer name + red Delete.</summary>
+		/// <summary>One row: click row to set active layer; visibility toggle; layer name; Delete. Active row has blue tint.</summary>
 		GameObject BuildRow(PaintLayer layer, int index)
 		{
 			GameObject row = new GameObject("LayerRow_" + index);
@@ -127,9 +129,20 @@ namespace spz {
 			h.childControlHeight = true;
 			h.childForceExpandWidth = false;
 
+			bool isActive = _layerStack != null && _layerStack.ActiveLayerIndex == index;
 			var rowBg = row.AddComponent<Image>();
-			rowBg.color = new Color(0, 0, 0, 0.2f);
-			rowBg.raycastTarget = false;
+			rowBg.color = isActive ? RowBgActive : RowBgDefault;
+			rowBg.raycastTarget = true;
+			var rowBtn = row.AddComponent<Button>();
+			rowBtn.targetGraphic = rowBg;
+			rowBtn.transition = Selectable.Transition.None;
+			int idx = index;
+			rowBtn.onClick.AddListener(() =>
+			{
+				if (_layerStack == null || idx < 0 || idx >= _layerStack.Layers.Count) return;
+				_layerStack.SetActiveLayer(idx);
+				RequestReRender();
+			});
 
 			// Visibility toggle button — dark blue when visible, light when hidden
 			var visGo = new GameObject("Visibility");
@@ -144,7 +157,6 @@ namespace spz {
 			var visBtn = visGo.AddComponent<Button>();
 			visBtn.targetGraphic = visImg;
 			visBtn.transition = Selectable.Transition.None;
-			int idx = index;
 			visBtn.onClick.AddListener(() =>
 			{
 				if (_layerStack == null || idx < 0 || idx >= _layerStack.Layers.Count) return;

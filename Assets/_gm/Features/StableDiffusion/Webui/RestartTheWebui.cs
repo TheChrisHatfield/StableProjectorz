@@ -16,7 +16,7 @@ namespace spz {
 	    [SerializeField] protected Button _fileButton; //allows to specify path to the file that should be launched
 	    [SerializeField] protected string _openFile_os_window_headerMsg;
 	    [Space(10)]
-	    [SerializeField] protected string _defaultRelativePath = "./stable-diffusion-webui-forge/run_noQuickEdit.lnk";
+	    [SerializeField] protected string _defaultRelativePath = "./" + LaunchWebUIBatFile.WebuiFolderName + "/run_noQuickEdit.lnk";
 	    [SerializeField] protected string _playerPrefs_filepathID = "_RestartWebuiFilepath";
 	    [SerializeField] protected Animation _anim;
 
@@ -92,7 +92,7 @@ namespace spz {
 	        full_path = OnWillLaunchWebui_AdjustArgs(full_path);
 	        string workingDir;
 	        string launchPath = LaunchWebUIBatFile.GetLaunchPathWithGpuSetting(full_path, out workingDir);
-	        uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(launchPath, isJustFile:true, workingDir);
+	        uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(launchPath, isJustFile:true, workingDir, keepWindow:true, hidden:false, attachToConsole:false);
 	        if (pid == 0){
 	            Debug.LogError("Failed to launch the file. Consider launching StableProjectorz as Admin.");
 	            return;

@@ -19,6 +19,8 @@ Shader "Custom/Object3d_BrushShader"{
         _BrushStrength ("Brush Strength [-1,1] (x:prev, y:new, zw:0)", Vector) = (1,1,0,0)
         _PrevNewBrushScreenCoord ("Stroke Coordinates (prev, new)", Vector) = (0,0,0,0)
         _BrushSize_andFirstFrameFlag("BrushSize (prev, new, isFirstFrame, 0)", Vector) = (1,1,0,0)
+        _BrushAngleRad("Brush angle (radians)", Float) = 0
+        _BrushRoundness01("Brush roundness 0-1", Float) = 1
     }
     SubShader{
         Tags { "RenderType"="Opaque" } 
@@ -46,6 +48,9 @@ Shader "Custom/Object3d_BrushShader"{
 
             sampler2D _LastCameraDepthTexture;
 
+            float _ClickDepth01;
+            float _DepthFalloffRange;
+
             //uv space texture.  
             //If non-zero, a texel is visible by the projection camera.
             // R: With fade-effect applied to edges of model.
@@ -64,9 +69,13 @@ Shader "Custom/Object3d_BrushShader"{
             float _BrushStampStronger;//when Erasing masks, we have to enhance the effect.
             float4 _BrushStrength;
             float4 _PrevNewBrushScreenCoord;
-            float4 _BrushSize_andFirstFrameFlag; //(previous size, new size, isFirstFrame, 0)
-            
-            float _FadeByNormal; //0 or 1.  1 will prevent brushing on surfaces that face away from camera.
+            float4 _BrushSize_andFirstFrameFlag;
+            float _BrushAngleRad;
+            float _BrushRoundness01;
+            float4 _StampPosSizeStr[64];
+            int _StampCount;
+
+            float _FadeByNormal;
                                  // We want to fade by normal when adding stuff, and disable this when erasing.
 
             struct VertexInput{
@@ -194,9 +203,16 @@ Shader "Custom/Object3d_BrushShader"{
                 float myDepth = Linear01Depth(i.fragScreenSpaceUV.z) - depthOffset;
                 float notObscured = myDepth <= depth ?  1 : 0;
 
+                float depthFalloff = 1.0;
+                if (_DepthFalloffRange > 0.0001 && _ClickDepth01 > 0.0001) {
+                    float depthDist = abs(myDepth - _ClickDepth01);
+                    depthFalloff = saturate(1.0 - depthDist / _DepthFalloffRange);
+                }
+
                 // Not visible. NOTICE, discard, - don't optimize it!!
                 // Useful when there is a clone version of objects (allows users to bake two sides at once)
                 if(isVis * isInFront * notObscured == 0){ discard; }
+                if(depthFalloff <= 0){ discard; }
 
                 PaintInBrushStroke_Input pibs_input;
                 pibs_input.screenAspectRatio  = _ScreenAspectRatio;
@@ -205,14 +221,15 @@ Shader "Custom/Object3d_BrushShader"{
                 pibs_input.BrushSizes_andFirstFrameFlag = _BrushSize_andFirstFrameFlag;
                 pibs_input.BrushStrength01 = abs(_BrushStrength.xy);
                 pibs_input.BrushStamp      = _BrushStamp;
-                pibs_input.brushStampStronger = _BrushStampStronger; 
+                pibs_input.brushStampStronger = _BrushStampStronger;
+                pibs_input.brushAngleRad = _BrushAngleRad;
+                pibs_input.brushRoundness01 = _BrushRoundness01;
 
-                // Sample the obj-mask-texture with the texture space UVs:
                 pibs_input.currentBrushPath01  =  SAMPLE_TEXTURE_OR_ARRAY(_PrevBrushPathTex, uv_withSliceIx).r;
-                
                 pibs_input.normalDotView =   _FadeByNormal==0?  1 : dot(normalize(i.objNormal), normalize(i.objViewDir));
 
-                return PaintInBrushStroke(pibs_input); //[0,1]
+                float strokeVal = _StampCount > 0 ? PaintInBrushStroke_Splotches(pibs_input, _StampPosSizeStr, _StampCount) : PaintInBrushStroke(pibs_input);
+                return strokeVal * depthFalloff; //[0,1]
             }
             ENDCG
         }//end Pass

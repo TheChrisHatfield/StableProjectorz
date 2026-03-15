@@ -54,6 +54,11 @@ namespace spz {
 	        _button = btn;
 	    }
 
+	    /// <summary>Set the active-state highlight for a runtime-created tab (so it matches prefab tabs: selected = show this child).</summary>
+	    public void SetRuntimeActiveHighlight(GameObject goActive){
+	        _go_active = goActive;
+	    }
+
 	    void OnClicked() => Toggle(true);
 
 	    void Start(){

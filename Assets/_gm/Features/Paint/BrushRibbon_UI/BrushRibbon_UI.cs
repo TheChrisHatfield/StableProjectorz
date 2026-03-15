@@ -23,6 +23,17 @@ namespace spz {
 
 	    public BrushRibbon_UI_Hardness brushHardnessUI => _hardness;
 
+	    /// <summary> Set brush size 0–1. Used when applying ABR suggested size; also allows AlphaPicker to work when SD_WorkflowOptionsRibbon_UI is not present. </summary>
+	    public void SetBrushSize(float s) { if (_size != null) _size.SetBrushSize(s); }
+	    /// <summary> Set brush spacing 0–1 (0 = continuous). Used when applying ABR suggested spacing. </summary>
+	    public void SetBrushSpacing(float s) { if (_size != null) _size.SetBrushSpacing(s); }
+	    public void SetBrushAngle(float deg) { if (_size != null) _size.SetBrushAngle(deg); }
+	    public void SetBrushRoundness(float r) { if (_size != null) _size.SetBrushRoundness(r); }
+	    public float brushSize01 => _size != null ? _size.brushSize01 : 0f;
+	    public float brushSpacing01 => _size != null ? _size.brushSpacing01 : 0f;
+	    public float brushAngleDeg => _size != null ? _size.brushAngleDeg : 0f;
+	    public float brushRoundness01 => _size != null ? _size.brushRoundness01 : 1f;
+
 	    void Awake(){
 	        if (instance != null){ DestroyImmediate(this); return; }
 	        instance = this;
@@ -44,10 +55,12 @@ namespace spz {
 	        _colors.Save(trSL);
 	        _size.Save(trSL);
 	        _opacity.Save(trSL);
+	        spz.brush_MGR = trSL;
 	    }
 
 	    public void Load(StableProjectorz_SL spz){
 	        BrushRibbon_UI_SL trSL = spz.brush_MGR;
+	        if (trSL == null) return;
 	        _hardness.Load(trSL);
 	        _colors.Load(trSL);
 	        _size.Load(trSL);

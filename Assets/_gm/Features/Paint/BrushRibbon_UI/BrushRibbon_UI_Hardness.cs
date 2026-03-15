@@ -8,6 +8,8 @@ namespace spz {
 
 	//helps the 'BrushRibbon_UI' component.
 	// Only deals with and represents the small button that controls the brush hardness.
+	// When BrushAlphas_MGR is present, supports custom alphas from the user BrushAlphas folder;
+	// _brushHardnessTex then returns the current stamp (built-in round or selected custom alpha).
 	public class BrushRibbon_UI_Hardness : MonoBehaviour
 	{
 	    [SerializeField] BrushRibbon_UI _rib;
@@ -16,8 +18,16 @@ namespace spz {
 	    [SerializeField] Image _hardnessChoiceIcon;
 	    [SerializeField] List<Sprite> _brushHardnessTextures;
 	    [SerializeField] Animation _currHardnessAnim;
+	    [Tooltip("Optional. When set, brush stamp can be built-in (0,1,2) or custom alphas from folder.")]
+	    [SerializeField] BrushAlphas_MGR _brushAlphasMGR;
 	    public int hardnessIx { get; private set; } = 0;
-	    public Texture2D _brushHardnessTex => _brushHardnessTextures[hardnessIx].texture;
+	    /// <summary> Current brush stamp: from BrushAlphas_MGR if present (built-in or custom), else built-in list only. </summary>
+	    public Texture2D _brushHardnessTex =>
+	        (_brushAlphasMGR != null && _brushAlphasMGR.CurrentBrushStampTex != null)
+	            ? _brushAlphasMGR.CurrentBrushStampTex
+	            : (_brushHardnessTextures != null && hardnessIx < _brushHardnessTextures.Count && _brushHardnessTextures[hardnessIx] != null
+	                ? _brushHardnessTextures[hardnessIx].texture
+	                : null);
 	    public Texture2D readSpecificHardnessTex(int hardnessIx) => _brushHardnessTextures[hardnessIx].texture;
 	    public Action onHovered { get; set; }
 
@@ -29,16 +39,45 @@ namespace spz {
 
 
 	    void OnHardnessButton(){
-	        hardnessIx++; //loop around maybe. Notice 1, because 0 is always 'the current':
-	        hardnessIx = hardnessIx > 2 ? 0 : hardnessIx;
-	        _hardnessChoiceIcon.sprite = _brushHardnessTextures[hardnessIx];
+	        // When a custom alpha is selected, don't overwrite it — hardness button only cycles built-in (0,1,2).
+	        if (_brushAlphasMGR != null && _brushAlphasMGR.IsCustomAlpha(_brushAlphasMGR.CurrentIndex))
+	            return;
+	        // Cycle built-in only (0,1,2). Custom alphas are selected via BrushRibbon_UI_AlphaPicker.
+	        hardnessIx = (hardnessIx + 1) > 2 ? 0 : (hardnessIx + 1);
+	        if (_brushAlphasMGR != null)
+	            _brushAlphasMGR.CurrentIndex = hardnessIx;
+	        UpdateHardnessIcon();
 	        _currHardnessAnim.Play();
 	    }
 
 	    void SetExactHardness(int exactHardness_textureIx, bool playAnimation=true){
-	        hardnessIx = exactHardness_textureIx;
-	        _hardnessChoiceIcon.sprite = _brushHardnessTextures[hardnessIx];
+	        hardnessIx = Mathf.Clamp(exactHardness_textureIx, 0, 2);
+	        if (_brushAlphasMGR != null)
+	            _brushAlphasMGR.CurrentIndex = hardnessIx;
+	        UpdateHardnessIcon();
 	        if(playAnimation){ _currHardnessAnim.Play(); }
+	    }
+
+	    void UpdateHardnessIcon(){
+	        if (_brushHardnessTextures != null && hardnessIx < _brushHardnessTextures.Count && _brushHardnessTextures[hardnessIx] != null)
+	            _hardnessChoiceIcon.sprite = _brushHardnessTextures[hardnessIx];
+	        // When using custom alpha (index >= 3), icon could be updated by BrushRibbon_UI_AlphaPicker
+	    }
+
+	    /// <summary> Call when BrushAlphas_MGR current selection is set from alpha picker (custom alpha). </summary>
+	    public void SetUsingCustomAlpha(int customAlphaIndex){
+	        if (_brushAlphasMGR == null) return;
+	        _brushAlphasMGR.CurrentIndex = 3 + customAlphaIndex;
+	        hardnessIx = 0; // show soft round icon as placeholder; actual stamp is custom
+	        UpdateHardnessIcon();
+	    }
+
+	    /// <summary> Select one of the three built-in round brushes by index (0,1,2). </summary>
+	    public void SetBuiltInOnly(int builtInIx){
+	        hardnessIx = Mathf.Clamp(builtInIx, 0, 2);
+	        if (_brushAlphasMGR != null)
+	            _brushAlphasMGR.CurrentIndex = hardnessIx;
+	        UpdateHardnessIcon();
 	    }
 
 
@@ -68,20 +107,38 @@ namespace spz {
 	    void Awake(){
 	        _hardnessButton.onClick.AddListener( OnHardnessButton );
 
+	        if (_brushAlphasMGR == null) _brushAlphasMGR = BrushAlphas_MGR.instance;
+	        if (_brushAlphasMGR == null) _brushAlphasMGR = FindObjectOfType<BrushAlphas_MGR>(true);
+
 	        SetExactHardness(hardnessIx);
+	        if (_brushAlphasMGR != null)
+	            _brushAlphasMGR.CurrentIndex = hardnessIx;
+	        UpdateHardnessIcon();
 	        _hardnessButton.GetComponentInChildren<MouseHoverSensor_UI>().onSurfaceEnter += OnHardnessButtonHover;
 
 	        MultiView_Ribbon_UI.OnStartEditMode += OnStartEditMode;
 	    }
 
+	    void Start(){
+	        if (_brushAlphasMGR == null) _brushAlphasMGR = BrushAlphas_MGR.instance;
+	        if (_brushAlphasMGR == null) _brushAlphasMGR = FindObjectOfType<BrushAlphas_MGR>(true);
+	    }
+
 
 	    public void Save(BrushRibbon_UI_SL trSL){
 	        trSL.maskBrush_hardnessIx = hardnessIx;
+	        if (_brushAlphasMGR != null && _brushAlphasMGR.IsCustomAlpha(_brushAlphasMGR.CurrentIndex))
+	            trSL.maskBrush_customAlphaIx = _brushAlphasMGR.CurrentIndex - 3;
+	        else
+	            trSL.maskBrush_customAlphaIx = -1;
 	    }
 
 	    public void Load(BrushRibbon_UI_SL trSL){
-	        int hardnessIx = trSL.maskBrush_hardnessIx;
-	        SetExactHardness(hardnessIx);
+	        if (trSL.maskBrush_customAlphaIx >= 0 && _brushAlphasMGR != null &&
+	            (3 + trSL.maskBrush_customAlphaIx) < _brushAlphasMGR.AllEntries.Count)
+	            SetUsingCustomAlpha(trSL.maskBrush_customAlphaIx);
+	        else
+	            SetExactHardness(trSL.maskBrush_hardnessIx);
 	    }
 	}
 }//end namespace

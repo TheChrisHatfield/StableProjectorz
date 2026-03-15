@@ -10,7 +10,7 @@ namespace Voxell.Inspector
 {
   [CanEditMultipleObjects]
   [CustomEditor(typeof(UnityEngine.Object), true)]
-  public class VXDefaultEditor : Editor
+  public class VXDefaultEditor : UnityEditor.Editor
   {
     private IEnumerable<MethodInfo> _methods;
 

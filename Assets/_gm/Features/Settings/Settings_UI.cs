@@ -42,7 +42,6 @@ namespace spz {
 	    [SerializeField] Toggle _useCtrlScroll_WorkflowMode_swaps_toggle;//ProjMask ->Color -> No Color.
 	    [SerializeField] Toggle _ignoreCtrl_if_clickSelectMeshes_toggle;//holding ctrl will not activate the 'ClickSelect_Meshes mode'.
 	    [SerializeField] Toggle _useVSync_toggle; // Optional: assign in scene; otherwise created at runtime.
-
 	    void Start(){
 	        EnsureUseVSyncRowExists();
 	        EnsureSDGpuRowExists();
@@ -78,7 +77,6 @@ namespace spz {
 	        EventsBinder.Bind_Clickable_to_event("Settings:set_ignoreCtrl_if_clickSelectingMeshes", _ignoreCtrl_if_clickSelectMeshes_toggle);
 	        if (_useVSync_toggle != null)
 	            EventsBinder.Bind_Clickable_to_event("Settings:set_useVSync", _useVSync_toggle);
-
 	        // Custom Sliders
 	        EventsBinder.Bind_Clickable_to_event("Settings:set_prompt_textSize", _prompt_textSize_slider);
 	        EventsBinder.Bind_Clickable_to_event("Settings:set_wireframeOpacity", _wireframeOpacity_slider);
@@ -141,6 +139,7 @@ namespace spz {
 	        toggleBg.raycastTarget = true;
 	        var toggle = toggleGo.AddComponent<Toggle>();
 	        toggle.targetGraphic = toggleBg;
+	        ApplySelectableColors(toggle);
 	        toggle.isOn = UnityEngine.PlayerPrefs.GetInt("UseVSync", 1) == 1;
 
 	        _useVSync_toggle = toggle;
@@ -238,15 +237,32 @@ namespace spz {
 	        var gpuInput = _sdGpuDeviceId_input != null ? _sdGpuDeviceId_input : EventsBinder.FindComponent<IntegerInputField>("Settings:set_sdGpuDeviceId");
 	        if (gpuInput != null) {
 	            gpuInput.CommitCurrentText();
-	            int deviceId = gpuInput.recentVal;
+	            int deviceId = Mathf.Clamp(gpuInput.recentVal, -1, 31);
 	            UnityEngine.PlayerPrefs.SetInt("SD_GPU_DeviceId", deviceId);
 	            UnityEngine.PlayerPrefs.Save();
+	            StaticEvents.Invoke<int>("Settings:set_sdGpuDeviceId", deviceId);
 	        }
 	        if (LaunchWebUIBatFile.instance != null) {
 	            LaunchWebUIBatFile.instance.LaunchWebui_Manually(printStatusText_ifNotFound: true);
 	            if (Viewport_StatusText.instance != null)
 	                Viewport_StatusText.instance.ShowStatusText("WebUI launching with selected GPU. Previous WebUI closed automatically.", false, 4f, false);
-	        }
+	        } else if (Viewport_StatusText.instance != null)
+	            Viewport_StatusText.instance.ShowStatusText("GPU preference saved. Launch WebUI from the menu to apply.", false, 3f, false);
+	    }
+
+	    /// <summary>Apply hover/pressed/selected colors so the control looks selectable and shows active state.</summary>
+	    static void ApplySelectableColors(Selectable sel, Color? whenOnTint = null) {
+	        sel.transition = Selectable.Transition.ColorTint;
+	        var block = new ColorBlock {
+	            normalColor = new Color(0.25f, 0.25f, 0.25f, 1f),
+	            highlightedColor = new Color(0.45f, 0.45f, 0.45f, 1f),
+	            pressedColor = new Color(0.5f, 0.5f, 0.5f, 1f),
+	            selectedColor = whenOnTint ?? new Color(0.35f, 0.5f, 0.35f, 1f),
+	            disabledColor = new Color(0.2f, 0.2f, 0.2f, 0.5f),
+	            colorMultiplier = 1f,
+	            fadeDuration = 0.12f
+	        };
+	        sel.colors = block;
 	    }
 	}
 }//end namespace

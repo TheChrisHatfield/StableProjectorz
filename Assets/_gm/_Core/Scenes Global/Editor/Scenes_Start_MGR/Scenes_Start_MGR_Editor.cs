@@ -8,7 +8,7 @@ namespace spz {
 	// Custom editor for the Scenes_Start_MGR component. Adds buttons
 	// to the inspector for loading and managing scene hierarchies in the editor.
 	[CustomEditor(typeof(Start_Scene_Global_MGR))]
-	public class Scenes_Start_MGR_Editor : Editor
+	public class Scenes_Start_MGR_Editor : UnityEditor.Editor
 	{
 	    public override void OnInspectorGUI(){
 	        Start_Scene_Global_MGR managerScript = (Start_Scene_Global_MGR)target;
@@ -34,7 +34,7 @@ namespace spz {
 
 	    // Correctly expands or collapses all scenes in the Hierarchy window.
 	    void SetAllScenesExpanded(bool expand){
-	        var hierarchyWindowType = typeof(Editor).Assembly.GetType("UnityEditor.SceneHierarchyWindow");
+	        var hierarchyWindowType = typeof(UnityEditor.Editor).Assembly.GetType("UnityEditor.SceneHierarchyWindow");
 	        var hierarchyWindow = EditorWindow.GetWindow(hierarchyWindowType);
 	        if (hierarchyWindow == null) return;
 

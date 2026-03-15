@@ -57,7 +57,11 @@ namespace spz {
 
 
 	    void Update(){
-	        if(!_colorPanel._isShowing){ return; }
+	        // When panel is closed (e.g. user clicked Commit), fully close the workbench so the color picker is gone
+	        if(!_colorPanel._isShowing){
+	            if(_workbenchGO != null) _workbenchGO.SetActive(false);
+	            return;
+	        }
 	        if(KeyMousePenInput.isLMBpressed()){ return; }//possibly still dragging the knob
 
 	        Vector2 cursorPos  = KeyMousePenInput.cursorScreenPos();
@@ -70,7 +74,7 @@ namespace spz {
 	        }
 	        if(!contains){ 
 	            _colorPanel.Hide();
-	            _workbenchGO.SetActive(false);
+	            if(_workbenchGO != null) _workbenchGO.SetActive(false);
 	        }
 	    }
 

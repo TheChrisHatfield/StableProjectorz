@@ -66,11 +66,41 @@ namespace spz {
 
 	    public float brushSize01 => _brushSize_slider.brushSize01;
 	    public void SetBrushSize(float s) => _brushSize_slider.SetBrushSize(s);
+	    public float brushSpacing01 => _brushSize_slider.brushSpacing01;
+	    public void SetBrushSpacing(float s) => _brushSize_slider.SetBrushSpacing(s);
+	    public float brushAngleDeg => _brushSize_slider.brushAngleDeg;
+	    public void SetBrushAngle(float deg) => _brushSize_slider.SetBrushAngle(deg);
+	    public float brushRoundness01 => _brushSize_slider.brushRoundness01;
+	    public void SetBrushRoundness(float r) => _brushSize_slider.SetBrushRoundness(r);
 
 	    public TabletPressureMode tabletPressureMode => _pressureTabletMode._mode;
 
 	    public bool IsEyeDropperMagnified => _brushColor.IsEyeDropperMagnified;
 
+
+	    /// <summary>Depth falloff range for brush painting (fraction of far clip plane).
+	    /// 0 = disabled (paint through everything, classic behaviour).
+	    /// Use DepthLimitSlider01 for UI (0=off, 0.01-1=tight to loose); actual range is DepthLimitRangeMin–DepthLimitRangeMax.</summary>
+	    float _brushDepthLimit01 = 0f;
+	    public float brushDepthLimit01 => _brushDepthLimit01;
+	    public const float DepthLimitRangeMin = 0.002f;
+	    public const float DepthLimitRangeMax = 0.06f;
+	    public const float DepthLimitDefaultRange = 0.02f;
+	    public void SetBrushDepthLimit(float v) => _brushDepthLimit01 = Mathf.Clamp(v, 0f, 1f);
+	    /// <summary>Set from UI slider 0–1: 0 = off, &gt;0 = map to DepthLimitRangeMin–DepthLimitRangeMax.</summary>
+	    public void SetBrushDepthLimitFromSlider01(float slider01)
+	    {
+		    if (slider01 <= 0.001f) { _brushDepthLimit01 = 0f; return; }
+		    float t = Mathf.Clamp01((slider01 - 0.001f) / (1f - 0.001f));
+		    _brushDepthLimit01 = Mathf.Lerp(DepthLimitRangeMin, DepthLimitRangeMax, t);
+	    }
+	    /// <summary>Current depth limit as UI slider 0–1 for syncing. 0 = off, else inverse of SetBrushDepthLimitFromSlider01.</summary>
+	    public float GetBrushDepthLimitSlider01()
+	    {
+		    if (_brushDepthLimit01 <= 0f) return 0f;
+		    float t = Mathf.InverseLerp(DepthLimitRangeMin, DepthLimitRangeMax, _brushDepthLimit01);
+		    return 0.001f + t * (1f - 0.001f);
+	    }
 
 	    public float denoisingStrength => _reThink_slider.value;
 	    public float maskBlur_StepLength01 => _blur_slider.value;
@@ -324,6 +354,7 @@ namespace spz {
 	    }
 
 	    public void Load(StableProjectorz_SL spz){
+	        if (spz.sd_workflowRibbon == null) return;
 	        _reThink_slider.SetSliderValue( spz.sd_workflowRibbon.denoisingStrength, true);
 
 	        _softInpaint.isOn = spz.sd_workflowRibbon.isUseSoftInpaint;

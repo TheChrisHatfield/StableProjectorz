@@ -9,6 +9,8 @@ namespace spz {
 	public class Art_IconList_Header : MonoBehaviour{
 	    [Space(10)]
 	    [SerializeField] Button _import_button;//to import textures from user's directory. Also, hovering it activates slide-out panel.
+	    [Tooltip("Import selected image file(s) into a new paint layer (Paint tab). Only shown on ART tab.")]
+	    [SerializeField] Button _importToLayer_button;
 
 	    [SerializeField] Button _loadFromFile_uv_button;//to import usual texture that wraps around model, from directory.
 	    [SerializeField] Button _loadFromFile_normals_button; //to import Normals-map texture from directory.
@@ -45,6 +47,7 @@ namespace spz {
 	    public Action onDel_HiddenIcons{ get; set; }
 	    public Action onDel_NonSelectedIcons { get; set; }
 	    public Action onMerge_all_icons { get; set; } //to collapse into a single png. This frees up memory.
+	    public Action onImportToLayerButton { get; set; }
 
 	    IconsUI_List _myList;
     
@@ -145,6 +148,12 @@ namespace spz {
 	        _loadFromFile_uv_button.gameObject.SetActive( !isForBG );
 	        _loadFromFile_normals_button.gameObject.SetActive( !isForBG );
 	        _loadFromFile_projection_button.gameObject.SetActive( !isForBG );
+	        if (_importToLayer_button != null)
+	        {
+	            _importToLayer_button.gameObject.SetActive(!isForBG);
+	            _importToLayer_button.onClick.RemoveAllListeners();
+	            _importToLayer_button.onClick.AddListener(() => onImportToLayerButton?.Invoke());
+	        }
 
 	        int numButtons = isForBG ? 3 : 3;
 	        var slideout_rtf = _customTex_slideOut.transform as RectTransform;
@@ -154,6 +163,7 @@ namespace spz {
 
 	    void OnDestroy(){
 	        _import_button.onClick.RemoveAllListeners();
+	        if (_importToLayer_button != null) _importToLayer_button.onClick.RemoveAllListeners();
 	    }
 
 	}

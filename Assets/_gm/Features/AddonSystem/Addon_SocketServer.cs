@@ -67,32 +67,49 @@ namespace spz {
 		void StartServer() {
 			if (_isRunning) return;
 			
+			// Delete any stale marker left by a previous crashed/killed process
+			// so Python doesn't immediately try to connect before we've actually bound.
+			try {
+				string staleMarker = GetReadyMarkerPath(_port);
+				if (File.Exists(staleMarker)) {
+					File.Delete(staleMarker);
+					UnityEngine.Debug.Log($"[Addon_SocketServer] Removed stale ready marker from previous run: {staleMarker}");
+				}
+			} catch { }
+
+			if (!TryBindListener()) {
+				// Port is occupied. This is normal when Unity Editor is running at the same time
+				// (Editor has its own Addon_SocketServer on the same port). Do NOT kill processes
+				// on this port -- that would kill the Editor. Just log and skip.
+				UnityEngine.Debug.LogWarning($"[Addon_SocketServer] Port {_port} already in use (Unity Editor likely running). Socket server will not start in this instance. Addons will use the Editor's socket instead.");
+				return;
+			}
+
+			UnityEngine.Debug.Log($"[Addon_SocketServer] Started listening on 127.0.0.1:{_port} (loopback only; Python connects here)");
+			try {
+				string markerPath = Path.Combine(Path.GetTempPath(), "spz_addon_" + _port + "_ready.txt");
+				File.WriteAllText(markerPath, _port.ToString());
+				UnityEngine.Debug.Log($"[Addon_SocketServer] Ready marker written: {markerPath}");
+			} catch (Exception ex) {
+				UnityEngine.Debug.LogWarning($"[Addon_SocketServer] Could not write ready marker file: {ex.Message}");
+			}
+		}
+		
+		bool TryBindListener() {
 			try {
 				_listener = new TcpListener(IPAddress.Loopback, _port);
 				_listener.Start();
 				_isRunning = true;
-				
-				_listenerThread = new Thread(ListenForClients) {
-					IsBackground = true
-				};
+				_listenerThread = new Thread(ListenForClients) { IsBackground = true };
 				_listenerThread.Start();
-				
-				UnityEngine.Debug.Log($"[Addon_SocketServer] Started listening on 127.0.0.1:{_port} (loopback only; Python connects here)");
-				
-				// File-based handshake: Python waits for this file before connecting (breaks "connection refused" loop).
-				try {
-					string markerPath = Path.Combine(Path.GetTempPath(), "spz_addon_" + _port + "_ready.txt");
-					File.WriteAllText(markerPath, _port.ToString());
-					UnityEngine.Debug.Log($"[Addon_SocketServer] Ready marker written: {markerPath}");
-				} catch (Exception ex) {
-					UnityEngine.Debug.LogWarning($"[Addon_SocketServer] Could not write ready marker file: {ex.Message}");
-				}
-			}
-			catch (Exception e) {
-				UnityEngine.Debug.LogError($"[Addon_SocketServer] Failed to start server (no listener on 5555, no ready file): {e.Message}\n{e.StackTrace}");
+				return true;
+			} catch (Exception e) {
+				UnityEngine.Debug.LogError($"[Addon_SocketServer] Failed to bind port {_port}: {e.Message}");
+				_listener = null;
+				return false;
 			}
 		}
-		
+
 		/// <summary>Path to the ready marker file (same as Python checks). Remove on shutdown.</summary>
 		static string GetReadyMarkerPath(int port) => Path.Combine(Path.GetTempPath(), "spz_addon_" + port + "_ready.txt");
 		

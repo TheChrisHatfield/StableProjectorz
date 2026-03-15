@@ -16,10 +16,11 @@ Our Discord server: [here](https://discord.gg/aWbnX2qan2)
 </p>
 
 ## 🛠️ Setup & Building
-*   **Requirements:** Unity 6000.
+*   **Requirements:** Unity 6 (6000.x). Unity Personal is free and includes the full Editor.
 *   **Codebase:** Located entirely in `Assets/_gm`.
-*   **Build:** Press `Ctrl + Shift + B` -> **Build and Run**.
+*   **Build:** Press `Ctrl + Shift + B` → **Build and Run**.
 *   **Note:** Keep "Development Build" unchecked for performance.
+*   **License:** If you see "No valid Unity Editor license found", open this project once in Unity (Hub → Open), let it load, then close. That activates your free Personal license so builds (including command-line) work.
 
 ## 📝 Contribution Rules
 1.  **Nested Prefabs:** Keep UI separated in Prefabs. Don't modify prefabs externally. Save your work directly inside a deepest prefab itself, to prevent merge conflicts.

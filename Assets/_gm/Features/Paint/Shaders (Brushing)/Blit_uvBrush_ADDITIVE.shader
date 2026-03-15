@@ -24,6 +24,7 @@ Shader "Unlit/Blit_uvBrush_ADDITIVE"
 
             #pragma multi_compile  NUM_SLICES_UPTO_8  NUM_SLICES_UPTO_16  NUM_SLICES_UPTO_24
 
+            #define BRUSH_ONLY_WHERE_PAINTED
             #include "Assets/_gm/_Core/Shader_Includes/Blit_uvTex_with_uvMask_SHADER_PASS.cginc"
             ENDCG
         }
