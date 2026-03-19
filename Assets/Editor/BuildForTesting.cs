@@ -114,7 +114,17 @@ public static class BuildForTesting
 		}
 		else
 		{
-			Debug.LogError($"[BuildForTesting] Build failed: {summary.result}, errors: {summary.totalErrors}. Check build_output.txt above. If it says 'user-mapped section open', close StableProjectorz.exe (and any copy), then run Build → Clean and Build Win64 (IL2CPP).");
+			string hint = "Check build_output.txt above. ";
+			string summarized = report.SummarizeErrors();
+			if (!string.IsNullOrEmpty(summarized))
+				hint += "Errors: " + summarized + ". ";
+			if (summarized != null && summarized.Contains("No space left on device"))
+				hint += "Free disk space on the drive containing the project and Library, then run Build → Clean and Build Win64 (IL2CPP).";
+			else if (summarized != null && summarized.Contains("user-mapped section open"))
+				hint += "Close StableProjectorz.exe (and any copy), then run Build → Clean and Build Win64 (IL2CPP).";
+			else
+				hint += "If you see 'user-mapped section open', close the exe and Clean+Build. If you see 'No space left on device', free disk space and Clean+Build.";
+			Debug.LogError($"[BuildForTesting] Build failed: {summary.result}, errors: {summary.totalErrors}. {hint}");
 			EditorApplication.Exit(1);
 		}
 	}

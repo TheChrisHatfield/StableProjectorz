@@ -202,21 +202,16 @@ namespace spz {
 				{
 					layersPanel.SetLayerStack(PaintLayerStack_MGR.instance);
 					Button addBtn = null;
-					Transform searchRoot = layersScrollContent != null ? layersScrollContent : layersPanel.transform.parent;
-					if (searchRoot != null)
+					// Search for existing LayerButtonsRow in scroll content and section root
+					Transform btnRowSearch = FindLayerButtonsRow(layersScrollContent);
+					if (btnRowSearch == null && layersSectionRoot != null)
+						btnRowSearch = FindLayerButtonsRow(layersSectionRoot);
+					if (btnRowSearch != null)
 					{
-						for (int si = 0; si < searchRoot.childCount; si++)
-						{
-							var row = searchRoot.GetChild(si);
-							if (row != null && row.name == "LayerButtonsRow")
-							{
-								addBtn = row.Find("AddLayerBtn")?.GetComponent<Button>();
-								if (addBtn == null) addBtn = row.GetComponentInChildren<Button>(true);
-								break;
-							}
-						}
+						addBtn = btnRowSearch.Find("AddLayerBtn")?.GetComponent<Button>();
+						if (addBtn == null) addBtn = btnRowSearch.GetComponentInChildren<Button>(true);
 					}
-					// If no Add Layer button (e.g. panel found but button row missing), create it so the feature is never missing.
+					// If no Add Layer button, create it (only creates if row doesn't already exist)
 					if (addBtn == null && layersScrollContent != null)
 						addBtn = EnsureLayersAddButtonRow(layersScrollContent);
 					if (addBtn != null)
@@ -225,7 +220,6 @@ namespace spz {
 				if (layersPanel != null && layersScrollContent != null && layersPanel.transform.parent != layersScrollContent)
 				{
 					var tr = (RectTransform)layersPanel.transform;
-					var oldParent = tr.parent;
 					tr.SetParent(layersScrollContent, false);
 					tr.SetAsFirstSibling();
 					tr.anchorMin = new Vector2(0, 1);
@@ -233,19 +227,15 @@ namespace spz {
 					tr.pivot = new Vector2(0.5f, 1);
 					tr.offsetMin = Vector2.zero;
 					tr.offsetMax = Vector2.zero;
-					// Move LayerButtonsRow with panel so Delete/Visibility/+ Layer stay with the list
-					if (oldParent != null)
+				}
+				// Move LayerButtonsRow outside scroll content into section root at the bottom so it never scrolls away
+				if (layersSectionRoot != null && layersScrollContent != null && layersSectionRoot != (Transform)layersScrollContent)
+				{
+					Transform btnRow = FindLayerButtonsRow(layersScrollContent);
+					if (btnRow != null)
 					{
-						for (int si = 0; si < oldParent.childCount; si++)
-						{
-							var sib = oldParent.GetChild(si);
-							if (sib != null && sib.name == "LayerButtonsRow")
-							{
-								sib.SetParent(layersScrollContent, false);
-								sib.SetSiblingIndex(1);
-								break;
-							}
-						}
+						btnRow.SetParent(layersSectionRoot, false);
+						btnRow.SetAsLastSibling(); // bottom of section: below the scroll area
 					}
 				}
 				if (layersPanel != null)
@@ -253,6 +243,8 @@ namespace spz {
 					did = true;
 					if (layersScrollContent != null)
 						LayoutRebuilder.ForceRebuildLayoutImmediate(layersScrollContent);
+					if (layersSectionRoot != null && layersSectionRoot is RectTransform sectionRect)
+						LayoutRebuilder.ForceRebuildLayoutImmediate(sectionRect);
 				}
 			}
 
@@ -415,10 +407,30 @@ namespace spz {
 
 		// ---- Runtime creation of missing UI components ----
 
-		/// <summary>Creates the LayerButtonsRow with the "+ Layer" button. Call when panel is created or when panel exists but has no Add button.</summary>
+		static Transform FindLayerButtonsRow(Transform parent)
+		{
+			if (parent == null) return null;
+			for (int i = 0; i < parent.childCount; i++)
+			{
+				var c = parent.GetChild(i);
+				if (c != null && c.name == "LayerButtonsRow") return c;
+			}
+			return null;
+		}
+
+		/// <summary>Creates the LayerButtonsRow with the "+ Layer" button if it doesn't already exist.</summary>
 		static Button EnsureLayersAddButtonRow(RectTransform scrollContent)
 		{
 			if (scrollContent == null) return null;
+			// Check if a LayerButtonsRow already exists anywhere in the hierarchy (scroll content, section root, etc.)
+			Transform existingRow = FindLayerButtonsRow(scrollContent);
+			if (existingRow == null && scrollContent.parent != null)
+				existingRow = FindLayerButtonsRow(scrollContent.parent);
+			if (existingRow != null)
+			{
+				var existingBtn = existingRow.Find("AddLayerBtn")?.GetComponent<Button>();
+				if (existingBtn != null) return existingBtn;
+			}
 			var buttonsRowGo = new GameObject("LayerButtonsRow");
 			buttonsRowGo.transform.SetParent(scrollContent, false);
 			buttonsRowGo.transform.SetAsLastSibling();
@@ -460,6 +472,33 @@ namespace spz {
 			addTxt.color = Color.white;
 			addTxt.alignment = TextAlignmentOptions.Center;
 			addTxt.raycastTarget = false;
+
+			// Collapse visible layers into one (same row)
+			var collapseBtnGo = new GameObject("CollapseBtn");
+			collapseBtnGo.transform.SetParent(buttonsRowGo.transform, false);
+			var collapseLE = collapseBtnGo.AddComponent<LayoutElement>();
+			collapseLE.preferredWidth = 90;
+			collapseLE.preferredHeight = 24;
+			collapseLE.flexibleWidth = 0;
+			var collapseImg = collapseBtnGo.AddComponent<Image>();
+			collapseImg.color = new Color(0.45f, 0.35f, 0.25f, 0.95f);
+			collapseImg.raycastTarget = true;
+			var collapseBtn = collapseBtnGo.AddComponent<Button>();
+			collapseBtn.targetGraphic = collapseImg;
+			var collapseTxtGo = new GameObject("Text");
+			collapseTxtGo.transform.SetParent(collapseBtnGo.transform, false);
+			var collapseTxtRect = collapseTxtGo.AddComponent<RectTransform>();
+			collapseTxtRect.anchorMin = Vector2.zero;
+			collapseTxtRect.anchorMax = Vector2.one;
+			collapseTxtRect.offsetMin = Vector2.zero;
+			collapseTxtRect.offsetMax = Vector2.zero;
+			var collapseTxt = collapseTxtGo.AddComponent<TextMeshProUGUI>();
+			collapseTxt.text = "Collapse";
+			collapseTxt.fontSize = 12;
+			collapseTxt.color = Color.white;
+			collapseTxt.alignment = TextAlignmentOptions.Center;
+			collapseTxt.raycastTarget = false;
+
 			return addBtn;
 		}
 

@@ -172,6 +172,7 @@ namespace spz {
 	    void AffectByPressure(ref float size_, ref float opacity_){
        
 	        if (KeyMousePenInput.isLMBpressed(checkOnlyPen:true) == false){ return; }//tablet not used.
+	        if (Pen.current == null){ return; }//no pen device (e.g. tablet not detected by Unity Input System).
 
 	        float penPressure01 = Pen.current.pressure.ReadValue();
 

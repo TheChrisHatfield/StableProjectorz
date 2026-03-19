@@ -205,6 +205,9 @@ namespace spz {
 	    void EarlyUpdate(){
 	        Check_if_Hovered();
 	        Scroll_to_ChangeMode_maybe();
+	        // Keep content camera rendering when in img2img mode so "what to send" (ControlNet) and capture show current scene + layers. Restores visual indicator that data is being pushed through.
+	        if (UserCameras_Permissions.contentCam_keepRendering != null)
+	            UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.ContentUserCam, this, isLock: isMode_using_img2img());
 	    }
 
 	    void Check_if_Hovered(){
@@ -275,6 +278,10 @@ namespace spz {
 
 	    void Start(){
 	         EarlyUpdate_callbacks_MGR.instance.onEarlyUpdate3 += EarlyUpdate;
+	    }
+
+	    void OnDestroy(){
+	        UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.ContentUserCam, this, isLock: false);
 	    }
 
     

@@ -69,8 +69,20 @@ Shader "Unlit/PaintLayer_CompositeBlend"
                 float4 bg = UNITY_SAMPLE_TEX2DARRAY(_Background, uv_slice);
                 // _MainTex is set by Graphics.Blit (foreground layer)
                 float4 fg = UNITY_SAMPLE_TEX2DARRAY(_MainTex, uv_slice);
-                float t = fg.a * _Opacity;
-                return lerp(bg, fg, t);
+                // Match the runtime display compositing done by `EntireColorLayer_BlitApply`:
+                // That shader multiplies the sampled layer by `_TotalOpacity01` (affects RGB + A)
+                // and uses GPU blend:
+                //   RGB: One + OneMinusSrcAlpha
+                //   A  : One + One
+                //
+                // Equivalent math (treating `fg` as the layer texture):
+                //   src = fg * _Opacity
+                //   out.rgb = src.rgb + bg.rgb * (1 - src.a)
+                //   out.a   = src.a   + bg.a
+                float4 src = fg * _Opacity;
+                float outA = src.a + bg.a;
+                float3 outRGB = src.rgb + bg.rgb * (1.0 - src.a);
+                return float4(outRGB, outA);
             }
             ENDCG
         }

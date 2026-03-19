@@ -9,6 +9,16 @@ using UnityEngine.Rendering;
 
 namespace spz {
 
+	// =============================================================================
+	// LAYER SYSTEM - PAINT TARGET AND DISPLAY (Inpaint_MaskPainter)
+	// =============================================================================
+	// Paint target: GetPaintTarget() returns active layer Content (from PaintLayerStack_MGR).
+	// Display: ApplyColorLayer_To_UV_Textures() is called by Objects_Renderer_MGR; with 2+
+	// layers it blits each visible layer's Content in order onto the accumulation texture
+	// (no composite buffer). New-layer injection: subscribes to PaintLayerStack_MGR.OnLayerAdded
+	// (OnLayerAdded_InjectScene) to inject scene + layers below into the new layer.
+	// =============================================================================
+
 	//allows us to drag mouse in viewport and "draw" a 2D screen-space mask.
 	public class Inpaint_MaskPainter : MaskPainter{
 	    public static Inpaint_MaskPainter instance { get; private set; } = null;
@@ -37,7 +47,12 @@ namespace spz {
 
 	    bool _subscribedActiveLayerChanged;
 	    bool _loggedDisplaySourceOnce;
+	    /// <summary>True while collapse runs. Skip scene injection so the new layer only gets the composite we copy.</summary>
+	    bool _isCollapsingLayers;
+	    /// <summary>Set by PaintLayerStack_MGR during collapse to suppress scene injection into the new layer.</summary>
+	    public bool IsCollapsingLayers { get => _isCollapsingLayers; set => _isCollapsingLayers = value; }
 
+	    // --- Paint target: active layer Content (used by brush stroke application) ---
 	    /// <summary>Paint target: active layer Content directly. Compute shader writes strokes into the same
 	    /// texture the renderer reads, so GPU command serialization guarantees strokes are visible on the same
 	    /// frame they're painted (no Data/Content timing gap). Ensures scene is injected before use.</summary>
@@ -77,21 +92,21 @@ namespace spz {
 	    }
 
 
-	    // Takes all of the color that we've brushed, and applies into accumulation texture.
-	    // This is typically done as the final step during projection-cams-renders (not during painting).
+	    // --- Display / SD bridge: blit paint layers onto accumulation (called from Objects_Renderer_MGR) ---
+	    // Takes all brushed color and applies into accumulation. When 2+ layers: every VISIBLE layer (not just active) is blit in order onto ontoHere, so the result is the same as if the user had painted on a single buffer. Used for both viewport display and for SD init image capture (EnsureInpaintColorLayerAppliedForCapture).
 	    public void ApplyColorLayer_To_UV_Textures( RenderUdims ontoHere ){
-        
+	        if (ontoHere == null) return;
 	        if (_blitApplyEntireColorLayer_mat == null)
 	        {
 		        Debug.LogError("[Inpaint] _blitApplyEntireColorLayer_mat is null – Awake likely crashed. Cannot display paint.");
 		        return;
 	        }
-	        bool isColorless  = WorkflowRibbon_UI.instance.currentMode() == WorkflowRibbon_CurrMode.Inpaint_NoColor;
-	        bool willSendToSD = StableDiffusion_Hub.instance._finalPreparations_beforeGen;
-	        if(isColorless && willSendToSD){ return; }//Don't blit, keep as is.
-	        if(Save_MGR.instance._isSaving){ return; }//Never blit colors if saving. Or merging icons into one, because no ctrl+z.
+	        bool isColorless  = WorkflowRibbon_UI.instance != null && WorkflowRibbon_UI.instance.currentMode() == WorkflowRibbon_CurrMode.Inpaint_NoColor;
+	        bool willSendToSD = StableDiffusion_Hub.instance != null && StableDiffusion_Hub.instance._finalPreparations_beforeGen;
+	        // NoColor + SD capture: skip so mask stays as-is. Color mode (visible layers): always composite so SD init image has full layer stack.
+	        if(isColorless && willSendToSD){ return; }
+	        if(Save_MGR.instance != null && Save_MGR.instance._isSaving){ return; }//Never blit colors if saving. Or merging icons into one, because no ctrl+z.
 
-	        // Scene is injected into active layer for painting. Display: when 2+ layers blit each visible layer directly to accumulation (same blend as 1-layer path). When 1 layer use active Content.
 	        EnsureSceneInjectedIntoActiveLayer();
 	        var stack = PaintLayerStack_MGR.instance;
 	        bool multiLayer = stack != null && stack.Layers != null && stack.Layers.Count > 1;
@@ -102,7 +117,7 @@ namespace spz {
 	        float sign = Mathf.Sign(_prevStrength);
 	        float maxStrength = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity : 1f;
 
-	        // Multi-layer: blit each visible layer in order to ontoHere. Same shader/blend as single-layer so paint is visible.
+	        // Multi-layer: blit every visible layer in stack order (bottom to top) onto ontoHere. All visible layers contribute; result = single composite for display and for SD.
 	        if (multiLayer && stack != null)
 	        {
 		        int activeIdx = stack.ActiveLayerIndex;
@@ -127,16 +142,12 @@ namespace spz {
 		        return;
 	        }
 
-	        // Single layer (or no stack): one blit from source
+	        // Single layer (or no stack): one blit from source. Same mechanism as traditional inpaint (Alt+sample → brush → paint). Layer path: use ActiveLayer.Content when present so visible layer color data is always sent to SD (Blit scales if layer res != accumulation res).
 	        RenderUdims source = null;
 	        float layerOpacity01 = 1f;
-	        if (stack != null && stack.Layers != null && stack.Layers.Count <= 1 && stack.ActiveLayer?.Content != null && _ObjectUV_brushedColorRGBA != null)
-	        {
-		        var activeContent = stack.ActiveLayer.Content;
-		        if (activeContent.width == _ObjectUV_brushedColorRGBA.width && activeContent.height == _ObjectUV_brushedColorRGBA.height && activeContent.UdimsCount == _ObjectUV_brushedColorRGBA.UdimsCount)
-			        source = activeContent;
-	        }
-	        if (source == null)
+	        if (stack != null && stack.Layers != null && stack.Layers.Count == 1 && stack.ActiveLayer?.Content != null)
+		        source = stack.ActiveLayer.Content;
+	        if (source == null && _ObjectUV_brushedColorRGBA != null)
 		        source = _ObjectUV_brushedColorRGBA;
 	        if (source == null)
 	        {
@@ -166,6 +177,74 @@ namespace spz {
 		    _layerStackCompositeTemp?.Dispose();
 		    _layerStackCompositeTemp = new RenderUdims( sameSizeAs.udims_sectors, sameSizeAs.widthHeight,
 			    GenData_Masks.colorBrushFormat, GenData_Masks.colorBrushFilter, Color.clear, 0 );
+	    }
+
+	    /// <summary>Ensure the scene buffer exists and has the same size as source; create or resize if needed. Does not copy contents.</summary>
+	    void EnsureSceneBufferSameSizeAs(RenderUdims source)
+	    {
+		    if (source == null) return;
+		    bool need = _ObjectUV_brushedColorRGBA == null
+			    || _ObjectUV_brushedColorRGBA.width != source.width || _ObjectUV_brushedColorRGBA.height != source.height
+			    || _ObjectUV_brushedColorRGBA.UdimsCount != source.UdimsCount;
+		    if (!need) return;
+		    _ObjectUV_brushedColorRGBA?.Dispose();
+		    _ObjectUV_brushedColorRGBA = new RenderUdims(source.udims_sectors, source.widthHeight,
+			    GenData_Masks.colorBrushFormat, GenData_Masks.masksFilter, Color.clear, 0);
+	    }
+
+	    /// <summary>Collapse into scene buffer. Fully synchronous — no coroutine.
+	    /// Order: composite → copy to scene buffer → replace layers → copy to new layer. All in one frame.</summary>
+	    public bool CollapseLayersIntoScene()
+	    {
+		    var stack = PaintLayerStack_MGR.instance;
+		    if (stack == null || stack.Layers == null || stack.Layers.Count == 0) return false;
+		    RenderUdims firstContent = null;
+		    foreach (var l in stack.Layers)
+		    {
+			    if (l.Visible && l.Content != null) { firstContent = l.Content; break; }
+		    }
+		    if (firstContent == null)
+		    {
+			    UnityEngine.Debug.LogWarning("[Inpaint_MaskPainter] CollapseLayersIntoScene: no visible layer with content.");
+			    return false;
+		    }
+		    EnsureLayerStackCompositeTemp(firstContent);
+		    if (_layerStackCompositeTemp == null) return false;
+
+		    // 1. Composite all visible layers into temp
+		    _isCollapsingLayers = true;
+		    stack.CompositeTo(_layerStackCompositeTemp);
+
+		    // 2. Copy composite into scene buffer
+		    EnsureSceneBufferSameSizeAs(_layerStackCompositeTemp);
+		    if (_ObjectUV_brushedColorRGBA != null)
+			    stack.CopyAllSlices(_layerStackCompositeTemp, _ObjectUV_brushedColorRGBA);
+
+		    // 3. Replace stack with one empty layer (injection is skipped because _isCollapsingLayers)
+		    stack.ReplaceLayersWithOneEmpty();
+
+		    // 4. Copy composite into the new single layer so display shows it
+		    var singleLayer = stack.Layers != null && stack.Layers.Count == 1 ? stack.Layers[0] : null;
+		    if (singleLayer != null)
+		    {
+			    if (singleLayer.Content == null)
+				    stack.EnsureContentForLayerIfNeeded(singleLayer);
+			    if (singleLayer.Content != null
+			        && singleLayer.Content.width == _layerStackCompositeTemp.width
+			        && singleLayer.Content.height == _layerStackCompositeTemp.height
+			        && singleLayer.Content.UdimsCount == _layerStackCompositeTemp.UdimsCount)
+			    {
+				    stack.CopyAllSlices(_layerStackCompositeTemp, singleLayer.Content);
+				    singleLayer.SyncDataFromContent();
+				    singleLayer.HasReceivedSceneInject = true;
+				    singleLayer.Name = "Collapsed";
+			    }
+		    }
+		    _isCollapsingLayers = false;
+		    if (Objects_Renderer_MGR.instance != null)
+			    Objects_Renderer_MGR.instance.ReRenderAll_soon();
+		    UnityEngine.Debug.Log("[Inpaint_MaskPainter] CollapseLayersIntoScene: composite → scene buffer → single 'Collapsed' layer (synchronous).");
+		    return true;
 	    }
 
 
@@ -257,8 +336,11 @@ namespace spz {
 	        return new Vector3Int( GenData_Masks.COLOR_BRUSH_RESOLUTION,  GenData_Masks.COLOR_BRUSH_RESOLUTION,  numSlices);
 	    }
 
-	    protected override float getBrushStrength(){//strength [0,1] --> [-1,1]}
+	    protected override float getBrushStrength(){//strength [0,1] --> [-1,1]
 	        var orib = SD_WorkflowOptionsRibbon_UI.instance;
+	        // Wacom stylus: eraser end = erase, tip = brush (overrides UI so first frame is correct)
+	        if (KeyMousePenInput.isPenEraserPressed()) return -orib.maskBrushOpacity;
+	        if (KeyMousePenInput.isPenTipPressed()) return orib.maskBrushOpacity;
 	        return orib.maskBrushOpacity * (orib.isPositive?1:-1);
 	    }
 
@@ -435,13 +517,13 @@ namespace spz {
 		    return TryInjectIntoLayer(layer, _ObjectUV_brushedColorRGBA);
 	    }
 
-	    /// <summary>Blit source into layer's Content if dimensions match. Sets HasReceivedSceneInject. Used for new layers so they get the same base as the previous layer or scene.</summary>
+	    /// <summary>Copy source into layer's Content (all UDIM slices, no premultiplication). Sets HasReceivedSceneInject.</summary>
 	    bool TryInjectIntoLayer(PaintLayer layer, RenderUdims source)
 	    {
 		    if (layer == null || source == null) return false;
 		    if (layer.Content == null) return false;
 		    if (source.width != layer.Content.width || source.height != layer.Content.height || source.UdimsCount != layer.Content.UdimsCount) return false;
-		    Graphics.Blit(source.texArray, layer.Content.texArray);
+		    Graphics.CopyTexture(source.texArray, layer.Content.texArray);
 		    layer.HasReceivedSceneInject = true;
 		    UnityEngine.Debug.Log($"[Inpaint_MaskPainter] TryInjectIntoLayer: injected into '{layer.Name}' ({layer.Content.width}x{layer.Content.height}), source={(source == _ObjectUV_brushedColorRGBA ? "scene" : "layer")}.");
 		    return true;
@@ -461,9 +543,11 @@ namespace spz {
 		    return _ObjectUV_brushedColorRGBA;
 	    }
 
+	    // --- Scene injection: active layer and new-layer (OnLayerAdded) ---
 	    /// <summary>Inject scene into the current active layer when it needs a base (no index check). When user adds or selects a layer, that layer becomes active and gets scene so behavior is adaptable, not fixed to bottom.</summary>
 	    void EnsureSceneInjectedIntoActiveLayer()
 	    {
+		    if (_isCollapsingLayers) return; // collapse coroutine will write composite into the new layer; don't overwrite
 		    var stack = PaintLayerStack_MGR.instance;
 		    if (stack?.ActiveLayer == null || _ObjectUV_brushedColorRGBA == null) return;
 		    if (stack.ActiveLayer.Content == null) return;
@@ -495,10 +579,11 @@ namespace spz {
 		    InjectSceneIntoActiveLayer();
 	    }
 
-	    /// <summary>When user clicks New Layer: ensure the new layer has Content, then inject the composite of (scene + all layers below) into it. Data is in the layer — no empty override; display still composites all visible layers.</summary>
+	    /// <summary>When user clicks New Layer: ensure the new layer has Content, then inject the composite of (scene + all layers below) into it. Subscribed in Awake to PaintLayerStack_MGR.OnLayerAdded.</summary>
 	    void OnLayerAdded_InjectScene(PaintLayer newLayer)
 	    {
 		    if (newLayer == null) return;
+		    if (_isCollapsingLayers) return; // collapse coroutine will copy composite into the new layer; don't inject
 		    var stack = PaintLayerStack_MGR.instance;
 		    if (stack == null) return;
 
@@ -561,7 +646,7 @@ namespace spz {
 		    stack.EnsureResolution(new Vector3Int(w, h, slices));
 	    }
 
-	    /// <summary>When we have 2+ layers but no scene buffer yet (e.g. user added layer before first paint), create scene buffer and sync stack so we can composite all layers. Do not inject into layer 0 here (buffer is empty); first paint will run InitTextures and inject then.</summary>
+	    /// <summary>When we have 2+ layers but no scene buffer yet (e.g. user added layer before first paint), create scene buffer and sync stack so we can composite all layers. Called from ApplyColorLayer_To_UV_Textures when multiLayer.</summary>
 	    void EnsureSceneBufferForDisplay()
 	    {
 		    var stack = PaintLayerStack_MGR.instance;

@@ -102,11 +102,17 @@ namespace spz {
 	    }
 
 	    protected virtual void Update(){
-	        // COMMENTED OUT, KEPT FOR PRECAUTION. Allow user to do it from anywhere, without hovering the viewport:
-	        //    if(MainViewport_UI.instance.isCursorHoveringMe() == false){ return; }
 	        if(KeyMousePenInput.isSomeInputFieldActive()){ 
 	            return; 
-	        }//maybe typing text, etc
+	        }
+
+	        // Wacom stylus: flip to eraser when eraser end touches; flip to brush when tip touches. Don't switch mid-stroke.
+	        bool anyPainting = (Inpaint_MaskPainter.instance != null && Inpaint_MaskPainter.instance._isPainting)
+	                          || (Projections_MaskPainter.instance != null && Projections_MaskPainter.instance._isPainting);
+	        if (!anyPainting){
+	            if (KeyMousePenInput.isPenEraserPressedThisFrame()){ SetDirection_Toggle(false); }
+	            else if (KeyMousePenInput.isPenTipPressedThisFrame()){ SetDirection_Toggle(true); }
+	        }
 
 	        bool hasCTRL = KeyMousePenInput.isKey_CtrlOrCommand_pressed();
 	        if (!hasCTRL){

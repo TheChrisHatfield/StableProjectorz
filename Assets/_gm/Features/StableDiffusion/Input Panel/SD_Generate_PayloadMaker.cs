@@ -59,6 +59,7 @@ namespace spz {
 
 
     
+	    /// <summary>Same payload path for traditional (single buffer) and layer system: prompt from UI, init = what's visible (composite), mask from same, denoising = redo slider. SD receives all of this and runs the full diffusion so the model generalizes from the prompt and init, not just copying the init.</summary>
 	    public void Create_img2img_payload( bool isMakingBackgrounds,  out SD_img2img_payload payload_, 
 	                                        out SD_GenRequestArgs_byproducts intermediates_ ){
 	        Texture2D screenMask_skipAntiEdge;
@@ -193,6 +194,18 @@ namespace spz {
 	    }
 
     
+	    // -------------------------------------------------------------------------
+	    // Traditional img2img flow (no layer system): base UV + projections + single
+	    // paint buffer + lighting/AO → accumulation → content camera captures that →
+	    // init_images + mask + denoise + PROMPT sent to SD. Color/redo/Generate use that path.
+	    // With layers: same pipeline. Bridge collapses every VISIBLE layer into one
+	    // composite, we capture that as init_images, mask from same composite, redo
+	    // slider = denoising_strength, prompt from UI. So the generative model receives
+	    // prompt + init + mask + denoising and runs the full diffusion (generalizes),
+	    // not just reproducing the init. Denoising is clamped to a minimum >0 when
+	    // using Original fill so SD always runs at least a little diffusion.
+	    // -------------------------------------------------------------------------
+
 	    // If we have bg, we will produce screenMask of the entireShape.
 	    void img2img_GetTextures_andFill( bool forceFullWhiteMask, 
 	                                      out Texture2D screenMask_skipAntiEdge_, out Texture2D screenMask_withAntiEdge_,
@@ -202,6 +215,7 @@ namespace spz {
 	        var camerasMGR = UserCameras_MGR.instance;
 	        var painter    = Inpaint_MaskPainter.instance;
 
+	        // Layer paint was applied in the coroutine (EnsureInpaintColorLayerAppliedForCapture) and we yielded one frame so the GPU has finished the blit. Capture now so the init image includes the visible layer strokes (blue/orange/green etc.).
 	        viewTex_    = camerasMGR.camTextures.GetDisposable_ContentCamTexture();
 
 	        painter.GetDisposable_ScreenMask( forceFullWhite:forceFullWhiteMask, 
@@ -209,9 +223,14 @@ namespace spz {
         
 	        inpaint_fill_ = WorkflowRibbon_UI.instance.Get_InpaintFill();
         
-	        //inpainting controls aren't available for any mode that's not original. In that case, always denoise by 100%:
-	        denoiseStrength_ =  inpaint_fill_==InpaintingFill.Original?  
-	                                SD_WorkflowOptionsRibbon_UI.instance.denoisingStrength : 1.0f;
+	        // Same as traditional: when Original (Color/NoColor), use redo slider so SD runs diffusion and uses the prompt. Enforce minimum >0 so we never send 0 (which would make SD return the init image unchanged).
+	        if (inpaint_fill_ == InpaintingFill.Original)
+	        {
+		        float redo = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.denoisingStrength : 0.5f;
+		        denoiseStrength_ = Mathf.Max(redo, 0.01f);
+	        }
+	        else
+		        denoiseStrength_ = 1.0f;
 	    }
 
 

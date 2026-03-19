@@ -2,9 +2,18 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-using UnityEngine.Experimental.Rendering;
 
 namespace spz {
+
+	// =============================================================================
+	// LAYER SYSTEM - MANAGER (stack of PaintLayer; single source of truth)
+	// =============================================================================
+	// Holds the ordered list of PaintLayer (index 0 = bottom). PaintTab_LayersPanel_UI
+	// holds a reference to this and calls AddLayer(), SetActiveLayer(), SetLayerVisible(),
+	// RemoveLayer(). Inpaint_MaskPainter subscribes to OnLayerAdded to inject scene into
+	// new layers; uses ActiveLayerRenderUdims as the paint target; display blits each
+	// visible layer's Content in order (see ApplyColorLayer_To_UV_Textures).
+	// =============================================================================
 
 	/// <summary>
 	/// Layer stack: each layer is a container (scene + strokes). Display uses composite of all visible layers (never "active layer only" — that would override and hide others).
@@ -26,6 +35,8 @@ namespace spz {
 		int _nextLayerNumber = 1;
 		RenderUdims _compositeTempA;
 		RenderUdims _compositeTempB;
+		/// <summary>Used only during in-place collapse: composite into this then copy to layer0 so we never use a layer as CompositeTo dest (avoids read-write hazard).</summary>
+		RenderUdims _collapseResultTemp;
 
 		/// <summary>Layers from bottom (index 0) to top. Do not modify list directly; use AddLayer/RemoveLayer/MoveLayer. </summary>
 		public IReadOnlyList<PaintLayer> Layers => _layers;
@@ -42,6 +53,7 @@ namespace spz {
 		/// <summary>Invoked when a new layer is added (the new layer is already active). Inpaint_MaskPainter subscribes to inject scene into it (OnLayerAdded_InjectScene).</summary>
 		public static Action<PaintLayer> OnLayerAdded;
 
+		// --- Singleton and lifecycle ---
 		void Awake()
 		{
 			if (instance != null) { Destroy(gameObject); return; }
@@ -62,6 +74,7 @@ namespace spz {
 			if (_compositeBlendMat != null) { UnityEngine.Object.DestroyImmediate(_compositeBlendMat); _compositeBlendMat = null; }
 			_compositeTempA?.Dispose();
 			_compositeTempB?.Dispose();
+			_collapseResultTemp?.Dispose();
 			foreach (var l in _layers)
 				l.Dispose();
 			_layers.Clear();
@@ -69,6 +82,7 @@ namespace spz {
 				instance = null;
 		}
 
+		// --- Resolution and layer allocation (called when scene buffer / mask resolution is known) ---
 		/// <summary>Call when inpaint resolution is known (e.g. from Inpaint_MaskPainter.maskResolution). Ensures all layers have content. </summary>
 		public void EnsureResolution(Vector3Int resolution)
 		{
@@ -94,6 +108,7 @@ namespace spz {
 			AddLayer("Layer 1");
 		}
 
+		// --- Layer list operations (Add / Remove / Move / Active / Visibility) ---
 		/// <summary>Add a new layer. New layer is set active. Existing layers (including layer 0) are unchanged and remain visible. Scene/data injection runs via OnLayerAdded (e.g. Inpaint_MaskPainter).</summary>
 		public PaintLayer AddLayer(string name = null)
 		{
@@ -215,6 +230,119 @@ namespace spz {
 			OnLayersChanged?.Invoke();
 		}
 
+		/// <summary>Read ALL visible layers to CPU, alpha-blend them on CPU, write the merged result into a new layer.
+		/// Bypasses all GPU compositing/shader issues. Does NOT remove any existing layer.</summary>
+		public bool CollapseVisibleLayersIntoOne()
+		{
+			// Gather visible layers
+			var visibleLayers = new List<PaintLayer>();
+			foreach (var l in _layers)
+				if (l.Visible && l.Content != null && l.Content.texArray != null)
+					visibleLayers.Add(l);
+
+			if (visibleLayers.Count == 0)
+			{
+				UnityEngine.Debug.Log("[PaintLayerStack] Collapse: no visible layer with content.");
+				return false;
+			}
+
+			RenderUdims first = visibleLayers[0].Content;
+			int w = first.width;
+			int h = first.height;
+			int slices = first.UdimsCount;
+
+			// Read every visible layer's pixel data to CPU (list of Texture2D per layer, one per UDIM slice)
+			var allLayerSlices = new List<List<Texture2D>>();
+			var allLayerOpacities = new List<float>();
+			foreach (var l in visibleLayers)
+			{
+				List<Texture2D> layerTextures = TextureTools_SPZ.TextureArray_to_Texture2DList(l.Content.texArray);
+				if (layerTextures == null || layerTextures.Count == 0)
+				{
+					UnityEngine.Debug.LogWarning($"[PaintLayerStack] Collapse: failed to read layer '{l.Name}' to CPU.");
+					foreach (var prevList in allLayerSlices)
+						foreach (var t in prevList) if (t != null) UnityEngine.Object.DestroyImmediate(t);
+					return false;
+				}
+				allLayerSlices.Add(layerTextures);
+				allLayerOpacities.Add(Mathf.Clamp01(l.Opacity));
+			}
+
+			// CPU-side alpha blend: for each UDIM slice, blend all layers bottom-to-top
+			var resultTextures = new List<Texture2D>();
+			for (int s = 0; s < slices; s++)
+			{
+				Color[] accum = new Color[w * h];
+				// Start with all-transparent
+				for (int p = 0; p < accum.Length; p++)
+					accum[p] = Color.clear;
+
+				for (int li = 0; li < allLayerSlices.Count; li++)
+				{
+					var layerSlices = allLayerSlices[li];
+					if (s >= layerSlices.Count) continue;
+					Texture2D sliceTex = layerSlices[s];
+					Color[] fg = sliceTex.GetPixels();
+					float opacity = allLayerOpacities[li];
+
+					for (int p = 0; p < accum.Length && p < fg.Length; p++)
+					{
+						float srcA = fg[p].a * opacity;
+						float srcR = fg[p].r * opacity;
+						float srcG = fg[p].g * opacity;
+						float srcB = fg[p].b * opacity;
+
+						accum[p].r = srcR + accum[p].r * (1f - srcA);
+						accum[p].g = srcG + accum[p].g * (1f - srcA);
+						accum[p].b = srcB + accum[p].b * (1f - srcA);
+						accum[p].a = srcA + accum[p].a;
+					}
+				}
+
+				Texture2D result = new Texture2D(w, h, TextureFormat.RGBA32, false);
+				result.SetPixels(accum);
+				result.Apply();
+				resultTextures.Add(result);
+			}
+
+			// Destroy CPU textures from layers (no longer needed)
+			foreach (var layerSlices in allLayerSlices)
+				foreach (var t in layerSlices) if (t != null) UnityEngine.Object.DestroyImmediate(t);
+			allLayerSlices.Clear();
+
+			// Suppress scene injection, add new layer, write result
+			var maskPainter = Inpaint_MaskPainter.instance;
+			if (maskPainter != null) maskPainter.IsCollapsingLayers = true;
+
+			PaintLayer newLayer = AddLayer("Collapsed");
+			EnsureContentForLayerIfNeeded(newLayer);
+
+			if (maskPainter != null) maskPainter.IsCollapsingLayers = false;
+
+			if (newLayer.Content != null && newLayer.Content.texArray != null)
+			{
+				TextureTools_SPZ.TextureArray_Fill_N_Slices(newLayer.Content.texArray, resultTextures, 0);
+				newLayer.SyncDataFromContent();
+				newLayer.HasReceivedSceneInject = true;
+			}
+			else
+				UnityEngine.Debug.LogWarning("[PaintLayerStack] Collapse: new layer has no Content; paste skipped.");
+
+			// Dispose CPU result textures
+			foreach (var t in resultTextures) if (t != null) UnityEngine.Object.DestroyImmediate(t);
+
+			return true;
+		}
+
+		/// <summary>Remove all layers and add a single empty layer (e.g. after collapsing into scene buffer). Used by Inpaint_MaskPainter.CollapseLayersIntoScene.</summary>
+		public void ReplaceLayersWithOneEmpty()
+		{
+			for (int i = _layers.Count - 1; i >= 0; i--)
+				RemoveLayer(i);
+			AddLayer("Layer 1");
+			UnityEngine.Debug.Log("[PaintLayerStack] ReplaceLayersWithOneEmpty: one empty layer.");
+		}
+
 		/// <summary>Set opacity of a layer (0–1). Fires OnLayersChanged. </summary>
 		public void SetLayerOpacity(int index, float opacity)
 		{
@@ -223,20 +351,21 @@ namespace spz {
 			OnLayersChanged?.Invoke();
 		}
 
+		// --- Compositing (used by Inpaint_MaskPainter for new-layer injection and for APIs that need a flat image) ---
 		/// <summary>Build composite of base + layers [0..layerIndexExclusive-1] into dest. Use to inject into a new layer so it starts with scene + everything below (no empty override).</summary>
 		public void CompositeBelowInto(RenderUdims baseLayer, RenderUdims dest, int layerIndexExclusive)
 		{
 			if (dest == null || baseLayer == null) return;
-			if (_compositeBlendMat == null) { Graphics.Blit(baseLayer.texArray, dest.texArray); return; }
+			if (_compositeBlendMat == null) { Graphics.CopyTexture(baseLayer.texArray, dest.texArray); return; }
 			RenderUdims.assertSameSize(dest, baseLayer);
 			RenderUdims a = GetOrCreateCompositeTemp(ref _compositeTempA);
 			RenderUdims b = GetOrCreateCompositeTemp(ref _compositeTempB);
 			if (a == null || b == null)
 			{
-				Graphics.Blit(baseLayer.texArray, dest.texArray);
+				Graphics.CopyTexture(baseLayer.texArray, dest.texArray);
 				return;
 			}
-			Graphics.Blit(baseLayer.texArray, a.texArray);
+			Graphics.CopyTexture(baseLayer.texArray, a.texArray);
 			for (int i = 0; i < layerIndexExclusive && i < _layers.Count; i++)
 			{
 				var l = _layers[i];
@@ -247,30 +376,29 @@ namespace spz {
 				Graphics.Blit(l.Content.texArray, b.texArray, _compositeBlendMat);
 				var t = a; a = b; b = t;
 			}
-			Graphics.Blit(a.texArray, dest.texArray);
+			Graphics.CopyTexture(a.texArray, dest.texArray);
 		}
 
 		/// <summary>Composite all visible layers over a base. Uses stack resolution for temps when set; otherwise creates temps from baseLayer so display still shows all layers (fixes blank when 2+ layers).</summary>
 		public void CompositeToOnTopOfBase(RenderUdims baseLayer, RenderUdims dest)
 		{
 			if (dest == null || baseLayer == null) return;
-			if (_compositeBlendMat == null) { Graphics.Blit(baseLayer.texArray, dest.texArray); return; }
+			if (_compositeBlendMat == null) { Graphics.CopyTexture(baseLayer.texArray, dest.texArray); return; }
 			RenderUdims.assertSameSize(dest, baseLayer);
 			RenderUdims a = GetOrCreateCompositeTemp(ref _compositeTempA);
 			RenderUdims b = GetOrCreateCompositeTemp(ref _compositeTempB);
 			if (a == null || b == null)
 			{
-				// Fallback: create temps from baseLayer so we can still composite when stack resolution/UDIMs weren't set (visibility fix for 2+ layers).
 				a = GetOrCreateCompositeTempFromBase(ref _compositeTempA, baseLayer);
 				b = GetOrCreateCompositeTempFromBase(ref _compositeTempB, baseLayer);
 			}
 			if (a == null || b == null)
 			{
-				UnityEngine.Debug.LogWarning("[PaintLayerStack] CompositeToOnTopOfBase: composite temps null (resolution not set?). Call EnsureResolution before composite so first layer stays visible. Blitting base only.");
-				Graphics.Blit(baseLayer.texArray, dest.texArray);
+				UnityEngine.Debug.LogWarning("[PaintLayerStack] CompositeToOnTopOfBase: composite temps null (resolution not set?). Copying base only.");
+				Graphics.CopyTexture(baseLayer.texArray, dest.texArray);
 				return;
 			}
-			Graphics.Blit(baseLayer.texArray, a.texArray);
+			Graphics.CopyTexture(baseLayer.texArray, a.texArray);
 			foreach (var l in _layers)
 			{
 				if (!l.Visible || l.Content == null) continue;
@@ -280,25 +408,34 @@ namespace spz {
 				Graphics.Blit(l.Content.texArray, b.texArray, _compositeBlendMat);
 				var t = a; a = b; b = t;
 			}
-			Graphics.Blit(a.texArray, dest.texArray);
+			Graphics.CopyTexture(a.texArray, dest.texArray);
 		}
 
 		/// <summary>Composite all visible layers (bottom to top) into dest. No base – first visible layer is the bottom. Use CompositeToOnTopOfBase when you need scene/fallback as the bottom.</summary>
-		public void CompositeTo(RenderUdims dest)
+		public void CompositeTo(RenderUdims dest) => CompositeTo(dest, excludeLayerIndex: -1);
+
+		/// <summary>Same as CompositeTo(dest) but skips the layer at excludeLayerIndex (e.g. when dest is that layer's Content and it should not be blended on top).</summary>
+		public void CompositeTo(RenderUdims dest, int excludeLayerIndex)
 		{
 			if (dest == null) return;
 			if (_compositeBlendMat == null) { dest.ClearTheTextures(Color.clear); return; }
 			int visibleCount = 0;
-			foreach (var l in _layers)
+			for (int i = 0; i < _layers.Count; i++)
+			{
+				if (i == excludeLayerIndex) continue;
+				var l = _layers[i];
 				if (l.Visible && l.Content != null) visibleCount++;
+			}
 			if (visibleCount == 0)
 			{
 				dest.ClearTheTextures(Color.clear);
 				return;
 			}
 			RenderUdims first = null;
-			foreach (var l in _layers)
+			for (int i = 0; i < _layers.Count; i++)
 			{
+				if (i == excludeLayerIndex) continue;
+				var l = _layers[i];
 				if (!l.Visible || l.Content == null) continue;
 				first = l.Content;
 				break;
@@ -317,27 +454,52 @@ namespace spz {
 				b = GetOrCreateCompositeTempFromBase(ref _compositeTempB, first);
 			}
 			if (a == null || b == null) return;
-			a.ClearTheTextures(Color.clear);
-			Graphics.Blit(first.texArray, a.texArray);
-			if (visibleCount == 1)
+			bool foundFirst = false;
+			RenderUdims tmp;
+			for (int i = 0; i < _layers.Count; i++)
 			{
-				Graphics.Blit(a.texArray, dest.texArray);
-				return;
-			}
-			bool firstVisible = true;
-			foreach (var l in _layers)
-			{
+				if (i == excludeLayerIndex) continue;
+				var l = _layers[i];
 				if (!l.Visible || l.Content == null) continue;
-				if (firstVisible) { firstVisible = false; continue; }
+				if (!foundFirst)
+				{
+					// The runtime display path (`EntireColorLayer_BlitApply`) multiplies each layer by its
+					// opacity (_TotalOpacity01) before blending. So the bottom-most visible layer cannot be
+					// "true-copied" without opacity; it must be blended over a cleared background using
+					// the same composite math.
+					a.ClearTheTextures(Color.clear);
+					_compositeBlendMat.SetTexture("_Background", a.texArray);
+					_compositeBlendMat.SetFloat("_Opacity", Mathf.Clamp01(l.Opacity));
+					RenderUdims.SetNumUdims(a, _compositeBlendMat);
+					Graphics.Blit(l.Content.texArray, b.texArray, _compositeBlendMat);
+					tmp = a; a = b; b = tmp;
+					foundFirst = true;
+					if (visibleCount == 1)
+					{
+						Graphics.CopyTexture(a.texArray, dest.texArray);
+						return;
+					}
+					continue;
+				}
 				_compositeBlendMat.SetTexture("_Background", a.texArray);
 				_compositeBlendMat.SetFloat("_Opacity", Mathf.Clamp01(l.Opacity));
 				RenderUdims.SetNumUdims(a, _compositeBlendMat);
 				Graphics.Blit(l.Content.texArray, b.texArray, _compositeBlendMat);
-				var t = a; a = b; b = t;
+				tmp = a; a = b; b = tmp;
 			}
-			Graphics.Blit(a.texArray, dest.texArray);
+			Graphics.CopyTexture(a.texArray, dest.texArray);
 		}
 
+		/// <summary>Direct GPU memory copy of all UDIM slices from src to dest. Uses Graphics.CopyTexture —
+		/// no shader, no material, no blending. Requires matching format, size, and slice count.</summary>
+		public void CopyAllSlices(RenderUdims src, RenderUdims dest)
+		{
+			if (src == null || dest == null) return;
+			if (src.width != dest.width || src.height != dest.height || src.UdimsCount != dest.UdimsCount) return;
+			Graphics.CopyTexture(src.texArray, dest.texArray);
+		}
+
+		// --- Composite temp buffers (ping-pong for blending; fallback from base when stack resolution not set) ---
 		RenderUdims GetOrCreateCompositeTemp(ref RenderUdims field)
 		{
 			if (field != null && field.width == _resolution.x && field.height == _resolution.y && field.UdimsCount == _udimsCount)
@@ -360,6 +522,7 @@ namespace spz {
 			return field;
 		}
 
+		// --- Save / Load (called from ProjectSaveLoad_Helper) ---
 		/// <summary>Save layer stack to project. Call from ProjectSaveLoad_Helper. </summary>
 		public void Save(StableProjectorz_SL spz)
 		{

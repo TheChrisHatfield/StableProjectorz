@@ -134,8 +134,8 @@ namespace spz {
 	        mat.SetTexture("_ScreenMaskTexture", screenMaskInpaint);
 	        mat.SetFloat("_Force_Mask0_as_white", 0);
 
-	        Texture art2D =  isHighlight? _checkerTexture  :  pcam.myIconUI?.texture0()?.tex2D ?? null;
-	                art2D =  _showOrderOfProjections? Texture2D.whiteTexture  :  art2D;
+	        Texture art2D = isHighlight ? _checkerTexture : (pcam.myIconUI?.texture0()?.tex2D ?? pcam._myGenData?.GetTexture_ref0()?.tex2D);
+	        art2D = _showOrderOfProjections ? Texture2D.whiteTexture : art2D;
 	        if (art2D == null) return false;
 	        mat.SetTexture("_ScreenArtTexture", art2D);
 	        return true;
@@ -158,7 +158,7 @@ namespace spz {
 	    void SetupMatVars_HSVC_forHighlight(Material pMat, ProjectorCamera pcam){
 	        float hueShift = 0;
 	        float saturation = 1;
-	        float value = pcam.myIconUI.hsvc().value;
+	        float value = pcam.myIconUI != null ? pcam.myIconUI.hsvc().value : 1f;
 	        float contrast = 1;
 	        pMat.SetVector("_HSV_and_Contrast", new Vector4(hueShift, saturation, value, contrast));
 
@@ -182,9 +182,11 @@ namespace spz {
 	    }
 
 	    void SetupMatVars_HSVC_Usual( Material mat, ProjectorCamera pcam ){
-	        mat.SetVector("_HSV_and_Contrast", pcam.myIconUI.hsvc().toVector4());
+	        var hsvc = pcam.myIconUI != null ? pcam.myIconUI.hsvc() : new HueSatValueContrast(0f, 1f, 1f, 1f);
+	        float visibility = pcam.myIconUI != null ? pcam.myIconUI.projBends().totalVisibility_01 : 1f;
+	        mat.SetVector("_HSV_and_Contrast", hsvc.toVector4());
 	        Color tintCol = Color.white;
-	              tintCol.a = pcam.myIconUI.projBends().totalVisibility_01;
+	        tintCol.a = visibility;
 	        mat.SetColor("_TintColorCurrProjection", tintCol);
 	    }
 
@@ -199,7 +201,7 @@ namespace spz {
 	        int hoveredPovIx = MultiView_Ribbon_UI.instance.hoveredPovIx;
 
 	        if(isPaiting_in_myGeneration && hoveredPovIx>=0){
-	            Texture2D art2D =  pcam.myIconUI?.texture0()?.tex2D ?? null;
+	            Texture2D art2D = pcam.myIconUI?.texture0()?.tex2D ?? pcam._myGenData?.GetTexture_ref0()?.tex2D;
 	            if (art2D == null) return;
 	            pMat.SetTexture("_ScreenArtTexture", art2D);
 	            pMat.SetTexture("_ObjectUVmasks_AtlasTexture", Texture2D.whiteTexture);

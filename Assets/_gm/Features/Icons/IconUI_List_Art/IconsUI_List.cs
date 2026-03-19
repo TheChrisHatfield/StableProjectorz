@@ -136,6 +136,14 @@ namespace spz {
 	        }
 	    }
 
+	    /// <summary>Ensure this generation's group is visible in the viewport (not hidden, not solo). Call after generation completes so the new art is projected.</summary>
+	    public void EnsureGenerationVisibleInViewport(Guid genGuid){
+	        if(!_genGUID_to_iconGroup.TryGetValue(genGuid, out ArtIconsGroup grp)){ return; }
+	        grp.hideMyIcons_please = false;
+	        grp.showMyIcons_as_solo = false;
+	        grp.DoForEachIcon( icon => icon.OnMyIconGroup_HiddenOrSolo(false) );
+	    }
+
 
 	    protected abstract bool OnWillGenerate_isMyKind(GenData2D genData, out IconUI prefab_);
 

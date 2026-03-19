@@ -120,6 +120,7 @@ namespace spz {
 
 	        currModelRootGO.transform.localScale =  Vector3.one*scaleFactor;
 	        currModelRootGO.transform.position -= totalBounds.center*scaleFactor;
+	        currModelRootGO.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
 	    }
 
 

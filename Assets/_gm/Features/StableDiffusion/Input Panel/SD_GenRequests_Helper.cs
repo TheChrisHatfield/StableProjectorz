@@ -127,6 +127,11 @@ namespace spz {
 	        UserCameras_Permissions.Force_KeepRenderingCameras(true);
 	            for(int i=0; i<3; ++i){ yield return null; }//give time for cameras to render the target textures.
 
+	            // Apply visible layer paint to mesh, then wait one frame so the GPU finishes the blit before we capture. Otherwise the content camera can capture before the layer strokes are on the texture and they won't be sent to SD.
+	            if (!isMakingBackgrounds && Objects_Renderer_MGR.instance != null)
+	                Objects_Renderer_MGR.instance.EnsureInpaintColorLayerAppliedForCapture();
+	            yield return null;
+
 	            GenerationData_Kind genData_kind = isMakingBackgrounds? GenerationData_Kind.SD_Backgrounds 
 	                                                                   : GenerationData_Kind.SD_ProjTextures;
 	            SD_img2img_payload payload;
@@ -354,8 +359,6 @@ namespace spz {
 	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:false);
 
 	        if(Finish_if_ResultError(result)){ return; }
-        
-	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
 
 	        // Use class-type information, to support inheritance of objects:
 	        string json = result.downloadHandler.text;
@@ -363,7 +366,19 @@ namespace spz {
 	        SD_txt2imgResponse response = JsonConvert.DeserializeObject<SD_txt2imgResponse>(json, settings);
 
 	        _latestGenData?.Complete_PendingImages( response.images ); //using ? in case SD had exception
+
+	        // Ensure new Gen Art is visible in viewport: clear Solo for all, and ensure this generation's group is not hidden. Then request re-render (and again after 2 frames so projection picks up the new texture).
+	        Guid latestGuid = _latestGenData != null ? _latestGenData.total_GUID : default;
 	        _latestGenData = null;
+
+	        if (Art2D_IconsUI_List.instance != null){
+	            Art2D_IconsUI_List.instance.disable_IsSolo_inAllGroups( anotherGroupRemains_asSolo: false, sendEventsToIcons: true );
+	            if (latestGuid != default)
+	                Art2D_IconsUI_List.instance.EnsureGenerationVisibleInViewport( latestGuid );
+	        }
+
+	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	        StartCoroutine( ReRenderAgainAfterFrames( 2 ) );
 
 	        int numGenerations = PlayerPrefs.GetInt("numArtGenerated", 0);
 	        string genCompleted_text = numGenerations < 20?  "Done! :)   Go to <b>Art</b> Tab, and right click the icon, to adjust."
@@ -414,6 +429,13 @@ namespace spz {
 	        Viewport_StatusText.instance.ShowStatusText("Cancelling the generation...", false, gracePeriod, progressVisibility: false);
 	    }
 
+
+	    IEnumerator ReRenderAgainAfterFrames(int frames){
+	        for(int i = 0; i < frames; i++)
+	            yield return null;
+	        if (Objects_Renderer_MGR.instance != null)
+	            Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	    }
 
 	    Coroutine _finishTheInterrupt_ifStuck_crtn = null;
 	    IEnumerator FinishTheInterrupt_ifStuck(float graceDelay=10){
