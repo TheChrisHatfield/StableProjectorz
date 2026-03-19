@@ -7,39 +7,63 @@ namespace spz {
 
 	public static class KeyMousePenInput{
 
+	    /// <summary>True when pen tip is pressed (and no barrel/eraser). Used for Wacom stylus: tip = brush mode.</summary>
+	    public static bool isPenTipPressed(){
+	        if (Pen.current == null) return false;
+	        if (!Pen.current.tip.isPressed) return false;
+	        if (Pen.current.firstBarrelButton.isPressed || Pen.current.secondBarrelButton.isPressed || Pen.current.thirdBarrelButton.isPressed || Pen.current.fourthBarrelButton.isPressed || Pen.current.eraser.isPressed) return false;
+	        return true;
+	    }
+	    /// <summary>True when pen eraser end is pressed. Used for Wacom stylus: eraser = erase mode.</summary>
+	    public static bool isPenEraserPressed(){
+	        return Pen.current != null && Pen.current.eraser.isPressed;
+	    }
+	    public static bool isPenTipPressedThisFrame(){
+	        if (Pen.current == null) return false;
+	        if (!Pen.current.tip.wasPressedThisFrame) return false;
+	        if (Pen.current.firstBarrelButton.isPressed || Pen.current.secondBarrelButton.isPressed || Pen.current.thirdBarrelButton.isPressed || Pen.current.fourthBarrelButton.isPressed || Pen.current.eraser.isPressed) return false;
+	        return true;
+	    }
+	    public static bool isPenEraserPressedThisFrame(){
+	        return Pen.current != null && Pen.current.eraser.wasPressedThisFrame;
+	    }
+
 	    public static bool isLMBpressed(bool checkOnlyPen=false){
 	        bool isMousePressed =  Mouse.current!=null  &&  Mouse.current.leftButton.isPressed;
-	        bool isPenPressed  =  Pen.current != null  &&  Pen.current.tip.isPressed;
-	        if(isPenPressed){
-	            isPenPressed &= Pen.current.firstBarrelButton.isPressed==false;
-	            isPenPressed &= Pen.current.secondBarrelButton.isPressed==false;
-	            isPenPressed &= Pen.current.thirdBarrelButton.isPressed==false;
-	            isPenPressed &= Pen.current.fourthBarrelButton.isPressed==false;
-	            isPenPressed &= Pen.current.eraser.isPressed==false;
-	            if(!isPenPressed){ isMousePressed=false; }//became false. So reset mouse also, to ensure it's false. Fights otherwise.
+	        bool isPenTip  =  Pen.current != null  &&  Pen.current.tip.isPressed;
+	        if(isPenTip){
+	            isPenTip &= Pen.current.firstBarrelButton.isPressed==false;
+	            isPenTip &= Pen.current.secondBarrelButton.isPressed==false;
+	            isPenTip &= Pen.current.thirdBarrelButton.isPressed==false;
+	            isPenTip &= Pen.current.fourthBarrelButton.isPressed==false;
+	            isPenTip &= Pen.current.eraser.isPressed==false;
+	            if(!isPenTip){ isMousePressed=false; }
 	        }
-	        if(checkOnlyPen){ return isPenPressed; }
-	        return isMousePressed || isPenPressed;
+	        bool isPenEraser = isPenEraserPressed();
+	        if(checkOnlyPen){ return isPenTip || isPenEraser; }
+	        return isMousePressed || isPenTip || isPenEraser;
 	    }
 
 	    public static bool isLMBpressedThisFrame(){
 	        bool isMousePressed = Mouse.current!=null  &&  Mouse.current.leftButton.wasPressedThisFrame;
-	        bool isPenPressed  =  Pen.current != null  &&  Pen.current.tip.wasPressedThisFrame;
-	        if(isPenPressed){
-	            isPenPressed &= Pen.current.firstBarrelButton.isPressed==false;
-	            isPenPressed &= Pen.current.secondBarrelButton.isPressed==false;
-	            isPenPressed &= Pen.current.thirdBarrelButton.isPressed==false;
-	            isPenPressed &= Pen.current.fourthBarrelButton.isPressed==false;
-	            isPenPressed &= Pen.current.eraser.isPressed==false;
-	            if(!isPenPressed){ isMousePressed=false; }//became false. So reset mouse also, to ensure it's false. Fights otherwise.
+	        bool isPenTip  =  Pen.current != null  &&  Pen.current.tip.wasPressedThisFrame;
+	        if(isPenTip){
+	            isPenTip &= Pen.current.firstBarrelButton.isPressed==false;
+	            isPenTip &= Pen.current.secondBarrelButton.isPressed==false;
+	            isPenTip &= Pen.current.thirdBarrelButton.isPressed==false;
+	            isPenTip &= Pen.current.fourthBarrelButton.isPressed==false;
+	            isPenTip &= Pen.current.eraser.isPressed==false;
+	            if(!isPenTip){ isMousePressed=false; }
 	        }
-	        return isMousePressed || isPenPressed;
+	        bool isPenEraser = isPenEraserPressedThisFrame();
+	        return isMousePressed || isPenTip || isPenEraser;
 	    }
 
 	    public static bool isLMBreleasedThisFrame(){
 	        bool isMouseReleased =  Mouse.current!=null  &&  Mouse.current.leftButton.wasReleasedThisFrame;
-	        bool isPenReleased   =  Pen.current != null  &&  Pen.current.tip.wasReleasedThisFrame;
-	        return isMouseReleased || isPenReleased;
+	        bool isPenTipReleased   =  Pen.current != null  &&  Pen.current.tip.wasReleasedThisFrame;
+	        bool isPenEraserReleased = Pen.current != null && Pen.current.eraser.wasReleasedThisFrame;
+	        return isMouseReleased || isPenTipReleased || isPenEraserReleased;
 	    }
 
 
@@ -93,9 +117,10 @@ namespace spz {
 	    public static Vector2 delta_while_LMBpressed( bool normalizeByScreenDiagonal=true ){
 	        float inv_screenDiagonal =  1.0f / Mathf.Sqrt(Screen.width*Screen.width + Screen.height*Screen.height);
 	        bool isMousePressed =  Mouse.current!=null  &&  Mouse.current.leftButton.isPressed;
-	        bool isPenPressed   =  Pen.current != null  &&  Pen.current.tip.isPressed;
-	        if (isPenPressed){
-	            Vector2 dt =Pen.current.delta.ReadValue();
+	        bool isPenTip   =  Pen.current != null  &&  Pen.current.tip.isPressed;
+	        bool isPenEraser = isPenEraserPressed();
+	        if (isPenTip || isPenEraser){
+	            Vector2 dt = Pen.current.delta.ReadValue();
 	            dt.y *= -1; // Invert Y if necessary for tablet setup
 	            dt *= normalizeByScreenDiagonal? inv_screenDiagonal : 1;
 	            return dt;
@@ -151,17 +176,22 @@ namespace spz {
 	    }
 
 
+	    /// <summary>Screen position (pixel coords). Prefers pen position when pen tip or eraser is pressed so brush follows stylus on tablet; otherwise mouse, then pen. Requires Unity Input System with Pen device (e.g. Wacom).</summary>
 	    public static Vector2 cursorScreenPos(){//entire window (NOT MAIN VIEW), pixel coords
 	        Vector2 screenPos = Vector2.zero;
+	        // Prefer pen when tip or eraser is pressed so painting follows the stylus.
+	        if (Pen.current != null && (Pen.current.tip.isPressed || Pen.current.eraser.isPressed)){
+	            screenPos = Pen.current.position.ReadValue();
+	            return screenPos;
+	        }
 	        if (Mouse.current != null){ screenPos = Mouse.current.position.ReadValue(); }
 	        else if (Pen.current != null){ screenPos = Pen.current.position.ReadValue(); }
 	        return screenPos;
 	    }
 
+	    /// <summary>Normalized [0,1] over entire window. Same source as cursorScreenPos (pen when drawing, else mouse/pen).</summary>
 	    public static Vector2 cursorViewPos01(){//entire window (NOT MAIN VIEW) normalized in [0,1] range
-	        Vector2 screenPos = Vector2.zero;
-	        if (Mouse.current != null){ screenPos = Mouse.current.position.ReadValue(); }
-	        else if (Pen.current != null){ screenPos = Pen.current.position.ReadValue(); }
+	        Vector2 screenPos = cursorScreenPos();
 	        screenPos /= new Vector2(Screen.width, Screen.height);
 	        return screenPos;
 	    }

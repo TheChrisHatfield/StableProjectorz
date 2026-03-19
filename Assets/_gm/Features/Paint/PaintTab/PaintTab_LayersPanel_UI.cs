@@ -4,6 +4,16 @@ using UnityEngine.UI;
 
 namespace spz {
 
+	// =============================================================================
+	// LAYER SYSTEM - UI ONLY (layer list panel; no layer data lives here)
+	// =============================================================================
+	// This script is the Paint Tab layer list UI: rows (one per layer), Add Layer
+	// button, visibility eye, delete. It does NOT hold layer data. It holds a
+	// reference to PaintLayerStack_MGR and calls AddLayer(), SetActiveLayer(idx),
+	// SetLayerVisible(idx), RemoveLayer(idx). RebuildList() repopulates rows from
+	// stack.Layers. Scene injection and paint target are handled by Inpaint_MaskPainter.
+	// =============================================================================
+
 	/// <summary>
 	/// Layer panel: Add Layer, visibility toggle per row, Delete per row. Click row to set active (if wired).
 	/// Visibility: toggle button — dark blue when layer visible, light when hidden. Scene data is injected by Inpaint_MaskPainter.
@@ -13,10 +23,12 @@ namespace spz {
 		[SerializeField] PaintLayerStack_MGR _layerStack;
 		[SerializeField] RectTransform _listRoot;
 		[SerializeField] Button _addLayerButton;
+		[SerializeField] Button _collapseButton;
 		[SerializeField] float _rowHeight = 28f;
 
 		readonly List<GameObject> _rows = new List<GameObject>();
 
+		// --- Wiring to PaintLayerStack_MGR (set stack ref and subscribe to layer/active changes) ---
 		public void SetAddLayerButton(Button btn)
 		{
 			_addLayerButton = btn;
@@ -24,6 +36,21 @@ namespace spz {
 			{
 				_addLayerButton.onClick.RemoveAllListeners();
 				_addLayerButton.onClick.AddListener(OnAddLayer);
+			}
+			// Collapse button lives in the same row as Add Layer
+			if (_addLayerButton != null)
+			{
+				var row = _addLayerButton.transform.parent;
+				if (row != null)
+				{
+					var collapseT = row.Find("CollapseBtn");
+					_collapseButton = collapseT != null ? collapseT.GetComponent<Button>() : null;
+					if (_collapseButton != null && _layerStack != null)
+					{
+						_collapseButton.onClick.RemoveAllListeners();
+						_collapseButton.onClick.AddListener(OnCollapse);
+					}
+				}
 			}
 		}
 
@@ -45,6 +72,20 @@ namespace spz {
 				{
 					_addLayerButton.onClick.RemoveAllListeners();
 					_addLayerButton.onClick.AddListener(OnAddLayer);
+				}
+				if (_collapseButton == null && _addLayerButton != null)
+				{
+					var row = _addLayerButton.transform.parent;
+					if (row != null)
+					{
+						var collapseT = row.Find("CollapseBtn");
+						_collapseButton = collapseT != null ? collapseT.GetComponent<Button>() : null;
+					}
+				}
+				if (_collapseButton != null)
+				{
+					_collapseButton.onClick.RemoveAllListeners();
+					_collapseButton.onClick.AddListener(OnCollapse);
 				}
 				RebuildList();
 			}
@@ -70,6 +111,20 @@ namespace spz {
 				_addLayerButton.onClick.RemoveAllListeners();
 				_addLayerButton.onClick.AddListener(OnAddLayer);
 			}
+			if (_collapseButton == null && _addLayerButton != null)
+			{
+				var row = _addLayerButton.transform.parent;
+				if (row != null)
+				{
+					var collapseT = row.Find("CollapseBtn");
+					_collapseButton = collapseT != null ? collapseT.GetComponent<Button>() : null;
+				}
+			}
+			if (_collapseButton != null)
+			{
+				_collapseButton.onClick.RemoveAllListeners();
+				_collapseButton.onClick.AddListener(OnCollapse);
+			}
 			RebuildList();
 		}
 
@@ -82,9 +137,24 @@ namespace spz {
 			}
 		}
 
+		// --- Add Layer and list rebuild (UI calls stack; RebuildList repopulates rows from stack.Layers) ---
 		void OnAddLayer()
 		{
 			_layerStack?.AddLayer();
+		}
+
+		void OnCollapse()
+		{
+			if (_layerStack == null)
+			{
+				UnityEngine.Debug.LogWarning("[PaintTab_LayersPanel_UI] Collapse: _layerStack is null.");
+				return;
+			}
+			// Copy composite to a new layer only. No layer removal.
+			bool didAdd = _layerStack.CollapseVisibleLayersIntoOne();
+			if (didAdd)
+				RebuildList();
+			RequestReRender();
 		}
 
 		void RebuildList()
@@ -103,6 +173,8 @@ namespace spz {
 				if (row != null)
 					_rows.Add(row);
 			}
+
+			LayoutRebuilder.ForceRebuildLayoutImmediate(_listRoot);
 		}
 
 		// Visibility button colors: discernible on/off
@@ -111,6 +183,7 @@ namespace spz {
 		static readonly Color RowBgDefault      = new Color(0, 0, 0, 0.2f);
 		static readonly Color RowBgActive       = new Color(0.2f, 0.38f, 0.55f, 0.45f);  // blue tint so user sees which layer is active
 
+		// --- Build one row: click row = SetActiveLayer, eye = SetLayerVisible, red button = RemoveLayer ---
 		/// <summary>One row: click row to set active layer; visibility toggle; layer name; Delete. Active row has blue tint.</summary>
 		GameObject BuildRow(PaintLayer layer, int index)
 		{

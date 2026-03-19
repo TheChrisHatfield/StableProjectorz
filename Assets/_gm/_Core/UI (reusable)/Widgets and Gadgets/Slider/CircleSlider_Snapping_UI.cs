@@ -38,6 +38,8 @@ namespace spz {
 
 	    // Accumulates small mouse movements for improved responsiveness
 	    float _accumulatedDelta = 0f;
+	    /// <summary>Pointer/pen/touch delta from OnDrag (pixels). Used so slider works with tablet and touch, not just mouse.</summary>
+	    float _accumulatedPointerDeltaX = 0f;
 
 	    void Awake(){
 	        // Setting default value.
@@ -60,6 +62,7 @@ namespace spz {
 
 	    void OnDisable(){
 	        _isDragging = false;
+	        _accumulatedPointerDeltaX = 0f;
 	    }
 
 	    public void OnPointerDown(PointerEventData eventData){
@@ -72,12 +75,19 @@ namespace spz {
 	    //empty, needed to prevent event from propagating to scroll rect etc (parent) from here.
 	    public void OnBeginDrag(PointerEventData eventData) { }
 	    public void OnEndDrag(PointerEventData eventData) { }
-	    public void OnDrag(PointerEventData eventData) { }
+	    public void OnDrag(PointerEventData eventData)
+	    {
+		    if (!_isDragging || !isInteractable) return;
+		    float sensit = _sensitivity;
+		    if (_scaleAffectsSinsitiv_optional != null) sensit /= _scaleAffectsSinsitiv_optional.localScale.x;
+		    _accumulatedPointerDeltaX += eventData.delta.x * sensit * 0.01f;
+	    }
 	    public void OnInitializePotentialDrag(PointerEventData eventData) { }
 
 	    void Update(){
 	        if(_isDragging && isInteractable){
-	            float delta = Calc_MouseDelta();
+	            float delta = Calc_MouseDelta() + _accumulatedPointerDeltaX;
+	            _accumulatedPointerDeltaX = 0f;
 	            _accumulatedDelta += delta;
 
 	            float normalizedValue = Mathf.InverseLerp(_min, _max, _value);
@@ -97,7 +107,8 @@ namespace spz {
 	        }
 	        if(KeyMousePenInput.isLMBreleasedThisFrame() || (_isDragging && !isInteractable)){
 	            _isDragging = false;
-	            _accumulatedDelta = 0f; // Reset accumulated delta when dragging ends
+	            _accumulatedDelta = 0f;
+	            _accumulatedPointerDeltaX = 0f;
 	        }
 	    }
 

@@ -5,6 +5,15 @@ using UnityEngine.Experimental.Rendering;
 
 namespace spz {
 
+	// =============================================================================
+	// LAYER SYSTEM - DATA MODEL (single layer)
+	// =============================================================================
+	// This file defines one paint layer. The manager is PaintLayerStack_MGR, which
+	// holds a list of PaintLayer instances (index 0 = bottom). Inpaint_MaskPainter
+	// injects scene into Content and uses each layer's Content for display blits.
+	// The layer list UI is in PaintTab_LayersPanel_UI; it only calls the stack.
+	// =============================================================================
+
 	/// <summary>
 	/// Layer is a container: it holds scene + paint. Scene data is injected into Content by the painter
 	/// when the layer is empty or when switching to it. Compute shader writes strokes directly into
@@ -34,6 +43,7 @@ namespace spz {
 			Name = name ?? "Layer";
 		}
 
+		// --- Allocation / resolution (called by PaintLayerStack_MGR when resolution is set) ---
 		/// <summary>Allocate content and data with same layout as inpaint brush (UDIMs, resolution, format). Call when stack resolution is known. New/rezised content needs scene injection again.</summary>
 		public void EnsureContent(IReadOnlyList<UDIM_Sector> udims, Vector2Int resolution, GraphicsFormat format, FilterMode filter)
 		{
@@ -50,6 +60,7 @@ namespace spz {
 			HasReceivedSceneInject = false; // new/rezised vessel; painter will inject static scene once
 		}
 
+		// --- Save/load helpers (Content = live paint buffer; Data = mirror for serialization) ---
 		/// <summary>Copy Content → Data so future strokes apply on top of current content. Call after the painter injects scene into Content (or after load). </summary>
 		public void SyncDataFromContent()
 		{
@@ -59,14 +70,14 @@ namespace spz {
 				Data?.Dispose();
 				Data = new RenderUdims(Content.udims_sectors, Content.widthHeight, Content.graphicsFormat, Content.filterMode, Color.clear, 0);
 			}
-			Graphics.Blit(Content.texArray, Data.texArray);
+			Graphics.CopyTexture(Content.texArray, Data.texArray);
 		}
 
 		/// <summary>Bake: copy Data → Content so display/composite shows the latest strokes. Call after writing into Data. </summary>
 		public void Bake()
 		{
-			if (Data != null && Content != null && Data.width == Content.width && Data.height == Content.height && Data.UdimsCount == Content.UdimsCount)
-				Graphics.Blit(Data.texArray, Content.texArray);
+			if (Data == null || Content == null || Data.width != Content.width || Data.height != Content.height || Data.UdimsCount != Content.UdimsCount) return;
+			Graphics.CopyTexture(Data.texArray, Content.texArray);
 		}
 
 		/// <summary>Assign content loaded from project (used by PaintLayerStack_MGR.Load). Disposes existing content. Data is synced from Content. </summary>

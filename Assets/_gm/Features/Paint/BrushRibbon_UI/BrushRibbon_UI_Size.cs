@@ -87,8 +87,19 @@ namespace spz {
 	    }
 
 
+	    /// <summary>True when viewport or the brush size slider area is hovered (mouse or pen), so bracket keys work for tablet users focused on the slider.</summary>
+	    bool IsViewportOrBrushSizeControlHovered()
+	    {
+		    if (MainViewport_UI.instance != null && MainViewport_UI.instance.isCursorHoveringMe()) return true;
+		    if (_maskBrushSize_slider == null) return false;
+		    var rt = _maskBrushSize_slider.GetComponent<RectTransform>();
+		    if (rt == null) return false;
+		    Vector2 screenPos = KeyMousePenInput.cursorScreenPos();
+		    return RectTransformUtility.RectangleContainsScreenPoint(rt, screenPos, null);
+	    }
+
 	    void Update(){
-	        if(MainViewport_UI.instance.isCursorHoveringMe() == false){ return; }
+	        if (!IsViewportOrBrushSizeControlHovered()){ return; }
 
 	        float currVal = _maskBrushSize_slider.value;
 	        float brushIncrement = 0.01f;

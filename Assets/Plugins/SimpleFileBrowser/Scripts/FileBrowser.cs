@@ -1,4 +1,4 @@
-﻿//#define WIN_DIR_CHECK_WITHOUT_TIMEOUT // When uncommented, Directory.Exists won't be wrapped inside a Task/Thread on Windows but we won't be able to set a timeout for unreachable directories/drives
+//#define WIN_DIR_CHECK_WITHOUT_TIMEOUT // When uncommented, Directory.Exists won't be wrapped inside a Task/Thread on Windows but we won't be able to set a timeout for unreachable directories/drives
 
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -958,6 +958,13 @@ namespace SimpleFileBrowser
 					if( Input.GetKeyDown( KeyCode.A ) && IsCtrlKeyHeld() )
 #endif
 						SelectAllFiles();
+
+#if ENABLE_INPUT_SYSTEM && !ENABLE_LEGACY_INPUT_MANAGER
+					if( Keyboard.current[Key.B].wasPressedThisFrame && IsCtrlKeyHeld() )
+#else
+					if( Input.GetKeyDown( KeyCode.B ) && IsCtrlKeyHeld() )
+#endif
+						AddCurrentFolderToFavorites();
 				}
 			}
 #endif
@@ -1065,6 +1072,12 @@ namespace SimpleFileBrowser
 
 			quickLinks = null;
 #endif
+
+			// Load user favorites (Quick access / pinned folders) from PlayerPrefs
+#if !UNITY_EDITOR && UNITY_ANDROID
+			if( !FileBrowserHelpers.ShouldUseSAF )
+#endif
+			LoadFavoritesIntoQuickLinks();
 
 			// Custom quick links should be placed at the bottom
 			if( customQuickLinks != null && allQuickLinks.Count > customQuickLinks.Length )
@@ -2957,6 +2970,50 @@ namespace SimpleFileBrowser
 
 			while( !result.HasValue )
 				yield return null;
+		}
+
+		/// <summary>Current directory path when the file browser is open. Null if browser is not open.</summary>
+		public static string GetCurrentPath()
+		{
+			return Instance != null ? Instance.m_currentPath : null;
+		}
+
+		private const string FAVORITES_PLAYERPREFS_KEY = "SimpleFileBrowser_Favorites";
+
+		private void LoadFavoritesIntoQuickLinks()
+		{
+			string raw = PlayerPrefs.GetString( FAVORITES_PLAYERPREFS_KEY, "" );
+			if( string.IsNullOrEmpty( raw ) ) return;
+			string[] lines = raw.Split( new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries );
+			for( int i = 0; i < lines.Length; i++ )
+			{
+				int tab = lines[i].IndexOf( '\t' );
+				if( tab <= 0 ) continue;
+				string name = lines[i].Substring( 0, tab );
+				string path = lines[i].Substring( tab + 1 ).Trim();
+				if( string.IsNullOrEmpty( path ) ) continue;
+				AddQuickLink( null, name, path );
+			}
+		}
+
+		/// <summary>Add the current folder to Quick access (favorites). Persisted so it appears next time. Use Ctrl+B when browser is open.</summary>
+		public static bool AddCurrentFolderToFavorites()
+		{
+			if( Instance == null || string.IsNullOrEmpty( Instance.m_currentPath ) ) return false;
+#if !UNITY_EDITOR && UNITY_ANDROID
+			if( FileBrowserHelpers.ShouldUseSAFForPath( Instance.m_currentPath ) ) return false;
+#endif
+			if( !FileBrowserHelpers.DirectoryExists( Instance.m_currentPath ) ) return false;
+			string path = Instance.m_currentPath.Trim().TrimEnd( Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar );
+			string name = Path.GetFileName( path );
+			if( string.IsNullOrEmpty( name ) ) name = path;
+			string raw = PlayerPrefs.GetString( FAVORITES_PLAYERPREFS_KEY, "" );
+			string newEntry = name + "\t" + path + "\n";
+			if( raw.IndexOf( path, StringComparison.OrdinalIgnoreCase ) >= 0 ) return false;
+			raw += newEntry;
+			PlayerPrefs.SetString( FAVORITES_PLAYERPREFS_KEY, raw );
+			PlayerPrefs.Save();
+			return Instance.AddQuickLink( Instance.m_skin != null ? Instance.m_skin.FolderIcon : null, name, path );
 		}
 
 		public static bool AddQuickLink( string name, string path, Sprite icon = null )

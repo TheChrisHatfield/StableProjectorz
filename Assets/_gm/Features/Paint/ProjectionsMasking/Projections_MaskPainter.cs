@@ -104,8 +104,10 @@ namespace spz {
 	        return new Vector3Int( GenData_Masks.MASK_RESOLUTION,  GenData_Masks.MASK_RESOLUTION,  numSlices);
 	    }
 
-	    protected override float getBrushStrength(){//strength [0,1] --> [-1,1]}
+	    protected override float getBrushStrength(){//strength [0,1] --> [-1,1]
 	        var orib = SD_WorkflowOptionsRibbon_UI.instance;
+	        if (KeyMousePenInput.isPenEraserPressed()) return -orib.maskBrushOpacity;
+	        if (KeyMousePenInput.isPenTipPressed()) return orib.maskBrushOpacity;
 	        return orib.maskBrushOpacity * (orib.isPositive?1:-1);
 	    }
 

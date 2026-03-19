@@ -195,7 +195,9 @@ namespace spz {
 	        for(int ix=0; ix<cnt; ++ix){
 	            Guid guid   = guidsOrdered_ref[ix];
 	            IconUI icon = Art2D_IconsUI_List.instance.GetIcon_of_GenerationGroup(guid, ix_in_generation:-1, justGetChosenIcon:true);
-	            GenData2D genData =  icon._genData;
+	            if(icon == null){ continue; }
+	            GenData2D genData = icon._genData;
+	            if(genData == null){ continue; }
 
 	            //Maybe skip this icon's projection, if it's not from that group which wans to be shown 'on its own':
 	            if(anyIconGroup_asSolo  &&  icon._myIconGroup.showMyIcons_as_solo==false){ continue;}
@@ -231,12 +233,26 @@ namespace spz {
 	    }
 
 
+	    /// <summary>Draw paint layers onto mesh accumulation texture. Inpaint_MaskPainter blits each visible layer's Content in order (or single active layer when only one).</summary>
 	    void Apply_InpaintSketch_ColorLayer(){
 	        if(MainViewport_UI.instance.showing != MainViewport_UI.Showing.UsualView){ return; }
 	        if(WorkflowRibbon_UI.instance == null || WorkflowRibbon_UI.instance.allowed_to_showBrushMask() == false){ return; }
 	        if(Inpaint_MaskPainter.instance == null){ return; }
 	        Inpaint_MaskPainter.instance.ApplyColorLayer_To_UV_Textures( _accumulation_uv_RT );
 	    }
+
+	    /// <summary>Ensure layer paint is on accumulation and mesh is updated before capturing for img2img. Call immediately before GetDisposable_ContentCamTexture() so the init image sent to SD includes current layer stack paint (blue/green/red strokes). Bypasses view/mode checks so capture always gets the layer composite.</summary>
+	    public void EnsureInpaintColorLayerAppliedForCapture(){
+	        if (Inpaint_MaskPainter.instance != null)
+	            Inpaint_MaskPainter.instance.ApplyColorLayer_To_UV_Textures( _accumulation_uv_RT );
+	        _finalMat_Helper.ShowFinalMat_on_ALL( _accumulation_uv_RT );
+	    }
+
+	    // ForceFullCompositeForSDCapture was removed: it duplicated the entire render pipeline
+	    // (UV chunks, starting color, projections, highlight, AO, layer blit, anti-seams) just to
+	    // get layers onto the mesh before capture. The normal render path (ReRenderAll_soon + 3-frame
+	    // wait) already does all of that. Before capture we only need EnsureInpaintColorLayerAppliedForCapture
+	    // which blits layers unconditionally (no mode guards) and refreshes the mesh material.
 
 
 	    void ApplyAmbientOcclusion(IconUI fromIcon){

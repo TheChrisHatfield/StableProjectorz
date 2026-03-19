@@ -36,6 +36,9 @@ namespace SimpleFileBrowser
 		[SerializeField]
 		private float minDistanceToEdges = 10f;
 
+		private Button pinToQuickAccessButton;
+		private bool pinButtonCreated;
+
 		private void Awake()
 		{
 			selectAllButton.onClick.AddListener( OnSelectAllButtonClicked );
@@ -45,6 +48,27 @@ namespace SimpleFileBrowser
 			renameButton.onClick.AddListener( OnRenameButtonClicked );
 		}
 
+		private void EnsurePinToQuickAccessButton()
+		{
+			if ( pinButtonCreated ) return;
+			pinButtonCreated = true;
+			GameObject clone = Instantiate( createFolderButton.gameObject, createFolderButton.transform.parent );
+			clone.name = "PinToQuickAccessButton";
+			pinToQuickAccessButton = clone.GetComponent<Button>();
+			pinToQuickAccessButton.onClick.RemoveAllListeners();
+			pinToQuickAccessButton.onClick.AddListener( OnPinToQuickAccessClicked );
+			TextMeshProUGUI label = clone.GetComponentInChildren<TextMeshProUGUI>( true );
+			if ( label != null ) label.text = "Pin to Quick access";
+			clone.transform.SetAsLastSibling();
+			pinToQuickAccessButton.gameObject.SetActive( false );
+		}
+
+		private void OnPinToQuickAccessClicked()
+		{
+			Hide();
+			FileBrowser.AddCurrentFolderToFavorites();
+		}
+
 		internal void Show( bool selectAllButtonVisible, bool deselectAllButtonVisible, bool deleteButtonVisible, bool renameButtonVisible, Vector2 position, bool isMoreOptionsMenu )
 		{
 			selectAllButton.gameObject.SetActive( selectAllButtonVisible );
@@ -52,6 +76,10 @@ namespace SimpleFileBrowser
 			deleteButton.gameObject.SetActive( deleteButtonVisible );
 			renameButton.gameObject.SetActive( renameButtonVisible );
 			selectAllButtonSeparator.SetActive( !deselectAllButtonVisible );
+
+			EnsurePinToQuickAccessButton();
+			if ( pinToQuickAccessButton != null )
+				pinToQuickAccessButton.gameObject.SetActive( isMoreOptionsMenu );
 
 			rectTransform.anchoredPosition = position;
 			gameObject.SetActive( true );
@@ -120,6 +148,15 @@ namespace SimpleFileBrowser
 
 			for( int i = 0; i < allButtonSeparators.Length; i++ )
 				allButtonSeparators[i].color = skin.ContextMenuSeparatorColor;
+
+			if( pinToQuickAccessButton != null )
+			{
+				pinToQuickAccessButton.image.color = skin.ContextMenuBackgroundColor;
+				LayoutElement le = pinToQuickAccessButton.GetComponent<LayoutElement>();
+				if( le != null ) le.preferredHeight = skin.RowHeight + 1;
+				TextMeshProUGUI pinText = pinToQuickAccessButton.GetComponentInChildren<TextMeshProUGUI>( true );
+				if( pinText != null ) skin.ApplyTo( pinText, skin.ContextMenuTextColor );
+			}
 		}
 
 		private void OnSelectAllButtonClicked()
