@@ -31,6 +31,8 @@ namespace spz {
 	    }
 
 	    void OnEyeDropperTool_Sampled(Color col){
+	        // Screen readback can return low/0 alpha (clear/background); brush blend uses alpha — swatches are opaque.
+	        col.a = 1f;
 	        ChangeBrushColor(col, ensureInpaint:true);
 	        _brushColor_anim.Play();
 	    }
@@ -51,8 +53,10 @@ namespace spz {
 	        if(invokeCallback){  _onBrushColorUpdated?.Invoke(wantedColor); }
 	    }
 
-	    /// <summary> Set brush color from palette swatch or external source (switches to Inpaint Color and notifies). </summary>
+	    /// <summary> Set brush color from palette swatch or external source (switches to Inpaint Color and notifies).
+	    /// Alpha is forced to 1 so imported ASE/ACO/GPL swatches and double-click–edited swatches paint like opaque picks (same idea as eyedropper readback). </summary>
 	    public void SetBrushColorFromPalette(Color c){
+	        c.a = 1f;
 	        ChangeBrushColor(c, ensureInpaint:true, invokeCallback:true);
 	    }
     

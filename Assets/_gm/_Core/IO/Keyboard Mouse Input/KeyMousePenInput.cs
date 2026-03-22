@@ -7,6 +7,12 @@ namespace spz {
 
 	public static class KeyMousePenInput{
 
+	    // After stylus lift, keep logical cursor at last pen/hover position until the user moves or clicks the mouse
+	    // (otherwise Windows leaves the mouse pointer elsewhere and the brush preview jumps away from the stroke).
+	    static Vector2 _lastPenOrHoverScreenPos;
+	    static bool _haveLastPenOrHoverScreenPos;
+	    const float MouseDeltaToBreakPenLatchSq = 2.25f; // 1.5 px — ignore sub-pixel jitter
+
 	    /// <summary>True when pen tip is pressed (and no barrel/eraser). Used for Wacom stylus: tip = brush mode.</summary>
 	    public static bool isPenTipPressed(){
 	        if (Pen.current == null) return false;
@@ -176,17 +182,52 @@ namespace spz {
 	    }
 
 
-	    /// <summary>Screen position (pixel coords). Prefers pen position when pen tip or eraser is pressed so brush follows stylus on tablet; otherwise mouse, then pen. Requires Unity Input System with Pen device (e.g. Wacom).</summary>
+	    /// <summary>Screen position (pixel coords). Uses pen while tip/eraser down or while pen is in range (hover); after the stylus leaves the tablet, keeps the last pen/hover point until the mouse moves or a mouse button is pressed so brush/tools do not snap back to an idle mouse position. Requires Unity Input System Pen (e.g. Wacom).</summary>
 	    public static Vector2 cursorScreenPos(){//entire window (NOT MAIN VIEW), pixel coords
-	        Vector2 screenPos = Vector2.zero;
-	        // Prefer pen when tip or eraser is pressed so painting follows the stylus.
-	        if (Pen.current != null && (Pen.current.tip.isPressed || Pen.current.eraser.isPressed)){
-	            screenPos = Pen.current.position.ReadValue();
-	            return screenPos;
+	        Pen pen = Pen.current;
+	        if (pen != null)
+	        {
+		        bool down = pen.tip.isPressed || pen.eraser.isPressed;
+		        bool hover = pen.inRange.isPressed;
+		        if (down || hover)
+		        {
+			        Vector2 p = pen.position.ReadValue();
+			        _lastPenOrHoverScreenPos = p;
+			        _haveLastPenOrHoverScreenPos = true;
+			        return p;
+		        }
 	        }
-	        if (Mouse.current != null){ screenPos = Mouse.current.position.ReadValue(); }
-	        else if (Pen.current != null){ screenPos = Pen.current.position.ReadValue(); }
-	        return screenPos;
+
+	        if (Mouse.current != null)
+	        {
+		        bool mouseClickedThisFrame = Mouse.current.leftButton.wasPressedThisFrame
+		                                     || Mouse.current.rightButton.wasPressedThisFrame
+		                                     || Mouse.current.middleButton.wasPressedThisFrame;
+		        if (mouseClickedThisFrame)
+		        {
+			        _haveLastPenOrHoverScreenPos = false;
+			        return Mouse.current.position.ReadValue();
+		        }
+		        Vector2 d = Mouse.current.delta.ReadValue();
+		        if (d.sqrMagnitude > MouseDeltaToBreakPenLatchSq)
+		        {
+			        _haveLastPenOrHoverScreenPos = false;
+			        return Mouse.current.position.ReadValue();
+		        }
+		        if (_haveLastPenOrHoverScreenPos)
+			        return _lastPenOrHoverScreenPos;
+		        return Mouse.current.position.ReadValue();
+	        }
+
+	        if (pen != null)
+	        {
+		        Vector2 p = pen.position.ReadValue();
+		        _lastPenOrHoverScreenPos = p;
+		        _haveLastPenOrHoverScreenPos = true;
+		        return p;
+	        }
+
+	        return _haveLastPenOrHoverScreenPos ? _lastPenOrHoverScreenPos : Vector2.zero;
 	    }
 
 	    /// <summary>Normalized [0,1] over entire window. Same source as cursorScreenPos (pen when drawing, else mouse/pen).</summary>

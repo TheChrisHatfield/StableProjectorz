@@ -77,3 +77,30 @@ Multi-layer paint → SD capture (2026-03-21)
 
   Unity packages: Packages/manifest.json and packages-lock.json had no local
   changes at this update (already in sync on main).
+
+-------------------------------------------------------------------------------
+
+Layer rename UI & enumerated collapse names (2026-03-22)
+-------------------------------------------------------------------------------
+
+Paint tab — layer list (PaintTab_LayersPanel_UI.cs)
+  • Stack still supplies default Layer 1, Layer 2, …; DisplayBlock = read-only label.
+  • Click name → EditBlock (TMP_InputField); Enter (onSubmit) commits SetLayerName;
+    Escape or focus loss cancels without save.
+  • Visibility button also SetActiveLayer so eye can pick active layer.
+  • OnActiveLayerChanged → RefreshActiveHighlight only (not full rebuild) so rename
+    input is not destroyed on active change.
+  • Unity 6 TMP: SelectAll() protected — use onFocusSelectAll on the field.
+
+Layer stack (PaintLayerStack_MGR.cs)
+  • SetLayerName, DefaultLayerDisplayName (trim, max length, empty → default).
+  • ConsumeNextDefaultCollapseLayerName → Collapse 1, Collapse 2, …
+  • CollapseVisibleLayersIntoOne uses enumerated names, not fixed "Collapsed".
+
+Save / load (SerializationObjects.cs + stack Save/Load)
+  • PaintLayerStack_SL.nextCollapseNumber; 0 in old saves → InferNextCollapseNumber
+    (Collapse N + legacy "Collapsed").
+
+Inpaint (Inpaint_MaskPainter.cs)
+  • CollapseLayersIntoScene uses ConsumeNextDefaultCollapseLayerName for the
+    single merged layer name (same counter as paint-tab collapse).

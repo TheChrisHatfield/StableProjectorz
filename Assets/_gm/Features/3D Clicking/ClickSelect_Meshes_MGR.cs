@@ -45,11 +45,18 @@ namespace spz {
 	        // maybe disallow ctrl, but only if not pressing Ctrl+A or Ctrl+D, which we need to take care of.
 	        bool allow_ctrl  = Settings_MGR.instance.get_ignoreCtrl_if_clickSelectingMeshes()==false
 	                            || Input.GetKeyDown(KeyCode.A) || Input.GetKeyDown(KeyCode.D);
+	        // Inpaint color workflows: Ctrl alone used to force mesh-select mode and blocked LMB painting + made eyedropper
+	        // ignore the viewport (see MaskPainter / BrushRibbon_UI_EyeDropperTool). Swatch picks had no Ctrl, so they "worked".
+	        // Here we only enable Ctrl+click selection when the user turns on the mesh-select toggle, or outside these modes.
+	        bool inpaintColorWorkflow = WorkflowRibbon_UI.instance != null
+	                                    && (WorkflowRibbon_UI.instance.currentMode() == WorkflowRibbon_CurrMode.Inpaint_Color
+	                                        || WorkflowRibbon_UI.instance.currentMode() == WorkflowRibbon_CurrMode.Inpaint_NoColor);
+	        bool ctrlForMeshSelect = KeyMousePenInput.isKey_CtrlOrCommand_pressed() && allow_ctrl && !inpaintColorWorkflow;
         
 	        //allow if manually enabled because we want to orbit around.
 	        isSelectMode_  =  !KeyMousePenInput.isKey_alt_pressed();
 	        isSelectMode_ &=  !KeyMousePenInput.isMMBpressed();
-	        isSelectMode_ &=   KeyMousePenInput.isKey_CtrlOrCommand_pressed() && allow_ctrl;
+	        isSelectMode_ &=   ctrlForMeshSelect;
 	        isSelectMode_ |=  _manuallyEnabled;
 
 	        isAllowClicks_ = !KeyMousePenInput.isKey_alt_pressed();

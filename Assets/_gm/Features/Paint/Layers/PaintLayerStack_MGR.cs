@@ -207,16 +207,18 @@ namespace spz {
 		public void MoveLayer(int fromIndex, int toIndex)
 		{
 			if (fromIndex < 0 || fromIndex >= _layers.Count || toIndex < 0 || toIndex >= _layers.Count || fromIndex == toIndex) return;
+			var keepActive = ActiveLayer;
 			var layer = _layers[fromIndex];
 			_layers.RemoveAt(fromIndex);
 			_layers.Insert(toIndex, layer);
-			if (_activeIndex == fromIndex)
-				_activeIndex = toIndex;
-			else if (fromIndex < _activeIndex && toIndex >= _activeIndex)
-				_activeIndex--;
-			else if (fromIndex > _activeIndex && toIndex <= _activeIndex)
-				_activeIndex++;
+			if (keepActive != null)
+				_activeIndex = _layers.IndexOf(keepActive);
+			else
+				_activeIndex = Mathf.Clamp(_activeIndex, 0, _layers.Count - 1);
 			OnLayersChanged?.Invoke();
+			// Reorder does not repaint UV accumulation until ProcessMeshes runs; SD capture and same-frame Generate can read stale order without this.
+			if (Objects_Renderer_MGR.instance != null)
+				Objects_Renderer_MGR.instance.ReRenderAll_soon();
 		}
 
 		public void SetActiveLayer(int index)

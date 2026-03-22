@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using TMPro;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 
 namespace spz {
 
@@ -14,6 +15,10 @@ namespace spz {
 	    [SerializeField] IntegerInputField _int_input;
 	    [SerializeField] FloatInputField _float_input;
 	    [SerializeField] float _sensitivity = 10;
+	    [SerializeField]
+	    [Tooltip("Multiplies horizontal stylus drag only (mouse unchanged). Higher = reach min/max with less hand travel. Tune per instance (e.g. brush size dial) in the Inspector.")]
+	    [Min(0.25f)]
+	    float _penStylusDragGain = 2f;
 	    [SerializeField] string _prefix = "";
 	    [SerializeField] float _min = 1f;
 	    [SerializeField] float _max = 100f;
@@ -66,8 +71,11 @@ namespace spz {
 	    }
 
 	    public void OnPointerDown(PointerEventData eventData){
-	        if (eventData.button != PointerEventData.InputButton.Left) { return; }
 	        if (!isInteractable) { return; }
+	        // Middle/right are reserved (e.g. reset on RMB). Pen/touch primary contact must not be rejected
+	        // because some runtimes do not map tip to InputButton.Left the same way as mouse.
+	        if (eventData.button == PointerEventData.InputButton.Right || eventData.button == PointerEventData.InputButton.Middle)
+		        return;
 	        _isDragging = true;
 	        onPressedDown?.Invoke();
 	    }
@@ -86,8 +94,21 @@ namespace spz {
 
 	    void Update(){
 	        if(_isDragging && isInteractable){
-	            float delta = Calc_MouseDelta() + _accumulatedPointerDeltaX;
-	            _accumulatedPointerDeltaX = 0f;
+	            float sensit = _sensitivity;
+	            if (_scaleAffectsSinsitiv_optional != null) sensit /= _scaleAffectsSinsitiv_optional.localScale.x;
+	            float delta;
+	            // Stylus: legacy Mouse X does not track pen; use Pen.delta (same scale as OnDrag eventData.delta * 0.01).
+	            // Skip accumulating OnDrag for the same frame to avoid double-applying identical motion.
+	            if (Pen.current != null && (Pen.current.tip.isPressed || Pen.current.eraser.isPressed))
+	            {
+		            delta = Pen.current.delta.ReadValue().x * sensit * 0.01f * _penStylusDragGain;
+		            _accumulatedPointerDeltaX = 0f;
+	            }
+	            else
+	            {
+		            delta = Calc_MouseDelta() + _accumulatedPointerDeltaX;
+		            _accumulatedPointerDeltaX = 0f;
+	            }
 	            _accumulatedDelta += delta;
 
 	            float normalizedValue = Mathf.InverseLerp(_min, _max, _value);

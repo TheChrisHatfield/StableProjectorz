@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
@@ -31,6 +32,11 @@ namespace spz {
 		readonly List<GameObject> _rows = new List<GameObject>();
 		int _renameRowIndex = -1;
 		bool _suppressRenameEndEdit;
+
+		// Drag reorder state
+		int _dragFromIndex = -1;
+		int _dragInsertIndex = -1;
+		GameObject _dragInsertIndicator;
 
 		// --- Wiring to PaintLayerStack_MGR (set stack ref and subscribe to layer/active changes) ---
 		public void SetAddLayerButton(Button btn)
@@ -139,6 +145,7 @@ namespace spz {
 				_layerStack.OnLayersChanged -= RebuildList;
 				_layerStack.OnActiveLayerChanged -= RefreshActiveHighlight;
 			}
+			if (_dragInsertIndicator != null) Destroy(_dragInsertIndicator);
 		}
 
 		void RefreshActiveHighlight()
@@ -299,6 +306,84 @@ namespace spz {
 		static readonly Color RowBgDefault      = new Color(0, 0, 0, 0.2f);
 		static readonly Color RowBgActive       = new Color(0.2f, 0.38f, 0.55f, 0.45f);  // blue tint so user sees which layer is active
 
+		// --- Drag-to-reorder: grip handle on each row drives MoveLayer ---
+
+		internal void OnRowBeginDrag(int fromIndex)
+		{
+			if (_layerStack == null || fromIndex < 0 || fromIndex >= _layerStack.Layers.Count) return;
+			if (_renameRowIndex >= 0) CancelLayerRename(_renameRowIndex);
+			_dragFromIndex = fromIndex;
+			_dragInsertIndex = fromIndex;
+			EnsureDragInsertIndicator();
+		}
+
+		internal void OnRowDrag(int fromIndex, PointerEventData eventData)
+		{
+			if (_dragFromIndex < 0 || _listRoot == null || _layerStack == null) return;
+			RectTransformUtility.ScreenPointToLocalPointInRectangle(_listRoot, eventData.position, eventData.pressEventCamera, out Vector2 localPos);
+			int insertIdx = CalcInsertIndex(localPos);
+			if (insertIdx != _dragInsertIndex)
+			{
+				_dragInsertIndex = insertIdx;
+				PositionInsertIndicator(insertIdx);
+			}
+		}
+
+		internal void OnRowEndDrag(int fromIndex)
+		{
+			if (_dragFromIndex < 0 || _layerStack == null) { HideInsertIndicator(); _dragFromIndex = -1; return; }
+			HideInsertIndicator();
+			int to = _dragInsertIndex;
+			_dragFromIndex = -1;
+			_dragInsertIndex = -1;
+			if (to < 0 || to >= _layerStack.Layers.Count || to == fromIndex) return;
+			_layerStack.MoveLayer(fromIndex, to);
+			// MoveLayer schedules ReRender; also push layer composite to accumulation now so img2img matches new order if Generate runs before next OnUpdate.
+			if (Objects_Renderer_MGR.instance != null)
+				Objects_Renderer_MGR.instance.EnsureInpaintColorLayerAppliedForCapture();
+		}
+
+		int CalcInsertIndex(Vector2 localPos)
+		{
+			if (_rows.Count == 0 || _layerStack == null) return 0;
+			float spacing = 2f;
+			float totalH = _rowHeight + spacing;
+			int rawIdx = Mathf.FloorToInt((-localPos.y) / totalH);
+			return Mathf.Clamp(rawIdx, 0, _layerStack.Layers.Count - 1);
+		}
+
+		void EnsureDragInsertIndicator()
+		{
+			if (_dragInsertIndicator != null) { _dragInsertIndicator.SetActive(true); return; }
+			_dragInsertIndicator = new GameObject("DragInsertIndicator");
+			_dragInsertIndicator.transform.SetParent(_listRoot, false);
+			var rect = _dragInsertIndicator.AddComponent<RectTransform>();
+			rect.anchorMin = new Vector2(0, 1);
+			rect.anchorMax = new Vector2(1, 1);
+			rect.pivot = new Vector2(0.5f, 0.5f);
+			rect.sizeDelta = new Vector2(0, 2);
+			var img = _dragInsertIndicator.AddComponent<Image>();
+			img.color = new Color(0.3f, 0.7f, 1f, 0.9f);
+			img.raycastTarget = false;
+			var ign = _dragInsertIndicator.AddComponent<LayoutElement>();
+			ign.ignoreLayout = true;
+		}
+
+		void PositionInsertIndicator(int insertIdx)
+		{
+			if (_dragInsertIndicator == null || _listRoot == null) return;
+			_dragInsertIndicator.SetActive(true);
+			var rect = _dragInsertIndicator.GetComponent<RectTransform>();
+			float spacing = 2f;
+			float y = -(insertIdx * (_rowHeight + spacing)) - _rowHeight * 0.5f;
+			rect.anchoredPosition = new Vector2(0, y);
+		}
+
+		void HideInsertIndicator()
+		{
+			if (_dragInsertIndicator != null) _dragInsertIndicator.SetActive(false);
+		}
+
 		// --- Build one row: row bg = SetActiveLayer; eye = select + SetLayerVisible; name = solid label, click → edit (Enter commit, blur/Escape cancel); Delete ---
 		/// <summary>One row: click row background for active layer; eye toggles visibility and selects; click name to rename (Enter confirms); Delete removes.</summary>
 		GameObject BuildRow(PaintLayer layer, int index)
@@ -332,6 +417,31 @@ namespace spz {
 				_layerStack.SetActiveLayer(idx);
 				RequestReRender();
 			});
+
+			// Drag handle (grip area) — left of the eye; drag to reorder
+			var gripGo = new GameObject("DragGrip");
+			gripGo.transform.SetParent(row.transform, false);
+			gripGo.AddComponent<RectTransform>().sizeDelta = new Vector2(16, _rowHeight - 4);
+			var gripLE = gripGo.AddComponent<LayoutElement>();
+			gripLE.minWidth = 16;
+			gripLE.preferredWidth = 16;
+			var gripImg = gripGo.AddComponent<Image>();
+			gripImg.color = new Color(0.45f, 0.45f, 0.5f, 0.6f);
+			gripImg.raycastTarget = true;
+			var gripLabelGo = new GameObject("GripLabel");
+			gripLabelGo.transform.SetParent(gripGo.transform, false);
+			var gripLabelRect = gripLabelGo.AddComponent<RectTransform>();
+			gripLabelRect.anchorMin = Vector2.zero;
+			gripLabelRect.anchorMax = Vector2.one;
+			gripLabelRect.sizeDelta = Vector2.zero;
+			var gripTmp = gripLabelGo.AddComponent<TextMeshProUGUI>();
+			gripTmp.text = "\u2261";
+			gripTmp.fontSize = 14;
+			gripTmp.color = new Color(1f, 1f, 1f, 0.7f);
+			gripTmp.alignment = TextAlignmentOptions.Center;
+			gripTmp.raycastTarget = false;
+			var dragHandler = gripGo.AddComponent<LayerRowDragHandler>();
+			dragHandler.Init(this, idx);
 
 			// Visibility toggle button — dark blue when visible, light when hidden
 			var visGo = new GameObject("Visibility");
@@ -469,5 +579,17 @@ namespace spz {
 
 			return row;
 		}
+	}
+
+	/// <summary>Attached to the grip handle of each layer row. Forwards drag events to PaintTab_LayersPanel_UI for reorder.</summary>
+	internal class LayerRowDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
+	{
+		PaintTab_LayersPanel_UI _panel;
+		int _index;
+
+		public void Init(PaintTab_LayersPanel_UI panel, int index) { _panel = panel; _index = index; }
+		public void OnBeginDrag(PointerEventData e) { _panel?.OnRowBeginDrag(_index); }
+		public void OnDrag(PointerEventData e) { _panel?.OnRowDrag(_index, e); }
+		public void OnEndDrag(PointerEventData e) { _panel?.OnRowEndDrag(_index); }
 	}
 }
