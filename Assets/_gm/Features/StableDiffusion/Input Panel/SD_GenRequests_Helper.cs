@@ -127,10 +127,11 @@ namespace spz {
 	        UserCameras_Permissions.Force_KeepRenderingCameras(true);
 	            for(int i=0; i<3; ++i){ yield return null; }//give time for cameras to render the target textures.
 
-	            // Apply visible layer paint to mesh, then wait one frame so the GPU finishes the blit before we capture. Otherwise the content camera can capture before the layer strokes are on the texture and they won't be sent to SD.
+	            // Apply visible layer paint to mesh; img2img_GetTextures_andFill calls EnsureInpaint again right before capture.
 	            if (!isMakingBackgrounds && Objects_Renderer_MGR.instance != null)
 	                Objects_Renderer_MGR.instance.EnsureInpaintColorLayerAppliedForCapture();
-	            yield return null;
+	            // Wait until after rendering so OnUpdate/ProcessMeshes cannot clear accumulation after EnsureInpaint but before ReadPixels.
+	            yield return new WaitForEndOfFrame();
 
 	            GenerationData_Kind genData_kind = isMakingBackgrounds? GenerationData_Kind.SD_Backgrounds 
 	                                                                   : GenerationData_Kind.SD_ProjTextures;
@@ -159,6 +160,9 @@ namespace spz {
 	            UserCameras_Permissions.Force_KeepRenderingCameras(true);
 	            Objects_Renderer_MGR.instance.ReRenderAll_soon();
 	            for(int i=0; i<3; ++i){ yield return null; }//give time for cameras to render the target textures.
+	            if (Objects_Renderer_MGR.instance != null)
+	                Objects_Renderer_MGR.instance.EnsureInpaintColorLayerAppliedForCapture();
+	            yield return new WaitForEndOfFrame();//same ordering as img2img: avoid capture before end-of-frame render after layer sync
 	        }
 
 	        SD_GenRequestArgs_byproducts intermediates = null;

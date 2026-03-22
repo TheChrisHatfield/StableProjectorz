@@ -236,16 +236,22 @@ namespace spz {
 	    /// <summary>Draw paint layers onto mesh accumulation texture. Inpaint_MaskPainter blits each visible layer's Content in order (or single active layer when only one).</summary>
 	    void Apply_InpaintSketch_ColorLayer(){
 	        if(MainViewport_UI.instance.showing != MainViewport_UI.Showing.UsualView){ return; }
-	        if(WorkflowRibbon_UI.instance == null || WorkflowRibbon_UI.instance.allowed_to_showBrushMask() == false){ return; }
 	        if(Inpaint_MaskPainter.instance == null){ return; }
+	        // Multi-layer stack must always composite onto accumulation for viewport + SD; do not gate on allowed_to_showBrushMask() (that only reflects inpaint ribbon modes and skipped the blit entirely).
+	        var stack = PaintLayerStack_MGR.instance;
+	        bool multiLayerStack = stack != null && stack.Layers != null && stack.Layers.Count > 1;
+	        if (!multiLayerStack && (WorkflowRibbon_UI.instance == null || WorkflowRibbon_UI.instance.allowed_to_showBrushMask() == false))
+		        return;
 	        Inpaint_MaskPainter.instance.ApplyColorLayer_To_UV_Textures( _accumulation_uv_RT );
 	    }
 
 	    /// <summary>Ensure layer paint is on accumulation and mesh is updated before capturing for img2img. Call immediately before GetDisposable_ContentCamTexture() so the init image sent to SD includes current layer stack paint (blue/green/red strokes). Bypasses view/mode checks so capture always gets the layer composite.</summary>
 	    public void EnsureInpaintColorLayerAppliedForCapture(){
 	        if (Inpaint_MaskPainter.instance != null)
-	            Inpaint_MaskPainter.instance.ApplyColorLayer_To_UV_Textures( _accumulation_uv_RT );
+	            Inpaint_MaskPainter.instance.ApplyColorLayer_To_UV_Textures( _accumulation_uv_RT, forStableDiffusionCapture: true );
 	        _finalMat_Helper.ShowFinalMat_on_ALL( _accumulation_uv_RT );
+	        // Layer composite uses Graphics.Blit / texture arrays; flush so the content camera render reads finished GPU work (see continual-learning/paint-layers-sd-bridge.md).
+	        GL.Flush();
 	    }
 
 	    // ForceFullCompositeForSDCapture was removed: it duplicated the entire render pipeline

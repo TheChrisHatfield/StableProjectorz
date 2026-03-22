@@ -155,6 +155,8 @@ namespace spz {
 	    public void Create_upscale_payload( float upscaleBy, 
 	                                        out SD_img2extra_payload payload_, 
 	                                        out SD_GenRequestArgs_byproducts byproducts){
+	        if (Objects_Renderer_MGR.instance != null)
+		        Objects_Renderer_MGR.instance.EnsureInpaintColorLayerAppliedForCapture();
 	        Texture2D viewTex = UserCameras_MGR.instance.camTextures.GetDisposable_ContentCamTexture();
 	        make_upscale_payload(viewTex, upscaleBy, out payload_);
 	        byproducts = new SD_GenRequestArgs_byproducts();
@@ -215,7 +217,12 @@ namespace spz {
 	        var camerasMGR = UserCameras_MGR.instance;
 	        var painter    = Inpaint_MaskPainter.instance;
 
-	        // Layer paint was applied in the coroutine (EnsureInpaintColorLayerAppliedForCapture) and we yielded one frame so the GPU has finished the blit. Capture now so the init image includes the visible layer strokes (blue/orange/green etc.).
+	        // Apply layer stack to accumulation immediately before content-cam capture so init_image matches the viewport
+	        // regardless of Update vs coroutine order (Objects_Renderer can rebuild accumulation in OnUpdate the same frame).
+	        if (!forceFullWhiteMask && Objects_Renderer_MGR.instance != null)
+		        Objects_Renderer_MGR.instance.EnsureInpaintColorLayerAppliedForCapture();
+
+	        // Layer paint: also applied one frame earlier in Generate_img2img_crtn; this call is the authoritative sync before ReadPixels.
 	        viewTex_    = camerasMGR.camTextures.GetDisposable_ContentCamTexture();
 
 	        painter.GetDisposable_ScreenMask( forceFullWhite:forceFullWhiteMask, 
