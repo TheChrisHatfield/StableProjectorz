@@ -12763,6 +12763,9 @@ MonoBehaviour:
   _layout_askServerOften_toggle: {fileID: 2238152507401496999}
   _useCtrlScroll_WorkflowMode_swaps_toggle: {fileID: 6600082993578893130}
   _ignoreCtrl_if_clickSelectMeshes_toggle: {fileID: 2684208209676026416}
+  _useVSync_toggle: {fileID: 0}
+  _settingsToggleFrameSprite: {fileID: 1888868239, guid: 02c1acb2ce48a854f83b4a59731089b3, type: 3}
+  _settingsToggleCheckSprite: {fileID: 1383242163, guid: 02c1acb2ce48a854f83b4a59731089b3, type: 3}
 --- !u!1 &8214840032678834685
 GameObject:
   m_ObjectHideFlags: 0

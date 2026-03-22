@@ -104,3 +104,39 @@ Save / load (SerializationObjects.cs + stack Save/Load)
 Inpaint (Inpaint_MaskPainter.cs)
   • CollapseLayersIntoScene uses ConsumeNextDefaultCollapseLayerName for the
     single merged layer name (same counter as paint-tab collapse).
+
+-------------------------------------------------------------------------------
+
+Paint undo / redo (session) + Settings UI (2026-03-22)
+-------------------------------------------------------------------------------
+
+New module Assets/_gm/Features/Paint/Undo/
+  • PaintUndo_MGR: pre-stroke snapshot (GPU copy → async readback → pack → Deflate);
+    undo/redo = inflate then amortized per-UDIM GPU upload in LateUpdate;
+    PaintUndo_Scheduler: EWMA, LAVD-style aging, optional UCB1 budget.
+  • PaintUndo_Input: Ctrl+Z / Ctrl+Y (Cmd+Z on Mac), input-field guard.
+  • PaintUndo_Storage: ring buffer; max depth from settings (cap 16).
+  • SnapshotRecord + PaintUndo_Compress: lossless format + Deflate;
+    TryBuildUncompressedBlob + off-thread Deflate on capture / redo snapshot.
+  • LinearSliceUploadOrder for restore upload order (was VisibleFirstOrder).
+
+Hooks / safety
+  • Inpaint_MaskPainter: SchedulePreStrokeCapture before brush apply; EnsureExists;
+    GetPaintTarget_Undo for restore.
+  • MaskPainter: block inpaint while PaintUndo_MGR.BlocksNewStroke.
+
+TextureTools_SPZ.RenderTexture_to_Texture2DList_Async
+  • Callback after all slice readbacks finish (incl. errors) via response counter.
+
+Settings (Settings_MGR.cs / Settings_UI.cs)
+  • PlayerPrefs: paintUndo_enabled, paintUndo_maxDepth (1–16); restore defaults;
+    SyncPaintUndoOnOffLabel for ON/OFF text when toggle set from code.
+  • Runtime paint-undo row: Toggle + Image same GameObject, green ON state,
+    checkmark, ON/OFF label; max-depth field row.
+  • _paintUndoSettingsRowsCreated only after successful row build.
+  • VSync runtime row: 112×28 hit area, checkmark, navigation None, label no raycast.
+  • SD GPU + paint-undo depth labels: raycastTarget false.
+  • AddToggleCheckmarkGraphic helper for runtime toggles.
+
+Documentation
+  • docs/PAINT_UNDO_SPEC.md, docs/UNDO_INTEGRATION.md, docs/PAINT_UNDO_PROFILING.md

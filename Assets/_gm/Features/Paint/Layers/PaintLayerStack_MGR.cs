@@ -10,7 +10,7 @@ namespace spz {
 	// =============================================================================
 	// Holds the ordered list of PaintLayer (index 0 = bottom). PaintTab_LayersPanel_UI
 	// holds a reference to this and calls AddLayer(), SetActiveLayer(), SetLayerVisible(),
-	// SetLayerName(), RemoveLayer(). Inpaint_MaskPainter subscribes to OnLayerAdded to inject scene into
+	// SetLayerName() (rename only — does not fire OnLayersChanged; see RebuildList / undo). RemoveLayer(). Inpaint_MaskPainter subscribes to OnLayerAdded to inject scene into
 	// new layers; uses ActiveLayerRenderUdims as the paint target; display blits each
 	// visible layer's Content in order (see ApplyColorLayer_To_UV_Textures).
 	// =============================================================================
@@ -239,7 +239,8 @@ namespace spz {
 
 		const int MaxLayerNameLength = 128;
 
-		/// <summary>Rename the layer at index. Empty or whitespace becomes a default label. Persists via Save like <see cref="PaintLayer.Name"/>. Fires <see cref="OnLayersChanged"/> when the stored name changes.</summary>
+		/// <summary>Rename the layer at index. Empty or whitespace becomes a default label. Persists via Save like <see cref="PaintLayer.Name"/>.
+		/// Does <b>not</b> fire <see cref="OnLayersChanged"/> — rename is metadata only; firing it rebuilt the entire layers UI (destroying rows mid-submit) and cleared paint undo, and could disrupt viewport state.</summary>
 		public void SetLayerName(int index, string name)
 		{
 			if (index < 0 || index >= _layers.Count) return;
@@ -248,7 +249,6 @@ namespace spz {
 				n = n.Substring(0, MaxLayerNameLength);
 			if (_layers[index].Name == n) return;
 			_layers[index].Name = n;
-			OnLayersChanged?.Invoke();
 		}
 
 		/// <summary>Fallback label when the user clears the name field (1-based index for display).</summary>
