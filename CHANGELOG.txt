@@ -1,0 +1,79 @@
+StableProjectorz — Change log
+==============================
+
+Project version (Unity Player Settings): 2.4.5
+This file tracks changes on top of that baseline until the next release bump.
+
+-------------------------------------------------------------------------------
+
+[Unreleased]  |  Date: 2026-03-11  |  Topic: Paint layer stack / inpaint → mesh / SD bridge
+-------------------------------------------------------------------------------
+
+Summary
+  Multi-layer inpaint display and Stable Diffusion capture now follow the same
+  final blit path as the proven single-layer case, with clearer fallbacks and
+  resolution alignment to the mesh accumulation texture.
+
+Inpaint / layer display (Inpaint_MaskPainter.cs)
+  • ApplyColorLayer_To_UV_Textures: unified flow — resolve a single `source`
+    RenderUdims, then one EntireColorLayer blit to accumulation (same pattern
+    as Count == 1 using ActiveLayer.Content).
+  • CompositeVisibleLayersIntoTemp: builds the multi-layer `source` by blitting
+    each visible layer onto a cleared temp with EntireColorLayer_BlitApply (same
+    material as single-layer), bottom→top, per-layer opacity; active layer can
+    use APPLY_LATEST_BRUSH_TOO while painting.
+  • Removed dependency on PaintLayerStack_MGR.CompositeTo for the mesh display
+    path (avoids runtime-created stack manager often having no compositor shader
+    assigned; CompositeTo / PaintLayer_CompositeBlend remains for other uses).
+  • GetLayerCompositeOrFallback: multi-layer path uses CompositeVisibleLayersIntoTemp
+    for consistency with viewport/SD mask source; fallbacks to active then layer 0.
+  • maskResolution(): prefers accumulation texture width/height when UDIM slice
+    count matches; if accumulation not ready, uses SceneResolution_MGR.resultTexQuality
+    so layer RTs align with scene UV quality (reduces multi-blit / scale issues).
+  • Earlier: removed Inpaint_NoColor + SD-prep early return that skipped layer
+    blit during capture; EnsureBottomLayerHasSceneForComposite + scene buffer
+    setup for multi-layer; warnings when composite temp or visible Content missing.
+
+Layer stack manager (PaintLayerStack_MGR.cs)
+  • CanCompositeLayers public property (_compositeBlendMat != null).
+  • CompositeTo: if stack _resolution unset, adopt from first visible layer
+    before allocating ping-pong temps; if temps still null, clear dest and log
+    instead of leaving stale mask data.
+
+Renderer (Objects_Renderer_MGR.cs)
+  • Apply_InpaintSketch_ColorLayer: when layer count > 1, always run
+    ApplyColorLayer_To_UV_Textures (UsualView still required); single-layer
+    still gated on allowed_to_showBrushMask() so inpaint ribbon modes behave
+    as before.
+
+Notes for testers
+  • After resolution changes, click in viewport or reload model once so brush
+    InitTextures / EnsureResolution refresh layer buffers if sizes changed.
+  • If PaintLayer_CompositeBlend fails to load, mesh display no longer depends
+    on it; Collapse / mask helpers that still call CompositeTo may log warnings.
+
+Documentation / continual learning
+  • Context_Ref/REVIEW_Codebase_Summary.md (sibling folder) — sections 4–5, 9–10
+    updated for this paint/layer pipeline.
+  • Context_Ref/CONTINUAL_LEARNING.md — pointer to StableProjectorz/continual-learning/.
+  • continual-learning/paint-layers-sd-bridge.md — Pattern lines for layer/display/SD
+    (folder gitignored).
+  • continual-learning/build-stability.md — stub for batch/build patterns (.cursor rule).
+
+-------------------------------------------------------------------------------
+
+Multi-layer paint → SD capture (2026-03-21)
+-------------------------------------------------------------------------------
+
+  • EntireColorLayer_BlitApply.shader: Blend One OneMinusSrcAlpha, One One —
+    RGB premultiplied-over; alpha additive so CompositeVisibleLayersIntoTemp
+    matches PaintLayer_CompositeBlend (fixes weak composite vs accumulation for SD).
+  • Inpaint_MaskPainter: forStableDiffusionCapture skips save guard during capture.
+  • Objects_Renderer_MGR.EnsureInpaintColorLayerAppliedForCapture: capture flag +
+    GL.Flush after ShowFinalMat.
+  • SD_GenRequests_Helper: EnsureInpaint + WaitForEndOfFrame before img2img payload
+    and before view upscale when genData is null.
+  • SD_Generate_PayloadMaker: EnsureInpaint before texture read where applicable.
+
+  Unity packages: Packages/manifest.json and packages-lock.json had no local
+  changes at this update (already in sync on main).
