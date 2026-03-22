@@ -239,6 +239,10 @@ namespace spz {
 
 	             correctMode &= MainViewport_UI.instance.showing == MainViewport_UI.Showing.UsualView;
 
+	        // Block all inpaint strokes while undo/redo restore runs (must not depend on correctMode — img2img inpaint is "correct").
+	        if (this is Inpaint_MaskPainter && PaintUndo_MGR.instance != null && PaintUndo_MGR.instance.BlocksNewStroke)
+		        return true;
+
 	        return !correctMode;
 	    }
 

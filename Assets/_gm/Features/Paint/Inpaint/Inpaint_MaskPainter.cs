@@ -56,6 +56,9 @@ namespace spz {
 	    /// <summary>Paint target: active layer Content directly. Compute shader writes strokes into the same
 	    /// texture the renderer reads, so GPU command serialization guarantees strokes are visible on the same
 	    /// frame they're painted (no Data/Content timing gap). Ensures scene is injected before use.</summary>
+	    /// <summary>Public resolver for undo/redo (same as paint target).</summary>
+	    public RenderUdims GetPaintTarget_Undo() => GetPaintTarget();
+
 	    RenderUdims GetPaintTarget()
 	    {
 		    var stack = PaintLayerStack_MGR.instance;
@@ -530,6 +533,8 @@ namespace spz {
 	        float sign =  Mathf.Sign(_prevStrength);
 	        float maxStrength = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity : 1f;
 
+	        // Paint undo hook — see docs/UNDO_INTEGRATION.md (pre-stroke GPU copy before compute applies stroke).
+	        PaintUndo_MGR.instance?.SchedulePreStrokeCapture(target);
 	        _applyBrushStroke_toUvMask.Apply_into_ColorBrushTex( prevBrushStroke_R8, currBrushStroke_R8, sign,  maxStrength,  target );
 	        // Compute writes to Content. When we use composite (2+ layers), the composite can be built before the GPU finishes; defer re-render so stroke appears.
 	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
@@ -587,6 +592,8 @@ namespace spz {
 	        _blitApplyEntireColorLayer_mat = new Material(_blitApplyEntireColorLayer_shader);
 
 	        base.Awake();
+
+	        PaintUndo_MGR.EnsureExists();
 
 	        PaintLayerStack_MGR.OnLayerAdded += OnLayerAdded_InjectScene;
 	        UnityEngine.Debug.Log("[Inpaint_MaskPainter] Awake complete: OnLayerAdded subscribed, material created.");

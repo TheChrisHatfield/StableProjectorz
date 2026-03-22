@@ -348,6 +348,7 @@ namespace spz {
 	        List<Texture2D> textures = new List<Texture2D>(udimsCount);
 	        for (int i=0; i<udimsCount; ++i){ textures.Add(null); }
 
+	        int responsesDone = 0;
 	        for (int i=0; i<udimsCount; ++i){
 	            int sliceIx = i;
 	            AsyncGPUReadback.Request( udims.texArray, 0, 0, udims.width, 0, udims.height, sliceIx, 1, 
@@ -366,7 +367,9 @@ namespace spz {
 	                texture2D.Apply();
 	                textures[sliceIx] = texture2D;
 	            }
-	            if(textures.All(t => t!=null)){ callback(textures); }
+	            responsesDone++;
+	            if (responsesDone >= udimsCount)
+	                callback(textures);
 	        }
 	    }
 

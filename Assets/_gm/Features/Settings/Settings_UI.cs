@@ -42,9 +42,11 @@ namespace spz {
 	    [SerializeField] Toggle _useCtrlScroll_WorkflowMode_swaps_toggle;//ProjMask ->Color -> No Color.
 	    [SerializeField] Toggle _ignoreCtrl_if_clickSelectMeshes_toggle;//holding ctrl will not activate the 'ClickSelect_Meshes mode'.
 	    [SerializeField] Toggle _useVSync_toggle; // Optional: assign in scene; otherwise created at runtime.
+	    bool _paintUndoSettingsRowsCreated;
 	    void Start(){
 	        EnsureUseVSyncRowExists();
 	        EnsureSDGpuRowExists();
+	        EnsurePaintUndoSettingsRowsExist();
 	        // Buttons (guard null so binding is safe when reference not assigned in scene)
 	        if (_openHelpSettingsPanel_button != null)
 	            EventsBinder.Bind_Clickable_to_event("Settings:OpenHelpSettingsPanel", _openHelpSettingsPanel_button);
@@ -234,6 +236,115 @@ namespace spz {
 	        restartBtnText.fontSize = 12;
 	        restartBtnText.color = new Color(0.95f, 0.95f, 0.95f, 1f);
 	        restartBtnText.raycastTarget = false;
+	    }
+
+	    /// <summary>Runtime rows: enable paint undo + max steps (capped in Settings_MGR for RAM safety).</summary>
+	    void EnsurePaintUndoSettingsRowsExist() {
+	        if (_paintUndoSettingsRowsCreated) return;
+	        if (_settingsPanel_go == null) return;
+	        var scrollRect = _settingsPanel_go.GetComponentInChildren<UnityEngine.UI.ScrollRect>(true);
+	        RectTransform content = scrollRect != null ? scrollRect.content : null;
+	        if (content == null) content = _settingsPanel_go.transform as RectTransform;
+	        if (content == null) return;
+
+	        bool undoOn = Settings_MGR.instance != null
+		        ? Settings_MGR.instance.get_paintUndo_enabled()
+		        : (PlayerPrefs.GetInt("paintUndo_enabled", 1) == 1);
+	        int undoDepth = Settings_MGR.instance != null
+		        ? Settings_MGR.instance.get_paintUndo_maxDepth()
+		        : Mathf.Clamp(PlayerPrefs.GetInt("paintUndo_maxDepth", 8), 1, Settings_MGR.PAINT_UNDO_DEPTH_MAX);
+
+	        // Row: enable toggle
+	        var rowEnable = new GameObject("Row_PaintUndo_Enable");
+	        rowEnable.transform.SetParent(content, false);
+	        var rowEnableRect = rowEnable.AddComponent<RectTransform>();
+	        rowEnableRect.sizeDelta = new Vector2(0, 28f);
+	        var rowEnableLayout = rowEnable.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+	        rowEnableLayout.spacing = 8f;
+	        rowEnableLayout.padding = new RectOffset(4, 4, 2, 2);
+	        rowEnableLayout.childAlignment = TextAnchor.MiddleLeft;
+	        rowEnableLayout.childControlWidth = true;
+	        rowEnableLayout.childControlHeight = true;
+	        rowEnableLayout.childForceExpandWidth = false;
+	        rowEnableLayout.childForceExpandHeight = false;
+
+	        var labelEnGo = new GameObject("Label");
+	        labelEnGo.transform.SetParent(rowEnable.transform, false);
+	        var labelEnLE = labelEnGo.AddComponent<UnityEngine.UI.LayoutElement>();
+	        labelEnLE.preferredWidth = 380f;
+	        labelEnLE.preferredHeight = 24f;
+	        var labelEnText = labelEnGo.AddComponent<TMPro.TextMeshProUGUI>();
+	        labelEnText.text = "Paint undo (Ctrl+Z / Ctrl+Y / Cmd+Z):";
+	        labelEnText.fontSize = 14;
+	        labelEnText.color = new Color(0.9f, 0.9f, 0.9f, 1f);
+
+	        var toggleGo = new GameObject("Toggle_PaintUndo");
+	        toggleGo.transform.SetParent(rowEnable.transform, false);
+	        toggleGo.AddComponent<RectTransform>();
+	        var toggleLE = toggleGo.AddComponent<UnityEngine.UI.LayoutElement>();
+	        toggleLE.preferredWidth = 24f;
+	        toggleLE.preferredHeight = 24f;
+	        var toggleBg = toggleGo.AddComponent<UnityEngine.UI.Image>();
+	        toggleBg.color = new Color(0.25f, 0.25f, 0.25f, 1f);
+	        toggleBg.raycastTarget = true;
+	        var paintUndoToggle = toggleGo.AddComponent<Toggle>();
+	        paintUndoToggle.targetGraphic = toggleBg;
+	        ApplySelectableColors(paintUndoToggle, new Color(0.35f, 0.45f, 0.55f, 1f));
+	        paintUndoToggle.isOn = undoOn;
+	        EventsBinder.Bind_Clickable_to_event("Settings:set_paintUndo_enabled", paintUndoToggle);
+
+	        // Row: max depth
+	        var rowDepth = new GameObject("Row_PaintUndo_Depth");
+	        rowDepth.transform.SetParent(content, false);
+	        var rowDepthRect = rowDepth.AddComponent<RectTransform>();
+	        rowDepthRect.sizeDelta = new Vector2(0, 28f);
+	        var rowDepthLayout = rowDepth.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+	        rowDepthLayout.spacing = 8f;
+	        rowDepthLayout.padding = new RectOffset(4, 4, 2, 2);
+	        rowDepthLayout.childAlignment = TextAnchor.MiddleLeft;
+	        rowDepthLayout.childControlWidth = true;
+	        rowDepthLayout.childControlHeight = true;
+	        rowDepthLayout.childForceExpandWidth = false;
+	        rowDepthLayout.childForceExpandHeight = false;
+
+	        var labelDpGo = new GameObject("Label");
+	        labelDpGo.transform.SetParent(rowDepth.transform, false);
+	        var labelDpLE = labelDpGo.AddComponent<UnityEngine.UI.LayoutElement>();
+	        labelDpLE.preferredWidth = 380f;
+	        labelDpLE.preferredHeight = 24f;
+	        var labelDpText = labelDpGo.AddComponent<TMPro.TextMeshProUGUI>();
+	        labelDpText.text = $"Max undo steps (1–{Settings_MGR.PAINT_UNDO_DEPTH_MAX}, CPU RAM per step):";
+	        labelDpText.fontSize = 14;
+	        labelDpText.color = new Color(0.9f, 0.9f, 0.9f, 1f);
+
+	        var inputGo = new GameObject("Input_PaintUndoDepth");
+	        inputGo.transform.SetParent(rowDepth.transform, false);
+	        inputGo.AddComponent<RectTransform>();
+	        var inputLE = inputGo.AddComponent<UnityEngine.UI.LayoutElement>();
+	        inputLE.preferredWidth = 56f;
+	        inputLE.preferredHeight = 24f;
+	        var inputBg = inputGo.AddComponent<UnityEngine.UI.Image>();
+	        inputBg.color = new Color(0.2f, 0.2f, 0.2f, 1f);
+	        var inputField = inputGo.AddComponent<TMPro.TMP_InputField>();
+	        var inputText = new GameObject("Text");
+	        inputText.transform.SetParent(inputGo.transform, false);
+	        var inputTextRect = inputText.AddComponent<RectTransform>();
+	        inputTextRect.anchorMin = Vector2.zero;
+	        inputTextRect.anchorMax = Vector2.one;
+	        inputTextRect.sizeDelta = Vector2.zero;
+	        var inputTextTMP = inputText.AddComponent<TMPro.TextMeshProUGUI>();
+	        inputTextTMP.fontSize = 14;
+	        inputTextTMP.color = Color.white;
+	        inputField.textViewport = inputTextRect;
+	        inputField.textComponent = inputTextTMP;
+	        inputField.text = undoDepth.ToString();
+	        var intInput = inputGo.AddComponent<IntegerInputField>();
+	        intInput.SetInputField(inputField);
+	        intInput.SetMin(1);
+	        intInput.SetMax(Settings_MGR.PAINT_UNDO_DEPTH_MAX);
+	        intInput.SetValueWithoutNotify(undoDepth.ToString());
+	        EventsBinder.Bind_Clickable_to_event("Settings:set_paintUndo_maxDepth", intInput);
+	        _paintUndoSettingsRowsCreated = true;
 	    }
 
 	    void OnRestartWebUI_ApplyGPU() {
