@@ -306,13 +306,13 @@ namespace spz {
 				    stack.CopyAllSlices(_layerStackCompositeTemp, singleLayer.Content);
 				    singleLayer.SyncDataFromContent();
 				    singleLayer.HasReceivedSceneInject = true;
-				    singleLayer.Name = "Collapsed";
+				    singleLayer.Name = stack.ConsumeNextDefaultCollapseLayerName();
 			    }
 		    }
 		    _isCollapsingLayers = false;
 		    if (Objects_Renderer_MGR.instance != null)
 			    Objects_Renderer_MGR.instance.ReRenderAll_soon();
-		    UnityEngine.Debug.Log("[Inpaint_MaskPainter] CollapseLayersIntoScene: composite → scene buffer → single 'Collapsed' layer (synchronous).");
+		    UnityEngine.Debug.Log("[Inpaint_MaskPainter] CollapseLayersIntoScene: composite → scene buffer → single enumerated Collapse N layer (synchronous).");
 		    return true;
 	    }
 

@@ -10,7 +10,7 @@ namespace spz {
 	// =============================================================================
 	// Holds the ordered list of PaintLayer (index 0 = bottom). PaintTab_LayersPanel_UI
 	// holds a reference to this and calls AddLayer(), SetActiveLayer(), SetLayerVisible(),
-	// RemoveLayer(). Inpaint_MaskPainter subscribes to OnLayerAdded to inject scene into
+	// SetLayerName(), RemoveLayer(). Inpaint_MaskPainter subscribes to OnLayerAdded to inject scene into
 	// new layers; uses ActiveLayerRenderUdims as the paint target; display blits each
 	// visible layer's Content in order (see ApplyColorLayer_To_UV_Textures).
 	// =============================================================================
@@ -33,6 +33,8 @@ namespace spz {
 		int _udimsCount;
 		/// <summary>Next cardinal number for default layer names (Layer 1, Layer 2, ...). Increments on each new layer; persists across deletes and save/load. </summary>
 		int _nextLayerNumber = 1;
+		/// <summary>Next default name for Collapse button merges: Collapse 1, Collapse 2, ... Persists across save/load.</summary>
+		int _nextCollapseNumber = 1;
 		RenderUdims _compositeTempA;
 		RenderUdims _compositeTempB;
 		/// <summary>Used only during in-place collapse: composite into this then copy to layer0 so we never use a layer as CompositeTo dest (avoids read-write hazard).</summary>
@@ -233,6 +235,35 @@ namespace spz {
 			OnLayersChanged?.Invoke();
 		}
 
+		const int MaxLayerNameLength = 128;
+
+		/// <summary>Rename the layer at index. Empty or whitespace becomes a default label. Persists via Save like <see cref="PaintLayer.Name"/>. Fires <see cref="OnLayersChanged"/> when the stored name changes.</summary>
+		public void SetLayerName(int index, string name)
+		{
+			if (index < 0 || index >= _layers.Count) return;
+			string n = string.IsNullOrWhiteSpace(name) ? DefaultLayerDisplayName(index) : name.Trim();
+			if (n.Length > MaxLayerNameLength)
+				n = n.Substring(0, MaxLayerNameLength);
+			if (_layers[index].Name == n) return;
+			_layers[index].Name = n;
+			OnLayersChanged?.Invoke();
+		}
+
+		/// <summary>Fallback label when the user clears the name field (1-based index for display).</summary>
+		public string DefaultLayerDisplayName(int index)
+		{
+			if (index < 0) index = 0;
+			return "Layer " + (index + 1);
+		}
+
+		/// <summary>Next default name for merged layers: "Collapse 1", "Collapse 2", … Counter advances and is saved in <see cref="PaintLayerStack_SL.nextCollapseNumber"/>.</summary>
+		public string ConsumeNextDefaultCollapseLayerName()
+		{
+			string name = "Collapse " + _nextCollapseNumber;
+			_nextCollapseNumber++;
+			return name;
+		}
+
 		/// <summary>Read ALL visible layers to CPU, alpha-blend them on CPU, write the merged result into a new layer.
 		/// Bypasses all GPU compositing/shader issues. Does NOT remove any existing layer.</summary>
 		public bool CollapseVisibleLayersIntoOne()
@@ -317,7 +348,7 @@ namespace spz {
 			var maskPainter = Inpaint_MaskPainter.instance;
 			if (maskPainter != null) maskPainter.IsCollapsingLayers = true;
 
-			PaintLayer newLayer = AddLayer("Collapsed");
+			PaintLayer newLayer = AddLayer(ConsumeNextDefaultCollapseLayerName());
 			EnsureContentForLayerIfNeeded(newLayer);
 
 			if (maskPainter != null) maskPainter.IsCollapsingLayers = false;
@@ -594,6 +625,7 @@ namespace spz {
 			_resolution = new Vector2Int(sl.resolutionWidth, sl.resolutionHeight);
 			_udimsCount = sl.udimsCount;
 			_nextLayerNumber = sl.nextLayerNumber > 0 ? sl.nextLayerNumber : InferNextLayerNumber(sl);
+			_nextCollapseNumber = sl.nextCollapseNumber > 0 ? sl.nextCollapseNumber : InferNextCollapseNumber(sl);
 			var format = GenData_Masks.colorBrushFormat;
 			var filter = GenData_Masks.colorBrushFilter;
 			if (sl.layers != null)
@@ -643,6 +675,28 @@ namespace spz {
 				    int.TryParse(n.Substring(6).Trim(), out int num) && num > max)
 					max = num;
 			}
+			return max + 1;
+		}
+
+		static int InferNextCollapseNumber(PaintLayerStack_SL sl)
+		{
+			if (sl?.layers == null || sl.layers.Count == 0) return 1;
+			int max = 0;
+			foreach (var layerSL in sl.layers)
+			{
+				if (layerSL?.name == null) continue;
+				string n = layerSL.name.Trim();
+				if (n.Equals("Collapsed", StringComparison.OrdinalIgnoreCase))
+				{
+					if (max < 1) max = 1;
+					continue;
+				}
+
+				if (n.StartsWith("Collapse ", StringComparison.OrdinalIgnoreCase) && n.Length > 9 &&
+				    int.TryParse(n.Substring(9).Trim(), out int num) && num > max)
+					max = num;
+			}
+
 			return max + 1;
 		}
 	}
