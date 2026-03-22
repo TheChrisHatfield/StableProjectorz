@@ -42,6 +42,10 @@ namespace spz {
 	    [SerializeField] Toggle _useCtrlScroll_WorkflowMode_swaps_toggle;//ProjMask ->Color -> No Color.
 	    [SerializeField] Toggle _ignoreCtrl_if_clickSelectMeshes_toggle;//holding ctrl will not activate the 'ClickSelect_Meshes mode'.
 	    [SerializeField] Toggle _useVSync_toggle; // Optional: assign in scene; otherwise created at runtime.
+	    [Tooltip("button_inactive from button_active_inactive_horiz; wired on Settings_UI.prefab for runtime toggles.")]
+	    [SerializeField] Sprite _settingsToggleFrameSprite;
+	    [Tooltip("button_active from button_active_inactive_horiz; checkmark face.")]
+	    [SerializeField] Sprite _settingsToggleCheckSprite;
 	    bool _paintUndoSettingsRowsCreated;
 	    void Start(){
 	        EnsureUseVSyncRowExists();
@@ -129,21 +133,10 @@ namespace spz {
 	        labelText.text = "Use VSync (reduces Gfx.PresentFrame, helps AMD FirePro / Alienware):";
 	        labelText.fontSize = 14;
 	        labelText.color = new Color(0.9f, 0.9f, 0.9f, 1f);
+	        labelText.raycastTarget = false;
 
-	        var toggleGo = new GameObject("Toggle_UseVSync");
-	        toggleGo.transform.SetParent(row.transform, false);
-	        var toggleRect = toggleGo.AddComponent<RectTransform>();
-	        var toggleLE = toggleGo.AddComponent<UnityEngine.UI.LayoutElement>();
-	        toggleLE.preferredWidth = 24f;
-	        toggleLE.preferredHeight = 24f;
-	        var toggleBg = toggleGo.AddComponent<UnityEngine.UI.Image>();
-	        toggleBg.color = new Color(0.25f, 0.25f, 0.25f, 1f);
-	        toggleBg.raycastTarget = true;
-	        var toggle = toggleGo.AddComponent<Toggle>();
-	        toggle.targetGraphic = toggleBg;
-	        ApplySelectableColors(toggle);
-	        toggle.isOn = UnityEngine.PlayerPrefs.GetInt("UseVSync", 1) == 1;
-
+	        var toggle = CreateRuntimeSpzStyledToggle(row.transform, "Toggle_UseVSync", new Vector2(112f, 28f),
+		        UnityEngine.PlayerPrefs.GetInt("UseVSync", 1) == 1, greenWhenOn: false);
 	        _useVSync_toggle = toggle;
 	        EventsBinder.Bind_Clickable_to_event("Settings:set_useVSync", _useVSync_toggle);
 	    }
@@ -185,6 +178,7 @@ namespace spz {
 	        labelText.text = labelBase;
 	        labelText.fontSize = 14;
 	        labelText.color = new Color(0.9f, 0.9f, 0.9f, 1f);
+	        labelText.raycastTarget = false;
 	        var inputGo = new GameObject("Input");
 	        inputGo.transform.SetParent(row.transform, false);
 	        var inputRect = inputGo.AddComponent<RectTransform>();
@@ -240,12 +234,24 @@ namespace spz {
 
 	    /// <summary>Runtime rows: enable paint undo + max steps (capped in Settings_MGR for RAM safety).</summary>
 	    void EnsurePaintUndoSettingsRowsExist() {
-	        if (_paintUndoSettingsRowsCreated) return;
-	        if (_settingsPanel_go == null) return;
+	        // Resolve deps before any "already created" skip — destroyed panel/content must clear the flag so rows can be rebuilt.
+	        if (_settingsPanel_go == null) {
+	            _paintUndoSettingsRowsCreated = false;
+	            return;
+	        }
 	        var scrollRect = _settingsPanel_go.GetComponentInChildren<UnityEngine.UI.ScrollRect>(true);
 	        RectTransform content = scrollRect != null ? scrollRect.content : null;
 	        if (content == null) content = _settingsPanel_go.transform as RectTransform;
-	        if (content == null) return;
+	        if (content == null) {
+	            _paintUndoSettingsRowsCreated = false;
+	            return;
+	        }
+	        if (_paintUndoSettingsRowsCreated) {
+	            if (PaintUndoSettingsRowsPresentUnder(content))
+	                return;
+	            DestroyPaintUndoSettingsRowsUnder(content);
+	            _paintUndoSettingsRowsCreated = false;
+	        }
 
 	        bool undoOn = Settings_MGR.instance != null
 		        ? Settings_MGR.instance.get_paintUndo_enabled()
@@ -258,7 +264,7 @@ namespace spz {
 	        var rowEnable = new GameObject("Row_PaintUndo_Enable");
 	        rowEnable.transform.SetParent(content, false);
 	        var rowEnableRect = rowEnable.AddComponent<RectTransform>();
-	        rowEnableRect.sizeDelta = new Vector2(0, 28f);
+	        rowEnableRect.sizeDelta = new Vector2(0, 32f);
 	        var rowEnableLayout = rowEnable.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
 	        rowEnableLayout.spacing = 8f;
 	        rowEnableLayout.padding = new RectOffset(4, 4, 2, 2);
@@ -271,27 +277,29 @@ namespace spz {
 	        var labelEnGo = new GameObject("Label");
 	        labelEnGo.transform.SetParent(rowEnable.transform, false);
 	        var labelEnLE = labelEnGo.AddComponent<UnityEngine.UI.LayoutElement>();
-	        labelEnLE.preferredWidth = 380f;
-	        labelEnLE.preferredHeight = 24f;
+	        labelEnLE.preferredWidth = 220f;
+	        labelEnLE.preferredHeight = 26f;
 	        var labelEnText = labelEnGo.AddComponent<TMPro.TextMeshProUGUI>();
-	        labelEnText.text = "Paint undo (Ctrl+Z / Ctrl+Y / Cmd+Z):";
+	        labelEnText.text = "Paint undo (Ctrl+Z / Y):";
 	        labelEnText.fontSize = 14;
 	        labelEnText.color = new Color(0.9f, 0.9f, 0.9f, 1f);
+	        labelEnText.raycastTarget = false;
 
-	        var toggleGo = new GameObject("Toggle_PaintUndo");
-	        toggleGo.transform.SetParent(rowEnable.transform, false);
-	        toggleGo.AddComponent<RectTransform>();
-	        var toggleLE = toggleGo.AddComponent<UnityEngine.UI.LayoutElement>();
-	        toggleLE.preferredWidth = 24f;
-	        toggleLE.preferredHeight = 24f;
-	        var toggleBg = toggleGo.AddComponent<UnityEngine.UI.Image>();
-	        toggleBg.color = new Color(0.25f, 0.25f, 0.25f, 1f);
-	        toggleBg.raycastTarget = true;
-	        var paintUndoToggle = toggleGo.AddComponent<Toggle>();
-	        paintUndoToggle.targetGraphic = toggleBg;
-	        ApplySelectableColors(paintUndoToggle, new Color(0.35f, 0.45f, 0.55f, 1f));
-	        paintUndoToggle.isOn = undoOn;
+	        var onOffGo = new GameObject(Settings_MGR.PAINT_UNDO_ONOFF_LABEL_NAME);
+	        onOffGo.transform.SetParent(rowEnable.transform, false);
+	        var onOffLE = onOffGo.AddComponent<UnityEngine.UI.LayoutElement>();
+	        onOffLE.preferredWidth = 42f;
+	        onOffLE.preferredHeight = 26f;
+	        onOffGo.AddComponent<RectTransform>();
+	        var onOffTmp = onOffGo.AddComponent<TMPro.TextMeshProUGUI>();
+	        onOffTmp.fontSize = 15;
+	        onOffTmp.fontStyle = FontStyles.Bold;
+	        onOffTmp.alignment = TextAlignmentOptions.MidlineRight;
+	        onOffTmp.raycastTarget = false;
+
+	        var paintUndoToggle = CreateRuntimeSpzStyledToggle(rowEnable.transform, "Toggle_PaintUndo", new Vector2(128f, 28f), undoOn, greenWhenOn: true);
 	        EventsBinder.Bind_Clickable_to_event("Settings:set_paintUndo_enabled", paintUndoToggle);
+	        Settings_MGR.SyncPaintUndoOnOffLabel(paintUndoToggle, undoOn);
 
 	        // Row: max depth
 	        var rowDepth = new GameObject("Row_PaintUndo_Depth");
@@ -316,6 +324,7 @@ namespace spz {
 	        labelDpText.text = $"Max undo steps (1–{Settings_MGR.PAINT_UNDO_DEPTH_MAX}, CPU RAM per step):";
 	        labelDpText.fontSize = 14;
 	        labelDpText.color = new Color(0.9f, 0.9f, 0.9f, 1f);
+	        labelDpText.raycastTarget = false;
 
 	        var inputGo = new GameObject("Input_PaintUndoDepth");
 	        inputGo.transform.SetParent(rowDepth.transform, false);
@@ -347,6 +356,27 @@ namespace spz {
 	        _paintUndoSettingsRowsCreated = true;
 	    }
 
+	    /// <summary>Direct children of scroll content; matches names used in <see cref="EnsurePaintUndoSettingsRowsExist"/>.</summary>
+	    static bool PaintUndoSettingsRowsPresentUnder(RectTransform content) {
+	        if (content == null) return false;
+	        bool hasEnable = false, hasDepth = false;
+	        for (int i = 0; i < content.childCount; i++) {
+	            var n = content.GetChild(i).name;
+	            if (n == "Row_PaintUndo_Enable") hasEnable = true;
+	            else if (n == "Row_PaintUndo_Depth") hasDepth = true;
+	        }
+	        return hasEnable && hasDepth;
+	    }
+
+	    static void DestroyPaintUndoSettingsRowsUnder(RectTransform content) {
+	        if (content == null) return;
+	        for (int i = content.childCount - 1; i >= 0; i--) {
+	            Transform c = content.GetChild(i);
+	            if (c.name == "Row_PaintUndo_Enable" || c.name == "Row_PaintUndo_Depth")
+	                UnityEngine.Object.DestroyImmediate(c.gameObject);
+	        }
+	    }
+
 	    void OnRestartWebUI_ApplyGPU() {
 	        // Commit the GPU input and force-save to PlayerPrefs so the next launch uses the visible value.
 	        var gpuInput = _sdGpuDeviceId_input != null ? _sdGpuDeviceId_input : EventsBinder.FindComponent<IntegerInputField>("Settings:set_sdGpuDeviceId");
@@ -365,6 +395,92 @@ namespace spz {
 	            Viewport_StatusText.instance.ShowStatusText("GPU preference saved. Launch WebUI from the menu to apply.", false, 3f, false);
 	    }
 
+	    /// <summary>Runtime VSync / paint-undo toggles: matches in-scene settings toggles (sliced sprites) when assigned on this component.</summary>
+	    Toggle CreateRuntimeSpzStyledToggle(Transform rowParent, string rootName, Vector2 size, bool initialOn, bool greenWhenOn) {
+	        var root = new GameObject(rootName);
+	        root.transform.SetParent(rowParent, false);
+	        var rootRt = root.AddComponent<RectTransform>();
+	        rootRt.sizeDelta = size;
+	        var rootLe = root.AddComponent<LayoutElement>();
+	        rootLe.preferredWidth = size.x;
+	        rootLe.preferredHeight = size.y;
+	        rootLe.minWidth = Mathf.Min(size.x, Mathf.Max(32f, size.x * 0.72f));
+	        rootLe.minHeight = Mathf.Max(24f, size.y * 0.9f);
+
+	        var host = new GameObject("ToggleHost");
+	        host.transform.SetParent(root.transform, false);
+	        StretchRectToParent(host.AddComponent<RectTransform>());
+
+	        bool useAtlas = _settingsToggleFrameSprite != null && _settingsToggleCheckSprite != null;
+	        var bg = host.AddComponent<Image>();
+	        bg.raycastTarget = true;
+	        Graphic graphic;
+	        if (useAtlas) {
+	            bg.sprite = _settingsToggleFrameSprite;
+	            bg.type = Image.Type.Sliced;
+	            bg.color = new Color(0.79514813f, 0.7285835f, 0.6933434f, 1f);
+	            var chkGo = new GameObject("Checkmark");
+	            chkGo.transform.SetParent(host.transform, false);
+	            StretchRectToParent(chkGo.AddComponent<RectTransform>());
+	            var chk = chkGo.AddComponent<Image>();
+	            chk.sprite = _settingsToggleCheckSprite;
+	            chk.type = Image.Type.Sliced;
+	            chk.color = new Color(0.8980392f, 0.827451f, 0.7882353f, 1f);
+	            chk.raycastTarget = false;
+	            graphic = chk;
+	        } else {
+	            bg.color = new Color(0.22f, 0.22f, 0.24f, 1f);
+	            graphic = AddToggleCheckmarkGraphic(host.transform);
+	        }
+
+	        var toggle = host.AddComponent<Toggle>();
+	        toggle.targetGraphic = bg;
+	        toggle.graphic = graphic;
+	        toggle.toggleTransition = Toggle.ToggleTransition.Fade;
+	        toggle.navigation = new Navigation { mode = Navigation.Mode.None };
+	        if (useAtlas) {
+	            if (greenWhenOn)
+	                ApplyPaintUndoSlicedToggleColors(toggle);
+	            else
+	                ApplySettingsPrefabMatchToggleColors(toggle);
+	        } else {
+	            if (greenWhenOn)
+	                ApplyPaintUndoEnableToggleColors(toggle);
+	            else
+	                ApplySelectableColors(toggle);
+	        }
+	        toggle.isOn = initialOn;
+	        return toggle;
+	    }
+
+	    /// <summary>Same ColorBlock as built-in Settings_UI.prefab toggles (tints sliced frame).</summary>
+	    static void ApplySettingsPrefabMatchToggleColors(Selectable sel) {
+	        sel.transition = Selectable.Transition.ColorTint;
+	        sel.colors = new ColorBlock {
+	            normalColor = Color.white,
+	            highlightedColor = new Color(0.9607843f, 0.9607843f, 0.9607843f, 1f),
+	            pressedColor = new Color(0.78431374f, 0.78431374f, 0.78431374f, 1f),
+	            selectedColor = new Color(0.9607843f, 0.9607843f, 0.9607843f, 1f),
+	            disabledColor = new Color(0.78431374f, 0.78431374f, 0.78431374f, 0.5019608f),
+	            colorMultiplier = 1f,
+	            fadeDuration = 0.1f
+	        };
+	    }
+
+	    /// <summary>Green selected tint on sliced frame; normal white so sprite skin shows through.</summary>
+	    static void ApplyPaintUndoSlicedToggleColors(Toggle t) {
+	        t.transition = Selectable.Transition.ColorTint;
+	        t.colors = new ColorBlock {
+	            normalColor = Color.white,
+	            highlightedColor = new Color(0.88f, 0.96f, 0.9f, 1f),
+	            pressedColor = new Color(0.75f, 0.9f, 0.8f, 1f),
+	            selectedColor = new Color(0.4f, 1f, 0.52f, 1f),
+	            disabledColor = new Color(1f, 1f, 1f, 0.45f),
+	            colorMultiplier = 1f,
+	            fadeDuration = 0.08f
+	        };
+	    }
+
 	    /// <summary>Apply hover/pressed/selected colors so the control looks selectable and shows active state.</summary>
 	    static void ApplySelectableColors(Selectable sel, Color? whenOnTint = null) {
 	        sel.transition = Selectable.Transition.ColorTint;
@@ -378,6 +494,44 @@ namespace spz {
 	            fadeDuration = 0.12f
 	        };
 	        sel.colors = block;
+	    }
+
+	    /// <summary>Toggle ON = bright green box (selected); OFF = dark gray. Improves visibility vs generic gray toggles.</summary>
+	    static void ApplyPaintUndoEnableToggleColors(Toggle t) {
+	        t.transition = Selectable.Transition.ColorTint;
+	        t.colors = new ColorBlock {
+	            normalColor = new Color(0.22f, 0.22f, 0.24f, 1f),
+	            highlightedColor = new Color(0.32f, 0.38f, 0.34f, 1f),
+	            pressedColor = new Color(0.45f, 0.55f, 0.48f, 1f),
+	            selectedColor = new Color(0.12f, 0.82f, 0.28f, 1f),
+	            disabledColor = new Color(0.2f, 0.2f, 0.2f, 0.45f),
+	            colorMultiplier = 1f,
+	            fadeDuration = 0.08f
+	        };
+	    }
+
+	    static void StretchRectToParent(RectTransform r) {
+	        r.anchorMin = Vector2.zero;
+	        r.anchorMax = Vector2.one;
+	        r.offsetMin = Vector2.zero;
+	        r.offsetMax = Vector2.zero;
+	        r.sizeDelta = Vector2.zero;
+	    }
+
+	    /// <summary>Child checkmark for uGUI Toggle.graphic. Toggle + clickable Image must live on the same GameObject as the Toggle component.</summary>
+	    static TMPro.TextMeshProUGUI AddToggleCheckmarkGraphic(Transform toggleRoot) {
+	        var checkGo = new GameObject("Checkmark");
+	        checkGo.transform.SetParent(toggleRoot, false);
+	        var checkRect = checkGo.AddComponent<RectTransform>();
+	        StretchRectToParent(checkRect);
+	        var checkTmp = checkGo.AddComponent<TMPro.TextMeshProUGUI>();
+	        checkTmp.text = "\u2713";
+	        checkTmp.fontSize = 20;
+	        checkTmp.fontStyle = FontStyles.Bold;
+	        checkTmp.alignment = TextAlignmentOptions.Center;
+	        checkTmp.color = Color.white;
+	        checkTmp.raycastTarget = false;
+	        return checkTmp;
 	    }
 	}
 }//end namespace

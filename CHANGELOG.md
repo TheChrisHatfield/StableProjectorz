@@ -74,3 +74,35 @@ Multi-layer inpaint display and Stable Diffusion capture now follow the same fin
 **Inpaint (`Inpaint_MaskPainter.cs`)**
 
 - **`CollapseLayersIntoScene`** renames the single result layer with **`ConsumeNextDefaultCollapseLayerName`** so it stays in sync with the paint-tab collapse counter.
+
+### Paint undo / redo (session) + Settings UI (2026-03-22)
+
+**New module `Assets/_gm/Features/Paint/Undo/`**
+
+- **`PaintUndo_MGR`:** Pre-stroke snapshot (GPU copy → async readback → pack → **Deflate**); undo/redo restores via **inflated** slice buffers and **amortized** per-UDIM GPU upload in `LateUpdate` with **`PaintUndo_Scheduler`** (EWMA hitch proxy, LAVD-style aging, optional UCB1 budget arms).
+- **`PaintUndo_Input`:** Ctrl+Z / Ctrl+Y (Cmd+Z on Mac) with input-field guard.
+- **`PaintUndo_Storage`:** Ring buffer; max depth from settings (cap **16**).
+- **`PaintUndo_SnapshotRecord` / `PaintUndo_Compress`:** Lossless wire format + zlib Deflate; **`TryBuildUncompressedBlob`** + **off-thread** Deflate on capture (and redo-stack snapshot) to reduce main-thread hitches.
+- **Upload order:** **`LinearSliceUploadOrder`** (slice index 0…n−1; replaces misleading `VisibleFirstOrder` name).
+
+**Hooks / safety**
+
+- **`Inpaint_MaskPainter`:** `SchedulePreStrokeCapture` before `Apply_into_ColorBrushTex`; `PaintUndo_MGR.EnsureExists()` in `Awake`; **`GetPaintTarget_Undo()`** for restore target.
+- **`MaskPainter`:** Blocks inpaint strokes while **`PaintUndo_MGR.BlocksNewStroke`** (restore in progress).
+
+**Texture readback (`TextureTools_SPZ.cs`)**
+
+- **`RenderTexture_to_Texture2DList_Async`:** Callback when **all** slice requests have **completed** (including error paths) via a response counter — avoids never-firing callback when any slice fails.
+
+**Settings (`Settings_MGR.cs` / `Settings_UI.cs`)**
+
+- **PlayerPrefs + UI:** `paintUndo_enabled`, `paintUndo_maxDepth` (clamped **1–16**); restore defaults resets them; **`SyncPaintUndoOnOffLabel`** keeps the **ON/OFF** text in sync when the toggle is set from code.
+- **Runtime settings rows:** Paint undo enable row uses **Toggle + `Image` on the same GameObject** (reliable clicks), **bright green** selected state, **✓** checkmark, **ON/OFF** label; max-depth integer field row.
+- **`_paintUndoSettingsRowsCreated`** is set **only after** rows build successfully (retries if panel/content was null).
+- **VSync runtime row:** Larger hit target (112×28), checkmark, **`navigation = None`**, descriptive label **`raycastTarget = false`**.
+- **SD GPU + paint-undo depth rows:** Descriptive labels **`raycastTarget = false`** so they do not steal clicks in the scroll view.
+- **Shared helper:** **`AddToggleCheckmarkGraphic`** for runtime toggles.
+
+**Documentation**
+
+- **`docs/PAINT_UNDO_SPEC.md`**, **`docs/UNDO_INTEGRATION.md`**, **`docs/PAINT_UNDO_PROFILING.md`** — spec, integration, profiling notes.

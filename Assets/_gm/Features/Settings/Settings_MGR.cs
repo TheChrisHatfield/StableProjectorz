@@ -320,6 +320,8 @@ namespace spz {
 	    // --- Paint undo (session-only history; see docs/PAINT_UNDO_SPEC.md) ---
 	    /// <summary>Upper cap for undo depth in Settings UI and PlayerPrefs (each step holds compressed full active layer in RAM).</summary>
 	    public const int PAINT_UNDO_DEPTH_MAX = 16;
+	    /// <summary>Direct child of Row_PaintUndo_Enable; must match Settings_UI runtime row.</summary>
+	    public const string PAINT_UNDO_ONOFF_LABEL_NAME = "PaintUndo_OnOff_Label";
 
 	    bool _paintUndo_enabled = true;
 	    public bool get_paintUndo_enabled() => _paintUndo_enabled;
@@ -328,7 +330,27 @@ namespace spz {
 		    PlayerPrefs.SetInt("paintUndo_enabled", _paintUndo_enabled ? 1 : 0);
 		    PlayerPrefs.Save();
 		    var toggle = EventsBinder.FindComponent<Toggle>("Settings:set_paintUndo_enabled");
-		    if (toggle != null) toggle.SetIsOnWithoutNotify(on);
+		    if (toggle != null) {
+			    toggle.SetIsOnWithoutNotify(on);
+			    SyncPaintUndoOnOffLabel(toggle, on);
+		    }
+	    }
+
+	    public static void SyncPaintUndoOnOffLabel(Toggle toggle, bool on) {
+		    if (toggle == null) return;
+		    Transform anc = toggle.transform.parent;
+		    TextMeshProUGUI tmp = null;
+		    while (anc != null) {
+			    var tr = anc.Find(PAINT_UNDO_ONOFF_LABEL_NAME);
+			    if (tr != null) {
+				    tmp = tr.GetComponent<TextMeshProUGUI>();
+				    break;
+			    }
+			    anc = anc.parent;
+		    }
+		    if (tmp == null) return;
+		    tmp.text = on ? "ON" : "OFF";
+		    tmp.color = on ? new Color(0.35f, 1f, 0.45f, 1f) : new Color(0.55f, 0.55f, 0.58f, 1f);
 	    }
 	    void tryLoad_paintUndo_enabled()
 		    => set_paintUndo_enabled(PlayerPrefs.GetInt("paintUndo_enabled", 1) == 1);

@@ -40,6 +40,7 @@ namespace spz {
 	        _confirmText_go.SetActive( Time.time < _confirmBy_time );
 	        _icon_go.SetActive( Time.time >= _confirmBy_time );
 
+	        if(KeyMousePenInput.isSomeInputFieldActive()){ return; }
 	        bool cmd_or_shift =   KeyMousePenInput.isKey_CtrlOrCommand_pressed() || KeyMousePenInput.isKey_Shift_pressed();
 	        if(cmd_or_shift &&  Input.GetKeyDown(KeyCode.F) ){
 	            OnFillFromCode();
