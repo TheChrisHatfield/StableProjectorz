@@ -373,6 +373,61 @@ namespace spz {
 	        }
 	    }
 
+	    /// <summary>Like <see cref="RenderTexture_to_Texture2DList_Async"/> but limits concurrent slice readbacks (sliding window). Use for heavy UDIM stacks to reduce driver/GPU spikes; <paramref name="maxInflight"/> ≤ 0 or ≥ slice count uses the parallel implementation.</summary>
+	    public static void RenderTexture_to_Texture2DList_Async_Staggered(RenderUdims udims, int maxInflight, Action<List<Texture2D>> callback){
+	        if (udims == null || udims.texArray == null){
+	            callback(new List<Texture2D>());
+	            return;
+	        }
+	        int n = udims.UdimsCount;
+	        if (n <= 0){
+	            callback(new List<Texture2D>());
+	            return;
+	        }
+	        if (maxInflight <= 0 || maxInflight >= n){
+	            RenderTexture_to_Texture2DList_Async(udims, callback);
+	            return;
+	        }
+
+	        var textures = new List<Texture2D>(n);
+	        for (int i = 0; i < n; ++i) textures.Add(null);
+
+	        int responsesDone = 0;
+	        int nextToSubmit = 0;
+	        int inFlight = 0;
+
+	        void SubmitNext(){
+	            while (inFlight < maxInflight && nextToSubmit < n){
+	                int sliceIx = nextToSubmit++;
+	                inFlight++;
+	                AsyncGPUReadback.Request(udims.texArray, 0, 0, udims.width, 0, udims.height, sliceIx, 1,
+	                    udims.texArray.graphicsFormat, (request) => OnSliceRequest(request, sliceIx));
+	            }
+	        }
+
+	        void OnSliceRequest(AsyncGPUReadbackRequest request, int sliceIx){
+	            if (request.hasError){
+	                Debug.LogError($"GPU readback error detected for slice {sliceIx}.");
+	                textures[sliceIx] = null;
+	            }else{
+	                Texture2D texture2D = new Texture2D(udims.width, udims.height, udims.texArray.graphicsFormat,
+	                    udims.texArray.mipmapCount, TextureCreationFlags.None);
+	                texture2D.filterMode = udims.texArray.filterMode;
+	                texture2D.LoadRawTextureData(request.GetData<byte>());
+	                texture2D.Apply();
+	                textures[sliceIx] = texture2D;
+	            }
+	            inFlight--;
+	            responsesDone++;
+	            if (responsesDone >= n)
+	                callback(textures);
+	            else
+	                SubmitNext();
+	        }
+
+	        SubmitNext();
+	    }
+
     
 	    public static void ClearRenderTexture(RenderTexture rt, Color col, bool clearColor=true, bool clearDepth=true){
 	        if(rt == null){ return; }
