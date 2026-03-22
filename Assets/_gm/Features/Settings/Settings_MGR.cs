@@ -317,6 +317,39 @@ namespace spz {
 	        => set_ignoreCtrl_if_clickSelectingMeshes(PlayerPrefs.GetInt("_ignoreCtrl_if_clickSelectingMeshes", 0) == 1);
 
 
+	    // --- Paint undo (session-only history; see docs/PAINT_UNDO_SPEC.md) ---
+	    /// <summary>Upper cap for undo depth in Settings UI and PlayerPrefs (each step holds compressed full active layer in RAM).</summary>
+	    public const int PAINT_UNDO_DEPTH_MAX = 16;
+
+	    bool _paintUndo_enabled = true;
+	    public bool get_paintUndo_enabled() => _paintUndo_enabled;
+	    public void set_paintUndo_enabled(bool on) {
+		    _paintUndo_enabled = on;
+		    PlayerPrefs.SetInt("paintUndo_enabled", _paintUndo_enabled ? 1 : 0);
+		    PlayerPrefs.Save();
+		    var toggle = EventsBinder.FindComponent<Toggle>("Settings:set_paintUndo_enabled");
+		    if (toggle != null) toggle.SetIsOnWithoutNotify(on);
+	    }
+	    void tryLoad_paintUndo_enabled()
+		    => set_paintUndo_enabled(PlayerPrefs.GetInt("paintUndo_enabled", 1) == 1);
+
+	    int _paintUndo_maxDepth = 8;
+	    public int get_paintUndo_maxDepth() => _paintUndo_maxDepth;
+	    public void set_paintUndo_maxDepth(int depth) {
+		    _paintUndo_maxDepth = Mathf.Clamp(depth, 1, PAINT_UNDO_DEPTH_MAX);
+		    PlayerPrefs.SetInt("paintUndo_maxDepth", _paintUndo_maxDepth);
+		    PlayerPrefs.Save();
+		    var inputField = EventsBinder.FindComponent<IntegerInputField>("Settings:set_paintUndo_maxDepth");
+		    if (inputField != null) inputField.SetValueWithoutNotify(_paintUndo_maxDepth.ToString());
+		    if (PaintUndo_MGR.instance != null)
+			    PaintUndo_MGR.instance.ApplyMaxDepthFromSettings();
+	    }
+	    void tryLoad_paintUndo_maxDepth() {
+		    int raw = PlayerPrefs.GetInt("paintUndo_maxDepth", 8);
+		    set_paintUndo_maxDepth(Mathf.Clamp(raw, 1, PAINT_UNDO_DEPTH_MAX));
+	    }
+
+
 
 	    [SerializeField] AnimationCurve _warpSpeed_curve;
 	    static float _default_uvWarpSpeed01 = 0.5f;
@@ -440,6 +473,8 @@ namespace spz {
 	            set_ignoreCtrl_if_clickSelectingMeshes(false);
 	            set_useCtrlScroll_for_WorkflowMode_swaps(false);
 	            set_sdGpuDeviceId(-1);
+	            set_paintUndo_enabled(true);
+	            set_paintUndo_maxDepth(8);
 	        }
 	        void OnNo() { }
 	    }
@@ -534,6 +569,8 @@ namespace spz {
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_useCtrlScroll_for_WorkflowMode_swaps", set_useCtrlScroll_for_WorkflowMode_swaps);
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_ignoreCtrl_if_clickSelectingMeshes", set_ignoreCtrl_if_clickSelectingMeshes);
 	        StaticEvents.SubscribeUnique<int>("Settings:set_sdGpuDeviceId", set_sdGpuDeviceId);
+	        StaticEvents.SubscribeUnique<bool>("Settings:set_paintUndo_enabled", set_paintUndo_enabled);
+	        StaticEvents.SubscribeUnique<int>("Settings:set_paintUndo_maxDepth", set_paintUndo_maxDepth);
 	        tryLoad_useVSync();
 	        tryLoad_targetFrameRate();
 	        tryLoad_brushPrecision_res();
@@ -555,6 +592,8 @@ namespace spz {
 	        tryLoad_useCtrlScroll_for_WorkflowMode_swaps();
 	        tryLoad_ignoreCtrl_if_clickSelectingMeshes();
 	        tryLoad_sdGpuDeviceId();
+	        tryLoad_paintUndo_enabled();
+	        tryLoad_paintUndo_maxDepth();
 	        isLaunchFastWebui = PlayerPrefs.GetInt("isLaunchFastWebui", 0) > 0;
 	    }
 
@@ -603,6 +642,8 @@ namespace spz {
 	        StaticEvents.Unsubscribe<bool>("Settings:set_useCtrlScroll_for_WorkflowMode_swaps", set_useCtrlScroll_for_WorkflowMode_swaps);
 	        StaticEvents.Unsubscribe<bool>("Settings:set_ignoreCtrl_if_clickSelectingMeshes", set_ignoreCtrl_if_clickSelectingMeshes);
 	        StaticEvents.Unsubscribe<int>("Settings:set_sdGpuDeviceId", set_sdGpuDeviceId);
+	        StaticEvents.Unsubscribe<bool>("Settings:set_paintUndo_enabled", set_paintUndo_enabled);
+	        StaticEvents.Unsubscribe<int>("Settings:set_paintUndo_maxDepth", set_paintUndo_maxDepth);
 	    }
 	}
 }//end namespace
