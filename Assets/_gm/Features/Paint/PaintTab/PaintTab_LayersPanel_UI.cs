@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace spz {
@@ -8,14 +10,14 @@ namespace spz {
 	// LAYER SYSTEM - UI ONLY (layer list panel; no layer data lives here)
 	// =============================================================================
 	// This script is the Paint Tab layer list UI: rows (one per layer), Add Layer
-	// button, visibility eye, delete. It does NOT hold layer data. It holds a
-	// reference to PaintLayerStack_MGR and calls AddLayer(), SetActiveLayer(idx),
-	// SetLayerVisible(idx), RemoveLayer(idx). RebuildList() repopulates rows from
-	// stack.Layers. Scene injection and paint target are handled by Inpaint_MaskPainter.
+	// button, visibility eye, layer name (read-only label → click to edit with TMP_InputField), delete.
+	// Name: solid display by default (stack default names e.g. Layer 1); click label to enter edit mode;
+	// Enter submits SetLayerName; Escape or focus loss cancels without saving. Active-layer changes only
+	// refresh row tint (RefreshActiveHighlight). Scene injection and paint target are handled by Inpaint_MaskPainter.
 	// =============================================================================
 
 	/// <summary>
-	/// Layer panel: Add Layer, visibility toggle per row, Delete per row. Click row to set active (if wired).
+	/// Layer panel: Add Layer, visibility toggle per row, click name to rename (Enter confirms), Delete. Click row background to set active.
 	/// Visibility: toggle button — dark blue when layer visible, light when hidden. Scene data is injected by Inpaint_MaskPainter.
 	/// </summary>
 	public class PaintTab_LayersPanel_UI : MonoBehaviour
@@ -27,6 +29,8 @@ namespace spz {
 		[SerializeField] float _rowHeight = 28f;
 
 		readonly List<GameObject> _rows = new List<GameObject>();
+		int _renameRowIndex = -1;
+		bool _suppressRenameEndEdit;
 
 		// --- Wiring to PaintLayerStack_MGR (set stack ref and subscribe to layer/active changes) ---
 		public void SetAddLayerButton(Button btn)
@@ -60,13 +64,13 @@ namespace spz {
 			if (_layerStack != null)
 			{
 				_layerStack.OnLayersChanged -= RebuildList;
-				_layerStack.OnActiveLayerChanged -= RebuildList;
+				_layerStack.OnActiveLayerChanged -= RefreshActiveHighlight;
 			}
 			_layerStack = stack;
 			if (_layerStack != null)
 			{
 				_layerStack.OnLayersChanged += RebuildList;
-				_layerStack.OnActiveLayerChanged += RebuildList;
+				_layerStack.OnActiveLayerChanged += RefreshActiveHighlight;
 				if (_listRoot == null) _listRoot = transform as RectTransform;
 				if (_addLayerButton != null)
 				{
@@ -103,9 +107,9 @@ namespace spz {
 			if (_listRoot == null) _listRoot = transform as RectTransform;
 			if (_layerStack == null) return;
 			_layerStack.OnLayersChanged -= RebuildList;
-			_layerStack.OnActiveLayerChanged -= RebuildList;
+			_layerStack.OnActiveLayerChanged -= RefreshActiveHighlight;
 			_layerStack.OnLayersChanged += RebuildList;
-			_layerStack.OnActiveLayerChanged += RebuildList;
+			_layerStack.OnActiveLayerChanged += RefreshActiveHighlight;
 			if (_addLayerButton != null)
 			{
 				_addLayerButton.onClick.RemoveAllListeners();
@@ -133,8 +137,119 @@ namespace spz {
 			if (_layerStack != null)
 			{
 				_layerStack.OnLayersChanged -= RebuildList;
-				_layerStack.OnActiveLayerChanged -= RebuildList;
+				_layerStack.OnActiveLayerChanged -= RefreshActiveHighlight;
 			}
+		}
+
+		void RefreshActiveHighlight()
+		{
+			if (_layerStack == null) return;
+			for (int i = 0; i < _rows.Count; i++)
+			{
+				var row = _rows[i];
+				if (row == null) continue;
+				var rowBg = row.GetComponent<Image>();
+				if (rowBg == null) continue;
+				bool isActive = i < _layerStack.Layers.Count && _layerStack.ActiveLayerIndex == i;
+				rowBg.color = isActive ? RowBgActive : RowBgDefault;
+			}
+		}
+
+		void Update()
+		{
+			if (_renameRowIndex < 0) return;
+			if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
+				CancelLayerRename(_renameRowIndex);
+		}
+
+		void BeginLayerRename(int index)
+		{
+			if (_layerStack == null || index < 0 || index >= _layerStack.Layers.Count) return;
+			if (_renameRowIndex >= 0 && _renameRowIndex != index)
+				CancelLayerRename(_renameRowIndex);
+
+			_renameRowIndex = index;
+			_layerStack.SetActiveLayer(index);
+
+			if (index >= _rows.Count || _rows[index] == null) return;
+			Transform nameRoot = _rows[index].transform.Find("Name");
+			if (nameRoot == null) return;
+			Transform disp = nameRoot.Find("DisplayBlock");
+			Transform edit = nameRoot.Find("EditBlock");
+			if (disp != null) disp.gameObject.SetActive(false);
+			if (edit != null)
+			{
+				edit.gameObject.SetActive(true);
+				TMP_InputField input = edit.GetComponentInChildren<TMP_InputField>(true);
+				if (input != null)
+				{
+					input.text = DisplayNameForLayer(_layerStack.Layers[index], index);
+					input.ActivateInputField();
+				}
+			}
+		}
+
+		void OnRenameEndEditLostFocus(int index)
+		{
+			if (_suppressRenameEndEdit) return;
+			if (_renameRowIndex != index) return;
+			CancelLayerRename(index);
+		}
+
+		void CommitLayerRename(int index, string text)
+		{
+			if (_layerStack == null || index < 0 || index >= _layerStack.Layers.Count) return;
+			_suppressRenameEndEdit = true;
+			_renameRowIndex = -1;
+			TMP_InputField input = FindRenameInput(index);
+			if (input != null && input.isFocused)
+				input.DeactivateInputField(false);
+
+			_layerStack.SetLayerName(index, text);
+			ExitRenameDisplayMode(index);
+			_suppressRenameEndEdit = false;
+		}
+
+		void CancelLayerRename(int index)
+		{
+			_suppressRenameEndEdit = true;
+			_renameRowIndex = -1;
+			TMP_InputField input = FindRenameInput(index);
+			if (input != null && input.isFocused)
+				input.DeactivateInputField(false);
+			ExitRenameDisplayMode(index);
+			_suppressRenameEndEdit = false;
+		}
+
+		void ExitRenameDisplayMode(int index)
+		{
+			if (index < 0 || index >= _rows.Count || _rows[index] == null) return;
+			Transform nameRoot = _rows[index].transform.Find("Name");
+			if (nameRoot == null) return;
+			Transform disp = nameRoot.Find("DisplayBlock");
+			Transform edit = nameRoot.Find("EditBlock");
+			if (edit != null) edit.gameObject.SetActive(false);
+			if (disp != null)
+			{
+				disp.gameObject.SetActive(true);
+				var label = disp.GetComponentInChildren<TextMeshProUGUI>();
+				if (label != null && _layerStack != null && index < _layerStack.Layers.Count)
+					label.text = DisplayNameForLayer(_layerStack.Layers[index], index);
+			}
+		}
+
+		string DisplayNameForLayer(PaintLayer layer, int index)
+		{
+			if (layer == null) return _layerStack != null ? _layerStack.DefaultLayerDisplayName(index) : "Layer " + (index + 1);
+			if (!string.IsNullOrEmpty(layer.Name)) return layer.Name;
+			return _layerStack != null ? _layerStack.DefaultLayerDisplayName(index) : "Layer " + (index + 1);
+		}
+
+		TMP_InputField FindRenameInput(int index)
+		{
+			if (index < 0 || index >= _rows.Count || _rows[index] == null) return null;
+			Transform edit = _rows[index].transform.Find("Name/EditBlock");
+			return edit != null ? edit.GetComponentInChildren<TMP_InputField>(true) : null;
 		}
 
 		// --- Add Layer and list rebuild (UI calls stack; RebuildList repopulates rows from stack.Layers) ---
@@ -160,6 +275,7 @@ namespace spz {
 		void RebuildList()
 		{
 			if (_layerStack == null || _listRoot == null) return;
+			_renameRowIndex = -1;
 			foreach (var go in _rows)
 			{
 				if (go != null) Destroy(go);
@@ -183,8 +299,8 @@ namespace spz {
 		static readonly Color RowBgDefault      = new Color(0, 0, 0, 0.2f);
 		static readonly Color RowBgActive       = new Color(0.2f, 0.38f, 0.55f, 0.45f);  // blue tint so user sees which layer is active
 
-		// --- Build one row: click row = SetActiveLayer, eye = SetLayerVisible, red button = RemoveLayer ---
-		/// <summary>One row: click row to set active layer; visibility toggle; layer name; Delete. Active row has blue tint.</summary>
+		// --- Build one row: row bg = SetActiveLayer; eye = select + SetLayerVisible; name = solid label, click → edit (Enter commit, blur/Escape cancel); Delete ---
+		/// <summary>One row: click row background for active layer; eye toggles visibility and selects; click name to rename (Enter confirms); Delete removes.</summary>
 		GameObject BuildRow(PaintLayer layer, int index)
 		{
 			GameObject row = new GameObject("LayerRow_" + index);
@@ -233,26 +349,103 @@ namespace spz {
 			visBtn.onClick.AddListener(() =>
 			{
 				if (_layerStack == null || idx < 0 || idx >= _layerStack.Layers.Count) return;
+				_layerStack.SetActiveLayer(idx);
 				bool newVisible = !_layerStack.Layers[idx].Visible;
 				_layerStack.SetLayerVisible(idx, newVisible);
 				visImg.color = newVisible ? VisibilityOnColor : VisibilityOffColor;
 				RequestReRender();
 			});
 
-			// Label: layer name (read-only, no raycast)
+			// Layer name: DisplayBlock = solid label (like legacy Text); EditBlock = TMP_InputField after click. Enter = commit; blur/Escape = cancel.
 			var nameGo = new GameObject("Name");
 			nameGo.transform.SetParent(row.transform, false);
-			var nameRect = nameGo.AddComponent<RectTransform>();
-			nameRect.sizeDelta = new Vector2(120, _rowHeight - 4);
+			nameGo.AddComponent<RectTransform>().sizeDelta = new Vector2(120, _rowHeight - 4);
 			var nameLE = nameGo.AddComponent<LayoutElement>();
 			nameLE.flexibleWidth = 1;
 			nameLE.minWidth = 40;
-			var nameText = nameGo.AddComponent<Text>();
-			nameText.text = layer.Name;
-			nameText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-			nameText.fontSize = 12;
-			nameText.color = Color.white;
-			nameText.raycastTarget = false;
+
+			void StretchToParent(RectTransform r)
+			{
+				r.anchorMin = Vector2.zero;
+				r.anchorMax = Vector2.one;
+				r.sizeDelta = Vector2.zero;
+				r.offsetMin = Vector2.zero;
+				r.offsetMax = Vector2.zero;
+			}
+
+			var displayBlock = new GameObject("DisplayBlock");
+			displayBlock.transform.SetParent(nameGo.transform, false);
+			StretchToParent(displayBlock.AddComponent<RectTransform>());
+			var dispImg = displayBlock.AddComponent<Image>();
+			dispImg.color = new Color(0, 0, 0, 0.12f);
+			dispImg.raycastTarget = true;
+			var dispBtn = displayBlock.AddComponent<Button>();
+			dispBtn.targetGraphic = dispImg;
+			dispBtn.transition = Selectable.Transition.None;
+			int idxCapture = idx;
+			dispBtn.onClick.AddListener(() => BeginLayerRename(idxCapture));
+
+			var labelGo = new GameObject("Label");
+			labelGo.transform.SetParent(displayBlock.transform, false);
+			StretchToParent(labelGo.AddComponent<RectTransform>());
+			var labelTmp = labelGo.AddComponent<TextMeshProUGUI>();
+			labelTmp.text = DisplayNameForLayer(layer, idx);
+			labelTmp.fontSize = 12;
+			labelTmp.color = Color.white;
+			labelTmp.raycastTarget = false;
+			labelTmp.alignment = TextAlignmentOptions.MidlineLeft;
+			labelTmp.margin = new Vector4(6, 0, 4, 0);
+
+			var editBlock = new GameObject("EditBlock");
+			editBlock.transform.SetParent(nameGo.transform, false);
+			StretchToParent(editBlock.AddComponent<RectTransform>());
+			editBlock.SetActive(false);
+
+			var inputRoot = new GameObject("InputRoot");
+			inputRoot.transform.SetParent(editBlock.transform, false);
+			StretchToParent(inputRoot.AddComponent<RectTransform>());
+			var editBg = inputRoot.AddComponent<Image>();
+			editBg.color = new Color(0.12f, 0.12f, 0.14f, 0.92f);
+			editBg.raycastTarget = true;
+
+			var textArea = new GameObject("Text Area");
+			textArea.transform.SetParent(inputRoot.transform, false);
+			var textAreaRect = textArea.AddComponent<RectTransform>();
+			textAreaRect.anchorMin = Vector2.zero;
+			textAreaRect.anchorMax = Vector2.one;
+			textAreaRect.offsetMin = new Vector2(4, 2);
+			textAreaRect.offsetMax = new Vector2(-4, -2);
+			textArea.AddComponent<RectMask2D>();
+
+			var placeholderGo = new GameObject("Placeholder");
+			placeholderGo.transform.SetParent(textArea.transform, false);
+			StretchToParent(placeholderGo.AddComponent<RectTransform>());
+			var placeholderTmp = placeholderGo.AddComponent<TextMeshProUGUI>();
+			placeholderTmp.text = _layerStack != null ? _layerStack.DefaultLayerDisplayName(idx) : "Layer " + (idx + 1);
+			placeholderTmp.fontSize = 11;
+			placeholderTmp.color = new Color(1f, 1f, 1f, 0.35f);
+			placeholderTmp.raycastTarget = false;
+
+			var textGo = new GameObject("Text");
+			textGo.transform.SetParent(textArea.transform, false);
+			StretchToParent(textGo.AddComponent<RectTransform>());
+			var editTmp = textGo.AddComponent<TextMeshProUGUI>();
+			editTmp.text = DisplayNameForLayer(layer, idx);
+			editTmp.fontSize = 12;
+			editTmp.color = Color.white;
+			editTmp.raycastTarget = false;
+
+			var nameInput = inputRoot.AddComponent<TMP_InputField>();
+			nameInput.textViewport = textAreaRect;
+			nameInput.textComponent = editTmp;
+			nameInput.placeholder = placeholderTmp;
+			nameInput.targetGraphic = editBg;
+			nameInput.lineType = TMP_InputField.LineType.SingleLine;
+			nameInput.characterLimit = 128;
+			nameInput.onFocusSelectAll = true;
+			nameInput.text = editTmp.text;
+			nameInput.onSubmit.AddListener(s => CommitLayerRename(idxCapture, s));
+			nameInput.onEndEdit.AddListener(_ => OnRenameEndEditLostFocus(idxCapture));
 
 			// Red Delete button
 			var deleteGo = new GameObject("Delete");

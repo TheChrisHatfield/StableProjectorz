@@ -291,6 +291,8 @@ namespace spz {
 	    public int udimsCount;
 	    /// <summary>Next cardinal number for default "Layer N" names (persists across save/load). </summary>
 	    public int nextLayerNumber;
+	    /// <summary>Next cardinal for default "Collapse N" names when using Collapse (0 in old saves = infer from layer names).</summary>
+	    public int nextCollapseNumber;
 	    public List<PaintLayer_SL> layers;
 	}
 
