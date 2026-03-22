@@ -48,6 +48,9 @@ namespace spz {
 		/// <summary>Active layer's secondary data buffer. Not used during live painting; exists for save/load. </summary>
 		public RenderUdims ActiveLayerDataRenderUdims => ActiveLayer?.Data;
 
+		/// <summary>False if the layer compositor shader did not load; <see cref="CompositeTo"/> cannot run.</summary>
+		public bool CanCompositeLayers => _compositeBlendMat != null;
+
 		public event Action OnLayersChanged;
 		public event Action OnActiveLayerChanged;
 		/// <summary>Invoked when a new layer is added (the new layer is already active). Inpaint_MaskPainter subscribes to inject scene into it (OnLayerAdded_InjectScene).</summary>
@@ -445,6 +448,12 @@ namespace spz {
 				dest.ClearTheTextures(Color.clear);
 				return;
 			}
+			// Stack resolution can still be unset if InitTextures hasn't run yet; temps require _resolution. Adopt from first visible layer (no layer realloc).
+			if (_resolution.x <= 0 && first.width > 0 && first.height > 0 && first.UdimsCount > 0)
+			{
+				_resolution = new Vector2Int(first.width, first.height);
+				_udimsCount = first.UdimsCount;
+			}
 			RenderUdims.assertSameSize(dest, first);
 			RenderUdims a = GetOrCreateCompositeTemp(ref _compositeTempA);
 			RenderUdims b = GetOrCreateCompositeTemp(ref _compositeTempB);
@@ -453,7 +462,12 @@ namespace spz {
 				a = GetOrCreateCompositeTempFromBase(ref _compositeTempA, first);
 				b = GetOrCreateCompositeTempFromBase(ref _compositeTempB, first);
 			}
-			if (a == null || b == null) return;
+			if (a == null || b == null)
+			{
+				UnityEngine.Debug.LogWarning("[PaintLayerStack] CompositeTo: could not create composite temps (UDIMs/resolution?). Clearing dest so callers do not reuse stale mask data.");
+				dest.ClearTheTextures(Color.clear);
+				return;
+			}
 			bool foundFirst = false;
 			RenderUdims tmp;
 			for (int i = 0; i < _layers.Count; i++)

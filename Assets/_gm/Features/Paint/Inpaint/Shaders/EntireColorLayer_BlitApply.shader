@@ -17,8 +17,8 @@ Shader "Unlit/EntireColorLayer_BlitApply"
         // Setup blending, for blending new stuff on top of other already existing projections.
         // I need an alpha which is to be added to the already existing alpha.
         // Yet, the current alpha also needs to "lerp" its RGB.
-        BlendOp Add //<--the source and destination values will be added together.
-        Blend One OneMinusSrcAlpha//<--two separate equations, one for RGB, one for Alpha.
+        BlendOp Add
+        Blend One OneMinusSrcAlpha, One One
 
         Pass
         {

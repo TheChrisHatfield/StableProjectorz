@@ -13,9 +13,9 @@ namespace spz {
 	// LAYER SYSTEM - PAINT TARGET AND DISPLAY (Inpaint_MaskPainter)
 	// =============================================================================
 	// Paint target: GetPaintTarget() returns active layer Content (from PaintLayerStack_MGR).
-	// Display: ApplyColorLayer_To_UV_Textures() is called by Objects_Renderer_MGR; with 2+
-	// layers it blits each visible layer's Content in order onto the accumulation texture
-	// (no composite buffer). New-layer injection: subscribes to PaintLayerStack_MGR.OnLayerAdded
+	// Display: ApplyColorLayer_To_UV_Textures() composites 2+ visible layers via PaintLayerStack_MGR.CompositeTo
+	// then one EntireColorLayer blit onto accumulation (same scaling behavior as single-layer).
+	// New-layer injection: subscribes to PaintLayerStack_MGR.OnLayerAdded
 	// (OnLayerAdded_InjectScene) to inject scene + layers below into the new layer.
 	// =============================================================================
 
@@ -93,8 +93,12 @@ namespace spz {
 
 
 	    // --- Display / SD bridge: blit paint layers onto accumulation (called from Objects_Renderer_MGR) ---
-	    // Takes all brushed color and applies into accumulation. When 2+ layers: every VISIBLE layer (not just active) is blit in order onto ontoHere, so the result is the same as if the user had painted on a single buffer. Used for both viewport display and for SD init image capture (EnsureInpaintColorLayerAppliedForCapture).
-	    public void ApplyColorLayer_To_UV_Textures( RenderUdims ontoHere ){
+	    // Single path for both 1 layer and N layers:
+	    //   1. Determine `source` (single layer: ActiveLayer.Content; multi-layer: composite all visible into _layerStackCompositeTemp)
+	    //   2. One blit: source → ontoHere (accumulation) via EntireColorLayer_BlitApply shader (handles scaling, UDIMs, etc.)
+	    // This replicates the proven single-layer mechanism at any layer count.
+	    /// <param name="forStableDiffusionCapture">When true, always composite/blit even if a project save is in progress (save guard would otherwise skip and SD would capture paint-free accumulation).</param>
+	    public void ApplyColorLayer_To_UV_Textures( RenderUdims ontoHere, bool forStableDiffusionCapture = false ){
 	        if (ontoHere == null) return;
 	        if (_blitApplyEntireColorLayer_mat == null)
 	        {
@@ -102,70 +106,135 @@ namespace spz {
 		        return;
 	        }
 	        bool isColorless  = WorkflowRibbon_UI.instance != null && WorkflowRibbon_UI.instance.currentMode() == WorkflowRibbon_CurrMode.Inpaint_NoColor;
-	        bool willSendToSD = StableDiffusion_Hub.instance != null && StableDiffusion_Hub.instance._finalPreparations_beforeGen;
-	        // NoColor + SD capture: skip so mask stays as-is. Color mode (visible layers): always composite so SD init image has full layer stack.
-	        if(isColorless && willSendToSD){ return; }
-	        if(Save_MGR.instance != null && Save_MGR.instance._isSaving){ return; }//Never blit colors if saving. Or merging icons into one, because no ctrl+z.
+	        if (!forStableDiffusionCapture && Save_MGR.instance != null && Save_MGR.instance._isSaving){ return; }
 
 	        EnsureSceneInjectedIntoActiveLayer();
 	        var stack = PaintLayerStack_MGR.instance;
 	        bool multiLayer = stack != null && stack.Layers != null && stack.Layers.Count > 1;
+
 	        if (multiLayer)
-		        EnsureSceneBufferForDisplay();
-
-	        Color brushCol = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.brushColor : Color.black;
-	        float sign = Mathf.Sign(_prevStrength);
-	        float maxStrength = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity : 1f;
-
-	        // Multi-layer: blit every visible layer in stack order (bottom to top) onto ontoHere. All visible layers contribute; result = single composite for display and for SD.
-	        if (multiLayer && stack != null)
 	        {
-		        int activeIdx = stack.ActiveLayerIndex;
-		        for (int i = 0; i < stack.Layers.Count; i++)
+		        for (int li = 0; li < stack.Layers.Count; li++)
 		        {
-			        var layer = stack.Layers[i];
-			        if (!layer.Visible || layer.Content == null) continue;
-			        float opacity = Mathf.Clamp01(layer.Opacity);
-			        bool isActiveLayer = (i == activeIdx);
-			        _blitApplyEntireColorLayer_mat.SetTexture("_SrcTex", layer.Content.texArray);
-			        RenderUdims.SetNumUdims(ontoHere, _blitApplyEntireColorLayer_mat);
-			        TextureTools_SPZ.SetKeyword_Material(_blitApplyEntireColorLayer_mat, "APPLY_LATEST_BRUSH_TOO", isActiveLayer && _isPainting);
-			        _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", _latestBrushStroke_ref);
-			        _blitApplyEntireColorLayer_mat.SetColor("_CurrBrushColor", brushCol);
-			        _blitApplyEntireColorLayer_mat.SetFloat("_Sign", sign);
-			        _blitApplyEntireColorLayer_mat.SetFloat("_MaxPossibleBrushStrength01", maxStrength);
-			        _blitApplyEntireColorLayer_mat.SetInteger("_isColorlessMask", isColorless ? 1 : 0);
-			        if (isColorless) _blitApplyEntireColorLayer_mat.SetTexture("_ColorlessCheckerTex", _colorlessMaskChecker_tex);
-			        _blitApplyEntireColorLayer_mat.SetFloat("_TotalOpacity01", opacity);
-			        TextureTools_SPZ.Blit(layer.Content.texArray, ontoHere.texArray, _blitApplyEntireColorLayer_mat);
+			        var L = stack.Layers[li];
+			        if (L != null && L.Visible)
+				        stack.EnsureContentForLayerIfNeeded(L);
 		        }
-		        return;
+		        EnsureSceneBufferForDisplay();
+		        EnsureBottomLayerHasSceneForComposite();
 	        }
 
-	        // Single layer (or no stack): one blit from source. Same mechanism as traditional inpaint (Alt+sample → brush → paint). Layer path: use ActiveLayer.Content when present so visible layer color data is always sent to SD (Blit scales if layer res != accumulation res).
+	        // ---- Determine source: this is the key mechanism. Same variable, same final blit, regardless of layer count. ----
 	        RenderUdims source = null;
-	        float layerOpacity01 = 1f;
-	        if (stack != null && stack.Layers != null && stack.Layers.Count == 1 && stack.ActiveLayer?.Content != null)
+
+	        if (multiLayer && stack != null)
+	        {
+		        // Multi-layer: composite all visible layers into _layerStackCompositeTemp using EntireColorLayer_BlitApply
+		        // (the same shader that works for single-layer). We blit each layer onto the composite temp in order,
+		        // then use the composite temp as `source` for the final blit — identical to how single-layer uses ActiveLayer.Content.
+		        source = CompositeVisibleLayersIntoTemp(stack, isColorless);
+		        if (source == null)
+		        {
+			        if (!_loggedDisplaySourceOnce)
+			        {
+				        _loggedDisplaySourceOnce = true;
+				        UnityEngine.Debug.LogWarning("[Inpaint] Multi-layer composite produced null source. Falling back to ActiveLayer.Content.");
+			        }
+			        source = stack.ActiveLayer?.Content;
+		        }
+	        }
+	        else if (stack != null && stack.Layers != null && stack.Layers.Count == 1 && stack.ActiveLayer?.Content != null)
+	        {
 		        source = stack.ActiveLayer.Content;
+	        }
+
 	        if (source == null && _ObjectUV_brushedColorRGBA != null)
 		        source = _ObjectUV_brushedColorRGBA;
+
 	        if (source == null)
 	        {
 		        Debug.LogWarning("[Inpaint] Paint not shown on mesh: no paint source. Load a 3D model and paint in the viewport.");
 		        return;
 	        }
 
+	        // ---- Final blit: identical for 1 layer and N layers. This is the proven single-layer mechanism. ----
+	        Color brushCol = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.brushColor : Color.black;
+	        float sign = Mathf.Sign(_prevStrength);
+	        float maxStrength = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity : 1f;
+	        bool applyBrush = _isPainting && !multiLayer;
+
 	        _blitApplyEntireColorLayer_mat.SetTexture("_SrcTex", source.texArray);
 	        RenderUdims.SetNumUdims(ontoHere, _blitApplyEntireColorLayer_mat);
-	        TextureTools_SPZ.SetKeyword_Material(_blitApplyEntireColorLayer_mat, "APPLY_LATEST_BRUSH_TOO", _isPainting);
+	        TextureTools_SPZ.SetKeyword_Material(_blitApplyEntireColorLayer_mat, "APPLY_LATEST_BRUSH_TOO", applyBrush);
 	        _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", _latestBrushStroke_ref);
 	        _blitApplyEntireColorLayer_mat.SetColor("_CurrBrushColor", brushCol);
 	        _blitApplyEntireColorLayer_mat.SetFloat("_Sign", sign);
 	        _blitApplyEntireColorLayer_mat.SetFloat("_MaxPossibleBrushStrength01", maxStrength);
 	        _blitApplyEntireColorLayer_mat.SetInteger("_isColorlessMask", isColorless ? 1 : 0);
 	        if (isColorless) _blitApplyEntireColorLayer_mat.SetTexture("_ColorlessCheckerTex", _colorlessMaskChecker_tex);
-	        _blitApplyEntireColorLayer_mat.SetFloat("_TotalOpacity01", layerOpacity01);
+	        _blitApplyEntireColorLayer_mat.SetFloat("_TotalOpacity01", 1f);
 	        TextureTools_SPZ.Blit(source.texArray, ontoHere.texArray, _blitApplyEntireColorLayer_mat);
+	    }
+
+	    /// <summary>Composite all visible layers into _layerStackCompositeTemp using the same EntireColorLayer_BlitApply shader.
+	    /// Blits each visible layer (bottom to top) onto a cleared temp, with opacity per layer, exactly as the single-layer
+	    /// path blits one layer onto accumulation. Returns the temp, or null on failure.</summary>
+	    RenderUdims CompositeVisibleLayersIntoTemp(PaintLayerStack_MGR stack, bool isColorless)
+	    {
+		    if (stack == null || stack.Layers == null || stack.Layers.Count == 0) return null;
+
+		    RenderUdims firstVis = null;
+		    for (int i = 0; i < stack.Layers.Count; i++)
+		    {
+			    var L = stack.Layers[i];
+			    if (L != null && L.Visible && L.Content != null) { firstVis = L.Content; break; }
+		    }
+		    if (firstVis == null) return null;
+
+		    EnsureLayerStackCompositeTemp(firstVis);
+		    if (_layerStackCompositeTemp == null)
+		    {
+			    UnityEngine.Debug.LogWarning("[Inpaint] Could not create composite temp for multi-layer.");
+			    return null;
+		    }
+
+		    _layerStackCompositeTemp.ClearTheTextures(Color.clear);
+
+		    Color brushCol = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.brushColor : Color.black;
+		    float sign = Mathf.Sign(_prevStrength);
+		    float maxStrength = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity : 1f;
+		    int activeIdx = stack.ActiveLayerIndex;
+
+		    int blitCount = 0;
+		    for (int i = 0; i < stack.Layers.Count; i++)
+		    {
+			    var layer = stack.Layers[i];
+			    if (!layer.Visible || layer.Content == null) continue;
+
+			    float opacity = Mathf.Clamp01(layer.Opacity);
+			    bool isActiveAndPainting = (i == activeIdx) && _isPainting;
+
+			    _blitApplyEntireColorLayer_mat.SetTexture("_SrcTex", layer.Content.texArray);
+			    RenderUdims.SetNumUdims(_layerStackCompositeTemp, _blitApplyEntireColorLayer_mat);
+			    TextureTools_SPZ.SetKeyword_Material(_blitApplyEntireColorLayer_mat, "APPLY_LATEST_BRUSH_TOO", isActiveAndPainting);
+			    _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", _latestBrushStroke_ref);
+			    _blitApplyEntireColorLayer_mat.SetColor("_CurrBrushColor", brushCol);
+			    _blitApplyEntireColorLayer_mat.SetFloat("_Sign", sign);
+			    _blitApplyEntireColorLayer_mat.SetFloat("_MaxPossibleBrushStrength01", maxStrength);
+			    _blitApplyEntireColorLayer_mat.SetInteger("_isColorlessMask", isColorless ? 1 : 0);
+			    if (isColorless) _blitApplyEntireColorLayer_mat.SetTexture("_ColorlessCheckerTex", _colorlessMaskChecker_tex);
+			    _blitApplyEntireColorLayer_mat.SetFloat("_TotalOpacity01", opacity);
+			    TextureTools_SPZ.Blit(layer.Content.texArray, _layerStackCompositeTemp.texArray, _blitApplyEntireColorLayer_mat);
+			    blitCount++;
+		    }
+
+		    if (blitCount == 0)
+		    {
+			    UnityEngine.Debug.LogWarning("[Inpaint] CompositeVisibleLayersIntoTemp: 0 layers blitted (all hidden or no Content?).");
+			    return null;
+		    }
+
+		    return _layerStackCompositeTemp;
 	    }
 
 	    void EnsureLayerStackCompositeTemp(RenderUdims sameSizeAs)
@@ -330,10 +399,29 @@ namespace spz {
 	        =>MainViewport_UI.instance.cursorMainViewportPos01;
 
 	    protected override Vector3Int maskResolution(){
-	        if (ModelsHandler_3D.instance == null) return new Vector3Int(GenData_Masks.COLOR_BRUSH_RESOLUTION, GenData_Masks.COLOR_BRUSH_RESOLUTION, 0);
+	        int fallBack = GenData_Masks.COLOR_BRUSH_RESOLUTION;
+	        if (ModelsHandler_3D.instance == null) return new Vector3Int(fallBack, fallBack, 0);
 	        IReadOnlyList<UDIM_Sector> allUdims = ModelsHandler_3D.instance._allKnownUdims;
 	        int numSlices = allUdims != null ? allUdims.Count : 0;
-	        return new Vector3Int( GenData_Masks.COLOR_BRUSH_RESOLUTION,  GenData_Masks.COLOR_BRUSH_RESOLUTION,  numSlices);
+	        int w = fallBack, h = fallBack;
+	        // Layer RTs must match the mesh accumulation texture. Using only "brush precision" while accumulation
+	        // uses scene texture quality breaks multi-layer (several array blits); single-layer often still looked OK due to one scaled blit.
+	        if (numSlices > 0 && Objects_Renderer_MGR.instance != null)
+	        {
+		        var acc = Objects_Renderer_MGR.instance.accumulationTextures_ref();
+		        if (acc != null && acc.texArray != null && acc.width > 0 && acc.height > 0 && acc.UdimsCount == numSlices)
+		        {
+			        w = acc.width;
+			        h = acc.height;
+		        }
+		        else
+		        {
+			        // Accumulation not allocated yet (e.g. before Objects_Renderer_MGR.Start) — still match scene UV size, not brush-precision-only.
+			        int rq = SceneResolution_MGR.resultTexQuality;
+			        if (rq > 0) { w = h = rq; }
+		        }
+	        }
+	        return new Vector3Int(w, h, numSlices);
 	    }
 
 	    protected override float getBrushStrength(){//strength [0,1] --> [-1,1]
@@ -662,24 +750,18 @@ namespace spz {
 			    stack.EnsureResolution(new Vector3Int(res.x, res.y, res.z));
 	    }
 
-	    /// <summary>Returns the display source: composite of all visible layers when 2+ layers (never active-only); else active Content or scene fallback.</summary>
+	    /// <summary>Returns the display source: composite of all visible layers when 2+ layers (never active-only); else active Content or scene fallback. Uses the same EntireColorLayer shader as the display path.</summary>
 	    public RenderUdims GetLayerCompositeOrFallback()
 	    {
 		    var stack = PaintLayerStack_MGR.instance;
 		    if (stack != null && stack.Layers != null && stack.Layers.Count > 1)
 		    {
-			    if (_ObjectUV_brushedColorRGBA != null)
-				    SyncStackResolutionFromSceneBuffer(stack, _ObjectUV_brushedColorRGBA);
-			    RenderUdims sizeRef = _ObjectUV_brushedColorRGBA ?? stack.Layers[0]?.Content;
-			    if (sizeRef != null)
-			    {
-				    EnsureLayerStackCompositeTemp(sizeRef);
-				    if (_layerStackCompositeTemp != null)
-				    {
-					    stack.CompositeTo(_layerStackCompositeTemp);
-					    return _layerStackCompositeTemp;
-				    }
-			    }
+			    EnsureSceneBufferForDisplay();
+			    EnsureBottomLayerHasSceneForComposite();
+			    bool isColorless = WorkflowRibbon_UI.instance != null && WorkflowRibbon_UI.instance.currentMode() == WorkflowRibbon_CurrMode.Inpaint_NoColor;
+			    var composite = CompositeVisibleLayersIntoTemp(stack, isColorless);
+			    if (composite != null) return composite;
+			    if (stack.ActiveLayer?.Content != null) return stack.ActiveLayer.Content;
 			    if (stack.Layers.Count > 0 && stack.Layers[0].Visible && stack.Layers[0].Content != null)
 				    return stack.Layers[0].Content;
 		    }
