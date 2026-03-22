@@ -133,7 +133,7 @@ namespace spz {
 	        => set_avoid_NSFW_generations(PlayerPrefs.GetInt("_avoid_NSFW_generations", 1) == 1);
 
 	    // Stable Diffusion GPU: -1 = default (auto), 0/1/2... = use that CUDA device (sets CUDA_VISIBLE_DEVICES when launching WebUI).
-	    const int SD_GPU_ID_MAX = 31; // reasonable upper bound for GPU index
+	    public const int SD_GPU_ID_MAX = 31; // reasonable upper bound for GPU index (UI + launch clamp)
 	    int _sdGpuDeviceId = -1;
 	    public int get_sdGpuDeviceId() => _sdGpuDeviceId;
 	    void set_sdGpuDeviceId(int id) {

@@ -223,7 +223,9 @@ namespace spz {
 
 	    bool isDoingSomethingElse(){
 	        if (KeyMousePenInput.isKey_alt_pressed()){ return true; }
-	        if (KeyMousePenInput.isKey_CtrlOrCommand_pressed()){ return true; }
+	        // Ctrl no longer blocks stroke start here: ClickSelect_Meshes_MGR._isSelectMode already suppresses painting
+	        // when Ctrl+mesh-select is active; treating Ctrl as "busy" left inpaint unable to paint after eyedropper if Ctrl
+	        // was still held (swatch workflow never held Ctrl).
 	        if (Images_ImportHelper.instance != null && Images_ImportHelper.instance.isImporting){ return true; }
 	        if (WorkflowRibbon_UI.instance == null || MainViewport_UI.instance == null || SD_WorkflowOptionsRibbon_UI.instance == null)
 		        return true;

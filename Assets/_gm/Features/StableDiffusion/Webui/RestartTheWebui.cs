@@ -67,16 +67,13 @@ namespace spz {
 	        }
 
 	        string full_path = _filepath;
-	        //if the path is relative, starts with ./  then we need to make it absolute:
-	        if(full_path.Length>0 && full_path[0] == '.'){
+	        if (!Path.IsPathRooted(full_path)) {
 	            string exeDirectory = Directory.GetParent(Application.dataPath).FullName;
 	            full_path = Path.Combine(exeDirectory, full_path);
 	        }
-        
-	        try{
-	            //simplify the path, to make it standardized:
-	            full_path = Path.GetFullPath(_filepath);
-	        }catch(Exception e){
+	        try {
+	            full_path = Path.GetFullPath(full_path);
+	        } catch (Exception) {
 	            Debug.Log("path is incorrect, please check it again");
 	        }
         

@@ -50,3 +50,27 @@ Multi-layer inpaint display and Stable Diffusion capture now follow the same fin
 - **`SD_Generate_PayloadMaker`:** `EnsureInpaintColorLayerAppliedForCapture` before reading content/accumulation for payloads where applicable.
 
 **Unity package manifests:** `Packages/manifest.json` and `Packages/packages-lock.json` were verified with no working-tree changes at this update (dependencies already in sync with `main`).
+
+### Layer rename UI & enumerated collapse names (2026-03-22)
+
+**Paint tab — layer list (`PaintTab_LayersPanel_UI.cs`)**
+
+- Default names still come from the stack (`Layer 1`, `Layer 2`, …); **DisplayBlock** shows a read-only label (legacy-style).
+- **Click the name** → **EditBlock** with `TMP_InputField`; **Enter** (`onSubmit`) commits via `SetLayerName`; **Escape** or **focus loss** (`onEndEdit`) cancels without saving.
+- **Visibility** button also calls `SetActiveLayer` so the eye can select the active layer when the name strip is not used for selection.
+- **OnActiveLayerChanged** only runs **`RefreshActiveHighlight`** (row tint), not a full list rebuild, so the rename field is not destroyed when the active layer changes.
+- **Unity 6 TMP:** `SelectAll()` is protected — use **`onFocusSelectAll = true`** on the rename field instead of calling `SelectAll()`.
+
+**Layer stack (`PaintLayerStack_MGR.cs`)**
+
+- **`SetLayerName`**, **`DefaultLayerDisplayName`** — trim, max length, empty → default label; fires `OnLayersChanged` when the stored name changes.
+- **`ConsumeNextDefaultCollapseLayerName`** — default merged-layer names **`Collapse 1`**, **`Collapse 2`**, … (monotonic counter).
+- **`CollapseVisibleLayersIntoOne`** uses that API instead of a fixed `"Collapsed"` string.
+
+**Save / load (`SerializationObjects.cs` + stack `Save`/`Load`)**
+
+- **`PaintLayerStack_SL.nextCollapseNumber`** persists the collapse counter; **`0`** in older saves triggers **`InferNextCollapseNumber`** (parses `Collapse N` and legacy **`Collapsed`**).
+
+**Inpaint (`Inpaint_MaskPainter.cs`)**
+
+- **`CollapseLayersIntoScene`** renames the single result layer with **`ConsumeNextDefaultCollapseLayerName`** so it stays in sync with the paint-tab collapse counter.

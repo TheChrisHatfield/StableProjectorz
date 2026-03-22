@@ -124,7 +124,6 @@ namespace spz {
 	        => MainViewport_UI.instance.showing != MainViewport_UI.Showing.UsualView ||
 	           KeyMousePenInput.isMMBpressed() || 
 	           KeyMousePenInput.isRMBpressed() || 
-	           KeyMousePenInput.isKey_CtrlOrCommand_pressed() || 
 	           KeyMousePenInput.isKey_Shift_pressed();
     
 

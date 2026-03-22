@@ -13,8 +13,8 @@ namespace spz {
 	// LAYER SYSTEM - PAINT TARGET AND DISPLAY (Inpaint_MaskPainter)
 	// =============================================================================
 	// Paint target: GetPaintTarget() returns active layer Content (from PaintLayerStack_MGR).
-	// Display: ApplyColorLayer_To_UV_Textures() composites 2+ visible layers via PaintLayerStack_MGR.CompositeTo
-	// then one EntireColorLayer blit onto accumulation (same scaling behavior as single-layer).
+	// Display: ApplyColorLayer_To_UV_Textures() uses CompositeVisibleLayersIntoTemp (EntireColorLayer shader, bottom→top)
+	// when 2+ layers, else active Content; one blit onto accumulation (same scaling as single-layer).
 	// New-layer injection: subscribes to PaintLayerStack_MGR.OnLayerAdded
 	// (OnLayerAdded_InjectScene) to inject scene + layers below into the new layer.
 	// =============================================================================
@@ -765,9 +765,13 @@ namespace spz {
 			    if (stack.Layers.Count > 0 && stack.Layers[0].Visible && stack.Layers[0].Content != null)
 				    return stack.Layers[0].Content;
 		    }
-		    if (stack != null && stack.Layers != null && stack.Layers.Count <= 1 && stack.ActiveLayer?.Content != null && _ObjectUV_brushedColorRGBA != null)
+		    // Single layer: use active layer Content when it exists. Scene buffer may be null before first multi-layer setup;
+		    // returning null here broke GetDisposable_ScreenMask / SD mask despite valid paint on the layer.
+		    if (stack != null && stack.Layers != null && stack.Layers.Count <= 1 && stack.ActiveLayer?.Content != null)
 		    {
 			    var activeContent = stack.ActiveLayer.Content;
+			    if (_ObjectUV_brushedColorRGBA == null)
+				    return activeContent;
 			    if (activeContent.width == _ObjectUV_brushedColorRGBA.width && activeContent.height == _ObjectUV_brushedColorRGBA.height && activeContent.UdimsCount == _ObjectUV_brushedColorRGBA.UdimsCount)
 				    return activeContent;
 		    }

@@ -148,7 +148,11 @@ namespace spz {
 
 	    /// <summary>Creates "SD GPU" row in Settings panel at runtime so it acts as remote control for which GPU Stable Diffusion uses when launched.</summary>
 	    void EnsureSDGpuRowExists() {
-	        if (_sdGpuDeviceId_input != null) return;
+	        if (_sdGpuDeviceId_input != null) {
+	            _sdGpuDeviceId_input.SetMin(-1);
+	            _sdGpuDeviceId_input.SetMax(Settings_MGR.SD_GPU_ID_MAX);
+	            return;
+	        }
 	        if (_settingsPanel_go == null) return;
 	        var scrollRect = _settingsPanel_go.GetComponentInChildren<UnityEngine.UI.ScrollRect>(true);
 	        RectTransform content = scrollRect != null ? scrollRect.content : null;
@@ -203,7 +207,7 @@ namespace spz {
 	        var intInput = inputGo.AddComponent<IntegerInputField>();
 	        intInput.SetInputField(inputField);
 	        intInput.SetMin(-1);
-	        intInput.SetMax(7);
+	        intInput.SetMax(Settings_MGR.SD_GPU_ID_MAX);
 	        intInput.SetValueWithoutNotify(current.ToString());
 	        _sdGpuDeviceId_input = intInput;
 
@@ -237,7 +241,7 @@ namespace spz {
 	        var gpuInput = _sdGpuDeviceId_input != null ? _sdGpuDeviceId_input : EventsBinder.FindComponent<IntegerInputField>("Settings:set_sdGpuDeviceId");
 	        if (gpuInput != null) {
 	            gpuInput.CommitCurrentText();
-	            int deviceId = Mathf.Clamp(gpuInput.recentVal, -1, 31);
+	            int deviceId = Mathf.Clamp(gpuInput.recentVal, -1, Settings_MGR.SD_GPU_ID_MAX);
 	            UnityEngine.PlayerPrefs.SetInt("SD_GPU_DeviceId", deviceId);
 	            UnityEngine.PlayerPrefs.Save();
 	            StaticEvents.Invoke<int>("Settings:set_sdGpuDeviceId", deviceId);
