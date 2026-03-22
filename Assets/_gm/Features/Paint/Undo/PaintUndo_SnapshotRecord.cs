@@ -108,14 +108,30 @@ namespace spz {
 			}
 		}
 
-		public bool MatchesLiveStack(PaintLayerStack_MGR stack, RenderUdims target) {
-			if (target == null) return false;
-			if (target.width != Width || target.height != Height || target.UdimsCount != Slices) return false;
+		/// <summary>Resolve the <see cref="RenderUdims"/> that this snapshot was captured for (by stored layer index), independent of current UI active layer.
+		/// Does not require layer count to match exactly — layers may have been added since capture.</summary>
+		public bool TryGetRestoreTarget(PaintLayerStack_MGR stack, out RenderUdims target) {
+			target = null;
 			if (LayerCount <= 0)
-				return stack == null;
-			if (stack == null || stack.Layers == null || stack.Layers.Count != LayerCount) return false;
-			if (stack.ActiveLayerIndex != ActiveLayerIndex) return false;
+				return false;
+			if (stack?.Layers == null)
+				return false;
+			if (ActiveLayerIndex < 0 || ActiveLayerIndex >= stack.Layers.Count)
+				return false;
+			var c = stack.Layers[ActiveLayerIndex]?.Content;
+			if (c == null)
+				return false;
+			if (c.width != Width || c.height != Height || c.UdimsCount != Slices)
+				return false;
+			target = c;
 			return true;
+		}
+
+		/// <summary>Legacy single-buffer path when snapshot has no layer stack metadata (<see cref="LayerCount"/> ≤ 0).</summary>
+		public bool MatchesNonStackTarget(RenderUdims target) {
+			if (target == null || LayerCount > 0)
+				return false;
+			return target.width == Width && target.height == Height && target.UdimsCount == Slices;
 		}
 	}
 }

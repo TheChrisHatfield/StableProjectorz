@@ -10,9 +10,9 @@ namespace spz {
 	// =============================================================================
 	// Holds the ordered list of PaintLayer (index 0 = bottom). PaintTab_LayersPanel_UI
 	// holds a reference to this and calls AddLayer(), SetActiveLayer(), SetLayerVisible(),
-	// SetLayerName() (rename only — does not fire OnLayersChanged; see RebuildList / undo). RemoveLayer(). Inpaint_MaskPainter subscribes to OnLayerAdded to inject scene into
-	// new layers; uses ActiveLayerRenderUdims as the paint target; display blits each
-	// visible layer's Content in order (see ApplyColorLayer_To_UV_Textures).
+	// SetLayerName() (rename only — does not fire OnLayersChanged; see RebuildList / undo). RemoveLayer().
+	// Inpaint_MaskPainter subscribes to OnLayerAdded to inject scene into new layers; uses ActiveLayerRenderUdims as the paint target; display blits each
+	// visible layer's Content in order (see ApplyColorLayer_To_UV_Textures). Paint undo clears on OnLayerStackStructureChanged only (structure/res/load), not visibility/opacity.
 	// =============================================================================
 
 	/// <summary>
@@ -54,6 +54,8 @@ namespace spz {
 		public bool CanCompositeLayers => _compositeBlendMat != null;
 
 		public event Action OnLayersChanged;
+		/// <summary>Add/remove/reorder, full stack load, or resolution/UDIM count change — invalidates paint undo snapshots. Visibility/opacity use <see cref="OnLayersChanged"/> only.</summary>
+		public event Action OnLayerStackStructureChanged;
 		public event Action OnActiveLayerChanged;
 		/// <summary>Invoked when a new layer is added (the new layer is already active). Inpaint_MaskPainter subscribes to inject scene into it (OnLayerAdded_InjectScene).</summary>
 		public static Action<PaintLayer> OnLayerAdded;
@@ -105,6 +107,8 @@ namespace spz {
 			for (int i = 0; i < _layers.Count; i++)
 				_layers[i].EnsureContent(udims, _resolution, GenData_Masks.colorBrushFormat, GenData_Masks.colorBrushFilter);
 			EnsureAtLeastOneLayer();
+			if (resChanged)
+				OnLayerStackStructureChanged?.Invoke();
 		}
 
 		void EnsureAtLeastOneLayer()
@@ -131,6 +135,7 @@ namespace spz {
 			_activeIndex = _layers.Count - 1;
 			UnityEngine.Debug.Log($"[PaintLayerStack] AddLayer '{layerName}': total={_layers.Count}, active={_activeIndex}, hasContent={layer.Content != null}, OnLayerAdded subscribers={OnLayerAdded?.GetInvocationList()?.Length ?? 0}.");
 			OnLayersChanged?.Invoke();
+			// AddLayer appends; existing layer indices remain valid — don't clear undo (OnLayerStackStructureChanged).
 			OnActiveLayerChanged?.Invoke();
 			OnLayerAdded?.Invoke(layer);
 			return layer;
@@ -201,6 +206,7 @@ namespace spz {
 			else if (index < _activeIndex)
 				_activeIndex--;
 			OnLayersChanged?.Invoke();
+			OnLayerStackStructureChanged?.Invoke();
 			OnActiveLayerChanged?.Invoke();
 		}
 
@@ -216,6 +222,7 @@ namespace spz {
 			else
 				_activeIndex = Mathf.Clamp(_activeIndex, 0, _layers.Count - 1);
 			OnLayersChanged?.Invoke();
+			OnLayerStackStructureChanged?.Invoke();
 			// Reorder does not repaint UV accumulation until ProcessMeshes runs; SD capture and same-frame Generate can read stale order without this.
 			if (Objects_Renderer_MGR.instance != null)
 				Objects_Renderer_MGR.instance.ReRenderAll_soon();
@@ -226,6 +233,16 @@ namespace spz {
 			if (index == _activeIndex || index < 0 || index >= _layers.Count) return;
 			_activeIndex = index;
 			OnActiveLayerChanged?.Invoke();
+		}
+
+		/// <summary>Index of the layer whose <see cref="PaintLayer.Content"/> reference-equals <paramref name="content"/>, or -1 (e.g. standalone inpaint buffer).</summary>
+		public int IndexOfContent(RenderUdims content) {
+			if (content == null) return -1;
+			for (int i = 0; i < _layers.Count; i++) {
+				var L = _layers[i];
+				if (L != null && L.Content == content) return i;
+			}
+			return -1;
 		}
 
 		/// <summary>Set visibility of a layer (Photoshop-style: hidden layers are not shown in viewport). Fires OnLayersChanged. </summary>
@@ -662,6 +679,7 @@ namespace spz {
 			}
 			_activeIndex = Mathf.Clamp(sl.activeLayerIndex, 0, Mathf.Max(0, _layers.Count - 1));
 			OnLayersChanged?.Invoke();
+			OnLayerStackStructureChanged?.Invoke();
 			OnActiveLayerChanged?.Invoke();
 		}
 

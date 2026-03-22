@@ -3,7 +3,7 @@ using UnityEngine.InputSystem;
 
 namespace spz {
 
-	/// <summary>Ctrl/Cmd+Z undo, Ctrl/Cmd+Y and Ctrl/Cmd+Shift+Z redo. Respects TMP input focus.</summary>
+	/// <summary>Ctrl/Cmd+Z undo, Ctrl/Cmd+Y and Ctrl/Cmd+Shift+Z redo. Respects TMP input focus. (Unity’s Ctrl+B is Build, not this.)</summary>
 	public class PaintUndo_Input : MonoBehaviour {
 
 		void Update() {

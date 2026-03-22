@@ -18,6 +18,7 @@ namespace spz {
 		readonly PaintUndo_Scheduler _scheduler = new PaintUndo_Scheduler();
 		readonly Queue<PendingCaptureJob> _captureQueue = new Queue<PendingCaptureJob>();
 
+		/// <summary>GPU copy + async readback staging for capture <b>and</b> redo snapshot inside restore — mutually exclusive users (see <see cref="TryStartCaptureProcessorIfNeeded"/>).</summary>
 		RenderUdims _scratchPreStroke;
 		Coroutine _captureCrt;
 		Texture2D _uploadStaging;
@@ -25,6 +26,10 @@ namespace spz {
 		RestoreSession _restoreSession;
 		bool _isRestoring;
 		bool _stackHooks;
+		/// <summary>Ctrl+Z/Y while capture readback/deflate is running would be ignored (<see cref="IsBusy"/>); queue and run when idle so undo stays reliable project-wide.</summary>
+		int _deferredUndoCount;
+		int _deferredRedoCount;
+		const int MaxDeferredUndoRedo = 16;
 
 		struct PendingCaptureJob {
 			public RenderUdims Target;
@@ -53,7 +58,7 @@ namespace spz {
 		void OnDestroy() {
 			if (instance == this) instance = null;
 			if (PaintLayerStack_MGR.instance != null && _stackHooks)
-				PaintLayerStack_MGR.instance.OnLayersChanged -= OnLayersChanged_ClearHistory;
+				PaintLayerStack_MGR.instance.OnLayerStackStructureChanged -= OnLayerStackStructureChanged_ClearHistory;
 			_scratchPreStroke?.Dispose();
 			if (_uploadStaging != null) Destroy(_uploadStaging);
 		}
@@ -66,16 +71,18 @@ namespace spz {
 			if (_stackHooks) return;
 			var s = PaintLayerStack_MGR.instance;
 			if (s == null) return;
-			s.OnLayersChanged += OnLayersChanged_ClearHistory;
+			s.OnLayerStackStructureChanged += OnLayerStackStructureChanged_ClearHistory;
 			_stackHooks = true;
 		}
 
-		void OnLayersChanged_ClearHistory() {
+		void OnLayerStackStructureChanged_ClearHistory() {
 			_storage.ClearAll();
 			_captureQueue.Clear();
 			_restoreSession = null;
 			_isRestoring = false;
-			if (_logVerbose) Debug.Log("[PaintUndo] Cleared undo/redo (layer stack changed).");
+			_deferredUndoCount = 0;
+			_deferredRedoCount = 0;
+			if (_logVerbose) Debug.Log("[PaintUndo] Cleared undo/redo (layer stack structure changed).");
 		}
 
 		public static void EnsureExists() {
@@ -109,14 +116,31 @@ namespace spz {
 			var stack = PaintLayerStack_MGR.instance;
 			int lc = stack?.Layers != null ? stack.Layers.Count : 0;
 			int aix = stack != null ? stack.ActiveLayerIndex : 0;
+			// Bind snapshot to the buffer actually painted, not "active layer index" alone (fallback buffer vs Content).
+			if (stack != null) {
+				int ix = stack.IndexOfContent(paintTarget);
+				if (ix >= 0)
+					aix = ix;
+				else {
+					lc = 0;
+					aix = 0;
+				}
+			} else
+				lc = 0;
 			_captureQueue.Enqueue(new PendingCaptureJob {
 				Target = paintTarget,
 				ActiveLayerIndex = aix,
 				LayerCount = lc,
 				ClearRedoAfterPush = true
 			});
-			if (_captureCrt == null)
-				_captureCrt = StartCoroutine(CaptureProcessorCoroutine());
+			TryStartCaptureProcessorIfNeeded();
+		}
+
+		/// <summary>Start capture coroutine only when restore is not using <see cref="_scratchPreStroke"/> (redo readback path).</summary>
+		void TryStartCaptureProcessorIfNeeded() {
+			if (_captureCrt != null || _isRestoring || _captureQueue.Count == 0)
+				return;
+			_captureCrt = StartCoroutine(CaptureProcessorCoroutine());
 		}
 
 		bool IsUndoEnabled() {
@@ -129,13 +153,27 @@ namespace spz {
 				if (job.Target == null || job.Target.texArray == null) continue;
 				EnsureScratchMatches(job.Target);
 				Graphics.CopyTexture(job.Target.texArray, _scratchPreStroke.texArray);
+				PaintUndo_Scheduler.EvaluateWorkload(job.Target.width, job.Target.height, job.Target.UdimsCount,
+					_scheduler.referencePixelsPerSlice, out _, out var captureComplexity01, out _);
+				int readbackInflight = PaintUndo_Scheduler.GetCaptureGpuReadbackMaxInflight(captureComplexity01, job.Target.UdimsCount);
+				if (_logVerbose)
+					Debug.Log($"[PaintUndo] Capture readback: complexity01={captureComplexity01:F2}, maxInflight={readbackInflight} (0=all parallel)");
 				bool done = false;
 				List<Texture2D> slices = null;
-				TextureTools_SPZ.RenderTexture_to_Texture2DList_Async(_scratchPreStroke, list => {
-					slices = list;
-					done = true;
-				});
+				if (readbackInflight <= 0 || readbackInflight >= job.Target.UdimsCount)
+					TextureTools_SPZ.RenderTexture_to_Texture2DList_Async(_scratchPreStroke, list => {
+						slices = list;
+						done = true;
+					});
+				else
+					TextureTools_SPZ.RenderTexture_to_Texture2DList_Async_Staggered(_scratchPreStroke, readbackInflight, list => {
+						slices = list;
+						done = true;
+					});
 				while (!done) yield return null;
+				int postRbYields = PaintUndo_Scheduler.GetCapturePostReadbackYieldFrames(captureComplexity01);
+				for (int y = 0; y < postRbYields; y++)
+					yield return null;
 				if (slices == null || slices.Count == 0) {
 					if (_logVerbose) Debug.LogWarning("[PaintUndo] Capture: no slices from readback.");
 					continue;
@@ -173,6 +211,45 @@ namespace spz {
 				if (_logVerbose) Debug.Log($"[PaintUndo] PushUndo depth={_storage.UndoCount} bytes={record.CompressedBytes?.Length ?? 0}");
 			}
 			_captureCrt = null;
+			ProcessDeferredUndoRedo();
+			TryStartCaptureProcessorIfNeeded();
+		}
+
+		/// <summary>After capture or restore finishes, run deferred Ctrl+Z / Ctrl+Y that arrived while <see cref="IsBusy"/>.</summary>
+		void ProcessDeferredUndoRedo() {
+			if (!IsUndoEnabled()) {
+				_deferredUndoCount = 0;
+				_deferredRedoCount = 0;
+				return;
+			}
+			if (_isRestoring || _captureCrt != null)
+				return;
+			while (_deferredUndoCount > 0) {
+				var snapUndo = _storage.PopUndo();
+				if (snapUndo == null) {
+					_deferredUndoCount = 0;
+					break;
+				}
+				_deferredUndoCount--;
+				StartDeferredRestoreCoroutine(snapUndo, pushCurrentToRedo: true);
+				return;
+			}
+			while (_deferredRedoCount > 0) {
+				var snapRedo = _storage.PopRedo();
+				if (snapRedo == null) {
+					_deferredRedoCount = 0;
+					break;
+				}
+				_deferredRedoCount--;
+				StartDeferredRestoreCoroutine(snapRedo, pushCurrentToRedo: false);
+				return;
+			}
+		}
+
+		/// <summary>Sets <see cref="_isRestoring"/> then schedules <see cref="UndoOrRedoCoroutine"/> — use for every restore start (TryUndo/TryRedo and <see cref="ProcessDeferredUndoRedo"/>) so scratch is not re-entered before the enumerator runs.</summary>
+		void StartDeferredRestoreCoroutine(PaintUndo_SnapshotRecord snap, bool pushCurrentToRedo) {
+			_isRestoring = true;
+			StartCoroutine(UndoOrRedoCoroutine(snap, pushCurrentToRedo));
 		}
 
 		void EnsureScratchMatches(RenderUdims target) {
@@ -195,34 +272,51 @@ namespace spz {
 		}
 
 		public void TryUndo() {
-			if (!IsUndoEnabled() || IsBusy) return;
+			if (!IsUndoEnabled()) return;
+			if (_isRestoring || _captureCrt != null) {
+				_deferredUndoCount = Mathf.Min(_deferredUndoCount + 1, MaxDeferredUndoRedo);
+				if (_logVerbose) Debug.Log($"[PaintUndo] Undo deferred (capture/restore busy); queue={_deferredUndoCount}");
+				return;
+			}
 			var snap = _storage.PopUndo();
 			if (snap == null) return;
-			StartCoroutine(UndoOrRedoCoroutine(snap, pushCurrentToRedo: true));
+			StartDeferredRestoreCoroutine(snap, pushCurrentToRedo: true);
 		}
 
 		public void TryRedo() {
-			if (!IsUndoEnabled() || IsBusy) return;
+			if (!IsUndoEnabled()) return;
+			if (_isRestoring || _captureCrt != null) {
+				_deferredRedoCount = Mathf.Min(_deferredRedoCount + 1, MaxDeferredUndoRedo);
+				if (_logVerbose) Debug.Log($"[PaintUndo] Redo deferred (capture/restore busy); queue={_deferredRedoCount}");
+				return;
+			}
 			var snap = _storage.PopRedo();
 			if (snap == null) return;
-			StartCoroutine(UndoOrRedoCoroutine(snap, pushCurrentToRedo: false));
+			StartDeferredRestoreCoroutine(snap, pushCurrentToRedo: false);
 		}
 
 		IEnumerator UndoOrRedoCoroutine(PaintUndo_SnapshotRecord snap, bool pushCurrentToRedo) {
-			_isRestoring = true;
-			_scheduler.ResetSession();
-			var target = Inpaint_MaskPainter.instance != null ? Inpaint_MaskPainter.instance.GetPaintTarget_Undo() : null;
-			if (target == null) {
-				if (pushCurrentToRedo) _storage.PushUndo(snap);
-				else _storage.PushRedo(snap);
-				_isRestoring = false;
-				yield break;
+			// _isRestoring is set by <see cref="StartDeferredRestoreCoroutine"/> before this enumerator is scheduled.
+			var stack = PaintLayerStack_MGR.instance;
+			RenderUdims target = null;
+			if (snap.TryGetRestoreTarget(stack, out target)) {
+				// Restore into the layer Content this stroke was captured from (index + count match current stack).
+			} else if (snap.LayerCount <= 0) {
+				// Standalone UV color buffer — not GetPaintTarget_Undo() (that follows *current* active layer).
+				var inpaint = Inpaint_MaskPainter.instance;
+				target = inpaint != null ? inpaint._ObjectUV_brushedColorRGBA : null;
+				if (target == null || !snap.MatchesNonStackTarget(target))
+					target = null;
+			} else {
+				target = null;
 			}
-			if (!snap.MatchesLiveStack(PaintLayerStack_MGR.instance, target)) {
-				Debug.LogWarning("[PaintUndo] Snapshot metadata mismatch; skipping restore.");
+			if (target == null) {
+				Debug.LogWarning("[PaintUndo] Cannot resolve restore target (stack/layer mismatch); skipping restore.");
 				if (pushCurrentToRedo) _storage.PushUndo(snap);
 				else _storage.PushRedo(snap);
 				_isRestoring = false;
+				ProcessDeferredUndoRedo();
+				TryStartCaptureProcessorIfNeeded();
 				yield break;
 			}
 			EnsureScratchMatches(target);
@@ -233,9 +327,12 @@ namespace spz {
 			while (!got) yield return null;
 			PaintUndo_SnapshotRecord currentRecord = null;
 			if (cur != null && cur.Count > 0 && !HasNullSlice(cur)) {
-				var stack = PaintLayerStack_MGR.instance;
 				int lc = stack?.Layers != null ? stack.Layers.Count : 0;
-				int aix = stack != null ? stack.ActiveLayerIndex : 0;
+				int aix = stack != null ? stack.IndexOfContent(target) : -1;
+				if (aix < 0) {
+					aix = 0;
+					lc = 0;
+				}
 				if (PaintUndo_SnapshotRecord.TryBuildUncompressedBlob(cur, aix, lc, out currentRecord, out var curRaw)) {
 					foreach (var t in cur)
 						if (t != null) Destroy(t);
@@ -264,8 +361,13 @@ namespace spz {
 				if (pushCurrentToRedo) _storage.PushUndo(snap);
 				else _storage.PushRedo(snap);
 				_isRestoring = false;
+				ProcessDeferredUndoRedo();
+				TryStartCaptureProcessorIfNeeded();
 				yield break;
 			}
+			_scheduler.BeginRestoreSession(target.width, target.height, sliceData.Count);
+			if (_logVerbose)
+				Debug.Log($"[PaintUndo] Restore session: {target.width}x{target.height} × {sliceData.Count} UDIMs, complexity01={_scheduler.LastSessionComplexity01:F2}, totalPx={_scheduler.LastSessionTotalPixels}");
 			_restoreSession = new RestoreSession {
 				Target = target,
 				SliceData = sliceData,
@@ -278,6 +380,8 @@ namespace spz {
 			FinishRestore(target);
 			_isRestoring = false;
 			if (_logVerbose) Debug.Log("[PaintUndo] Restore complete.");
+			ProcessDeferredUndoRedo();
+			TryStartCaptureProcessorIfNeeded();
 		}
 
 		static bool HasNullSlice(List<Texture2D> list) {
@@ -317,9 +421,13 @@ namespace spz {
 
 		void FinishRestore(RenderUdims target) {
 			var stack = PaintLayerStack_MGR.instance;
-			var layer = stack?.ActiveLayer;
-			if (layer != null && layer.Content == target)
-				layer.SyncDataFromContent();
+			if (stack?.Layers != null) {
+				for (int i = 0; i < stack.Layers.Count; i++) {
+					var layer = stack.Layers[i];
+					if (layer != null && layer.Content == target)
+						layer.SyncDataFromContent();
+				}
+			}
 			if (Objects_Renderer_MGR.instance != null) {
 				Objects_Renderer_MGR.instance.ReRenderAll_soon();
 				Objects_Renderer_MGR.instance.EnsureInpaintColorLayerAppliedForCapture();

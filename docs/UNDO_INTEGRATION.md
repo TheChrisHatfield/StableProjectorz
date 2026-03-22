@@ -8,21 +8,29 @@ Living document for `PaintUndo_*` and core touch points. **Do not** put implemen
 |----------|------|---------|
 | [`Inpaint_MaskPainter.OnFinal_ApplyIncomingVals_intoMask`](../Assets/_gm/Features/Paint/Inpaint/Inpaint_MaskPainter.cs) | After `Apply_into_ColorBrushTex`, before/after ordering: see below | Schedules **pre-stroke** GPU capture via `PaintUndo_MGR` (CopyTexture → async readback → push undo) |
 | [`MaskPainter.isDoingSomethingElse`](../Assets/_gm/Features/Paint/MaskPainter.cs) | Every paint/drag gate | Blocks strokes while `PaintUndo_MGR.BlocksNewStroke` |
-| [`PaintLayerStack_MGR.OnLayersChanged`](../Assets/_gm/Features/Paint/Layers/PaintLayerStack_MGR.cs) | Stack structure changes | `PaintUndo_MGR` clears history |
-| [`PaintUndo_Input`](../Assets/_gm/Features/Paint/Undo/PaintUndo_Input.cs) | `Update` | Ctrl/Cmd+Z / redo shortcuts |
+| [`PaintLayerStack_MGR.OnLayerStackStructureChanged`](../Assets/_gm/Features/Paint/Layers/PaintLayerStack_MGR.cs) | Add/remove/reorder, load, resolution/UDIM change | `PaintUndo_MGR` clears history (not on visibility/opacity — those use `OnLayersChanged` for UI only) |
+| [`PaintUndo_Input`](../Assets/_gm/Features/Paint/Undo/PaintUndo_Input.cs) | `Update` | Ctrl/Cmd+Z / redo shortcuts (not Unity **Ctrl+B** Build) |
 | [`Inpaint_MaskPainter.Awake`](../Assets/_gm/Features/Paint/Inpaint/Inpaint_MaskPainter.cs) | Startup | `PaintUndo_MGR.EnsureExists()` |
 
 **Capture ordering (correctness):** Immediately before `Apply_into_ColorBrushTex`, `PaintUndo_MGR` copies **target → scratch** (`Graphics.CopyTexture`). That snapshot is the **pre-stroke** state. After the compute apply, the scratch still holds pre-stroke texels; async readback compresses into the undo ring.
 
+**Capture throttling (heavy UV / 4K):** `PaintUndo_Scheduler.EvaluateWorkload` + `GetCaptureGpuReadbackMaxInflight` choose **staggered** `AsyncGPUReadback` (sliding window via `TextureTools_SPZ.RenderTexture_to_Texture2DList_Async_Staggered`) when complexity is high; light loads keep **all slices in parallel**. `GetCapturePostReadbackYieldFrames` adds 0–3 frame yields before CPU blob pack to spread main-thread work.
+
+**Deferred shortcuts:** `PaintUndo_MGR.TryUndo` / `TryRedo` used to no-op while `IsBusy` (capture coroutine running). Ctrl+Z during GPU readback/deflate is now **queued** (capped) and `ProcessDeferredUndoRedo` runs when capture finishes or after each restore—same global `PaintUndo_MGR` instance (`DontDestroyOnLoad`).
+
+**Global stroke order (all layers):** The undo list is **one chronological stack** for the session. Each entry stores the **actual** paint buffer: `SchedulePreStrokeCapture` uses `PaintLayerStack_MGR.IndexOfContent(paintTarget)` so metadata matches the layer whose `Content` was written, not only the active index. If the stroke went to the standalone `Inpaint_MaskPainter._ObjectUV_brushedColorRGBA` (layer `Content` not used), `LayerCount` is stored as **0** and restore writes that buffer — **not** `GetPaintTarget_Undo()` (which would follow the current active layer and felt “per current layer only”).
+
 ## Restore order (GPU + SD)
 
 1. Decompress snapshot to per-slice CPU buffers (may be amortized across frames).
-2. Upload slices into **active layer `Content`** (or single-buffer target).
-3. `PaintLayer.SyncDataFromContent()` on that layer.
+2. Upload slices into the **`Content` of the layer recorded in the snapshot** (`ActiveLayerIndex`), not necessarily the layer currently selected in the UI (so undo/redo still applies after switching layers).
+3. `PaintLayer.SyncDataFromContent()` on whichever layer owns that `Content`.
 4. `Objects_Renderer_MGR.ReRenderAll_soon()`.
 5. `Objects_Renderer_MGR.EnsureInpaintColorLayerAppliedForCapture()` so img2img/capture sees updated paint.
 
 If any step is skipped, SD or viewport can disagree with layer texels.
+
+**Workload-aware scheduling:** `PaintUndo_Scheduler.BeginRestoreSession(width, height, sliceCount)` derives a complexity score from total pixels (resolution × UDIM count). Heavy targets (e.g. 4K, many tiles) automatically use fewer slices per frame, higher per-frame time caps, faster EWMA on hitches, and a fresh UCB1 pass per restore so the bandit explores for that job—not a one-size-fits-all budget.
 
 ## Invariants
 
