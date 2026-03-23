@@ -85,19 +85,20 @@ float2 rotate2d(float2 v, float rad){
     return float2(v.x*c - v.y*s, v.x*s + v.y*c);
 }
 
-// Compute brush stamp UV from fragment position, center, size, with angle and roundness. Returns UV in [0,1].
+// Compute brush stamp UV from fragment position, center, size, with angle and roundness. Unclamped: outside [0,1] means outside the stamp footprint (caller must not sample the texture there — avoids clamp-to-edge line artifacts from non-zero border texels).
 float2 brushStampUV(float2 fragUV, float2 center, float2 size, float aspect, float angleRad, float roundness01){
     float2 d = fragUV - center;
     d = rotate2d(d, -angleRad);
     size.x /= aspect;
     float ry = max(0.01, roundness01);
     size.y = size.x * ry;
-    float2 uv = (d + 0.5*size) / size;
-    return clamp(uv, 0.0, 1.0);
+    return (d + 0.5*size) / size;
 }
 
 // Single-stamp sample with angle/roundness and strength curve.
 float sampleBrushStamp(PaintInBrushStroke_Input i, float2 uv, float strength){
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
+        return 0.0;
     float brushStamp = tex2D(i.BrushStamp, uv).r;
     brushStamp = 1.0 - pow(1.0 - brushStamp, 1.0 + i.brushStampStronger);
     brushStamp = saturate(brushStamp);
@@ -154,6 +155,8 @@ float Mask_by_CurrBrushCursor(PaintInBrushStroke_Input i){
     float angleRad = i.brushAngleRad;
     float roundness01 = i.brushRoundness01 > 0.0 ? i.brushRoundness01 : 1.0;
     float2 brushUV_curr = brushStampUV(i.fragScreenSpaceUV, brushNewPos, brushNewSize, i.screenAspectRatio, angleRad, roundness01);
+    if (brushUV_curr.x < 0.0 || brushUV_curr.x > 1.0 || brushUV_curr.y < 0.0 || brushUV_curr.y > 1.0)
+        return 0.0;
     return tex2D(i.BrushStamp, brushUV_curr).r;
 }
 
