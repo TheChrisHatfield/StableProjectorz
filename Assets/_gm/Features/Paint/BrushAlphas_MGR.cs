@@ -568,7 +568,7 @@ namespace spz {
 				Debug.Log($"BrushAlphas: loaded {added} brush(es) from '{baseName}.abr'.");
 		}
 
-		/// <summary> Parse v6 samp block exactly like Eric Lamarque abr.c: [brush_size(4)][chunk(padded to 4)][...]. Chunk: skip 37, subver 1 skip 10 else 264, 19-byte header, packed 8-bit or RLE (no row padding). 8-bit only to avoid crosshairs. </summary>
+		/// <summary> Parse v6 samp block exactly like Eric Lamarque abr.c: [brush_size(4)][chunk(padded to 4)][...]. Chunk: skip 37, subver 1 skip 10 else 264, 19-byte header, packed 8-bit or RLE (no row padding). Uncompressed 8-bit: <see cref="DecodeAbrV6Uncompressed8"/> picks packed vs strided from payload size (avoids striping). </summary>
 		int ParseSampBlock_EricLamarque(byte[] data, int start, int end, int subversion, string baseName, AbrDescSettings desc, string sourcePath, int uiGroupIndex)
 		{
 			int pos = start;
@@ -604,29 +604,9 @@ namespace spz {
 							Texture2D stamp = null;
 							if (comp == 0)
 							{
-								bool packedFits = dataStart + w * h <= chunkEnd;
-								int strideBytes = RowStride8Bit(w) * h;
-								bool stridedFits = dataStart + strideBytes <= chunkEnd;
-								byte[] pixels = null;
-								if (packedFits && stridedFits)
-								{
-									byte[] packed = DecodeUncompressed(data, dataStart, w, h, 8, use8BitStride: false);
-									byte[] strided = DecodeUncompressed(data, dataStart, w, h, 8, use8BitStride: true);
-									float sp = packed != null ? ScoreDecodedBrush(packed, w, h) : 0f;
-									float ss = strided != null ? ScoreDecodedBrush(strided, w, h) : 0f;
-									pixels = ss > sp ? strided : packed;
-									LastDecodePath = "Eric Lamarque v6 (packed vs strided by score)";
-								}
-								else if (stridedFits)
-								{
-									pixels = DecodeUncompressed(data, dataStart, w, h, 8, use8BitStride: true);
-									LastDecodePath = "Eric Lamarque v6 (strided 8-bit)";
-								}
-								else if (packedFits)
-								{
-									pixels = DecodeUncompressed(data, dataStart, w, h, 8, use8BitStride: false);
-									LastDecodePath = "Eric Lamarque v6 (packed 8-bit)";
-								}
+								byte[] pixels = DecodeAbrV6Uncompressed8(data, dataStart, chunkEnd, w, h, out string decodeNote);
+								if (!string.IsNullOrEmpty(decodeNote))
+									LastDecodePath = decodeNote;
 								if (pixels != null)
 									stamp = CreateStampFromGrayscaleBytes(pixels, w, h, flipY: true, invertGrayscale: InvertAbrGrayscale);
 							}
@@ -787,12 +767,82 @@ namespace spz {
 			return score;
 		}
 
+		/// <summary> v6 uncompressed 8-bit: choose packed vs 4-byte row stride using payload size (not score alone). Mis-reading packed data as strided causes vertical striping. </summary>
+		static byte[] DecodeAbrV6Uncompressed8(byte[] data, int dataStart, int chunkEnd, int w, int h, out string decodeNote)
+		{
+			decodeNote = null;
+			if (data == null || chunkEnd <= dataStart) return null;
+			int payloadMax = chunkEnd - dataStart;
+			int packedLen = w * h;
+			int stridedLen = RowStride8Bit(w) * h;
+			if (payloadMax < packedLen) return null;
+
+			// Same layout when width is multiple of 4 — one decode path.
+			if (stridedLen == packedLen)
+			{
+				decodeNote = "Eric Lamarque v6 (8-bit, w%4==0 packed=strided)";
+				return DecodeUncompressed(data, dataStart, w, h, 8, use8BitStride: false, dataEndExclusive: chunkEnd);
+			}
+
+			// Payload exactly matches one layout — no heuristic.
+			if (payloadMax == packedLen)
+			{
+				decodeNote = "Eric Lamarque v6 (packed 8-bit, exact payload)";
+				return DecodeUncompressed(data, dataStart, w, h, 8, use8BitStride: false, dataEndExclusive: chunkEnd);
+			}
+			if (payloadMax == stridedLen)
+			{
+				decodeNote = "Eric Lamarque v6 (strided 8-bit, exact payload)";
+				return DecodeUncompressed(data, dataStart, w, h, 8, use8BitStride: true, dataEndExclusive: chunkEnd);
+			}
+
+			bool packedFits = payloadMax >= packedLen;
+			bool stridedFits = payloadMax >= stridedLen;
+
+			if (stridedFits && !packedFits)
+			{
+				decodeNote = "Eric Lamarque v6 (strided 8-bit)";
+				return DecodeUncompressed(data, dataStart, w, h, 8, use8BitStride: true, dataEndExclusive: chunkEnd);
+			}
+			if (packedFits && !stridedFits)
+			{
+				decodeNote = "Eric Lamarque v6 (packed 8-bit, payload < strided)";
+				return DecodeUncompressed(data, dataStart, w, h, 8, use8BitStride: false, dataEndExclusive: chunkEnd);
+			}
+
+			// Both fit with extra tail bytes: prefer packed (common for Photoshop); require clear margin to pick strided.
+			byte[] packed = DecodeUncompressed(data, dataStart, w, h, 8, use8BitStride: false, dataEndExclusive: chunkEnd);
+			byte[] strided = DecodeUncompressed(data, dataStart, w, h, 8, use8BitStride: true, dataEndExclusive: chunkEnd);
+			if (packed == null && strided != null)
+			{
+				decodeNote = "Eric Lamarque v6 (strided fallback)";
+				return strided;
+			}
+			if (packed != null && strided == null)
+			{
+				decodeNote = "Eric Lamarque v6 (packed only)";
+				return packed;
+			}
+			if (packed == null) return null;
+			float sp = ScoreDecodedBrush(packed, w, h);
+			float ss = ScoreDecodedBrush(strided, w, h);
+			const float stridedWinMargin = 1.08f;
+			if (ss > sp * stridedWinMargin)
+			{
+				decodeNote = "Eric Lamarque v6 (strided wins score, both fit)";
+				return strided;
+			}
+			decodeNote = "Eric Lamarque v6 (packed default, both fit)";
+			return packed;
+		}
+
 		/// <summary> [Unused after rebuild] Kept for Editor compatibility. v6 uses packed/strided by score when both fit. </summary>
 		public static bool AbrPreferStridedWhenBothFit = false;
 
 		/// <summary> Decode uncompressed brush pixels. 8-bit: packed or row-aligned per use8BitStride. 1-bit: always DWORD row stride. </summary>
 		/// <param name="use8BitStride">True for v6 (4-byte row alignment); false for v1/v2 (packed rows).</param>
-		static byte[] DecodeUncompressed(byte[] data, int dataStart, int w, int h, int depth, bool use8BitStride = true)
+		/// <param name="dataEndExclusive">If &gt;= 0, require all reads to stay before this index (ABR chunk end). Otherwise use <paramref name="data"/>.Length.</param>
+		static byte[] DecodeUncompressed(byte[] data, int dataStart, int w, int h, int depth, bool use8BitStride = true, int dataEndExclusive = -1)
 		{
 			if (data == null || dataStart < 0 || w < 1 || h < 1 || w > 4096 || h > 4096) return null;
 			int requiredBytes;
@@ -800,7 +850,8 @@ namespace spz {
 				requiredBytes = use8BitStride ? (RowStride8Bit(w) * h) : (w * h);
 			else
 				requiredBytes = RowStride1Bit(w) * h;
-			if (dataStart + requiredBytes > data.Length) return null;
+			int limit = dataEndExclusive >= 0 ? dataEndExclusive : data.Length;
+			if (dataStart + requiredBytes > limit || dataStart + requiredBytes > data.Length) return null;
 
 			byte[] pixels = new byte[w * h];
 			if (depth == 8)
@@ -914,13 +965,14 @@ namespace spz {
 		/// <summary> If true, brush stamps are created as RGBA32 (R=G=B=gray, A=255). Default true to avoid R8 pipeline/crosshair artifacts on some GPUs. Set false to use R8. Shader samples .r so result is the same. </summary>
 		public static bool UseRgba32ForBrushStamp = true;
 
-		/// <summary> If true, brush stamp uses Point filter (no bilinear). Can reduce crosshair/line artifacts from sampling. Set false for smoother brush edges. </summary>
-		public static bool UsePointFilterForBrushStamp = true;
+		/// <summary> If true, brush stamp uses Point filter. If false, Bilinear — matches procedural round brushes and reduces aliasing when stamping (especially ABR tips). </summary>
+		public static bool UsePointFilterForBrushStamp = false;
 
 		/// <summary> When true: invert decoded grayscale so file black→opaque (Photoshop convention). When false: file white=opaque, black=transparent (many ABR exports). Default false so brush shape is opaque and background transparent; set true if you see a white brush on black or the opposite. </summary>
 		public static bool InvertAbrGrayscale = false;
 
-		/// <summary> Create brush stamp from grayscale pixels (R8 or RGBA32). flipY: true for ABR. invertGrayscale: when true, file black→255 (opaque); when false, file white→255 (opaque). Shader uses high .r = more paint. </summary>
+		/// <summary> Create brush stamp from grayscale pixels (R8 or RGBA32). flipY: true for ABR. invertGrayscale: when true, file black→255 (opaque); when false, file white→255 (opaque). Shader uses high .r = more paint.
+		/// Out-of-stamp UV is handled in <c>BrushEffects.cginc</c> (no UV clamp before sample) so non-zero edge texels are not smeared; do not pad the texture or [0,1] UV no longer matches tip extent. </summary>
 		static Texture2D CreateStampFromGrayscaleBytes(byte[] grayscale, int w, int h, bool flipY = false, bool invertGrayscale = false)
 		{
 			byte[] src = grayscale;
@@ -942,6 +994,7 @@ namespace spz {
 					inverted[i] = (byte)(255 - src[i]);
 				src = inverted;
 			}
+
 			Texture2D stamp;
 			if (UseRgba32ForBrushStamp)
 			{
@@ -971,13 +1024,14 @@ namespace spz {
 					string dir = Path.Combine(Application.persistentDataPath, "StableProjectorz");
 					if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
 					string path = Path.Combine(dir, "abr_stamp_debug.png");
-					var rgba = new Texture2D(w, h, TextureFormat.RGBA32, false);
+					int sw = stamp.width, sh = stamp.height;
+					var rgba = new Texture2D(sw, sh, TextureFormat.RGBA32, false);
 					if (UseRgba32ForBrushStamp)
 						rgba.SetPixels32(stamp.GetPixels32());
 					else
 					{
 						var raw = stamp.GetRawTextureData<byte>();
-						var colors = new Color32[w * h];
+						var colors = new Color32[sw * sh];
 						for (int i = 0; i < raw.Length && i < colors.Length; i++)
 							colors[i] = new Color32(raw[i], raw[i], raw[i], 255);
 						rgba.SetPixels32(colors);
