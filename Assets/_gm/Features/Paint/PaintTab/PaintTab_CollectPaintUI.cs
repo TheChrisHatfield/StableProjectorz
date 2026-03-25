@@ -1,6 +1,9 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace spz {
 
@@ -17,6 +20,17 @@ namespace spz {
 	public class PaintTab_CollectPaintUI : MonoBehaviour
 	{
 		[SerializeField] PaintTab_KritaLayout_UI _layout;
+		[Tooltip("Defaults to ENG Roboto-Regular SDF via OnValidate in Editor; assign for builds if needed.")]
+		[SerializeField] TMP_FontAsset _paintTabUiFontAsset;
+
+		static PaintTab_CollectPaintUI _paintTabTmpStyleSource;
+		const float kPaintTabUiFontSize = 10f;
+		/// <summary> Rich-text size for symmetry on/off subline (was 8pt; +3 for readability). </summary>
+		const int kSymmetryOnOffSublineTmpSize = 11;
+		static readonly System.Collections.Generic.List<System.Action> _brushSettingsHandlers = new System.Collections.Generic.List<System.Action>();
+		/// <summary> Kept when tool options are built once so we can re-subscribe after OnDisable cleared handlers. </summary>
+		static System.Action _cachedBrushOptsOnSettingsChanged;
+		static System.Action _cachedSymmetryOnSettingsChanged;
 
 		bool _collected;
 		bool _toolchestCollected;
@@ -126,14 +140,91 @@ namespace spz {
 			vlg.childControlHeight = false; // let picker drive its own height so ContentSizeFitter gets correct total and scroll works
 		}
 
+#if UNITY_EDITOR
+		void OnValidate()
+		{
+			if (_paintTabUiFontAsset == null)
+				_paintTabUiFontAsset = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(
+					"Assets/_gm/Art/Fonts/ENG - Roboto-Regular SDF.asset");
+		}
+#endif
+
+		TMP_FontAsset ResolvePaintTabUiFont()
+			=> _paintTabUiFontAsset != null ? _paintTabUiFontAsset : TMP_Settings.defaultFontAsset;
+
+		/// <summary>Roboto (or default TMP) + wrap + ellipsis so labels stay inside button rects; same base size as Bucket Fill / Depth Limit.</summary>
+		static void ApplyPaintTabToolRowTmp(TextMeshProUGUI tmp, TextAlignmentOptions alignment, float fontSize = kPaintTabUiFontSize)
+		{
+			if (tmp == null) return;
+			tmp.font = _paintTabTmpStyleSource != null ? _paintTabTmpStyleSource.ResolvePaintTabUiFont() : TMP_Settings.defaultFontAsset;
+			tmp.fontSize = fontSize;
+			tmp.enableWordWrapping = true;
+			tmp.overflowMode = TextOverflowModes.Ellipsis;
+			tmp.alignment = alignment;
+			tmp.raycastTarget = false;
+		}
+
+		static void StylePaintTabTmp(TextMeshProUGUI tmp, string text, float fontSize = kPaintTabUiFontSize,
+			TextAlignmentOptions alignment = TextAlignmentOptions.Left)
+		{
+			if (tmp == null) return;
+			ApplyPaintTabToolRowTmp(tmp, alignment, fontSize);
+			tmp.text = text;
+		}
+
 		void OnEnable()
 		{
+			_paintTabTmpStyleSource = this;
 			if (_layout == null) _layout = GetComponent<PaintTab_KritaLayout_UI>();
 			if (_layout != null)
 			{
 				CollectNow();
 				StartCoroutine(RefreshBrushPresetsLayoutWhenReady());
 			}
+		}
+
+		void OnDisable()
+		{
+			UnregisterBrushSettingsHandlers();
+			if (_paintTabTmpStyleSource == this)
+				_paintTabTmpStyleSource = null;
+		}
+
+		static void RegisterBrushSettingsHandler(System.Action handler)
+		{
+			if (handler == null) return;
+			BrushRibbon_UI_Size.OnBrushSettingsChanged += handler;
+			_brushSettingsHandlers.Add(handler);
+		}
+
+		static void UnregisterBrushSettingsHandlers()
+		{
+			for (int i = 0; i < _brushSettingsHandlers.Count; i++)
+				BrushRibbon_UI_Size.OnBrushSettingsChanged -= _brushSettingsHandlers[i];
+			_brushSettingsHandlers.Clear();
+		}
+
+		static bool HasRuntimeToolOptionsRow(Transform toolOptionsSection)
+		{
+			if (toolOptionsSection == null) return false;
+			for (int i = 0; i < toolOptionsSection.childCount; i++)
+			{
+				if (toolOptionsSection.GetChild(i) != null && toolOptionsSection.GetChild(i).name == "ToolOptionsRow")
+					return true;
+			}
+			return false;
+		}
+
+		/// <summary> OnDisable unsubscribes all; when the paint tab re-enables, CreateToolOptionsRuntime is skipped if UI exists — re-wire cached handlers. </summary>
+		static void ResubscribeBrushSettingsHandlersIfToolOptionsExist()
+		{
+			if (_cachedBrushOptsOnSettingsChanged == null && _cachedSymmetryOnSettingsChanged == null)
+				return;
+			UnregisterBrushSettingsHandlers();
+			if (_cachedBrushOptsOnSettingsChanged != null)
+				RegisterBrushSettingsHandler(_cachedBrushOptsOnSettingsChanged);
+			if (_cachedSymmetryOnSettingsChanged != null)
+				RegisterBrushSettingsHandler(_cachedSymmetryOnSettingsChanged);
 		}
 
 		System.Collections.IEnumerator RefreshBrushPresetsLayoutWhenReady()
@@ -373,6 +464,10 @@ namespace spz {
 			{
 				CreateToolOptionsRuntime(_layout.ToolOptionsSection);
 				did = true;
+			}
+			else if (_layout.ToolOptionsSection != null && HasRuntimeToolOptionsRow(_layout.ToolOptionsSection))
+			{
+				ResubscribeBrushSettingsHandlersIfToolOptionsExist();
 			}
 
 			// --- Color / Palette section ---
@@ -825,6 +920,8 @@ namespace spz {
 				() => { BrushRibbon_UI_DeleteButton.onClicked?.Invoke(); ShowToolFeedback("Clear Mask"); });
 			MakeDepthLimitToggle(rowGo.transform);
 			MakeDepthLimitSlider(rowGo.transform);
+			MakePaintSymmetryToggle(rowGo.transform);
+			MakeBrushToolOptionsExpando(rowGo.transform, parent);
 		}
 
 		static void ShowToolFeedback(string toolName)
@@ -860,12 +957,8 @@ namespace spz {
 			var txt = txtGo.AddComponent<TextMeshProUGUI>();
 			string display = string.IsNullOrEmpty(shortcut) ? label : label + "\n<size=8>" + shortcut + "</size>";
 			txt.text = display;
-			txt.fontSize = 10;
 			txt.color = Color.white;
-			txt.alignment = TextAlignmentOptions.Center;
-			txt.raycastTarget = false;
-			txt.enableWordWrapping = true;
-			txt.overflowMode = TextOverflowModes.Ellipsis;
+			ApplyPaintTabToolRowTmp(txt, TextAlignmentOptions.Center);
 		}
 
 		static void MakeDepthLimitToggle(Transform parent)
@@ -889,11 +982,8 @@ namespace spz {
 			txtRect.offsetMin = new Vector2(4, 0);
 			txtRect.offsetMax = new Vector2(-4, 0);
 			var txt = txtGo.AddComponent<TextMeshProUGUI>();
-			txt.fontSize = 10;
 			txt.color = Color.white;
-			txt.alignment = TextAlignmentOptions.Center;
-			txt.raycastTarget = false;
-			txt.enableWordWrapping = true;
+			ApplyPaintTabToolRowTmp(txt, TextAlignmentOptions.Center);
 
 			System.Action refreshButtonState = () =>
 			{
@@ -1001,10 +1091,8 @@ namespace spz {
 			labelRect.offsetMax = new Vector2(-2, 0);
 			var label = labelGo.AddComponent<TextMeshProUGUI>();
 			label.text = "Depth";
-			label.fontSize = 9;
 			label.color = new Color(0.9f, 0.9f, 0.9f, 1f);
-			label.alignment = TextAlignmentOptions.Left;
-			label.raycastTarget = false;
+			ApplyPaintTabToolRowTmp(label, TextAlignmentOptions.Left, 9f);
 
 			var ribbon = SD_WorkflowOptionsRibbon_UI.instance;
 			if (ribbon != null)
@@ -1014,6 +1102,458 @@ namespace spz {
 			{
 				SD_WorkflowOptionsRibbon_UI.instance?.SetBrushDepthLimitFromSlider01(v);
 				SyncDepthLimitButtonState(parent);
+			});
+		}
+
+		/// <summary> Collapsible dropdown-style block: compact header in tool row + panel below with radio groups. </summary>
+		static void MakeBrushToolOptionsExpando(Transform toolRowParent, RectTransform toolSectionParent)
+		{
+			Color radioOff = new Color(0.34f, 0.36f, 0.4f, 1f);
+			Color radioOn = new Color(0.22f, 0.45f, 0.55f, 1f);
+
+			var root = new GameObject("BrushToolOptionsExpando");
+			root.transform.SetParent(toolRowParent, false);
+			root.AddComponent<RectTransform>();
+			var rootLe = root.AddComponent<LayoutElement>();
+			rootLe.minWidth = 80;
+			rootLe.preferredWidth = 80;
+			rootLe.flexibleWidth = 0;
+			rootLe.minHeight = 28;
+			rootLe.preferredHeight = 28;
+			rootLe.flexibleHeight = 0;
+
+			var headerGo = new GameObject("BrushOptsHeaderBtn");
+			headerGo.transform.SetParent(root.transform, false);
+			var headerRt = headerGo.AddComponent<RectTransform>();
+			headerRt.anchorMin = Vector2.zero;
+			headerRt.anchorMax = Vector2.one;
+			headerRt.offsetMin = Vector2.zero;
+			headerRt.offsetMax = Vector2.zero;
+			var headerImg = headerGo.AddComponent<Image>();
+			headerImg.color = new Color(0.25f, 0.32f, 0.4f, 1f);
+			headerImg.raycastTarget = true;
+			var headerBtn = headerGo.AddComponent<Button>();
+			var headerColors = headerBtn.colors;
+			headerColors.highlightedColor = new Color(0.32f, 0.4f, 0.48f, 1f);
+			headerColors.pressedColor = new Color(0.2f, 0.26f, 0.34f, 1f);
+			headerBtn.colors = headerColors;
+
+			var headerTxtGo = new GameObject("Label");
+			headerTxtGo.transform.SetParent(headerGo.transform, false);
+			var headerTxtRt = headerTxtGo.AddComponent<RectTransform>();
+			headerTxtRt.anchorMin = Vector2.zero;
+			headerTxtRt.anchorMax = Vector2.one;
+			headerTxtRt.offsetMin = new Vector2(6, 0);
+			headerTxtRt.offsetMax = new Vector2(-6, 0);
+			var headerTxt = headerTxtGo.AddComponent<TextMeshProUGUI>();
+			headerTxt.color = new Color(0.92f, 0.93f, 0.95f, 1f);
+			StylePaintTabTmp(headerTxt, "Brush options ▼", kPaintTabUiFontSize, TextAlignmentOptions.Left);
+
+			var panelGo = new GameObject("BrushOptsPanel");
+			panelGo.transform.SetParent(toolSectionParent, false);
+			panelGo.SetActive(false);
+			panelGo.AddComponent<RectTransform>();
+			var panelLe = panelGo.AddComponent<LayoutElement>();
+			panelLe.flexibleWidth = 1;
+			panelLe.minHeight = 100;
+			panelLe.preferredHeight = 0;
+			panelLe.flexibleHeight = 0;
+			var panelImg = panelGo.AddComponent<Image>();
+			panelImg.color = new Color(0.16f, 0.18f, 0.22f, 0.98f);
+			panelImg.raycastTarget = false;
+			var panelVlg = panelGo.AddComponent<VerticalLayoutGroup>();
+			panelVlg.spacing = 4;
+			panelVlg.padding = new RectOffset(6, 6, 6, 6);
+			panelVlg.childControlWidth = true;
+			panelVlg.childControlHeight = true;
+			panelVlg.childForceExpandWidth = true;
+			var panelCsf = panelGo.AddComponent<ContentSizeFitter>();
+			panelCsf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+			panelCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+			var toolOptsScroll = toolSectionParent.GetComponentInParent<ScrollRect>();
+			bool pinCollapseToToolViewport = toolOptsScroll != null && toolOptsScroll.viewport != null;
+
+			MakeBrushOptsSectionLabel(panelGo.transform, "Scatter (viewport jitter)");
+			var scatterRow = new GameObject("ScatterRow");
+			scatterRow.transform.SetParent(panelGo.transform, false);
+			scatterRow.AddComponent<RectTransform>();
+			var scatterRowLe = scatterRow.AddComponent<LayoutElement>();
+			scatterRowLe.minHeight = 32;
+			var scatterH = scatterRow.AddComponent<HorizontalLayoutGroup>();
+			scatterH.spacing = 4;
+			scatterH.childAlignment = TextAnchor.MiddleLeft;
+			scatterH.childControlWidth = false;
+			scatterH.childControlHeight = true;
+			scatterH.childForceExpandWidth = false;
+			var tgScatter = scatterRow.AddComponent<ToggleGroup>();
+			tgScatter.allowSwitchOff = false;
+			var scatterToggles = new Toggle[3];
+			string[] scatterLabels = { "Off", "Light", "Med" };
+			for (int i = 0; i < 3; i++)
+			{
+				int ix = i;
+				scatterToggles[i] = MakeToolOptionsRadioToggle(scatterRow.transform, tgScatter, scatterLabels[ix], radioOff, radioOn, () =>
+				{
+					var inst = BrushRibbon_UI_Size.instance;
+					if (inst != null) inst.SetScatterMode((BrushScatterMode)ix);
+					ShowToolFeedback("Scatter: " + scatterLabels[ix]);
+				});
+			}
+
+			MakeBrushOptsSectionLabel(panelGo.transform, "Tip rotation");
+			var angleRow = new GameObject("TipAngleRow");
+			angleRow.transform.SetParent(panelGo.transform, false);
+			angleRow.AddComponent<RectTransform>();
+			var angleRowLe = angleRow.AddComponent<LayoutElement>();
+			angleRowLe.minHeight = 32;
+			var angleH = angleRow.AddComponent<HorizontalLayoutGroup>();
+			angleH.spacing = 4;
+			angleH.childAlignment = TextAnchor.MiddleLeft;
+			angleH.childControlWidth = false;
+			angleH.childControlHeight = true;
+			angleH.childForceExpandWidth = false;
+			var tgAngle = angleRow.AddComponent<ToggleGroup>();
+			tgAngle.allowSwitchOff = false;
+			var angleToggles = new Toggle[2];
+			string[] angleLabels = { "Fixed", "Follow stroke" };
+			for (int i = 0; i < 2; i++)
+			{
+				int ix = i;
+				angleToggles[i] = MakeToolOptionsRadioToggle(angleRow.transform, tgAngle, angleLabels[ix], radioOff, radioOn, () =>
+				{
+					var inst = BrushRibbon_UI_Size.instance;
+					if (inst != null) inst.SetTipAngleMode((BrushTipAngleMode)ix);
+					ShowToolFeedback("Tip: " + angleLabels[ix]);
+				});
+			}
+
+			MakeBrushOptsSectionLabel(panelGo.transform, "Mirror plane (mesh symmetry)");
+			var planeRow = new GameObject("SymmetryPlaneRow");
+			planeRow.transform.SetParent(panelGo.transform, false);
+			planeRow.AddComponent<RectTransform>();
+			var planeRowLe = planeRow.AddComponent<LayoutElement>();
+			planeRowLe.minHeight = 32;
+			var planeH = planeRow.AddComponent<HorizontalLayoutGroup>();
+			planeH.spacing = 4;
+			planeH.childAlignment = TextAnchor.MiddleLeft;
+			planeH.childControlWidth = false;
+			planeH.childControlHeight = true;
+			planeH.childForceExpandWidth = false;
+			var tgPlane = planeRow.AddComponent<ToggleGroup>();
+			tgPlane.allowSwitchOff = false;
+			var planeToggles = new Toggle[3];
+			string[] planeLabels = { "Auto", "View", "Face" };
+			for (int i = 0; i < 3; i++)
+			{
+				int ix = i;
+				planeToggles[i] = MakeToolOptionsRadioToggle(planeRow.transform, tgPlane, planeLabels[ix], radioOff, radioOn, () =>
+				{
+					var inst = BrushRibbon_UI_Size.instance;
+					if (inst != null) inst.SetPaintSymmetryPlaneSource((PaintSymmetryPlaneSource)ix);
+					ShowToolFeedback("Mirror plane: " + planeLabels[ix]);
+				});
+			}
+
+			var planeActionsRow = new GameObject("SymmetryPlaneActions");
+			planeActionsRow.transform.SetParent(panelGo.transform, false);
+			planeActionsRow.AddComponent<RectTransform>();
+			var planeActLe = planeActionsRow.AddComponent<LayoutElement>();
+			planeActLe.minHeight = 32;
+			var planeActH = planeActionsRow.AddComponent<HorizontalLayoutGroup>();
+			planeActH.spacing = 4;
+			planeActH.childAlignment = TextAnchor.MiddleLeft;
+			planeActH.childControlWidth = false;
+			planeActH.childControlHeight = true;
+			planeActH.childForceExpandWidth = false;
+			MakeBrushOptsActionButton(planeActionsRow.transform, "Pick @ cursor", () =>
+			{
+				TryPickSymmetryPlaneUnderCursor();
+				SyncBrushToolRadiosFromSize();
+			}, 108);
+			MakeBrushOptsActionButton(planeActionsRow.transform, "Flip normal", () =>
+			{
+				var inst = BrushRibbon_UI_Size.instance;
+				if (inst == null) return;
+				if (inst.paintSymmetryPlaneSource != PaintSymmetryPlaneSource.FacePick)
+				{
+					ShowToolFeedback("Mirror plane: use Face mode first");
+					return;
+				}
+				inst.FlipPickedSymmetryPlaneNormal();
+				ShowToolFeedback("Mirror plane: flipped normal");
+			}, 92);
+
+			if (pinCollapseToToolViewport)
+			{
+				var spacerGo = new GameObject("BrushOptsBottomSpacer");
+				spacerGo.transform.SetParent(panelGo.transform, false);
+				spacerGo.AddComponent<RectTransform>();
+				var spacerLe = spacerGo.AddComponent<LayoutElement>();
+				spacerLe.minHeight = 40;
+				spacerLe.preferredHeight = 40;
+			}
+
+			var collapseBtnGo = new GameObject("BrushOptsCollapseBtn");
+			collapseBtnGo.AddComponent<RectTransform>();
+			var collapseImg = collapseBtnGo.AddComponent<Image>();
+			collapseImg.color = new Color(0.22f, 0.28f, 0.36f, 1f);
+			collapseImg.raycastTarget = true;
+			var collapseBtn = collapseBtnGo.AddComponent<Button>();
+			var collapseColors = collapseBtn.colors;
+			collapseColors.highlightedColor = new Color(0.28f, 0.34f, 0.42f, 1f);
+			collapseColors.pressedColor = new Color(0.19f, 0.24f, 0.32f, 1f);
+			collapseBtn.colors = collapseColors;
+			var collapseTxtGo = new GameObject("Label");
+			collapseTxtGo.transform.SetParent(collapseBtnGo.transform, false);
+			var collapseTxtRt = collapseTxtGo.AddComponent<RectTransform>();
+			collapseTxtRt.anchorMin = Vector2.zero;
+			collapseTxtRt.anchorMax = Vector2.one;
+			collapseTxtRt.offsetMin = new Vector2(4, 0);
+			collapseTxtRt.offsetMax = new Vector2(-4, 0);
+			var collapseTxt = collapseTxtGo.AddComponent<TextMeshProUGUI>();
+			collapseTxt.color = Color.white;
+			StylePaintTabTmp(collapseTxt, "Collapse ▲", kPaintTabUiFontSize, TextAlignmentOptions.Center);
+
+			var collapseRt = collapseBtnGo.GetComponent<RectTransform>();
+			if (pinCollapseToToolViewport)
+			{
+				collapseBtnGo.transform.SetParent(toolOptsScroll.viewport, false);
+				collapseRt.anchorMin = new Vector2(0f, 0f);
+				collapseRt.anchorMax = new Vector2(1f, 0f);
+				collapseRt.pivot = new Vector2(0.5f, 0f);
+				collapseRt.anchoredPosition = Vector2.zero;
+				collapseRt.offsetMin = new Vector2(6f, 4f);
+				collapseRt.offsetMax = new Vector2(-6f, 4f + 30f);
+				collapseBtnGo.SetActive(false);
+				collapseBtnGo.transform.SetAsLastSibling();
+			}
+			else
+			{
+				collapseBtnGo.transform.SetParent(panelGo.transform, false);
+				var collapseLe = collapseBtnGo.AddComponent<LayoutElement>();
+				collapseLe.minHeight = 30;
+				collapseLe.preferredHeight = 30;
+			}
+
+			void ApplyRadioRowTint(Toggle[] group)
+			{
+				foreach (var t in group)
+				{
+					if (t == null) continue;
+					var img = t.targetGraphic as Image;
+					if (img != null) img.color = t.isOn ? radioOn : radioOff;
+				}
+			}
+
+			void SyncBrushToolRadiosFromSize()
+			{
+				var inst = BrushRibbon_UI_Size.instance;
+				int sm = inst != null ? (int)inst.scatterMode : 0;
+				int am = inst != null ? (int)inst.tipAngleMode : 0;
+				int pm = inst != null ? (int)inst.paintSymmetryPlaneSource : 0;
+				if (pm < 0 || pm > 2) pm = 0;
+				for (int i = 0; i < scatterToggles.Length; i++)
+					scatterToggles[i].SetIsOnWithoutNotify(i == sm);
+				for (int i = 0; i < angleToggles.Length; i++)
+					angleToggles[i].SetIsOnWithoutNotify(i == am);
+				for (int i = 0; i < planeToggles.Length; i++)
+					planeToggles[i].SetIsOnWithoutNotify(i == pm);
+				ApplyRadioRowTint(scatterToggles);
+				ApplyRadioRowTint(angleToggles);
+				ApplyRadioRowTint(planeToggles);
+			}
+
+			void OnBrushSettingsMaybeSync()
+			{
+				if (panelGo.activeSelf) SyncBrushToolRadiosFromSize();
+			}
+
+			_cachedBrushOptsOnSettingsChanged = OnBrushSettingsMaybeSync;
+			RegisterBrushSettingsHandler(OnBrushSettingsMaybeSync);
+
+			headerBtn.onClick.AddListener(() =>
+			{
+				bool open = !panelGo.activeSelf;
+				panelGo.SetActive(open);
+				if (pinCollapseToToolViewport)
+					collapseBtnGo.SetActive(open);
+				panelLe.preferredHeight = open ? -1f : 0f;
+				headerTxt.text = open ? "Brush options ▴" : "Brush options ▼";
+				if (open) SyncBrushToolRadiosFromSize();
+				if (open)
+				{
+					LayoutRebuilder.ForceRebuildLayoutImmediate(toolSectionParent);
+					Canvas.ForceUpdateCanvases();
+					var sr = toolSectionParent.GetComponentInParent<ScrollRect>();
+					if (sr != null) sr.verticalNormalizedPosition = 0f;
+					if (pinCollapseToToolViewport)
+						collapseBtnGo.transform.SetAsLastSibling();
+				}
+			});
+
+			collapseBtn.onClick.AddListener(() =>
+			{
+				panelGo.SetActive(false);
+				if (pinCollapseToToolViewport)
+					collapseBtnGo.SetActive(false);
+				panelLe.preferredHeight = 0f;
+				headerTxt.text = "Brush options ▼";
+				LayoutRebuilder.ForceRebuildLayoutImmediate(toolSectionParent);
+			});
+
+			SyncBrushToolRadiosFromSize();
+		}
+
+		static void TryPickSymmetryPlaneUnderCursor()
+		{
+			var cam = UserCameras_MGR.instance?._curr_viewCamera?.myCamera;
+			var mv = MainViewport_UI.instance;
+			var sz = BrushRibbon_UI_Size.instance;
+			if (cam == null || mv == null || sz == null)
+			{
+				ShowToolFeedback("Mirror plane: need viewport & brush UI");
+				return;
+			}
+			Vector2 uv = mv.cursorMainViewportPos01;
+			if (!PaintSymmetryMesh.TryPreferredRaycast(cam, uv, out RaycastHit hit))
+			{
+				ShowToolFeedback("Mirror plane: nothing hit under cursor");
+				return;
+			}
+			sz.ApplySymmetryPlaneFromFaceHit(hit);
+			ShowToolFeedback("Mirror plane: face under cursor");
+		}
+
+		static void MakeBrushOptsActionButton(Transform parent, string label, UnityEngine.Events.UnityAction onClick, int minWidth)
+		{
+			var go = new GameObject("Btn_" + label.Replace(" ", "").Replace("@", ""));
+			go.transform.SetParent(parent, false);
+			go.AddComponent<RectTransform>();
+			var le = go.AddComponent<LayoutElement>();
+			le.minHeight = 28;
+			le.preferredHeight = 28;
+			le.minWidth = minWidth;
+			le.preferredWidth = minWidth;
+			var img = go.AddComponent<Image>();
+			img.color = new Color(0.28f, 0.32f, 0.38f, 1f);
+			img.raycastTarget = true;
+			var btn = go.AddComponent<Button>();
+			btn.onClick.AddListener(onClick);
+			var txtGo = new GameObject("Label");
+			txtGo.transform.SetParent(go.transform, false);
+			var tr = txtGo.AddComponent<RectTransform>();
+			tr.anchorMin = Vector2.zero;
+			tr.anchorMax = Vector2.one;
+			tr.offsetMin = new Vector2(4, 0);
+			tr.offsetMax = new Vector2(-4, 0);
+			var tmp = txtGo.AddComponent<TextMeshProUGUI>();
+			tmp.color = Color.white;
+			StylePaintTabTmp(tmp, label, kPaintTabUiFontSize, TextAlignmentOptions.Center);
+		}
+
+		static void MakeBrushOptsSectionLabel(Transform parent, string text)
+		{
+			var go = new GameObject("BrushOptsLbl");
+			go.transform.SetParent(parent, false);
+			go.AddComponent<RectTransform>();
+			var le = go.AddComponent<LayoutElement>();
+			le.minHeight = 24;
+			var tmp = go.AddComponent<TextMeshProUGUI>();
+			tmp.color = new Color(0.75f, 0.76f, 0.8f, 1f);
+			StylePaintTabTmp(tmp, text, 9f, TextAlignmentOptions.Left);
+		}
+
+		static Toggle MakeToolOptionsRadioToggle(Transform rowParent, ToggleGroup group, string label, Color offCol, Color onCol, UnityEngine.Events.UnityAction onChosenWhenOn)
+		{
+			var go = new GameObject("Radio_" + label.Replace(" ", ""));
+			go.transform.SetParent(rowParent, false);
+			var le = go.AddComponent<LayoutElement>();
+			le.preferredWidth = label.Length >= 12 ? 120 : (label.Length > 5 ? 72 : 52);
+			le.minHeight = 28;
+			le.preferredHeight = 28;
+			var img = go.AddComponent<Image>();
+			img.color = offCol;
+			var toggle = go.AddComponent<Toggle>();
+			toggle.targetGraphic = img;
+			toggle.group = group;
+			toggle.graphic = null;
+			var cb = toggle.colors;
+			cb.normalColor = Color.white;
+			cb.highlightedColor = new Color(0.95f, 0.95f, 1f);
+			cb.pressedColor = new Color(0.88f, 0.88f, 0.92f);
+			cb.selectedColor = Color.white;
+			toggle.colors = cb;
+			toggle.onValueChanged.AddListener(isOn =>
+			{
+				img.color = isOn ? onCol : offCol;
+				if (isOn && onChosenWhenOn != null) onChosenWhenOn();
+			});
+
+			var txtGo = new GameObject("Text");
+			txtGo.transform.SetParent(go.transform, false);
+			var tr = txtGo.AddComponent<RectTransform>();
+			tr.anchorMin = Vector2.zero;
+			tr.anchorMax = Vector2.one;
+			tr.offsetMin = new Vector2(3, 1);
+			tr.offsetMax = new Vector2(-3, -1);
+			var tmp = txtGo.AddComponent<TextMeshProUGUI>();
+			tmp.color = Color.white;
+			StylePaintTabTmp(tmp, label, kPaintTabUiFontSize, TextAlignmentOptions.Center);
+			return toggle;
+		}
+
+		/// <summary>Vertical mirror: duplicate brush at x&apos; = 1−x in viewport UV (inpaint, projection, background mask).</summary>
+		static void MakePaintSymmetryToggle(Transform parent)
+		{
+			Color offCol = new Color(0.3f, 0.3f, 0.3f, 1f);
+			Color onCol = new Color(0.38f, 0.26f, 0.52f, 1f);
+
+			var go = new GameObject("Btn_PaintSymmetry");
+			go.transform.SetParent(parent, false);
+			go.AddComponent<RectTransform>();
+			var img = go.AddComponent<Image>();
+			img.color = offCol;
+			img.raycastTarget = true;
+			var btn = go.AddComponent<Button>();
+
+			var txtGo = new GameObject("Label");
+			txtGo.transform.SetParent(go.transform, false);
+			var txtRect = txtGo.AddComponent<RectTransform>();
+			txtRect.anchorMin = Vector2.zero;
+			txtRect.anchorMax = Vector2.one;
+			txtRect.offsetMin = new Vector2(4, 0);
+			txtRect.offsetMax = new Vector2(-4, 0);
+			var txt = txtGo.AddComponent<TextMeshProUGUI>();
+			txt.color = Color.white;
+			ApplyPaintTabToolRowTmp(txt, TextAlignmentOptions.Center);
+
+			void RefreshSymmetryButton()
+			{
+				bool on = BrushRibbon_UI_Size.GetPaintSymmetryXOn();
+				img.color = on ? onCol : offCol;
+				int szLine = kSymmetryOnOffSublineTmpSize;
+				txt.text = on
+					? $"Symmetry\n<size={szLine}>On</size>"
+					: $"Symmetry\n<size={szLine}>Off</size>";
+			}
+			RefreshSymmetryButton();
+			_cachedSymmetryOnSettingsChanged = RefreshSymmetryButton;
+			RegisterBrushSettingsHandler(RefreshSymmetryButton);
+
+			btn.onClick.AddListener(() =>
+			{
+				var sz = BrushRibbon_UI_Size.instance;
+				if (sz == null)
+				{
+					ShowToolFeedback("Symmetry: open Paint tab / brush size UI first");
+					return;
+				}
+				sz.SetPaintSymmetryXOn(!sz.paintSymmetryXOn);
+				RefreshSymmetryButton();
+				ShowToolFeedback(sz.paintSymmetryXOn
+					? "Paint symmetry on (3D: mesh plane; 2D: screen)"
+					: "Paint symmetry off");
 			});
 		}
 

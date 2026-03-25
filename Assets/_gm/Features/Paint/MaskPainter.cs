@@ -33,6 +33,9 @@ namespace spz {
 	    static readonly int _StampCount_ID = Shader.PropertyToID("_StampCount");
 	    static readonly int _BrushAngleRad_ID = Shader.PropertyToID("_BrushAngleRad");
 	    static readonly int _BrushRoundness01_ID = Shader.PropertyToID("_BrushRoundness01");
+	    static readonly int _SymmetryMode_ID = Shader.PropertyToID("_SymmetryMode");
+	    static readonly int _MirrorPrevNewBrushScreenCoord_ID = Shader.PropertyToID("_MirrorPrevNewBrushScreenCoord");
+	    static readonly int _SymmetryMirrorAngleDeltaRad_ID = Shader.PropertyToID("_SymmetryMirrorAngleDeltaRad");
 
 	    const int MaxSplotchStamps = 64;
 	    readonly Vector4[] _stampPosSizeStr = new Vector4[MaxSplotchStamps];
@@ -48,6 +51,13 @@ namespace spz {
 	    public abstract Vector2 getViewportCursorPos01(bool forceMainViewport=false);
 	    public abstract Vector2 getViewportSize();
 
+	    /// <summary>Aspect passed to brush shaders (<c>_ScreenAspectRatio</c>): full game window so stamps stay circular when the Game view is non-square (viewport rect alone can mismatch clip-space UVs).</summary>
+	    public static float GetGameWindowAspectForBrushShader()
+	    {
+		    float h = Screen.height;
+		    return h > 1e-6f ? Mathf.Max(0.0001f, Screen.width) / h : 1f;
+	    }
+
 	    // scale the brush additionally. It's based on the % of main viewport:
 	    protected virtual float getBrushExtraScaling_due_viewport() => 1.0f;
 
@@ -59,6 +69,9 @@ namespace spz {
 	    // - might want to keep painting even if cursor went outside the viewport momentarily.
 	    // Useful when adjusting the backgrounds near the viewport border.
 	    protected abstract bool isAllowedToPaintNow(bool also_check_viewportHovered);
+
+	    /// <summary>When false, symmetry stays screen-space (e.g. 2D background mask). 3D object / projection painters use mesh raycast symmetry when possible.</summary>
+	    protected virtual bool useMeshPaintSymmetry () => true;
 
     
 	    public virtual void ResetPaintMask(){
@@ -239,8 +252,9 @@ namespace spz {
 
 	             correctMode &= MainViewport_UI.instance.showing == MainViewport_UI.Showing.UsualView;
 
-	        // Block all inpaint strokes while undo/redo restore runs (must not depend on correctMode — img2img inpaint is "correct").
-	        if (this is Inpaint_MaskPainter && PaintUndo_MGR.instance != null && PaintUndo_MGR.instance.BlocksNewStroke)
+	        // Block paint strokes while undo/redo restore runs (same global undo stack for inpaint, background, projection masks).
+	        if (PaintUndo_MGR.instance != null && PaintUndo_MGR.instance.BlocksNewStroke
+	            && (this is Inpaint_MaskPainter || this is Background_Painter || this is Projections_MaskPainter))
 		        return true;
 
 	        return !correctMode;
@@ -250,32 +264,37 @@ namespace spz {
 	    protected abstract float getBrushStrength();
 
 	    void PaintOnTexture(){
-	        var orib = SD_WorkflowOptionsRibbon_UI.instance;
-
 	        float brushSize =  _brushSizeScale.Evaluate(BrushRibbon_UI_Size.GetBrushSize01());
 	        float suggested_brushOpacity = getBrushStrength();
         
 	        AffectByPressure(ref brushSize, ref suggested_brushOpacity);
 
-	        Vector2 pointInViewport01 = getViewportCursorPos01();
-        
-	        var brushSizeVec =  new Vector4(_lastBrushSize,brushSize,0,0) * getBrushExtraScaling_due_viewport();
+	        // Raw cursor only for stroke direction, spacing path, and symmetry — scatter jitter applies to stamp positions only.
+	        Vector2 cursorRaw01 = getViewportCursorPos01();
+	        float scale = getBrushExtraScaling_due_viewport();
+	        float scatterMul = BrushRibbon_UI_Size.GetBrushScatterJitterMul();
+
+	        var brushSizeVec =  new Vector4(_lastBrushSize,brushSize,0,0) * scale;
 	        if (_isFirstFrameOfStroke){  brushSizeVec.z = 1.0f;  }
 
 	        float spacing01 = BrushRibbon_UI_Size.GetBrushSpacing01();
 	        float angleDeg = BrushRibbon_UI_Size.GetBrushAngleDeg();
+	        if (BrushRibbon_UI_Size.GetBrushTipFollowsStroke() && !_isFirstFrameOfStroke)
+	        {
+		        Vector2 strokeDelta = cursorRaw01 - _prevPaintPosition;
+		        if (strokeDelta.sqrMagnitude > 1e-12f)
+			        angleDeg = Mathf.Repeat(angleDeg + Mathf.Atan2(strokeDelta.y, strokeDelta.x) * Mathf.Rad2Deg, 360f);
+	        }
 	        float roundness01 = BrushRibbon_UI_Size.GetBrushRoundness01();
 	        _brushMaterial.SetFloat(_BrushAngleRad_ID, angleDeg * Mathf.Deg2Rad);
 	        _brushMaterial.SetFloat(_BrushRoundness01_ID, roundness01 > 0f ? roundness01 : 1f);
-
 	        int stampCount = 0;
 	        if (spacing01 > 0.001f && !_isFirstFrameOfStroke)
 	        {
-	            float scale = getBrushExtraScaling_due_viewport();
 	            float step = spacing01 * brushSize * scale;
 	            if (step < 0.001f) step = 0.001f;
 	            Vector2 from = _prevPaintPosition;
-	            Vector2 to = pointInViewport01;
+	            Vector2 to = cursorRaw01;
 	            float dist = Vector2.Distance(from, to);
 	            if (dist >= step)
 	            {
@@ -285,17 +304,66 @@ namespace spz {
 	                    float t = (n > 1) ? (k / (float)n) : 0f;
 	                    Vector2 pos = Vector2.Lerp(from, to, t);
 	                    float sizeK = Mathf.Lerp(_lastBrushSize, brushSize, t) * scale;
+	                    if (scatterMul > 0f)
+	                    {
+		                    float jStamp = scatterMul * Mathf.Max(sizeK, 0.0001f);
+		                    pos += (Vector2)UnityEngine.Random.insideUnitCircle * jStamp;
+		                    pos.x = Mathf.Clamp01(pos.x);
+		                    pos.y = Mathf.Clamp01(pos.y);
+	                    }
 	                    _stampPosSizeStr[stampCount] = new Vector4(pos.x, pos.y, sizeK, Mathf.Abs(suggested_brushOpacity));
 	                    stampCount++;
 	                }
 	            }
 	        }
+
+	        Vector2 brushEndpointForRender01 = cursorRaw01;
+	        if (scatterMul > 0f && stampCount == 0)
+	        {
+		        float jr = scatterMul * brushSize * scale;
+		        brushEndpointForRender01 = cursorRaw01 + (Vector2)UnityEngine.Random.insideUnitCircle * jr;
+		        brushEndpointForRender01.x = Mathf.Clamp01(brushEndpointForRender01.x);
+		        brushEndpointForRender01.y = Mathf.Clamp01(brushEndpointForRender01.y);
+	        }
+
+	        bool symOn = BrushRibbon_UI_Size.GetPaintSymmetryXOn();
+	        Camera paintCam = UserCameras_MGR.instance?._curr_viewCamera?.myCamera;
+	        if (!symOn) {
+		        _brushMaterial.SetFloat(_SymmetryMode_ID, 0f);
+		        _brushMaterial.SetVector(_MirrorPrevNewBrushScreenCoord_ID, Vector4.zero);
+		        _brushMaterial.SetFloat(_SymmetryMirrorAngleDeltaRad_ID, 0f);
+	        } else if (stampCount > 0) {
+		        bool allowMeshReflection = useMeshPaintSymmetry() && paintCam != null;
+		        if (allowMeshReflection) {
+			        // Mesh symmetry for splotches: duplicate mirrored twins in C# (shader splotch path only supports screen mirror mode 1).
+			        int origCount = stampCount;
+			        for (int k = 0; k < origCount && stampCount < MaxSplotchStamps; k++) {
+				        Vector2 c = new Vector2(_stampPosSizeStr[k].x, _stampPosSizeStr[k].y);
+				        if (!PaintSymmetryMesh.TryMirrorViewportPoint(paintCam, c, out Vector2 mc, true))
+					        mc = PaintSymmetryMesh.ScreenMirrorViewportUV(c);
+				        _stampPosSizeStr[stampCount++] = new Vector4(mc.x, mc.y, _stampPosSizeStr[k].z, _stampPosSizeStr[k].w);
+			        }
+			        _brushMaterial.SetFloat(_SymmetryMode_ID, 0f);
+			        _brushMaterial.SetVector(_MirrorPrevNewBrushScreenCoord_ID, Vector4.zero);
+			        _brushMaterial.SetFloat(_SymmetryMirrorAngleDeltaRad_ID, 0f);
+		        } else {
+			        // Screen symmetry for splotches: let shader mirror centers so mirrored angle delta is applied for directional tips.
+			        _brushMaterial.SetFloat(_SymmetryMode_ID, 1f);
+			        _brushMaterial.SetVector(_MirrorPrevNewBrushScreenCoord_ID, Vector4.zero);
+			        _brushMaterial.SetFloat(_SymmetryMirrorAngleDeltaRad_ID,
+				        PaintSymmetryMesh.ComputeScreenMirrorAngleDelta(_prevPaintPosition, cursorRaw01));
+		        }
+	        } else {
+		        PaintSymmetryMesh.SetMaterialSymmetry(_brushMaterial, paintCam, _prevPaintPosition, cursorRaw01, symOn,
+			        useMeshPaintSymmetry() && paintCam != null);
+	        }
+
 	        _brushMaterial.SetVectorArray(_StampPosSizeStr_ID, _stampPosSizeStr);
 	        _brushMaterial.SetInt(_StampCount_ID, stampCount);
 
-	        _brushMaterial.SetVector("_PrevNewBrushScreenCoord", new Vector4(_prevPaintPosition.x, _prevPaintPosition.y, pointInViewport01.x, pointInViewport01.y)); 
+	        _brushMaterial.SetVector("_PrevNewBrushScreenCoord", new Vector4(_prevPaintPosition.x, _prevPaintPosition.y, brushEndpointForRender01.x, brushEndpointForRender01.y)); 
 	        _brushMaterial.SetVector("_BrushSize_andFirstFrameFlag", brushSizeVec );
-	        _brushMaterial.SetFloat("_ScreenAspectRatio", getViewportSize().x/getViewportSize().y);
+	        _brushMaterial.SetFloat("_ScreenAspectRatio", GetGameWindowAspectForBrushShader());
 	        _brushMaterial.SetFloat(_ClickDepth01_ID, _clickDepth01);
 	        float depthRange = SD_WorkflowOptionsRibbon_UI.instance != null
 	            ? SD_WorkflowOptionsRibbon_UI.instance.brushDepthLimit01
@@ -304,7 +372,7 @@ namespace spz {
         
 	        OnRenderIntoCurrTex_please( _prevBrushPath_R8, _currBrushPath_R8, _isFirstFrameOfStroke, suggested_brushOpacity);
 
-	        _prevPaintPosition = pointInViewport01;
+	        _prevPaintPosition = cursorRaw01;
 	        _lastBrushSize = brushSize;
 	        _isFirstFrameOfStroke = false;
 	    }

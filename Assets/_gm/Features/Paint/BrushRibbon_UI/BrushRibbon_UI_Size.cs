@@ -3,6 +3,22 @@ using UnityEngine;
 
 namespace spz {
 
+	/// <summary> Per-stamp viewport jitter (spray). </summary>
+	public enum BrushScatterMode { None = 0, Light = 1, Medium = 2 }
+
+	/// <summary> How brush tip rotation combines with stroke direction. </summary>
+	public enum BrushTipAngleMode { FixedAngle = 0, FollowStroke = 1 }
+
+	/// <summary> World-space mirror plane for mesh symmetry (paint / projections). </summary>
+	public enum PaintSymmetryPlaneSource {
+		/// <summary> Plane through selection bounds center, normal = average mesh +X (transform.right). </summary>
+		Auto = 0,
+		/// <summary> Vertical plane through bounds center, normal = view camera +X (screen “left/right” in world). </summary>
+		ViewAligned = 1,
+		/// <summary> Plane from a picked surface (hit point + hit normal). </summary>
+		FacePick = 2,
+	}
+
 	/// <summary>
 	/// Single source of truth for brush size and spacing. One instance in the app; all painters and UI read/write here
 	/// so changes in the Paint tab (or anywhere) persist everywhere until the user changes them again.
@@ -27,6 +43,24 @@ namespace spz {
 	    public static float GetBrushAngleDeg() => instance != null ? instance.brushAngleDeg : 0f;
 	    /// <summary> App-wide read: brush roundness 0–1 (1 = circle). </summary>
 	    public static float GetBrushRoundness01() => instance != null ? instance.brushRoundness01 : 1f;
+	    /// <summary> Mirror stroke across vertical center of viewport (screen x = 0.5). </summary>
+	    public static bool GetPaintSymmetryXOn() => instance != null && instance._paintSymmetryXOn;
+
+	    /// <summary> Multiplier for Random.insideUnitCircle jitter in viewport UV, scaled by brush diameter (0 = off). </summary>
+	    public static float GetBrushScatterJitterMul()
+	    {
+		    if (instance == null) return 0f;
+		    switch (instance._scatterMode)
+		    {
+			    case BrushScatterMode.Light: return 0.14f;
+			    case BrushScatterMode.Medium: return 0.32f;
+			    default: return 0f;
+		    }
+	    }
+
+	    /// <summary> When true, stroke direction (previous→current viewport pos) is added to the brush angle each frame. </summary>
+	    public static bool GetBrushTipFollowsStroke()
+		    => instance != null && instance._tipAngleMode == BrushTipAngleMode.FollowStroke;
 
 	    /// <summary> Fired when brush size (or slider value) changes so brush preset UI / "brush eyes" can stay in sync with the actual brush system. </summary>
 	    public static event System.Action OnBrushSizeChanged;
@@ -59,6 +93,60 @@ namespace spz {
 	    {
 	        _brushRoundness01 = Mathf.Clamp01(r);
 	        OnBrushSettingsChanged?.Invoke();
+	    }
+
+	    /// <summary> Vertical-axis symmetry: duplicate brush at mirrored screen x (1−x). </summary>
+	    bool _paintSymmetryXOn;
+	    public bool paintSymmetryXOn => _paintSymmetryXOn;
+	    public void SetPaintSymmetryXOn(bool on)
+	    {
+		    _paintSymmetryXOn = on;
+		    OnBrushSettingsChanged?.Invoke();
+	    }
+
+	    BrushScatterMode _scatterMode = BrushScatterMode.None;
+	    public BrushScatterMode scatterMode => _scatterMode;
+	    public void SetScatterMode(BrushScatterMode mode)
+	    {
+		    _scatterMode = mode;
+		    OnBrushSettingsChanged?.Invoke();
+	    }
+
+	    BrushTipAngleMode _tipAngleMode = BrushTipAngleMode.FixedAngle;
+	    public BrushTipAngleMode tipAngleMode => _tipAngleMode;
+	    public void SetTipAngleMode(BrushTipAngleMode mode)
+	    {
+		    _tipAngleMode = mode;
+		    OnBrushSettingsChanged?.Invoke();
+	    }
+
+	    PaintSymmetryPlaneSource _paintSymmetryPlaneSource = PaintSymmetryPlaneSource.Auto;
+	    public PaintSymmetryPlaneSource paintSymmetryPlaneSource => _paintSymmetryPlaneSource;
+	    Vector3 _symmetryPlanePointWorld;
+	    Vector3 _symmetryPlaneNormalWorld = Vector3.right;
+	    public Vector3 symmetryPlanePointWorld => _symmetryPlanePointWorld;
+	    public Vector3 symmetryPlaneNormalWorld => _symmetryPlaneNormalWorld;
+
+	    public void SetPaintSymmetryPlaneSource(PaintSymmetryPlaneSource src)
+	    {
+		    _paintSymmetryPlaneSource = src;
+		    OnBrushSettingsChanged?.Invoke();
+	    }
+
+	    /// <summary> Use struck face as mirror plane (normal from mesh; flip if mirror side is inverted). </summary>
+	    public void ApplySymmetryPlaneFromFaceHit(RaycastHit hit)
+	    {
+		    _paintSymmetryPlaneSource = PaintSymmetryPlaneSource.FacePick;
+		    _symmetryPlanePointWorld = hit.point;
+		    _symmetryPlaneNormalWorld = hit.normal.sqrMagnitude > 1e-12f ? hit.normal.normalized : Vector3.up;
+		    OnBrushSettingsChanged?.Invoke();
+	    }
+
+	    public void FlipPickedSymmetryPlaneNormal()
+	    {
+		    if (_paintSymmetryPlaneSource != PaintSymmetryPlaneSource.FacePick) return;
+		    _symmetryPlaneNormalWorld = -_symmetryPlaneNormalWorld;
+		    OnBrushSettingsChanged?.Invoke();
 	    }
 
 	    void RefreshSpacingText()
@@ -142,6 +230,20 @@ namespace spz {
 	        trSL.maskBrush_spacing01 = _brushSpacing01;
 	        trSL.maskBrush_angleDeg = _brushAngleDeg;
 	        trSL.maskBrush_roundness01 = _brushRoundness01;
+	        trSL.maskBrush_symmetryX = _paintSymmetryXOn;
+	        trSL.maskBrush_scatterMode = (int)_scatterMode;
+	        trSL.maskBrush_tipAngleMode = (int)_tipAngleMode;
+	        trSL.maskBrush_symmetryPlaneSource = (int)_paintSymmetryPlaneSource;
+	        if (_paintSymmetryPlaneSource == PaintSymmetryPlaneSource.FacePick)
+	        {
+		        trSL.maskBrush_symmetryPlanePoint = new Vector3Serializable(_symmetryPlanePointWorld.x, _symmetryPlanePointWorld.y, _symmetryPlanePointWorld.z);
+		        trSL.maskBrush_symmetryPlaneNormal = new Vector3Serializable(_symmetryPlaneNormalWorld.x, _symmetryPlaneNormalWorld.y, _symmetryPlaneNormalWorld.z);
+	        }
+	        else
+	        {
+		        trSL.maskBrush_symmetryPlanePoint = null;
+		        trSL.maskBrush_symmetryPlaneNormal = null;
+	        }
 	    }
 
 	    /// <summary> Default brush size when none saved: 32 (on 0–100 display). </summary>
@@ -156,6 +258,26 @@ namespace spz {
 	        _brushSpacing01 = sp;
 	        _brushAngleDeg = Mathf.Repeat(trSL.maskBrush_angleDeg, 360f);
 	        _brushRoundness01 = Mathf.Clamp01(trSL.maskBrush_roundness01);
+	        _paintSymmetryXOn = trSL.maskBrush_symmetryX;
+	        int sc = trSL.maskBrush_scatterMode;
+	        _scatterMode = (sc >= 0 && sc <= 2) ? (BrushScatterMode)sc : BrushScatterMode.None;
+	        int ta = trSL.maskBrush_tipAngleMode;
+	        _tipAngleMode = (ta >= 0 && ta <= 1) ? (BrushTipAngleMode)ta : BrushTipAngleMode.FixedAngle;
+	        int plSrc = trSL.maskBrush_symmetryPlaneSource;
+	        if (plSrc < 0 || plSrc > 2) plSrc = 0;
+	        _paintSymmetryPlaneSource = (PaintSymmetryPlaneSource)plSrc;
+	        if (_paintSymmetryPlaneSource == PaintSymmetryPlaneSource.FacePick
+	            && trSL.maskBrush_symmetryPlanePoint != null && trSL.maskBrush_symmetryPlaneNormal != null)
+	        {
+		        _symmetryPlanePointWorld = trSL.maskBrush_symmetryPlanePoint.toVec3();
+		        _symmetryPlaneNormalWorld = trSL.maskBrush_symmetryPlaneNormal.toVec3();
+		        if (_symmetryPlaneNormalWorld.sqrMagnitude < 1e-8f)
+			        _paintSymmetryPlaneSource = PaintSymmetryPlaneSource.Auto;
+		        else
+			        _symmetryPlaneNormalWorld.Normalize();
+	        }
+	        else if (_paintSymmetryPlaneSource == PaintSymmetryPlaneSource.FacePick)
+		        _paintSymmetryPlaneSource = PaintSymmetryPlaneSource.Auto;
 	        RefreshSpacingText();
 	    }
 	}

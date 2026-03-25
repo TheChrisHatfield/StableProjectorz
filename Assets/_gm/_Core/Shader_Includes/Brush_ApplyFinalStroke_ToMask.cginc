@@ -29,4 +29,10 @@ float4 apply_brush_stroke_rgba(float4 currMask, float4 targetColor, float diff_m
 }
 
 
+float4 apply_brush_stroke_smudge(float4 currColor, float4 neighborAvg, float brushIntensity, float maxStrength01){
+    if (brushIntensity < 0.001) return currColor;
+    float t = saturate(brushIntensity * maxStrength01);
+    return lerp(currColor, neighborAvg, t);
+}
+
 #endif

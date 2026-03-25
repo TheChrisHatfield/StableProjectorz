@@ -73,6 +73,43 @@ if (Test-Path $LogRef -ErrorAction SilentlyContinue) {
 $estTotalSec = 25 * 60
 $maxWaitMin = 40
 
+function Test-BuildSucceededFromLog {
+    param([string]$Path)
+    if (-not (Test-Path $Path -ErrorAction SilentlyContinue)) { return $false }
+    try {
+        $hits = Select-String -Path $Path -Pattern "\[BuildForTesting\] Build succeeded\.|Build Finished, Result: Success\." -SimpleMatch:$false -ErrorAction SilentlyContinue
+        return ($null -ne $hits -and $hits.Count -gt 0)
+    } catch {
+        return $false
+    }
+}
+
+function Wait-ForBuildExe {
+    param(
+        [string]$ExactPath,
+        [string]$BuildDir,
+        [int]$TimeoutSeconds = 45
+    )
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($sw.Elapsed.TotalSeconds -lt $TimeoutSeconds) {
+        if (Test-Path $ExactPath -ErrorAction SilentlyContinue) {
+            return $ExactPath
+        }
+        # Fallback: resolve any produced game exe (exclude crash handler).
+        if (Test-Path $BuildDir -ErrorAction SilentlyContinue) {
+            $exe = Get-ChildItem $BuildDir -Filter *.exe -File -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -ne "UnityCrashHandler64.exe" } |
+                Sort-Object LastWriteTime -Descending |
+                Select-Object -First 1
+            if ($exe -and (Test-Path $exe.FullName -ErrorAction SilentlyContinue)) {
+                return $exe.FullName
+            }
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    return $null
+}
+
 function RunUnityBuild {
     param([string]$ExtraArgs)
     
@@ -170,7 +207,6 @@ if ($exitCode -eq 198) {
 # Copy log
 if (Test-Path $LogTemp -ErrorAction SilentlyContinue) {
     Copy-Item $LogTemp $LogFile -Force -ErrorAction SilentlyContinue
-    Remove-Item $LogTemp -Force -ErrorAction SilentlyContinue
 }
 
 Write-Host ""
@@ -178,10 +214,30 @@ Write-Host ""
 Write-Host "  *** BUILD FINISHED. Unity exit code: $exitCode ***"
 Write-Host ""
 
-# Success only when Unity exited 0. Exe may exist from a previous build even when Unity failed.
-if ($exitCode -eq 0 -and (Test-Path $BuildPath -ErrorAction SilentlyContinue)) {
-    Write-Host "Build succeeded: $BuildPath"
-    $ts = (Get-Item $BuildPath).LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
+# Ground truth: BuildForTesting success marker in log (preferred), then exit code fallback.
+$logIndicatesSuccess = Test-BuildSucceededFromLog $LogFile
+if (-not $logIndicatesSuccess -and (Test-Path $LogTemp -ErrorAction SilentlyContinue)) {
+    $logIndicatesSuccess = Test-BuildSucceededFromLog $LogTemp
+}
+$resolvedBuildPath = $BuildPath
+if ($logIndicatesSuccess) {
+    $waited = Wait-ForBuildExe -ExactPath $BuildPath -BuildDir $BuildDir -TimeoutSeconds 60
+    if ($waited) { $resolvedBuildPath = $waited }
+}
+$buildLooksSuccessful = $logIndicatesSuccess -or ($exitCode -eq 0)
+if (Test-Path $LogTemp -ErrorAction SilentlyContinue) {
+    Remove-Item $LogTemp -Force -ErrorAction SilentlyContinue
+}
+
+if ($buildLooksSuccessful -and (Test-Path $resolvedBuildPath -ErrorAction SilentlyContinue)) {
+    if ($exitCode -ne 0 -and $logIndicatesSuccess) {
+        Write-Host "Note: Unity exited with code $exitCode, but build log reports success. Treating as successful build."
+    }
+    if ($resolvedBuildPath -ne $BuildPath) {
+        Write-Host "Note: expected output path differed; resolved build exe at: $resolvedBuildPath"
+    }
+    Write-Host "Build succeeded: $resolvedBuildPath"
+    $ts = (Get-Item $resolvedBuildPath).LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
     Write-Host "Exe timestamp: $ts"
     $dataFolder = Join-Path $BuildDir "StableProjectorz_Data"
     if (Test-Path $dataFolder) { Write-Host "Data folder: OK" }

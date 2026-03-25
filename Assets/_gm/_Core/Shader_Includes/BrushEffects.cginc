@@ -70,6 +70,11 @@ struct PaintInBrushStroke_Input{
     float brushAngleRad;
     // Brush roundness 0-1 (1 = circle). For elliptical tips.
     float brushRoundness01;
+    // 0 = symmetry off. 1 = screen mirror (x' = 1 - x). 2 = mesh mirror: use MirrorPrevNewBrushScreenCoord (xy=prev, zw=new).
+    float symmetryMode;
+    float4 MirrorPrevNewBrushScreenCoord;
+    // Additional rotation (radians) applied only on mirrored side, so directional tips align to mirrored stroke direction.
+    float symmetryMirrorAngleDeltaRad;
 };
 
 
@@ -125,7 +130,22 @@ float PaintInBrushStroke(PaintInBrushStroke_Input i){
     float roundness01 = i.brushRoundness01 > 0.0 ? i.brushRoundness01 : 1.0;
     float2 brushUV_curr = brushStampUV(i.fragScreenSpaceUV, brushNearPos, brushNearSize, i.screenAspectRatio, angleRad, roundness01);
     float wanted = sampleBrushStamp(i, brushUV_curr, brushNearStrength);
-    return max(wanted, i.currentBrushPath01);
+    float outv = max(wanted, i.currentBrushPath01);
+    if (i.symmetryMode < 0.5)
+        return outv;
+
+    float2 mPrev = (i.symmetryMode < 1.5)
+        ? float2(1.0 - brushPrevPos.x, brushPrevPos.y)
+        : i.MirrorPrevNewBrushScreenCoord.xy;
+    float2 mNew = (i.symmetryMode < 1.5)
+        ? float2(1.0 - brushNewPos.x, brushNewPos.y)
+        : i.MirrorPrevNewBrushScreenCoord.zw;
+    SegmentResult segM = nearestPointOnSegment(i.fragScreenSpaceUV, mPrev, mNew,
+        brushPrevSize, brushNewSize, brushPrevStrength, brushNewStrength, i.screenAspectRatio);
+    float angleRadM = angleRad + i.symmetryMirrorAngleDeltaRad;
+    float2 brushUV_m = brushStampUV(i.fragScreenSpaceUV, segM.nearestPoint, segM.interpolatedSize, i.screenAspectRatio, angleRadM, roundness01);
+    float wantedM = sampleBrushStamp(i, brushUV_m, segM.interpolatedStrength);
+    return max(outv, wantedM);
 }
 
 // Splotch mode: discrete stamps along the path. stampPosSizeStr[k] = (pos.x, pos.y, size, strength). stampCount 0 = use segment.
@@ -144,6 +164,19 @@ float PaintInBrushStroke_Splotches(PaintInBrushStroke_Input i, float4 stampPosSi
         float w = sampleBrushStamp(i, uv, strength);
         accum = max(accum, w);
     }
+    // Screen mirror only (mode 1). Mesh mirror duplicates stamps in C# and uses mode 0 here.
+    if (i.symmetryMode > 0.5 && i.symmetryMode < 1.5) {
+        for (int km = 0; km < stampCount; km++){
+            float2 centerM = float2(1.0 - stampPosSizeStr[km].x, stampPosSizeStr[km].y);
+            float sizeM = stampPosSizeStr[km].z;
+            float strengthM = stampPosSizeStr[km].w;
+            float2 size2M = float2(sizeM, sizeM);
+            float angleRadM = angleRad + i.symmetryMirrorAngleDeltaRad;
+            float2 uvM = brushStampUV(i.fragScreenSpaceUV, centerM, size2M, i.screenAspectRatio, angleRadM, roundness01);
+            float wM = sampleBrushStamp(i, uvM, strengthM);
+            accum = max(accum, wM);
+        }
+    }
     return accum;
 }
 
@@ -155,9 +188,19 @@ float Mask_by_CurrBrushCursor(PaintInBrushStroke_Input i){
     float angleRad = i.brushAngleRad;
     float roundness01 = i.brushRoundness01 > 0.0 ? i.brushRoundness01 : 1.0;
     float2 brushUV_curr = brushStampUV(i.fragScreenSpaceUV, brushNewPos, brushNewSize, i.screenAspectRatio, angleRad, roundness01);
-    if (brushUV_curr.x < 0.0 || brushUV_curr.x > 1.0 || brushUV_curr.y < 0.0 || brushUV_curr.y > 1.0)
-        return 0.0;
-    return tex2D(i.BrushStamp, brushUV_curr).r;
+    float a = 0.0;
+    if (brushUV_curr.x >= 0.0 && brushUV_curr.x <= 1.0 && brushUV_curr.y >= 0.0 && brushUV_curr.y <= 1.0)
+        a = tex2D(i.BrushStamp, brushUV_curr).r;
+    if (i.symmetryMode < 0.5)
+        return a;
+    float2 mPos = (i.symmetryMode < 1.5)
+        ? float2(1.0 - brushNewPos.x, brushNewPos.y)
+        : i.MirrorPrevNewBrushScreenCoord.zw;
+    float angleRadM = angleRad + i.symmetryMirrorAngleDeltaRad;
+    float2 brushUV_m = brushStampUV(i.fragScreenSpaceUV, mPos, brushNewSize, i.screenAspectRatio, angleRadM, roundness01);
+    if (brushUV_m.x >= 0.0 && brushUV_m.x <= 1.0 && brushUV_m.y >= 0.0 && brushUV_m.y <= 1.0)
+        a = max(a, tex2D(i.BrushStamp, brushUV_m).r);
+    return a;
 }
 
 #endif

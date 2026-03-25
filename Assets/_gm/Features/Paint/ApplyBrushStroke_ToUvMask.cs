@@ -11,6 +11,8 @@ namespace spz {
 	    [SerializeField] ComputeShader _brushStroke_intoMaskPovs;
 	    [SerializeField] ComputeShader _invertMask_shader; //used when user presses InvertMaskTool button.
 
+	    RenderTexture _smudgeCopyRT;
+
 
 	    //used when user presses InvertMaskTool button.
 	    public void InvertMask(RenderUdims invertThis, RenderUdims visibilityTexture){
@@ -134,6 +136,69 @@ namespace spz {
 	            maskIx += 1;
 	            alphabetIx += isPainted ? 0 : 1;
 	        }
+	    }
+
+
+	    /// <summary>Applies smudge: reads from a copy of the paint target, blurs under brush coverage, writes back.
+	    /// Call each frame during drag when smudge mode is active.</summary>
+	    public void Apply_smudge_to_ColorBrushTex( RenderTexture currBrushStroke_R8,
+	                                                float smudgeStrength01, float brushSize01, RenderUdims destin ){
+	        if (destin == null || destin.texArray == null || currBrushStroke_R8 == null) return;
+
+	        EnsureSmudgeCopy(destin.texArray);
+	        if (_smudgeCopyRT == null) return;
+
+	        Graphics.CopyTexture(destin.texArray, _smudgeCopyRT);
+
+	        int kernel = _brushStroke_intoMask.FindKernel("CSSmudge");
+
+	        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "BLEND_RGBA_ONCE", true);
+	        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "SMUDGE_MODE", true);
+
+	        _brushStroke_intoMask.SetTexture(kernel, "_CurrBrushStroke_R8", currBrushStroke_R8);
+	        _brushStroke_intoMask.SetTexture(kernel, "_PaintedMask", destin.texArray);
+	        _brushStroke_intoMask.SetTexture(kernel, "_SmudgeSourceCopy", _smudgeCopyRT);
+	        _brushStroke_intoMask.SetFloat("_MaxPossibleBrushStrength01", smudgeStrength01);
+
+	        float kernelSpacing = Mathf.Max(1f, brushSize01 * destin.width * 0.04f);
+	        _brushStroke_intoMask.SetFloat("_SmudgeKernelSpacing", kernelSpacing);
+	        _brushStroke_intoMask.SetInt("_SmudgeTexWidth", destin.width);
+	        _brushStroke_intoMask.SetInt("_SmudgeTexHeight", destin.height);
+
+	        var orm = Objects_Renderer_MGR.instance;
+	        RenderTexture chunksTex = orm != null ? orm.chunksTexture_ref()?.texArray : null;
+	        if (chunksTex == null){
+	            TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "SMUDGE_MODE", false);
+	            TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "BLEND_RGBA_ONCE", false);
+	            return;
+	        }
+	        _brushStroke_intoMask.SetTexture(kernel, "_UV_Chunks_R8", chunksTex);
+	        Vector4 chunks_scale = new Vector4(chunksTex.width/(float)currBrushStroke_R8.width,
+	                                            chunksTex.height/(float)currBrushStroke_R8.height, 0,0);
+	        _brushStroke_intoMask.SetVector("_UV_Chunks_scale", chunks_scale);
+
+	        Vector3Int grps = destin.CalcGroups_for_ComputeShader();
+	        _brushStroke_intoMask.Dispatch(kernel, grps.x, grps.y, grps.z);
+
+	        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "SMUDGE_MODE", false);
+	        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "BLEND_RGBA_ONCE", false);
+	    }
+
+	    void EnsureSmudgeCopy(RenderTexture source){
+	        bool ok = _smudgeCopyRT != null
+	                  && _smudgeCopyRT.width == source.width
+	                  && _smudgeCopyRT.height == source.height
+	                  && _smudgeCopyRT.volumeDepth == source.volumeDepth;
+	        if (ok) return;
+
+	        if (_smudgeCopyRT != null){ _smudgeCopyRT.Release(); DestroyImmediate(_smudgeCopyRT); }
+	        _smudgeCopyRT = new RenderTexture(source.descriptor);
+	        _smudgeCopyRT.enableRandomWrite = false;
+	        _smudgeCopyRT.Create();
+	    }
+
+	    void OnDestroy(){
+	        if (_smudgeCopyRT != null){ _smudgeCopyRT.Release(); DestroyImmediate(_smudgeCopyRT); }
 	    }
 
 

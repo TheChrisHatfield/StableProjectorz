@@ -6,8 +6,10 @@ Living document for `PaintUndo_*` and core touch points. **Do not** put implemen
 
 | Location | When | Purpose |
 |----------|------|---------|
-| [`Inpaint_MaskPainter.OnFinal_ApplyIncomingVals_intoMask`](../Assets/_gm/Features/Paint/Inpaint/Inpaint_MaskPainter.cs) | After `Apply_into_ColorBrushTex`, before/after ordering: see below | Schedules **pre-stroke** GPU capture via `PaintUndo_MGR` (CopyTexture → async readback → push undo) |
-| [`MaskPainter.isDoingSomethingElse`](../Assets/_gm/Features/Paint/MaskPainter.cs) | Every paint/drag gate | Blocks strokes while `PaintUndo_MGR.BlocksNewStroke` |
+| [`Inpaint_MaskPainter.OnFinal_ApplyIncomingVals_intoMask`](../Assets/_gm/Features/Paint/Inpaint/Inpaint_MaskPainter.cs) | Before `Apply_into_ColorBrushTex` | Schedules **pre-stroke** capture; non-stack tag `PaintUndoNonStackTarget.InpaintColor` (default overload). |
+| [`Background_Painter.OnFinal_ApplyIncomingVals_intoMask`](../Assets/_gm/Features/Paint/BG%20painter/Background_Painter.cs) | Before final blit into background mask | `SchedulePreStrokeCapture(mask, PaintUndoNonStackTarget.BackgroundGenMask)`. |
+| [`Projections_MaskPainter.OnRenderIntoCurrTex_please`](../Assets/_gm/Features/Paint/ProjectionsMasking/Projections_MaskPainter.cs) | First frame of stroke only, **single-POV** (`numPOV == 1`), before `Apply_into_MaskUtils` | `SchedulePreStrokeCapture(uvMask, PaintUndoNonStackTarget.ProjectionGenMask)`. Multi-POV: no capture (undo not wired for that path yet). |
+| [`MaskPainter.isDoingSomethingElse`](../Assets/_gm/Features/Paint/MaskPainter.cs) | Every paint/drag gate | Blocks strokes while `PaintUndo_MGR.BlocksNewStroke` (inpaint, background, and projection painters). |
 | [`PaintLayerStack_MGR.OnLayerStackStructureChanged`](../Assets/_gm/Features/Paint/Layers/PaintLayerStack_MGR.cs) | Add/remove/reorder, load, resolution/UDIM change | `PaintUndo_MGR` clears history (not on visibility/opacity — those use `OnLayersChanged` for UI only) |
 | [`PaintUndo_Input`](../Assets/_gm/Features/Paint/Undo/PaintUndo_Input.cs) | `Update` | Ctrl/Cmd+Z / redo shortcuts (not Unity **Ctrl+B** Build) |
 | [`Inpaint_MaskPainter.Awake`](../Assets/_gm/Features/Paint/Inpaint/Inpaint_MaskPainter.cs) | Startup | `PaintUndo_MGR.EnsureExists()` |
@@ -18,7 +20,9 @@ Living document for `PaintUndo_*` and core touch points. **Do not** put implemen
 
 **Deferred shortcuts:** `PaintUndo_MGR.TryUndo` / `TryRedo` used to no-op while `IsBusy` (capture coroutine running). Ctrl+Z during GPU readback/deflate is now **queued** (capped) and `ProcessDeferredUndoRedo` runs when capture finishes or after each restore—same global `PaintUndo_MGR` instance (`DontDestroyOnLoad`).
 
-**Global stroke order (all layers):** The undo list is **one chronological stack** for the session. Each entry stores the **actual** paint buffer: `SchedulePreStrokeCapture` uses `PaintLayerStack_MGR.IndexOfContent(paintTarget)` so metadata matches the layer whose `Content` was written, not only the active index. If the stroke went to the standalone `Inpaint_MaskPainter._ObjectUV_brushedColorRGBA` (layer `Content` not used), `LayerCount` is stored as **0** and restore writes that buffer — **not** `GetPaintTarget_Undo()` (which would follow the current active layer and felt “per current layer only”).
+**Global stroke order (all layers):** The undo list is **one chronological stack** for the session. Each entry stores the **actual** paint buffer: `SchedulePreStrokeCapture` uses `PaintLayerStack_MGR.IndexOfContent(paintTarget)` so metadata matches the layer whose `Content` was written, not only the active index. If the stroke went to the standalone `Inpaint_MaskPainter._ObjectUV_brushedColorRGBA` (layer `Content` not used), `LayerCount` is stored as **0** and restore uses `PaintUndo_SnapshotRecord.NonStackTargetKind` + `TryResolveNonStackRestoreTarget` — **not** guessing from the active layer.
+
+**Non-layer targets (`LayerCount` ≤ 0):** `PaintUndoNonStackTarget` distinguishes inpaint color vs background-gen mask vs single-POV projection mask so restore uploads to the correct `RenderUdims` (dimensions + `GraphicsFormat` must match the snapshot).
 
 ## Restore order (GPU + SD)
 

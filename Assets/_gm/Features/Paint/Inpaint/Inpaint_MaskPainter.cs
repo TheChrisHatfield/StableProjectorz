@@ -47,6 +47,7 @@ namespace spz {
 
 	    bool _subscribedActiveLayerChanged;
 	    bool _loggedDisplaySourceOnce;
+	    WorkflowRibbon_CurrMode _trackedWorkflowModeForSceneFlush;
 	    /// <summary>True while collapse runs. Skip scene injection so the new layer only gets the composite we copy.</summary>
 	    bool _isCollapsingLayers;
 	    /// <summary>Set by PaintLayerStack_MGR during collapse to suppress scene injection into the new layer.</summary>
@@ -367,6 +368,8 @@ namespace spz {
 	        var target = GetPaintTarget();
 	        if (target == null) return;
 	        Color col = SD_WorkflowOptionsRibbon_UI.instance.brushColor;
+	        PaintUndo_MGR.EnsureExists();
+	        PaintUndo_MGR.instance?.SchedulePreStrokeCapture(target);
 	        OnBucketFill_orDelete_button( col, target.texArray,  visibilTex:null );
 	        isPaintMaskEmpty = false;
 	    }
@@ -429,7 +432,8 @@ namespace spz {
 
 	    protected override float getBrushStrength(){//strength [0,1] --> [-1,1]
 	        var orib = SD_WorkflowOptionsRibbon_UI.instance;
-	        // Wacom stylus: eraser end = erase, tip = brush (overrides UI so first frame is correct)
+	        if (orib == null) return 0f;
+	        if (orib.isSmudge) return orib.maskBrushOpacity; // smudge always positive
 	        if (KeyMousePenInput.isPenEraserPressed()) return -orib.maskBrushOpacity;
 	        if (KeyMousePenInput.isPenTipPressed()) return orib.maskBrushOpacity;
 	        return orib.maskBrushOpacity * (orib.isPositive?1:-1);
@@ -511,11 +515,44 @@ namespace spz {
 	                                                                       _brushMaterial,  useClearingColor:false,  Color.clear, dontFrustumCull:true);
 	        _prevStrength = suggested_brushStrength;
 	        _latestBrushStroke_ref = currBrushStroke_R8;
+
+	        // Smudge: apply weighted-average blur under brush coverage each frame.
+	        bool smudgeActive = SD_WorkflowOptionsRibbon_UI.instance != null && SD_WorkflowOptionsRibbon_UI.instance.isSmudge;
+	        if (smudgeActive){
+	            if (_applyBrushStroke_toUvMask == null)
+	                _applyBrushStroke_toUvMask = FindObjectOfType<ApplyBrushStroke_ToUvMask>(true);
+	            if (_applyBrushStroke_toUvMask != null){
+	                if (isFirstFrameOfStroke){
+	                    PaintUndo_MGR.EnsureExists();
+	                    // Same undo entry as a normal stroke (one gesture). Must GPU-copy before smudge compute runs this frame — coroutine would run too late.
+	                    PaintUndo_MGR.instance?.SchedulePreStrokeCapture(target, PaintUndoNonStackTarget.InpaintColor, 0, immediateGpuCopyBeforeMutation: true);
+	                }
+	                float smudgeStr = SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity;
+	                float brushSize = BrushRibbon_UI_Size.GetBrushSize01();
+	                _applyBrushStroke_toUvMask.Apply_smudge_to_ColorBrushTex(currBrushStroke_R8, smudgeStr, brushSize, target);
+	                Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	            }
+	        }
 	    }
 
 
 	    protected override void OnFinal_ApplyIncomingVals_intoMask( RenderTexture prevBrushStroke_R8, 
 	                                                                RenderTexture currBrushStroke_R8 ){
+	        // Smudge already applies each frame during drag; just fire stroke end and re-render.
+	        bool smudgeActive = SD_WorkflowOptionsRibbon_UI.instance != null && SD_WorkflowOptionsRibbon_UI.instance.isSmudge;
+	        if (smudgeActive){
+	            var smTarget = GetPaintTarget();
+	            if (smTarget != null){
+	                Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	                RequestReRenderAfterGpuCommit(smTarget);
+	                var al = PaintLayerStack_MGR.instance?.ActiveLayer;
+	                if (al != null && smTarget == al.Content)
+	                    StartCoroutine(DeferredReRenderAfterStroke());
+	            }
+	            Act_OnPaintStrokeEnd?.Invoke();
+	            return;
+	        }
+
 	        var target = GetPaintTarget();
 	        if (target == null)
 	            target = _ObjectUV_brushedColorRGBA;
@@ -533,10 +570,8 @@ namespace spz {
 	        float sign =  Mathf.Sign(_prevStrength);
 	        float maxStrength = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity : 1f;
 
-	        // Paint undo hook — see docs/UNDO_INTEGRATION.md (pre-stroke GPU copy before compute applies stroke).
 	        PaintUndo_MGR.instance?.SchedulePreStrokeCapture(target);
 	        _applyBrushStroke_toUvMask.Apply_into_ColorBrushTex( prevBrushStroke_R8, currBrushStroke_R8, sign,  maxStrength,  target );
-	        // Compute writes to Content. When we use composite (2+ layers), the composite can be built before the GPU finishes; defer re-render so stroke appears.
 	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
 	        RequestReRenderAfterGpuCommit(target);
 	        var activeLayer = PaintLayerStack_MGR.instance?.ActiveLayer;
@@ -597,6 +632,11 @@ namespace spz {
 
 	        PaintLayerStack_MGR.OnLayerAdded += OnLayerAdded_InjectScene;
 	        UnityEngine.Debug.Log("[Inpaint_MaskPainter] Awake complete: OnLayerAdded subscribed, material created.");
+
+	        _trackedWorkflowModeForSceneFlush = WorkflowRibbon_UI.instance != null
+		        ? WorkflowRibbon_UI.instance.currentMode()
+		        : WorkflowRibbon_CurrMode.ProjectionsMasking;
+	        WorkflowRibbon_UI._Act_OnModeChanged += OnWorkflowModeChanged_ClearStaleSceneBuffer;
 
 	        if (SystemInfo.supportsConservativeRaster == false){
 	            DestroyImmediate(base._brushMaterial); //secretly swap the parent's material with a more suitable one
@@ -806,7 +846,21 @@ namespace spz {
 	    }
 
 
+	    /// <summary>After non-color/projection workflows, the scene snapshot buffer can hold stale data; clear on mode transitions that should start color-layer compositing from transparent base.</summary>
+	    void OnWorkflowModeChanged_ClearStaleSceneBuffer(WorkflowRibbon_CurrMode mode)
+	    {
+		    var prev = _trackedWorkflowModeForSceneFlush;
+		    _trackedWorkflowModeForSceneFlush = mode;
+		    bool enteringInpaint = mode == WorkflowRibbon_CurrMode.Inpaint_Color || mode == WorkflowRibbon_CurrMode.Inpaint_NoColor;
+		    if (!enteringInpaint) return;
+		    bool cameFromProjection = prev == WorkflowRibbon_CurrMode.ProjectionsMasking;
+		    bool noColorToColor = prev == WorkflowRibbon_CurrMode.Inpaint_NoColor && mode == WorkflowRibbon_CurrMode.Inpaint_Color;
+		    if (!cameFromProjection && !noColorToColor) return;
+		    _ObjectUV_brushedColorRGBA?.ClearTheTextures(Color.clear);
+	    }
+
 	    protected override void OnDestroy(){
+	        WorkflowRibbon_UI._Act_OnModeChanged -= OnWorkflowModeChanged_ClearStaleSceneBuffer;
 	        if (PaintLayerStack_MGR.instance != null)
 		        PaintLayerStack_MGR.instance.OnActiveLayerChanged -= OnActiveLayerChanged_EnsureContent;
 	        PaintLayerStack_MGR.OnLayerAdded -= OnLayerAdded_InjectScene;

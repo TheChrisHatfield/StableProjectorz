@@ -157,7 +157,8 @@ namespace spz {
 				if (row == null) continue;
 				var rowBg = row.GetComponent<Image>();
 				if (rowBg == null) continue;
-				bool isActive = i < _layerStack.Layers.Count && _layerStack.ActiveLayerIndex == i;
+				int layerIx = LayerIndexFromDisplay(i);
+				bool isActive = layerIx >= 0 && _layerStack.ActiveLayerIndex == layerIx;
 				rowBg.color = isActive ? RowBgActive : RowBgDefault;
 			}
 		}
@@ -178,8 +179,9 @@ namespace spz {
 			_renameRowIndex = index;
 			_layerStack.SetActiveLayer(index);
 
-			if (index >= _rows.Count || _rows[index] == null) return;
-			Transform nameRoot = _rows[index].transform.Find("Name");
+			int displayIx = DisplayIndexFromLayer(index);
+			if (displayIx < 0 || displayIx >= _rows.Count || _rows[displayIx] == null) return;
+			Transform nameRoot = _rows[displayIx].transform.Find("Name");
 			if (nameRoot == null) return;
 			Transform disp = nameRoot.Find("DisplayBlock");
 			Transform edit = nameRoot.Find("EditBlock");
@@ -230,8 +232,9 @@ namespace spz {
 
 		void ExitRenameDisplayMode(int index)
 		{
-			if (index < 0 || index >= _rows.Count || _rows[index] == null) return;
-			Transform nameRoot = _rows[index].transform.Find("Name");
+			int displayIx = DisplayIndexFromLayer(index);
+			if (displayIx < 0 || displayIx >= _rows.Count || _rows[displayIx] == null) return;
+			Transform nameRoot = _rows[displayIx].transform.Find("Name");
 			if (nameRoot == null) return;
 			Transform disp = nameRoot.Find("DisplayBlock");
 			Transform edit = nameRoot.Find("EditBlock");
@@ -254,8 +257,9 @@ namespace spz {
 
 		TMP_InputField FindRenameInput(int index)
 		{
-			if (index < 0 || index >= _rows.Count || _rows[index] == null) return null;
-			Transform edit = _rows[index].transform.Find("Name/EditBlock");
+			int displayIx = DisplayIndexFromLayer(index);
+			if (displayIx < 0 || displayIx >= _rows.Count || _rows[displayIx] == null) return null;
+			Transform edit = _rows[displayIx].transform.Find("Name/EditBlock");
 			return edit != null ? edit.GetComponentInChildren<TMP_InputField>(true) : null;
 		}
 
@@ -290,9 +294,10 @@ namespace spz {
 			_rows.Clear();
 
 			var layers = _layerStack.Layers;
-			for (int i = 0; i < layers.Count; i++)
+			for (int displayIx = 0; displayIx < layers.Count; displayIx++)
 			{
-				GameObject row = BuildRow(layers[i], i);
+				int layerIx = LayerIndexFromDisplay(displayIx);
+				GameObject row = BuildRow(layers[layerIx], layerIx);
 				if (row != null)
 					_rows.Add(row);
 			}
@@ -321,7 +326,7 @@ namespace spz {
 		{
 			if (_dragFromIndex < 0 || _listRoot == null || _layerStack == null) return;
 			RectTransformUtility.ScreenPointToLocalPointInRectangle(_listRoot, eventData.position, eventData.pressEventCamera, out Vector2 localPos);
-			int insertIdx = CalcInsertIndex(localPos);
+			int insertIdx = CalcInsertLayerIndex(localPos);
 			if (insertIdx != _dragInsertIndex)
 			{
 				_dragInsertIndex = insertIdx;
@@ -343,13 +348,14 @@ namespace spz {
 				Objects_Renderer_MGR.instance.EnsureInpaintColorLayerAppliedForCapture();
 		}
 
-		int CalcInsertIndex(Vector2 localPos)
+		int CalcInsertLayerIndex(Vector2 localPos)
 		{
 			if (_rows.Count == 0 || _layerStack == null) return 0;
 			float spacing = 2f;
 			float totalH = _rowHeight + spacing;
-			int rawIdx = Mathf.FloorToInt((-localPos.y) / totalH);
-			return Mathf.Clamp(rawIdx, 0, _layerStack.Layers.Count - 1);
+			int displayIdx = Mathf.FloorToInt((-localPos.y) / totalH);
+			displayIdx = Mathf.Clamp(displayIdx, 0, _layerStack.Layers.Count - 1);
+			return LayerIndexFromDisplay(displayIdx);
 		}
 
 		void EnsureDragInsertIndicator()
@@ -369,14 +375,29 @@ namespace spz {
 			ign.ignoreLayout = true;
 		}
 
-		void PositionInsertIndicator(int insertIdx)
+		void PositionInsertIndicator(int layerIndex)
 		{
 			if (_dragInsertIndicator == null || _listRoot == null) return;
 			_dragInsertIndicator.SetActive(true);
 			var rect = _dragInsertIndicator.GetComponent<RectTransform>();
 			float spacing = 2f;
-			float y = -(insertIdx * (_rowHeight + spacing)) - _rowHeight * 0.5f;
+			int displayIdx = DisplayIndexFromLayer(layerIndex);
+			float y = -(displayIdx * (_rowHeight + spacing)) - _rowHeight * 0.5f;
 			rect.anchoredPosition = new Vector2(0, y);
+		}
+
+		int LayerIndexFromDisplay(int displayIndex)
+		{
+			if (_layerStack == null) return displayIndex;
+			int n = _layerStack.Layers.Count;
+			return n - 1 - displayIndex;
+		}
+
+		int DisplayIndexFromLayer(int layerIndex)
+		{
+			if (_layerStack == null) return layerIndex;
+			int n = _layerStack.Layers.Count;
+			return n - 1 - layerIndex;
 		}
 
 		void HideInsertIndicator()
