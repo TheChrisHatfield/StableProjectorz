@@ -174,6 +174,11 @@ Shader "Custom/MultiProjectionShader"
             sampler2D _BrushStamp;//texture of the cursor, usually circular. Shader will move it to correct screen location.
             float4 _PrevNewBrushScreenCoord;
             float4 _BrushSize_andFirstFrameFlag;
+            float _BrushAngleRad;
+            float _BrushRoundness01;
+            float _SymmetryMode;
+            float4 _MirrorPrevNewBrushScreenCoord;
+            float _SymmetryMirrorAngleDeltaRad;
             int _Cursor_for_POV_ix; //should we preview some POV inside cursor. for example 0,1,2,3,4, or 5.
 
             sampler2D _MultiProj_WrongSide_Tex;
@@ -419,6 +424,12 @@ Shader "Custom/MultiProjectionShader"
                 pibs.brushStampStronger = 0;
                 pibs.BrushStrength01    = 0; //doesn't matter
                 pibs.currentBrushPath01 = 0; //doesn't matter.
+                pibs.normalDotView = 1.0;
+                pibs.brushAngleRad = _BrushAngleRad;
+                pibs.brushRoundness01 = _BrushRoundness01;
+                pibs.symmetryMode = _SymmetryMode;
+                pibs.MirrorPrevNewBrushScreenCoord = _MirrorPrevNewBrushScreenCoord;
+                pibs.symmetryMirrorAngleDeltaRad = _SymmetryMirrorAngleDeltaRad;
                 float mask01 = Mask_by_CurrBrushCursor(pibs);
                 return mask01;
             }

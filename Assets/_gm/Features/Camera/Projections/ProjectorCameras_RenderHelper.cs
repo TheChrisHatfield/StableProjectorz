@@ -103,8 +103,11 @@ namespace spz {
 	        putHere.SetVector("_PrevNewBrushScreenCoord", new Vector4(pointInViewport01.x, pointInViewport01.y, 
 	                                                                  pointInViewport01.x, pointInViewport01.y));
 	        putHere.SetVector("_BrushSize_andFirstFrameFlag", new Vector4(p.visibleBrushSize(), p.visibleBrushSize(), 0,0));
-	        Vector2 viewportSize = p.getViewportSize();
-	        putHere.SetFloat("_ScreenAspectRatio", viewportSize.x / viewportSize.y);
+	        putHere.SetFloat("_ScreenAspectRatio", MaskPainter.GetGameWindowAspectForBrushShader());
+	        putHere.SetFloat("_BrushAngleRad", BrushRibbon_UI_Size.GetBrushAngleDeg() * Mathf.Deg2Rad);
+	        putHere.SetFloat("_BrushRoundness01", BrushRibbon_UI_Size.GetBrushRoundness01() > 0f ? BrushRibbon_UI_Size.GetBrushRoundness01() : 1f);
+	        PaintSymmetryMesh.SetMaterialSymmetry(putHere, currViewCam.myCamera, pointInViewport01, pointInViewport01,
+		        BrushRibbon_UI_Size.GetPaintSymmetryXOn(), true);
 
 	        bool isPaintingMyIcon = p.isPainting_in_Generation(pCam._myGenData);
 	            bool showPreview  = mvRib._isEditingMode  &&  isPaintingMyIcon;  

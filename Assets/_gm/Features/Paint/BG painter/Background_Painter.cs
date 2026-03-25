@@ -11,6 +11,8 @@ namespace spz {
 	public class Background_Painter : MaskPainter{
 	    public static Background_Painter instance { get; private set; } = null;
 
+	    protected override bool useMeshPaintSymmetry () => false;
+
 	    [SerializeField] Shader _applyFinalBrushStroke_add_shader;
 	    [SerializeField] Shader _applyFinalBrushStroke_rmv_shader;
 	    [SerializeField] RectTransform _bgRectTransf;
@@ -216,6 +218,9 @@ namespace spz {
 	        float sign        = Mathf.Sign(_prevStrength);
 	        float maxStrength = Mathf.Abs(sign);
 
+	        PaintUndo_MGR.EnsureExists();
+	        PaintUndo_MGR.instance?.SchedulePreStrokeCapture(renderUdims, PaintUndoNonStackTarget.BackgroundGenMask);
+
 	        Material mat = sign>0? _applyFinalBrushStroke_add_mat : _applyFinalBrushStroke_rmv_mat;
 	        mat.SetTexture("_CurrBrushStroke", currBrushStroke_R8);
 	        mat.SetFloat("_MaxStrength", maxStrength);
@@ -232,6 +237,8 @@ namespace spz {
 	        if(DimensionMode_MGR.instance._dimensionMode != DimensionMode.dim_gen_3d){ return; }
 	        RenderUdims maskUDIM = current_BG_MaskRenderUdim();
 	        if(maskUDIM==null){ return; }
+	        PaintUndo_MGR.EnsureExists();
+	        PaintUndo_MGR.instance?.SchedulePreStrokeCapture(maskUDIM, PaintUndoNonStackTarget.BackgroundGenMask);
 	        // Fill with 1 or 0:
 	        Color fillC =  SD_WorkflowOptionsRibbon_UI.instance.isPositive? Color.white : Color.black;
 	        TextureTools_SPZ.ClearRenderTexture(maskUDIM.texArray, fillC);
@@ -255,6 +262,7 @@ namespace spz {
 	        _applyFinalBrushStroke_add_mat = new Material(_applyFinalBrushStroke_add_shader);
 	        _applyFinalBrushStroke_rmv_mat = new Material(_applyFinalBrushStroke_rmv_shader);
 	        base.Awake();
+	        PaintUndo_MGR.EnsureExists();
 	    }
 
 	    protected override void OnDestroy(){

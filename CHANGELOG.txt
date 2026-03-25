@@ -6,6 +6,49 @@ This file tracks changes on top of that baseline until the next release bump.
 
 -------------------------------------------------------------------------------
 
+[Unreleased]  |  Date: 2026-03-25  |  Topic: Smudge brush tool
+-------------------------------------------------------------------------------
+
+Summary
+  Adds a smudge brush as a third tool mode alongside paint and erase in the
+  inpaint brush direction strip. Smudging blends neighboring pixel colors under
+  the brush in real time during the stroke.
+
+New files
+  * BrushToolMode.cs — Paint, Smudge, Erase enum used by the direction toggle
+    strip and paint pipeline.
+
+Brush direction UI (SD_BrushRibbon_UI_Direction.cs, BrushRibbon_UI_Direction.cs)
+  * BrushRibbon_UI_Direction gains isSmudge, toolMode, SetToolMode(BrushToolMode).
+  * SD_BrushRibbon_UI_Direction.CreateSmudgeToggle_IfNeeded() programmatically
+    clones the brush toggle, inserts it between paint and erase, re-anchors all
+    three to vertical thirds, loads icon_smudge sprite.
+  * Cursor color set to gray when smudge is active.
+
+Smudge compute shader (ApplyBrushStroke_IntoMask.compute)
+  * New CSSmudge kernel: 5x5 weighted-average blur with spacing proportional to
+    brush size, applied only where the R8 brush stroke has coverage.
+  * Reads from _SmudgeSourceCopy (snapshot), writes to _PaintedMask.
+  * Reuses apply_brush_stroke_smudge() from Brush_ApplyFinalStroke_ToMask.cginc.
+
+C# wiring
+  * ApplyBrushStroke_ToUvMask.Apply_smudge_to_ColorBrushTex() — copies paint
+    target to temp RT, dispatches CSSmudge with BLEND_RGBA_ONCE + SMUDGE_MODE.
+  * Inpaint_MaskPainter.OnRenderIntoCurrTex_please() — when smudge active,
+    dispatches smudge compute each frame during drag (undo on first frame).
+  * Inpaint_MaskPainter.OnFinal_ApplyIncomingVals_intoMask() — skips normal
+    color-apply when smudge; fires stroke-end event and re-render.
+  * Inpaint_MaskPainter.getBrushStrength() — returns positive opacity for smudge.
+  * SD_WorkflowOptionsRibbon_UI — exposes isSmudge and brushToolMode.
+
+Notes for testers
+  * Smudge only affects inpaint color painting (not projection masks or backgrounds).
+  * If the smudge icon does not appear, assign icon_smudge.png as a sprite in a
+    Resources folder or via the serialized field on the prefab.
+  * Undo captures the paint target on the first frame of the smudge stroke.
+
+-------------------------------------------------------------------------------
+
 [Unreleased]  |  Date: 2026-03-11  |  Topic: Paint layer stack / inpaint → mesh / SD bridge
 -------------------------------------------------------------------------------
 
@@ -140,3 +183,41 @@ Settings (Settings_MGR.cs / Settings_UI.cs)
 
 Documentation
   • docs/PAINT_UNDO_SPEC.md, docs/UNDO_INTEGRATION.md, docs/PAINT_UNDO_PROFILING.md
+
+-------------------------------------------------------------------------------
+
+Paint undo — Thompson / contextual / capture bandit + scratch split (2026-03-24)
+-------------------------------------------------------------------------------
+
+PaintUndo_Scheduler.cs
+  • RestoreBudgetPolicy: FixedMiddle, Ucb1, Thompson; Thompson per bucket + decay
+    on BeginRestoreSession; RegisterRestoreBanditObservation (UCB continuous /
+    Thompson binarized); RegisterUcbReward obsolete.
+  • Capture bandit: discrete arms for readback inflight + yield frames; cold-start
+    per bucket then Thompson; hitch window after capture updates posteriors.
+
+PaintUndo_MGR.cs
+  • _scratchRestore vs _scratchCapture[0/1] ping-pong; optional eager GPU copy for
+    single queued capture; inspector: restore policy, capture bandit, min pulls,
+    ping-pong, eager copy.
+
+-------------------------------------------------------------------------------
+
+UI text undo — all TMP_InputField (2026-03-24)
+-------------------------------------------------------------------------------
+
+Assets/_gm/_Core/UI (reusable)/UiTextUndo/
+  • UiTextUndo_MGR + UiTextUndo_Input: RuntimeInitializeOnLoadMethod bootstrap;
+    per-field undo/redo stacks; periodic rescan for new TMP fields.
+  • Shortcuts while TMP focused: Ctrl/Cmd+Z (undo); Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z
+    (redo). Complements PaintUndo_Input (viewport undo when no field focused).
+
+-------------------------------------------------------------------------------
+
+Command ribbon — Paint tab inactive = like other tabs (2026-03-24)
+-------------------------------------------------------------------------------
+
+CommandRibbon_UI.cs
+  • Runtime Paint tab: TabBg = invisible raycast plane only; flared sliced sprite
+    and colors only on go active (selected), matching prefab tab behavior.
+  • CopySlicedTabImageTuningFromReference(activeImg only).

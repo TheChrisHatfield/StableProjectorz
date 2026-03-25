@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
@@ -46,11 +47,39 @@ namespace spz {
 	        if(genData._masking_utils == null){ return; }
 
 	        Color col = SD_WorkflowOptionsRibbon_UI.instance.isPositive? Color.white : Color.black;
+	        PaintUndo_MGR.EnsureExists();
+	        StartCoroutine(BucketFillWithUndo_Coroutine(genData, col));
+	    }
 
-	        for(int i=0;  i<genData._masking_utils._ObjectUV_brushedMaskR8.Count;  ++i){
-	            RenderUdims br  = genData._masking_utils._ObjectUV_brushedMaskR8[i];
-	            RenderUdims vis = genData._masking_utils._ObjectUV_visibilityR8G8[i];
-	            if(br==null){ continue; }
+	    /// <summary>True while the main selected art icon still owns this generation data (user did not switch icons / deselect).</summary>
+	    bool BucketFillTargetStillCurrent (GenData2D startedWith) =>
+	        startedWith != null && getGenData_currentIcon() == startedWith;
+
+	    /// <summary>Capture each POV mask to undo before modifying it. Waits for each capture to finish so later POVs are not snapshotted after fill.</summary>
+	    IEnumerator BucketFillWithUndo_Coroutine (GenData2D targetGenData, Color col){
+	        var mu = targetGenData._masking_utils;
+	        if (mu == null)
+		        yield break;
+
+	        for (int i = 0; i < mu._ObjectUV_brushedMaskR8.Count; ++i){
+	            if (!BucketFillTargetStillCurrent(targetGenData))
+		            yield break;
+
+	            RenderUdims br = mu._ObjectUV_brushedMaskR8[i];
+	            RenderUdims vis = mu._ObjectUV_visibilityR8G8[i];
+	            if (br == null)
+		            continue;
+
+	            PaintUndo_MGR.instance?.SchedulePreStrokeCapture(br, PaintUndoNonStackTarget.ProjectionGenMask, i);
+	            while (PaintUndo_MGR.instance != null && PaintUndo_MGR.instance.IsBusy) {
+		            if (!BucketFillTargetStillCurrent(targetGenData))
+			            yield break;
+		            yield return null;
+	            }
+
+	            if (!BucketFillTargetStillCurrent(targetGenData))
+		            yield break;
+
 	            OnBucketFill_orDelete_button(col, br.texArray, vis.texArray);
 	        }
 	    }
@@ -164,8 +193,20 @@ namespace spz {
 	        float sign = Mathf.Sign(suggested_brushStrength);
 	        if (_applyBrushStroke_toUvMask == null)
 	            _applyBrushStroke_toUvMask = FindObjectOfType<ApplyBrushStroke_ToUvMask>(true);
-	        if (_applyBrushStroke_toUvMask != null)
+	        if (_applyBrushStroke_toUvMask != null) {
+	            var mu = genData._masking_utils;
+	            // Single-POV only: Apply_intoMask_multiView can write every POV mask in one dispatch (shrink others).
+	            // Undo is one snapshot per stack entry; capturing only the active POV would leave other masks wrong on restore.
+	            if (isFirstFrameOfStroke && mu != null && mu.numPOV == 1 && mu._ObjectUV_brushedMaskR8 != null
+	                && povIx >= 0 && povIx < mu._ObjectUV_brushedMaskR8.Count) {
+	                var uvMask = mu._ObjectUV_brushedMaskR8[povIx];
+	                if (uvMask != null && uvMask.texArray != null) {
+	                    PaintUndo_MGR.EnsureExists();
+	                    PaintUndo_MGR.instance?.SchedulePreStrokeCapture(uvMask, PaintUndoNonStackTarget.ProjectionGenMask, povIx);
+	                }
+	            }
 	            _applyBrushStroke_toUvMask.Apply_into_MaskUtils(prevBrushStroke_R8, currBrushStroke_R8,  sign,  genData._masking_utils, povIx);
+	        }
 	        else
 	            Debug.LogWarning("[Projections_MaskPainter] ApplyBrushStroke_ToUvMask not found. Mask will not persist.");
 
@@ -209,6 +250,8 @@ namespace spz {
 	        }
 
 	        base.Awake();
+
+	        PaintUndo_MGR.EnsureExists();
 
 	        if (SystemInfo.supportsConservativeRaster == false){
 	            DestroyImmediate(base._brushMaterial);

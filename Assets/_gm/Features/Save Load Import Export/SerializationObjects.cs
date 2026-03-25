@@ -468,6 +468,16 @@ namespace spz {
 	    public float maskBrush_angleDeg;
 	    /// <summary> Brush roundness 0–1 (1 = circle). For elliptical tips. </summary>
 	    public float maskBrush_roundness01;
+	    /// <summary> Mirror brush across vertical center of viewport (x = 0.5). </summary>
+	    public bool maskBrush_symmetryX;
+	    /// <summary> 0 = none, 1 = light, 2 = medium viewport jitter per stamp. </summary>
+	    public int maskBrush_scatterMode;
+	    /// <summary> 0 = fixed angle from ribbon, 1 = add stroke direction to angle. </summary>
+	    public int maskBrush_tipAngleMode;
+	    /// <summary> 0 = auto (selection bounds + mesh right), 1 = view (camera.right through bounds center), 2 = face pick (stored point+normal). </summary>
+	    public int maskBrush_symmetryPlaneSource;
+	    public Vector3Serializable maskBrush_symmetryPlanePoint;
+	    public Vector3Serializable maskBrush_symmetryPlaneNormal;
 	    public bool maskBrush_showText;
 	    public bool isColorlessMask;
 	}

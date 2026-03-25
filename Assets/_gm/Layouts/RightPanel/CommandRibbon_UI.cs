@@ -25,8 +25,14 @@ namespace spz {
 	    [SerializeField] RectTransform _SD_ControlNets_List_Panel;
 	    [Tooltip("Paint tab content: workflow toggles, brush options, alpha picker, palette swatches. Add a tab with title 'Paint' in TabsGroup and assign this panel.")]
 	    [SerializeField] RectTransform _Paint_Panel;
+	    [Tooltip("Sliced tab background (e.g. tab_ui). If unset, copied from first prefab tab on the strip at runtime.")]
+	    [SerializeField] Sprite _paintTabSliceSprite;
+	    [Tooltip("TMP font for the Paint tab label. If unset, copied from first prefab tab on the strip.")]
+	    [SerializeField] TMP_FontAsset _paintTabFont;
 	    [Space(10)]
 	    [SerializeField] Animation _ctrlNetButton_anim;
+
+	    const float kPaintTabLabelFontSize = 18f;
 
 	    // One tab + one panel per addon (Blender N-panel style)
 	    Dictionary<string, RectTransform> _addonPanelsById = new Dictionary<string, RectTransform>();
@@ -252,24 +258,53 @@ namespace spz {
 	        tabLE.minHeight = -1f;
 	        tabLE.preferredWidth = -1f;
 	        tabLE.preferredHeight = -1f;
-	        var tabImg = tabGo.AddComponent<Image>();
-	        tabImg.color = new Color(0.35f, 0.35f, 0.38f, 1f); // dark gray to match other tabs so "Paint" text is visible
-	        tabImg.raycastTarget = true;
+	        // Prefab tabs: no Image on root — sliced tab_ui under children (matches silhouette of other strip tabs).
 	        var tabBtn = tabGo.AddComponent<Button>();
-	        tabBtn.targetGraphic = tabImg;
-	        // Active-state highlight (same structure as prefab tabs: show when selected)
-	        var goActive = new GameObject("Active");
+
+	        var goTabBg = new GameObject("TabBg");
+	        goTabBg.transform.SetParent(tabGo.transform, false);
+	        goTabBg.transform.SetAsFirstSibling();
+	        var tabBgRect = goTabBg.AddComponent<RectTransform>();
+	        tabBgRect.anchorMin = Vector2.zero;
+	        tabBgRect.anchorMax = Vector2.one;
+	        tabBgRect.sizeDelta = Vector2.zero;
+	        tabBgRect.anchoredPosition = Vector2.zero;
+	        var tabBgImg = goTabBg.AddComponent<Image>();
+	        // Prefab tabs have no always-on tab slab; only "go active" shows the flared slice.
+	        // Keep this as a subtle interaction plane so hover/press has feedback.
+	        tabBgImg.sprite = null;
+	        tabBgImg.type = Image.Type.Simple;
+	        tabBgImg.color = Color.white;
+	        tabBgImg.raycastTarget = true;
+	        tabBtn.targetGraphic = tabBgImg;
+	        var tabBtnColors = tabBtn.colors;
+	        tabBtnColors.normalColor = new Color(1f, 1f, 1f, 0f);
+	        tabBtnColors.highlightedColor = new Color(1f, 1f, 1f, 0.08f);
+	        tabBtnColors.pressedColor = new Color(1f, 1f, 1f, 0.14f);
+	        tabBtnColors.selectedColor = new Color(1f, 1f, 1f, 0f);
+	        tabBtnColors.disabledColor = new Color(1f, 1f, 1f, 0f);
+	        tabBtn.colors = tabBtnColors;
+
+	        var goActive = new GameObject("go active");
 	        goActive.transform.SetParent(tabGo.transform, false);
 	        var activeRect = goActive.AddComponent<RectTransform>();
 	        activeRect.anchorMin = Vector2.zero;
 	        activeRect.anchorMax = Vector2.one;
 	        activeRect.sizeDelta = Vector2.zero;
 	        activeRect.anchoredPosition = Vector2.zero;
-	        var activeImg = goActive.AddComponent<Image>();
-	        activeImg.color = new Color(0.45f, 0.6f, 0.8f, 1f); // lighter blue/green so it's more visible when selected
+	        var activeInner = new GameObject("image");
+	        activeInner.transform.SetParent(goActive.transform, false);
+	        var activeInnerRt = activeInner.AddComponent<RectTransform>();
+	        activeInnerRt.anchorMin = Vector2.zero;
+	        activeInnerRt.anchorMax = Vector2.one;
+	        activeInnerRt.sizeDelta = Vector2.zero;
+	        activeInnerRt.anchoredPosition = Vector2.zero;
+	        var activeImg = activeInner.AddComponent<Image>();
+	        activeImg.color = new Color(0.32941177f, 0.32941177f, 0.32941177f, 1f);
 	        activeImg.raycastTarget = false;
 	        goActive.SetActive(false);
-	        var tabTextGo = new GameObject("Text");
+
+	        var tabTextGo = new GameObject("Input (text)");
 	        tabTextGo.transform.SetParent(tabGo.transform, false);
 	        var tabTextRect = tabTextGo.AddComponent<RectTransform>();
 	        tabTextRect.anchorMin = Vector2.zero;
@@ -277,12 +312,17 @@ namespace spz {
 	        tabTextRect.sizeDelta = Vector2.zero;
 	        var tabText = tabTextGo.AddComponent<TextMeshProUGUI>();
 	        tabText.text = "Paint";
-	        tabText.fontSize = 12;
+	        tabText.fontSize = kPaintTabLabelFontSize;
+	        tabText.enableAutoSizing = false;
 	        tabText.color = Color.white;
 	        tabText.alignment = TextAlignmentOptions.Center;
+	        tabText.verticalAlignment = TMPro.VerticalAlignmentOptions.Middle;
 	        tabText.raycastTarget = false;
-	        tabText.enableWordWrapping = false;
+	        tabText.textWrappingMode = TMPro.TextWrappingModes.Normal;
 	        tabText.overflowMode = TMPro.TextOverflowModes.Ellipsis;
+
+	        ApplyPaintTabStripVisuals(tabStrip, tabGo, tabBgImg, activeImg, tabText);
+
 	        var tabElem = tabGo.AddComponent<TabsGroupElem_UI>();
 	        tabElem.InitForRuntime("paint", tabBtn);
 	        tabElem.SetRuntimeActiveHighlight(goActive);
@@ -441,7 +481,7 @@ namespace spz {
 	        tabText.color = Color.white;
 	        tabText.alignment = TextAlignmentOptions.Center;
 	        tabText.raycastTarget = false;
-	        tabText.enableWordWrapping = false;
+	        tabText.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
 	        tabText.overflowMode = TMPro.TextOverflowModes.Ellipsis;
 
 	        var tabElem = tabGo.AddComponent<TabsGroupElem_UI>();
@@ -461,6 +501,108 @@ namespace spz {
 	        StartCoroutine(RebuildTabStripLayoutNextFrame(tabStrip));
 	        
 	        return panelRect;
+	    }
+
+	    void ApplyPaintTabStripVisuals(Transform tabStrip, GameObject paintTabGo, Image tabBgImg, Image activeImg, TextMeshProUGUI tabText)
+	    {
+	        if (tabBgImg != null) {
+	            tabBgImg.sprite = null;
+	            tabBgImg.type = Image.Type.Simple;
+	            tabBgImg.color = new Color(1f, 1f, 1f, 0f);
+	            tabBgImg.raycastTarget = true;
+	        }
+	        Sprite slice = _paintTabSliceSprite;
+	        var refElem = FindFirstNonPaintTabOnStrip(tabStrip, paintTabGo.transform);
+	        if (refElem != null)
+	        {
+	            CopyPaintTabLabelStyleFromReference(refElem, tabText);
+	            if (slice == null)
+	                slice = FindFirstSlicedTabSpriteUnder(refElem.transform);
+	        }
+	        if (_paintTabFont != null && tabText != null)
+	        {
+	            tabText.font = _paintTabFont;
+	            tabText.fontSharedMaterial = _paintTabFont.material;
+	        }
+	        // Active state only: same as other ribbon tabs (flared slice lives under go active, toggled off when deselected).
+	        if (slice != null)
+	        {
+	            activeImg.sprite = slice;
+	            activeImg.type = Image.Type.Sliced;
+	        }
+	        if (refElem != null)
+	            CopySlicedTabImageTuningFromReference(refElem, activeImg);
+	        else if (slice != null)
+	            activeImg.pixelsPerUnitMultiplier = 6f;
+	    }
+
+	    static TabsGroupElem_UI FindFirstNonPaintTabOnStrip(Transform tabStrip, Transform paintTabRoot)
+	    {
+	        if (tabStrip == null) return null;
+	        foreach (var elem in tabStrip.GetComponentsInChildren<TabsGroupElem_UI>(true))
+	        {
+	            if (elem == null || paintTabRoot != null && elem.transform == paintTabRoot) continue;
+	            if (elem.gameObject.name.IndexOf("paint", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+	            return elem;
+	        }
+	        return null;
+	    }
+
+	    static void CopyPaintTabLabelStyleFromReference(TabsGroupElem_UI reference, TextMeshProUGUI tabText)
+	    {
+	        if (reference == null || tabText == null) return;
+	        var tmp = reference.GetComponentInChildren<TextMeshProUGUI>(true);
+	        if (tmp == null) return;
+	        tabText.font = tmp.font;
+	        tabText.fontSharedMaterial = tmp.fontSharedMaterial;
+	        tabText.fontSize = tmp.fontSize;
+	        tabText.fontWeight = tmp.fontWeight;
+	        tabText.alignment = tmp.alignment;
+	        tabText.textWrappingMode = tmp.textWrappingMode;
+	        tabText.overflowMode = tmp.overflowMode;
+	    }
+
+	    static Sprite FindFirstSlicedTabSpriteUnder(Transform tabRoot)
+	    {
+	        if (tabRoot == null) return null;
+	        foreach (var img in tabRoot.GetComponentsInChildren<Image>(true))
+	        {
+	            if (img.sprite != null && img.type == Image.Type.Sliced)
+	                return img.sprite;
+	        }
+	        return null;
+	    }
+
+	    static void CopySlicedTabImageTuningFromReference(TabsGroupElem_UI reference, Image activeImg)
+	    {
+	        if (reference == null || activeImg == null) return;
+	        Image template = null;
+	        foreach (var img in reference.GetComponentsInChildren<Image>(true))
+	        {
+	            if (img.sprite == null || img.type != Image.Type.Sliced) continue;
+	            Transform p = img.transform.parent;
+	            if (p != null && p.name.IndexOf("active", StringComparison.OrdinalIgnoreCase) >= 0)
+	            {
+	                template = img;
+	                break;
+	            }
+	        }
+	        if (template == null)
+	        {
+	            foreach (var img in reference.GetComponentsInChildren<Image>(true))
+	            {
+	                if (img.sprite != null && img.type == Image.Type.Sliced)
+	                {
+	                    template = img;
+	                    break;
+	                }
+	            }
+	        }
+	        if (template == null) return;
+	        float ppu = template.pixelsPerUnitMultiplier;
+	        if (ppu > 0.001f)
+	            activeImg.pixelsPerUnitMultiplier = ppu;
+	        activeImg.color = template.color;
 	    }
 
 	    IEnumerator RebuildTabStripLayoutNextFrame(Transform tabStrip){

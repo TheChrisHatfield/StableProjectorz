@@ -60,7 +60,9 @@ namespace spz {
 	    public Texture2D _brushHardnessTex => _brushHardness._brushHardnessTex;
 
 	    public bool direction => _direction.isPositive;
-	    public bool isPositive => _direction.isPositive; //are we adding or erasing color with the brush.
+	    public bool isPositive => _direction.isPositive;
+	    public bool isSmudge => _direction.isSmudge;
+	    public BrushToolMode brushToolMode => _direction.toolMode;
 	    public Color brushColor => _brushColor._brushColor;
 	    public float maskBrushOpacity => _brushOpacity._maskBrushOpacity;
 

@@ -2135,7 +2135,7 @@ namespace SimpleFileBrowser
         {
             // 1. Find the type by name in the main game assembly
             // "Assembly-CSharp" is the default assembly name for scripts in Assets/Scripts
-            System.Type type = System.Type.GetType("GlobalClickBlocker, Assembly-CSharp");
+            System.Type type = System.Type.GetType("spz.GlobalClickBlocker, Assembly-CSharp");
 
             if (type == null)
             {

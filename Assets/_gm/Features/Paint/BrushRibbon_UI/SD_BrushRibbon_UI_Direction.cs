@@ -14,56 +14,53 @@ namespace spz {
 	    [SerializeField] BrushRibbon_UI_Colors _colors;
     
 	    void OnUpdateDirection_Mode( WorkflowRibbon_CurrMode currMode ){
-	        //for convenience. We erase masks of 3d objects usually, and for inpaint - usually add.
 	        switch (currMode){
 	            case WorkflowRibbon_CurrMode.ProjectionsMasking:
-	                //Check if this change in mode was due to user previewing the projection.
-	                //If so, keep the direction as is, to avoid frustration:
 	                if(Keyboard.current.rKey.isPressed){ return; }
-	                SetDirection_Toggle(false);
+	                SetToolMode(BrushToolMode.Erase);
 	                break;
-	            case WorkflowRibbon_CurrMode.Inpaint_Color: SetDirection_Toggle(true); break;
-	            case WorkflowRibbon_CurrMode.Inpaint_NoColor: SetDirection_Toggle(true); break;
-	            case WorkflowRibbon_CurrMode.TotalObject: SetDirection_Toggle(true); break;
-	            case WorkflowRibbon_CurrMode.WhereEmpty: SetDirection_Toggle(true); break;
+	            case WorkflowRibbon_CurrMode.Inpaint_Color: SetToolMode(BrushToolMode.Paint); break;
+	            case WorkflowRibbon_CurrMode.Inpaint_NoColor: SetToolMode(BrushToolMode.Paint); break;
+	            case WorkflowRibbon_CurrMode.TotalObject: SetToolMode(BrushToolMode.Paint); break;
+	            case WorkflowRibbon_CurrMode.WhereEmpty: SetToolMode(BrushToolMode.Paint); break;
 	            default: break;
 	        }
 	    }
 
 	    protected void OnStartedEditMode_MultiView( MultiView_StartEditMode_Args args ){
-	        //if our icon is for multi-view, change to white brush. 
-	        //Because rather than erase, we usually want to "increase" the POV's appearance,
-	        //to dominate it over its sibling POVs:
 	        IconUI icon = Art2D_IconsUI_List.instance._mainSelectedIcon;
 	        if (icon != null){
 	            bool isMultiPOV =  icon._genData.povInfos.numEnabled > 1;
-	            if(isMultiPOV){  SetDirection_Toggle(true);  }
+	            if(isMultiPOV){  SetToolMode(BrushToolMode.Paint);  }
 	        }
 	    }
 
 	    void OnUpdateDirection_Toggle(Toggle toggle, bool isOn){
-	        if(!isOn){ return; } //toggles are in a mutually-exclusive group, so care only if ON.
-	        // Don't allow if we are currently dragging on the screen, painting.
-	        // Brush stroke must remain of the same color until the mouse button is released.
+	        if(!isOn){ return; }
 	        if(Projections_MaskPainter.instance._isPainting){ return; }
 	        if(Inpaint_MaskPainter.instance._isPainting){ return; }
 
-	        bool isPositive =  toggle == _brushAdd_Toggle;
-	        Cursor_UI.instance.SetCursorColor( isPositive? Color.white : Color.black );
+	        if (toggle == _brushSmudge_Toggle){
+	            Cursor_UI.instance.SetCursorColor( new Color(0.5f, 0.5f, 0.5f, 1f) );
+	        } else {
+	            bool positive = toggle == _brushAdd_Toggle;
+	            Cursor_UI.instance.SetCursorColor( positive? Color.white : Color.black );
+	        }
 	    }
 
 
 	    void OnBrushStrokeEnd(){
-	        base._anim.Play(); //little bouncing animation, so that user can see that they are painting negatively or positively.
+	        base._anim.Play();
 	    }
 
 
 	    protected override void Awake(){
 	        base.Awake();
+	        CreateSmudgeToggle_IfNeeded();
 	        MultiView_Ribbon_UI.OnStartEditMode += OnStartedEditMode_MultiView;
         
 	        if(_colors != null){ 
-	            _colors._onBrushColorUpdated += (Color col)=>SetDirection_Toggle(true);
+	            _colors._onBrushColorUpdated += (Color col)=>SetToolMode(BrushToolMode.Paint);
 	        }
 	        if(_rib!=null){
 	            WorkflowRibbon_UI._Act_OnModeChanged += OnUpdateDirection_Mode;
@@ -73,16 +70,114 @@ namespace spz {
 
 	        _brushAdd_Toggle.onValueChanged.AddListener( (isOn)=>OnUpdateDirection_Toggle(_brushAdd_Toggle, isOn) );
 	        _brushErase_Toggle.onValueChanged.AddListener( (isOn)=>OnUpdateDirection_Toggle(_brushErase_Toggle, isOn) );
-	    }//void Awake()
+	        if (_brushSmudge_Toggle != null)
+	            _brushSmudge_Toggle.onValueChanged.AddListener( (isOn)=>OnUpdateDirection_Toggle(_brushSmudge_Toggle, isOn) );
+	    }
 
     
 	    protected override void Start(){
 	        base.Start();
-	        // Usually at the start, users do single-projection, which it makes sense to erase.
-	        // Notice, we also have 'OnStartedEditMode_MultiView', where we can force brush color as white :)
-	        _brushAdd_Toggle.SetIsOnWithoutNotify(true);
-	        _brushErase_Toggle.SetIsOnWithoutNotify(false);
-	        SetDirection_Toggle(false);
+	        // Default state must be internally consistent: Erase selected, others off.
+	        _brushAdd_Toggle.SetIsOnWithoutNotify(false);
+	        _brushErase_Toggle.SetIsOnWithoutNotify(true);
+	        if (_brushSmudge_Toggle != null) _brushSmudge_Toggle.SetIsOnWithoutNotify(false);
+	        if (Cursor_UI.instance != null)
+	            Cursor_UI.instance.SetCursorColor(Color.black);
+	    }
+
+	    void CreateSmudgeToggle_IfNeeded(){
+	        if (_brushSmudge_Toggle != null) return;
+	        if (_brushAdd_Toggle == null || _brushErase_Toggle == null) return;
+
+	        GameObject cloneSrc = _brushAdd_Toggle.gameObject;
+	        Transform parent = cloneSrc.transform.parent;
+	        if (parent == null) return;
+
+	        GameObject smudgeGO = Instantiate(cloneSrc, parent);
+	        smudgeGO.name = "SmudgeBrush_Toggle";
+
+	        _brushSmudge_Toggle = smudgeGO.GetComponent<Toggle>();
+	        if (_brushSmudge_Toggle == null){
+	            Destroy(smudgeGO);
+	            return;
+	        }
+
+	        ToggleGroup grp = _brushAdd_Toggle.group;
+	        if (grp != null) _brushSmudge_Toggle.group = grp;
+	        _brushSmudge_Toggle.SetIsOnWithoutNotify(false);
+
+	        // Adjust anchor positions: brush=top third, smudge=middle third, eraser=bottom third
+	        RectTransform addRect = _brushAdd_Toggle.GetComponent<RectTransform>();
+	        RectTransform smudgeRect = smudgeGO.GetComponent<RectTransform>();
+	        RectTransform eraseRect = _brushErase_Toggle.GetComponent<RectTransform>();
+
+	        const float third = 1f / 3f;
+	        const float pad = 0.015f;
+	        float baseLeft = addRect != null ? addRect.anchorMin.x : 0f;
+	        float baseRight = addRect != null ? addRect.anchorMax.x : 1f;
+
+	        if (addRect != null){
+	            addRect.anchorMin = new Vector2(addRect.anchorMin.x, 2 * third + pad);
+	            addRect.anchorMax = new Vector2(addRect.anchorMax.x, 1f);
+	            baseLeft = addRect.anchorMin.x;
+	            baseRight = addRect.anchorMax.x;
+	        }
+	        if (smudgeRect != null){
+	            smudgeRect.anchorMin = new Vector2(baseLeft, third + pad);
+	            smudgeRect.anchorMax = new Vector2(baseRight, 2 * third - pad);
+	            smudgeRect.offsetMin = Vector2.zero;
+	            smudgeRect.offsetMax = Vector2.zero;
+	            smudgeRect.SetSiblingIndex(_brushAdd_Toggle.transform.GetSiblingIndex() + 1);
+	        }
+	        if (eraseRect != null){
+	            eraseRect.anchorMin = new Vector2(eraseRect.anchorMin.x, 0f);
+	            eraseRect.anchorMax = new Vector2(eraseRect.anchorMax.x, third - pad);
+	        }
+
+	        // Increase parent layout element height to fit 3 toggles
+	        var rootLayout = GetComponent<LayoutElement>();
+	        if (rootLayout != null && rootLayout.minHeight < 200f)
+	            rootLayout.minHeight = 210f;
+
+	        TrySetSmudgeIcon(smudgeGO);
+	    }
+
+	    void TrySetSmudgeIcon(GameObject smudgeGO){
+	        Transform iconTr = smudgeGO.transform.Find("icon");
+	        if (iconTr == null){
+	            foreach (Transform child in smudgeGO.transform){
+	                Image img = child.GetComponent<Image>();
+	                if (img != null && img.sprite != null){ iconTr = child; break; }
+	            }
+	        }
+	        if (iconTr == null) return;
+	        Image iconImage = iconTr.GetComponent<Image>();
+	        if (iconImage == null) return;
+
+	        Sprite loaded = TryLoadSmudgeSprite();
+	        // Sprite is white line-art on transparent (same convention as brush/erase); black Image tint → visible glyph.
+	        if (loaded != null){
+	            iconImage.sprite = loaded;
+	            iconImage.preserveAspect = true;
+	        }
+	    }
+
+	    static Sprite TryLoadSmudgeSprite(){
+	        var spr = Resources.Load<Sprite>("icon_smudge");
+	        if (spr != null) return spr;
+	        Texture2D tex = Resources.Load<Texture2D>("icon_smudge");
+	        if (tex != null)
+	            return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
+
+	        #if UNITY_EDITOR
+	        var obj = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/_gm/Art/Icons/icon_smudge.png");
+	        if (obj != null) return obj;
+	        var texEd = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/_gm/Art/Icons/icon_smudge.png");
+	        if (texEd != null)
+	            return Sprite.Create(texEd, new Rect(0, 0, texEd.width, texEd.height), new Vector2(0.5f, 0.5f), 100f);
+	        #endif
+
+	        return null;
 	    }
 	}
 
@@ -90,15 +185,36 @@ namespace spz {
 
 	public class BrushRibbon_UI_Direction : MonoBehaviour{
 	    [Space(10)]
-	    [SerializeField] protected Toggle _brushErase_Toggle;//add or subtract (erase)
+	    [SerializeField] protected Toggle _brushErase_Toggle;
 	    [SerializeField] protected Toggle _brushAdd_Toggle;
 	    [SerializeField] protected Animation _anim;
+	    protected Toggle _brushSmudge_Toggle;
     
 	    public bool isPositive => _brushAdd_Toggle.isOn;
+	    public bool isSmudge => _brushSmudge_Toggle != null && _brushSmudge_Toggle.isOn;
+
+	    public BrushToolMode toolMode {
+	        get {
+	            if (_brushSmudge_Toggle != null && _brushSmudge_Toggle.isOn) return BrushToolMode.Smudge;
+	            if (_brushAdd_Toggle.isOn) return BrushToolMode.Paint;
+	            return BrushToolMode.Erase;
+	        }
+	    }
 
 	    protected void SetDirection_Toggle(bool isPositive_dir){
 	        if (isPositive_dir){ _brushAdd_Toggle.isOn = true; }
-	        if(!isPositive_dir){ _brushErase_Toggle.isOn = true; }//toggle group will disable rest.
+	        if(!isPositive_dir){ _brushErase_Toggle.isOn = true; }
+	    }
+
+	    protected void SetToolMode(BrushToolMode mode){
+	        switch (mode){
+	            case BrushToolMode.Paint:  _brushAdd_Toggle.isOn = true; break;
+	            case BrushToolMode.Smudge:
+	                if (_brushSmudge_Toggle != null) _brushSmudge_Toggle.isOn = true;
+	                else _brushAdd_Toggle.isOn = true;
+	                break;
+	            case BrushToolMode.Erase:  _brushErase_Toggle.isOn = true; break;
+	        }
 	    }
 
 	    protected virtual void Update(){
@@ -106,12 +222,11 @@ namespace spz {
 	            return; 
 	        }
 
-	        // Wacom stylus: flip to eraser when eraser end touches; flip to brush when tip touches. Don't switch mid-stroke.
 	        bool anyPainting = (Inpaint_MaskPainter.instance != null && Inpaint_MaskPainter.instance._isPainting)
 	                          || (Projections_MaskPainter.instance != null && Projections_MaskPainter.instance._isPainting);
 	        if (!anyPainting){
-	            if (KeyMousePenInput.isPenEraserPressedThisFrame()){ SetDirection_Toggle(false); }
-	            else if (KeyMousePenInput.isPenTipPressedThisFrame()){ SetDirection_Toggle(true); }
+	            if (KeyMousePenInput.isPenEraserPressedThisFrame()){ SetToolMode(BrushToolMode.Erase); }
+	            else if (KeyMousePenInput.isPenTipPressedThisFrame()){ SetToolMode(BrushToolMode.Paint); }
 	        }
 
 	        bool hasCTRL = KeyMousePenInput.isKey_CtrlOrCommand_pressed();

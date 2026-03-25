@@ -21,6 +21,8 @@ Shader "Custom/Object3d_BrushShader"{
         _BrushSize_andFirstFrameFlag("BrushSize (prev, new, isFirstFrame, 0)", Vector) = (1,1,0,0)
         _BrushAngleRad("Brush angle (radians)", Float) = 0
         _BrushRoundness01("Brush roundness 0-1", Float) = 1
+        _SymmetryMode("Symmetry: 0 off, 1 screen, 2 mesh", Float) = 0
+        _MirrorPrevNewBrushScreenCoord("Mesh mirror stroke (prev.xy, new.zw)", Vector) = (0,0,0,0)
     }
     SubShader{
         Tags { "RenderType"="Opaque" } 
@@ -72,6 +74,9 @@ Shader "Custom/Object3d_BrushShader"{
             float4 _BrushSize_andFirstFrameFlag;
             float _BrushAngleRad;
             float _BrushRoundness01;
+            float _SymmetryMode;
+            float4 _MirrorPrevNewBrushScreenCoord;
+            float _SymmetryMirrorAngleDeltaRad;
             float4 _StampPosSizeStr[64];
             int _StampCount;
 
@@ -224,6 +229,9 @@ Shader "Custom/Object3d_BrushShader"{
                 pibs_input.brushStampStronger = _BrushStampStronger;
                 pibs_input.brushAngleRad = _BrushAngleRad;
                 pibs_input.brushRoundness01 = _BrushRoundness01;
+                pibs_input.symmetryMode = _SymmetryMode;
+                pibs_input.MirrorPrevNewBrushScreenCoord = _MirrorPrevNewBrushScreenCoord;
+                pibs_input.symmetryMirrorAngleDeltaRad = _SymmetryMirrorAngleDeltaRad;
 
                 pibs_input.currentBrushPath01  =  SAMPLE_TEXTURE_OR_ARRAY(_PrevBrushPathTex, uv_withSliceIx).r;
                 pibs_input.normalDotView =   _FadeByNormal==0?  1 : dot(normalize(i.objNormal), normalize(i.objViewDir));

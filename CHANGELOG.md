@@ -5,6 +5,43 @@ This file tracks changes on top of that baseline until the next release bump.
 
 ---
 
+## [Unreleased] — 2026-03-25 — Smudge brush tool
+
+### Summary
+
+Adds a smudge brush as a third tool mode alongside paint and erase in the inpaint brush direction strip. Smudging blends neighboring pixel colors under the brush in real time during the stroke.
+
+### New files
+
+- **`BrushToolMode.cs`** — `Paint`, `Smudge`, `Erase` enum used by the direction toggle strip and paint pipeline.
+
+### Brush direction UI (`SD_BrushRibbon_UI_Direction.cs`, `BrushRibbon_UI_Direction.cs`)
+
+- `BrushRibbon_UI_Direction` gains `isSmudge`, `toolMode`, `SetToolMode(BrushToolMode)`.
+- `SD_BrushRibbon_UI_Direction.CreateSmudgeToggle_IfNeeded()` programmatically clones the brush toggle, inserts it between paint and erase, re-anchors all three to vertical thirds, loads `icon_smudge` sprite via Resources / editor asset database.
+- Cursor color set to gray when smudge is active.
+
+### Smudge compute shader (`ApplyBrushStroke_IntoMask.compute`)
+
+- New `CSSmudge` kernel: 5×5 weighted-average blur with spacing proportional to brush size, applied only where the R8 brush stroke has coverage. Reads from `_SmudgeSourceCopy` (snapshot), writes to `_PaintedMask`.
+- Reuses `apply_brush_stroke_smudge()` from `Brush_ApplyFinalStroke_ToMask.cginc`.
+
+### C# wiring
+
+- **`ApplyBrushStroke_ToUvMask.Apply_smudge_to_ColorBrushTex()`** — copies paint target to temp RT, dispatches `CSSmudge` with `BLEND_RGBA_ONCE + SMUDGE_MODE` keywords. Manages persistent `_smudgeCopyRT`.
+- **`Inpaint_MaskPainter.OnRenderIntoCurrTex_please()`** — when smudge is active, dispatches smudge compute each frame during drag (captures undo on first frame).
+- **`Inpaint_MaskPainter.OnFinal_ApplyIncomingVals_intoMask()`** — skips normal color-apply when smudge (already applied per frame); fires stroke-end event and re-render.
+- **`Inpaint_MaskPainter.getBrushStrength()`** — returns positive opacity when smudge (no sign flip).
+- **`SD_WorkflowOptionsRibbon_UI`** — exposes `isSmudge` and `brushToolMode` from direction component.
+
+### Notes for testers
+
+- Smudge only affects inpaint color painting (not projection masks or backgrounds).
+- If the smudge icon does not appear, assign `Assets/_gm/Art/Icons/icon_smudge.png` as a sprite in a Resources folder or via the serialized field on the prefab.
+- Undo captures the paint target on the first frame of the smudge stroke.
+
+---
+
 ## [Unreleased] — 2026-03-11 — Paint layer stack / inpaint → mesh / SD bridge
 
 ### Summary
@@ -106,3 +143,32 @@ Multi-layer inpaint display and Stable Diffusion capture now follow the same fin
 **Documentation**
 
 - **`docs/PAINT_UNDO_SPEC.md`**, **`docs/UNDO_INTEGRATION.md`**, **`docs/PAINT_UNDO_PROFILING.md`** — spec, integration, profiling notes.
+
+### Paint undo — Thompson sampling, contextual arms, capture bandit, scratch split (2026-03-24)
+
+**`PaintUndo_Scheduler.cs`**
+
+- **`RestoreBudgetPolicy`:** `FixedMiddle`, `Ucb1`, `Thompson` (default wired from `PaintUndo_MGR` inspector).
+- **Restore (Thompson):** Beta–Bernoulli per budget arm, **per context bucket** (`QuantizeContextBucket`); **`restorePosteriorDecayPerSession`** blends posteriors toward uniform on each `BeginRestoreSession`.
+- **`RegisterRestoreBanditObservation(hitchMs, uploaded)`:** UCB keeps continuous reward; Thompson uses binarized success vs **`restoreThompsonSuccessHitchMs`**. **`RegisterUcbReward`** retained as obsolete for UCB-only.
+- **Capture bandit:** Discrete **arms** for readback inflight + post-readback yields; **cold-start** uses legacy **`GetCaptureGpuReadbackMaxInflight` / `GetCapturePostReadbackYieldFrames`** for the first N jobs per bucket; post-capture **hitch window** feeds **`RegisterCaptureBanditObservation`**.
+
+**`PaintUndo_MGR.cs`**
+
+- **Separate scratch buffers:** **`_scratchRestore`** for undo/redo readback; **`_scratchCapture[2]`** ping-pong for capture (optional **`_capturePingPongScratches`**); optional **`_captureEagerGpuCopy`** for single-queued-job early `CopyTexture`.
+- Inspector toggles for restore policy, capture bandit, min pulls per bucket, ping-pong, eager copy.
+- **`LateUpdate`:** calls **`RegisterRestoreBanditObservation`** (not UCB-only API).
+
+### UI — `TMP_InputField` undo / redo (2026-03-24)
+
+**`Assets/_gm/_Core/UI (reusable)/UiTextUndo/`**
+
+- **`UiTextUndo_MGR` + `UiTextUndo_Input`:** After scene load bootstrap (`RuntimeInitializeOnLoadMethod`); registers **`TMP_InputField`** instances (rescans periodically) with per-field undo/redo stacks (max depth configurable).
+- **Ctrl/Cmd+Z** (undo) and **Ctrl/Cmd+Y** or **Ctrl/Cmd+Shift+Z** (redo) while a TMP field is focused (`DefaultExecutionOrder(-40)`); **`PaintUndo_Input`** still skips the viewport stack when a field is active — no conflict.
+
+### Command ribbon — Paint tab visual parity (2026-03-24)
+
+**`CommandRibbon_UI.cs` (`EnsurePaintTabExists` / `ApplyPaintTabStripVisuals`)**
+
+- Prefab ribbon tabs show the **flared sliced sprite only under `go active`** (hidden when deselected). The runtime Paint tab had **`TabBg`** using the same slice **always**, so it looked permanently selected.
+- **`TabBg`** is now an **invisible** full-rect hit target; **sprite / sliced styling apply only to the active-state `Image`**. Tuning copy from reference tabs targets the **active** graphic only (`CopySlicedTabImageTuningFromReference`).

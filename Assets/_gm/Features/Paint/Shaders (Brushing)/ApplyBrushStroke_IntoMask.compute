@@ -1,11 +1,11 @@
 #pragma kernel CSMain
-// Size of thread group for each kernel. 32 is good for NVIDIA, 64 for AMD.
-// NOTICE: must correspond to 'ComputeShaders_MGR.computeShaders_threadsXYZ'.
+#pragma kernel CSSmudge
 #define THREADS_X 32 
 #define THREADS_Y 1
 #define THREADS_Z 1
 
 #pragma multi_compile _ BLEND_RGBA_ONCE
+#pragma multi_compile _ SMUDGE_MODE
 
 
 #ifdef BLEND_RGBA_ONCE // destination is going to be four-channel RGBA:
@@ -23,6 +23,11 @@
   Texture2DArray<float> _UV_Chunks_R8; //tells where the uv islands are, and where there is emptyness. Helps in dilation.
   float4 _UV_Chunks_scale; //by how much '_UV_Chunks_R8' is bigger than the other textures.
 
+  // Smudge: read-only copy of paint target for sampling neighbors without read-write hazards.
+  Texture2DArray<float4> _SmudgeSourceCopy;
+  float _SmudgeKernelSpacing;
+  int _SmudgeTexWidth;
+  int _SmudgeTexHeight;
 
 #else // destination is going to be single-channel R:
 
@@ -137,3 +142,46 @@ void CSMain (uint3 id : SV_DispatchThreadID){
         ApplyDifference(diff_m1_p1, id, id);
     }
 }
+
+
+// ---------------------------------------------------------------------------
+// Smudge kernel: weighted-average blur of neighbors, applied where brush covers.
+// Reads from _SmudgeSourceCopy (read-only snapshot), writes to _PaintedMask.
+// ---------------------------------------------------------------------------
+#ifdef BLEND_RGBA_ONCE
+[numthreads(THREADS_X, THREADS_Y, THREADS_Z)]
+void CSSmudge (uint3 id : SV_DispatchThreadID){
+    if ((int)id.x >= _SmudgeTexWidth || (int)id.y >= _SmudgeTexHeight) return;
+
+    float brushCoverage = _CurrBrushStroke_R8[id];
+    if (brushCoverage < 0.001) return;
+
+    float4 currColor = _SmudgeSourceCopy[id];
+    float4 weightedSum = float4(0,0,0,0);
+    float totalWeight = 0;
+
+    int spacing = max(1, (int)_SmudgeKernelSpacing);
+    const int RADIUS = 2;
+
+    for (int dy = -RADIUS; dy <= RADIUS; dy++){
+        for (int dx = -RADIUS; dx <= RADIUS; dx++){
+            int3 nc = int3(
+                clamp((int)id.x + dx * spacing, 0, _SmudgeTexWidth  - 1),
+                clamp((int)id.y + dy * spacing, 0, _SmudgeTexHeight - 1),
+                id.z);
+
+            float dist = length(float2(dx, dy));
+            float w = max(0.0, 1.0 - dist / (RADIUS + 1.0));
+            w *= w;
+
+            float4 samp = _SmudgeSourceCopy[nc];
+            weightedSum += samp * w;
+            totalWeight += w;
+        }
+    }
+
+    float4 neighborAvg = weightedSum / max(totalWeight, 0.001);
+    float4 result = apply_brush_stroke_smudge(currColor, neighborAvg, brushCoverage, _MaxPossibleBrushStrength01);
+    _PaintedMask[id] = result;
+}
+#endif
