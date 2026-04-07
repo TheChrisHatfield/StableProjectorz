@@ -1,0 +1,54 @@
+{
+  "name": "Add-on Manager (reference mock)",
+  "notes": "Visual/UX target for AddonManager_UI runtime-built panel. Hex sRGB; Unity colors are linearized in code.",
+  "modal": {
+    "dim_overlay": "#000000C7",
+    "panel": "#121212FF",
+    "surface": "#1E1E1EFF",
+    "segment_selected": "#333333FF",
+    "border_soft": "#FFFFFF0D",
+    "text_muted": "#737373FF",
+    "accent_green": "#22C55EFF",
+    "accent_blue": "#3B82F6FF",
+    "button_neutral": "#2A2A2AFF",
+    "row": "#1A1A1AFF",
+    "danger_text": "#EF4444FF"
+  },
+  "copy": {
+    "title": "Add-on Manager",
+    "install": "+ Install from File",
+    "refresh": "↻ Refresh",
+    "load_now": "▶ Load addons now",
+    "restart_addons": "↻ Restart with addons",
+    "close": "Close",
+    "filter_label": "FILTER",
+    "filter_all": "All",
+    "filter_enabled": "Enabled",
+    "filter_disabled": "Disabled",
+    "search_placeholder": "⌕ Search extensions...",
+    "footer_left": "© 2026 STABLEPROJECTORZ ADD-ON MANAGER • BUILD {version}",
+    "links": ["Documentation", "Support", "API"]
+  },
+  "layout_px": {
+    "panel_w": 1040,
+    "panel_h": 680,
+    "header_action_h": 40,
+    "scroll_h": 400,
+    "row_h_min": 80,
+    "status_dot": 28
+  },
+  "list_row": {
+    "status_on": "filled circle accent_green",
+    "status_off": "hollow ring (dark stroke, transparent fill)",
+    "actions": ["Open folder", "Info", "Uninstall"]
+  },
+  "unity_parity_vs_react_ref": {
+    "interactive_list": "Addon_MGR registry, enable/disable, uninstall, OnAddonEnabledStateChanged → RefreshAddonsList",
+    "filter_search": "Toggle group All/Enabled/Disabled; TMP search on id + listSubtitle",
+    "action_buttons": "Install zip, refresh discovery, load enabled now, restart-with-addons bat — RefGreen/RefBlue/RefBtnDefault",
+    "shortcut_overlay": "Blocker child ShortcutBackdropHints — low-contrast VIEWPORT hints (RMB+WASD, orbit, pan, zoom, focus, menu)",
+    "motion": "Dimmer + panel CanvasGroup alpha and slight scale via coroutine (unscaled time); row + footer link pointer hover",
+    "responsive": "CanvasScaler + AddonManager_ResponsiveLayout; shared tokens in ProjectUiScale (8px Space, Tailwind-aligned breakpoints, ClampModalSize). Reuse for other overlays.",
+    "icons": "TMP glyphs / text labels — not Lucide SVGs"
+  }
+}

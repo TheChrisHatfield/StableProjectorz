@@ -38,26 +38,27 @@ namespace spz {
 		}
 		
 		/// <summary>
-		/// Creates a panel for an add-on
+		/// Creates add-on UI under the ribbon tab shell for <paramref name="addonId"/> (see <see cref="AddonRibbonIntegration"/>).
+		/// The shell shares the same stacked body rect as Art/ControlNet/Paint; widgets are parented as children of that shell.
 		/// </summary>
 		public string CreatePanel(string addonId, string title) {
 			UnityEngine.Debug.Log($"[AddonUI_MGR] CreatePanel requested for addon: {addonId}, title: {title}");
 			RectTransform parentForThisAddon = null;
-			var commandRibbon = CommandRibbon_UI.instance;
-			if (commandRibbon == null) {
-				commandRibbon = UnityEngine.Object.FindObjectOfType<CommandRibbon_UI>(true);
-				UnityEngine.Debug.Log($"[AddonUI_MGR] CommandRibbon_UI.instance was null, FindObjectOfType(incl.Inactive)={commandRibbon != null}");
-			}
-			if (commandRibbon != null) {
+			var commandRibbon = AddonRibbonIntegration.ResolveCommandRibbon();
+			if (CommandRibbon_UI.instance == null && commandRibbon != null)
+				UnityEngine.Debug.Log("[AddonUI_MGR] CommandRibbon_UI.instance was null; resolved ribbon via FindObjectOfType(including inactive).");
+			bool ribbonResolved = commandRibbon != null;
+			if (ribbonResolved) {
 				parentForThisAddon = commandRibbon.GetOrCreatePanelForAddon(addonId, title);
 				if (parentForThisAddon != null)
 					UnityEngine.Debug.Log($"[AddonUI_MGR] Got ribbon panel parent for: {title}");
 				else
-					UnityEngine.Debug.LogWarning($"[AddonUI_MGR] GetOrCreatePanelForAddon returned null for: {addonId}. Tab will not appear in ribbon.");
+					UnityEngine.Debug.LogWarning($"[AddonUI_MGR] GetOrCreatePanelForAddon returned null for: {addonId}. Not using canvas fallback (would stack over Art). Fix ribbon/tab wiring.");
 			} else {
 				UnityEngine.Debug.LogWarning("[AddonUI_MGR] CommandRibbon_UI not found (even incl. inactive). Using fallback parent.");
 			}
-			if (parentForThisAddon == null) {
+			// Only use floating fallback when there is no command ribbon; otherwise a null shell would wrongly overlay built-in tabs (e.g. Art).
+			if (parentForThisAddon == null && !ribbonResolved) {
 				if (_addonPanelsParent == null) {
 					var rightPanel = GameObject.Find("UI_Global_Right_Panel");
 					if (rightPanel != null) {

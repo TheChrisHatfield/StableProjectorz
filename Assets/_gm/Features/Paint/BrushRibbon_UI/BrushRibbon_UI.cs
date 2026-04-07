@@ -34,6 +34,9 @@ namespace spz {
 	    public float brushAngleDeg => _size != null ? _size.brushAngleDeg : 0f;
 	    public float brushRoundness01 => _size != null ? _size.brushRoundness01 : 1f;
 
+	    public float brushOpacity01 => _opacity != null ? _opacity.Opacity01 : 1f;
+	    public void SetBrushOpacity01(float opacity01) { if (_opacity != null) _opacity.SetOpacity01(opacity01); }
+
 	    void Awake(){
 	        if (instance != null){ DestroyImmediate(this); return; }
 	        instance = this;

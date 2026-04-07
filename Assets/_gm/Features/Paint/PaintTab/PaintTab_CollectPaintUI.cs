@@ -31,6 +31,12 @@ namespace spz {
 		/// <summary> Kept when tool options are built once so we can re-subscribe after OnDisable cleared handlers. </summary>
 		static System.Action _cachedBrushOptsOnSettingsChanged;
 		static System.Action _cachedSymmetryOnSettingsChanged;
+		/// <summary>Delegates for smudge UI sync; cleared in <see cref="UnregisterSmudgeBrushOptsHandlers"/> (tab OnDisable or before re-bind).</summary>
+		static System.Action _smudgeSliderSyncFromStoreHandler;
+		/// <summary>Subscribed to <see cref="BrushRibbon_UI_Direction.OnDirectionToggleChanged"/>.</summary>
+		static System.Action _smudgeOptsVisibilityOnDirChangedHandler;
+		/// <summary>Subscribed to <see cref="WorkflowRibbon_UI._Act_OnModeChanged"/>.</summary>
+		static System.Action<WorkflowRibbon_CurrMode> _smudgeOptsVisibilityOnWorkflowModeHandler;
 
 		bool _collected;
 		bool _toolchestCollected;
@@ -172,6 +178,7 @@ namespace spz {
 			tmp.text = text;
 		}
 
+		/// <summary>Populate/repair Krita sections and re-run <see cref="CollectNow"/> so subscriptions (brush + smudge) attach when the tab becomes active.</summary>
 		void OnEnable()
 		{
 			_paintTabTmpStyleSource = this;
@@ -183,9 +190,11 @@ namespace spz {
 			}
 		}
 
+		/// <summary>Paint tab inactive: drop brush-size listeners and smudge store/visibility subscriptions (rebound on next CollectNow when UI exists).</summary>
 		void OnDisable()
 		{
 			UnregisterBrushSettingsHandlers();
+			UnregisterSmudgeBrushOptsHandlers();
 			if (_paintTabTmpStyleSource == this)
 				_paintTabTmpStyleSource = null;
 		}
@@ -225,6 +234,105 @@ namespace spz {
 				RegisterBrushSettingsHandler(_cachedBrushOptsOnSettingsChanged);
 			if (_cachedSymmetryOnSettingsChanged != null)
 				RegisterBrushSettingsHandler(_cachedSymmetryOnSettingsChanged);
+		}
+
+		/// <summary>Shows the smudge block only for inpaint workflows (color / no-color) while the brush tool is smudge.</summary>
+		static void SyncSmudgeBrushOptsVisibilityForRoot(GameObject smudgeOptsRoot)
+		{
+			if (smudgeOptsRoot == null) return;
+			bool show = false;
+			var wf = WorkflowRibbon_UI.instance;
+			var sd = SD_WorkflowOptionsRibbon_UI.instance;
+			if (wf != null && sd != null)
+			{
+				var m = wf.currentMode();
+				bool inpaint = m == WorkflowRibbon_CurrMode.Inpaint_Color || m == WorkflowRibbon_CurrMode.Inpaint_NoColor;
+				show = inpaint && sd.isSmudge;
+			}
+			smudgeOptsRoot.SetActive(show);
+		}
+
+		/// <summary>Removes smudge listeners from <see cref="PaintTab_SmudgeBrushOptions.Changed"/>, direction toggles, and workflow mode.</summary>
+		static void UnregisterSmudgeBrushOptsHandlers()
+		{
+			if (_smudgeSliderSyncFromStoreHandler != null)
+			{
+				PaintTab_SmudgeBrushOptions.Changed -= _smudgeSliderSyncFromStoreHandler;
+				_smudgeSliderSyncFromStoreHandler = null;
+			}
+			if (_smudgeOptsVisibilityOnDirChangedHandler != null)
+			{
+				BrushRibbon_UI_Direction.OnDirectionToggleChanged -= _smudgeOptsVisibilityOnDirChangedHandler;
+				_smudgeOptsVisibilityOnDirChangedHandler = null;
+			}
+			if (_smudgeOptsVisibilityOnWorkflowModeHandler != null)
+			{
+				WorkflowRibbon_UI._Act_OnModeChanged -= _smudgeOptsVisibilityOnWorkflowModeHandler;
+				_smudgeOptsVisibilityOnWorkflowModeHandler = null;
+			}
+		}
+
+		/// <summary>Locates runtime smudge UI under the Tool Options section: <c>BrushOptsPanel/SmudgeBrushOptsBlock</c> and row sliders.</summary>
+		static bool TryFindSmudgeBrushOptsUi(RectTransform toolOptionsSection, out Slider strengthSlider, out Slider angleSlider,
+			out GameObject smudgeOptsRoot)
+		{
+			strengthSlider = null;
+			angleSlider = null;
+			smudgeOptsRoot = null;
+			if (toolOptionsSection == null) return false;
+			Transform panel = null;
+			for (int i = 0; i < toolOptionsSection.childCount; i++)
+			{
+				var ch = toolOptionsSection.GetChild(i);
+				if (ch != null && ch.name == "BrushOptsPanel")
+				{
+					panel = ch;
+					break;
+				}
+			}
+			if (panel == null) return false;
+			var block = panel.Find("SmudgeBrushOptsBlock");
+			if (block == null) return false;
+			var strRow = block.Find("SmudgeStrengthRow");
+			var angRow = block.Find("SmudgeAngleRow");
+			if (strRow == null || angRow == null) return false;
+			strengthSlider = strRow.GetComponentInChildren<Slider>(true);
+			angleSlider = angRow.GetComponentInChildren<Slider>(true);
+			if (strengthSlider == null || angleSlider == null) return false;
+			smudgeOptsRoot = block.gameObject;
+			return true;
+		}
+
+		/// <summary>Unregisters any prior smudge handlers, then binds slider sync and visibility for this UI instance.</summary>
+		static void RegisterSmudgeBrushOptsHandlersForUi(Slider smudgeStrSlider, Slider smudgeAngSlider, GameObject smudgeOptsRoot)
+		{
+			if (smudgeStrSlider == null || smudgeAngSlider == null || smudgeOptsRoot == null) return;
+			UnregisterSmudgeBrushOptsHandlers();
+
+			void SyncSmudgeSlidersFromStore()
+			{
+				if (smudgeStrSlider != null)
+					smudgeStrSlider.SetValueWithoutNotify(PaintTab_SmudgeBrushOptions.Strength01);
+				if (smudgeAngSlider != null)
+					smudgeAngSlider.SetValueWithoutNotify(PaintTab_SmudgeBrushOptions.AngleDeg);
+			}
+
+			void SyncSmudgeBrushOptsVisibility() => SyncSmudgeBrushOptsVisibilityForRoot(smudgeOptsRoot);
+
+			_smudgeSliderSyncFromStoreHandler = SyncSmudgeSlidersFromStore;
+			PaintTab_SmudgeBrushOptions.Changed += _smudgeSliderSyncFromStoreHandler;
+			_smudgeOptsVisibilityOnDirChangedHandler = SyncSmudgeBrushOptsVisibility;
+			_smudgeOptsVisibilityOnWorkflowModeHandler = (_) => SyncSmudgeBrushOptsVisibility();
+			BrushRibbon_UI_Direction.OnDirectionToggleChanged += _smudgeOptsVisibilityOnDirChangedHandler;
+			WorkflowRibbon_UI._Act_OnModeChanged += _smudgeOptsVisibilityOnWorkflowModeHandler;
+			SyncSmudgeBrushOptsVisibility();
+		}
+
+		/// <summary>After tab re-enable when ToolOptionsRow already exists: find smudge controls and call <see cref="RegisterSmudgeBrushOptsHandlersForUi"/>.</summary>
+		static void ResubscribeSmudgeBrushOptsHandlersIfUiExists(RectTransform toolOptionsSection)
+		{
+			if (!TryFindSmudgeBrushOptsUi(toolOptionsSection, out var s, out var a, out var root)) return;
+			RegisterSmudgeBrushOptsHandlersForUi(s, a, root);
 		}
 
 		System.Collections.IEnumerator RefreshBrushPresetsLayoutWhenReady()
@@ -467,7 +575,9 @@ namespace spz {
 			}
 			else if (_layout.ToolOptionsSection != null && HasRuntimeToolOptionsRow(_layout.ToolOptionsSection))
 			{
+				// Runtime row already present (e.g. tab re-opened): re-wire brush radios + smudge store/visibility after OnDisable cleared subscriptions.
 				ResubscribeBrushSettingsHandlersIfToolOptionsExist();
+				ResubscribeSmudgeBrushOptsHandlersIfUiExists(_layout.ToolOptionsSection);
 			}
 
 			// --- Color / Palette section ---
@@ -1105,6 +1215,91 @@ namespace spz {
 			});
 		}
 
+		/// <summary>Label + horizontal slider row inside Brush options expando (same track style as depth limit).</summary>
+		static Slider MakeBrushOptsSliderRow(Transform parent, string rowName, string labelText, float min, float max,
+			float initialValue, UnityEngine.Events.UnityAction<float> onChanged)
+		{
+			var row = new GameObject(rowName);
+			row.transform.SetParent(parent, false);
+			row.AddComponent<RectTransform>();
+			var rowLe = row.AddComponent<LayoutElement>();
+			rowLe.minHeight = 30;
+			rowLe.preferredHeight = 30;
+			rowLe.flexibleWidth = 1;
+			var h = row.AddComponent<HorizontalLayoutGroup>();
+			h.spacing = 8;
+			h.padding = new RectOffset(0, 0, 0, 0);
+			h.childAlignment = TextAnchor.MiddleLeft;
+			h.childControlWidth = false;
+			h.childControlHeight = true;
+			h.childForceExpandWidth = true;
+			h.childForceExpandHeight = false;
+
+			var lblGo = new GameObject("Lbl");
+			lblGo.transform.SetParent(row.transform, false);
+			var lblLe = lblGo.AddComponent<LayoutElement>();
+			lblLe.minWidth = 88;
+			lblLe.preferredWidth = 88;
+			var lbl = lblGo.AddComponent<TextMeshProUGUI>();
+			StylePaintTabTmp(lbl, labelText, 9f, TextAlignmentOptions.Left);
+
+			var go = new GameObject("Slider");
+			go.transform.SetParent(row.transform, false);
+			var le = go.AddComponent<LayoutElement>();
+			le.flexibleWidth = 1f;
+			le.minWidth = 72;
+
+			var bg = go.AddComponent<Image>();
+			bg.color = new Color(0.22f, 0.28f, 0.35f, 0.95f);
+			bg.raycastTarget = true;
+
+			var slider = go.AddComponent<Slider>();
+			slider.minValue = min;
+			slider.maxValue = max;
+			slider.wholeNumbers = false;
+			slider.fillRect = null;
+			slider.handleRect = null;
+			slider.direction = Slider.Direction.LeftToRight;
+			slider.transition = Selectable.Transition.None;
+
+			var fillArea = new GameObject("Fill Area");
+			fillArea.transform.SetParent(go.transform, false);
+			var fillAreaRect = fillArea.AddComponent<RectTransform>();
+			fillAreaRect.anchorMin = new Vector2(0, 0.25f);
+			fillAreaRect.anchorMax = new Vector2(1, 0.75f);
+			fillAreaRect.offsetMin = new Vector2(4, 0);
+			fillAreaRect.offsetMax = new Vector2(-4, 0);
+			var fill = new GameObject("Fill");
+			fill.transform.SetParent(fillArea.transform, false);
+			var fillRect = fill.AddComponent<RectTransform>();
+			fillRect.anchorMin = Vector2.zero;
+			fillRect.anchorMax = Vector2.one;
+			fillRect.offsetMin = Vector2.zero;
+			fillRect.offsetMax = Vector2.zero;
+			var fillImg = fill.AddComponent<Image>();
+			fillImg.color = new Color(0.2f, 0.5f, 0.35f, 0.8f);
+			slider.fillRect = fillRect;
+			var handleArea = new GameObject("Handle Slide Area");
+			handleArea.transform.SetParent(go.transform, false);
+			var handleAreaRect = handleArea.AddComponent<RectTransform>();
+			handleAreaRect.anchorMin = new Vector2(0, 0);
+			handleAreaRect.anchorMax = new Vector2(1, 1);
+			handleAreaRect.offsetMin = new Vector2(4, 0);
+			handleAreaRect.offsetMax = new Vector2(-4, 0);
+			var handle = new GameObject("Handle");
+			handle.transform.SetParent(handleArea.transform, false);
+			var handleRect = handle.AddComponent<RectTransform>();
+			handleRect.sizeDelta = new Vector2(8, 20);
+			var handleImg = handle.AddComponent<Image>();
+			handleImg.color = Color.white;
+			slider.handleRect = handleRect;
+			slider.targetGraphic = handleImg;
+
+			slider.SetValueWithoutNotify(initialValue);
+			slider.onValueChanged.AddListener(onChanged);
+			return slider;
+		}
+
 		/// <summary> Collapsible dropdown-style block: compact header in tool row + panel below with radio groups. </summary>
 		static void MakeBrushToolOptionsExpando(Transform toolRowParent, RectTransform toolSectionParent)
 		{
@@ -1219,14 +1414,41 @@ namespace spz {
 			string[] angleLabels = { "Fixed", "Follow stroke" };
 			for (int i = 0; i < 2; i++)
 			{
-				int ix = i;
-				angleToggles[i] = MakeToolOptionsRadioToggle(angleRow.transform, tgAngle, angleLabels[ix], radioOff, radioOn, () =>
+				BrushTipAngleMode angleMode = (BrushTipAngleMode)i;
+				string angleLabel = angleLabels[i];
+				angleToggles[i] = MakeToolOptionsRadioToggle(angleRow.transform, tgAngle, angleLabel, radioOff, radioOn, () =>
 				{
 					var inst = BrushRibbon_UI_Size.instance;
-					if (inst != null) inst.SetTipAngleMode((BrushTipAngleMode)ix);
-					ShowToolFeedback("Tip: " + angleLabels[ix]);
+					if (inst != null) inst.SetTipAngleMode(angleMode);
+					ShowToolFeedback("Tip: " + angleLabel);
 				});
 			}
+
+			var smudgeOptsRoot = new GameObject("SmudgeBrushOptsBlock");
+			smudgeOptsRoot.transform.SetParent(panelGo.transform, false);
+			smudgeOptsRoot.AddComponent<RectTransform>();
+			var smudgeBlockLe = smudgeOptsRoot.AddComponent<LayoutElement>();
+			smudgeBlockLe.flexibleWidth = 1;
+			smudgeBlockLe.minHeight = 1;
+
+			MakeBrushOptsSectionLabel(smudgeOptsRoot.transform, "Smudge");
+			var smudgeStrSlider = MakeBrushOptsSliderRow(smudgeOptsRoot.transform, "SmudgeStrengthRow", "Strength", 0f, 1f,
+				PaintTab_SmudgeBrushOptions.Strength01, v =>
+				{
+					PaintTab_SmudgeBrushOptions.SetStrength01(v);
+					Viewport_StatusText.instance?.ShowStatusText(
+						$"Smudge strength {Mathf.RoundToInt(Mathf.Clamp01(v) * 100)}%", false, 0.65f, false);
+				});
+			var smudgeAngSlider = MakeBrushOptsSliderRow(smudgeOptsRoot.transform, "SmudgeAngleRow", "Angle °", 0f, 360f,
+				PaintTab_SmudgeBrushOptions.AngleDeg, v =>
+				{
+					PaintTab_SmudgeBrushOptions.SetAngleDeg(v);
+					Viewport_StatusText.instance?.ShowStatusText(
+						$"Smudge angle {Mathf.RoundToInt(v)}°", false, 0.65f, false);
+				});
+
+			// Smudge rows: sync sliders when PaintTab_SmudgeBrushOptions changes (API); show/hide block for inpaint + smudge tool. Handlers cleared on tab OnDisable.
+			RegisterSmudgeBrushOptsHandlersForUi(smudgeStrSlider, smudgeAngSlider, smudgeOptsRoot);
 
 			MakeBrushOptsSectionLabel(panelGo.transform, "Mirror plane (mesh symmetry)");
 			var planeRow = new GameObject("SymmetryPlaneRow");
@@ -1242,16 +1464,25 @@ namespace spz {
 			planeH.childForceExpandWidth = false;
 			var tgPlane = planeRow.AddComponent<ToggleGroup>();
 			tgPlane.allowSwitchOff = false;
-			var planeToggles = new Toggle[3];
-			string[] planeLabels = { "Auto", "View", "Face" };
-			for (int i = 0; i < 3; i++)
+			// UI order ≠ enum numeric order (FacePick=2, ObjectLocal=3); map explicitly.
+			var symPlaneRowOrder = new[]
 			{
-				int ix = i;
-				planeToggles[i] = MakeToolOptionsRadioToggle(planeRow.transform, tgPlane, planeLabels[ix], radioOff, radioOn, () =>
+				PaintSymmetryPlaneSource.Auto,
+				PaintSymmetryPlaneSource.ViewAligned,
+				PaintSymmetryPlaneSource.ObjectLocal,
+				PaintSymmetryPlaneSource.FacePick,
+			};
+			var planeToggles = new Toggle[4];
+			string[] planeLabels = { "Auto", "View", "Mesh", "Face" };
+			for (int i = 0; i < 4; i++)
+			{
+				PaintSymmetryPlaneSource planeSource = symPlaneRowOrder[i];
+				string planeLabel = planeLabels[i];
+				planeToggles[i] = MakeToolOptionsRadioToggle(planeRow.transform, tgPlane, planeLabel, radioOff, radioOn, () =>
 				{
 					var inst = BrushRibbon_UI_Size.instance;
-					if (inst != null) inst.SetPaintSymmetryPlaneSource((PaintSymmetryPlaneSource)ix);
-					ShowToolFeedback("Mirror plane: " + planeLabels[ix]);
+					if (inst != null) inst.SetPaintSymmetryPlaneSource(planeSource);
+					ShowToolFeedback("Mirror plane: " + planeLabel);
 				});
 			}
 
@@ -1271,18 +1502,23 @@ namespace spz {
 				TryPickSymmetryPlaneUnderCursor();
 				SyncBrushToolRadiosFromSize();
 			}, 108);
-			MakeBrushOptsActionButton(planeActionsRow.transform, "Flip normal", () =>
+			MakeBrushOptsActionButton(planeActionsRow.transform, "Flip", () =>
 			{
 				var inst = BrushRibbon_UI_Size.instance;
 				if (inst == null) return;
-				if (inst.paintSymmetryPlaneSource != PaintSymmetryPlaneSource.FacePick)
+				if (inst.paintSymmetryPlaneSource == PaintSymmetryPlaneSource.FacePick)
 				{
-					ShowToolFeedback("Mirror plane: use Face mode first");
-					return;
+					inst.FlipPickedSymmetryPlaneNormal();
+					ShowToolFeedback("Mirror plane: flipped face normal");
 				}
-				inst.FlipPickedSymmetryPlaneNormal();
-				ShowToolFeedback("Mirror plane: flipped normal");
-			}, 92);
+				else if (inst.paintSymmetryPlaneSource == PaintSymmetryPlaneSource.ObjectLocal)
+				{
+					inst.FlipSymmetryObjectLocalSign();
+					ShowToolFeedback("Mirror plane: flipped mesh lateral axis");
+				}
+				else
+					ShowToolFeedback("Mirror plane: use Mesh or Face mode to flip");
+			}, 72);
 
 			if (pinCollapseToToolViewport)
 			{
@@ -1294,16 +1530,24 @@ namespace spz {
 				spacerLe.preferredHeight = 40;
 			}
 
+			// Slight transparency so scrolling content remains visible under the pinned collapse bar (viewport overlay).
+			const float collapseBarA = 0.78f;
+			const float collapseBarHoverA = 0.86f;
+			const float collapseBarPressA = 0.74f;
+
 			var collapseBtnGo = new GameObject("BrushOptsCollapseBtn");
 			collapseBtnGo.AddComponent<RectTransform>();
 			var collapseImg = collapseBtnGo.AddComponent<Image>();
-			collapseImg.color = new Color(0.22f, 0.28f, 0.36f, 1f);
 			collapseImg.raycastTarget = true;
 			var collapseBtn = collapseBtnGo.AddComponent<Button>();
 			var collapseColors = collapseBtn.colors;
-			collapseColors.highlightedColor = new Color(0.28f, 0.34f, 0.42f, 1f);
-			collapseColors.pressedColor = new Color(0.19f, 0.24f, 0.32f, 1f);
+			collapseColors.normalColor = new Color(0.22f, 0.28f, 0.36f, collapseBarA);
+			collapseColors.highlightedColor = new Color(0.30f, 0.36f, 0.44f, collapseBarHoverA);
+			collapseColors.pressedColor = new Color(0.17f, 0.22f, 0.30f, collapseBarPressA);
+			collapseColors.selectedColor = collapseColors.normalColor;
+			collapseColors.disabledColor = new Color(0.22f, 0.28f, 0.36f, 0.45f);
 			collapseBtn.colors = collapseColors;
+			collapseImg.color = collapseColors.normalColor;
 			var collapseTxtGo = new GameObject("Label");
 			collapseTxtGo.transform.SetParent(collapseBtnGo.transform, false);
 			var collapseTxtRt = collapseTxtGo.AddComponent<RectTransform>();
@@ -1351,8 +1595,14 @@ namespace spz {
 				var inst = BrushRibbon_UI_Size.instance;
 				int sm = inst != null ? (int)inst.scatterMode : 0;
 				int am = inst != null ? (int)inst.tipAngleMode : 0;
-				int pm = inst != null ? (int)inst.paintSymmetryPlaneSource : 0;
-				if (pm < 0 || pm > 2) pm = 0;
+				PaintSymmetryPlaneSource ps = inst != null ? inst.paintSymmetryPlaneSource : PaintSymmetryPlaneSource.Auto;
+				int pm = 0;
+				for (int i = 0; i < symPlaneRowOrder.Length; i++) {
+					if (symPlaneRowOrder[i] == ps) {
+						pm = i;
+						break;
+					}
+				}
 				for (int i = 0; i < scatterToggles.Length; i++)
 					scatterToggles[i].SetIsOnWithoutNotify(i == sm);
 				for (int i = 0; i < angleToggles.Length; i++)
@@ -1381,6 +1631,7 @@ namespace spz {
 				panelLe.preferredHeight = open ? -1f : 0f;
 				headerTxt.text = open ? "Brush options ▴" : "Brush options ▼";
 				if (open) SyncBrushToolRadiosFromSize();
+				if (open) SyncSmudgeBrushOptsVisibilityForRoot(smudgeOptsRoot);
 				if (open)
 				{
 					LayoutRebuilder.ForceRebuildLayoutImmediate(toolSectionParent);

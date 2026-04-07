@@ -40,8 +40,9 @@ namespace spz {
 
 
 	    public void PositionCursor(float brushScaleFactor){
-        
-	        Vector2 brushPos01 = MainViewport_UI.instance.cursorMainViewportPos01;
+	        var mv = MainViewport_UI.instance;
+	        // Anchors are in main-viewport space; MainViewport_UI already caches cursorMainViewportPos01 each frame.
+	        Vector2 brushPos01 = mv != null ? mv.cursorMainViewportPos01 : Vector2.zero;
         
 	        //mvoe cursors that should stay inside the viewport:
 	        _maskableMove_rectTransf.anchorMin =  _maskableMove_rectTransf.anchorMax  =  brushPos01;
@@ -50,7 +51,7 @@ namespace spz {
 	        //move cursors that are meant to move across entire screen, not only within the viewport:
 	        _nonMaskableMove_rectTransf.transform.position = KeyMousePenInput.cursorScreenPos();
 
-	        float drawView_yPixels = MainViewport_UI.instance.mainViewportRect.rect.size.y;
+	        float drawView_yPixels = mv != null ? mv.mainViewportRect.rect.size.y : Screen.height;
 
 	        Vector2 sizeDelta =   Vector2.one * drawView_yPixels * brushScaleFactor
 	                                          * _brushCursorPreview_shrink;

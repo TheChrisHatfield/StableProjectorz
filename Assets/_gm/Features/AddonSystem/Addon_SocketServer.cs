@@ -28,6 +28,7 @@ namespace spz {
 		private Thread _listenerThread;
 		private volatile bool _isRunning = false; // Volatile for thread safety
 		private int _port = 5555;
+		bool _quitNetworkingShutdownDone;
 		
 		// Connection limit to prevent resource exhaustion
 		private const int MAX_CONCURRENT_CONNECTIONS = 50;
@@ -75,6 +76,9 @@ namespace spz {
 					File.Delete(staleMarker);
 					UnityEngine.Debug.Log($"[Addon_SocketServer] Removed stale ready marker from previous run: {staleMarker}");
 				}
+				string staleFail = GetBindFailedMarkerPath(_port);
+				if (File.Exists(staleFail))
+					File.Delete(staleFail);
 			} catch { }
 
 			if (!TryBindListener()) {
@@ -82,14 +86,23 @@ namespace spz {
 				// (Editor has its own Addon_SocketServer on the same port). Do NOT kill processes
 				// on this port -- that would kill the Editor. Just log and skip.
 				UnityEngine.Debug.LogWarning($"[Addon_SocketServer] Port {_port} already in use (Unity Editor likely running). Socket server will not start in this instance. Addons will use the Editor's socket instead.");
+				try {
+					File.WriteAllText(GetBindFailedMarkerPath(_port),
+						"Port " + _port + " in use. Close Unity Editor or any process on 127.0.0.1:" + _port + " and restart the game.");
+				} catch (Exception ex) {
+					UnityEngine.Debug.LogWarning($"[Addon_SocketServer] Could not write bind-failed marker: {ex.Message}");
+				}
 				return;
 			}
 
 			UnityEngine.Debug.Log($"[Addon_SocketServer] Started listening on 127.0.0.1:{_port} (loopback only; Python connects here)");
 			try {
-				string markerPath = Path.Combine(Path.GetTempPath(), "spz_addon_" + _port + "_ready.txt");
+				string markerPath = GetReadyMarkerPath(_port);
 				File.WriteAllText(markerPath, _port.ToString());
 				UnityEngine.Debug.Log($"[Addon_SocketServer] Ready marker written: {markerPath}");
+				string failPath = GetBindFailedMarkerPath(_port);
+				if (File.Exists(failPath))
+					File.Delete(failPath);
 			} catch (Exception ex) {
 				UnityEngine.Debug.LogWarning($"[Addon_SocketServer] Could not write ready marker file: {ex.Message}");
 			}
@@ -112,6 +125,9 @@ namespace spz {
 
 		/// <summary>Path to the ready marker file (same as Python checks). Remove on shutdown.</summary>
 		static string GetReadyMarkerPath(int port) => Path.Combine(Path.GetTempPath(), "spz_addon_" + port + "_ready.txt");
+
+		/// <summary>Python polls this to fail fast when port is in use (no 90s wait).</summary>
+		static string GetBindFailedMarkerPath(int port) => Path.Combine(Path.GetTempPath(), "spz_addon_" + port + "_bind_failed.txt");
 		
 		/// <summary>
 		/// Background thread loop that accepts connections
@@ -389,9 +405,66 @@ namespace spz {
 		}
 		
 		/// <summary>
+		/// Static catalog of JSON-RPC methods supported by this build (for spz.cmd.get_api_capabilities).
+		/// Keep in sync when adding cases in ExecuteFastPathCommand / ExecuteUICommand.
+		/// </summary>
+		static JObject BuildAddonApiCapabilities() {
+			var cmd = new JArray {
+				"spz.cmd.deselect_all_meshes", "spz.cmd.deselect_mesh", "spz.cmd.export_3d_with_textures",
+				"spz.cmd.export_projection_textures", "spz.cmd.export_view_textures",
+				"spz.cmd.get_active_controlnet_unit_count", "spz.cmd.get_addon_context", "spz.cmd.get_all_camera_fovs",
+				"spz.cmd.get_all_camera_positions", "spz.cmd.get_all_camera_rotations", "spz.cmd.get_all_mesh_ids",
+				"spz.cmd.get_api_capabilities", "spz.cmd.get_brush_settings", "spz.cmd.get_camera_pos",
+				"spz.cmd.get_camera_fov", "spz.cmd.get_camera_rot",
+				"spz.cmd.get_controlnet_unit_count", "spz.cmd.get_controlnet_unit_enabled",
+				"spz.cmd.get_controlnet_unit_model", "spz.cmd.get_controlnet_unit_weight",
+				"spz.cmd.get_mesh_bounds", "spz.cmd.get_mesh_name", "spz.cmd.get_mesh_pos", "spz.cmd.get_mesh_rot",
+				"spz.cmd.get_mesh_scale", "spz.cmd.get_mesh_visibility", "spz.cmd.get_negative_prompt",
+				"spz.cmd.get_paint_layers", "spz.cmd.get_positive_prompt", "spz.cmd.get_projection_camera_count",
+				"spz.cmd.get_projection_camera_pos", "spz.cmd.get_projection_camera_rot",
+				"spz.cmd.get_project_data_dir", "spz.cmd.get_project_path", "spz.cmd.get_project_version",
+				"spz.cmd.get_sd_workflow_options", "spz.cmd.get_selected_mesh_count", "spz.cmd.get_selected_meshes",
+				"spz.cmd.get_selected_meshes_bounds", "spz.cmd.get_skybox_bottom_color", "spz.cmd.get_skybox_top_color",
+				"spz.cmd.get_total_mesh_count", "spz.cmd.get_workflow_mode", "spz.cmd.is_3d_connected",
+				"spz.cmd.is_3d_generation_in_progress", "spz.cmd.is_3d_generation_ready", "spz.cmd.is_generating",
+				"spz.cmd.is_project_operation_in_progress", "spz.cmd.is_sd_connected",
+				"spz.cmd.is_skybox_gradient_clear", "spz.cmd.load_project", "spz.cmd.save_project",
+				"spz.cmd.select_all_meshes", "spz.cmd.select_mesh", "spz.cmd.set_active_paint_layer",
+				"spz.cmd.set_brush_angle", "spz.cmd.set_brush_opacity", "spz.cmd.set_brush_roundness",
+				"spz.cmd.set_brush_size", "spz.cmd.set_brush_spacing", "spz.cmd.set_brush_stamp_index",
+				"spz.cmd.set_camera_fov", "spz.cmd.set_camera_pos", "spz.cmd.set_camera_rot",
+				"spz.cmd.set_controlnet_unit_enabled", "spz.cmd.set_controlnet_unit_weight",
+				"spz.cmd.set_mesh_pos", "spz.cmd.set_mesh_positions", "spz.cmd.set_mesh_rot",
+				"spz.cmd.set_mesh_rotations", "spz.cmd.set_mesh_scale", "spz.cmd.set_mesh_scales",
+				"spz.cmd.set_mesh_visibility", "spz.cmd.set_negative_prompt", "spz.cmd.set_positive_prompt",
+				"spz.cmd.set_projection_camera_pos", "spz.cmd.set_projection_camera_rot",
+				"spz.cmd.set_sd_denoising_strength", "spz.cmd.set_sd_ignore_depth_or_normals",
+				"spz.cmd.set_sd_mask_blur", "spz.cmd.set_sd_soft_inpaint", "spz.cmd.set_sd_tileable_inpaint",
+				"spz.cmd.set_skybox_color", "spz.cmd.set_workflow_mode", "spz.cmd.stop_generation",
+				"spz.cmd.trigger_3d_generation", "spz.cmd.trigger_texture_generation",
+			};
+			var ui = new JArray {
+				"spz.ui.add_button", "spz.ui.add_dropdown", "spz.ui.add_slider", "spz.ui.add_text_input",
+				"spz.ui.create_panel", "spz.ui.get_value", "spz.ui.set_value",
+			};
+			return new JObject {
+				["success"] = true,
+				["addon_rpc_version"] = "1.2",
+				["spz_cmd"] = cmd,
+				["spz_ui"] = ui,
+				["context_command"] = "spz.cmd.get_addon_context",
+				["note"] = "get_api_capabilities is available before FastPath finishes initializing; get_addon_context requires FastPath ready.",
+			};
+		}
+
+		/// <summary>
 		/// Executes fast-path commands
 		/// </summary>
 		JObject ExecuteFastPathCommand(string method, JObject @params) {
+			if (method == "spz.cmd.get_api_capabilities") {
+				return BuildAddonApiCapabilities();
+			}
+
 			if (FastPath_API.instance == null || !FastPath_API.instance.IsReady()) {
 				return new JObject { ["success"] = false, ["error"] = "FastPath_API not ready" };
 			}
@@ -432,6 +505,31 @@ namespace spz {
 							result["x"] = pos.Value.x;
 							result["y"] = pos.Value.y;
 							result["z"] = pos.Value.z;
+						} else {
+							result["success"] = false;
+						}
+						break;
+
+					case "spz.cmd.get_camera_rot":
+						camIdx = @params["camera_index"]?.ToObject<int>() ?? 0;
+						var camRot = fastPath.GetCameraRotation(camIdx);
+						if (camRot.HasValue) {
+							result["success"] = true;
+							result["x"] = camRot.Value.x;
+							result["y"] = camRot.Value.y;
+							result["z"] = camRot.Value.z;
+							result["w"] = camRot.Value.w;
+						} else {
+							result["success"] = false;
+						}
+						break;
+
+					case "spz.cmd.get_camera_fov":
+						camIdx = @params["camera_index"]?.ToObject<int>() ?? 0;
+						var camFov = fastPath.GetCameraFOV(camIdx);
+						if (camFov.HasValue) {
+							result["success"] = true;
+							result["fov"] = camFov.Value;
 						} else {
 							result["success"] = false;
 						}
@@ -1009,6 +1107,75 @@ namespace spz {
 						result["success"] = true;
 						result["fovs"] = JArray.FromObject(allFOVs);
 						break;
+
+					case "spz.cmd.get_brush_settings":
+						fastPath.PopulateBrushSettings(result);
+						break;
+
+					case "spz.cmd.get_paint_layers":
+						fastPath.PopulatePaintLayers(result);
+						break;
+
+					case "spz.cmd.set_brush_size":
+						result["success"] = fastPath.SetBrushSize01(@params["value"]?.ToObject<float>() ?? @params["size01"]?.ToObject<float>() ?? -1f);
+						break;
+
+					case "spz.cmd.set_brush_spacing":
+						result["success"] = fastPath.SetBrushSpacing01(@params["value"]?.ToObject<float>() ?? @params["spacing01"]?.ToObject<float>() ?? -1f);
+						break;
+
+					case "spz.cmd.set_brush_angle":
+						result["success"] = fastPath.SetBrushAngleDeg(@params["value"]?.ToObject<float>() ?? @params["angle_deg"]?.ToObject<float>() ?? float.NaN);
+						break;
+
+					case "spz.cmd.set_brush_roundness":
+						result["success"] = fastPath.SetBrushRoundness01(@params["value"]?.ToObject<float>() ?? @params["roundness01"]?.ToObject<float>() ?? -1f);
+						break;
+
+					case "spz.cmd.set_brush_opacity":
+						result["success"] = fastPath.SetBrushOpacity01(@params["value"]?.ToObject<float>() ?? @params["opacity01"]?.ToObject<float>() ?? -1f);
+						break;
+
+					case "spz.cmd.set_brush_stamp_index":
+						result["success"] = fastPath.SetBrushStampIndex(@params["index"]?.ToObject<int>() ?? -1);
+						break;
+
+					case "spz.cmd.set_active_paint_layer":
+						result["success"] = fastPath.SetActivePaintLayerIndex(@params["index"]?.ToObject<int>() ?? -1);
+						break;
+
+					case "spz.cmd.get_sd_workflow_options":
+						fastPath.PopulateSdWorkflowOptions(result);
+						break;
+
+					case "spz.cmd.set_sd_denoising_strength":
+						result["success"] = fastPath.SetSdDenoisingStrength(
+							@params["value"]?.ToObject<float>() ?? float.NaN);
+						break;
+
+					case "spz.cmd.set_sd_mask_blur":
+						result["success"] = fastPath.SetSdMaskBlurStep(
+							@params["value"]?.ToObject<float>() ?? float.NaN);
+						break;
+
+					case "spz.cmd.set_sd_soft_inpaint":
+						result["success"] = fastPath.SetSdSoftInpaint(
+							@params["value"]?.ToObject<bool>() ?? @params["on"]?.ToObject<bool>() ?? false);
+						break;
+
+					case "spz.cmd.set_sd_tileable_inpaint":
+						result["success"] = fastPath.SetSdTileableInpaint(
+							@params["value"]?.ToObject<bool>() ?? @params["on"]?.ToObject<bool>() ?? false);
+						break;
+
+					case "spz.cmd.set_sd_ignore_depth_or_normals":
+						result["success"] = fastPath.SetSdIgnoreDepthOrNormals(
+							@params["value"]?.ToObject<bool>() ?? @params["on"]?.ToObject<bool>() ?? false);
+						break;
+
+					case "spz.cmd.get_addon_context":
+						fastPath.PopulateAddonContext(result);
+						break;
 						
 					default:
 						result["success"] = false;
@@ -1219,34 +1386,34 @@ namespace spz {
 			}
 		}
 		
-		void OnDestroy() {
+		/// <summary>
+		/// Stops the JSON-RPC TCP listener and joins the accept thread. Call after Python/add-on clients are terminated
+		/// so <see cref="HandleClient"/> loops can exit. Idempotent; safe from <see cref="Application.quitting"/> or <see cref="MonoBehaviour.OnDestroy"/>.
+		/// </summary>
+		public void ShutdownNetworkingForQuit() {
+			if (_quitNetworkingShutdownDone)
+				return;
+			_quitNetworkingShutdownDone = true;
 			_isRunning = false;
-			
-			// Stop accepting new connections
 			try {
 				_listener?.Stop();
 			} catch { }
-			
-			// Wait for listener thread to finish
 			if (_listenerThread != null && _listenerThread.IsAlive) {
-				_listenerThread.Join(2000); // Wait up to 2 seconds
-				if (_listenerThread.IsAlive) {
-					UnityEngine.Debug.LogWarning("[Addon_SocketServer] Listener thread did not terminate gracefully");
-				}
+				_listenerThread.Join(1500);
+				if (_listenerThread.IsAlive)
+					UnityEngine.Debug.LogWarning("[Addon_SocketServer] Listener thread did not terminate within timeout (quit).");
 			}
-			
-			// Clear pending responses
 			_pendingResponses.Clear();
-			
-			// Clear command queue
 			while (_mainThreadQueue.TryDequeue(out _)) { }
-			
-			// Remove ready marker so next run doesn't see stale file
 			try {
 				string markerPath = GetReadyMarkerPath(_port);
 				if (File.Exists(markerPath))
 					File.Delete(markerPath);
 			} catch { }
+		}
+
+		void OnDestroy() {
+			ShutdownNetworkingForQuit();
 		}
 	}
 }

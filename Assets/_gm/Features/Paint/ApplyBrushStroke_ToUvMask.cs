@@ -12,6 +12,7 @@ namespace spz {
 	    [SerializeField] ComputeShader _invertMask_shader; //used when user presses InvertMaskTool button.
 
 	    RenderTexture _smudgeCopyRT;
+	    RenderTexture _smudgeAccumCopyRT;
 
 
 	    //used when user presses InvertMaskTool button.
@@ -139,16 +140,47 @@ namespace spz {
 	    }
 
 
-	    /// <summary>Applies smudge: reads from a copy of the paint target, blurs under brush coverage, writes back.
-	    /// Call each frame during drag when smudge mode is active.</summary>
-	    public void Apply_smudge_to_ColorBrushTex( RenderTexture currBrushStroke_R8,
-	                                                float smudgeStrength01, float brushSize01, RenderUdims destin ){
-	        if (destin == null || destin.texArray == null || currBrushStroke_R8 == null) return;
+	    static bool SmudgeLayerAndAccumSameShape(RenderUdims layer, RenderUdims accum){
+		    if (layer == null || accum == null || layer.texArray == null || accum.texArray == null) return false;
+		    return layer.width == accum.width && layer.height == accum.height && layer.UdimsCount == accum.UdimsCount;
+	    }
 
-	        EnsureSmudgeCopy(destin.texArray);
-	        if (_smudgeCopyRT == null) return;
+	    /// <summary>Call before <see cref="SchedulePreStrokeCapture"/> for smudge so undo is not captured when dispatch will no-op (missing chunks / RTs).</summary>
+	    public bool SmudgeDispatchPreconditionsMet(RenderUdims destin, RenderTexture currBrushStroke_R8) {
+		    if (destin == null || destin.texArray == null || currBrushStroke_R8 == null) return false;
+		    var orm = Objects_Renderer_MGR.instance;
+		    if (orm == null || orm.chunksTexture_ref()?.texArray == null) return false;
+		    EnsureSmudgeCopies(destin.texArray);
+		    return _smudgeCopyRT != null && _smudgeAccumCopyRT != null;
+	    }
+
+	    /// <summary>Applies smudge: reads layer + mesh accumulation (SD UV results / under-paint) combined per texel, blurs, writes active layer.
+	    /// Call each frame during drag when smudge mode is active. Returns false if UV chunks or temps are unavailable (no GPU write).</summary>
+	    static readonly int _SmudgeAngleRadId = Shader.PropertyToID("_SmudgeAngleRad");
+	    static readonly int _SmudgeDirBoostId = Shader.PropertyToID("_SmudgeDirBoost");
+
+	    /// <param name="smudgeAngleDeg">0° = +X in UV texel space; favors smearing along this direction in the neighbor kernel.</param>
+	    /// <param name="smudgeDirBoost">0 = isotropic smudge; higher = stronger directional bias (typical 1–2).</param>
+	    public bool Apply_smudge_to_ColorBrushTex( RenderTexture currBrushStroke_R8,
+	                                                float smudgeStrength01, float brushSize01, RenderUdims destin,
+	                                                RenderUdims meshAccumulationForSmudge = null,
+	                                                float kernelSpacingMultiplier = 1f,
+	                                                float smudgeAngleDeg = 0f,
+	                                                float smudgeDirBoost = 1.35f ){
+	        if (destin == null || destin.texArray == null || currBrushStroke_R8 == null) return false;
+
+	        var orm = Objects_Renderer_MGR.instance;
+	        RenderTexture chunksTex = orm != null ? orm.chunksTexture_ref()?.texArray : null;
+	        if (chunksTex == null) return false;
+
+	        EnsureSmudgeCopies(destin.texArray);
+	        if (_smudgeCopyRT == null || _smudgeAccumCopyRT == null) return false;
 
 	        Graphics.CopyTexture(destin.texArray, _smudgeCopyRT);
+	        if (SmudgeLayerAndAccumSameShape(destin, meshAccumulationForSmudge))
+		        Graphics.CopyTexture(meshAccumulationForSmudge.texArray, _smudgeAccumCopyRT);
+	        else
+		        TextureTools_SPZ.ClearRenderTexture(_smudgeAccumCopyRT, Color.clear, clearColor: true, clearDepth: false);
 
 	        int kernel = _brushStroke_intoMask.FindKernel("CSSmudge");
 
@@ -158,20 +190,18 @@ namespace spz {
 	        _brushStroke_intoMask.SetTexture(kernel, "_CurrBrushStroke_R8", currBrushStroke_R8);
 	        _brushStroke_intoMask.SetTexture(kernel, "_PaintedMask", destin.texArray);
 	        _brushStroke_intoMask.SetTexture(kernel, "_SmudgeSourceCopy", _smudgeCopyRT);
+	        _brushStroke_intoMask.SetTexture(kernel, "_SmudgeAccumCopy", _smudgeAccumCopyRT);
 	        _brushStroke_intoMask.SetFloat("_MaxPossibleBrushStrength01", smudgeStrength01);
+	        // >0: favor neighbors similar to brush-center (hover) color — edge-aware smudge. 0 = pure distance blur.
+	        _brushStroke_intoMask.SetFloat("_SmudgeAdaptiveColorSigma", 10f);
 
-	        float kernelSpacing = Mathf.Max(1f, brushSize01 * destin.width * 0.04f);
+	        float kernelSpacing = Mathf.Max(1f, brushSize01 * destin.width * 0.04f) * Mathf.Max(0.25f, kernelSpacingMultiplier);
 	        _brushStroke_intoMask.SetFloat("_SmudgeKernelSpacing", kernelSpacing);
 	        _brushStroke_intoMask.SetInt("_SmudgeTexWidth", destin.width);
 	        _brushStroke_intoMask.SetInt("_SmudgeTexHeight", destin.height);
+	        _brushStroke_intoMask.SetFloat(_SmudgeAngleRadId, smudgeAngleDeg * Mathf.Deg2Rad);
+	        _brushStroke_intoMask.SetFloat(_SmudgeDirBoostId, Mathf.Max(0f, smudgeDirBoost));
 
-	        var orm = Objects_Renderer_MGR.instance;
-	        RenderTexture chunksTex = orm != null ? orm.chunksTexture_ref()?.texArray : null;
-	        if (chunksTex == null){
-	            TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "SMUDGE_MODE", false);
-	            TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "BLEND_RGBA_ONCE", false);
-	            return;
-	        }
 	        _brushStroke_intoMask.SetTexture(kernel, "_UV_Chunks_R8", chunksTex);
 	        Vector4 chunks_scale = new Vector4(chunksTex.width/(float)currBrushStroke_R8.width,
 	                                            chunksTex.height/(float)currBrushStroke_R8.height, 0,0);
@@ -182,23 +212,29 @@ namespace spz {
 
 	        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "SMUDGE_MODE", false);
 	        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "BLEND_RGBA_ONCE", false);
+	        return true;
 	    }
 
-	    void EnsureSmudgeCopy(RenderTexture source){
-	        bool ok = _smudgeCopyRT != null
-	                  && _smudgeCopyRT.width == source.width
-	                  && _smudgeCopyRT.height == source.height
-	                  && _smudgeCopyRT.volumeDepth == source.volumeDepth;
+	    void EnsureSmudgeCopies(RenderTexture layerSource){
+	        bool ok = _smudgeCopyRT != null && _smudgeAccumCopyRT != null
+	                  && _smudgeCopyRT.width == layerSource.width
+	                  && _smudgeCopyRT.height == layerSource.height
+	                  && _smudgeCopyRT.volumeDepth == layerSource.volumeDepth;
 	        if (ok) return;
 
 	        if (_smudgeCopyRT != null){ _smudgeCopyRT.Release(); DestroyImmediate(_smudgeCopyRT); }
-	        _smudgeCopyRT = new RenderTexture(source.descriptor);
+	        if (_smudgeAccumCopyRT != null){ _smudgeAccumCopyRT.Release(); DestroyImmediate(_smudgeAccumCopyRT); }
+	        _smudgeCopyRT = new RenderTexture(layerSource.descriptor);
 	        _smudgeCopyRT.enableRandomWrite = false;
 	        _smudgeCopyRT.Create();
+	        _smudgeAccumCopyRT = new RenderTexture(layerSource.descriptor);
+	        _smudgeAccumCopyRT.enableRandomWrite = false;
+	        _smudgeAccumCopyRT.Create();
 	    }
 
 	    void OnDestroy(){
 	        if (_smudgeCopyRT != null){ _smudgeCopyRT.Release(); DestroyImmediate(_smudgeCopyRT); }
+	        if (_smudgeAccumCopyRT != null){ _smudgeAccumCopyRT.Release(); DestroyImmediate(_smudgeAccumCopyRT); }
 	    }
 
 

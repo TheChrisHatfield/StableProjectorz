@@ -19,7 +19,18 @@ namespace spz {
 	        EventsBinder.Bind_Clickable_to_event(eventId, uiComponent);
 	    }
 	    public static void Invoke(string id) {
-	        if (_actionsDict.TryGetValue(id, out var d) && d is Action act) { act?.Invoke(); }
+	        if (!_actionsDict.TryGetValue(id, out var d) || d == null)
+	            return;
+	        if (d is Action act) {
+	            act.Invoke();
+	            return;
+	        }
+	        // IL2CPP / delegate identity: some builds store a parameterless delegate that is not `is Action`.
+	        try {
+	            d.DynamicInvoke();
+	        } catch (Exception ex) {
+	            Debug.LogWarning($"StaticEvents.Invoke(\"{id}\") failed: {ex.Message}");
+	        }
 	    }
 	    public static void Invoke<T1>(string id, T1 arg1) {
 	        if (_actionsDict.TryGetValue(id, out var d) && d is Action<T1> act) { act?.Invoke(arg1); }
@@ -69,6 +80,14 @@ namespace spz {
 	    public static void SubscribeUnique<T1, T2, T3, T4, T5, T6>(string id, Action<T1, T2, T3, T4, T5, T6> act) {
 	        if (!_actionsDict.ContainsKey(id)) { _actionsDict.Add(id, act); return; }
 	        throw new Exception($"Event ID '{id}' is already used. Use SubscribeAppend or a different ID.");
+	    }
+
+	    /// <summary>
+	    /// Replaces any existing handler for <paramref name="id"/> (same as <c>SubscribeUnique</c> but idempotent).
+	    /// Use for singleton UI bridges when Enter Play Mode Without Reload Domain can leave a stale <see cref="Action"/> on the same id.
+	    /// </summary>
+	    public static void SubscribeOrReplace(string id, Action act) {
+		    _actionsDict[id] = act;
 	    }
 
 

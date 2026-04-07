@@ -1,7 +1,10 @@
 using System;
+using System.Buffers.Binary;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
+using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.InputSystem;
@@ -40,6 +43,11 @@ namespace spz {
 
 	    Material _blitApplyEntireColorLayer_mat;
 	    RenderUdims _layerStackCompositeTemp; // when using layer stack, composite output for blit
+	    /// <summary>Multi-layer smudge: scene + visible layers below active, so smudge samples mesh/SD through transparent strokes (see <see cref="TryBuildSmudgeUnderTextureForSmudge"/>).</summary>
+	    RenderUdims _smudgeUnderActiveTemp;
+	    /// <summary>Non-owning wrapper for main Art tab icon UV color; invalidated when <see cref="GenData2D.total_GUID"/> or texture ref changes.</summary>
+	    RenderUdims _artIconUvColorWrapper;
+	    Guid _artIconUvColorWrapperGenGuid;
 
 	    public bool isPaintMaskEmpty { get; private set; } = true;
 	    /// <summary>Single-layer paint target (when PaintLayerStack_MGR is not used). When layer stack is used, paint goes to active layer. </summary>
@@ -52,6 +60,30 @@ namespace spz {
 	    bool _isCollapsingLayers;
 	    /// <summary>Set by PaintLayerStack_MGR during collapse to suppress scene injection into the new layer.</summary>
 	    public bool IsCollapsingLayers { get => _isCollapsingLayers; set => _isCollapsingLayers = value; }
+
+	    [Tooltip("Min seconds between GPU picks of mesh color under cursor for smudge ring tint.")]
+	    [SerializeField] float _smudgeCursorReadMinInterval = 0.07f;
+	    [Tooltip("Viewport 01 movement below this skips a new readback (reduces GPU traffic).")]
+	    [SerializeField] float _smudgeCursorViewportMoveThresh = 0.0035f;
+
+	    bool _smudgeCursorReadInFlight;
+	    Vector2 _smudgeCursorLastReadVp01 = new Vector2(-1f, -1f);
+	    float _smudgeCursorLastReadTime;
+	    /// <summary>Format passed to <see cref="AsyncGPUReadback.Request"/> for the in-flight smudge cursor sample (decode must match).</summary>
+	    GraphicsFormat _smudgeCursorPendingReadbackFormat;
+
+	    [Tooltip("Auto: contextual Thompson + layer opacity picks smudge on active layer vs mesh/SD accumulation when both match. LayerStack / GeneratedMesh fix the target.")]
+	    [SerializeField] SmudgeWriteTargetPreference _smudgeWriteTargetPreference = SmudgeWriteTargetPreference.Auto;
+
+	    SmudgeAdaptiveRouteLock _smudgeRouteLockForStroke;
+	    bool _smudgeRouteObsPending;
+	    int _smudgeRouteObsBucket;
+	    int _smudgeRouteObsArm;
+	    float _smudgeStrokeMaxUnscaledDt;
+	    /// <summary>Paint <c>Content</c> when adaptive route was locked; invalidated if <see cref="GetPaintTarget"/> changes mid-stroke.</summary>
+	    RenderUdims _smudgeStrokeLockedPaintContent;
+	    /// <summary>Last destination that had a pre-smudge undo capture this stroke; new <c>RenderUdims</c> triggers another capture.</summary>
+	    RenderUdims _smudgeUndoSegmentDest;
 
 	    // --- Paint target: active layer Content (used by brush stroke application) ---
 	    /// <summary>Paint target: active layer Content directly. Compute shader writes strokes into the same
@@ -85,7 +117,8 @@ namespace spz {
 
 	    public SoftInpaintingArgs GetArgs_for_SoftInpaint_GenRequest(){
 
-	        if(!SD_WorkflowOptionsRibbon_UI.instance.isSoftInpaint){ return null; }
+	        var sd = SD_WorkflowOptionsRibbon_UI.instance;
+	        if (sd == null || !sd.isSoftInpaint) return null;
 
 	        var entry = new SoftInpaintingArgsEntry{};//keep default values, they don't have much difference (Jul 2024)
 
@@ -162,10 +195,12 @@ namespace spz {
 	        }
 
 	        // ---- Final blit: identical for 1 layer and N layers. This is the proven single-layer mechanism. ----
+	        bool isSmudgeTool = SD_WorkflowOptionsRibbon_UI.instance != null && SD_WorkflowOptionsRibbon_UI.instance.isSmudge;
 	        Color brushCol = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.brushColor : Color.black;
 	        float sign = Mathf.Sign(_prevStrength);
 	        float maxStrength = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity : 1f;
-	        bool applyBrush = _isPainting && !multiLayer;
+	        // Smudge mutates the layer in compute; do not overlay the live stroke with the palette brush color (would hide true smear colors).
+	        bool applyBrush = _isPainting && !multiLayer && !isSmudgeTool;
 
 	        _blitApplyEntireColorLayer_mat.SetTexture("_SrcTex", source.texArray);
 	        RenderUdims.SetNumUdims(ontoHere, _blitApplyEntireColorLayer_mat);
@@ -204,6 +239,7 @@ namespace spz {
 
 		    _layerStackCompositeTemp.ClearTheTextures(Color.clear);
 
+		    bool isSmudgeTool = SD_WorkflowOptionsRibbon_UI.instance != null && SD_WorkflowOptionsRibbon_UI.instance.isSmudge;
 		    Color brushCol = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.brushColor : Color.black;
 		    float sign = Mathf.Sign(_prevStrength);
 		    float maxStrength = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity : 1f;
@@ -216,7 +252,7 @@ namespace spz {
 			    if (!layer.Visible || layer.Content == null) continue;
 
 			    float opacity = Mathf.Clamp01(layer.Opacity);
-			    bool isActiveAndPainting = (i == activeIdx) && _isPainting;
+			    bool isActiveAndPainting = (i == activeIdx) && _isPainting && !isSmudgeTool;
 
 			    _blitApplyEntireColorLayer_mat.SetTexture("_SrcTex", layer.Content.texArray);
 			    RenderUdims.SetNumUdims(_layerStackCompositeTemp, _blitApplyEntireColorLayer_mat);
@@ -250,6 +286,203 @@ namespace spz {
 		    _layerStackCompositeTemp?.Dispose();
 		    _layerStackCompositeTemp = new RenderUdims( sameSizeAs.udims_sectors, sameSizeAs.widthHeight,
 			    GenData_Masks.colorBrushFormat, GenData_Masks.colorBrushFilter, Color.clear, 0 );
+	    }
+
+	    void EnsureSmudgeUnderActiveTemp(RenderUdims sameSizeAs)
+	    {
+		    if (sameSizeAs == null) return;
+		    if (_smudgeUnderActiveTemp != null && _smudgeUnderActiveTemp.width == sameSizeAs.width &&
+		        _smudgeUnderActiveTemp.height == sameSizeAs.height && _smudgeUnderActiveTemp.UdimsCount == sameSizeAs.UdimsCount)
+			    return;
+		    _smudgeUnderActiveTemp?.Dispose();
+		    _smudgeUnderActiveTemp = new RenderUdims(sameSizeAs.udims_sectors, sameSizeAs.widthHeight,
+			    GenData_Masks.colorBrushFormat, GenData_Masks.colorBrushFilter, Color.clear, 0);
+	    }
+
+	    static bool SmudgeSameUdimsShape(RenderUdims a, RenderUdims b)
+	    {
+		    return a != null && b != null && a.texArray != null && b.texArray != null
+		           && a.width == b.width && a.height == b.height && a.UdimsCount == b.UdimsCount;
+	    }
+
+	    /// <summary>Wraps the selected Art tab icon’s primary UV color texture array for smudge / undo when it matches mesh brush resolution.</summary>
+	    public RenderUdims EnsureArtIconUvColorWrapper()
+	    {
+		    var art = Art2D_IconsUI_List.instance;
+		    var icon = art?._mainSelectedIcon;
+		    var gen = icon?._genData;
+		    if (gen == null) return null;
+		    var tr = gen.GetTexture_ref0();
+		    if (tr?.texArray == null) return null;
+		    var udims = ModelsHandler_3D.instance?._allKnownUdims;
+		    if (udims == null || udims.Count == 0 || udims.Count != tr.texArray.volumeDepth)
+			    return null;
+		    Guid g = gen.total_GUID;
+		    if (_artIconUvColorWrapper != null && _artIconUvColorWrapper.texArray == tr.texArray && _artIconUvColorWrapperGenGuid == g)
+			    return _artIconUvColorWrapper;
+		    _artIconUvColorWrapper?.Dispose();
+		    _artIconUvColorWrapper = new RenderUdims(tr.texArray, udims.ToList(), texturesBelongToMe: false);
+		    _artIconUvColorWrapperGenGuid = g;
+		    return _artIconUvColorWrapper;
+	    }
+
+	    /// <summary>Delegates to <see cref="SmudgeStrokeRouter"/> for domain barriers, adaptive layer vs mesh routing, and kernel spacing.</summary>
+	    void ResolveSmudgeDestinationAndAccum(RenderUdims layerPaintTarget, PaintLayerStack_MGR stack,
+		    out RenderUdims smudgeDest, out RenderUdims smudgeAcc, out PaintUndoNonStackTarget undoNonStackKind,
+		    out float smudgeKernelSpacingMultiplier)
+	    {
+		    smudgeDest = null;
+		    smudgeAcc = null;
+		    undoNonStackKind = PaintUndoNonStackTarget.InpaintColor;
+		    smudgeKernelSpacingMultiplier = 1f;
+		    if (layerPaintTarget == null) return;
+
+		    if (_smudgeStrokeLockedPaintContent != null
+		        && _smudgeRouteLockForStroke != SmudgeAdaptiveRouteLock.Inactive
+		        && !ReferenceEquals(layerPaintTarget, _smudgeStrokeLockedPaintContent)) {
+			    _smudgeRouteLockForStroke = SmudgeAdaptiveRouteLock.Inactive;
+			    _smudgeRouteObsPending = false;
+			    _smudgeStrokeLockedPaintContent = null;
+		    }
+
+		    var meshAcc = Objects_Renderer_MGR.instance?.accumulationTextures_ref();
+		    bool meshOk = meshAcc != null && SmudgeSameUdimsShape(layerPaintTarget, meshAcc);
+		    bool layerGate = SmudgeStrokeRouter.LayerSmudgeGateOpen(stack, layerPaintTarget);
+		    bool skipMultiLayerUnder = meshOk && (_smudgeWriteTargetPreference == SmudgeWriteTargetPreference.GeneratedMesh
+		                                         || (_smudgeWriteTargetPreference == SmudgeWriteTargetPreference.Auto
+		                                             && _smudgeRouteLockForStroke == SmudgeAdaptiveRouteLock.PreferMesh));
+
+		    RenderUdims preUnder = null;
+		    if (!skipMultiLayerUnder && layerGate && stack != null && stack.Layers != null && stack.Layers.Count > 1)
+			    preUnder = TryBuildSmudgeUnderTextureForSmudge(layerPaintTarget, stack);
+
+		    var artWrap = EnsureArtIconUvColorWrapper();
+		    var plan = SmudgeStrokeRouter.Build(layerPaintTarget, stack, meshAcc, artWrap, preUnder,
+			    _smudgeWriteTargetPreference, _smudgeRouteLockForStroke);
+		    smudgeDest = plan.Dest;
+		    smudgeAcc = plan.Underlay;
+		    undoNonStackKind = plan.UndoKind;
+		    smudgeKernelSpacingMultiplier = plan.KernelSpacingMultiplier;
+	    }
+
+	    /// <summary>First smudge frame: lock Auto route (layer vs mesh) and register a bandit pull on the undo scheduler.</summary>
+	    void BeginSmudgeStrokeAdaptiveRoutingIfNeeded(RenderUdims target, PaintLayerStack_MGR stack)
+	    {
+		    PaintUndo_MGR.EnsureExists();
+		    _smudgeStrokeMaxUnscaledDt = Time.unscaledDeltaTime;
+		    _smudgeRouteObsPending = false;
+		    _smudgeRouteObsBucket = -1;
+		    _smudgeRouteLockForStroke = SmudgeAdaptiveRouteLock.Inactive;
+
+		    if (_smudgeWriteTargetPreference != SmudgeWriteTargetPreference.Auto)
+			    return;
+		    if (!SmudgeStrokeRouter.LayerSmudgeGateOpen(stack, target))
+			    return;
+		    var meshAcc = Objects_Renderer_MGR.instance?.accumulationTextures_ref();
+		    if (meshAcc == null || !SmudgeSameUdimsShape(target, meshAcc))
+			    return;
+
+		    float opacity = stack.ActiveLayer != null ? Mathf.Clamp01(stack.ActiveLayer.Opacity) : 1f;
+		    var sch = PaintUndo_MGR.instance != null ? PaintUndo_MGR.instance.UndoScheduler : null;
+		    float refPx = sch != null ? sch.referencePixelsPerSlice : 512f * 512f;
+		    int bucketCount = sch != null ? sch.restoreContextBucketCount : 8;
+		    PaintUndo_Scheduler.EvaluateWorkload(target.width, target.height, target.UdimsCount, refPx, out _, out float complexity01, out _);
+
+		    bool preferLayer;
+		    int bucket;
+		    int chosenArm;
+		    if (sch != null) {
+			    preferLayer = sch.SelectSmudgeLayerVersusGeneratedMesh(complexity01, target.UdimsCount, opacity, true, out bucket, out chosenArm);
+		    } else {
+			    bucket = PaintUndo_Scheduler.QuantizeContextBucket(complexity01, target.UdimsCount, bucketCount);
+			    preferLayer = opacity >= 0.5f;
+			    chosenArm = preferLayer ? 0 : 1;
+		    }
+
+		    _smudgeRouteObsBucket = bucket;
+		    _smudgeRouteObsArm = chosenArm;
+		    _smudgeRouteObsPending = true;
+		    _smudgeRouteLockForStroke = preferLayer ? SmudgeAdaptiveRouteLock.PreferLayer : SmudgeAdaptiveRouteLock.PreferMesh;
+		    _smudgeStrokeLockedPaintContent = target;
+	    }
+
+	    /// <summary>Builds what lies <em>under</em> the active layer for smudge sampling: mesh/SD scene buffer and/or visible layers with index &lt; active. Avoids multi-layer smudge using an empty accum slot (no UV/SD under transparent paint).</summary>
+	    RenderUdims TryBuildSmudgeUnderTextureForSmudge(RenderUdims target, PaintLayerStack_MGR stack)
+	    {
+		    if (target == null || stack?.Layers == null || stack.Layers.Count <= 1 || _blitApplyEntireColorLayer_mat == null)
+			    return null;
+
+		    EnsureBottomLayerHasSceneForComposite();
+		    EnsureSceneBufferForDisplay();
+
+		    bool isColorless = WorkflowRibbon_UI.instance != null && WorkflowRibbon_UI.instance.currentMode() == WorkflowRibbon_CurrMode.Inpaint_NoColor;
+
+		    EnsureSmudgeUnderActiveTemp(target);
+		    if (_smudgeUnderActiveTemp == null)
+			    return null;
+
+		    int activeIdx = Mathf.Clamp(stack.ActiveLayerIndex, 0, stack.Layers.Count - 1);
+
+		    // Bottom layer: underlay matches single-layer idea — scene snapshot and/or mesh accumulation (not “other layers”).
+		    if (activeIdx <= 0)
+		    {
+			    if (_ObjectUV_brushedColorRGBA != null && SmudgeSameUdimsShape(target, _ObjectUV_brushedColorRGBA))
+			    {
+				    Graphics.CopyTexture(_ObjectUV_brushedColorRGBA.texArray, _smudgeUnderActiveTemp.texArray);
+				    return _smudgeUnderActiveTemp;
+			    }
+			    var accBottom = Objects_Renderer_MGR.instance?.accumulationTextures_ref();
+			    if (accBottom != null && SmudgeSameUdimsShape(target, accBottom))
+			    {
+				    Graphics.CopyTexture(accBottom.texArray, _smudgeUnderActiveTemp.texArray);
+				    return _smudgeUnderActiveTemp;
+			    }
+			    return null;
+		    }
+
+		    _smudgeUnderActiveTemp.ClearTheTextures(Color.clear);
+
+		    Color brushCol = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.brushColor : Color.black;
+		    float sign = Mathf.Sign(_prevStrength);
+		    float maxStrength = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity : 1f;
+
+		    int blitCount = 0;
+		    for (int i = 0; i < activeIdx; i++)
+		    {
+			    var layer = stack.Layers[i];
+			    if (layer == null || !layer.Visible || layer.Content == null) continue;
+
+			    float opacity = Mathf.Clamp01(layer.Opacity);
+
+			    _blitApplyEntireColorLayer_mat.SetTexture("_SrcTex", layer.Content.texArray);
+			    RenderUdims.SetNumUdims(_smudgeUnderActiveTemp, _blitApplyEntireColorLayer_mat);
+			    TextureTools_SPZ.SetKeyword_Material(_blitApplyEntireColorLayer_mat, "APPLY_LATEST_BRUSH_TOO", false);
+			    _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", _latestBrushStroke_ref);
+			    _blitApplyEntireColorLayer_mat.SetColor("_CurrBrushColor", brushCol);
+			    _blitApplyEntireColorLayer_mat.SetFloat("_Sign", sign);
+			    _blitApplyEntireColorLayer_mat.SetFloat("_MaxPossibleBrushStrength01", maxStrength);
+			    _blitApplyEntireColorLayer_mat.SetInteger("_isColorlessMask", isColorless ? 1 : 0);
+			    if (isColorless) _blitApplyEntireColorLayer_mat.SetTexture("_ColorlessCheckerTex", _colorlessMaskChecker_tex);
+			    _blitApplyEntireColorLayer_mat.SetFloat("_TotalOpacity01", opacity);
+			    TextureTools_SPZ.Blit(layer.Content.texArray, _smudgeUnderActiveTemp.texArray, _blitApplyEntireColorLayer_mat);
+			    blitCount++;
+		    }
+
+		    if (blitCount == 0)
+		    {
+			    if (_ObjectUV_brushedColorRGBA != null && SmudgeSameUdimsShape(target, _ObjectUV_brushedColorRGBA))
+				    Graphics.CopyTexture(_ObjectUV_brushedColorRGBA.texArray, _smudgeUnderActiveTemp.texArray);
+			    else
+			    {
+				    var accFallback = Objects_Renderer_MGR.instance?.accumulationTextures_ref();
+				    if (accFallback != null && SmudgeSameUdimsShape(target, accFallback))
+					    Graphics.CopyTexture(accFallback.texArray, _smudgeUnderActiveTemp.texArray);
+				    else
+					    return null;
+			    }
+		    }
+
+		    return _smudgeUnderActiveTemp;
 	    }
 
 	    /// <summary>Ensure the scene buffer exists and has the same size as source; create or resize if needed. Does not copy contents.</summary>
@@ -363,26 +596,28 @@ namespace spz {
 
 
 	    protected override void OnBucketFill_button(){
-	        if(MainViewport_UI.instance.showing != MainViewport_UI.Showing.UsualView){ return; }
-	        if(WorkflowRibbon_UI.instance.isMode_using_img2img() == false){ return; }
+	        if (MainViewport_UI.instance?.showing != MainViewport_UI.Showing.UsualView) return;
+	        if (WorkflowRibbon_UI.instance == null || !WorkflowRibbon_UI.instance.isMode_using_img2img()) return;
 	        var target = GetPaintTarget();
 	        if (target == null) return;
-	        Color col = SD_WorkflowOptionsRibbon_UI.instance.brushColor;
+	        var sd = SD_WorkflowOptionsRibbon_UI.instance;
+	        if (sd == null) return;
+	        Color col = sd.brushColor;
 	        PaintUndo_MGR.EnsureExists();
 	        PaintUndo_MGR.instance?.SchedulePreStrokeCapture(target);
 	        OnBucketFill_orDelete_button( col, target.texArray,  visibilTex:null );
 	        isPaintMaskEmpty = false;
 	    }
 	    protected override void OnDelete_button(){//different to ResetPaintMask(), might be only for some isolated mesh.
-	        if(MainViewport_UI.instance.showing != MainViewport_UI.Showing.UsualView){ return; }
+	        if (MainViewport_UI.instance?.showing != MainViewport_UI.Showing.UsualView) return;
 	        var target = GetPaintTarget();
 	        if (target == null) return;
 	        OnBucketFill_orDelete_button( Color.clear, target.texArray,  visibilTex:null );
 	    }
 
 	    protected override bool isAllowedToShow_BrushCursorNow()
-	        => MainViewport_UI.instance.showing == MainViewport_UI.Showing.UsualView
-	           && WorkflowRibbon_UI.instance.isMode_using_img2img();
+	        => MainViewport_UI.instance?.showing == MainViewport_UI.Showing.UsualView
+	           && (WorkflowRibbon_UI.instance?.isMode_using_img2img() ?? false);
 
 	    protected override bool isAllowedToPaintNow( bool also_check_viewportHovered ){
 	        bool isAllowed =  MainViewport_UI.instance?.showing == MainViewport_UI.Showing.UsualView;
@@ -398,11 +633,264 @@ namespace spz {
 	        return isAllowed;
 	    }
 
-	    public override Vector2 getViewportSize()
-	        => MainViewport_UI.instance.mainViewportRect.rect.size;
+	    public override Vector2 getViewportSize() {
+	        var mv = MainViewport_UI.instance;
+	        if (mv == null) return Vector2.zero;
+	        return mv.mainViewportRect.rect.size;
+	    }
 
-	    public override Vector2 getViewportCursorPos01(bool forceMainViewport=false)
-	        =>MainViewport_UI.instance.cursorMainViewportPos01;
+	    public override Vector2 getViewportCursorPos01(bool forceMainViewport=false){
+	        var mv = MainViewport_UI.instance;
+	        if (mv == null) return Vector2.zero;
+	        return mv.cursorMainViewportPos01;
+	    }
+
+	    protected override void OnUpdateChildren()
+	    {
+		    UpdateSmudgeHoverCursorSample();
+	    }
+
+	    /// <summary>While smudge is active, tint the viewport brush ring from the mesh accumulation color under the cursor (throttled GPU readback).</summary>
+	    void UpdateSmudgeHoverCursorSample()
+	    {
+		    if (Cursor_UI.instance == null) return;
+		    var sd = SD_WorkflowOptionsRibbon_UI.instance;
+		    if (sd == null || !sd.isSmudge) return;
+		    if (_smudgeCursorReadInFlight) return;
+		    if (!isAllowedToShow_BrushCursorNow()) return;
+		    var mv = MainViewport_UI.instance;
+		    if (mv == null || !mv.isCursorHoveringMe()) return;
+
+		    Vector2 vp = getViewportCursorPos01();
+		    float thr = _smudgeCursorViewportMoveThresh;
+		    if ((vp - _smudgeCursorLastReadVp01).sqrMagnitude < thr * thr
+		        && Time.unscaledTime - _smudgeCursorLastReadTime < _smudgeCursorReadMinInterval)
+			    return;
+
+		    var orm = Objects_Renderer_MGR.instance;
+		    if (orm == null) return;
+		    var acc = orm.accumulationTextures_ref();
+		    if (acc == null || acc.texArray == null || acc.udims_sectors == null || acc.udims_sectors.Count == 0) return;
+
+		    if (!TryViewportToAccumTexel(vp, acc, out int slice, out int px, out int py))
+			    return;
+
+		    _smudgeCursorReadInFlight = true;
+		    _smudgeCursorLastReadVp01 = vp;
+		    _smudgeCursorLastReadTime = Time.unscaledTime;
+		    _smudgeCursorPendingReadbackFormat = acc.texArray.graphicsFormat;
+
+		    AsyncGPUReadback.Request(acc.texArray, 0, px, 1, py, 1, slice, 1, _smudgeCursorPendingReadbackFormat,
+			    OnSmudgeCursorReadbackComplete);
+	    }
+
+	    static bool TryViewportToAccumTexel(Vector2 viewport01, RenderUdims accum, out int slice, out int px, out int py)
+	    {
+		    slice = 0;
+		    px = py = 0;
+		    var cam = UserCameras_MGR.instance?._curr_viewCamera?.myCamera;
+		    if (cam == null) return false;
+		    if (!PaintSymmetryMesh.TryPreferredRaycast(cam, viewport01, out RaycastHit hit)) return false;
+
+		    Vector2 uv = hit.textureCoord;
+		    int sx = Mathf.Max(0, Mathf.CeilToInt(uv.x) - 1);
+		    int sy = Mathf.Max(0, Mathf.CeilToInt(uv.y) - 1);
+		    float uLoc = uv.x - sx;
+		    float vLoc = uv.y - sy;
+		    uLoc = Mathf.Repeat(uLoc, 1f);
+		    vLoc = Mathf.Repeat(vLoc, 1f);
+
+		    var targetSector = new UDIM_Sector(sx, sy);
+		    slice = 0;
+		    bool foundSector = false;
+		    for (int i = 0; i < accum.udims_sectors.Count; i++)
+		    {
+			    var sec = accum.udims_sectors[i];
+			    if (sec.x == targetSector.x && sec.y == targetSector.y)
+			    {
+				    slice = i;
+				    foundSector = true;
+				    break;
+			    }
+		    }
+		    if (!foundSector)
+			    return false;
+		    if (slice < 0 || slice >= accum.texArray.volumeDepth)
+			    return false;
+
+		    px = Mathf.Clamp((int)(uLoc * accum.width), 0, accum.width - 1);
+		    py = Mathf.Clamp((int)(vLoc * accum.height), 0, accum.height - 1);
+		    return true;
+	    }
+
+	    void OnSmudgeCursorReadbackComplete(AsyncGPUReadbackRequest req)
+	    {
+		    if (this == null) return;
+		    _smudgeCursorReadInFlight = false;
+		    if (req.hasError) return;
+		    if (Cursor_UI.instance == null) return;
+		    var sd = SD_WorkflowOptionsRibbon_UI.instance;
+		    if (sd == null || !sd.isSmudge) return;
+
+		    Color c;
+		    if (TryDecodeSmudgeCursorReadback(req, _smudgeCursorPendingReadbackFormat, out c))
+			    Cursor_UI.instance.SetCursorColor(c);
+	    }
+
+	    /// <summary>Decode one texel from <see cref="AsyncGPUReadback.Request"/> using the same <paramref name="readbackFormat"/> passed to that API. One typed/native read per callback.</summary>
+	    static bool TryDecodeSmudgeCursorReadback(AsyncGPUReadbackRequest req, GraphicsFormat readbackFormat, out Color c)
+	    {
+		    c = Color.white;
+		    try
+		    {
+			    switch (readbackFormat)
+			    {
+				    case GraphicsFormat.R32G32B32A32_SFloat:
+					    return TryDecodeSmudgeReadback_Rgba32F(req, out c);
+				    case GraphicsFormat.R16G16B16A16_SFloat:
+					    return TryDecodeSmudgeReadback_Rgba16F(req, out c);
+				    case GraphicsFormat.R16G16B16A16_UNorm:
+					    return TryDecodeSmudgeReadback_Rgba16UNorm(req, out c);
+				    case GraphicsFormat.B8G8R8A8_UNorm:
+				    case GraphicsFormat.B8G8R8A8_SRGB:
+					    return TryDecodeSmudgeReadback_Bgra8(req, out c);
+				    case GraphicsFormat.R8G8B8A8_UNorm:
+				    case GraphicsFormat.R8G8B8A8_SRGB:
+					    return TryDecodeSmudgeReadback_Rgba8(req, out c);
+				    default:
+					    return TryDecodeSmudgeReadback_GuessFromBytes(req, out c);
+			    }
+		    }
+		    catch (Exception)
+		    {
+			    return false;
+		    }
+	    }
+
+	    static Color ClampRgbForCursorRing(float r, float g, float b)
+	    {
+		    if (!float.IsFinite(r)) r = 1f;
+		    if (!float.IsFinite(g)) g = 1f;
+		    if (!float.IsFinite(b)) b = 1f;
+		    return new Color(Mathf.Clamp01(r), Mathf.Clamp01(g), Mathf.Clamp01(b), 1f);
+	    }
+
+	    static bool TryDecodeSmudgeReadback_Rgba32F(AsyncGPUReadbackRequest req, out Color c)
+	    {
+		    c = Color.white;
+		    var f = req.GetData<float>();
+		    if (f.Length < 4) return false;
+		    c = ClampRgbForCursorRing(f[0], f[1], f[2]);
+		    return true;
+	    }
+
+	    static bool TryDecodeSmudgeReadback_Rgba16F(AsyncGPUReadbackRequest req, out Color c)
+	    {
+		    c = Color.white;
+		    var bytes = req.GetData<byte>();
+		    if (bytes.Length < 8) return false;
+		    float r = HalfUShortToFloat((ushort)(bytes[0] | (bytes[1] << 8)));
+		    float g = HalfUShortToFloat((ushort)(bytes[2] | (bytes[3] << 8)));
+		    float b = HalfUShortToFloat((ushort)(bytes[4] | (bytes[5] << 8)));
+		    c = ClampRgbForCursorRing(r, g, b);
+		    return true;
+	    }
+
+	    static bool TryDecodeSmudgeReadback_Rgba16UNorm(AsyncGPUReadbackRequest req, out Color c)
+	    {
+		    c = Color.white;
+		    var bytes = req.GetData<byte>();
+		    if (bytes.Length < 8) return false;
+		    float r = (ushort)(bytes[0] | (bytes[1] << 8)) / 65535f;
+		    float g = (ushort)(bytes[2] | (bytes[3] << 8)) / 65535f;
+		    float b = (ushort)(bytes[4] | (bytes[5] << 8)) / 65535f;
+		    c = ClampRgbForCursorRing(r, g, b);
+		    return true;
+	    }
+
+	    static bool TryDecodeSmudgeReadback_Rgba8(AsyncGPUReadbackRequest req, out Color c)
+	    {
+		    c = Color.white;
+		    var bytes = req.GetData<byte>();
+		    if (bytes.Length < 4) return false;
+		    c = new Color(bytes[0] / 255f, bytes[1] / 255f, bytes[2] / 255f, 1f);
+		    return true;
+	    }
+
+	    static bool TryDecodeSmudgeReadback_Bgra8(AsyncGPUReadbackRequest req, out Color c)
+	    {
+		    c = Color.white;
+		    var bytes = req.GetData<byte>();
+		    if (bytes.Length < 4) return false;
+		    // B, G, R, A
+		    c = new Color(bytes[2] / 255f, bytes[1] / 255f, bytes[0] / 255f, 1f);
+		    return true;
+	    }
+
+	    /// <summary>If format is uncommon, infer layout from byte count (still a single <see cref="AsyncGPUReadbackRequest.GetData{T}"/> call).</summary>
+	    static uint SmudgeReadbackU32LE(NativeArray<byte> bytes, int offset)
+	    {
+		    return (uint)bytes[offset]
+		           | ((uint)bytes[offset + 1] << 8)
+		           | ((uint)bytes[offset + 2] << 16)
+		           | ((uint)bytes[offset + 3] << 24);
+	    }
+
+	    static bool TryDecodeSmudgeReadback_GuessFromBytes(AsyncGPUReadbackRequest req, out Color c)
+	    {
+		    c = Color.white;
+		    var bytes = req.GetData<byte>();
+		    // Unknown format: avoid treating 8–15 bytes as half (could be RGBA8 + row/alignment padding).
+		    if (bytes.Length >= 16)
+		    {
+			    Span<byte> s = stackalloc byte[4];
+			    BinaryPrimitives.WriteUInt32LittleEndian(s, SmudgeReadbackU32LE(bytes, 0));
+			    float r = MemoryMarshal.Read<float>(s);
+			    BinaryPrimitives.WriteUInt32LittleEndian(s, SmudgeReadbackU32LE(bytes, 4));
+			    float g = MemoryMarshal.Read<float>(s);
+			    BinaryPrimitives.WriteUInt32LittleEndian(s, SmudgeReadbackU32LE(bytes, 8));
+			    float b = MemoryMarshal.Read<float>(s);
+			    c = ClampRgbForCursorRing(r, g, b);
+			    return true;
+		    }
+		    if (bytes.Length == 8)
+		    {
+			    float r = HalfUShortToFloat((ushort)(bytes[0] | (bytes[1] << 8)));
+			    float g = HalfUShortToFloat((ushort)(bytes[2] | (bytes[3] << 8)));
+			    float b = HalfUShortToFloat((ushort)(bytes[4] | (bytes[5] << 8)));
+			    c = ClampRgbForCursorRing(r, g, b);
+			    return true;
+		    }
+		    if (bytes.Length >= 4)
+		    {
+			    c = new Color(bytes[0] / 255f, bytes[1] / 255f, bytes[2] / 255f, 1f);
+			    return true;
+		    }
+		    return false;
+	    }
+
+	    static float HalfUShortToFloat(ushort h)
+	    {
+		    int sign = h >> 15;
+		    int exp = (h >> 10) & 0x1f;
+		    int mant = h & 0x3ff;
+		    if (exp == 0)
+		    {
+			    if (mant == 0)
+				    return sign != 0 ? -0f : 0f;
+			    float m = mant / 1024f;
+			    float v = m * Mathf.Pow(2f, -14f);
+			    return sign != 0 ? -v : v;
+		    }
+		    if (exp == 31)
+			    return mant != 0 ? float.NaN : (sign != 0 ? float.NegativeInfinity : float.PositiveInfinity);
+		    exp = exp - 15 + 127;
+		    mant <<= 13;
+		    uint bits = (uint)((sign << 31) | (exp << 23) | mant);
+		    Span<byte> s = stackalloc byte[4];
+		    BinaryPrimitives.WriteUInt32LittleEndian(s, bits);
+		    return MemoryMarshal.Read<float>(s);
+	    }
 
 	    protected override Vector3Int maskResolution(){
 	        int fallBack = GenData_Masks.COLOR_BRUSH_RESOLUTION;
@@ -496,6 +984,10 @@ namespace spz {
 		                         + " ColorBuf=" + (_ObjectUV_brushedColorRGBA != null));
 		        return;
 	        }
+	        if (ModelsHandler_3D.instance == null || Objects_Renderer_MGR.instance == null
+	            || UserCameras_MGR.instance?._curr_viewCamera == null)
+		        return;
+
 	        isPaintMaskEmpty = false;
 	        if(isFirstFrameOfStroke){ _prevStrength = suggested_brushStrength; }
         
@@ -522,15 +1014,33 @@ namespace spz {
 	            if (_applyBrushStroke_toUvMask == null)
 	                _applyBrushStroke_toUvMask = FindObjectOfType<ApplyBrushStroke_ToUvMask>(true);
 	            if (_applyBrushStroke_toUvMask != null){
-	                if (isFirstFrameOfStroke){
-	                    PaintUndo_MGR.EnsureExists();
-	                    // Same undo entry as a normal stroke (one gesture). Must GPU-copy before smudge compute runs this frame — coroutine would run too late.
-	                    PaintUndo_MGR.instance?.SchedulePreStrokeCapture(target, PaintUndoNonStackTarget.InpaintColor, 0, immediateGpuCopyBeforeMutation: true);
+	                var stackForSmudge = PaintLayerStack_MGR.instance;
+	                if (isFirstFrameOfStroke)
+		                _smudgeUndoSegmentDest = null;
+	                if (isFirstFrameOfStroke)
+		                BeginSmudgeStrokeAdaptiveRoutingIfNeeded(target, stackForSmudge);
+	                else
+		                _smudgeStrokeMaxUnscaledDt = Mathf.Max(_smudgeStrokeMaxUnscaledDt, Time.unscaledDeltaTime);
+	                ResolveSmudgeDestinationAndAccum(target, stackForSmudge, out RenderUdims smudgeDest, out RenderUdims smudgeAcc,
+		                out PaintUndoNonStackTarget smudgeUndoKind, out float smudgeKernelSpacingMul);
+	                if (smudgeDest != null && smudgeDest.texArray != null)
+	                {
+		                bool destSegmentChanged = _smudgeUndoSegmentDest != null && !ReferenceEquals(_smudgeUndoSegmentDest, smudgeDest);
+		                // Continuation frames only: first frame already covered by isFirstFrameOfStroke; catches late-ready chunks / no-op first apply.
+		                bool needUndoForLateReady = !isFirstFrameOfStroke && _smudgeUndoSegmentDest == null;
+		                bool needUndoThisSegment = isFirstFrameOfStroke || destSegmentChanged || needUndoForLateReady;
+		                if (needUndoThisSegment && _applyBrushStroke_toUvMask.SmudgeDispatchPreconditionsMet(smudgeDest, currBrushStroke_R8)) {
+			                PaintUndo_MGR.EnsureExists();
+			                PaintUndo_MGR.instance?.SchedulePreStrokeCapture(smudgeDest, smudgeUndoKind, 0, immediateGpuCopyBeforeMutation: true);
+		                }
+		                var sdRibbon = SD_WorkflowOptionsRibbon_UI.instance;
+		                float smudgeStr = (sdRibbon != null ? sdRibbon.maskBrushOpacity : 1f) * PaintTab_SmudgeBrushOptions.Strength01;
+		                float smudgeAngle = PaintTab_SmudgeBrushOptions.AngleDeg;
+		                float brushSize = BrushRibbon_UI_Size.GetBrushSize01();
+		                if (_applyBrushStroke_toUvMask.Apply_smudge_to_ColorBrushTex(currBrushStroke_R8, smudgeStr, brushSize, smudgeDest, smudgeAcc, smudgeKernelSpacingMul, smudgeAngle, 1.35f))
+			                _smudgeUndoSegmentDest = smudgeDest;
+		                Objects_Renderer_MGR.instance?.ReRenderAll_soon();
 	                }
-	                float smudgeStr = SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity;
-	                float brushSize = BrushRibbon_UI_Size.GetBrushSize01();
-	                _applyBrushStroke_toUvMask.Apply_smudge_to_ColorBrushTex(currBrushStroke_R8, smudgeStr, brushSize, target);
-	                Objects_Renderer_MGR.instance.ReRenderAll_soon();
 	            }
 	        }
 	    }
@@ -541,14 +1051,32 @@ namespace spz {
 	        // Smudge already applies each frame during drag; just fire stroke end and re-render.
 	        bool smudgeActive = SD_WorkflowOptionsRibbon_UI.instance != null && SD_WorkflowOptionsRibbon_UI.instance.isSmudge;
 	        if (smudgeActive){
-	            var smTarget = GetPaintTarget();
-	            if (smTarget != null){
-	                Objects_Renderer_MGR.instance.ReRenderAll_soon();
-	                RequestReRenderAfterGpuCommit(smTarget);
-	                var al = PaintLayerStack_MGR.instance?.ActiveLayer;
-	                if (al != null && smTarget == al.Content)
-	                    StartCoroutine(DeferredReRenderAfterStroke());
+	            var layerPt = GetPaintTarget();
+	            if (layerPt != null){
+	                ResolveSmudgeDestinationAndAccum(layerPt, PaintLayerStack_MGR.instance, out RenderUdims smudgeWritten, out _, out _, out _);
+	                Objects_Renderer_MGR.instance?.ReRenderAll_soon();
+	                if (smudgeWritten != null)
+	                {
+		                RequestReRenderAfterGpuCommit(smudgeWritten);
+		                var al = PaintLayerStack_MGR.instance?.ActiveLayer;
+		                if (al != null && smudgeWritten == al.Content)
+		                    StartCoroutine(DeferredReRenderAfterStroke());
+	                }
 	            }
+	            if (_smudgeRouteObsPending && PaintUndo_MGR.instance != null) {
+		            var sch = PaintUndo_MGR.instance.UndoScheduler;
+		            float op = PaintLayerStack_MGR.instance?.ActiveLayer != null
+			            ? Mathf.Clamp01(PaintLayerStack_MGR.instance.ActiveLayer.Opacity)
+			            : 1f;
+		            // Mutually exclusive vs cold-start cutoff (0.5) so mid-opacity isn’t “aligned” for both arms.
+		            bool opacityAlign = (_smudgeRouteObsArm == 0 && op >= 0.5f) || (_smudgeRouteObsArm == 1 && op < 0.5f);
+		            bool smooth = _smudgeStrokeMaxUnscaledDt <= sch.smudgeRouteSuccessMaxFrameTimeSec;
+		            sch.RegisterSmudgeRouteObservation(_smudgeRouteObsBucket, _smudgeRouteObsArm, opacityAlign && smooth);
+	            }
+	            _smudgeRouteObsPending = false;
+	            _smudgeRouteLockForStroke = SmudgeAdaptiveRouteLock.Inactive;
+	            _smudgeStrokeLockedPaintContent = null;
+	            _smudgeUndoSegmentDest = null;
 	            Act_OnPaintStrokeEnd?.Invoke();
 	            return;
 	        }
@@ -572,7 +1100,7 @@ namespace spz {
 
 	        PaintUndo_MGR.instance?.SchedulePreStrokeCapture(target);
 	        _applyBrushStroke_toUvMask.Apply_into_ColorBrushTex( prevBrushStroke_R8, currBrushStroke_R8, sign,  maxStrength,  target );
-	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	        Objects_Renderer_MGR.instance?.ReRenderAll_soon();
 	        RequestReRenderAfterGpuCommit(target);
 	        var activeLayer = PaintLayerStack_MGR.instance?.ActiveLayer;
 	        if (activeLayer != null && target == activeLayer.Content)
@@ -865,6 +1393,8 @@ namespace spz {
 		        PaintLayerStack_MGR.instance.OnActiveLayerChanged -= OnActiveLayerChanged_EnsureContent;
 	        PaintLayerStack_MGR.OnLayerAdded -= OnLayerAdded_InjectScene;
 	        _layerStackCompositeTemp?.Dispose();
+	        _smudgeUnderActiveTemp?.Dispose();
+	        _artIconUvColorWrapper?.Dispose();
 	        DestroyImmediate(_blitApplyEntireColorLayer_mat);
 	        base.OnDestroy();
 	    }

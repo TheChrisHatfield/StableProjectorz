@@ -47,6 +47,19 @@ namespace spz {
 		/// <summary>Hitch threshold (ms, max over window) for capture Bernoulli success.</summary>
 		public float captureSuccessMaxHitchMs = 12f;
 
+		/// <summary>Thompson over two smudge write targets (layer stack vs mesh/SD accumulation), same <see cref="QuantizeContextBucket"/> as capture/restore. Observations from stroke end only.</summary>
+		public bool smudgeRouteBanditEnabled = true;
+
+		public int smudgeRouteMinPullsPerBucket = 3;
+
+		/// <summary>Opacity below this → prior favors smudging generated mesh; blend ramps through <see cref="smudgeRouteOpacityPriorHigh"/>.</summary>
+		public float smudgeRouteOpacityPriorLow = 0.2f;
+
+		public float smudgeRouteOpacityPriorHigh = 0.85f;
+
+		/// <summary>Stroke was “smooth” if max frame time stayed below this (seconds) for observation reward.</summary>
+		public float smudgeRouteSuccessMaxFrameTimeSec = 1f / 45f;
+
 		float _ewmaHitchMs = 0f;
 		float _ewmaAlpha = 0.12f;
 		float _restoreStartedRealtime;
@@ -68,6 +81,29 @@ namespace spz {
 		int[,] _capturePulls;
 		double[,] _captureThompsonAlpha;
 		double[,] _captureThompsonBeta;
+
+		const int SmudgeRouteArmCount = 2;
+		int[] _smudgeRouteJobsSeenPerBucket;
+		int[,] _smudgeRoutePulls;
+		double[,] _smudgeRouteThompsonAlpha;
+		double[,] _smudgeRouteThompsonBeta;
+
+		void EnsureSmudgeRouteBucketArrays() {
+			int b = Mathf.Max(2, restoreContextBucketCount);
+			if (_smudgeRoutePulls != null && _smudgeRoutePulls.GetLength(0) == b) return;
+			_smudgeRouteJobsSeenPerBucket = new int[b];
+			_smudgeRoutePulls = new int[b, SmudgeRouteArmCount];
+			_smudgeRouteThompsonAlpha = new double[b, SmudgeRouteArmCount];
+			_smudgeRouteThompsonBeta = new double[b, SmudgeRouteArmCount];
+			for (int i = 0; i < b; i++) {
+				_smudgeRouteJobsSeenPerBucket[i] = 0;
+				for (int a = 0; a < SmudgeRouteArmCount; a++) {
+					_smudgeRoutePulls[i, a] = 0;
+					_smudgeRouteThompsonAlpha[i, a] = 1;
+					_smudgeRouteThompsonBeta[i, a] = 1;
+				}
+			}
+		}
 
 		void EnsureRestoreBucketArrays() {
 			int b = Mathf.Max(2, restoreContextBucketCount);
@@ -145,6 +181,18 @@ namespace spz {
 			return complexity01 < 0.15f ? 0 : Mathf.Clamp(Mathf.RoundToInt(complexity01 * 3f), 1, 3);
 		}
 
+		/// <summary>
+		/// Small spacing nudge from the same discrete capture arm the readback/yield bandit uses (parallel readback + zero yields → slightly wider smudge spacing).
+		/// Not a separate bandit; observations still come only from <see cref="RegisterCaptureBanditObservation"/>.
+		/// </summary>
+		static float SmudgeSpacingBumpFromCaptureArm(int arm, int maxInflight, int postYields, int sliceCount) {
+			if (arm < 0) return 0f;
+			float bump = arm * 0.022f;
+			if (sliceCount > 1 && maxInflight == 0) bump += 0.06f;
+			bump -= postYields * 0.035f;
+			return Mathf.Clamp(bump, -0.08f, 0.14f);
+		}
+
 		static void ResolveCaptureArmParameters(int armId, float complexity01, int sliceCount, out int maxInflight, out int postYields) {
 			int L = GetCaptureGpuReadbackMaxInflight(complexity01, sliceCount);
 			int Y = GetCapturePostReadbackYieldFrames(complexity01);
@@ -183,18 +231,24 @@ namespace spz {
 			if (maxInflight >= sliceCount) maxInflight = 0;
 		}
 
-		/// <summary>Select capture readback/yield arm; returns arm index (for logging/observation). Uses legacy parameters when bandit disabled or cold-start.</summary>
-		public int SelectCaptureArm(float complexity01, int sliceCount, out int maxInflight, out int postYields) {
+		/// <summary>
+		/// Same contextual bucket + Thompson posteriors as undo capture readback/yield arms.
+		/// When <paramref name="registerForCaptureBandit"/> is false, does not update job counts, <see cref="_captureContextBucket"/>, or <see cref="_lastCaptureArm"/> (for smudge spacing only).
+		/// </summary>
+		int SelectCaptureArmInternal(float complexity01, int sliceCount, bool registerForCaptureBandit, out int maxInflight, out int postYields) {
 			EnsureCaptureBucketArrays();
-			_captureContextBucket = QuantizeContextBucket(complexity01, sliceCount, restoreContextBucketCount);
-			int b = _captureContextBucket;
-			_captureJobsSeenPerBucket[b]++;
+			int b = QuantizeContextBucket(complexity01, sliceCount, restoreContextBucketCount);
+			if (registerForCaptureBandit) {
+				_captureContextBucket = b;
+				_captureJobsSeenPerBucket[b]++;
+			}
 
 			bool coldStart = captureBanditMinPullsPerBucket > 0
 			                 && _captureJobsSeenPerBucket[b] <= captureBanditMinPullsPerBucket;
 
 			if (!captureBanditEnabled || coldStart) {
-				_lastCaptureArm = -1;
+				if (registerForCaptureBandit)
+					_lastCaptureArm = -1;
 				maxInflight = GetCaptureGpuReadbackMaxInflight(complexity01, sliceCount);
 				postYields = GetCapturePostReadbackYieldFrames(complexity01);
 				if (maxInflight >= sliceCount) maxInflight = 0;
@@ -210,9 +264,76 @@ namespace spz {
 					best = a;
 				}
 			}
-			_lastCaptureArm = best;
+			if (registerForCaptureBandit)
+				_lastCaptureArm = best;
 			ResolveCaptureArmParameters(best, complexity01, sliceCount, out maxInflight, out postYields);
 			return best;
+		}
+
+		/// <summary>Select capture readback/yield arm; returns arm index (for logging/observation). Uses legacy parameters when bandit disabled or cold-start.</summary>
+		public int SelectCaptureArm(float complexity01, int sliceCount, out int maxInflight, out int postYields) {
+			return SelectCaptureArmInternal(complexity01, sliceCount, true, out maxInflight, out postYields);
+		}
+
+		/// <summary>
+		/// Smudge kernel spacing uses the same workload quantization and capture Thompson arms (no separate smudge bandit; no observation from smudge).
+		/// Future: optional extra context dimension can fold into bucket alongside this.
+		/// </summary>
+		public float GetSmudgeKernelSpacingMultiplier(int width, int height, int sliceCount) {
+			if (width <= 0 || height <= 0 || sliceCount <= 0) return 1f;
+			EvaluateWorkload(width, height, sliceCount, referencePixelsPerSlice, out _, out float complexity01, out _);
+			int arm = SelectCaptureArmInternal(complexity01, sliceCount, false, out int maxInflight, out int postYields);
+			float baseMul = 1f + 0.35f * complexity01;
+			return Mathf.Max(0.25f, baseMul + SmudgeSpacingBumpFromCaptureArm(arm, maxInflight, postYields, sliceCount));
+		}
+
+		/// <summary>
+		/// Arm 0 = smudge layer stack; arm 1 = smudge mesh/SD accumulation. Call once per smudge stroke (e.g. first frame) with <paramref name="registerStrokePull"/> true.
+		/// </summary>
+		/// <returns>True to route smudge into the active layer (and underlays); false to route into <c>accumulationTextures</c> only.</returns>
+		public bool SelectSmudgeLayerVersusGeneratedMesh(float complexity01, int sliceCount, float activeLayerOpacity01,
+			bool registerStrokePull, out int contextBucket, out int chosenArm) {
+			chosenArm = 0;
+			contextBucket = 0;
+			if (sliceCount <= 0) return true;
+			EnsureSmudgeRouteBucketArrays();
+			int b = QuantizeContextBucket(complexity01, sliceCount, restoreContextBucketCount);
+			contextBucket = b;
+			if (registerStrokePull && smudgeRouteBanditEnabled)
+				_smudgeRouteJobsSeenPerBucket[b]++;
+
+			float wLayer = Mathf.SmoothStep(
+				Mathf.Min(smudgeRouteOpacityPriorLow, smudgeRouteOpacityPriorHigh),
+				Mathf.Max(smudgeRouteOpacityPriorLow, smudgeRouteOpacityPriorHigh),
+				Mathf.Clamp01(activeLayerOpacity01));
+
+			bool coldStart = smudgeRouteMinPullsPerBucket > 0
+			                 && _smudgeRouteJobsSeenPerBucket[b] <= smudgeRouteMinPullsPerBucket;
+
+			if (!smudgeRouteBanditEnabled || coldStart) {
+				bool pickLayer = activeLayerOpacity01 >= 0.5f;
+				chosenArm = pickLayer ? 0 : 1;
+				return pickLayer;
+			}
+
+			double s0 = SampleBeta01(_smudgeRouteThompsonAlpha[b, 0], _smudgeRouteThompsonBeta[b, 0]);
+			double s1 = SampleBeta01(_smudgeRouteThompsonAlpha[b, 1], _smudgeRouteThompsonBeta[b, 1]);
+			double scoreLayer = s0 * (0.25 + 1.15 * wLayer);
+			double scoreMesh = s1 * (0.25 + 1.15 * (1.0 - wLayer));
+			bool layer = scoreLayer >= scoreMesh;
+			chosenArm = layer ? 0 : 1;
+			return layer;
+		}
+
+		/// <summary>Bernoulli update for the arm chosen at stroke start (<paramref name="chosenArm"/> 0 = layer, 1 = mesh).</summary>
+		public void RegisterSmudgeRouteObservation(int contextBucket, int chosenArm, bool success) {
+			if (!smudgeRouteBanditEnabled) return;
+			EnsureSmudgeRouteBucketArrays();
+			int b = Mathf.Clamp(contextBucket, 0, _smudgeRouteThompsonAlpha.GetLength(0) - 1);
+			int a = Mathf.Clamp(chosenArm, 0, SmudgeRouteArmCount - 1);
+			_smudgeRoutePulls[b, a]++;
+			if (success) _smudgeRouteThompsonAlpha[b, a] += 1;
+			else _smudgeRouteThompsonBeta[b, a] += 1;
 		}
 
 		public void RegisterCaptureBanditObservation(bool success) {

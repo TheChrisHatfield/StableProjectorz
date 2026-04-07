@@ -12,6 +12,9 @@ namespace spz {
 	public class SD_BrushRibbon_UI_Direction : BrushRibbon_UI_Direction{
 	    [SerializeField] WorkflowRibbon_UI _rib;
 	    [SerializeField] BrushRibbon_UI_Colors _colors;
+
+	    /// <summary> JSON-RPC / add-ons: paint, smudge, or erase without simulating UI toggles. </summary>
+	    public void SetToolModeFromApi(BrushToolMode mode) => SetToolMode(mode);
     
 	    void OnUpdateDirection_Mode( WorkflowRibbon_CurrMode currMode ){
 	        switch (currMode){
@@ -37,15 +40,15 @@ namespace spz {
 
 	    void OnUpdateDirection_Toggle(Toggle toggle, bool isOn){
 	        if(!isOn){ return; }
-	        if(Projections_MaskPainter.instance._isPainting){ return; }
-	        if(Inpaint_MaskPainter.instance._isPainting){ return; }
+	        if(Projections_MaskPainter.instance != null && Projections_MaskPainter.instance._isPainting){ return; }
+	        if(Inpaint_MaskPainter.instance != null && Inpaint_MaskPainter.instance._isPainting){ return; }
 
-	        if (toggle == _brushSmudge_Toggle){
-	            Cursor_UI.instance.SetCursorColor( new Color(0.5f, 0.5f, 0.5f, 1f) );
-	        } else {
+	        if (toggle != _brushSmudge_Toggle){
 	            bool positive = toggle == _brushAdd_Toggle;
-	            Cursor_UI.instance.SetCursorColor( positive? Color.white : Color.black );
+	            Cursor_UI.instance?.SetCursorColor( positive? Color.white : Color.black );
 	        }
+	        // Smudge: ring tint comes from mesh under cursor (Inpaint_MaskPainter GPU readback).
+	        BrushRibbon_UI_Direction.RaiseDirectionToggleChanged();
 	    }
 
 
@@ -163,6 +166,7 @@ namespace spz {
 	    }
 
 	    static Sprite TryLoadSmudgeSprite(){
+	        const string kIconsPath = "Assets/_gm/Art/Icons/icon_smudge.png";
 	        var spr = Resources.Load<Sprite>("icon_smudge");
 	        if (spr != null) return spr;
 	        Texture2D tex = Resources.Load<Texture2D>("icon_smudge");
@@ -170,9 +174,9 @@ namespace spz {
 	            return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
 
 	        #if UNITY_EDITOR
-	        var obj = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/_gm/Art/Icons/icon_smudge.png");
+	        var obj = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(kIconsPath);
 	        if (obj != null) return obj;
-	        var texEd = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/_gm/Art/Icons/icon_smudge.png");
+	        var texEd = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(kIconsPath);
 	        if (texEd != null)
 	            return Sprite.Create(texEd, new Rect(0, 0, texEd.width, texEd.height), new Vector2(0.5f, 0.5f), 100f);
 	        #endif
@@ -184,6 +188,11 @@ namespace spz {
 
 
 	public class BrushRibbon_UI_Direction : MonoBehaviour{
+	    /// <summary>Fired when paint / smudge / erase mode changes (after the active toggle updates).</summary>
+	    public static event System.Action OnDirectionToggleChanged;
+
+	    public static void RaiseDirectionToggleChanged() => OnDirectionToggleChanged?.Invoke();
+
 	    [Space(10)]
 	    [SerializeField] protected Toggle _brushErase_Toggle;
 	    [SerializeField] protected Toggle _brushAdd_Toggle;

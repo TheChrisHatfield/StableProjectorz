@@ -12,6 +12,19 @@ import threading
 import time
 
 
+def tcp_port_accepting_connections(host: str, port: int, timeout: float = 0.35) -> bool:
+    """
+    True if something accepts TCP on host:port.
+    Same idea as probing Forge/WebUI on 7861 before sending HTTP — confirms a listener exists
+    without requiring the Unity ready-marker file (helps older builds or failed marker writes).
+    """
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
 class SPZClient:
     """Client for communicating with StableProjectorz via JSON-RPC"""
     
@@ -153,6 +166,29 @@ class CameraAPI:
                 "y": result.get("y", 0.0),
                 "z": result.get("z", 0.0)
             }
+        return None
+
+    def get_rot(self, camera_index):
+        """Get camera rotation (quaternion) for one viewport camera."""
+        result = self._client._send_request("spz.cmd.get_camera_rot", {
+            "camera_index": int(camera_index)
+        })
+        if result.get("success", False):
+            return {
+                "x": result.get("x", 0.0),
+                "y": result.get("y", 0.0),
+                "z": result.get("z", 0.0),
+                "w": result.get("w", 1.0),
+            }
+        return None
+
+    def get_fov(self, camera_index):
+        """Get field of view for one viewport camera."""
+        result = self._client._send_request("spz.cmd.get_camera_fov", {
+            "camera_index": int(camera_index)
+        })
+        if result.get("success", False):
+            return result.get("fov", 60.0)
         return None
     
     def get_all_positions(self):
@@ -533,6 +569,82 @@ class StableDiffusionAPI:
             return result.get("connected", False)
         return False
 
+    def get_workflow_mode(self):
+        """Current workflow ribbon mode (e.g. Inpaint_Color, ProjectionsMasking)."""
+        return self._client._send_request("spz.cmd.get_workflow_mode", {})
+
+    def set_workflow_mode(self, mode: str):
+        """Set workflow mode by enum name (case-insensitive)."""
+        return self._client._send_request("spz.cmd.set_workflow_mode", {"mode": str(mode)})
+
+    def get_generation_options(self):
+        """Snapshot for Forge/external tools: denoise, mask blur, toggles, edge, workflow_mode, sd_connected."""
+        return self._client._send_request("spz.cmd.get_sd_workflow_options", {})
+
+    def set_denoising_strength(self, value: float):
+        r = self._client._send_request("spz.cmd.set_sd_denoising_strength", {"value": float(value)})
+        return r.get("success", False)
+
+    def set_mask_blur(self, value: float):
+        r = self._client._send_request("spz.cmd.set_sd_mask_blur", {"value": float(value)})
+        return r.get("success", False)
+
+    def set_soft_inpaint(self, on: bool):
+        r = self._client._send_request("spz.cmd.set_sd_soft_inpaint", {"value": bool(on)})
+        return r.get("success", False)
+
+    def set_tileable_inpaint(self, on: bool):
+        r = self._client._send_request("spz.cmd.set_sd_tileable_inpaint", {"value": bool(on)})
+        return r.get("success", False)
+
+    def set_ignore_depth_or_normals(self, on: bool):
+        r = self._client._send_request("spz.cmd.set_sd_ignore_depth_or_normals", {"value": bool(on)})
+        return r.get("success", False)
+
+    def controlnet_unit_count(self):
+        return self._client._send_request("spz.cmd.get_controlnet_unit_count", {})
+
+    def controlnet_active_count(self):
+        return self._client._send_request("spz.cmd.get_active_controlnet_unit_count", {})
+
+    def get_controlnet_enabled(self, unit_index: int):
+        return self._client._send_request("spz.cmd.get_controlnet_unit_enabled", {"unit_index": int(unit_index)})
+
+    def set_controlnet_enabled(self, unit_index: int, enabled: bool):
+        r = self._client._send_request(
+            "spz.cmd.set_controlnet_unit_enabled",
+            {"unit_index": int(unit_index), "enabled": bool(enabled)},
+        )
+        return r.get("success", False)
+
+    def get_controlnet_weight(self, unit_index: int):
+        return self._client._send_request("spz.cmd.get_controlnet_unit_weight", {"unit_index": int(unit_index)})
+
+    def set_controlnet_weight(self, unit_index: int, weight: float):
+        r = self._client._send_request(
+            "spz.cmd.set_controlnet_unit_weight",
+            {"unit_index": int(unit_index), "weight": float(weight)},
+        )
+        return r.get("success", False)
+
+    def get_controlnet_model(self, unit_index: int):
+        return self._client._send_request("spz.cmd.get_controlnet_unit_model", {"unit_index": int(unit_index)})
+
+    def get_skybox_top_color(self):
+        return self._client._send_request("spz.cmd.get_skybox_top_color", {})
+
+    def get_skybox_bottom_color(self):
+        return self._client._send_request("spz.cmd.get_skybox_bottom_color", {})
+
+    def is_skybox_gradient_clear(self):
+        return self._client._send_request("spz.cmd.is_skybox_gradient_clear", {})
+
+    def set_skybox_color(self, is_top: bool, r: float, g: float, b: float, a: float = 1.0):
+        return self._client._send_request(
+            "spz.cmd.set_skybox_color",
+            {"is_top": bool(is_top), "r": float(r), "g": float(g), "b": float(b), "a": float(a)},
+        )
+
 
 # ============================================
 # 3D Generation API
@@ -549,6 +661,13 @@ class Gen3DAPI:
         result = self._client._send_request("spz.cmd.is_3d_generation_ready", {})
         if result.get("success", False):
             return result.get("ready", False)
+        return False
+
+    def is_connected(self):
+        """Check if the external 3D generation service is connected."""
+        result = self._client._send_request("spz.cmd.is_3d_connected", {})
+        if result.get("success", False):
+            return result.get("connected", False)
         return False
     
     def is_in_progress(self):
@@ -1078,6 +1197,72 @@ class Panel:
 
 
 # ============================================
+# Paint / brush API (viewport brush + inpaint layer stack)
+# ============================================
+
+class PaintAPI:
+    """Brush settings and inpaint layer stack (same JSON-RPC as HTTP ``/api/v1/paint/*``)."""
+
+    def __init__(self, client):
+        self._client = client
+
+    def get_brush_settings(self):
+        """Return dict from Unity or empty dict if unavailable."""
+        return self._client._send_request("spz.cmd.get_brush_settings", {})
+
+    def get_layers(self):
+        """Return layer stack summary from Unity."""
+        return self._client._send_request("spz.cmd.get_paint_layers", {})
+
+    def set_brush_size(self, value01):
+        r = self._client._send_request("spz.cmd.set_brush_size", {"value": float(value01)})
+        return r.get("success", False)
+
+    def set_brush_spacing(self, value01):
+        r = self._client._send_request("spz.cmd.set_brush_spacing", {"value": float(value01)})
+        return r.get("success", False)
+
+    def set_brush_angle(self, angle_deg):
+        r = self._client._send_request("spz.cmd.set_brush_angle", {"value": float(angle_deg)})
+        return r.get("success", False)
+
+    def set_brush_roundness(self, value01):
+        r = self._client._send_request("spz.cmd.set_brush_roundness", {"value": float(value01)})
+        return r.get("success", False)
+
+    def set_brush_opacity(self, value01):
+        r = self._client._send_request("spz.cmd.set_brush_opacity", {"value": float(value01)})
+        return r.get("success", False)
+
+    def set_brush_stamp_index(self, index):
+        r = self._client._send_request("spz.cmd.set_brush_stamp_index", {"index": int(index)})
+        return r.get("success", False)
+
+    def set_active_layer(self, index):
+        r = self._client._send_request("spz.cmd.set_active_paint_layer", {"index": int(index)})
+        return r.get("success", False)
+
+
+# ============================================
+# Add-on discovery / context (TCP JSON-RPC)
+# ============================================
+
+class AddonAPI:
+    """Method catalog and one-shot context snapshot (``spz.cmd.get_api_capabilities``, ``get_addon_context``)."""
+
+    def __init__(self, client):
+        self._client = client
+
+    def get_capabilities(self):
+        """Return dict: ``spz_cmd``, ``spz_ui``, ``addon_rpc_version``, etc."""
+        return self._client._send_request("spz.cmd.get_api_capabilities", {})
+
+    def get_context(self):
+        """Blender-style snapshot: scene, pipelines, brush, paint layers, SD workflow block."""
+        return self._client._send_request("spz.cmd.get_addon_context", {})
+
+
+# ============================================
 # Main API Module
 # ============================================
 
@@ -1086,6 +1271,7 @@ class SPZAPI:
     
     def __init__(self):
         self._client = _get_client()
+        self.addon = AddonAPI(self._client)
         self.cameras = CameraAPI(self._client)
         self.models = ModelsAPI(self._client)
         self.scene = SceneAPI(self._client)
@@ -1098,6 +1284,7 @@ class SPZAPI:
         self.project = ProjectAPI(self._client)
         self.projection = ProjectionAPI(self._client)
         self.ui = UIAPI(self._client)
+        self.paint = PaintAPI(self._client)
     
     def close(self):
         """Close the connection"""
@@ -1114,6 +1301,11 @@ def get_api():
     if _api is None:
         _api = SPZAPI()
     return _api
+
+
+def addon():
+    """Capabilities + context snapshot (``spz.cmd.get_api_capabilities`` / ``get_addon_context``)."""
+    return get_api().addon
 
 
 # Convenience aliases for easier import
@@ -1175,3 +1367,8 @@ def projection():
 def ui():
     """Get UI API"""
     return get_api().ui
+
+
+def paint():
+    """Get paint / brush API"""
+    return get_api().paint

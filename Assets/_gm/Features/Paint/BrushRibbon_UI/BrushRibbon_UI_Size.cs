@@ -11,12 +11,14 @@ namespace spz {
 
 	/// <summary> World-space mirror plane for mesh symmetry (paint / projections). </summary>
 	public enum PaintSymmetryPlaneSource {
-		/// <summary> Plane through selection bounds center, normal = average mesh +X (transform.right). </summary>
+		/// <summary> Plane through selection bounds center; with a view camera uses camera +X (same idea as ViewAligned). Without a camera, falls back to average mesh +X. </summary>
 		Auto = 0,
 		/// <summary> Vertical plane through bounds center, normal = view camera +X (screen “left/right” in world). </summary>
 		ViewAligned = 1,
 		/// <summary> Plane from a picked surface (hit point + hit normal). </summary>
 		FacePick = 2,
+		/// <summary> Plane through selection bounds center; normal = average <see cref="Transform.right"/> of selected meshes (bilateral axis in model space). Use Flip when left/right is inverted. </summary>
+		ObjectLocal = 3,
 	}
 
 	/// <summary>
@@ -127,6 +129,10 @@ namespace spz {
 	    public Vector3 symmetryPlanePointWorld => _symmetryPlanePointWorld;
 	    public Vector3 symmetryPlaneNormalWorld => _symmetryPlaneNormalWorld;
 
+	    /// <summary> ±1; flips lateral mirror direction when <see cref="paintSymmetryPlaneSource"/> is ObjectLocal. </summary>
+	    int _symmetryObjectLocalSign = 1;
+	    public int symmetryObjectLocalSign => _symmetryObjectLocalSign;
+
 	    public void SetPaintSymmetryPlaneSource(PaintSymmetryPlaneSource src)
 	    {
 		    _paintSymmetryPlaneSource = src;
@@ -146,6 +152,14 @@ namespace spz {
 	    {
 		    if (_paintSymmetryPlaneSource != PaintSymmetryPlaneSource.FacePick) return;
 		    _symmetryPlaneNormalWorld = -_symmetryPlaneNormalWorld;
+		    OnBrushSettingsChanged?.Invoke();
+	    }
+
+	    /// <summary> Inverts mesh-axis symmetry (ObjectLocal only). </summary>
+	    public void FlipSymmetryObjectLocalSign()
+	    {
+		    if (_paintSymmetryPlaneSource != PaintSymmetryPlaneSource.ObjectLocal) return;
+		    _symmetryObjectLocalSign = -_symmetryObjectLocalSign;
 		    OnBrushSettingsChanged?.Invoke();
 	    }
 
@@ -234,6 +248,7 @@ namespace spz {
 	        trSL.maskBrush_scatterMode = (int)_scatterMode;
 	        trSL.maskBrush_tipAngleMode = (int)_tipAngleMode;
 	        trSL.maskBrush_symmetryPlaneSource = (int)_paintSymmetryPlaneSource;
+	        trSL.maskBrush_symmetryObjectLocalSign = _symmetryObjectLocalSign < 0 ? -1 : 1;
 	        if (_paintSymmetryPlaneSource == PaintSymmetryPlaneSource.FacePick)
 	        {
 		        trSL.maskBrush_symmetryPlanePoint = new Vector3Serializable(_symmetryPlanePointWorld.x, _symmetryPlanePointWorld.y, _symmetryPlanePointWorld.z);
@@ -264,8 +279,10 @@ namespace spz {
 	        int ta = trSL.maskBrush_tipAngleMode;
 	        _tipAngleMode = (ta >= 0 && ta <= 1) ? (BrushTipAngleMode)ta : BrushTipAngleMode.FixedAngle;
 	        int plSrc = trSL.maskBrush_symmetryPlaneSource;
-	        if (plSrc < 0 || plSrc > 2) plSrc = 0;
+	        if (plSrc < 0 || plSrc > 3) plSrc = 0;
 	        _paintSymmetryPlaneSource = (PaintSymmetryPlaneSource)plSrc;
+	        int ols = trSL.maskBrush_symmetryObjectLocalSign;
+	        _symmetryObjectLocalSign = (ols < 0) ? -1 : 1;
 	        if (_paintSymmetryPlaneSource == PaintSymmetryPlaneSource.FacePick
 	            && trSL.maskBrush_symmetryPlanePoint != null && trSL.maskBrush_symmetryPlaneNormal != null)
 	        {

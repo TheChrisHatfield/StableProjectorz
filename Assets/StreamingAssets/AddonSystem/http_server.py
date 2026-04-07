@@ -1,7 +1,23 @@
 #!/usr/bin/env python3
 """
 FastAPI HTTP Server for StableProjectorz
-Provides REST API endpoints that forward to Unity via JSON-RPC
+Provides REST API endpoints that forward to Unity via JSON-RPC.
+
+Scene/control: ``/api/v1/cameras``, ``projection/*``, ``meshes`` (transforms, selection, batch), ``scene``, ``sd``, ``project``, ``gen3d/*``, ``export/*`` → ``spz.cmd.*``.
+
+Paint/brush: ``/api/v1/paint/*`` → ``spz.cmd.get_brush_settings``, ``get_paint_layers``, ``set_brush_*``, ``set_active_paint_layer``.
+
+SD / Forge-style: ``/api/v1/sd/workflow/*``, ``/api/v1/sd/generation/*``, ``/api/v1/sd/controlnet/*``,
+``/api/v1/sd/skybox/*`` → workflow mode, denoise/blur/toggles, ControlNet units, skybox (same as ``spz.cmd.*``).
+
+Add-on panel UI (same as Python ``api.ui`` over TCP): ``/api/v1/ui/*`` → ``spz.ui.*``
+(create_panel, buttons, sliders, inputs, dropdowns, get/set widget values).
+
+Meta / discovery: ``GET /api/v1/meta`` → ``spz.cmd.get_api_capabilities`` (method list + RPC version);
+``GET /api/v1/context`` → ``spz.cmd.get_addon_context`` (scene + SD + brush snapshot).
+
+Blocking work (Unity JSON-RPC over TCP, connection-ready probe, import/exec in
+load_addon / invoke_callback) runs in asyncio.to_thread so the event loop stays free.
 """
 
 from fastapi import FastAPI, HTTPException, Request
@@ -9,8 +25,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
+import asyncio
 import uvicorn
-import threading
 
 # Import spz for Unity communication
 try:
@@ -94,20 +110,150 @@ class InvokeCallbackRequest(BaseModel):
     addon_id: str
     callback: str
 
-# Helper function to call Unity API
-def call_unity(method: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
-    """Call Unity via JSON-RPC and return result"""
+
+# --- Add-on UI (Unity AddonUI_MGR / ribbon tab content) — mirrors spz.ui.* JSON-RPC ---
+
+class UICreatePanelBody(BaseModel):
+    addon_id: str
+    title: str = "Add-on Panel"
+
+
+class UIAddButtonBody(BaseModel):
+    addon_id: str
+    panel_id: str = ""
+    label: str = "Button"
+    callback: str = ""
+
+
+class UIAddSliderBody(BaseModel):
+    addon_id: str
+    panel_id: str = ""
+    label: str = "Slider"
+    min: float = 0
+    max: float = 100
+    default: float = 50
+
+
+class UIAddTextInputBody(BaseModel):
+    addon_id: str
+    panel_id: str = ""
+    label: str = "Text Input"
+    default: str = ""
+
+
+class UIAddDropdownBody(BaseModel):
+    addon_id: str
+    panel_id: str = ""
+    label: str = "Dropdown"
+    options: List[str] = []
+    default: int = 0
+
+
+class UISetValueBody(BaseModel):
+    element_id: str
+    value: Any = None
+
+
+class PaintFloat01Body(BaseModel):
+    """Brush scalar in 0..1 (size, spacing, roundness, opacity). Use ``value`` or the alias key matching Unity params."""
+    value: float
+
+
+class PaintAngleBody(BaseModel):
+    """Brush angle in degrees (any finite value; same as ribbon)."""
+    value: float
+
+
+class PaintIndexBody(BaseModel):
+    """Integer index (active paint layer or brush stamp)."""
+    index: int
+
+
+class SdWorkflowModeBody(BaseModel):
+    """``WorkflowRibbon_CurrMode`` name, e.g. ``Inpaint_Color``, ``ProjectionsMasking``."""
+    mode: str
+
+
+class SdBoolValueBody(BaseModel):
+    value: bool
+
+
+class SdFloatValueBody(BaseModel):
+    value: float
+
+
+class SdSkyboxColorBody(BaseModel):
+    is_top: bool = True
+    r: float
+    g: float
+    b: float
+    a: float = 1.0
+
+
+class MeshVisibilityBody(BaseModel):
+    visible: bool
+
+
+class _UnityCallError(Exception):
+    """Raised from asyncio.to_thread worker for Unity RPC failures; converted to HTTPException on the event loop."""
+
+    def __init__(self, status_code: int, detail: str):
+        self.status_code = status_code
+        self.detail = detail
+        super().__init__(detail)
+
+
+def _call_unity_sync(method: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Blocking JSON-RPC to Unity (socket I/O). Do not raise HTTPException here — runs inside a thread pool."""
     if _api is None:
-        raise HTTPException(status_code=503, detail="Not connected to Unity")
-    
+        raise _UnityCallError(503, "Not connected to Unity")
     try:
-        # Use the spz client to send JSON-RPC request
-        # _api is the result of spz.get_api(), which has a _client attribute
         client = _api._client
-        result = client._send_request(method, params or {})
-        return result
+        return client._send_request(method, params or {})
+    except _UnityCallError:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _UnityCallError(500, str(e))
+
+
+async def call_unity_async(method: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Run blocking Unity RPC in a thread pool so the event loop is not stalled on socket I/O."""
+    try:
+        return await asyncio.to_thread(_call_unity_sync, method, params)
+    except _UnityCallError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+
+async def _connection_ready_async() -> bool:
+    """
+    Run the registered readiness probe (typically a Unity JSON-RPC ping) in a worker thread.
+    Callers must ensure _connection_ready_callback is set (non-None) before awaiting.
+    """
+    cb = _connection_ready_callback
+    if cb is None:
+        raise RuntimeError("connection ready callback not set")
+    return bool(await asyncio.to_thread(cb))
+
+# ============================================
+# Meta / context (add-on discovery — same JSON-RPC as TCP)
+# ============================================
+
+@app.get("/api/v1/meta", tags=["meta"])
+async def api_meta():
+    """
+    Supported ``spz.cmd.*`` / ``spz.ui.*`` method names and ``addon_rpc_version``.
+    Unity serves this even while meshes/cameras are still initializing (no FastPath required).
+    """
+    return await call_unity_async("spz.cmd.get_api_capabilities", {})
+
+
+@app.get("/api/v1/context", tags=["meta"])
+async def api_context():
+    """
+    Single snapshot: selection, workflow, SD/gen3d flags, project paths, nested ``brush``,
+    ``paint_layers``, and ``sd_workflow`` (requires FastPath ready).
+    """
+    return await call_unity_async("spz.cmd.get_addon_context", {})
 
 # ============================================
 # Camera Endpoints
@@ -116,7 +262,7 @@ def call_unity(method: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
 @app.get("/api/v1/cameras/{camera_id}/position")
 async def get_camera_position(camera_id: int):
     """Get camera position"""
-    result = call_unity("spz.cmd.get_camera_pos", {"camera_index": camera_id})
+    result = await call_unity_async("spz.cmd.get_camera_pos", {"camera_index": camera_id})
     if "success" in result and result["success"]:
         return {
             "x": result.get("x", 0.0),
@@ -128,7 +274,7 @@ async def get_camera_position(camera_id: int):
 @app.post("/api/v1/cameras/{camera_id}/position")
 async def set_camera_position(camera_id: int, position: Position):
     """Set camera position"""
-    result = call_unity("spz.cmd.set_camera_pos", {
+    result = await call_unity_async("spz.cmd.set_camera_pos", {
         "camera_index": camera_id,
         "x": position.x,
         "y": position.y,
@@ -139,7 +285,7 @@ async def set_camera_position(camera_id: int, position: Position):
 @app.get("/api/v1/cameras/{camera_id}/rotation")
 async def get_camera_rotation(camera_id: int):
     """Get camera rotation"""
-    result = call_unity("spz.cmd.get_camera_rot", {"camera_index": camera_id})
+    result = await call_unity_async("spz.cmd.get_camera_rot", {"camera_index": camera_id})
     if "success" in result and result["success"]:
         return {
             "x": result.get("x", 0.0),
@@ -152,7 +298,7 @@ async def get_camera_rotation(camera_id: int):
 @app.post("/api/v1/cameras/{camera_id}/rotation")
 async def set_camera_rotation(camera_id: int, rotation: Rotation):
     """Set camera rotation"""
-    result = call_unity("spz.cmd.set_camera_rot", {
+    result = await call_unity_async("spz.cmd.set_camera_rot", {
         "camera_index": camera_id,
         "x": rotation.x,
         "y": rotation.y,
@@ -164,7 +310,7 @@ async def set_camera_rotation(camera_id: int, rotation: Rotation):
 @app.get("/api/v1/cameras/{camera_id}/fov")
 async def get_camera_fov(camera_id: int):
     """Get camera FOV"""
-    result = call_unity("spz.cmd.get_camera_fov", {"camera_index": camera_id})
+    result = await call_unity_async("spz.cmd.get_camera_fov", {"camera_index": camera_id})
     if "success" in result and result["success"]:
         return {"fov": result.get("fov", 60.0)}
     raise HTTPException(status_code=404, detail="Camera not found")
@@ -172,7 +318,7 @@ async def get_camera_fov(camera_id: int):
 @app.post("/api/v1/cameras/{camera_id}/fov")
 async def set_camera_fov(camera_id: int, fov: float):
     """Set camera FOV"""
-    result = call_unity("spz.cmd.set_camera_fov", {
+    result = await call_unity_async("spz.cmd.set_camera_fov", {
         "camera_index": camera_id,
         "fov": float(fov)
     })
@@ -181,20 +327,74 @@ async def set_camera_fov(camera_id: int, fov: float):
 @app.get("/api/v1/cameras/positions")
 async def get_all_camera_positions():
     """Get all camera positions"""
-    result = call_unity("spz.cmd.get_all_camera_positions", {})
+    result = await call_unity_async("spz.cmd.get_all_camera_positions", {})
     return result
 
 @app.get("/api/v1/cameras/rotations")
 async def get_all_camera_rotations():
     """Get all camera rotations"""
-    result = call_unity("spz.cmd.get_all_camera_rotations", {})
+    result = await call_unity_async("spz.cmd.get_all_camera_rotations", {})
     return result
 
 @app.get("/api/v1/cameras/fovs")
 async def get_all_camera_fovs():
     """Get all camera FOVs"""
-    result = call_unity("spz.cmd.get_all_camera_fovs", {})
+    result = await call_unity_async("spz.cmd.get_all_camera_fovs", {})
     return result
+
+# ============================================
+# Projection cameras (separate from viewport cameras above)
+# ============================================
+
+@app.get("/api/v1/projection/cameras/count", tags=["projection"])
+async def projection_camera_count():
+    """Number of projection cameras in the stack."""
+    return await call_unity_async("spz.cmd.get_projection_camera_count", {})
+
+
+@app.get("/api/v1/projection/cameras/{camera_index}/position", tags=["projection"])
+async def projection_get_camera_position(camera_index: int):
+    result = await call_unity_async("spz.cmd.get_projection_camera_pos", {"camera_index": camera_index})
+    if result.get("success"):
+        return {"x": result.get("x", 0.0), "y": result.get("y", 0.0), "z": result.get("z", 0.0)}
+    raise HTTPException(status_code=404, detail="Projection camera not found")
+
+
+@app.post("/api/v1/projection/cameras/{camera_index}/position", tags=["projection"])
+async def projection_set_camera_position(camera_index: int, position: Position):
+    result = await call_unity_async(
+        "spz.cmd.set_projection_camera_pos",
+        {"camera_index": camera_index, "x": position.x, "y": position.y, "z": position.z},
+    )
+    return {"success": result.get("success", False)}
+
+
+@app.get("/api/v1/projection/cameras/{camera_index}/rotation", tags=["projection"])
+async def projection_get_camera_rotation(camera_index: int):
+    result = await call_unity_async("spz.cmd.get_projection_camera_rot", {"camera_index": camera_index})
+    if result.get("success"):
+        return {
+            "x": result.get("x", 0.0),
+            "y": result.get("y", 0.0),
+            "z": result.get("z", 0.0),
+            "w": result.get("w", 1.0),
+        }
+    raise HTTPException(status_code=404, detail="Projection camera not found")
+
+
+@app.post("/api/v1/projection/cameras/{camera_index}/rotation", tags=["projection"])
+async def projection_set_camera_rotation(camera_index: int, rotation: Rotation):
+    result = await call_unity_async(
+        "spz.cmd.set_projection_camera_rot",
+        {
+            "camera_index": camera_index,
+            "x": rotation.x,
+            "y": rotation.y,
+            "z": rotation.z,
+            "w": rotation.w,
+        },
+    )
+    return {"success": result.get("success", False)}
 
 # ============================================
 # Mesh Endpoints
@@ -203,13 +403,32 @@ async def get_all_camera_fovs():
 @app.get("/api/v1/meshes")
 async def get_meshes():
     """Get all mesh IDs"""
-    result = call_unity("spz.cmd.get_all_mesh_ids", {})
+    result = await call_unity_async("spz.cmd.get_all_mesh_ids", {})
     return result
+
+
+@app.get("/api/v1/meshes/selected", tags=["meshes"])
+async def get_selected_mesh_ids():
+    """Currently selected mesh IDs (same as ``spz.cmd.get_selected_meshes``)."""
+    return await call_unity_async("spz.cmd.get_selected_meshes", {})
+
+
+@app.post("/api/v1/meshes/{mesh_id}/select", tags=["meshes"])
+async def mesh_select(mesh_id: int):
+    result = await call_unity_async("spz.cmd.select_mesh", {"mesh_id": mesh_id})
+    return result
+
+
+@app.post("/api/v1/meshes/{mesh_id}/deselect", tags=["meshes"])
+async def mesh_deselect(mesh_id: int):
+    result = await call_unity_async("spz.cmd.deselect_mesh", {"mesh_id": mesh_id})
+    return result
+
 
 @app.get("/api/v1/meshes/{mesh_id}/position")
 async def get_mesh_position(mesh_id: int):
     """Get mesh position"""
-    result = call_unity("spz.cmd.get_mesh_pos", {"mesh_id": mesh_id})
+    result = await call_unity_async("spz.cmd.get_mesh_pos", {"mesh_id": mesh_id})
     if "success" in result and result["success"]:
         return {
             "x": result.get("x", 0.0),
@@ -221,7 +440,7 @@ async def get_mesh_position(mesh_id: int):
 @app.post("/api/v1/meshes/{mesh_id}/position")
 async def set_mesh_position(mesh_id: int, position: Position):
     """Set mesh position"""
-    result = call_unity("spz.cmd.set_mesh_pos", {
+    result = await call_unity_async("spz.cmd.set_mesh_pos", {
         "mesh_id": mesh_id,
         "x": position.x,
         "y": position.y,
@@ -234,11 +453,117 @@ async def set_mesh_positions_batch(request: Dict[str, Any]):
     """Set multiple mesh positions (batch operation)"""
     mesh_ids = request.get("mesh_ids", [])
     positions = request.get("positions", [])
-    result = call_unity("spz.cmd.set_mesh_positions", {
+    result = await call_unity_async("spz.cmd.set_mesh_positions", {
         "mesh_ids": mesh_ids,
         "positions": positions
     })
     return result
+
+
+@app.post("/api/v1/meshes/batch/rotation", tags=["meshes"])
+async def set_mesh_rotations_batch(request: Dict[str, Any]):
+    """Batch set mesh rotations (quaternions); same payload shape as TCP ``mesh_ids`` + ``rotations``."""
+    mesh_ids = request.get("mesh_ids", [])
+    rotations = request.get("rotations", [])
+    return await call_unity_async("spz.cmd.set_mesh_rotations", {"mesh_ids": mesh_ids, "rotations": rotations})
+
+
+@app.post("/api/v1/meshes/batch/scale", tags=["meshes"])
+async def set_mesh_scales_batch(request: Dict[str, Any]):
+    """Batch set mesh scales; same payload shape as TCP ``mesh_ids`` + ``scales``."""
+    mesh_ids = request.get("mesh_ids", [])
+    scales = request.get("scales", [])
+    return await call_unity_async("spz.cmd.set_mesh_scales", {"mesh_ids": mesh_ids, "scales": scales})
+
+
+@app.get("/api/v1/meshes/{mesh_id}/rotation", tags=["meshes"])
+async def get_mesh_rotation(mesh_id: int):
+    result = await call_unity_async("spz.cmd.get_mesh_rot", {"mesh_id": mesh_id})
+    if result.get("success"):
+        return {
+            "x": result.get("x", 0.0),
+            "y": result.get("y", 0.0),
+            "z": result.get("z", 0.0),
+            "w": result.get("w", 1.0),
+        }
+    raise HTTPException(status_code=404, detail="Mesh not found")
+
+
+@app.post("/api/v1/meshes/{mesh_id}/rotation", tags=["meshes"])
+async def set_mesh_rotation(mesh_id: int, rotation: Rotation):
+    result = await call_unity_async(
+        "spz.cmd.set_mesh_rot",
+        {
+            "mesh_id": mesh_id,
+            "x": rotation.x,
+            "y": rotation.y,
+            "z": rotation.z,
+            "w": rotation.w,
+        },
+    )
+    return {"success": result.get("success", False)}
+
+
+@app.get("/api/v1/meshes/{mesh_id}/scale", tags=["meshes"])
+async def get_mesh_scale(mesh_id: int):
+    result = await call_unity_async("spz.cmd.get_mesh_scale", {"mesh_id": mesh_id})
+    if result.get("success"):
+        return {"x": result.get("x", 1.0), "y": result.get("y", 1.0), "z": result.get("z", 1.0)}
+    raise HTTPException(status_code=404, detail="Mesh not found")
+
+
+@app.post("/api/v1/meshes/{mesh_id}/scale", tags=["meshes"])
+async def set_mesh_scale(mesh_id: int, scale: Position):
+    """Scale uses x,y,z like position (Unity ``Vector3`` scale)."""
+    result = await call_unity_async(
+        "spz.cmd.set_mesh_scale",
+        {"mesh_id": mesh_id, "x": scale.x, "y": scale.y, "z": scale.z},
+    )
+    return {"success": result.get("success", False)}
+
+
+@app.get("/api/v1/meshes/{mesh_id}/bounds", tags=["meshes"])
+async def get_mesh_bounds(mesh_id: int):
+    result = await call_unity_async("spz.cmd.get_mesh_bounds", {"mesh_id": mesh_id})
+    if result.get("success"):
+        return {
+            "center": {
+                "x": result.get("center_x", 0.0),
+                "y": result.get("center_y", 0.0),
+                "z": result.get("center_z", 0.0),
+            },
+            "size": {
+                "x": result.get("size_x", 0.0),
+                "y": result.get("size_y", 0.0),
+                "z": result.get("size_z", 0.0),
+            },
+        }
+    raise HTTPException(status_code=404, detail="Mesh not found")
+
+
+@app.get("/api/v1/meshes/{mesh_id}/visibility", tags=["meshes"])
+async def get_mesh_visibility(mesh_id: int):
+    result = await call_unity_async("spz.cmd.get_mesh_visibility", {"mesh_id": mesh_id})
+    if result.get("success"):
+        return {"visible": result.get("visible", True)}
+    raise HTTPException(status_code=404, detail="Mesh not found")
+
+
+@app.post("/api/v1/meshes/{mesh_id}/visibility", tags=["meshes"])
+async def set_mesh_visibility(mesh_id: int, body: MeshVisibilityBody):
+    result = await call_unity_async(
+        "spz.cmd.set_mesh_visibility",
+        {"mesh_id": mesh_id, "visible": body.visible},
+    )
+    return {"success": result.get("success", False)}
+
+
+@app.get("/api/v1/meshes/{mesh_id}/name", tags=["meshes"])
+async def get_mesh_name(mesh_id: int):
+    result = await call_unity_async("spz.cmd.get_mesh_name", {"mesh_id": mesh_id})
+    if result.get("success"):
+        return {"name": result.get("name", "")}
+    raise HTTPException(status_code=404, detail="Mesh not found")
 
 # ============================================
 # Scene Endpoints
@@ -247,23 +572,45 @@ async def set_mesh_positions_batch(request: Dict[str, Any]):
 @app.get("/api/v1/scene/info")
 async def get_scene_info():
     """Get scene information"""
-    total = call_unity("spz.cmd.get_total_mesh_count", {})
-    selected = call_unity("spz.cmd.get_selected_mesh_count", {})
+    total, selected = await asyncio.gather(
+        call_unity_async("spz.cmd.get_total_mesh_count", {}),
+        call_unity_async("spz.cmd.get_selected_mesh_count", {}),
+    )
     return {
         "total_meshes": total.get("count", 0),
         "selected_meshes": selected.get("count", 0)
     }
 
+
+@app.get("/api/v1/scene/selected_bounds", tags=["scene"])
+async def get_scene_selected_bounds():
+    """Axis-aligned bounds union of all selected meshes (``center`` + ``size``)."""
+    result = await call_unity_async("spz.cmd.get_selected_meshes_bounds", {})
+    if result.get("success"):
+        return {
+            "center": {
+                "x": result.get("center_x", 0.0),
+                "y": result.get("center_y", 0.0),
+                "z": result.get("center_z", 0.0),
+            },
+            "size": {
+                "x": result.get("size_x", 0.0),
+                "y": result.get("size_y", 0.0),
+                "z": result.get("size_z", 0.0),
+            },
+        }
+    raise HTTPException(status_code=404, detail="No bounds for current selection")
+
 @app.post("/api/v1/scene/select_all")
 async def select_all_meshes():
     """Select all meshes"""
-    result = call_unity("spz.cmd.select_all_meshes", {})
+    result = await call_unity_async("spz.cmd.select_all_meshes", {})
     return result
 
 @app.post("/api/v1/scene/deselect_all")
 async def deselect_all_meshes():
     """Deselect all meshes"""
-    result = call_unity("spz.cmd.deselect_all_meshes", {})
+    result = await call_unity_async("spz.cmd.deselect_all_meshes", {})
     return result
 
 # ============================================
@@ -273,8 +620,10 @@ async def deselect_all_meshes():
 @app.get("/api/v1/sd/prompt")
 async def get_sd_prompt():
     """Get Stable Diffusion prompts"""
-    positive = call_unity("spz.cmd.get_positive_prompt", {})
-    negative = call_unity("spz.cmd.get_negative_prompt", {})
+    positive, negative = await asyncio.gather(
+        call_unity_async("spz.cmd.get_positive_prompt", {}),
+        call_unity_async("spz.cmd.get_negative_prompt", {}),
+    )
     return {
         "positive": positive.get("prompt", ""),
         "negative": negative.get("prompt", "")
@@ -284,27 +633,145 @@ async def get_sd_prompt():
 async def set_sd_prompt(prompt: Prompt):
     """Set Stable Diffusion prompts"""
     results = {}
+    tasks = []
+    keys = []
     if prompt.positive is not None:
-        results["positive"] = call_unity("spz.cmd.set_positive_prompt", {
-            "prompt": prompt.positive
-        })
+        keys.append("positive")
+        tasks.append(call_unity_async("spz.cmd.set_positive_prompt", {"prompt": prompt.positive}))
     if prompt.negative is not None:
-        results["negative"] = call_unity("spz.cmd.set_negative_prompt", {
-            "prompt": prompt.negative
-        })
+        keys.append("negative")
+        tasks.append(call_unity_async("spz.cmd.set_negative_prompt", {"prompt": prompt.negative}))
+    if tasks:
+        for k, r in zip(keys, await asyncio.gather(*tasks)):
+            results[k] = r
     return results
 
 @app.post("/api/v1/sd/generate")
-async def trigger_sd_generation():
-    """Trigger Stable Diffusion generation"""
-    result = call_unity("spz.cmd.trigger_texture_generation", {})
+async def trigger_sd_generation(is_background: bool = False):
+    """Trigger Stable Diffusion texture generation (``is_background`` = backgrounds pass)."""
+    result = await call_unity_async("spz.cmd.trigger_texture_generation", {"is_background": is_background})
     return result
+
+
+@app.get("/api/v1/sd/workflow/mode", tags=["sd"])
+async def sd_get_workflow_mode():
+    return await call_unity_async("spz.cmd.get_workflow_mode", {})
+
+
+@app.post("/api/v1/sd/workflow/mode", tags=["sd"])
+async def sd_set_workflow_mode(body: SdWorkflowModeBody):
+    return await call_unity_async("spz.cmd.set_workflow_mode", {"mode": body.mode})
+
+
+@app.get("/api/v1/sd/generation/options", tags=["sd"])
+async def sd_get_generation_options():
+    """Forge/WebUI-aligned snapshot: denoising, mask blur, soft/tileable/ignore-depth, edge sliders, workflow mode, ``sd_connected``."""
+    return await call_unity_async("spz.cmd.get_sd_workflow_options", {})
+
+
+@app.post("/api/v1/sd/generation/denoising", tags=["sd"])
+async def sd_set_denoising(body: SdFloatValueBody):
+    return await call_unity_async("spz.cmd.set_sd_denoising_strength", {"value": body.value})
+
+
+@app.post("/api/v1/sd/generation/mask_blur", tags=["sd"])
+async def sd_set_mask_blur(body: SdFloatValueBody):
+    return await call_unity_async("spz.cmd.set_sd_mask_blur", {"value": body.value})
+
+
+@app.post("/api/v1/sd/generation/soft_inpaint", tags=["sd"])
+async def sd_set_soft_inpaint(body: SdBoolValueBody):
+    return await call_unity_async("spz.cmd.set_sd_soft_inpaint", {"value": body.value})
+
+
+@app.post("/api/v1/sd/generation/tileable", tags=["sd"])
+async def sd_set_tileable(body: SdBoolValueBody):
+    return await call_unity_async("spz.cmd.set_sd_tileable_inpaint", {"value": body.value})
+
+
+@app.post("/api/v1/sd/generation/ignore_depth_or_normals", tags=["sd"])
+async def sd_set_ignore_depth_or_normals(body: SdBoolValueBody):
+    return await call_unity_async("spz.cmd.set_sd_ignore_depth_or_normals", {"value": body.value})
+
+
+@app.get("/api/v1/sd/controlnet/summary", tags=["sd"])
+async def sd_controlnet_summary():
+    total, active = await asyncio.gather(
+        call_unity_async("spz.cmd.get_controlnet_unit_count", {}),
+        call_unity_async("spz.cmd.get_active_controlnet_unit_count", {}),
+    )
+    return {
+        "total_units": total.get("count", 0),
+        "active_units": active.get("count", 0),
+    }
+
+
+@app.get("/api/v1/sd/controlnet/{unit_index}/enabled", tags=["sd"])
+async def sd_controlnet_get_enabled(unit_index: int):
+    return await call_unity_async("spz.cmd.get_controlnet_unit_enabled", {"unit_index": unit_index})
+
+
+@app.post("/api/v1/sd/controlnet/{unit_index}/enabled", tags=["sd"])
+async def sd_controlnet_set_enabled(unit_index: int, body: SdBoolValueBody):
+    return await call_unity_async(
+        "spz.cmd.set_controlnet_unit_enabled",
+        {"unit_index": unit_index, "enabled": body.value},
+    )
+
+
+@app.get("/api/v1/sd/controlnet/{unit_index}/weight", tags=["sd"])
+async def sd_controlnet_get_weight(unit_index: int):
+    return await call_unity_async("spz.cmd.get_controlnet_unit_weight", {"unit_index": unit_index})
+
+
+@app.post("/api/v1/sd/controlnet/{unit_index}/weight", tags=["sd"])
+async def sd_controlnet_set_weight(unit_index: int, body: SdFloatValueBody):
+    return await call_unity_async(
+        "spz.cmd.set_controlnet_unit_weight",
+        {"unit_index": unit_index, "weight": body.value},
+    )
+
+
+@app.get("/api/v1/sd/controlnet/{unit_index}/model", tags=["sd"])
+async def sd_controlnet_get_model(unit_index: int):
+    return await call_unity_async("spz.cmd.get_controlnet_unit_model", {"unit_index": unit_index})
+
+
+@app.get("/api/v1/sd/skybox", tags=["sd"])
+async def sd_get_skybox_colors():
+    top_c, bot_c, is_clear = await asyncio.gather(
+        call_unity_async("spz.cmd.get_skybox_top_color", {}),
+        call_unity_async("spz.cmd.get_skybox_bottom_color", {}),
+        call_unity_async("spz.cmd.is_skybox_gradient_clear", {}),
+    )
+    return {
+        "gradient_clear": is_clear.get("is_clear", False),
+        "top": {k: top_c.get(k) for k in ("r", "g", "b", "a")} if top_c.get("success") else None,
+        "bottom": {k: bot_c.get(k) for k in ("r", "g", "b", "a")} if bot_c.get("success") else None,
+    }
+
+
+@app.post("/api/v1/sd/skybox/color", tags=["sd"])
+async def sd_set_skybox_color(body: SdSkyboxColorBody):
+    return await call_unity_async(
+        "spz.cmd.set_skybox_color",
+        {
+            "is_top": body.is_top,
+            "r": body.r,
+            "g": body.g,
+            "b": body.b,
+            "a": body.a,
+        },
+    )
+
 
 @app.get("/api/v1/sd/status")
 async def get_sd_status():
     """Get Stable Diffusion status"""
-    is_generating = call_unity("spz.cmd.is_generating", {})
-    is_connected = call_unity("spz.cmd.is_sd_connected", {})
+    is_generating, is_connected = await asyncio.gather(
+        call_unity_async("spz.cmd.is_generating", {}),
+        call_unity_async("spz.cmd.is_sd_connected", {}),
+    )
     return {
         "generating": is_generating.get("generating", False),
         "connected": is_connected.get("connected", False)
@@ -313,7 +780,7 @@ async def get_sd_status():
 @app.post("/api/v1/sd/stop")
 async def stop_sd_generation():
     """Stop Stable Diffusion generation"""
-    result = call_unity("spz.cmd.stop_generation", {})
+    result = await call_unity_async("spz.cmd.stop_generation", {})
     return result
 
 # ============================================
@@ -322,20 +789,61 @@ async def stop_sd_generation():
 
 @app.get("/api/v1/project/info")
 async def get_project_info():
-    """Get project information"""
-    path = call_unity("spz.cmd.get_project_path", {})
-    version = call_unity("spz.cmd.get_project_version", {})
-    data_dir = call_unity("spz.cmd.get_project_data_dir", {})
+    """
+    Get project information. Unity ``spz.cmd.get_project_path`` returns ``path`` only (never ``filepath``).
+    When no project is saved, path/data_dir RPCs return ``success: false`` — response uses JSON null, not empty string.
+    """
+    path, version, data_dir = await asyncio.gather(
+        call_unity_async("spz.cmd.get_project_path", {}),
+        call_unity_async("spz.cmd.get_project_version", {}),
+        call_unity_async("spz.cmd.get_project_data_dir", {}),
+    )
+    if not version.get("success"):
+        raise HTTPException(
+            status_code=502,
+            detail="spz.cmd.get_project_version did not return a version",
+        )
+    ver = version.get("version")
+    if ver is None:
+        raise HTTPException(
+            status_code=502,
+            detail="spz.cmd.get_project_version succeeded but omitted 'version'",
+        )
+
+    path_ok = bool(path.get("success"))
+    if path_ok and path.get("path") is None:
+        raise HTTPException(
+            status_code=502,
+            detail="spz.cmd.get_project_path succeeded but omitted 'path' (expected Unity contract)",
+        )
+    path_value = path.get("path") if path_ok else None
+
+    dd_ok = bool(data_dir.get("success"))
+    if dd_ok and data_dir.get("data_dir") is None:
+        raise HTTPException(
+            status_code=502,
+            detail="spz.cmd.get_project_data_dir succeeded but omitted 'data_dir'",
+        )
+    dd_value = data_dir.get("data_dir") if dd_ok else None
+
     return {
-        "path": path.get("filepath", ""),
-        "version": version.get("version", ""),
-        "data_dir": data_dir.get("data_dir", "")
+        "path": path_value,
+        "path_available": path_ok,
+        "version": ver,
+        "data_dir": dd_value,
+        "data_dir_available": dd_ok,
     }
+
+
+@app.get("/api/v1/project/operation_in_progress", tags=["project"])
+async def get_project_operation_in_progress():
+    """True while Unity save/load dialog workflow is in progress."""
+    return await call_unity_async("spz.cmd.is_project_operation_in_progress", {})
 
 @app.post("/api/v1/project/save")
 async def save_project(project_path: ProjectPath):
     """Save project"""
-    result = call_unity("spz.cmd.save_project", {
+    result = await call_unity_async("spz.cmd.save_project", {
         "filepath": project_path.filepath
     })
     return result
@@ -343,26 +851,204 @@ async def save_project(project_path: ProjectPath):
 @app.post("/api/v1/project/load")
 async def load_project(project_path: ProjectPath):
     """Load project"""
-    result = call_unity("spz.cmd.load_project", {
+    result = await call_unity_async("spz.cmd.load_project", {
         "filepath": project_path.filepath
     })
     return result
 
 # ============================================
+# 3D generation (external 3D pipeline — same JSON-RPC as TCP)
+# ============================================
+
+@app.get("/api/v1/gen3d/connected", tags=["gen3d"])
+async def gen3d_connected():
+    return await call_unity_async("spz.cmd.is_3d_connected", {})
+
+
+@app.get("/api/v1/gen3d/ready", tags=["gen3d"])
+async def gen3d_ready():
+    return await call_unity_async("spz.cmd.is_3d_generation_ready", {})
+
+
+@app.get("/api/v1/gen3d/in_progress", tags=["gen3d"])
+async def gen3d_in_progress():
+    return await call_unity_async("spz.cmd.is_3d_generation_in_progress", {})
+
+
+@app.post("/api/v1/gen3d/trigger", tags=["gen3d"])
+async def gen3d_trigger():
+    return await call_unity_async("spz.cmd.trigger_3d_generation", {})
+
+# ============================================
+# Export (Unity menu actions — may open dialogs / block briefly)
+# ============================================
+
+@app.post("/api/v1/export/3d_with_textures", tags=["export"])
+async def export_3d_with_textures():
+    return await call_unity_async("spz.cmd.export_3d_with_textures", {})
+
+
+@app.post("/api/v1/export/projection_textures", tags=["export"])
+async def export_projection_textures(is_dilate: bool = True):
+    """``is_dilate`` matches Unity ``ExportProjectionTextures`` default."""
+    return await call_unity_async("spz.cmd.export_projection_textures", {"is_dilate": is_dilate})
+
+
+@app.post("/api/v1/export/view_textures", tags=["export"])
+async def export_view_textures():
+    return await call_unity_async("spz.cmd.export_view_textures", {})
+
+# ============================================
+# Paint / brush (HTTP mirror of spz.cmd.* — viewport brush + inpaint layer stack)
+# ============================================
+
+@app.get("/api/v1/paint/brush/settings", tags=["paint"])
+async def paint_get_brush_settings():
+    """Snapshot: size01, spacing01, angle_deg, roundness01, opacity01, brush_index, brush_count, brush_name, symmetry flags."""
+    return await call_unity_async("spz.cmd.get_brush_settings", {})
+
+
+@app.get("/api/v1/paint/layers", tags=["paint"])
+async def paint_get_layers():
+    """Inpaint layer stack: active_index and layers[{index, name, visible, opacity}]."""
+    return await call_unity_async("spz.cmd.get_paint_layers", {})
+
+
+@app.post("/api/v1/paint/brush/size", tags=["paint"])
+async def paint_set_brush_size(body: PaintFloat01Body):
+    return await call_unity_async("spz.cmd.set_brush_size", {"value": body.value})
+
+
+@app.post("/api/v1/paint/brush/spacing", tags=["paint"])
+async def paint_set_brush_spacing(body: PaintFloat01Body):
+    return await call_unity_async("spz.cmd.set_brush_spacing", {"value": body.value})
+
+
+@app.post("/api/v1/paint/brush/angle", tags=["paint"])
+async def paint_set_brush_angle(body: PaintAngleBody):
+    return await call_unity_async("spz.cmd.set_brush_angle", {"value": body.value})
+
+
+@app.post("/api/v1/paint/brush/roundness", tags=["paint"])
+async def paint_set_brush_roundness(body: PaintFloat01Body):
+    return await call_unity_async("spz.cmd.set_brush_roundness", {"value": body.value})
+
+
+@app.post("/api/v1/paint/brush/opacity", tags=["paint"])
+async def paint_set_brush_opacity(body: PaintFloat01Body):
+    return await call_unity_async("spz.cmd.set_brush_opacity", {"value": body.value})
+
+
+@app.post("/api/v1/paint/brush/stamp_index", tags=["paint"])
+async def paint_set_brush_stamp_index(body: PaintIndexBody):
+    """Select brush alpha by index (0–2 built-in soft/medium/hard; 3+ custom / ABR)."""
+    return await call_unity_async("spz.cmd.set_brush_stamp_index", {"index": body.index})
+
+
+@app.post("/api/v1/paint/layers/active", tags=["paint"])
+async def paint_set_active_layer(body: PaintIndexBody):
+    """Set which inpaint layer receives new strokes."""
+    return await call_unity_async("spz.cmd.set_active_paint_layer", {"index": body.index})
+
+# ============================================
+# Add-on UI (HTTP mirror of spz.ui.* — external tools / services without raw TCP)
+# ============================================
+
+@app.post("/api/v1/ui/panel", tags=["ui"])
+async def ui_create_panel(body: UICreatePanelBody):
+    """Create ribbon tab + panel shell for an add-on (same as Python api.ui.create_panel)."""
+    return await call_unity_async("spz.ui.create_panel", {
+        "addon_id": body.addon_id,
+        "title": body.title,
+    })
+
+
+@app.post("/api/v1/ui/button", tags=["ui"])
+async def ui_add_button(body: UIAddButtonBody):
+    return await call_unity_async("spz.ui.add_button", {
+        "addon_id": body.addon_id,
+        "panel_id": body.panel_id,
+        "label": body.label,
+        "callback": body.callback,
+    })
+
+
+@app.post("/api/v1/ui/slider", tags=["ui"])
+async def ui_add_slider(body: UIAddSliderBody):
+    return await call_unity_async("spz.ui.add_slider", {
+        "addon_id": body.addon_id,
+        "panel_id": body.panel_id,
+        "label": body.label,
+        "min": body.min,
+        "max": body.max,
+        "default": body.default,
+    })
+
+
+@app.post("/api/v1/ui/text_input", tags=["ui"])
+async def ui_add_text_input(body: UIAddTextInputBody):
+    return await call_unity_async("spz.ui.add_text_input", {
+        "addon_id": body.addon_id,
+        "panel_id": body.panel_id,
+        "label": body.label,
+        "default": body.default,
+    })
+
+
+@app.post("/api/v1/ui/dropdown", tags=["ui"])
+async def ui_add_dropdown(body: UIAddDropdownBody):
+    return await call_unity_async("spz.ui.add_dropdown", {
+        "addon_id": body.addon_id,
+        "panel_id": body.panel_id,
+        "label": body.label,
+        "options": body.options,
+        "default": body.default,
+    })
+
+
+@app.get("/api/v1/ui/value/{element_id}", tags=["ui"])
+async def ui_get_value(element_id: str):
+    return await call_unity_async("spz.ui.get_value", {"element_id": element_id})
+
+
+@app.post("/api/v1/ui/value", tags=["ui"])
+async def ui_set_value(body: UISetValueBody):
+    return await call_unity_async("spz.ui.set_value", {
+        "element_id": body.element_id,
+        "value": body.value,
+    })
+
 # ============================================
 # Addon loading (Unity calls this when user enables an addon or at startup)
 # ============================================
 
 @app.get("/ready")
 async def ready():
-    """Returns ready=True when Python has connected to Unity (socket 5555). Unity should poll this before POST /load_addon so create_panel works."""
+    """
+    Forge-style split: HTTP is always up when this returns; 'ready' means Python linked to Unity TCP (5555).
+    Unity polls this like SD readiness — distinguish api_up vs unity_linked.
+    """
     if _connection_ready_callback is None:
-        return {"ready": False, "reason": "no callback"}
+        return {
+            "ready": False,
+            "api_up": True,
+            "unity_linked": False,
+            "reason": "no callback",
+        }
     try:
-        ready_val = _connection_ready_callback()
-        return {"ready": bool(ready_val)}
+        ready_val = await _connection_ready_async()
+        return {
+            "ready": ready_val,
+            "api_up": True,
+            "unity_linked": ready_val,
+        }
     except Exception as e:
-        return {"ready": False, "reason": str(e)}
+        return {
+            "ready": False,
+            "api_up": True,
+            "unity_linked": False,
+            "reason": str(e),
+        }
 
 
 @app.post("/load_addon")
@@ -372,10 +1058,10 @@ async def load_addon(req: LoadAddonRequest):
         raise HTTPException(status_code=503, detail="Addon loader not registered")
     if _connection_ready_callback is None:
         raise HTTPException(status_code=503, detail="Connection readiness not available; server may not be fully initialized")
-    if not _connection_ready_callback():
+    if not await _connection_ready_async():
         raise HTTPException(status_code=503, detail="Not connected to Unity yet; wait for GET /ready")
     try:
-        ok = _load_addon_callback(req.addon_id)
+        ok = await asyncio.to_thread(_load_addon_callback, req.addon_id)
         return {"success": ok, "addon_id": req.addon_id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -388,10 +1074,10 @@ async def invoke_callback(req: InvokeCallbackRequest):
         raise HTTPException(status_code=503, detail="Invoke callback not registered")
     if _connection_ready_callback is None:
         raise HTTPException(status_code=503, detail="Connection readiness not available; server may not be fully initialized")
-    if not _connection_ready_callback():
+    if not await _connection_ready_async():
         raise HTTPException(status_code=503, detail="Not connected to Unity yet; wait for GET /ready")
     try:
-        ok = _invoke_callback(req.addon_id, req.callback)
+        ok = await asyncio.to_thread(_invoke_callback, req.addon_id, req.callback)
         return {"success": ok, "addon_id": req.addon_id, "callback": req.callback}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -402,12 +1088,29 @@ async def invoke_callback(req: InvokeCallbackRequest):
 
 @app.get("/")
 async def root():
-    """Root endpoint - API info"""
+    """Root endpoint — same role as hitting Forge root: confirms local HTTP server is up."""
+    unity_ok = False
+    if _connection_ready_callback is not None:
+        try:
+            unity_ok = await _connection_ready_async()
+        except Exception:
+            unity_ok = False
     return {
-        "name": "StableProjectorz API",
+        "name": "StableProjectorz Add-on API",
         "version": "1.0.0",
         "docs": "/docs",
-        "status": "running"
+        "status": "running",
+        "unity_linked": unity_ok,
+        "meta_http": "GET /api/v1/meta — method catalog; GET /api/v1/context — live snapshot → spz.cmd.*",
+        "projection_http": "/api/v1/projection/cameras/* — count, get/set position & rotation → spz.cmd.*",
+        "meshes_http": "/api/v1/meshes/* — selection, transforms, bounds, visibility, name, batch pos/rot/scale → spz.cmd.*",
+        "scene_http": "/api/v1/scene/* — info, selected_bounds, select/deselect all",
+        "gen3d_http": "/api/v1/gen3d/* — connected, ready, in_progress, trigger",
+        "export_http": "/api/v1/export/* — 3d_with_textures, projection_textures, view_textures",
+        "paint_brush_http": "/api/v1/paint/* (tag 'paint') — brush settings, layer stack, set size/spacing/angle/roundness/opacity/stamp, active layer → spz.cmd.*",
+        "sd_forge_http": "/api/v1/sd/* (tag 'sd') — prompts, generate, workflow mode, generation options (denoise/blur/toggles), ControlNet, skybox → spz.cmd.*",
+        "add_on_ui_http": "/api/v1/ui/* (OpenAPI tag 'ui') — panel, button, slider, text_input, dropdown, value get/set → spz.ui.*",
+        "note": "Like Forge: this URL means FastAPI is listening; unity_linked follows once Python connects to Unity TCP.",
     }
 
 @app.get("/health")
@@ -417,13 +1120,14 @@ async def health():
         return {"status": "disconnected", "unity": False}
     try:
         # Try a simple call to Unity
-        call_unity("spz.cmd.get_total_mesh_count", {})
+        await call_unity_async("spz.cmd.get_total_mesh_count", {})
         return {"status": "connected", "unity": True}
-    except:
+    except Exception:
         return {"status": "disconnected", "unity": False}
 
 def start_server(host: str = "127.0.0.1", port: int = 5557):
     """Start the FastAPI server. Binds to 127.0.0.1 by default (Unity on same machine calls /load_addon, /ready, etc.)."""
     print(f"[HTTP Server] Starting FastAPI server on http://{host}:{port}")
-    print(f"[HTTP Server] API docs available at http://{host}:{port}/docs")
+    print(f"[HTTP Server] API docs: http://{host}:{port}/docs")
+    print(f"[HTTP Server] Running on local URL: http://{host}:{port}  (Forge-style: HTTP up first; Unity links via /ready)")
     uvicorn.run(app, host=host, port=port, log_level="info")

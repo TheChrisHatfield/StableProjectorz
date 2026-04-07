@@ -5,6 +5,29 @@ This file tracks changes on top of that baseline until the next release bump.
 
 ---
 
+## [Unreleased] — 2026-04-05 — Command ribbon tab strip (many add-ons, resize)
+
+### Summary
+
+The right-panel command ribbon tab row adapts when many add-on tabs load or when the panel width changes, instead of breaking layout by forcing equal flex widths against per-tab `LayoutElement.minWidth`.
+
+### `CommandRibbon_UI.cs`
+
+- **`PatchTabStripResponsiveLayout`:** Sets `HorizontalLayoutGroup.childForceExpandWidth = false` (keeps `childControlWidth = true`) so label-driven minimum widths work with the layout group until rebalanced.
+- **`RebalanceStripTabMinWidthsIfOverflowing`:** If the sum of tab `LayoutElement.minWidth` exceeds the strip budget (after padding and spacing), scales mins down proportionally with crowded floors (**36px**, then **28px**), then an iterative proportional pass down to **1px** when still over budget (guarded iteration + no-progress exit).
+- **`HarmonizeStripTabTypography`:** After `ApplyStripTabMinWidthForLabel` for each direct strip tab, calls rebalance so overflow is handled whenever strip typography is applied.
+- **Resize:** `Update` polls effective tab strip `RectTransform.rect.width`; when it changes by more than **1px**, calls **`RefreshTabStripLayout`**. If the strip is missing, **`_lastRibbonStripWidth`** resets so the next valid strip re-initializes tracking.
+- **`FindFirstOtherStripTabForStyleReference`:** Only uses **`TabsGroupElem_UI`** instances that are **direct children** of the strip (aligned with harmonize / rebalance).
+- **Deferred rebuild:** **`QueueTabStripRebuildNextFrame`** replaces overlapping **`StartCoroutine(RebuildTabStripLayoutNextFrame)`** calls; **`_rebuildTabStripLayoutSeq`** ensures `finally` only clears **`_rebuildTabStripLayout_crtn`** when that run is still the latest (avoids a stopped coroutine wiping the handle for a newer run).
+- **`EnsurePaintTabExists`:** Uses **`QueueTabStripRebuildNextFrame`** for the same coalesced next-frame path as add-on refresh.
+
+### Notes for testers
+
+- With many add-ons and long titles, narrow and widen the right panel; tabs should stay in a single row with ellipsis where needed, without layout explosion.
+- If the tab row sits in a horizontal **ScrollRect**, the next-frame pass still walks parents and scrolls right after new tabs (unchanged intent).
+
+---
+
 ## [Unreleased] — 2026-03-25 — Smudge brush tool
 
 ### Summary

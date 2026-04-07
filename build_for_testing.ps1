@@ -61,9 +61,23 @@ if (Test-Path $LockFile -ErrorAction SilentlyContinue) {
 
 Write-Host ""
 Write-Host "This may take 10-30 minutes. Do not open this project in Unity Editor while building."
-Write-Host "Build indicators: heartbeat every 15 seconds."
+Write-Host "Build indicators: progress bar updates every 3s; 'Still building...' heartbeat every ~15s."
 Write-Host "When done you will see: *** BUILD FINISHED. Unity exit code: N ***"
 Write-Host ""
+
+# If the Editor (or any Unity) already has this project, batchmode often exits immediately
+# (tiny log, no "[BuildForTesting]" lines, return code 1).
+if (-not $env:SPZ_BUILD_ALLOW_UNITY_RUNNING) {
+    $unityProcs = Get-Process -Name "Unity" -ErrorAction SilentlyContinue
+    if ($unityProcs) {
+        Write-Host "ERROR: Unity is already running (PID(s): $(($unityProcs | ForEach-Object { $_.Id }) -join ', '))."
+        Write-Host "Close the Unity Editor (and any other Unity using this project), then run the build again."
+        Write-Host "Advanced: set env SPZ_BUILD_ALLOW_UNITY_RUNNING=1 to skip this check (build may still fail)."
+        Write-Host ""
+        Read-Host "Press Enter to close"
+        exit 1
+    }
+}
 
 # Reference log size for progress estimation
 $refSize = 0
@@ -143,8 +157,16 @@ function RunUnityBuild {
         $elapsedMin = ((Get-Date) - $start).TotalMinutes
         if ($elapsedMin -ge $maxWaitMin) {
             Write-Host ""
-            Write-Host "  (Timeout: $maxWaitMin min - assuming build finished. Check exe and log.)"
-            $code = 0
+            Write-Host "  (Timeout: $maxWaitMin min - Unity still running; stopping process. Build did not finish in time.)"
+            try {
+                if (-not $p.HasExited) {
+                    $p.Kill()
+                    $p.WaitForExit(60000) | Out-Null
+                }
+            } catch {
+                Write-Host "  (Could not terminate Unity process: $_)"
+            }
+            $code = 124
             break
         }
 
@@ -180,9 +202,21 @@ function RunUnityBuild {
         Start-Sleep -Seconds 3
     }
 
-    if ($null -eq $code) {
-        if ($p) { $code = $p.ExitCode }
+    # Clear the in-place progress line (\r + NoNewline) so following output is readable.
+    Write-Host ""
+
+    if ($null -eq $code -and $p) {
+        try {
+            if (-not $p.HasExited) { $p.WaitForExit() }
+            $code = $p.ExitCode
+        } catch {
+            $code = 1
+        }
         if ($null -eq $code) { $code = 0 }
+    }
+
+    if ($p) {
+        try { $p.Dispose() } catch { }
     }
 
     return $code
@@ -213,6 +247,22 @@ Write-Host ""
 Write-Host ""
 Write-Host "  *** BUILD FINISHED. Unity exit code: $exitCode ***"
 Write-Host ""
+
+# Immediate exit with almost no log = project lock / second instance, not a compile error.
+if ($exitCode -ne 0 -and (Test-Path $LogFile -ErrorAction SilentlyContinue)) {
+    $logLen = (Get-Item $LogFile -ErrorAction SilentlyContinue).Length
+    $hasBuildMarker = $false
+    try {
+        $hasBuildMarker = $null -ne (Select-String -Path $LogFile -SimpleMatch "[BuildForTesting]" -ErrorAction SilentlyContinue | Select-Object -First 1)
+    } catch { }
+    if ($logLen -lt 4096 -and -not $hasBuildMarker) {
+        Write-Host ""
+        Write-Host "  Hint: Log is very short and BuildForTesting never started. Usually the Unity Editor"
+        Write-Host "  still has this project open, or a stuck Unity process holds the Library lock."
+        Write-Host "  Close all Unity windows for this project, end any stray Unity.exe in Task Manager if needed, then rebuild."
+        Write-Host ""
+    }
+}
 
 # Ground truth: BuildForTesting success marker in log (preferred), then exit code fallback.
 $logIndicatesSuccess = Test-BuildSucceededFromLog $LogFile

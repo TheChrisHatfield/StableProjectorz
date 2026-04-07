@@ -35,6 +35,15 @@ namespace spz {
 	    public Vector2 cursorMainViewportPos01 { get; private set; }
 	    public Vector2 cursorInnerViewportPos01 { get; private set; }//fitted inside main viewport & is usually smaller.
 
+	    /// <summary>Maps a point in inner-viewport 01 (where the view RT is drawn) to normalized coords in <see cref="mainViewportRect"/> for UI anchors.</summary>
+	    public Vector2 InnerViewport01ToMainViewport01 (Vector2 inner01){
+	        Vector2 pInInnerLocal = Rect.NormalizedToPoint(innerViewportRect.rect, inner01);
+	        Vector3 world = innerViewportRect.TransformPoint(new Vector3(pInInnerLocal.x, pInInnerLocal.y, 0f));
+	        Vector2 screen = RectTransformUtility.WorldToScreenPoint(null, world);
+	        RectTransformUtility.ScreenPointToLocalPointInRectangle(_viewportRect, screen, null, out Vector2 localMain);
+	        return Rect.PointToNormalized(_viewportRect.rect, localMain);
+	    }
+
 	    public bool isCursorHoveringMe(){
 	        //those ones are on different canvas than this Viewport, so it's important to manually check if they are on:
 	        if(CheckForUpdates_MGR.instance.isShowing){ return false; }
@@ -42,6 +51,7 @@ namespace spz {
 	        if(WelcomeScreenNovices_MGR.instance._isShowing){ return false; }
 	        if(LoadIntroScreen_Panel_UI.isShowing){ return false; }
 	        if(_viewportContextMenu_mgr.isShowing){ return false; }
+	        if(AddonManager_UI.IsModalOpen){ return false; }
 	        return MainViewport_UI_EventListener.instance.TryRaycastTowardsSelf();
 	    }
 
@@ -52,6 +62,7 @@ namespace spz {
 	        if(WelcomeScreenCMD_MGR._isShowing){ return false; }
 	        if(WelcomeScreenNovices_MGR.instance._isShowing){ return false; }
 	        if(LoadIntroScreen_Panel_UI.isShowing){ return false; }
+	        if(AddonManager_UI.IsModalOpen){ return false; }
 	        return MainViewport_UI_EventListener.instance.IsCursorIn_my_width();
 	    }
 

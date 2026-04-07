@@ -23,9 +23,13 @@
   Texture2DArray<float> _UV_Chunks_R8; //tells where the uv islands are, and where there is emptyness. Helps in dilation.
   float4 _UV_Chunks_scale; //by how much '_UV_Chunks_R8' is bigger than the other textures.
 
-  // Smudge: read-only copy of paint target for sampling neighbors without read-write hazards.
+  // Smudge: read-only copy of active layer (paint target) + mesh accumulation (SD UV gens / viewport composite under layer).
   Texture2DArray<float4> _SmudgeSourceCopy;
+  Texture2DArray<float4> _SmudgeAccumCopy;
   float _SmudgeKernelSpacing;
+  float _SmudgeAdaptiveColorSigma;
+  float _SmudgeAngleRad;
+  float _SmudgeDirBoost;
   int _SmudgeTexWidth;
   int _SmudgeTexHeight;
 
@@ -146,9 +150,20 @@ void CSMain (uint3 id : SV_DispatchThreadID){
 
 // ---------------------------------------------------------------------------
 // Smudge kernel: weighted-average blur of neighbors, applied where brush covers.
-// Reads from _SmudgeSourceCopy (read-only snapshot), writes to _PaintedMask.
+// Samples layer-over-accumulation so UV generations (blit to accumulation) contribute when layer alpha is low.
+// Writes to _PaintedMask (active layer).
 // ---------------------------------------------------------------------------
 #ifdef BLEND_RGBA_ONCE
+float4 SmudgeCombinedLayerOverAccum(int3 c){
+    float4 L = _SmudgeSourceCopy[c];
+    float4 A = _SmudgeAccumCopy[c];
+    float4 Lpm = float4(L.rgb * L.a, L.a);
+    float4 Apm = float4(A.rgb * A.a, A.a);
+    float4 Opm = Lpm + (1.0 - Lpm.a) * Apm;
+    if (Opm.a < 1e-5) return float4(0,0,0,0);
+    return float4(Opm.rgb / Opm.a, Opm.a);
+}
+
 [numthreads(THREADS_X, THREADS_Y, THREADS_Z)]
 void CSSmudge (uint3 id : SV_DispatchThreadID){
     if ((int)id.x >= _SmudgeTexWidth || (int)id.y >= _SmudgeTexHeight) return;
@@ -156,12 +171,13 @@ void CSSmudge (uint3 id : SV_DispatchThreadID){
     float brushCoverage = _CurrBrushStroke_R8[id];
     if (brushCoverage < 0.001) return;
 
-    float4 currColor = _SmudgeSourceCopy[id];
+    float4 currColor = SmudgeCombinedLayerOverAccum(int3((int)id.x, (int)id.y, (int)id.z));
     float4 weightedSum = float4(0,0,0,0);
     float totalWeight = 0;
 
     int spacing = max(1, (int)_SmudgeKernelSpacing);
     const int RADIUS = 2;
+    float2 dirU = float2(cos(_SmudgeAngleRad), sin(_SmudgeAngleRad));
 
     for (int dy = -RADIUS; dy <= RADIUS; dy++){
         for (int dx = -RADIUS; dx <= RADIUS; dx++){
@@ -174,7 +190,17 @@ void CSSmudge (uint3 id : SV_DispatchThreadID){
             float w = max(0.0, 1.0 - dist / (RADIUS + 1.0));
             w *= w;
 
-            float4 samp = _SmudgeSourceCopy[nc];
+            if (_SmudgeDirBoost > 1e-5 && dist > 1e-5){
+                float2 duv = float2(dx, dy) / dist;
+                float align = saturate(dot(duv, dirU));
+                w *= 1.0 + _SmudgeDirBoost * align;
+            }
+
+            float4 samp = SmudgeCombinedLayerOverAccum(nc);
+            if (_SmudgeAdaptiveColorSigma > 1e-5){
+                float3 cd = samp.rgb - currColor.rgb;
+                w *= exp(-dot(cd, cd) * _SmudgeAdaptiveColorSigma);
+            }
             weightedSum += samp * w;
             totalWeight += w;
         }

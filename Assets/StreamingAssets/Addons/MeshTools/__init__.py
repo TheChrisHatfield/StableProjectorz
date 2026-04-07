@@ -6,6 +6,7 @@ and Stable Diffusion integration.
 
 Required structure for true enabling (tab + working buttons):
 - register() must call api.ui.create_panel(addon_id, title) and panel.add_button(label, callback_name).
+  The panel opens in the same right-panel body as Art/ControlNet/Paint (below the tab strip); addon_id must match the add-on folder name.
 - Button callback_name must match a module-level function name (e.g. center_selected_meshes).
 - Unity enables via Add-on Manager; "Load addons now" or enable toggle triggers Python load;
   Python register() creates the tab/panel in Unity; button clicks POST to /invoke_callback

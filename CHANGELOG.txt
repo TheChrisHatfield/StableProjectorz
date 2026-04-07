@@ -6,6 +6,35 @@ This file tracks changes on top of that baseline until the next release bump.
 
 -------------------------------------------------------------------------------
 
+[Unreleased]  |  Date: 2026-04-05  |  Topic: Command ribbon tab strip (many add-ons, resize)
+-------------------------------------------------------------------------------
+
+Summary
+  The right-panel command ribbon tab row adapts when many add-on tabs load or when
+  the panel width changes, instead of breaking layout by forcing equal flex widths
+  against per-tab LayoutElement.minWidth.
+
+CommandRibbon_UI.cs
+  * PatchTabStripResponsiveLayout — childForceExpandWidth false (childControlWidth
+    true) so label-driven mins work until rebalanced.
+  * RebalanceStripTabMinWidthsIfOverflowing — proportional scale when sum of tab
+    min widths exceeds strip budget; floors 36px then 28px; iterative pass down to
+    1px when still over budget (guarded, stops on no progress).
+  * HarmonizeStripTabTypography — calls rebalance after per-tab min width from labels.
+  * Update — polls strip RectTransform width; >1px change triggers RefreshTabStripLayout;
+    missing strip resets last width tracking.
+  * FindFirstOtherStripTabForStyleReference — only direct children of the strip.
+  * QueueTabStripRebuildNextFrame — coalesces next-frame rebuild coroutines; sequence
+    id in finally avoids clearing the active coroutine handle when a superseded run
+    finishes after a newer one was started.
+  * EnsurePaintTabExists — uses QueueTabStripRebuildNextFrame like add-on refresh.
+
+Notes for testers
+  * Many add-ons + long titles: narrow/widen right panel; expect single row + ellipsis.
+  * Horizontal ScrollRect on tab row: next-frame pass still scrolls right for new tabs.
+
+-------------------------------------------------------------------------------
+
 [Unreleased]  |  Date: 2026-03-25  |  Topic: Smudge brush tool
 -------------------------------------------------------------------------------
 

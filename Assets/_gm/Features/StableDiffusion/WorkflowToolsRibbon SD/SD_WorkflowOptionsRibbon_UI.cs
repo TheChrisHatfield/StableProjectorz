@@ -66,6 +66,12 @@ namespace spz {
 	    public Color brushColor => _brushColor._brushColor;
 	    public float maskBrushOpacity => _brushOpacity._maskBrushOpacity;
 
+	    /// <summary>Smudge strength 0–1 from Paint tab → Tool Options → Brush options (× <see cref="maskBrushOpacity"/> when applying smudge).</summary>
+	    public float smudgeToolStrength01 => PaintTab_SmudgeBrushOptions.Strength01;
+
+	    /// <summary>Smudge smear direction in degrees (see compute <c>_SmudgeAngleRad</c>).</summary>
+	    public float smudgeToolAngleDeg => PaintTab_SmudgeBrushOptions.AngleDeg;
+
 	    public float brushSize01 => _brushSize_slider.brushSize01;
 	    public void SetBrushSize(float s) => _brushSize_slider.SetBrushSize(s);
 	    public float brushSpacing01 => _brushSize_slider.brushSpacing01;
@@ -104,14 +110,62 @@ namespace spz {
 		    return 0.001f + t * (1f - 0.001f);
 	    }
 
-	    public float denoisingStrength => _reThink_slider.value;
-	    public float maskBlur_StepLength01 => _blur_slider.value;
+	    /// <summary> Add-on / JSON-RPC: paint (0), smudge (1), erase (2). </summary>
+	    public bool TrySetBrushToolModeFromApi(int modeInt) {
+		    if (_direction == null) return false;
+		    if (modeInt < 0 || modeInt > 2) return false;
+		    _direction.SetToolModeFromApi((BrushToolMode)modeInt);
+		    return true;
+	    }
+
+	    /// <summary> Add-on / JSON-RPC: brush tint for inpaint color workflow. </summary>
+	    public bool SetBrushColorFromApi(float r, float g, float b, float a) {
+		    if (_brushColor == null) return false;
+		    _brushColor.SetBrushColorFromPalette(new Color(r, g, b, a));
+		    return true;
+	    }
+
+	    static void ApplyCircleSlider(CircleSlider_Snapping_UI s, float v) {
+		    if (s == null) return;
+		    float c = Mathf.Clamp(v, s.min, s.max);
+		    s.SetSliderValue(c, true);
+	    }
+
+	    void SyncBothReThinkSliders(float v) {
+		    ApplyCircleSlider(_reThink_slider, v);
+		    ApplyCircleSlider(_reThink_slider_mini, v);
+	    }
+
+	    /// <summary> JSON-RPC / HTTP / Forge: denoising strength (same dial as “re-think” / img2img). </summary>
+	    public bool TrySetDenoisingStrengthFromApi(float v) {
+		    if (!float.IsFinite(v) || _reThink_slider == null) return false;
+		    SyncBothReThinkSliders(v);
+		    if (SD_Options_Fetcher.instance != null) SD_Options_Fetcher.instance.SubmitOptions_Asap();
+		    return true;
+	    }
+
+	    /// <summary> JSON-RPC / HTTP / Forge: mask dilation blur step (circle slider raw value). </summary>
+	    public bool TrySetMaskBlurStepFromApi(float v) {
+		    if (!float.IsFinite(v) || _blur_slider == null) return false;
+		    ApplyCircleSlider(_blur_slider, v);
+		    if (SD_Options_Fetcher.instance != null) SD_Options_Fetcher.instance.SubmitOptions_Asap();
+		    return true;
+	    }
+
+	    public void SetIgnoreDepthOrNormals_from_script(bool isOn) {
+		    if (_ignoreDepthOrNormals == null) return;
+		    _ignoreDepthOrNormals.isOn = isOn;
+		    if (SD_Options_Fetcher.instance != null) SD_Options_Fetcher.instance.SubmitOptions_Asap();
+	    }
+
+	    public float denoisingStrength => _reThink_slider != null ? _reThink_slider.value : 0f;
+	    public float maskBlur_StepLength01 => _blur_slider != null ? _blur_slider.value : 0f;
 	    public bool isSoftInpaint => on_and_interactable(_softInpaint);
 	    public bool isTileable => on_and_interactable(_tileableInpaint);
 	    public bool ignoreDepthOrNormals => on_and_interactable(_ignoreDepthOrNormals);
-	    bool on_and_interactable(Toggle tog) => tog.isOn && tog.IsInteractable();
+	    bool on_and_interactable(Toggle tog) => tog != null && tog.isOn && tog.IsInteractable();
 
-	    public float edgeThresh => 1 - _edgeThresh_slider.value;//1-value because slider is caled EDG. smaller=fewer edges (higher thresh), more intuitive
+	    public float edgeThresh => _edgeThresh_slider != null ? 1f - _edgeThresh_slider.value : 0f;//1-value because slider is caled EDG. smaller=fewer edges (higher thresh), more intuitive
 	    public float edgeThick => _edgeThick_slider==null? 0 : _edgeThick_slider.value;
 	    public float edgeBlur => 0.3f; //0.5 would extend from borders, 0.3 leaves a nice gap with a bit softness.
 
@@ -133,13 +187,15 @@ namespace spz {
 
 
 	    public void SetIsTileable_from_script(bool isOn){
+	        if (_tileableInpaint == null) return;
 	        _tileableInpaint.isOn = isOn;
-	        SD_Options_Fetcher.instance.SubmitOptions_Asap();
+	        if (SD_Options_Fetcher.instance != null) SD_Options_Fetcher.instance.SubmitOptions_Asap();
 	    }
 
 	    public void SetIsSoftInpaint_from_script(bool isOn){
+	        if (_softInpaint == null) return;
 	        _softInpaint.isOn = isOn;
-	        SD_Options_Fetcher.instance.SubmitOptions_Asap();
+	        if (SD_Options_Fetcher.instance != null) SD_Options_Fetcher.instance.SubmitOptions_Asap();
 	    }
 
 
@@ -248,7 +304,6 @@ namespace spz {
 	    void Toggle_the_GOs(bool isOn, List<Component> mbs){
 	        for(int i=0; i<mbs.Count; i++){  mbs[i].gameObject.SetActive(isOn); }
 	    }
-
 
 	    void Reposition_ReDoMini_slider(){
 	        if (StableDiffusion_Hub.instance==null){ return; }//scenes are probably loading

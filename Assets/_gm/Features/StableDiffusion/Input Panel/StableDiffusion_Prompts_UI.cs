@@ -138,7 +138,7 @@ namespace spz {
 	    /// Set positive prompt (for add-on API)
 	    /// </summary>
 	    public void SetPositivePrompt(string prompt) {
-	        if (string.IsNullOrEmpty(prompt)) return;
+	        if (prompt == null) return;
 	        _positive_input.text = prompt;
 	        _posChanged_thisFrame = true;
 	    }
@@ -148,7 +148,7 @@ namespace spz {
 	    /// </summary>
 	    public void SetNegativePrompt(string prompt) {
 	        if (_negative_input == null) return;
-	        if (string.IsNullOrEmpty(prompt)) return;
+	        if (prompt == null) return;
 	        _negative_input.text = prompt;
 	        _negChanged_thisFrame = true;
 	    }

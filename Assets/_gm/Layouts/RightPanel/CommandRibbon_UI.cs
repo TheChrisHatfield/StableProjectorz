@@ -25,26 +25,281 @@ namespace spz {
 	    [SerializeField] RectTransform _SD_ControlNets_List_Panel;
 	    [Tooltip("Paint tab content: workflow toggles, brush options, alpha picker, palette swatches. Add a tab with title 'Paint' in TabsGroup and assign this panel.")]
 	    [SerializeField] RectTransform _Paint_Panel;
-	    [Tooltip("Sliced tab background (e.g. tab_ui). If unset, copied from first prefab tab on the strip at runtime.")]
+	    [Tooltip("Optional explicit parent for stacked tab bodies (Art, ControlNet, add-on shells). If unset, resolved from built-in panel parents.")]
+	    [SerializeField] RectTransform _ribbonTabBodiesRootOverride;
+	    [Tooltip("Optional sliced tab background for runtime strip tabs (Paint + add-ons). If unset, copied from the first prefab tab on the strip.")]
 	    [SerializeField] Sprite _paintTabSliceSprite;
-	    [Tooltip("TMP font for the Paint tab label. If unset, copied from first prefab tab on the strip.")]
+	    [Tooltip("Optional TMP font for all ribbon strip tab labels (built-in + runtime + add-ons). If unset, copied from the first prefab tab on the strip.")]
 	    [SerializeField] TMP_FontAsset _paintTabFont;
 	    [Space(10)]
 	    [SerializeField] Animation _ctrlNetButton_anim;
 
-	    const float kPaintTabLabelFontSize = 18f;
+	    /// <summary>Default label point size for ribbon strip tabs when no prefab reference is available (TMP; same basis for built-in, Paint, add-ons).</summary>
+	    const float kRibbonStripTabLabelDefaultPt = 18f;
+	    /// <summary>Horizontal padding added to TMP preferred width so TabBg / active slice fully covers the label (incl. sliced borders).</summary>
+	    const float kRibbonStripTabLabelHorizontalPad = 28f;
+	    const float kRibbonStripTabMinWidthFloor = 48f;
+	    /// <summary>When many tabs exceed strip width, do not go below this min width before ellipsis (px).</summary>
+	    const float kRibbonStripTabMinWidthWhenCrowded = 36f;
+	    /// <summary>Fixed layout width for the soft vertical bar before each add-on strip tab (uGUI layout units).</summary>
+	    const float kRibbonAddonDividerLayoutWidth = 6f;
+
+	    static Sprite _addonRibbonDividerSprite;
+
+	    /// <summary>Soft vertical grey bar (~#555 on transparent) for add-on tab separation; shared by all dividers.</summary>
+	    static Sprite GetAddonRibbonDividerSprite()
+	    {
+		    if (_addonRibbonDividerSprite != null)
+			    return _addonRibbonDividerSprite;
+		    const int w = 7;
+		    const int h = 32;
+		    var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+		    tex.filterMode = FilterMode.Bilinear;
+		    tex.wrapMode = TextureWrapMode.Clamp;
+		    var edge = new Color(0.2f, 0.2f, 0.2f, 0f);
+		    var core = new Color(0.33f, 0.33f, 0.33f, 0.92f);
+		    for (int y = 0; y < h; y++)
+		    {
+			    for (int x = 0; x < w; x++)
+			    {
+				    float t = (x + 0.5f) / w;
+				    float dist = Mathf.Abs(t - 0.5f) * 2f;
+				    float blend = 1f - dist * dist * (3f - 2f * dist);
+				    tex.SetPixel(x, y, Color.Lerp(edge, core, blend));
+			    }
+		    }
+		    tex.Apply();
+		    _addonRibbonDividerSprite = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f), 100f);
+		    return _addonRibbonDividerSprite;
+	    }
+
+	    static void ApplyStripTabMinWidthForLabel(LayoutElement le, TextMeshProUGUI tmp, float horizontalPad)
+	    {
+		    if (le == null || tmp == null) return;
+		    string t = tmp.text;
+		    if (string.IsNullOrEmpty(t)) return;
+		    tmp.ForceMeshUpdate(true);
+		    // Wide width budget: strip labels use NoWrap; measure full single-line width.
+		    Vector2 pref = tmp.GetPreferredValues(t, 8192f, 128f);
+		    float w = pref.x + horizontalPad;
+		    le.minWidth = Mathf.Max(kRibbonStripTabMinWidthFloor, w);
+	    }
+
+	    static void ConfigureResponsiveRibbonTabText(TextMeshProUGUI tabText, TextMeshProUGUI referenceStripLabel, float fallbackMaxPt)
+	    {
+		    if (tabText == null) return;
+		    float maxPt = fallbackMaxPt > 0.05f ? fallbackMaxPt : kRibbonStripTabLabelDefaultPt;
+		    if (referenceStripLabel != null && referenceStripLabel.fontSize > 0.05f)
+			    maxPt = Mathf.Max(maxPt, referenceStripLabel.fontSize);
+		    maxPt = Mathf.Clamp(maxPt, 11f, 34f);
+		    float minPt = Mathf.Clamp(maxPt * 0.42f, 7f, maxPt - 1f);
+		    if (minPt >= maxPt)
+			    minPt = Mathf.Max(7f, maxPt * 0.55f);
+		    tabText.enableAutoSizing = true;
+		    tabText.fontSizeMin = minPt;
+		    tabText.fontSizeMax = maxPt;
+		    tabText.textWrappingMode = TextWrappingModes.NoWrap;
+		    tabText.overflowMode = TextOverflowModes.Ellipsis;
+		    tabText.verticalAlignment = TMPro.VerticalAlignmentOptions.Middle;
+	    }
+
+	    /// <summary>Leftmost prefab/runtime strip tab label (direct children of <paramref name="strip"/>), excluding one cell if needed.</summary>
+	    static TextMeshProUGUI GetRibbonStripTypographyReferenceTMP(Transform strip, Transform excludeTabCellRoot)
+	    {
+		    if (strip == null) return null;
+		    TabsGroupElem_UI best = null;
+		    int bestIx = int.MaxValue;
+		    foreach (var elem in strip.GetComponentsInChildren<TabsGroupElem_UI>(true))
+		    {
+			    if (elem == null || elem.transform.parent != strip) continue;
+			    if (excludeTabCellRoot != null && elem.transform == excludeTabCellRoot) continue;
+			    int ix = elem.transform.GetSiblingIndex();
+			    if (ix >= bestIx) continue;
+			    bestIx = ix;
+			    best = elem;
+		    }
+		    if (best == null) return null;
+		    return best.GetComponentInChildren<TextMeshProUGUI>(true);
+	    }
+
+	    /// <summary>
+	    /// The rect that owns <see cref="HorizontalLayoutGroup"/> for ribbon tab buttons (direct children = tab cells).
+	    /// Do not confuse with a single tab GameObject (e.g. Art) — parenting runtime tabs there stacks labels on Art.
+	    /// </summary>
+	    Transform ResolveEffectiveTabStripTransform() => ResolveTabStripForGroup(_tabGroup);
+
+	    void EnsureTabGroupResolved() {
+		    if (_tabGroup == null) _tabGroup = GetComponentInChildren<TabsGroup_UI>(true);
+	    }
+
+	    /// <summary>Stack rect for tab bodies (built-in + add-on shells). Same parent Python/Unity content uses via <see cref="GetOrCreatePanelForAddon"/>.</summary>
+	    public RectTransform GetRibbonTabBodiesParentRect() {
+		    TryResolvePanelRefs();
+		    if (_ribbonTabBodiesRootOverride != null)
+			    return _ribbonTabBodiesRootOverride;
+		    EnsureTabGroupResolved();
+		    Transform strip = ResolveEffectiveTabStripTransform();
+		    if (strip == null) return null;
+		    return GetRibbonTabBodiesParent(strip) as RectTransform;
+	    }
+
+	    /// <summary>Select an add-on tab and show its body (same path as clicking the tab). No-op if unknown id.</summary>
+	    public bool TrySelectAddonRibbonTab(string addonId) {
+		    if (string.IsNullOrEmpty(addonId)) return false;
+		    if (!_addonPanelsById.TryGetValue(addonId, out var shellRt) || shellRt == null || shellRt.gameObject == null)
+			    return false;
+		    EnsureTabGroupResolved();
+		    if (_tabGroup == null) return false;
+		    _tabGroup.SwitchTab(AddonRibbonIntegration.TabIdForAddon(addonId));
+		    return true;
+	    }
+
+	    /// <summary>Copy anchors/sizeDelta/position from a built-in ribbon panel so add-on shells occupy the same region below the tab strip.</summary>
+	    void CopyRibbonTabBodyRectFromReference(RectTransform target) {
+		    if (target == null) return;
+		    RectTransform r = _SD_ControlNets_List_Panel ?? _SD_ArtList_Panel ?? _SD_ArtBgList_Panel ?? _SD_3D_Models_Panels ?? _Paint_Panel;
+		    if (r == null) return;
+		    // anchoredPosition/sizeDelta are in parent space — only safe when reference shares the same parent as the add-on shell.
+		    if (r.parent != target.parent) return;
+		    target.anchorMin = r.anchorMin;
+		    target.anchorMax = r.anchorMax;
+		    target.pivot = r.pivot;
+		    target.anchoredPosition = r.anchoredPosition;
+		    target.sizeDelta = r.sizeDelta;
+		    target.localScale = r.localScale;
+		    target.localRotation = r.localRotation;
+	    }
+
+	    static Transform ResolveTabStripForGroup(TabsGroup_UI tabGroup) {
+		    if (tabGroup == null) return null;
+		    Transform strip = tabGroup.GetTabStripTransform();
+		    if (strip == null) return null;
+		    // Typical RIGHT PANEL / CommandRibbon: HLG is on the same GameObject as <see cref="TabsGroup_UI"/>; tabs are siblings under it.
+		    if (strip.GetComponent<HorizontalLayoutGroup>() != null)
+			    return strip;
+		    // Rare: TabsGroup wrapper with the real row as a child (must not pick a <see cref="TabsGroupElem_UI"/> tab cell).
+		    if (strip == tabGroup.transform)
+			    return FindTabStripFallback(tabGroup.transform) ?? strip;
+		    return strip;
+	    }
+
+	    /// <summary>Strip HLG: control child widths but do not force equal expansion — that fights per-tab <see cref="LayoutElement.minWidth"/> when many add-ons load.</summary>
+	    void PatchTabStripResponsiveLayout()
+	    {
+		    Transform strip = ResolveEffectiveTabStripTransform();
+		    var h = strip != null ? strip.GetComponent<HorizontalLayoutGroup>() : null;
+		    if (h == null) return;
+		    h.childControlWidth = true;
+		    h.childForceExpandWidth = false;
+	    }
+
+	    /// <summary>If sum of tab <see cref="LayoutElement.minWidth"/> exceeds the strip, scale mins down proportionally so the row reflows instead of breaking layout.</summary>
+	    void RebalanceStripTabMinWidthsIfOverflowing(Transform strip)
+	    {
+		    var rt = strip as RectTransform;
+		    var hlg = strip != null ? strip.GetComponent<HorizontalLayoutGroup>() : null;
+		    if (rt == null || hlg == null) return;
+
+		    var elements = new List<LayoutElement>();
+		    foreach (var te in strip.GetComponentsInChildren<TabsGroupElem_UI>(true))
+		    {
+			    if (te == null || te.transform.parent != strip) continue;
+			    var le = te.GetComponent<LayoutElement>();
+			    if (le != null && !le.ignoreLayout)
+				    elements.Add(le);
+		    }
+		    if (elements.Count == 0) return;
+
+		    UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
+		    float width = rt.rect.width;
+		    float budget = width - (float)(hlg.padding.left + hlg.padding.right)
+		                   - hlg.spacing * Mathf.Max(0, elements.Count - 1);
+		    if (budget < 8f) return;
+
+		    float sumMin = 0f;
+		    foreach (var le in elements)
+			    sumMin += Mathf.Max(1f, le.minWidth);
+		    if (sumMin <= budget) return;
+
+		    float factor = budget / sumMin;
+		    foreach (var le in elements)
+		    {
+			    float scaled = le.minWidth * factor;
+			    le.minWidth = Mathf.Max(kRibbonStripTabMinWidthWhenCrowded, scaled);
+		    }
+
+		    sumMin = 0f;
+		    foreach (var le in elements)
+			    sumMin += Mathf.Max(1f, le.minWidth);
+		    if (sumMin > budget && sumMin > 0.01f)
+		    {
+			    factor = budget / sumMin;
+			    foreach (var le in elements)
+				    le.minWidth = Mathf.Max(28f, le.minWidth * factor);
+		    }
+
+		    // 36px / 28px floors can still leave sum > budget (many tabs); shrink further until within budget or no progress.
+		    sumMin = 0f;
+		    foreach (var le in elements)
+			    sumMin += Mathf.Max(1f, le.minWidth);
+		    int guard = 0;
+		    while (sumMin > budget + 0.5f && sumMin > 0.01f && guard++ < 28)
+		    {
+			    factor = budget / sumMin;
+			    if (factor >= 0.999f)
+				    break;
+			    float beforeSum = sumMin;
+			    sumMin = 0f;
+			    foreach (var le in elements)
+			    {
+				    le.minWidth = Mathf.Max(1f, le.minWidth * factor);
+				    sumMin += Mathf.Max(1f, le.minWidth);
+			    }
+			    if (sumMin >= beforeSum - 0.01f)
+				    break;
+		    }
+	    }
+
+	    /// <summary>Apply shared min/max auto-size to every tab label on the strip so width changes reflow text (built-in + Paint + add-ons).</summary>
+	    void HarmonizeStripTabTypography()
+	    {
+		    Transform strip = ResolveEffectiveTabStripTransform();
+		    if (strip == null) return;
+		    TextMeshProUGUI refTmp = GetRibbonStripTypographyReferenceTMP(strip, null);
+		    float basis = refTmp != null && refTmp.fontSize > 0.05f ? refTmp.fontSize : kRibbonStripTabLabelDefaultPt;
+		    foreach (var elem in strip.GetComponentsInChildren<TabsGroupElem_UI>(true))
+		    {
+			    if (elem == null || elem.transform.parent != strip) continue;
+			    var tmp = elem.GetComponentInChildren<TextMeshProUGUI>(true);
+			    if (tmp == null) continue;
+			    ConfigureResponsiveRibbonTabText(tmp, refTmp, basis);
+			    var le = elem.GetComponent<LayoutElement>();
+			    if (le != null)
+				    ApplyStripTabMinWidthForLabel(le, tmp, kRibbonStripTabLabelHorizontalPad);
+		    }
+		    RebalanceStripTabMinWidthsIfOverflowing(strip);
+	    }
 
 	    // One tab + one panel per addon (Blender N-panel style)
 	    Dictionary<string, RectTransform> _addonPanelsById = new Dictionary<string, RectTransform>();
 	    Dictionary<string, GameObject> _addonTabById = new Dictionary<string, GameObject>();
+	    /// <summary>Add-on folder ids sorted for Shift+6..9 (not <see cref="Dictionary{TKey,TValue}.Keys"/> order).</summary>
+	    readonly List<string> _addonIdsShortcutOrder = new List<string>();
+	    /// <summary>Per-addon ShowOnePanel handler so we can remove before re-<see cref="TabsGroup_UI.SubscribeForTab"/> (connectivity retry without duplicates).</summary>
+	    Dictionary<string, Action<TabsGroupElem_UI>> _addonTabPanelShowByAddonId = new Dictionary<string, Action<TabsGroupElem_UI>>();
+	    /// <summary>Vertical strip divider placed immediately before each add-on tab (not a <see cref="TabsGroupElem_UI"/>).</summary>
+	    Dictionary<string, GameObject> _addonStripDividerById = new Dictionary<string, GameObject>();
 
 	    Coroutine _attention_toCtrlNetButton_crtn = null;
-
+	    Coroutine _rebuildTabStripLayout_crtn = null;
+	    int _rebuildTabStripLayoutSeq = 0;
+	    float _lastRibbonStripWidth = -1f;
 
 	    public Panel _currentPanel { get; private set; } = Panel.Unknown;
 
 
 	    public void Attention_toCtrlNetButton(){
+	        if (_ctrlNetButton_anim == null) return;
 	        if(_attention_toCtrlNetButton_crtn != null){ StopCoroutine(_attention_toCtrlNetButton_crtn); }
 	        _attention_toCtrlNetButton_crtn = StartCoroutine( Attention_toCtrlNetButton_crtn() );
 	    }
@@ -55,6 +310,7 @@ namespace spz {
 
 
 	    IEnumerator Attention_toCtrlNetButton_crtn(){
+	        if (_ctrlNetButton_anim == null || _ctrlNetButton_anim.transform.childCount < 1) yield break;
 	        int childCount = _ctrlNetButton_anim.transform.childCount;
 	        _ctrlNetButton_anim.transform.GetChild(childCount-1).gameObject.SetActive(true);
 	        _ctrlNetButton_anim.Stop();
@@ -67,6 +323,7 @@ namespace spz {
 
 
 	    void ShowOnePanel(GameObject go){
+	        if (go == null) return;
 	        go.SetActive(true);
 	        if (_SD_ArtList_Panel != null && go != _SD_ArtList_Panel.gameObject) _SD_ArtList_Panel.gameObject.SetActive(false);
 	        if (_SD_ArtBgList_Panel != null && go != _SD_ArtBgList_Panel.gameObject) _SD_ArtBgList_Panel.gameObject.SetActive(false);
@@ -75,7 +332,7 @@ namespace spz {
 	        if (_Paint_Panel != null && go != _Paint_Panel.gameObject) _Paint_Panel.gameObject.SetActive(false);
 	        foreach(var p in _addonPanelsById.Values)
 	            if(p != null && p.gameObject != go) p.gameObject.SetActive(false);
-	        if (KeyMousePenInput.isKey_Shift_pressed() == false){
+	        if (KeyMousePenInput.isKey_Shift_pressed() == false && Viewport_StatusText.instance != null){
 	            string msg = "Use Shift+1, Shift+2, etc to switch tabs faster :)";
 	            Viewport_StatusText.instance.ShowStatusText(msg, false, 1.2f, false);
 	        }
@@ -88,16 +345,19 @@ namespace spz {
 	    }
 
 	    void OnArtBgList_Toggle(TabsGroupElem_UI tab){
+	        if (_SD_ArtBgList_Panel == null) return;
 	        ShowOnePanel( _SD_ArtBgList_Panel.gameObject );
 	        _currentPanel = Panel.ArtBG;
 	    }
 
 	    void On_3D_Meshes_Toggle(TabsGroupElem_UI tab){
+	        if (_SD_3D_Models_Panels == null) return;
 	        ShowOnePanel( _SD_3D_Models_Panels.gameObject );
 	        _currentPanel = Panel.Obj3D;
 	    }
 
 	    void On_ControlNets_Toggle(TabsGroupElem_UI tab){
+	        if (_SD_ControlNets_List_Panel == null) return;
 	        ShowOnePanel( _SD_ControlNets_List_Panel.gameObject );
 	        _currentPanel = Panel.CtrlNet;
 	    }
@@ -109,20 +369,40 @@ namespace spz {
 	    }
 
 	    void Update(){
+		    if (isActiveAndEnabled) {
+			    EnsureTabGroupResolved();
+			    Transform stripPoll = ResolveEffectiveTabStripTransform();
+			    var stripRtPoll = stripPoll as RectTransform;
+			    if (stripRtPoll != null) {
+				    float wPoll = stripRtPoll.rect.width;
+				    if (_lastRibbonStripWidth < 0f)
+					    _lastRibbonStripWidth = wPoll;
+				    else if (Mathf.Abs(wPoll - _lastRibbonStripWidth) > 1f) {
+					    _lastRibbonStripWidth = wPoll;
+					    RefreshTabStripLayout();
+				    }
+			    } else {
+				    _lastRibbonStripWidth = -1f;
+			    }
+		    }
 	        if(KeyMousePenInput.isSomeInputFieldActive()){ return;} //maybe typing some exclamation mark etc.
 	        if (KeyMousePenInput.isKey_Shift_pressed() == false){ return; }
+	        EnsureTabGroupResolved();
 	        if (_tabGroup == null) return; // TabsGroup_UI may not be found at init; avoid NullReferenceException on Shift+1..9
 	        if (Input.GetKeyDown(KeyCode.Alpha1)){ _tabGroup.SwitchTab("art list"); }
 	        if (Input.GetKeyDown(KeyCode.Alpha2)){ _tabGroup.SwitchTab("art bg list"); }
 	        if (Input.GetKeyDown(KeyCode.Alpha3)){ _tabGroup.SwitchTab("mesh"); }
 	        if (Input.GetKeyDown(KeyCode.Alpha4)){ _tabGroup.SwitchTab("controlnet"); }
 	        if (Input.GetKeyDown(KeyCode.Alpha5)){ _tabGroup.SwitchTab("paint"); }
-	        // Dynamic shift keys for addons (6+) (_addonPanelsById keys are addonIds; TabsGroup tab id is "addon_" + addonId)
+	        // Shift+6..9: add-ons in stable order (folder id, ordinal case-insensitive sort)
 	        int addonIdx = 6;
-	        foreach (string addonId in _addonPanelsById.Keys) {
-	            if (Input.GetKeyDown(KeyCode.Alpha0 + addonIdx)) { _tabGroup.SwitchTab("addon_" + addonId); }
+	        for (int i = 0; i < _addonIdsShortcutOrder.Count && addonIdx <= 9; i++) {
+	            string addonId = _addonIdsShortcutOrder[i];
+	            if (string.IsNullOrEmpty(addonId)) continue;
+	            if (!_addonPanelsById.TryGetValue(addonId, out var shell) || shell == null || shell.gameObject == null) continue;
+	            if (Input.GetKeyDown(KeyCode.Alpha0 + addonIdx))
+		            _tabGroup.SwitchTab(AddonRibbonIntegration.TabIdForAddon(addonId));
 	            addonIdx++;
-	            if (addonIdx > 9) break;
 	        }
 	    }
     
@@ -132,7 +412,9 @@ namespace spz {
 	        instance = this;
 
 	        TryResolvePanelRefs();
+	        EnsureTabGroupResolved();
 	        EnsurePaintTabExists();
+	        PatchTabStripResponsiveLayout();
 	        if (_tabGroup != null) {
 	            _tabGroup.SubscribeForTab("art list", OnArtList_Toggle);
 	            _tabGroup.SubscribeForTab("art bg list", OnArtBgList_Toggle);
@@ -160,6 +442,8 @@ namespace spz {
 	            var collector = _Paint_Panel.GetComponent<PaintTab_CollectPaintUI>();
 	            if (collector != null) StartCoroutine(PaintCollect_WaitForSingletons_crtn(collector));
 	        }
+
+	        HarmonizeStripTabTypography();
 	    }
 
 	    IEnumerator PaintCollect_WaitForSingletons_crtn(PaintTab_CollectPaintUI collector)
@@ -187,6 +471,98 @@ namespace spz {
 	        }
 	    }
 
+	    /// <summary>
+	    /// Runtime <see cref="TabsGroup_UI"/> strip cell (Art / ControlNet / Paint / add-ons share the row only — add-ons are not part of the paint pipeline).
+	    /// Hierarchy: root <see cref="LayoutElement"/> + <see cref="Button"/>, child <c>TabBg</c> as <see cref="Button.targetGraphic"/>,
+	    /// <c>go active</c> slice, <c>Input (text)</c> label — matches how the Paint tab button is built so <see cref="HorizontalLayoutGroup"/> lays out correctly.
+	    /// </summary>
+	    TabsGroupElem_UI CreateRibbonStripTabCell(Transform tabStrip, string tabsGroupTitleId, string headerLabelText) {
+		    if (tabStrip == null || string.IsNullOrEmpty(tabsGroupTitleId)) return null;
+		    var tabGo = new GameObject("Tab: " + headerLabelText);
+		    tabGo.transform.SetParent(tabStrip, false);
+		    tabGo.transform.SetAsLastSibling();
+		    tabGo.SetActive(true);
+		    var tabRect = tabGo.AddComponent<RectTransform>();
+		    tabRect.anchorMin = Vector2.zero;
+		    tabRect.anchorMax = Vector2.one;
+		    tabRect.sizeDelta = Vector2.zero;
+		    tabRect.anchoredPosition = Vector2.zero;
+		    tabRect.pivot = new Vector2(0.5f, 0.5f);
+		    var tabLE = tabGo.AddComponent<LayoutElement>();
+		    tabLE.flexibleWidth = 1f;
+		    tabLE.flexibleHeight = 1f;
+		    tabLE.minWidth = -1f;
+		    tabLE.minHeight = -1f;
+		    tabLE.preferredWidth = -1f;
+		    tabLE.preferredHeight = -1f;
+		    var tabBtn = tabGo.AddComponent<Button>();
+
+		    var goTabBg = new GameObject("TabBg");
+		    goTabBg.transform.SetParent(tabGo.transform, false);
+		    goTabBg.transform.SetAsFirstSibling();
+		    var tabBgRect = goTabBg.AddComponent<RectTransform>();
+		    tabBgRect.anchorMin = Vector2.zero;
+		    tabBgRect.anchorMax = Vector2.one;
+		    tabBgRect.sizeDelta = Vector2.zero;
+		    tabBgRect.anchoredPosition = Vector2.zero;
+		    var tabBgImg = goTabBg.AddComponent<Image>();
+		    tabBgImg.sprite = null;
+		    tabBgImg.type = Image.Type.Simple;
+		    tabBgImg.color = Color.white;
+		    tabBgImg.raycastTarget = true;
+		    tabBtn.targetGraphic = tabBgImg;
+		    var tabBtnColors = tabBtn.colors;
+		    tabBtnColors.normalColor = new Color(1f, 1f, 1f, 0f);
+		    tabBtnColors.highlightedColor = new Color(1f, 1f, 1f, 0.08f);
+		    tabBtnColors.pressedColor = new Color(1f, 1f, 1f, 0.14f);
+		    tabBtnColors.selectedColor = new Color(1f, 1f, 1f, 0f);
+		    tabBtnColors.disabledColor = new Color(1f, 1f, 1f, 0f);
+		    tabBtn.colors = tabBtnColors;
+
+		    var goActive = new GameObject("go active");
+		    goActive.transform.SetParent(tabGo.transform, false);
+		    var activeRect = goActive.AddComponent<RectTransform>();
+		    activeRect.anchorMin = Vector2.zero;
+		    activeRect.anchorMax = Vector2.one;
+		    activeRect.sizeDelta = Vector2.zero;
+		    activeRect.anchoredPosition = Vector2.zero;
+		    var activeInner = new GameObject("image");
+		    activeInner.transform.SetParent(goActive.transform, false);
+		    var activeInnerRt = activeInner.AddComponent<RectTransform>();
+		    activeInnerRt.anchorMin = Vector2.zero;
+		    activeInnerRt.anchorMax = Vector2.one;
+		    activeInnerRt.sizeDelta = Vector2.zero;
+		    activeInnerRt.anchoredPosition = Vector2.zero;
+		    var activeImg = activeInner.AddComponent<Image>();
+		    activeImg.color = new Color(0.32941177f, 0.32941177f, 0.32941177f, 1f);
+		    activeImg.raycastTarget = false;
+		    goActive.SetActive(false);
+
+		    var tabTextGo = new GameObject("Input (text)");
+		    tabTextGo.transform.SetParent(tabGo.transform, false);
+		    var tabTextRect = tabTextGo.AddComponent<RectTransform>();
+		    tabTextRect.anchorMin = Vector2.zero;
+		    tabTextRect.anchorMax = Vector2.one;
+		    tabTextRect.sizeDelta = Vector2.zero;
+		    var tabText = tabTextGo.AddComponent<TextMeshProUGUI>();
+		    tabText.text = headerLabelText;
+		    tabText.fontSize = kRibbonStripTabLabelDefaultPt;
+		    tabText.color = Color.white;
+		    tabText.alignment = TextAlignmentOptions.Center;
+		    tabText.verticalAlignment = TMPro.VerticalAlignmentOptions.Middle;
+		    tabText.raycastTarget = false;
+		    tabText.textWrappingMode = TMPro.TextWrappingModes.Normal;
+		    tabText.overflowMode = TMPro.TextOverflowModes.Ellipsis;
+
+		    ApplyRibbonStripTabVisuals(tabStrip, tabGo, tabBgImg, activeImg, tabText);
+		    ApplyStripTabMinWidthForLabel(tabLE, tabText, kRibbonStripTabLabelHorizontalPad);
+
+		    var tabElem = tabGo.AddComponent<TabsGroupElem_UI>();
+		    tabElem.InitForRuntime(tabsGroupTitleId, tabBtn);
+		    tabElem.SetRuntimeActiveHighlight(goActive);
+		    return tabElem;
+	    }
+
 	    /// <summary>Creates the Paint tab and panel at runtime if missing, so Paint appears alongside Art list, Art BG, Mesh, ControlNet.</summary>
 	    void EnsurePaintTabExists(){
 	        if (_tabGroup == null) _tabGroup = GetComponentInChildren<TabsGroup_UI>(true);
@@ -194,22 +570,23 @@ namespace spz {
 	            UnityEngine.Debug.LogWarning("[CommandRibbon_UI] Paint tab: no TabsGroup_UI found.");
 	            return;
 	        }
-	        Transform tabStrip = _tabGroup.GetTabStripTransform();
+	        Transform tabStrip = ResolveEffectiveTabStripTransform();
 	        if (tabStrip == null) return;
 	        // Only skip when BOTH panel and tab exist; if panel exists but tab does not, we must create the tab below so the panel is reachable.
 	        if (_Paint_Panel != null && _tabGroup.HasTab("paint")) return;
 
-	        Transform panelsParent = (_SD_ControlNets_List_Panel != null ? _SD_ControlNets_List_Panel : _SD_ArtList_Panel)?.parent ?? tabStrip.parent;
+	        Transform panelsParent = GetRibbonTabBodiesParent(tabStrip);
 	        RectTransform newPanelRect = null;
 	        if (_Paint_Panel == null && panelsParent != null) {
 	            var panelGo = new GameObject("Panel_Paint");
 	            panelGo.transform.SetParent(panelsParent, false);
-	            panelGo.transform.SetSiblingIndex(0); // draw behind tab strip and other panels so tabs stay visible and clickable
+	            panelGo.transform.SetSiblingIndex(0);
 	            var panelRect = panelGo.AddComponent<RectTransform>();
 	            panelRect.anchorMin = Vector2.zero;
 	            panelRect.anchorMax = Vector2.one;
 	            panelRect.sizeDelta = Vector2.zero;
 	            panelRect.anchoredPosition = Vector2.zero;
+	            CopyRibbonTabBodyRectFromReference(panelRect);
 	            var panelBg = panelGo.AddComponent<Image>();
 	            panelBg.color = new Color(0.22f, 0.22f, 0.22f, 1f);
 	            panelBg.raycastTarget = true;
@@ -241,113 +618,67 @@ namespace spz {
 	            return;
 	        }
 
-	        var tabGo = new GameObject("Tab: Paint");
-	        tabGo.transform.SetParent(tabStrip, false);
-	        tabGo.transform.SetAsLastSibling();
-	        tabGo.SetActive(true);
-	        var tabRect = tabGo.AddComponent<RectTransform>();
-	        tabRect.anchorMin = Vector2.zero;
-	        tabRect.anchorMax = Vector2.one;
-	        tabRect.sizeDelta = Vector2.zero;
-	        tabRect.anchoredPosition = Vector2.zero;
-	        tabRect.pivot = new Vector2(0.5f, 0.5f);
-	        var tabLE = tabGo.AddComponent<LayoutElement>();
-	        tabLE.flexibleWidth = 1f;
-	        tabLE.flexibleHeight = 1f;
-	        tabLE.minWidth = -1f;
-	        tabLE.minHeight = -1f;
-	        tabLE.preferredWidth = -1f;
-	        tabLE.preferredHeight = -1f;
-	        // Prefab tabs: no Image on root — sliced tab_ui under children (matches silhouette of other strip tabs).
-	        var tabBtn = tabGo.AddComponent<Button>();
-
-	        var goTabBg = new GameObject("TabBg");
-	        goTabBg.transform.SetParent(tabGo.transform, false);
-	        goTabBg.transform.SetAsFirstSibling();
-	        var tabBgRect = goTabBg.AddComponent<RectTransform>();
-	        tabBgRect.anchorMin = Vector2.zero;
-	        tabBgRect.anchorMax = Vector2.one;
-	        tabBgRect.sizeDelta = Vector2.zero;
-	        tabBgRect.anchoredPosition = Vector2.zero;
-	        var tabBgImg = goTabBg.AddComponent<Image>();
-	        // Prefab tabs have no always-on tab slab; only "go active" shows the flared slice.
-	        // Keep this as a subtle interaction plane so hover/press has feedback.
-	        tabBgImg.sprite = null;
-	        tabBgImg.type = Image.Type.Simple;
-	        tabBgImg.color = Color.white;
-	        tabBgImg.raycastTarget = true;
-	        tabBtn.targetGraphic = tabBgImg;
-	        var tabBtnColors = tabBtn.colors;
-	        tabBtnColors.normalColor = new Color(1f, 1f, 1f, 0f);
-	        tabBtnColors.highlightedColor = new Color(1f, 1f, 1f, 0.08f);
-	        tabBtnColors.pressedColor = new Color(1f, 1f, 1f, 0.14f);
-	        tabBtnColors.selectedColor = new Color(1f, 1f, 1f, 0f);
-	        tabBtnColors.disabledColor = new Color(1f, 1f, 1f, 0f);
-	        tabBtn.colors = tabBtnColors;
-
-	        var goActive = new GameObject("go active");
-	        goActive.transform.SetParent(tabGo.transform, false);
-	        var activeRect = goActive.AddComponent<RectTransform>();
-	        activeRect.anchorMin = Vector2.zero;
-	        activeRect.anchorMax = Vector2.one;
-	        activeRect.sizeDelta = Vector2.zero;
-	        activeRect.anchoredPosition = Vector2.zero;
-	        var activeInner = new GameObject("image");
-	        activeInner.transform.SetParent(goActive.transform, false);
-	        var activeInnerRt = activeInner.AddComponent<RectTransform>();
-	        activeInnerRt.anchorMin = Vector2.zero;
-	        activeInnerRt.anchorMax = Vector2.one;
-	        activeInnerRt.sizeDelta = Vector2.zero;
-	        activeInnerRt.anchoredPosition = Vector2.zero;
-	        var activeImg = activeInner.AddComponent<Image>();
-	        activeImg.color = new Color(0.32941177f, 0.32941177f, 0.32941177f, 1f);
-	        activeImg.raycastTarget = false;
-	        goActive.SetActive(false);
-
-	        var tabTextGo = new GameObject("Input (text)");
-	        tabTextGo.transform.SetParent(tabGo.transform, false);
-	        var tabTextRect = tabTextGo.AddComponent<RectTransform>();
-	        tabTextRect.anchorMin = Vector2.zero;
-	        tabTextRect.anchorMax = Vector2.one;
-	        tabTextRect.sizeDelta = Vector2.zero;
-	        var tabText = tabTextGo.AddComponent<TextMeshProUGUI>();
-	        tabText.text = "Paint";
-	        tabText.fontSize = kPaintTabLabelFontSize;
-	        tabText.enableAutoSizing = false;
-	        tabText.color = Color.white;
-	        tabText.alignment = TextAlignmentOptions.Center;
-	        tabText.verticalAlignment = TMPro.VerticalAlignmentOptions.Middle;
-	        tabText.raycastTarget = false;
-	        tabText.textWrappingMode = TMPro.TextWrappingModes.Normal;
-	        tabText.overflowMode = TMPro.TextOverflowModes.Ellipsis;
-
-	        ApplyPaintTabStripVisuals(tabStrip, tabGo, tabBgImg, activeImg, tabText);
-
-	        var tabElem = tabGo.AddComponent<TabsGroupElem_UI>();
-	        tabElem.InitForRuntime("paint", tabBtn);
-	        tabElem.SetRuntimeActiveHighlight(goActive);
+	        var tabElem = CreateRibbonStripTabCell(tabStrip, "paint", "Paint");
+	        if (tabElem == null) {
+		        UnityEngine.Debug.LogError("[CommandRibbon_UI] Paint tab: CreateRibbonStripTabCell returned null.");
+		        return;
+	        }
 	        _tabGroup.AddTab(tabElem);
 	        if (newPanelRect != null)
 	            _Paint_Panel = newPanelRect;
 	        var stripRect = tabStrip as RectTransform;
 	        if (stripRect != null) UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(stripRect);
-	        StartCoroutine(RebuildTabStripLayoutNextFrame(tabStrip));
-	        UnityEngine.Debug.Log($"[CommandRibbon_UI] Paint tab created, parented to {tabGo.transform.parent.name}, siblingIndex={tabGo.transform.GetSiblingIndex()}, strip.childCount={tabStrip.childCount}");
+	        QueueTabStripRebuildNextFrame(tabStrip);
+	        UnityEngine.Debug.Log($"[CommandRibbon_UI] Paint tab created, parented to {tabElem.transform.parent.name}, siblingIndex={tabElem.transform.GetSiblingIndex()}, strip.childCount={tabStrip.childCount}");
 	    }
 
-	    /// <summary>When GetTabStripTransform returns TabsGroup itself, find the actual strip (child with HorizontalLayoutGroup or multiple children).</summary>
+	    /// <summary>When tabs are not direct children of the TabsGroup transform, find a child row. Never return a <see cref="TabsGroupElem_UI"/> tab cell.</summary>
 	    static Transform FindTabStripFallback(Transform tabGroupTransform){
+	        if (tabGroupTransform == null) return null;
 	        for (int i = 0; i < tabGroupTransform.childCount; i++) {
 	            Transform ch = tabGroupTransform.GetChild(i);
+	            if (ch.GetComponent<TabsGroupElem_UI>() != null) continue;
 	            if (ch.GetComponent<UnityEngine.UI.HorizontalLayoutGroup>() != null)
 	                return ch;
 	        }
 	        for (int i = 0; i < tabGroupTransform.childCount; i++) {
 	            Transform ch = tabGroupTransform.GetChild(i);
-	            if (ch.childCount >= 2)
+	            if (ch.GetComponent<TabsGroupElem_UI>() != null) continue;
+	            if (ch is RectTransform && ch.childCount >= 2)
 	                return ch;
 	        }
 	        return null;
+	    }
+
+	    static TabsGroupElem_UI FindAddonTabElementForTabId(TabsGroup_UI tabGroup, string tabId) {
+	        if (tabGroup == null || string.IsNullOrEmpty(tabId)) return null;
+	        Transform strip = ResolveTabStripForGroup(tabGroup);
+	        if (strip == null) return null;
+	        string idLower = tabId.ToLowerInvariant();
+	        for (int i = 0; i < strip.childCount; i++) {
+		        var e = strip.GetChild(i).GetComponent<TabsGroupElem_UI>();
+		        if (e != null && e.title != null && e.title.ToLowerInvariant() == idLower)
+			        return e;
+	        }
+	        foreach (var e in strip.GetComponentsInChildren<TabsGroupElem_UI>(true)) {
+	            if (e == null) continue;
+	            if (e.title != null && e.title.ToLowerInvariant() == idLower)
+	                return e;
+	        }
+	        return null;
+	    }
+
+	    void RegisterAddonShortcutOrder(string addonId) {
+		    if (string.IsNullOrEmpty(addonId)) return;
+		    int ix = _addonIdsShortcutOrder.BinarySearch(addonId, StringComparer.OrdinalIgnoreCase);
+		    if (ix >= 0) return;
+		    _addonIdsShortcutOrder.Insert(~ix, addonId);
+	    }
+
+	    void UnregisterAddonShortcutOrder(string addonId) {
+		    if (string.IsNullOrEmpty(addonId)) return;
+		    int ix = _addonIdsShortcutOrder.BinarySearch(addonId, StringComparer.OrdinalIgnoreCase);
+		    if (ix >= 0) _addonIdsShortcutOrder.RemoveAt(ix);
 	    }
 
 	    /// <summary>Resolve serialized refs at runtime if missing (e.g. base prefab has nulls; parent prefab overrides may not apply in some builds).</summary>
@@ -371,7 +702,7 @@ namespace spz {
 	        }
 	        // Fallback: tab strip's sibling content area often has panels as children; 4th (index 3) is usually ControlNet
 	        if (_tabGroup != null){
-	            Transform strip = _tabGroup.GetTabStripTransform();
+	            Transform strip = ResolveEffectiveTabStripTransform();
 	            if (strip != null && strip.parent != null){
 	                Transform container = strip.parent;
 	                for (int i = 0; i < container.childCount; i++){
@@ -390,11 +721,157 @@ namespace spz {
 	        }
 	    }
 
+	    /// <summary>
+	    /// Parent transform that holds stacked tab bodies (Art, Mesh, ControlNet, Paint, …) — same for all, never the raw tab strip row.
+	    /// Using <see cref="Transform.parent"/> of the tab strip alone can parent add-on shells as a sibling that covers the strip and blocks tab clicks.
+	    /// </summary>
+	    Transform GetRibbonTabBodiesParent(Transform tabStrip)
+	    {
+		    TryResolvePanelRefs();
+		    if (_ribbonTabBodiesRootOverride != null)
+			    return _ribbonTabBodiesRootOverride;
+		    var parents = new List<Transform>();
+		    void CollectParent(RectTransform body)
+		    {
+			    if (body == null) return;
+			    Transform p = body.parent;
+			    if (p != null) parents.Add(p);
+		    }
+		    CollectParent(_SD_ControlNets_List_Panel);
+		    CollectParent(_SD_ArtList_Panel);
+		    CollectParent(_SD_ArtBgList_Panel);
+		    CollectParent(_SD_3D_Models_Panels);
+		    CollectParent(_Paint_Panel);
+		    if (parents.Count > 0)
+		    {
+			    Transform first = parents[0];
+			    bool allSame = true;
+			    for (int i = 1; i < parents.Count; i++)
+			    {
+				    if (parents[i] != first)
+				    {
+					    allSame = false;
+					    break;
+				    }
+			    }
+			    if (allSame)
+				    return first;
+			    UnityEngine.Debug.LogWarning("[CommandRibbon_UI] Built-in ribbon bodies use different parents; preferring Art list parent for addon shells.");
+			    if (_SD_ArtList_Panel != null && _SD_ArtList_Panel.parent != null)
+				    return _SD_ArtList_Panel.parent;
+			    return first;
+		    }
+		    // No serialized bodies: stack lives under the same rect as the tab strip row (e.g. RIGHT PANEL).
+		    // Do not pick "first child with childCount>=2" — that is often the Art panel root, which parents addon UI inside Art (overlay bug).
+		    if (tabStrip != null && tabStrip.parent != null)
+			    return tabStrip.parent;
+		    return null;
+	    }
+
+	    /// <summary>Stack add-on shells with built-in tab bodies (same sibling group) so a full-rect shell does not sit above the tab strip.</summary>
+	    void PlaceAddonShellAmongBuiltInPanels(Transform shell, Transform panelsParent)
+	    {
+		    if (shell == null || panelsParent == null || shell.parent != panelsParent) return;
+		    int maxIx = -1;
+		    void Consider(Transform t)
+		    {
+			    if (t == null || t.parent != panelsParent || t == shell) return;
+			    maxIx = Mathf.Max(maxIx, t.GetSiblingIndex());
+		    }
+		    Consider(_SD_ControlNets_List_Panel);
+		    Consider(_SD_ArtList_Panel);
+		    Consider(_SD_ArtBgList_Panel);
+		    Consider(_SD_3D_Models_Panels);
+		    Consider(_Paint_Panel);
+		    foreach (var kv in _addonPanelsById)
+			    Consider(kv.Value != null ? kv.Value.transform : null);
+		    if (maxIx >= 0)
+			    shell.SetSiblingIndex(Mathf.Clamp(maxIx + 1, 0, panelsParent.childCount - 1));
+		    else
+			    shell.SetSiblingIndex(0);
+	    }
+
+	    void DestroyAddonStripDivider(string addonId)
+	    {
+		    if (string.IsNullOrEmpty(addonId)) return;
+		    if (!_addonStripDividerById.TryGetValue(addonId, out var go) || go == null)
+		    {
+			    _addonStripDividerById.Remove(addonId);
+			    return;
+		    }
+		    _addonStripDividerById.Remove(addonId);
+		    Destroy(go);
+	    }
+
+	    /// <summary>Inserts a narrow non-interactive divider before the next tab (call immediately before <see cref="CreateRibbonStripTabCell"/> for add-ons).</summary>
+	    void EnsureAddonStripDividerBeforeTab(Transform tabStrip, string addonId)
+	    {
+		    if (tabStrip == null || string.IsNullOrEmpty(addonId)) return;
+		    DestroyAddonStripDivider(addonId);
+		    var go = new GameObject("StripDivider_" + addonId);
+		    go.transform.SetParent(tabStrip, false);
+		    go.transform.SetAsLastSibling();
+		    var rt = go.AddComponent<RectTransform>();
+		    rt.anchorMin = Vector2.zero;
+		    rt.anchorMax = Vector2.one;
+		    rt.pivot = new Vector2(0.5f, 0.5f);
+		    rt.sizeDelta = Vector2.zero;
+		    rt.anchoredPosition = Vector2.zero;
+		    var le = go.AddComponent<LayoutElement>();
+		    le.minWidth = kRibbonAddonDividerLayoutWidth;
+		    le.preferredWidth = kRibbonAddonDividerLayoutWidth;
+		    le.flexibleWidth = 0f;
+		    le.minHeight = -1f;
+		    le.preferredHeight = -1f;
+		    le.flexibleHeight = 1f;
+		    var img = go.AddComponent<Image>();
+		    img.sprite = GetAddonRibbonDividerSprite();
+		    img.type = Image.Type.Simple;
+		    img.preserveAspect = false;
+		    img.raycastTarget = false;
+		    img.color = Color.white;
+		    _addonStripDividerById[addonId] = go;
+	    }
+
+	    void StripAddonTabPanelShowHandler(string addonId, TabsGroupElem_UI tabOnStrip, GameObject tabGoFromDict) {
+		    if (!_addonTabPanelShowByAddonId.TryGetValue(addonId, out var ph) || ph == null) return;
+		    if (tabOnStrip != null)
+			    tabOnStrip.onClicked = (Action<TabsGroupElem_UI>)Delegate.Remove(tabOnStrip.onClicked, ph);
+		    if (tabGoFromDict != null) {
+			    var te = tabGoFromDict.GetComponent<TabsGroupElem_UI>();
+			    if (te != null && te != tabOnStrip)
+				    te.onClicked = (Action<TabsGroupElem_UI>)Delegate.Remove(te.onClicked, ph);
+		    }
+		    _addonTabPanelShowByAddonId.Remove(addonId);
+	    }
+
+	    /// <summary>
+	    /// Ensures the addon tab calls <see cref="ShowOnePanel"/> for this panel (restores tab→panel link if a prior subscribe failed or state desynced).
+	    /// </summary>
+	    bool TryWireAddonTabPanelShow(string addonId, string tabId, RectTransform panelRect, TabsGroupElem_UI tabElem) {
+		    if (panelRect == null || tabElem == null || _tabGroup == null) return false;
+		    GameObject panelGo = panelRect.gameObject;
+		    if (_addonTabPanelShowByAddonId.TryGetValue(addonId, out var prevHandler) && prevHandler != null)
+			    tabElem.onClicked = (Action<TabsGroupElem_UI>)Delegate.Remove(tabElem.onClicked, prevHandler);
+		    Action<TabsGroupElem_UI> handler = _ => {
+			    UnityEngine.Debug.Log($"[CommandRibbon_UI] Switching to addon tab: {addonId}");
+			    ShowOnePanel(panelGo);
+			    _currentPanel = Panel.Unknown;
+		    };
+		    if (!_tabGroup.SubscribeForTab(tabId, handler)) {
+			    UnityEngine.Debug.LogError($"[CommandRibbon_UI] SubscribeForTab failed for addon '{addonId}' tab '{tabId}'; tab→panel wiring not applied.");
+			    _addonTabPanelShowByAddonId.Remove(addonId); // prev handler was stripped from delegate; drop stale map entry
+			    return false;
+		    }
+		    _addonTabPanelShowByAddonId[addonId] = handler;
+		    return true;
+	    }
+
 	    /// <summary>One tab per addon (Blender N-panel style). Returns the panel content parent for this addon.</summary>
 	    public RectTransform GetOrCreatePanelForAddon(string addonId, string displayTitle){
 	        UnityEngine.Debug.Log($"[CommandRibbon_UI] GetOrCreatePanelForAddon: {addonId} ({displayTitle})");
 	        
-	        if(_tabGroup == null) _tabGroup = GetComponentInChildren<TabsGroup_UI>(true);
+	        EnsureTabGroupResolved();
 	        TryResolvePanelRefs();
 	        UnityEngine.Debug.Log($"[CommandRibbon_UI] _tabGroup={(_tabGroup != null ? _tabGroup.name : "null")} _SD_ControlNets_List_Panel={(_SD_ControlNets_List_Panel != null ? "set" : "null")}");
 	        
@@ -402,34 +879,67 @@ namespace spz {
 	            UnityEngine.Debug.LogError($"[CommandRibbon_UI] Cannot create addon tab: _tabGroup is null.");
 	            return null;
 	        }
-	        if(_addonPanelsById.TryGetValue(addonId, out var existing)) {
-	            UnityEngine.Debug.Log($"[CommandRibbon_UI] Returning existing panel for: {addonId}");
-	            return existing;
+	        string tabId = AddonRibbonIntegration.TabIdForAddon(addonId);
+	        if (_addonPanelsById.TryGetValue(addonId, out var existing)) {
+	            bool panelOk = existing != null && existing.gameObject != null;
+	            bool groupHasTab = _tabGroup.HasTab(tabId);
+	            TabsGroupElem_UI tabOnStrip = groupHasTab ? FindAddonTabElementForTabId(_tabGroup, tabId) : null;
+	            _addonTabById.TryGetValue(addonId, out var tabGoFromDict);
+	            // Connectivity: panel + tab in TabsGroup + SubscribeForTab panel-show handler (not just existence).
+	            if (panelOk && groupHasTab && tabOnStrip != null) {
+	                _addonTabById[addonId] = tabOnStrip.gameObject;
+	                if (TryWireAddonTabPanelShow(addonId, tabId, existing, tabOnStrip)) {
+		                RegisterAddonShortcutOrder(addonId);
+		                UnityEngine.Debug.Log($"[CommandRibbon_UI] Returning existing panel for: {addonId}");
+		                return existing;
+	                }
+	                UnityEngine.Debug.LogWarning($"[CommandRibbon_UI] Could not restore tab→panel subscription for {addonId}; recreating tab/panel.");
+	            } else
+		            UnityEngine.Debug.LogWarning($"[CommandRibbon_UI] Stale or incomplete addon ribbon state for {addonId} (panelOk={panelOk}, groupHasTab={groupHasTab}, tabOnStrip={(tabOnStrip != null)}). Recreating tab/panel.");
+	            StripAddonTabPanelShowHandler(addonId, tabOnStrip, tabGoFromDict);
+	            DestroyAddonStripDivider(addonId);
+	            if (panelOk)
+	                Destroy(existing.gameObject);
+	            _addonPanelsById.Remove(addonId);
+	            UnregisterAddonShortcutOrder(addonId);
+	            _addonTabById.Remove(addonId);
+	            bool sameGo = tabOnStrip != null && tabGoFromDict != null && tabGoFromDict == tabOnStrip.gameObject;
+	            if (tabOnStrip != null) {
+	                _tabGroup.RemoveTab(tabOnStrip);
+	                Destroy(tabOnStrip.gameObject);
+	            }
+	            if (tabGoFromDict != null && !sameGo) {
+	                var strayElem = tabGoFromDict.GetComponent<TabsGroupElem_UI>();
+	                if (strayElem != null)
+	                    _tabGroup.RemoveTab(strayElem);
+	                Destroy(tabGoFromDict);
+	            }
 	        }
-	        Transform tabStrip = _tabGroup.GetTabStripTransform();
-	        if (tabStrip == _tabGroup.transform)
-	            tabStrip = FindTabStripFallback(_tabGroup.transform) ?? tabStrip;
+	        Transform tabStrip = ResolveEffectiveTabStripTransform();
 	        if (tabStrip == null) {
 	            UnityEngine.Debug.LogError("[CommandRibbon_UI] Cannot create addon tab: tab strip is null.");
 	            return null;
 	        }
 
-	        Transform panelsParent = (_SD_ControlNets_List_Panel != null ? _SD_ControlNets_List_Panel : _SD_ArtList_Panel)?.parent ?? tabStrip.parent;
+	        Transform panelsParent = GetRibbonTabBodiesParent(tabStrip);
 	        if(panelsParent == null) {
 	            UnityEngine.Debug.LogError("[CommandRibbon_UI] Cannot create addon tab: panelsParent is null");
 	            return null;
 	        }
 
-	        string tabId = "addon_" + addonId;
 	        UnityEngine.Debug.Log($"[CommandRibbon_UI] Creating new tab and panel for: {addonId}. TabID: {tabId}");
 	        
 	        var panelGo = new GameObject("Panel_" + addonId);
 	        panelGo.transform.SetParent(panelsParent, false);
-	        var panelRect = panelGo.AddComponent<RectTransform>();
+	        PlaceAddonShellAmongBuiltInPanels(panelGo.transform, panelsParent);
+	        var panelRect = panelGo.transform as RectTransform;
+	        if (panelRect == null)
+		        panelRect = panelGo.AddComponent<RectTransform>();
 	        panelRect.anchorMin = Vector2.zero;
 	        panelRect.anchorMax = Vector2.one;
 	        panelRect.sizeDelta = Vector2.zero;
 	        panelRect.anchoredPosition = Vector2.zero;
+	        CopyRibbonTabBodyRectFromReference(panelRect);
 	        var panelBg = panelGo.AddComponent<Image>();
 	        panelBg.color = new Color(0.22f, 0.22f, 0.22f, 1f);
 	        panelBg.raycastTarget = true;
@@ -440,70 +950,42 @@ namespace spz {
 	        panelLayout.childControlWidth = true;
 	        panelLayout.childForceExpandHeight = false;
 	        panelLayout.childForceExpandWidth = true;
-	        _addonPanelsById[addonId] = panelRect;
 	        panelGo.SetActive(false);
 
 	        UnityEngine.Debug.Log($"[CommandRibbon_UI] Tab strip: {tabStrip.name}, childCount={tabStrip.childCount}");
-	        var tabGo = new GameObject("Tab: " + displayTitle);
-	        _addonTabById[addonId] = tabGo;
-	        tabGo.transform.SetParent(tabStrip, false);
-	        tabGo.transform.SetAsLastSibling();
-	        tabGo.SetActive(true);
-	        var tabRect = tabGo.AddComponent<RectTransform>();
-	        tabRect.anchorMin = Vector2.zero;
-	        tabRect.anchorMax = Vector2.one;
-	        tabRect.sizeDelta = Vector2.zero;
-	        tabRect.anchoredPosition = Vector2.zero;
-	        tabRect.pivot = new Vector2(0.5f, 0.5f);
-
-	        // Ensure the tab has a proper size in the layout (HorizontalLayoutGroup on strip)
-	        var tabLE = tabGo.AddComponent<LayoutElement>();
-	        tabLE.flexibleWidth = 0f;
-	        tabLE.minWidth = 60f;
-	        tabLE.preferredWidth = 90f;
-	        tabLE.preferredHeight = 30f;
-
-	        var tabImg = tabGo.AddComponent<Image>();
-	        tabImg.color = new Color(0f, 0.8f, 0.2f, 1f); // Bright green so it's very visible for testing
-	        tabImg.raycastTarget = true;
-	        var tabBtn = tabGo.AddComponent<Button>();
-	        tabBtn.targetGraphic = tabImg;
-
-	        var tabTextGo = new GameObject("Text");
-	        tabTextGo.transform.SetParent(tabGo.transform, false);
-	        var tabTextRect = tabTextGo.AddComponent<RectTransform>();
-	        tabTextRect.anchorMin = Vector2.zero;
-	        tabTextRect.anchorMax = Vector2.one;
-	        tabTextRect.sizeDelta = Vector2.zero;
-	        var tabText = tabTextGo.AddComponent<TextMeshProUGUI>();
-	        tabText.text = displayTitle;
-	        tabText.fontSize = 12;
-	        tabText.color = Color.white;
-	        tabText.alignment = TextAlignmentOptions.Center;
-	        tabText.raycastTarget = false;
-	        tabText.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
-	        tabText.overflowMode = TMPro.TextOverflowModes.Ellipsis;
-
-	        var tabElem = tabGo.AddComponent<TabsGroupElem_UI>();
-	        tabElem.InitForRuntime(tabId, tabBtn);
+	        EnsureAddonStripDividerBeforeTab(tabStrip, addonId);
+	        var tabElem = CreateRibbonStripTabCell(tabStrip, tabId, displayTitle);
+	        if (tabElem == null) {
+		        UnityEngine.Debug.LogError($"[CommandRibbon_UI] Add-on tab creation failed for {addonId} (CreateRibbonStripTabCell returned null).");
+		        DestroyAddonStripDivider(addonId);
+		        Destroy(panelGo);
+		        return null;
+	        }
 	        _tabGroup.AddTab(tabElem);
-	        
-	        var panelToShow = panelRect;
-	        _tabGroup.SubscribeForTab(tabId, _ => {
-	            UnityEngine.Debug.Log($"[CommandRibbon_UI] Switching to addon tab: {addonId}");
-	            ShowOnePanel(panelToShow.gameObject);
-	            _currentPanel = Panel.Unknown;
-	        });
+	        GameObject tabGo = tabElem.gameObject;
+
+	        if (!TryWireAddonTabPanelShow(addonId, tabId, panelRect, tabElem)) {
+	            UnityEngine.Debug.LogError($"[CommandRibbon_UI] Addon tab '{tabId}' was not registered in TabsGroup_UI; cannot wire panel show. Destroying tab and panel.");
+	            _addonTabPanelShowByAddonId.Remove(addonId);
+	            _tabGroup.RemoveTab(tabElem);
+	            Destroy(tabGo);
+	            DestroyAddonStripDivider(addonId);
+	            Destroy(panelGo);
+	            return null;
+	        }
+
+	        _addonPanelsById[addonId] = panelRect;
+	        _addonTabById[addonId] = tabGo;
+	        RegisterAddonShortcutOrder(addonId);
 
 	        UnityEngine.Debug.Log($"[CommandRibbon_UI] Addon tab created: {displayTitle}, tabGo.activeSelf={tabGo.activeSelf}, tabStrip.childCount={tabStrip.childCount}");
-	        
-	        // Force layout rebuild so the new tab appears (strip + parents for ScrollRect/ContentSizeFitter)
-	        StartCoroutine(RebuildTabStripLayoutNextFrame(tabStrip));
+
+	        RefreshRibbonTabStripLayout(tabStrip);
 	        
 	        return panelRect;
 	    }
 
-	    void ApplyPaintTabStripVisuals(Transform tabStrip, GameObject paintTabGo, Image tabBgImg, Image activeImg, TextMeshProUGUI tabText)
+	    void ApplyRibbonStripTabVisuals(Transform tabStrip, GameObject newTabGo, Image tabBgImg, Image activeImg, TextMeshProUGUI tabText)
 	    {
 	        if (tabBgImg != null) {
 	            tabBgImg.sprite = null;
@@ -512,10 +994,10 @@ namespace spz {
 	            tabBgImg.raycastTarget = true;
 	        }
 	        Sprite slice = _paintTabSliceSprite;
-	        var refElem = FindFirstNonPaintTabOnStrip(tabStrip, paintTabGo.transform);
+	        var refElem = FindFirstOtherStripTabForStyleReference(tabStrip, newTabGo != null ? newTabGo.transform : null);
 	        if (refElem != null)
 	        {
-	            CopyPaintTabLabelStyleFromReference(refElem, tabText);
+	            CopyStripTabLabelStyleFromReference(refElem, tabText);
 	            if (slice == null)
 	                slice = FindFirstSlicedTabSpriteUnder(refElem.transform);
 	        }
@@ -534,21 +1016,30 @@ namespace spz {
 	            CopySlicedTabImageTuningFromReference(refElem, activeImg);
 	        else if (slice != null)
 	            activeImg.pixelsPerUnitMultiplier = 6f;
+	        // Same TMP auto-size band / wrap rules as HarmonizeStripTabTypography (add-on + Paint strip cells match prefab tabs).
+	        if (tabText != null)
+	        {
+		        TextMeshProUGUI refForPts = GetRibbonStripTypographyReferenceTMP(tabStrip, null);
+		        float basis = refForPts != null && refForPts.fontSize > 0.05f ? refForPts.fontSize : kRibbonStripTabLabelDefaultPt;
+		        ConfigureResponsiveRibbonTabText(tabText, refForPts, basis);
+	        }
 	    }
 
-	    static TabsGroupElem_UI FindFirstNonPaintTabOnStrip(Transform tabStrip, Transform paintTabRoot)
+	    /// <summary>Prefab tab used to copy fonts/slice (skips the tab being styled and any tab named like the Paint strip cell).</summary>
+	    static TabsGroupElem_UI FindFirstOtherStripTabForStyleReference(Transform tabStrip, Transform skipTabRoot)
 	    {
 	        if (tabStrip == null) return null;
 	        foreach (var elem in tabStrip.GetComponentsInChildren<TabsGroupElem_UI>(true))
 	        {
-	            if (elem == null || paintTabRoot != null && elem.transform == paintTabRoot) continue;
+	            if (elem == null || skipTabRoot != null && elem.transform == skipTabRoot) continue;
+	            if (elem.transform.parent != tabStrip) continue;
 	            if (elem.gameObject.name.IndexOf("paint", StringComparison.OrdinalIgnoreCase) >= 0) continue;
 	            return elem;
 	        }
 	        return null;
 	    }
 
-	    static void CopyPaintTabLabelStyleFromReference(TabsGroupElem_UI reference, TextMeshProUGUI tabText)
+	    static void CopyStripTabLabelStyleFromReference(TabsGroupElem_UI reference, TextMeshProUGUI tabText)
 	    {
 	        if (reference == null || tabText == null) return;
 	        var tmp = reference.GetComponentInChildren<TextMeshProUGUI>(true);
@@ -605,39 +1096,97 @@ namespace spz {
 	        activeImg.color = template.color;
 	    }
 
-	    IEnumerator RebuildTabStripLayoutNextFrame(Transform tabStrip){
-	        yield return null;
-	        if (tabStrip == null) yield break;
-	        var stripRect = tabStrip as RectTransform;
-	        if (stripRect != null) UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(stripRect);
-	        // Rebuild parents so ScrollRect content size / ContentSizeFitter updates
-	        Transform t = tabStrip.parent;
-	        UnityEngine.UI.ScrollRect scrollRect = null;
-	        while (t != null) {
-	            var rt = t as RectTransform;
-	            if (rt != null) UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
-	            if (scrollRect == null) scrollRect = t.GetComponent<UnityEngine.UI.ScrollRect>();
-	            t = t.parent;
+	    void QueueTabStripRebuildNextFrame(Transform tabStrip) {
+		    if (tabStrip == null) return;
+		    if (_rebuildTabStripLayout_crtn != null)
+			    StopCoroutine(_rebuildTabStripLayout_crtn);
+		    int seq = ++_rebuildTabStripLayoutSeq;
+		    _rebuildTabStripLayout_crtn = StartCoroutine(RebuildTabStripLayoutNextFrame(tabStrip, seq));
+	    }
+
+	    IEnumerator RebuildTabStripLayoutNextFrame(Transform tabStrip, int seq){
+	        try {
+		        yield return null;
+		        if (tabStrip == null) yield break;
+		        var stripRect = tabStrip as RectTransform;
+		        if (stripRect != null) UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(stripRect);
+		        // Rebuild parents so ScrollRect content size / ContentSizeFitter updates
+		        Transform t = tabStrip.parent;
+		        UnityEngine.UI.ScrollRect scrollRect = null;
+		        while (t != null) {
+		            var rt = t as RectTransform;
+		            if (rt != null) UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
+		            if (scrollRect == null) scrollRect = t.GetComponent<UnityEngine.UI.ScrollRect>();
+		            t = t.parent;
+		        }
+		        // If tab bar is in a ScrollRect, scroll to right so new addon tab is visible
+		        if (scrollRect != null && scrollRect.horizontal) {
+		            scrollRect.horizontalNormalizedPosition = 1f;
+		        }
+		        Canvas.ForceUpdateCanvases();
+	        } finally {
+		        if (seq == _rebuildTabStripLayoutSeq)
+			        _rebuildTabStripLayout_crtn = null;
 	        }
-	        // If tab bar is in a ScrollRect, scroll to right so new addon tab is visible
-	        if (scrollRect != null && scrollRect.horizontal) {
-	            scrollRect.horizontalNormalizedPosition = 1f;
-	        }
-	        Canvas.ForceUpdateCanvases();
 	    }
 
 	    /// <summary>Removes an addon's tab and panel (e.g. when addon is disabled). Call from Addon_MGR.UnloadAddon.</summary>
 	    public void RemoveAddonPanel(string addonId){
-	        if(!_addonPanelsById.TryGetValue(addonId, out var panelRect)) return;
-	        if(_addonTabById.TryGetValue(addonId, out var tabGo)){
+	        if (string.IsNullOrEmpty(addonId)) return;
+	        if (!_addonPanelsById.TryGetValue(addonId, out var panelRect)) return;
+	        EnsureTabGroupResolved();
+	        string tabId = AddonRibbonIntegration.TabIdForAddon(addonId);
+	        _addonTabById.TryGetValue(addonId, out var tabGo);
+	        TabsGroupElem_UI tabElemOnStrip = null;
+	        if (tabGo != null)
+		        tabElemOnStrip = tabGo.GetComponent<TabsGroupElem_UI>();
+	        if (tabElemOnStrip == null && _tabGroup != null && _tabGroup.HasTab(tabId))
+		        tabElemOnStrip = FindAddonTabElementForTabId(_tabGroup, tabId);
+	        StripAddonTabPanelShowHandler(addonId, tabElemOnStrip, tabGo);
+	        if(tabGo != null){
 	            var tabElem = tabGo.GetComponent<TabsGroupElem_UI>();
 	            if(tabElem != null && _tabGroup != null) _tabGroup.RemoveTab(tabElem);
 	            UnityEngine.Object.Destroy(tabGo);
 	            _addonTabById.Remove(addonId);
+	        } else if (_tabGroup != null && _tabGroup.HasTab(tabId)) {
+	            var orphan = FindAddonTabElementForTabId(_tabGroup, tabId);
+	            if (orphan != null) {
+	                _tabGroup.RemoveTab(orphan);
+	                UnityEngine.Object.Destroy(orphan.gameObject);
+	            }
 	        }
 	        if(panelRect != null && panelRect.gameObject != null) UnityEngine.Object.Destroy(panelRect.gameObject);
 	        _addonPanelsById.Remove(addonId);
+	        UnregisterAddonShortcutOrder(addonId);
+	        DestroyAddonStripDivider(addonId);
 	        UnityEngine.Debug.Log($"[CommandRibbon_UI] Removed addon tab/panel: {addonId}");
+	        if (_tabGroup != null) {
+		        Transform strip = ResolveEffectiveTabStripTransform();
+		        if (strip != null)
+			        RefreshRibbonTabStripLayout(strip);
+	        }
+	    }
+
+	    /// <summary>Re-apply strip HLG rules, label auto-size, layout rebuild, and optional ScrollRect (call after add/remove runtime tabs).</summary>
+	    void RefreshRibbonTabStripLayout(Transform tabStrip) {
+		    if (tabStrip == null) return;
+		    PatchTabStripResponsiveLayout();
+		    HarmonizeStripTabTypography();
+		    var stripRect = tabStrip as RectTransform;
+		    if (stripRect != null)
+			    UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(stripRect);
+		    QueueTabStripRebuildNextFrame(tabStrip);
+	    }
+
+	    /// <summary>Public hook to reflow the ribbon tab row (e.g. after external hierarchy changes). Uses <see cref="ResolveEffectiveTabStripTransform"/>.</summary>
+	    public void RefreshTabStripLayout() {
+		    RefreshRibbonTabStripLayout(ResolveEffectiveTabStripTransform());
+	    }
+
+	    /// <summary>Calls <see cref="RefreshTabStripLayout"/> when a ribbon instance is available (e.g. from add-on load after a frame).</summary>
+	    public static void RefreshTabStripLayoutIfPresent(CommandRibbon_UI ribbon) {
+		    if (ribbon != null)
+			    ribbon.RefreshTabStripLayout();
 	    }
 
 

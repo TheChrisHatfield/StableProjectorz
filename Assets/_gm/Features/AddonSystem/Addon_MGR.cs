@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.Networking;
 #if UNITY_EDITOR
@@ -14,6 +15,13 @@ using Lavender.Systems;
 #endif
 
 namespace spz {
+
+	/// <summary>Optional manifest beside <c>__init__.py</c> for Add-on Manager list (reference-style “v1.0 • description”).</summary>
+	[Serializable]
+	public class AddonJsonManifest {
+		public string version;
+		public string description;
+	}
 
 	/// <summary>Kill any process listening on the given port (Windows). Avoids [Errno 10048] when starting FastAPI on 5557. Never kills Unity.exe or Unity Hub.</summary>
 	internal static class AddonPortHelper
@@ -136,12 +144,83 @@ namespace spz {
 #endif
 		private Dictionary<string, AddonInfo> _registeredAddons = new Dictionary<string, AddonInfo>();
 		private bool _isServerRunning = false;
+
+		static bool s_addonApiQuitShutdownDone;
+
+		[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+		static void ResetAddonQuitStatics() {
+			s_addonApiQuitShutdownDone = false;
+		}
+
+		static void HandleApplicationQuitting() {
+			ShutdownAddonApiBeforeQuit();
+		}
+
+		/// <summary>
+		/// Stops add-on API in order: legacy C# HTTP (if any), Python FastAPI/socket client process, then Unity TCP listener.
+		/// Idempotent. Call from <see cref="Application.wantsToQuit"/> (after user confirms exit) and/or rely on <see cref="Application.quitting"/>.
+		/// </summary>
+		public static void ShutdownAddonApiBeforeQuit() {
+			if (s_addonApiQuitShutdownDone)
+				return;
+			s_addonApiQuitShutdownDone = true;
+			try {
+				if (Addon_HttpServer.instance != null)
+					Addon_HttpServer.instance.ShutdownForQuit();
+			} catch (Exception e) {
+				UnityEngine.Debug.LogWarning("[Addon_MGR] ShutdownAddonApiBeforeQuit (HTTP): " + e.Message);
+			}
+			try {
+				if (instance != null)
+					instance.TerminatePythonAddonServerProcess();
+			} catch (Exception e) {
+				UnityEngine.Debug.LogWarning("[Addon_MGR] ShutdownAddonApiBeforeQuit (Python): " + e.Message);
+			}
+			try {
+				if (Addon_SocketServer.instance != null)
+					Addon_SocketServer.instance.ShutdownNetworkingForQuit();
+			} catch (Exception e) {
+				UnityEngine.Debug.LogWarning("[Addon_MGR] ShutdownAddonApiBeforeQuit (socket): " + e.Message);
+			}
+		}
+
+		void TerminatePythonAddonServerProcess() {
+#if UNITY_EDITOR
+			if (_pythonProcess != null) {
+				try {
+					_pythonProcess.CancelOutputRead();
+					_pythonProcess.CancelErrorRead();
+				} catch { }
+				if (!_pythonProcess.HasExited) {
+					try { _pythonProcess.Kill(); } catch { }
+				}
+				try { _pythonProcess.Dispose(); } catch { }
+				_pythonProcess = null;
+			}
+#elif UNITY_STANDALONE_WIN && !UNITY_EDITOR
+			if (_pythonServerPid != 0) {
+				try {
+					string workDir = Path.GetTempPath();
+					string cmd = "taskkill /PID " + _pythonServerPid + " /T /F";
+					uint killPid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(cmd, isJustFile: false, workDir, keepWindow: false, hidden: true, attachToConsole: false);
+					if (killPid != 0)
+						StartExternalProcess.WaitForProcessExit(killPid, 3000);
+				} catch (Exception e) {
+					UnityEngine.Debug.LogWarning("[Addon_MGR] Could not terminate Python addon server: " + e.Message);
+				}
+				_pythonServerPid = 0;
+			}
+#endif
+			_isServerRunning = false;
+		}
 		
 		public class AddonInfo {
 			public string id;
 			public string path;
 			public bool isEnabled;
 			public List<GameObject> uiElements = new List<GameObject>();
+			/// <summary>List row subtitle: e.g. <c>v1.2.0 • Advanced camera controls…</c> from <c>addon.json</c> or <c>__init__.py</c>.</summary>
+			public string listSubtitle;
 		}
 		
 		void Awake() {
@@ -166,6 +245,7 @@ namespace spz {
 				gameObject.AddComponent<AddonDebugCapture>();
 			if (GetComponent<Launch_Addons_Bat_File>() == null)
 				gameObject.AddComponent<Launch_Addons_Bat_File>();
+			Application.quitting += HandleApplicationQuitting;
 		}
 		
 		void Start() {
@@ -241,6 +321,92 @@ namespace spz {
 			}
 		}
 		
+		static void EnrichAddonListSubtitle(AddonInfo info) {
+			if (info == null) return;
+			if (string.IsNullOrEmpty(info.path) || !Directory.Exists(info.path)) {
+				info.listSubtitle = "Installed add-on";
+				return;
+			}
+			string ver = null;
+			string desc = null;
+			string jsonPath = Path.Combine(info.path, "addon.json");
+			if (File.Exists(jsonPath)) {
+				try {
+					string json = File.ReadAllText(jsonPath);
+					var m = JsonUtility.FromJson<AddonJsonManifest>(json);
+					if (m != null) {
+						if (!string.IsNullOrWhiteSpace(m.version)) ver = m.version.Trim();
+						if (!string.IsNullOrWhiteSpace(m.description)) desc = m.description.Trim();
+					}
+				} catch (Exception e) {
+					UnityEngine.Debug.LogWarning($"[Addon_MGR] addon.json read failed for {info.id}: {e.Message}");
+				}
+			}
+			TryParseInitPyMetadata(Path.Combine(info.path, "__init__.py"), ref ver, ref desc);
+			info.listSubtitle = BuildAddonListSubtitle(ver, desc, info.path);
+		}
+		
+		static void TryParseInitPyMetadata(string initPath, ref string ver, ref string desc) {
+			if (!File.Exists(initPath)) return;
+			string text;
+			try {
+				text = File.ReadAllText(initPath);
+			} catch {
+				return;
+			}
+			if (text.Length > 24576)
+				text = text.Substring(0, 24576);
+			if (string.IsNullOrEmpty(ver)) {
+				var vm = Regex.Match(text, @"__version__\s*=\s*[""']([^""']+)[""']");
+				if (vm.Success)
+					ver = vm.Groups[1].Value.Trim();
+			}
+			if (!string.IsNullOrEmpty(desc)) return;
+			int a = text.IndexOf("\"\"\"", StringComparison.Ordinal);
+			if (a < 0) return;
+			int b = text.IndexOf("\"\"\"", a + 3, StringComparison.Ordinal);
+			if (b <= a) return;
+			string body = text.Substring(a + 3, b - a - 3).Trim();
+			var lines = body.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+			if (lines.Length == 0) return;
+			string l0 = lines[0].Trim();
+			if (lines.Length >= 2) {
+				string l1 = lines[1].Trim();
+				if (l1.Length > 0 && (l0.EndsWith("Add-on", StringComparison.OrdinalIgnoreCase) || l0.Length < 28))
+					desc = l1;
+				else
+					desc = l0;
+			} else {
+				desc = l0;
+			}
+		}
+		
+		static string BuildAddonListSubtitle(string ver, string desc, string dirPath) {
+			desc = NormalizeSubtitleLine(desc, 160);
+			string vPart = null;
+			if (!string.IsNullOrEmpty(ver)) {
+				ver = ver.Trim();
+				vPart = ver.StartsWith("v", StringComparison.OrdinalIgnoreCase) ? ver : "v" + ver;
+			}
+			if (vPart != null && !string.IsNullOrEmpty(desc))
+				return $"{vPart} • {desc}";
+			if (vPart != null)
+				return $"{vPart} • Installed add-on";
+			if (!string.IsNullOrEmpty(desc))
+				return desc;
+			return $"Installed add-on · {Path.GetFileName(dirPath)}";
+		}
+		
+		static string NormalizeSubtitleLine(string s, int maxLen) {
+			if (string.IsNullOrEmpty(s)) return null;
+			s = s.Replace('\r', ' ').Replace('\n', ' ').Trim();
+			while (s.Contains("  "))
+				s = s.Replace("  ", " ");
+			if (s.Length > maxLen)
+				s = s.Substring(0, maxLen - 1) + "…";
+			return s;
+		}
+		
 		/// <summary>
 		/// Scans StreamingAssets/Addons/ for add-on directories
 		/// </summary>
@@ -294,6 +460,7 @@ namespace spz {
 								path = dir,
 								isEnabled = wasEnabled
 							};
+							EnrichAddonListSubtitle(_registeredAddons[addonId]);
 							UnityEngine.Debug.Log($"[Addon_MGR] Discovered add-on: {addonId} (enabled: {wasEnabled})");
 						} else {
 							UnityEngine.Debug.LogWarning($"[Addon_MGR] Directory '{addonId}' found but missing __init__.py, skipping");
@@ -582,8 +749,8 @@ namespace spz {
 			if (AddonUI_MGR.instance != null)
 				AddonUI_MGR.instance.DestroyAddonUI(addonId);
 			
-			// 2) CommandRibbon_UI: remove addon tab and panel container from the ribbon (find ribbon even if inactive, same as CreatePanel)
-			var ribbon = CommandRibbon_UI.instance ?? UnityEngine.Object.FindObjectOfType<CommandRibbon_UI>(true);
+			// 2) CommandRibbon_UI: remove addon tab and panel (same resolution as AddonRibbonIntegration.ResolveCommandRibbon)
+			var ribbon = AddonRibbonIntegration.ResolveCommandRibbon();
 			if (ribbon != null)
 				ribbon.RemoveAddonPanel(addonId);
 			
@@ -663,19 +830,10 @@ namespace spz {
 		}
 		
 		void OnDestroy() {
-#if UNITY_EDITOR
-			if (_pythonProcess != null) {
-				try {
-					_pythonProcess.CancelOutputRead();
-					_pythonProcess.CancelErrorRead();
-				} catch { }
-				if (!_pythonProcess.HasExited) {
-					try { _pythonProcess.Kill(); } catch { }
-				}
-				try { _pythonProcess.Dispose(); } catch { }
-				_pythonProcess = null;
-			}
-#endif
+			Application.quitting -= HandleApplicationQuitting;
+			ShutdownAddonApiBeforeQuit();
+			if (instance == this)
+				instance = null;
 		}
 	}
 }

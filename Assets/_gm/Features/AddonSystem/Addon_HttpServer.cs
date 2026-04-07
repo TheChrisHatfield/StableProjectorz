@@ -22,6 +22,7 @@ namespace spz {
 		private Thread _listenerThread;
 		private volatile bool _isRunning = false; // Volatile for thread safety
 		private int _port = 5557;
+		bool _quitShutdownDone;
 		
 		// Thread-safe queue for commands from background thread to main thread
 		private ConcurrentQueue<Action> _mainThreadQueue = new ConcurrentQueue<Action>();
@@ -100,22 +101,23 @@ namespace spz {
 			UnityEngine.Debug.Log("[Addon_HttpServer] HTTP server stopped");
 		}
 		
-		void OnDestroy() {
+		/// <summary>Stops legacy C# HTTP listener and joins its thread. Idempotent.</summary>
+		public void ShutdownForQuit() {
+			if (_quitShutdownDone)
+				return;
+			_quitShutdownDone = true;
 			StopServer();
-			
-			// Wait for listener thread to finish
 			if (_listenerThread != null && _listenerThread.IsAlive) {
-				_listenerThread.Join(2000); // Wait up to 2 seconds
-				if (_listenerThread.IsAlive) {
-					UnityEngine.Debug.LogWarning("[Addon_HttpServer] Listener thread did not terminate gracefully");
-				}
+				_listenerThread.Join(1500);
+				if (_listenerThread.IsAlive)
+					UnityEngine.Debug.LogWarning("[Addon_HttpServer] Listener thread did not terminate within timeout (quit).");
 			}
-			
-			// Clear pending responses
 			_pendingResponses?.Clear();
-			
-			// Clear command queue
 			while (_mainThreadQueue.TryDequeue(out _)) { }
+		}
+
+		void OnDestroy() {
+			ShutdownForQuit();
 		}
 		
 		/// <summary>

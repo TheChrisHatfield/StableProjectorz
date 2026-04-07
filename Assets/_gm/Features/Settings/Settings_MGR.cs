@@ -453,7 +453,7 @@ namespace spz {
 	    void OnButton_OpenSettingsPanel() {
 	        var panel = EventsBinder.FindComponent<RectTransform>("Settings:SettingsPanel");
 	        if (panel != null) panel.gameObject.SetActive(true);
-	        var autoScroll = EventsBinder.FindComponent<ScrollRect_AutoScroll>("Settings:AutoScroll"); 
+	        var autoScroll = EventsBinder.FindComponent<ScrollRect_AutoScroll>("Settings:AutoScroll");
 	        if (autoScroll != null) autoScroll.ScrollToEnd(0.35f, false);
 	    }
 
@@ -464,13 +464,10 @@ namespace spz {
 	        if (autoScroll != null) autoScroll.ScrollToEnd(0.35f, false);
 	    }
 
-    void OnButton_OpenAddonManager() {
-        if (AddonManager_UI.instance != null) {
-            AddonManager_UI.instance.OpenPanel();
-        } else {
-            StaticEvents.Invoke("AddonManager:OpenPanel");
-        }
-    }
+	    void OnButton_OpenAddonManager() {
+	        // OpenFromMenu: instance path + pending when Tool_AddonSystem still loading + Invoke after Awake subscribe.
+	        AddonManager_UI.OpenFromMenu();
+	    }
 
 
 	    void OnButton_RestoreDefaults() {
@@ -584,7 +581,8 @@ namespace spz {
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_viewport_in_center", set_viewport_in_center);
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_viewport_isSwapVerticalRibbons", set_viewport_isSwapVerticalRibbons);
 	        StaticEvents.SubscribeUnique("Settings:OnButton_RestoreDefaults", OnButton_RestoreDefaults);
-	        StaticEvents.SubscribeUnique("Settings:OnButton_OpenAddonManager", OnButton_OpenAddonManager);
+	        // Same handler as legacy repo; OrReplace avoids stale delegate with Enter Play Mode Without Reload Domain.
+	        StaticEvents.SubscribeOrReplace("Settings:OnButton_OpenAddonManager", OnButton_OpenAddonManager);
 	        StaticEvents.SubscribeUnique<float>("Settings:set_noiseSpeed", set_noiseSpeed);
 	        StaticEvents.SubscribeUnique("Settings:OnButton_NoiseColor", OnButton_NoiseColor);
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_layout_askServerOften", set_layout_askServerOften);
@@ -658,6 +656,7 @@ namespace spz {
 	        StaticEvents.Unsubscribe<bool>("Settings:set_viewport_in_center", set_viewport_in_center);
 	        StaticEvents.Unsubscribe<bool>("Settings:set_viewport_isSwapVerticalRibbons", set_viewport_isSwapVerticalRibbons);
 	        StaticEvents.Unsubscribe("Settings:OnButton_RestoreDefaults", OnButton_RestoreDefaults);
+	        StaticEvents.Unsubscribe("Settings:OnButton_OpenAddonManager", OnButton_OpenAddonManager);
 	        StaticEvents.Unsubscribe<float>("Settings:set_noiseSpeed", set_noiseSpeed);
 	        StaticEvents.Unsubscribe("Settings:OnButton_NoiseColor", OnButton_NoiseColor);
 	        StaticEvents.Unsubscribe<bool>("Settings:set_layout_askServerOften", set_layout_askServerOften);

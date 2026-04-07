@@ -14,6 +14,12 @@ namespace spz {
 	    [SerializeField] BrushRibbon_UI_Colors _colors;
 	    public float _maskBrushOpacity {get; private set;}
 
+	    /// <summary> Current brush strength 0–1 (JSON-RPC / scripts; same backing field as UI). </summary>
+	    public float Opacity01 => _maskBrushOpacity;
+
+	    /// <summary> Set strength 0–1 from code (same path as slider: workflow rules e.g. Inpaint_NoColor → 100%). </summary>
+	    public void SetOpacity01(float opacity01) => SetBrushOpacity(Mathf.Clamp01(opacity01));
+
 	    //we might temporariyl override opacity (due to Colorless-mask, etc). This is what it used to be.
 	    float _nonOverridenOpacity;
 

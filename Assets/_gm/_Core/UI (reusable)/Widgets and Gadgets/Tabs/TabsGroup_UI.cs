@@ -15,15 +15,17 @@ namespace spz {
 	    [SerializeField] List<TabsGroupElem_UI> _tabs = new List<TabsGroupElem_UI>();
 	    bool _tabsSwitched_atLeastOnce = false;
 
-	    public void SubscribeForTab(string tabName, Action<TabsGroupElem_UI> act){
+	    /// <returns>False if no tab matched <paramref name="tabName"/>; listener was not added.</returns>
+	    public bool SubscribeForTab(string tabName, Action<TabsGroupElem_UI> act){
 	        if (_tabs == null) _tabs = new List<TabsGroupElem_UI>();
 	        string nameLower = tabName.ToLower();
 	        var tab = _tabs.FirstOrDefault(t=>t != null && t.title != null && t.title.ToLower()==nameLower);
 	        if(tab == null){ 
 	            UnityEngine.Debug.LogWarning($"[TabsGroup_UI] SubscribeForTab: Tab '{tabName}' not found in list of {_tabs.Count} tabs");
-	            return; 
+	            return false; 
 	        }
 	        tab.onClicked += act;
+	        return true;
 	    }
 
 	    /// <summary>Add a tab at runtime (e.g. Addons). Ribbon will adjust if it has a flexible layout.</summary>
@@ -32,6 +34,7 @@ namespace spz {
 	        if (_tabs == null) _tabs = new List<TabsGroupElem_UI>();
 	        _tabs.Add(tabElem);
 	        tabElem.onClicked += OnTabClicked;
+	        ReorderTabsByStripSiblingIndex();
 	        UnityEngine.Debug.Log($"[TabsGroup_UI] Added runtime tab: {tabElem.title}. Total tabs: {_tabs.Count}");
 	    }
 
@@ -39,6 +42,27 @@ namespace spz {
 	    public void RemoveTab(TabsGroupElem_UI tabElem){
 	        if(tabElem == null || _tabs == null) return;
 	        _tabs.Remove(tabElem);
+	        ReorderTabsByStripSiblingIndex();
+	    }
+
+	    /// <summary>
+	    /// Keep <see cref="_tabs"/> order aligned with tab-button sibling order on the strip so <see cref="OnTabClicked"/>
+	    /// divider logic matches visual order (runtime tabs appended with <c>SetAsLastSibling</c> must not sit at wrong list indices).
+	    /// </summary>
+	    void ReorderTabsByStripSiblingIndex(){
+	        if (_tabs == null || _tabs.Count <= 1) return;
+	        Transform strip = GetTabStripTransform();
+	        if (strip == null) return;
+	        _tabs.Sort((a, b) => {
+	            if (a == null && b == null) return 0;
+	            if (a == null) return 1;
+	            if (b == null) return -1;
+	            Transform pa = a.transform.parent;
+	            Transform pb = b.transform.parent;
+	            if (pa != strip) return pb == strip ? 1 : string.Compare(a.title, b.title, StringComparison.OrdinalIgnoreCase);
+	            if (pb != strip) return -1;
+	            return a.transform.GetSiblingIndex().CompareTo(b.transform.GetSiblingIndex());
+	        });
 	    }
 
 	    /// <summary>Transform under which tab buttons live (for adding runtime tabs so they appear in the ribbon).</summary>
@@ -77,6 +101,8 @@ namespace spz {
 	            _tabs[i].Toggle(false);
 	        }//end for
 
+	        if (ixOfClicked < 0) return;
+
 	        //make sure the neighboring tabs have their adjacent divider-lines hidden (neighbors may be null if _tabs has holes from RemoveTab):
 	        if(ixOfClicked > 0 && _tabs[ixOfClicked - 1] != null){
 	            _tabs[ixOfClicked - 1].DisableDivider(isLeft:false);
@@ -93,6 +119,7 @@ namespace spz {
 	            if (_tabs[i] != null)
 	                _tabs[i].onClicked += OnTabClicked;
 	        }
+	        ReorderTabsByStripSiblingIndex();
 	    }
 
 
