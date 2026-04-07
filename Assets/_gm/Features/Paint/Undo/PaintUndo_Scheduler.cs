@@ -288,9 +288,11 @@ namespace spz {
 		}
 
 		/// <summary>
-		/// Arm 0 = smudge layer stack; arm 1 = smudge mesh/SD accumulation. Call once per smudge stroke (e.g. first frame) with <paramref name="registerStrokePull"/> true.
+		/// Arm 0 = prefer full multi-layer underlay for smudge sampling; arm 1 = skip the multi-layer under pass (cheaper; see <c>Inpaint_MaskPainter.ResolveSmudgeDestinationAndAccum</c>).
+		/// Writes to the active layer are not switched to mesh-only here — use smudge target preference <c>GeneratedMesh</c> for that.
+		/// Call once per smudge stroke (e.g. first frame) with <paramref name="registerStrokePull"/> true.
 		/// </summary>
-		/// <returns>True to route smudge into the active layer (and underlays); false to route into <c>accumulationTextures</c> only.</returns>
+		/// <returns>True for arm 0 (PreferLayer underlay policy); false for arm 1 (PreferMesh underlay policy).</returns>
 		public bool SelectSmudgeLayerVersusGeneratedMesh(float complexity01, int sliceCount, float activeLayerOpacity01,
 			bool registerStrokePull, out int contextBucket, out int chosenArm) {
 			chosenArm = 0;
@@ -325,7 +327,7 @@ namespace spz {
 			return layer;
 		}
 
-		/// <summary>Bernoulli update for the arm chosen at stroke start (<paramref name="chosenArm"/> 0 = layer, 1 = mesh).</summary>
+		/// <summary>Bernoulli update for underlay policy arm at stroke start (0 = full multi-layer under, 1 = skip that pass).</summary>
 		public void RegisterSmudgeRouteObservation(int contextBucket, int chosenArm, bool success) {
 			if (!smudgeRouteBanditEnabled) return;
 			EnsureSmudgeRouteBucketArrays();

@@ -326,7 +326,7 @@ namespace spz {
 		    return _artIconUvColorWrapper;
 	    }
 
-	    /// <summary>Delegates to <see cref="SmudgeStrokeRouter"/> for domain barriers, adaptive layer vs mesh routing, and kernel spacing.</summary>
+	    /// <summary>Delegates to <see cref="SmudgeStrokeRouter"/> for domain barriers, write target (layer vs mesh when explicitly <see cref="SmudgeWriteTargetPreference.GeneratedMesh"/>), and kernel spacing; Auto PreferMesh affects underlay here only.</summary>
 	    void ResolveSmudgeDestinationAndAccum(RenderUdims layerPaintTarget, PaintLayerStack_MGR stack,
 		    out RenderUdims smudgeDest, out RenderUdims smudgeAcc, out PaintUndoNonStackTarget undoNonStackKind,
 		    out float smudgeKernelSpacingMultiplier)
@@ -358,14 +358,14 @@ namespace spz {
 
 		    var artWrap = EnsureArtIconUvColorWrapper();
 		    var plan = SmudgeStrokeRouter.Build(layerPaintTarget, stack, meshAcc, artWrap, preUnder,
-			    _smudgeWriteTargetPreference, _smudgeRouteLockForStroke);
+			    _smudgeWriteTargetPreference);
 		    smudgeDest = plan.Dest;
 		    smudgeAcc = plan.Underlay;
 		    undoNonStackKind = plan.UndoKind;
 		    smudgeKernelSpacingMultiplier = plan.KernelSpacingMultiplier;
 	    }
 
-	    /// <summary>First smudge frame: lock Auto route (layer vs mesh) and register a bandit pull on the undo scheduler.</summary>
+	    /// <summary>First smudge frame (Auto only): lock underlay policy (full multi-layer under vs skip) and register bandit pull; does not change write target.</summary>
 	    void BeginSmudgeStrokeAdaptiveRoutingIfNeeded(RenderUdims target, PaintLayerStack_MGR stack)
 	    {
 		    PaintUndo_MGR.EnsureExists();

@@ -4,7 +4,7 @@ namespace spz {
 
 	/// <summary>Where smudge writes when both layer stack and mesh accumulation are valid shape.</summary>
 	public enum SmudgeWriteTargetPreference {
-		/// <summary>Contextual Thompson + layer opacity (see <see cref="PaintUndo_Scheduler.SelectSmudgeLayerVersusGeneratedMesh"/>).</summary>
+		/// <summary>Thompson + opacity at stroke start steers multi-layer <em>underlay</em> (full composite under active vs skip that pass); writes stay on the active layer when <see cref="LayerSmudgeGateOpen"/>.</summary>
 		Auto,
 		LayerStack,
 		GeneratedMesh
@@ -20,7 +20,8 @@ namespace spz {
 	/// <summary>
 	/// Isolates smudge <em>writes</em> between layer stack, mesh UV accumulation, and Art icon UV source.
 	/// Kernel spacing follows <see cref="PaintUndo_Scheduler.GetSmudgeKernelSpacingMultiplier"/> when undo manager exists (same contextual bucket + capture Thompson arms as readback/yield; no smudge-only bandit).
-	/// Adaptive layer vs generated mesh uses a separate Thompson pair per context bucket on the same scheduler.
+	/// For <see cref="SmudgeWriteTargetPreference.Auto"/>, stroke-locked <see cref="SmudgeAdaptiveRouteLock.PreferMesh"/> does <em>not</em> redirect the write off the active layer when
+	/// <see cref="LayerSmudgeGateOpen"/> is true — paint stays on <c>ActiveLayer.Content</c>. PreferMesh only steers underlay policy in <c>Inpaint_MaskPainter</c> (multi-layer under pass).
 	/// </summary>
 	public static class SmudgeStrokeRouter {
 
@@ -105,8 +106,7 @@ namespace spz {
 			RenderUdims meshAccumulation,
 			RenderUdims artIconUvWrapper,
 			RenderUdims prebuiltMultiLayerUnderlay,
-			SmudgeWriteTargetPreference writePreference,
-			SmudgeAdaptiveRouteLock adaptiveRouteLock) {
+			SmudgeWriteTargetPreference writePreference) {
 
 			var plan = new Plan {
 				Dest = null,
@@ -122,14 +122,12 @@ namespace spz {
 			bool layerGate = LayerSmudgeGateOpen(stack, layerPaintTarget);
 			bool meshOk = meshAccumulation != null && SameShape(layerPaintTarget, meshAccumulation);
 
-			if (writePreference == SmudgeWriteTargetPreference.GeneratedMesh && meshOk)
-				return MeshAccumulationPlan(meshAccumulation);
-
-			bool adaptiveMesh = writePreference == SmudgeWriteTargetPreference.Auto
-			                    && adaptiveRouteLock == SmudgeAdaptiveRouteLock.PreferMesh
-			                    && layerGate && meshOk;
-			if (adaptiveMesh)
-				return MeshAccumulationPlan(meshAccumulation);
+			if (writePreference == SmudgeWriteTargetPreference.GeneratedMesh) {
+				if (meshOk)
+					return MeshAccumulationPlan(meshAccumulation);
+				// Explicit mesh target but accumulation does not match paint resolution: do not fall through to layer/art (misleading write).
+				return plan;
+			}
 
 			if (layerGate && (writePreference == SmudgeWriteTargetPreference.LayerStack
 			                  || writePreference == SmudgeWriteTargetPreference.Auto)) {
