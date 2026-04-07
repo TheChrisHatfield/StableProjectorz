@@ -114,3 +114,7 @@ Thumbs.db
 *~
 /[Ll]ocal/
 /[Pp]layer_[Ll]ogs/
+
+# Python bytecode (addon scripts under StreamingAssets)
+**/__pycache__/
+*.pyc
