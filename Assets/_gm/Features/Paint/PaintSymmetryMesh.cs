@@ -4,8 +4,8 @@ using UnityEngine;
 namespace spz {
 
 	/// <summary>
-	/// Mesh-aware paint symmetry: mirror plane from <see cref="BrushRibbon_UI_Size"/> (auto / view-aligned / face pick),
-	/// raycast hit, then triangle-vertex correspondence when readable <see cref="MeshCollider"/>; viewport refine + screen mirror fallbacks.
+	/// Mesh-aware paint symmetry: mirror plane from <see cref="BrushRibbon_UI_Size"/> (auto / view / mesh axes / face pick),
+	/// raycast hit, triangle barycentric mirror when readable <see cref="MeshCollider"/>; optional camera ray refine; screen mirror fallback.
 	/// </summary>
 	public static class PaintSymmetryMesh {
 
@@ -44,10 +44,33 @@ namespace spz {
 							return false;
 						planeNormal.Normalize();
 						return true;
+					case PaintSymmetryPlaneSource.ObjectLocal:
+						// Bilateral axis from rig/object orientation — stable vs camera orbit (hands, limbs at oblique views).
+						planePoint = center;
+						Vector3 meshRightSum = Vector3.zero;
+						for (int i = 0; i < sel.Count; i++) {
+							if (sel[i] != null)
+								meshRightSum += sel[i].transform.right;
+						}
+						if (meshRightSum.sqrMagnitude < 1e-8f)
+							return false;
+						int latSign = sz.symmetryObjectLocalSign < 0 ? -1 : 1;
+						planeNormal = (meshRightSum * latSign).normalized;
+						return true;
 				}
 			}
 
+			// Auto: vertical mirror plane through bounds center, facing the view camera (left/right on screen).
+			// Averaging mesh transform.right is often wrong for posed/skinned characters (asymmetrical symmetry).
 			planePoint = center;
+			if (viewCam != null) {
+				planeNormal = viewCam.transform.right;
+				if (planeNormal.sqrMagnitude < 1e-8f)
+					return false;
+				planeNormal.Normalize();
+				return true;
+			}
+
 			Vector3 sumRight = Vector3.zero;
 			for (int i = 0; i < sel.Count; i++) {
 				if (sel[i] != null)
@@ -61,6 +84,11 @@ namespace spz {
 			Vector3 n = planeNormal.normalized;
 			float d = Vector3.Dot(point - planePoint, n);
 			return point - 2f * d * n;
+		}
+
+		/// <summary>Signed distance along plane normal from <paramref name="planePoint"/> (not normalized length — uses unit normal).</summary>
+		static float PlaneSignedOffset (Vector3 planePoint, Vector3 planeNormalUnit, Vector3 worldPoint) {
+			return Vector3.Dot(worldPoint - planePoint, planeNormalUnit);
 		}
 
 		/// <summary>Barycentric coordinates of <paramref name="p"/> on triangle a,b,c (same plane).</summary>
@@ -111,18 +139,28 @@ namespace spz {
 			Vector3 w2 = xf.TransformPoint(verts[i2]);
 			Vector3 bc = BarycentricOnTriangle(hit.point, w0, w1, w2);
 
-			Vector3 r0 = ReflectAcrossPlane(w0, planePoint, planeNormal);
-			Vector3 r1 = ReflectAcrossPlane(w1, planePoint, planeNormal);
-			Vector3 r2 = ReflectAcrossPlane(w2, planePoint, planeNormal);
+			Vector3 n = planeNormal.normalized;
+			Vector3 r0 = ReflectAcrossPlane(w0, planePoint, n);
+			Vector3 r1 = ReflectAcrossPlane(w1, planePoint, n);
+			Vector3 r2 = ReflectAcrossPlane(w2, planePoint, n);
 			Vector3 candidate = bc.x * r0 + bc.y * r1 + bc.z * r2;
 			mirroredOnSurfaceWorld = hit.collider.ClosestPoint(candidate);
+			// Asymmetric meshes: ClosestPoint often snaps to the near (camera-facing) shell. Require opposite
+			// hemisphere from the original stroke so the partner lies on the far side of the mirror plane.
+			float sideOrig = PlaneSignedOffset(planePoint, n, hit.point);
+			float sideSnap = PlaneSignedOffset(planePoint, n, mirroredOnSurfaceWorld);
+			if (Mathf.Abs(sideOrig) > 1e-4f && Mathf.Abs(sideSnap) > 1e-4f && sideOrig * sideSnap > 0f)
+				mirroredOnSurfaceWorld = ReflectAcrossPlane(hit.point, planePoint, n);
 			return true;
 		}
 
 		/// <summary>Vertex-triangle correspondence when possible; otherwise plane-reflect hit point.</summary>
-		static Vector3 MirrorWorldFromHit (RaycastHit hit, Vector3 planePoint, Vector3 planeNormal) {
-			if (TryMirrorWorldViaHitTriangle(hit, planePoint, planeNormal, out Vector3 onSurface))
+		static Vector3 MirrorWorldFromHit (RaycastHit hit, Vector3 planePoint, Vector3 planeNormal, out bool usedReadableTriangleMirror) {
+			if (TryMirrorWorldViaHitTriangle(hit, planePoint, planeNormal, out Vector3 onSurface)) {
+				usedReadableTriangleMirror = true;
 				return onSurface;
+			}
+			usedReadableTriangleMirror = false;
 			return ReflectAcrossPlane(hit.point, planePoint, planeNormal);
 		}
 
@@ -165,39 +203,126 @@ namespace spz {
 			return false;
 		}
 
+		/// <summary>Eye ray (camera → scene): hit normal faces camera when dot(n, rayDir) &lt; 0.</summary>
+		static bool IsFrontFacingAlongEyeRay (Vector3 hitNormal, Vector3 eyeRayDirWorld) {
+			return Vector3.Dot(hitNormal, eyeRayDirWorld) < -0.02f;
+		}
+
+		/// <summary>Ray from body toward camera: first outside→in hit should face the camera.</summary>
+		static bool IsFrontFacingTowardCameraRay (Vector3 hitNormal, Vector3 rayDirTowardCamera) {
+			return Vector3.Dot(hitNormal, rayDirTowardCamera) > 0.02f;
+		}
+
 		/// <summary>
-		/// Ground-truth reinforcement: snap mirror UV to the selected-surface hit closest to reflected world point.
-		/// If no selected hit exists, UV is unchanged (caller still has a valid fallback UV).
+		/// Pick best hit: tier A opposite plane + front face, tier B opposite only, tier C any selected.
+		/// Returns false if no selected hit.
 		/// </summary>
-		static void RefineMirrorUvOnSelectedSurface (Camera cam, Vector3 reflectedWorldHint, ref Vector2 mirrorUv01) {
+		static bool TierPickMirrorHit (RaycastHit[] hits, Vector3 reflectedHint, Vector3 planePoint, Vector3 planeNormalUnit,
+			float origOff, bool useOppositeHemisphere, bool useEyeRayFrontTest, Vector3 rayDirForFrontTest,
+			out RaycastHit chosen) {
+			chosen = default;
 			var sel = ModelsHandler_3D.instance?.selectedMeshes;
-			if (sel == null || sel.Count == 0 || cam == null)
-				return;
+			if (sel == null || sel.Count == 0 || hits == null || hits.Length == 0)
+				return false;
 
-			Ray ray = cam.ViewportPointToRay(new Vector3(mirrorUv01.x, mirrorUv01.y, 0f));
-			var hits = Physics.RaycastAll(ray, cam.farClipPlane, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
-			if (hits == null || hits.Length == 0)
-				return;
-
-			Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-
-			int bestIx = -1;
-			float bestScore = float.MaxValue;
+			float bestA = float.MaxValue, bestB = float.MaxValue, bestC = float.MaxValue;
+			int ixA = -1, ixB = -1, ixC = -1;
 			for (int i = 0; i < hits.Length; i++) {
 				var mesh = hits[i].collider.GetComponentInParent<SD_3D_Mesh>();
 				if (!IsMeshInSelection(mesh, sel))
 					continue;
-				float d = (hits[i].point - reflectedWorldHint).sqrMagnitude;
-				if (d < bestScore) {
-					bestScore = d;
-					bestIx = i;
+				float d = (hits[i].point - reflectedHint).sqrMagnitude;
+				if (d < bestC) {
+					bestC = d;
+					ixC = i;
+				}
+				bool oppositeOk = !useOppositeHemisphere;
+				if (!oppositeOk) {
+					float hOff = PlaneSignedOffset(planePoint, planeNormalUnit, hits[i].point);
+					oppositeOk = origOff * hOff < 0f;
+				}
+				if (!oppositeOk)
+					continue;
+				if (d < bestB) {
+					bestB = d;
+					ixB = i;
+				}
+				bool front = useEyeRayFrontTest
+					? IsFrontFacingAlongEyeRay(hits[i].normal, rayDirForFrontTest)
+					: IsFrontFacingTowardCameraRay(hits[i].normal, rayDirForFrontTest);
+				if (front && d < bestA) {
+					bestA = d;
+					ixA = i;
 				}
 			}
 
-			if (bestIx < 0)
+			int pick = ixA >= 0 ? ixA : (ixB >= 0 ? ixB : ixC);
+			if (pick < 0)
+				return false;
+			chosen = hits[pick];
+			return true;
+		}
+
+		/// <summary>
+		/// Snap mirror UV using exact eye→hint ray + tiered opposite-hemisphere / front-face rules, and a secondary
+		/// ray from the reflected hint toward the camera when the eye ray only sees the wrong sheet.
+		/// </summary>
+		static void RefineMirrorUvOnSelectedSurface (Camera cam, Vector3 reflectedWorldHint, ref Vector2 mirrorUv01,
+			Vector3 planePoint, Vector3 planeNormal, Vector3 originalStrokeWorld) {
+			if (ModelsHandler_3D.instance?.selectedMeshes == null || ModelsHandler_3D.instance.selectedMeshes.Count == 0 || cam == null)
 				return;
 
-			Vector3 vp = cam.WorldToViewportPoint(hits[bestIx].point);
+			Vector3 n = planeNormal.normalized;
+			float origOff = PlaneSignedOffset(planePoint, n, originalStrokeWorld);
+			bool useOpposite = Mathf.Abs(origOff) > 1e-4f;
+			Vector3 camPos = cam.transform.position;
+			Vector3 toHint = reflectedWorldHint - camPos;
+			if (toHint.sqrMagnitude < 1e-10f)
+				return;
+			Vector3 eyeDir = toHint.normalized;
+
+			var hitsEye = Physics.RaycastAll(camPos, eyeDir, cam.farClipPlane, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+			if (hitsEye != null && hitsEye.Length > 0)
+				Array.Sort(hitsEye, (a, b) => a.distance.CompareTo(b.distance));
+
+			RaycastHit pickEye = default;
+			bool haveEye = hitsEye != null && hitsEye.Length > 0
+			               && TierPickMirrorHit(hitsEye, reflectedWorldHint, planePoint, n, origOff, useOpposite, true, eyeDir, out pickEye);
+
+			Vector3 towardCam = -eyeDir;
+			Vector3 startFromHint = reflectedWorldHint - towardCam * Mathf.Max(0.02f, cam.nearClipPlane * 2f);
+			var hitsChord = Physics.RaycastAll(startFromHint, towardCam, cam.farClipPlane, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+			if (hitsChord != null && hitsChord.Length > 0)
+				Array.Sort(hitsChord, (a, b) => a.distance.CompareTo(b.distance));
+
+			RaycastHit pickChord = default;
+			bool haveChord = hitsChord != null && hitsChord.Length > 0
+			                 && TierPickMirrorHit(hitsChord, reflectedWorldHint, planePoint, n, origOff, useOpposite, false, towardCam, out pickChord);
+
+			RaycastHit pick;
+			if (haveEye && haveChord) {
+				float dE = (pickEye.point - reflectedWorldHint).sqrMagnitude;
+				float dC = (pickChord.point - reflectedWorldHint).sqrMagnitude;
+				float offE = Mathf.Abs(PlaneSignedOffset(planePoint, n, pickEye.point));
+				float offC = Mathf.Abs(PlaneSignedOffset(planePoint, n, pickChord.point));
+				bool oppE = !useOpposite || (origOff * PlaneSignedOffset(planePoint, n, pickEye.point) < 0f);
+				bool oppC = !useOpposite || (origOff * PlaneSignedOffset(planePoint, n, pickChord.point) < 0f);
+				// Prefer opposite-hemisphere contact; then closer 3D match to the mathematical reflection.
+				if (oppC && !oppE) pick = pickChord;
+				else if (oppE && !oppC) pick = pickEye;
+				else if (dC < dE * 0.85f && offC <= offE * 1.15f)
+					pick = pickChord;
+				else
+					pick = pickEye;
+			}
+			else if (haveEye)
+				pick = pickEye;
+			else if (haveChord)
+				pick = pickChord;
+			else
+				return;
+
+			Vector3 vp = cam.WorldToViewportPoint(pick.point);
 			if (vp.z <= 0f)
 				return;
 			mirrorUv01 = new Vector2(Mathf.Clamp01(vp.x), Mathf.Clamp01(vp.y));
@@ -210,13 +335,16 @@ namespace spz {
 			if (!TryPreferredRaycast(cam, viewport01, out RaycastHit hit))
 				return false;
 
-			Vector3 reflected = MirrorWorldFromHit(hit, c, n);
+			Vector3 reflected = MirrorWorldFromHit(hit, c, n, out bool triMirror);
 			Vector3 vp = cam.WorldToViewportPoint(reflected);
 			if (vp.z <= 0f)
 				return false;
 
 			Vector2 uv = new Vector2(vp.x, vp.y);
-			RefineMirrorUvOnSelectedSurface(cam, reflected, ref uv);
+			// Readable mesh: barycentric mirror + ClosestPoint is geometry-ground; camera ray re-pick often
+			// selects the wrong sheet at oblique angles — keep projected UV unless we only had plane reflect.
+			if (!triMirror)
+				RefineMirrorUvOnSelectedSurface(cam, reflected, ref uv, c, n, hit.point);
 			mirrorViewport01 = uv;
 			return true;
 		}
@@ -232,8 +360,8 @@ namespace spz {
 			if (!TryPreferredRaycast(cam, newViewport01, out RaycastHit hitNew))
 				return false;
 
-			Vector3 rPrev = MirrorWorldFromHit(hitPrev, c, n);
-			Vector3 rNew = MirrorWorldFromHit(hitNew, c, n);
+			Vector3 rPrev = MirrorWorldFromHit(hitPrev, c, n, out bool triP);
+			Vector3 rNew = MirrorWorldFromHit(hitNew, c, n, out bool triN);
 			Vector3 vpP = cam.WorldToViewportPoint(rPrev);
 			Vector3 vpN = cam.WorldToViewportPoint(rNew);
 			if (vpP.z <= 0f || vpN.z <= 0f)
@@ -241,8 +369,10 @@ namespace spz {
 
 			Vector2 mp = new Vector2(vpP.x, vpP.y);
 			Vector2 mn = new Vector2(vpN.x, vpN.y);
-			RefineMirrorUvOnSelectedSurface(cam, rPrev, ref mp);
-			RefineMirrorUvOnSelectedSurface(cam, rNew, ref mn);
+			if (!triP)
+				RefineMirrorUvOnSelectedSurface(cam, rPrev, ref mp, c, n, hitPrev.point);
+			if (!triN)
+				RefineMirrorUvOnSelectedSurface(cam, rNew, ref mn, c, n, hitNew.point);
 			mirrorPrev01 = mp;
 			mirrorNew01 = mn;
 			return true;

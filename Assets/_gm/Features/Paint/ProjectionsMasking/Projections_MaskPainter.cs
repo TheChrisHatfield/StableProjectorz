@@ -120,11 +120,15 @@ namespace spz {
 
 
 	    public override Vector2 getViewportSize(){
-	        return MainViewport_UI.instance.mainViewportRect.rect.size;
+	        var mv = MainViewport_UI.instance;
+	        if (mv == null) return Vector2.zero;
+	        return mv.mainViewportRect.rect.size;
 	    }
 
 	    public override Vector2 getViewportCursorPos01(bool forceMainViewport=false){
-	        return MainViewport_UI.instance.cursorMainViewportPos01;
+	        var mv = MainViewport_UI.instance;
+	        if (mv == null) return Vector2.zero;
+	        return mv.cursorMainViewportPos01;
 	    }
 
 	    protected override Vector3Int maskResolution(){

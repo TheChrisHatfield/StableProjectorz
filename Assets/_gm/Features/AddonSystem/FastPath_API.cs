@@ -1,5 +1,7 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using Newtonsoft.Json.Linq;
 using UnityEngine;
 
 namespace spz {
@@ -771,7 +773,8 @@ namespace spz {
 		/// </summary>
 		public bool SetPositivePrompt(string prompt) {
 			if (!_isInitialized) return false;
-			if (string.IsNullOrEmpty(prompt)) return false;
+			// Match SetNegativePrompt / RPC default (params["prompt"] ?? ""): allow "" to clear; reject null only.
+			if (prompt == null) return false;
 			
 			var prompts = StableDiffusion_Prompts_UI.instance;
 			if (prompts == null) return false;
@@ -797,7 +800,7 @@ namespace spz {
 		/// </summary>
 		public bool SetNegativePrompt(string prompt) {
 			if (!_isInitialized) return false;
-			if (string.IsNullOrEmpty(prompt)) return false;
+			if (prompt == null) return false;
 			
 			var prompts = StableDiffusion_Prompts_UI.instance;
 			if (prompts == null) return false;
@@ -997,12 +1000,68 @@ namespace spz {
 			var workflow = WorkflowRibbon_UI.instance;
 			if (workflow == null) return false;
 			
-			if (System.Enum.TryParse(typeof(WorkflowRibbon_CurrMode), modeStr, out object mode)) {
-				workflow.Set_CurrentMode((WorkflowRibbon_CurrMode)mode, playAttentionAnim: false);
+			if (Enum.TryParse<WorkflowRibbon_CurrMode>(modeStr, true, out var mode)) {
+				workflow.Set_CurrentMode(mode, playAttentionAnim: false);
 				return true;
 			}
 			
 			return false;
+		}
+
+		// --- SD / Forge-facing generation options (workflow ribbon → WebUI) ---
+
+		public void PopulateSdWorkflowOptions(JObject result) {
+			var sd = SD_WorkflowOptionsRibbon_UI.instance;
+			if (sd == null) {
+				result["success"] = false;
+				result["error"] = "SD_WorkflowOptionsRibbon_UI not available";
+				return;
+			}
+			result["success"] = true;
+			result["denoising_strength"] = sd.denoisingStrength;
+			result["mask_blur_step01"] = sd.maskBlur_StepLength01;
+			result["soft_inpaint"] = sd.isSoftInpaint;
+			result["tileable_inpaint"] = sd.isTileable;
+			result["ignore_depth_or_normals"] = sd.ignoreDepthOrNormals;
+			result["edge_thresh"] = sd.edgeThresh;
+			result["edge_thick"] = sd.edgeThick;
+			var wf = WorkflowRibbon_UI.instance;
+			if (wf != null)
+				result["workflow_mode"] = wf.currentMode().ToString();
+			result["sd_connected"] = Connection_MGR.is_sd_connected;
+		}
+
+		public bool SetSdDenoisingStrength(float value) {
+			if (!IsValidFloat(value)) return false;
+			var sd = SD_WorkflowOptionsRibbon_UI.instance;
+			return sd != null && sd.TrySetDenoisingStrengthFromApi(value);
+		}
+
+		public bool SetSdMaskBlurStep(float value) {
+			if (!IsValidFloat(value)) return false;
+			var sd = SD_WorkflowOptionsRibbon_UI.instance;
+			return sd != null && sd.TrySetMaskBlurStepFromApi(value);
+		}
+
+		public bool SetSdSoftInpaint(bool on) {
+			var sd = SD_WorkflowOptionsRibbon_UI.instance;
+			if (sd == null) return false;
+			sd.SetIsSoftInpaint_from_script(on);
+			return true;
+		}
+
+		public bool SetSdTileableInpaint(bool on) {
+			var sd = SD_WorkflowOptionsRibbon_UI.instance;
+			if (sd == null) return false;
+			sd.SetIsTileable_from_script(on);
+			return true;
+		}
+
+		public bool SetSdIgnoreDepthOrNormals(bool on) {
+			var sd = SD_WorkflowOptionsRibbon_UI.instance;
+			if (sd == null) return false;
+			sd.SetIgnoreDepthOrNormals_from_script(on);
+			return true;
 		}
 		
 		// ============================================
@@ -1335,6 +1394,266 @@ namespace spz {
 			quat.Normalize();
 			
 			projCam.transform.rotation = quat;
+			return true;
+		}
+
+		// ============================================
+		// ADD-ON DISCOVERY / CONTEXT (single-call snapshot for external tools)
+		// ============================================
+
+		/// <summary>
+		/// One JSON object with scene, pipeline, project, brush, paint layers, and SD workflow snapshot
+		/// (same data as separate spz.cmd.* calls; for add-on ergonomics).
+		/// </summary>
+		public void PopulateAddonContext(JObject root) {
+			root["success"] = true;
+			root["fast_path_ready"] = _isInitialized;
+			root["viewport_camera_count"] = GetCameraCount();
+			root["total_mesh_count"] = GetTotalMeshCount();
+			root["selected_mesh_count"] = GetSelectedMeshCount();
+			root["selected_mesh_ids"] = JArray.FromObject(GetSelectedMeshIDs());
+			string wmStr = GetWorkflowMode();
+			root["workflow_mode"] = wmStr != null ? wmStr : (JToken)JValue.CreateNull();
+			root["sd_connected"] = Connection_MGR.is_sd_connected;
+			root["sd_generating"] = IsGenerating();
+			root["is_3d_connected"] = Is3DConnected();
+			root["is_3d_generation_ready"] = Is3DGenerationReady();
+			root["is_3d_generation_in_progress"] = Is3DGenerationInProgress();
+			root["projection_camera_count"] = GetProjectionCameraCount();
+			root["project_operation_in_progress"] = IsProjectOperationInProgress();
+			string pp = GetProjectPath();
+			root["project_path"] = pp != null ? pp : (JToken)JValue.CreateNull();
+			string dd = GetProjectDataDir();
+			root["project_data_dir"] = dd != null ? dd : (JToken)JValue.CreateNull();
+			string ver = GetProjectVersion();
+			root["spz_release_version"] = ver != null ? ver : (JToken)JValue.CreateNull();
+
+			var brush = new JObject();
+			PopulateBrushSettings(brush);
+			root["brush"] = brush;
+
+			var paint = new JObject();
+			PopulatePaintLayers(paint);
+			root["paint_layers"] = paint;
+
+			var sdw = new JObject();
+			PopulateSdWorkflowOptions(sdw);
+			root["sd_workflow"] = sdw;
+		}
+
+		// ============================================
+		// BRUSH + PAINT LAYERS (viewport / inpaint stack)
+		// ============================================
+
+		/// <summary> Fill <paramref name="result"/> with current brush + stamp index (for spz.cmd.get_brush_settings). </summary>
+		public void PopulateBrushSettings(JObject result) {
+			result["success"] = true;
+			result["size01"] = BrushRibbon_UI_Size.GetBrushSize01();
+			result["spacing01"] = BrushRibbon_UI_Size.GetBrushSpacing01();
+			result["angle_deg"] = BrushRibbon_UI_Size.GetBrushAngleDeg();
+			result["roundness01"] = BrushRibbon_UI_Size.GetBrushRoundness01();
+			result["opacity01"] = BrushRibbon_UI.instance != null ? BrushRibbon_UI.instance.brushOpacity01 : 1f;
+			result["symmetry_x"] = BrushRibbon_UI_Size.GetPaintSymmetryXOn();
+			result["tip_follows_stroke"] = BrushRibbon_UI_Size.GetBrushTipFollowsStroke();
+			var sz = BrushRibbon_UI_Size.instance;
+			result["scatter_mode"] = sz != null ? (int)sz.scatterMode : 0;
+			int idx = 0, cnt = 0;
+			string bname = "";
+			if (BrushAlphas_MGR.instance != null) {
+				cnt = BrushAlphas_MGR.instance.AllEntries.Count;
+				idx = BrushAlphas_MGR.instance.CurrentIndex;
+				if (cnt > 0 && idx >= 0 && idx < cnt) {
+					var ent = BrushAlphas_MGR.instance.AllEntries[idx];
+					bname = string.IsNullOrEmpty(ent.name) ? "" : ent.name;
+				}
+			}
+			result["brush_index"] = idx;
+			result["brush_count"] = cnt;
+			result["brush_name"] = bname;
+
+			var sdOpt = SD_WorkflowOptionsRibbon_UI.instance;
+			if (sdOpt != null) {
+				result["brush_tool_mode"] = (int)sdOpt.brushToolMode;
+				result["is_positive"] = sdOpt.isPositive;
+				result["is_smudge"] = sdOpt.isSmudge;
+				var bc = sdOpt.brushColor;
+				result["brush_color"] = new JObject { ["r"] = bc.r, ["g"] = bc.g, ["b"] = bc.b, ["a"] = bc.a };
+				result["depth_limit_slider01"] = sdOpt.GetBrushDepthLimitSlider01();
+			}
+			var wfRib = WorkflowRibbon_UI.instance;
+			if (wfRib != null)
+				result["workflow_mode"] = wfRib.currentMode().ToString();
+		}
+
+		/// <summary> Fill layer list summary for spz.cmd.get_paint_layers. </summary>
+		public void PopulatePaintLayers(JObject result) {
+			var stack = PaintLayerStack_MGR.instance;
+			if (stack == null) {
+				result["success"] = false;
+				result["error"] = "PaintLayerStack_MGR not available";
+				return;
+			}
+			result["success"] = true;
+			result["active_index"] = stack.ActiveLayerIndex;
+			var arr = new JArray();
+			for (int i = 0; i < stack.Layers.Count; i++) {
+				var L = stack.Layers[i];
+				if (L == null) continue;
+				arr.Add(new JObject {
+					["index"] = i,
+					["name"] = L.Name ?? "",
+					["visible"] = L.Visible,
+					["opacity"] = L.Opacity,
+				});
+			}
+			result["layers"] = arr;
+		}
+
+		public bool SetBrushSize01(float size01) {
+			if (!IsValidFloat(size01) || size01 < 0f || size01 > 1f) return false;
+			if (BrushRibbon_UI.instance != null) {
+				BrushRibbon_UI.instance.SetBrushSize(size01);
+				return true;
+			}
+			if (BrushRibbon_UI_Size.instance != null) {
+				BrushRibbon_UI_Size.instance.SetBrushSize(size01);
+				return true;
+			}
+			return false;
+		}
+
+		public bool SetBrushSpacing01(float spacing01) {
+			if (!IsValidFloat(spacing01) || spacing01 < 0f || spacing01 > 1f) return false;
+			if (BrushRibbon_UI.instance != null) {
+				BrushRibbon_UI.instance.SetBrushSpacing(spacing01);
+				return true;
+			}
+			if (BrushRibbon_UI_Size.instance != null) {
+				BrushRibbon_UI_Size.instance.SetBrushSpacing(spacing01);
+				return true;
+			}
+			return false;
+		}
+
+		public bool SetBrushAngleDeg(float deg) {
+			if (!IsValidFloat(deg)) return false;
+			if (BrushRibbon_UI.instance != null) {
+				BrushRibbon_UI.instance.SetBrushAngle(deg);
+				return true;
+			}
+			if (BrushRibbon_UI_Size.instance != null) {
+				BrushRibbon_UI_Size.instance.SetBrushAngle(deg);
+				return true;
+			}
+			return false;
+		}
+
+		public bool SetBrushRoundness01(float r01) {
+			if (!IsValidFloat(r01) || r01 < 0f || r01 > 1f) return false;
+			if (BrushRibbon_UI.instance != null) {
+				BrushRibbon_UI.instance.SetBrushRoundness(r01);
+				return true;
+			}
+			if (BrushRibbon_UI_Size.instance != null) {
+				BrushRibbon_UI_Size.instance.SetBrushRoundness(r01);
+				return true;
+			}
+			return false;
+		}
+
+		public bool SetBrushOpacity01(float opacity01) {
+			if (!IsValidFloat(opacity01) || opacity01 < 0f || opacity01 > 1f) return false;
+			if (BrushRibbon_UI.instance == null) return false;
+			BrushRibbon_UI.instance.SetBrushOpacity01(opacity01);
+			return true;
+		}
+
+		public bool SetBrushStampIndex(int index) {
+			if (index < 0) return false;
+			if (BrushAlphas_MGR.instance == null) return false;
+			if (BrushAlphas_MGR.instance.AllEntries.Count == 0) return false;
+			BrushAlphas_MGR.instance.CurrentIndex = index;
+			return true;
+		}
+
+		public bool SetActivePaintLayerIndex(int index) {
+			var stack = PaintLayerStack_MGR.instance;
+			if (stack == null) return false;
+			if (index < 0 || index >= stack.Layers.Count) return false;
+			stack.SetActiveLayer(index);
+			return stack.ActiveLayerIndex == index;
+		}
+
+		public bool SetPaintLayerVisible(int index, bool visible) {
+			var stack = PaintLayerStack_MGR.instance;
+			if (stack == null) return false;
+			if (index < 0 || index >= stack.Layers.Count) return false;
+			stack.SetLayerVisible(index, visible);
+			return true;
+		}
+
+		public bool SetPaintLayerOpacity01(int index, float opacity01) {
+			if (!IsValidFloat(opacity01)) return false;
+			opacity01 = Mathf.Clamp01(opacity01);
+			var stack = PaintLayerStack_MGR.instance;
+			if (stack == null) return false;
+			if (index < 0 || index >= stack.Layers.Count) return false;
+			stack.SetLayerOpacity(index, opacity01);
+			return true;
+		}
+
+		public bool SetPaintLayerName(int index, string name) {
+			var stack = PaintLayerStack_MGR.instance;
+			if (stack == null || name == null) return false;
+			if (index < 0 || index >= stack.Layers.Count) return false;
+			stack.SetLayerName(index, name);
+			return true;
+		}
+
+		public bool SetBrushSymmetryX(bool on) {
+			if (BrushRibbon_UI_Size.instance == null) return false;
+			BrushRibbon_UI_Size.instance.SetPaintSymmetryXOn(on);
+			return true;
+		}
+
+		public bool SetBrushScatterMode(int modeInt) {
+			if (modeInt < 0 || modeInt > 2) return false;
+			if (BrushRibbon_UI_Size.instance == null) return false;
+			BrushRibbon_UI_Size.instance.SetScatterMode((BrushScatterMode)modeInt);
+			return true;
+		}
+
+		public bool SetBrushTipFollowsStroke(bool follows) {
+			if (BrushRibbon_UI_Size.instance == null) return false;
+			BrushRibbon_UI_Size.instance.SetTipAngleMode(follows ? BrushTipAngleMode.FollowStroke : BrushTipAngleMode.FixedAngle);
+			return true;
+		}
+
+		public bool SetWorkflowModeByName(string modeName) {
+			if (string.IsNullOrEmpty(modeName) || WorkflowRibbon_UI.instance == null) return false;
+			if (!Enum.TryParse<WorkflowRibbon_CurrMode>(modeName, true, out var mode)) return false;
+			WorkflowRibbon_UI.instance.Set_CurrentMode(mode, false);
+			return true;
+		}
+
+		public bool SetBrushToolModeFromApi(int modeInt) {
+			var sd = SD_WorkflowOptionsRibbon_UI.instance;
+			if (sd == null) return false;
+			return sd.TrySetBrushToolModeFromApi(modeInt);
+		}
+
+		public bool SetBrushColorFromApi(float r, float g, float b, float a) {
+			if (!IsValidFloat(r) || !IsValidFloat(g) || !IsValidFloat(b) || !IsValidFloat(a)) return false;
+			var sd = SD_WorkflowOptionsRibbon_UI.instance;
+			if (sd == null) return false;
+			return sd.SetBrushColorFromApi(r, g, b, Mathf.Clamp01(a));
+		}
+
+		public bool SetBrushDepthLimitSlider01(float slider01) {
+			if (!IsValidFloat(slider01)) return false;
+			var sd = SD_WorkflowOptionsRibbon_UI.instance;
+			if (sd == null) return false;
+			sd.SetBrushDepthLimitFromSlider01(Mathf.Clamp01(slider01));
 			return true;
 		}
 	}

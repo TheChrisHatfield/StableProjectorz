@@ -1,8 +1,9 @@
 @echo off
 cd /d "%~dp0"
 
-REM Launches PowerShell build script. Double-click or: build_for_testing.bat [clean]
-REM If PowerShell not found, falls back to running Unity directly.
+REM Launches PowerShell build script (progress bar + ~15s heartbeat while Unity runs).
+REM Double-click or: build_for_testing.bat [clean]
+REM If PowerShell not found, falls back to running Unity directly (no heartbeat).
 
 if /i "%~1"=="clean" (
     powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0build_for_testing.ps1" -Clean

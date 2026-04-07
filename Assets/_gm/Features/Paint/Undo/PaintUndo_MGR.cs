@@ -16,11 +16,16 @@ namespace spz {
 		[SerializeField] RestoreBudgetPolicy _restoreBudgetPolicy = RestoreBudgetPolicy.Thompson;
 		[SerializeField] bool _captureBanditEnabled = true;
 		[SerializeField] int _captureBanditMinPullsPerBucket = 3;
+		[SerializeField] bool _smudgeRouteBanditEnabled = true;
+		[SerializeField] int _smudgeRouteMinPullsPerBucket = 3;
 		[SerializeField] bool _capturePingPongScratches = true;
 		[SerializeField] bool _captureEagerGpuCopy = false;
 
 		readonly PaintUndo_Storage _storage = new PaintUndo_Storage();
 		readonly PaintUndo_Scheduler _scheduler = new PaintUndo_Scheduler();
+
+		/// <summary>Live undo scheduler (restore + capture bandits). Used by smudge spacing to share capture Thompson context without extra observations.</summary>
+		public PaintUndo_Scheduler UndoScheduler => _scheduler;
 		readonly Queue<PendingCaptureJob> _captureQueue = new Queue<PendingCaptureJob>();
 
 		/// <summary>GPU copy + async readback for redo snapshot inside restore only.</summary>
@@ -73,6 +78,37 @@ namespace spz {
 			_scheduler.restoreBudgetPolicy = _restoreBudgetPolicy;
 			_scheduler.captureBanditEnabled = _captureBanditEnabled;
 			_scheduler.captureBanditMinPullsPerBucket = Mathf.Max(0, _captureBanditMinPullsPerBucket);
+			_scheduler.smudgeRouteBanditEnabled = _smudgeRouteBanditEnabled;
+			_scheduler.smudgeRouteMinPullsPerBucket = Mathf.Max(0, _smudgeRouteMinPullsPerBucket);
+		}
+
+		public void CopyRestoreSchedulerPolicyTo(PaintUndo_Scheduler target) {
+			if (target == null) return;
+			PushSchedulerInspectorSettings();
+			var src = _scheduler;
+			target.restoreBudgetPolicy = src.restoreBudgetPolicy;
+			target.baseBudgetMs = src.baseBudgetMs;
+			target.minBudgetMs = src.minBudgetMs;
+			target.maxBudgetMs = src.maxBudgetMs;
+			target.minSlicesPerFrame = src.minSlicesPerFrame;
+			target.maxSlicesPerFrame = src.maxSlicesPerFrame;
+			target.agingBoostPerSecond = src.agingBoostPerSecond;
+			target.agingMaxMultiplier = src.agingMaxMultiplier;
+			target.restoreThompsonSuccessHitchMs = src.restoreThompsonSuccessHitchMs;
+			target.restorePosteriorDecayPerSession = src.restorePosteriorDecayPerSession;
+			target.restoreContextBucketCount = src.restoreContextBucketCount;
+			target.referencePixelsPerSlice = src.referencePixelsPerSlice;
+			target.smudgeRouteBanditEnabled = src.smudgeRouteBanditEnabled;
+			target.smudgeRouteMinPullsPerBucket = src.smudgeRouteMinPullsPerBucket;
+			target.smudgeRouteOpacityPriorLow = src.smudgeRouteOpacityPriorLow;
+			target.smudgeRouteOpacityPriorHigh = src.smudgeRouteOpacityPriorHigh;
+			target.smudgeRouteSuccessMaxFrameTimeSec = src.smudgeRouteSuccessMaxFrameTimeSec;
+		}
+
+		public static PaintUndo_Scheduler CreateCollapseSliceScheduler() {
+			var s = new PaintUndo_Scheduler();
+			if (instance != null) instance.CopyRestoreSchedulerPolicyTo(s);
+			return s;
 		}
 
 		void OnDestroy() {
@@ -528,6 +564,12 @@ namespace spz {
 					}
 					break;
 				}
+				case PaintUndoNonStackTarget.MeshAccumulation:
+					target = Objects_Renderer_MGR.instance != null ? Objects_Renderer_MGR.instance.accumulationTextures_ref() : null;
+					break;
+				case PaintUndoNonStackTarget.ArtIconUvColor:
+					target = Inpaint_MaskPainter.instance != null ? Inpaint_MaskPainter.instance.EnsureArtIconUvColorWrapper() : null;
+					break;
 				default:
 					return false;
 			}

@@ -69,8 +69,8 @@ namespace spz {
 	        _uvChunks_RT.Dispose();
 	        IReadOnlyList<UDIM_Sector> allUdims = ModelsHandler_3D.instance._allKnownUdims;
 
-	        _accumulation_uv_RT = new RenderUdims(allUdims, Vector2Int.one*texSize, 
-	                                              GraphicsFormat.R8G8B8A8_UNorm, FilterMode.Bilinear, Color.clear);
+	        _accumulation_uv_RT = new RenderUdims(allUdims, Vector2Int.one*texSize,
+	                                              GenData_Masks.colorBrushFormat, GenData_Masks.colorBrushFilter, Color.clear);
 	        _uvChunks_RT = new RenderUdims(allUdims, Vector2Int.one*texSize, 
 	                                       GraphicsFormat.R8_UNorm, FilterMode.Point, Color.clear);
 	        _render_uvChunks_asap = true;

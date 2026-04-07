@@ -4,6 +4,10 @@ Shader "Unlit/PaintLayer_CompositeBlend"
     {
         _Background("Background (Texture2DArray)", 2DArray) = "" {}
         _Opacity("Layer opacity", Range(0, 1)) = 1
+        // Ranged geometry (TextureArrays_GeomFunc_ForBlitSlices_Ranged): C# sets these on every Blit via PaintLayerStack_MGR.SetCompositeBlendSliceRange*.
+        // _SliceCompositeEnd == 0 means “all slices” (see .cginc); defaults keep ad-hoc material use safe until SetNumUdims runs.
+        [HideInInspector] _SliceCompositeBegin ("", Int) = 0
+        [HideInInspector] _SliceCompositeEnd ("", Int) = 0
     }
     SubShader
     {
@@ -61,7 +65,8 @@ Shader "Unlit/PaintLayer_CompositeBlend"
                 return o;
             }
 
-            #include "Assets/_gm/_Core/Shader_Includes/TextureArrays_GeomFunc_ForBlitSlices.cginc"
+            // Ranged geom: full-stack Blits use SetCompositeBlendSliceRangeFull(0, UdimsCount); partial paths use a sub-range. Non-ranged .cginc is equivalent when begin=0 and end=UdimsCount (or end=0 → full in ranged).
+            #include "Assets/_gm/_Core/Shader_Includes/TextureArrays_GeomFunc_ForBlitSlices_Ranged.cginc"
 
             fixed4 frag (g2f i) : SV_Target
             {

@@ -18,6 +18,8 @@ namespace spz {
 	{
 	    static bool _hasLoaded = false;
 
+	    const string kToolAddonSystemScene = "Assets/_gm/Features/AddonSystem/Tool_AddonSystem.unity";
+
 	    readonly List<string> scenePathsToLoadFirst = new List<string>
 	    {
 	        "Assets/_gm/_Core/Scenes Global/Separators/0 ----.unity", //Delimiter
@@ -27,7 +29,7 @@ namespace spz {
 	        "Assets/_gm/_Core/UI (reusable)/Widgets and Gadgets/UI_ConfirmPopup_YesNo/UI_ConfirmPopup_YesNo.unity",
 	        "Assets/_gm/Features/Settings/Tool_Settings.unity",
 	        "Assets/_gm/_Core/Scenes Global/Managers_Global.unity", // Renamed from GlobalManagers
-	        "Assets/_gm/Features/AddonSystem/Tool_AddonSystem.unity", // Socket server (5555) must be up before Python connects
+	        kToolAddonSystemScene, // Socket server (5555) must be up before Python connects
 	    };
 
 	    // EDIT THIS LIST
@@ -100,11 +102,34 @@ namespace spz {
 	        if (_hasLoaded){ DestroyImmediate(gameObject); return; }
 
 	        if (SceneManager.sceneCount > 1){
-	            Debug.Log($"<color=yellow>[{nameof(Start_Scene_Global_MGR)}]</color> Other scenes detected. Skipping  auto-load sequence to allow isolated testing.");
+	            Debug.Log($"<color=yellow>[{nameof(Start_Scene_Global_MGR)}]</color> Other scenes detected. Skipping auto-load sequence to allow isolated testing.");
 	            _hasLoaded = true;
+	            // Still load addon system so Addon_SocketServer (5555) runs and Python can connect (see Addon_MGR / addon_server.py handshake).
+	            StartCoroutine(LoadAddonSystemSceneIfMissing());
 	            return;
 	        }
 	        StartCoroutine(LoadScenes());
+	    }
+
+	    static bool IsScenePathAlreadyLoaded (string scenePath){
+	        for (int i = 0; i < SceneManager.sceneCount; i++){
+	            if (SceneManager.GetSceneAt(i).path == scenePath)
+	                return true;
+	        }
+	        return false;
+	    }
+
+	    IEnumerator LoadAddonSystemSceneIfMissing (){
+	        if (SceneUtility.GetBuildIndexByScenePath(kToolAddonSystemScene) < 0){
+	            Debug.LogError($"[{nameof(Start_Scene_Global_MGR)}] '{kToolAddonSystemScene}' is not in Build Settings — add-on TCP socket will not start.");
+	            yield break;
+	        }
+	        if (IsScenePathAlreadyLoaded(kToolAddonSystemScene))
+	            yield break;
+	        var op = SceneManager.LoadSceneAsync(kToolAddonSystemScene, LoadSceneMode.Additive);
+	        op.allowSceneActivation = true;
+	        yield return op;
+	        Debug.Log($"<color=cyan>[{nameof(Start_Scene_Global_MGR)}]</color> Loaded {kToolAddonSystemScene} additively (minimal load for Addon_SocketServer).");
 	    }
 
 

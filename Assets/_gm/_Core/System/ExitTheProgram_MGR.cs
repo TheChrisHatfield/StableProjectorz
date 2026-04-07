@@ -13,7 +13,10 @@ namespace spz {
 	    }
 
 	    bool WantsToQuit(){
-	        if(_quitPopupConfirmed){ return true; }
+	        if(_quitPopupConfirmed){
+	            Addon_MGR.ShutdownAddonApiBeforeQuit();
+	            return true;
+	        }
         
 	        if(ConfirmPopup_UI.instance==null){ 
 	            OnExitConfirm(); 

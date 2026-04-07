@@ -1,0 +1,1676 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
+using TMPro;
+using SimpleFileBrowser;
+
+namespace spz {
+
+	/// <summary>
+	/// UI panel for managing add-ons (install, enable/disable, remove).
+	/// List rows are built in code (reference layout); no per-row prefab.
+	/// Reference mock (Tailwind / motion / Lucide) is approximated in uGUI: colors, typography, shortcut backdrop, fades, row hover.
+	/// </summary>
+	public class AddonManager_UI : MonoBehaviour {
+		public static AddonManager_UI instance { get; private set; }
+
+		/// <summary>
+		/// Set from Settings when <see cref="instance"/> is still null (additive <c>Tool_AddonSystem</c> not finished loading).
+		/// Consumed in <see cref="Start"/> after initial hide — avoids <see cref="StaticEvents.Invoke"/> no-op before subscribe.
+		/// </summary>
+		static bool s_pendingOpenRequest;
+
+		[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+		static void ResetStaticState() {
+			s_pendingOpenRequest = false;
+		}
+
+		/// <summary>Call when opening the manager but <see cref="instance"/> may not exist yet (e.g. Settings before addon scene loads).</summary>
+		public static void RequestOpenWhenReady() {
+			s_pendingOpenRequest = true;
+		}
+
+		/// <summary>
+		/// Single entry point from Settings (and any other menu). Handles: live instance → <see cref="OpenPanel"/>;
+		/// no instance yet → pending flag + <see cref="StaticEvents.Invoke"/> once <see cref="Awake"/> has subscribed.
+		/// </summary>
+		public static void OpenFromMenu() {
+			if (instance != null) {
+				instance.OpenPanel();
+				return;
+			}
+			RequestOpenWhenReady();
+			StaticEvents.Invoke("AddonManager:OpenPanel");
+		}
+
+		/// <summary>True while the fullscreen add-on manager overlay is up (viewport hints / hover treat as modal).</summary>
+		public static bool IsModalOpen =>
+			instance != null
+			&& ((instance._blocker != null && instance._blocker.activeSelf)
+			    || (instance._panel != null && instance._panel.activeSelf));
+
+		/// <summary> Same value as <see cref="CreatePanelIfNeeded"/> overlay canvas. File browser must sort above this while open. </summary>
+		const int AddonManagerCanvasSortOrder = 32767;
+
+		// Reference UI (Addon_Manager_REF_FILES / App.tsx) — Tailwind hex → linear color
+		static readonly Color RefBgModalDim = new Color(0f, 0f, 0f, 0.78f);
+		static readonly Color RefPanel = new Color(18f / 255f, 18f / 255f, 18f / 255f, 1f);
+		static readonly Color RefSurface = new Color(30f / 255f, 30f / 255f, 30f / 255f, 1f);
+		static readonly Color RefSegmentSelected = new Color(51f / 255f, 51f / 255f, 51f / 255f, 1f);
+		static readonly Color RefBorderSoft = new Color(1f, 1f, 1f, 0.05f);
+		static readonly Color RefTextMuted = new Color(0.45f, 0.45f, 0.45f, 1f);
+		static readonly Color RefGreen = new Color(34f / 255f, 197f / 255f, 94f / 255f, 1f);
+		static readonly Color RefBlue = new Color(59f / 255f, 130f / 255f, 246f / 255f, 1f);
+		static readonly Color RefBtnDefault = new Color(42f / 255f, 42f / 255f, 42f / 255f, 1f);
+		static readonly Color RefItemRow = new Color(26f / 255f, 26f / 255f, 26f / 255f, 1f);
+		static readonly Color RefRedText = new Color(239f / 255f, 68f / 255f, 68f / 255f, 1f);
+		static readonly Color RefItemRowHover = Color.Lerp(
+			new Color(26f / 255f, 26f / 255f, 26f / 255f, 1f),
+			new Color(30f / 255f, 30f / 255f, 30f / 255f, 1f),
+			0.5f);
+		
+		[SerializeField] GameObject _panel;
+		[SerializeField] Button _openPanel_button;
+		[SerializeField] Button _closePanel_button;
+		[SerializeField] Button _installFromFile_button;
+		[SerializeField] Button _refresh_button;
+		[SerializeField] RectTransform _addonsListParent; // Where to place add-on list items (runtime panel sets this when null)
+		[SerializeField] TextMeshProUGUI _statusText;
+		
+		private Dictionary<string, GameObject> _addonUIItems = new Dictionary<string, GameObject>();
+		bool _hidViewportStatusForModal;
+		
+		// Filter state: 0 = All, 1 = Enabled, 2 = Disabled
+		private int _filterState = 0;
+		private Toggle _filterAllToggle;
+		private Toggle _filterEnabledToggle;
+		private Toggle _filterDisabledToggle;
+		private GameObject _blocker; // full-screen click blocker, shown/hidden with panel
+		Image _blockerDimImage; // dimmer on blocker root (alpha animated; children unaffected)
+		CanvasGroup _panelModalGroup; // panel fade + block interaction while animating
+		Coroutine _modalAnimCo;
+		const float ModalOpenDuration = 0.22f;
+		const float ModalCloseDuration = 0.16f;
+		TMP_InputField _searchInput;
+		string _searchQuery = "";
+		
+		void Awake() {
+			if (instance != null) { DestroyImmediate(this); return; }
+			instance = this;
+			// Subscribe here so StaticEvents.Invoke works as soon as the singleton exists (before Start runs).
+			StaticEvents.SubscribeOrReplace("AddonManager:OpenPanel", OpenPanel);
+		}
+		
+	void OnEnable() {
+		Addon_MGR.OnAddonEnabledStateChanged += OnAddonEnabledStateChanged;
+	}
+
+	void OnDisable() {
+		Addon_MGR.OnAddonEnabledStateChanged -= OnAddonEnabledStateChanged;
+	}
+
+	void Start() {
+		if (_openPanel_button != null) {
+			_openPanel_button.onClick.AddListener(OpenPanel);
+		}
+		if (_closePanel_button != null) {
+			_closePanel_button.onClick.AddListener(ClosePanel);
+		}
+		if (_installFromFile_button != null) {
+			_installFromFile_button.onClick.AddListener(OnInstallFromFile);
+		}
+		if (_refresh_button != null) {
+			_refresh_button.onClick.AddListener(RefreshAddonsList);
+		}
+		
+		// Always run full connectivity check (panel + list parent + ref layout), not only _panel
+		CreatePanelIfNeeded();
+		// If OpenPanel ran before this Start (e.g. Settings clicked first), do not hide — old code only deactivated _panel
+		// and left the fullscreen blocker active, so the user saw a dim screen with no manager.
+		if (!IsModalOpen) {
+			if (_hidViewportStatusForModal && Viewport_StatusText.instance != null) {
+				Viewport_StatusText.instance.PreferVIsible(this);
+				_hidViewportStatusForModal = false;
+			}
+			if (_blocker != null)
+				_blocker.SetActive(false);
+			if (_panel != null) {
+				_panel.SetActive(false);
+				Canvas oc = _panel.GetComponentInParent<Canvas>(true);
+				if (oc != null && oc.gameObject.name == "AddonManager_Canvas")
+					oc.gameObject.SetActive(false);
+			}
+		}
+
+		if (s_pendingOpenRequest) {
+			s_pendingOpenRequest = false;
+			OpenPanel();
+		}
+	}
+	
+	/// <summary>
+	/// True when <see cref="_panel"/>, <see cref="_addonsListParent"/>, and reference chrome are wired so
+	/// <see cref="RefreshAddonsList"/> can run (connectivity rule: do not skip setup when only one ref exists).
+	/// </summary>
+	bool AddonManagerPanelSetupIsComplete() {
+		if (_panel == null || _addonsListParent == null) return false;
+		if (!_addonsListParent.transform.IsChildOf(_panel.transform)) return false;
+		return _panel.transform.Find("FilterSearchBlock/SearchRow") != null;
+	}
+
+	/// <summary>
+	/// Unity keeps a managed wrapper after native destroy; <c>== null</c> is true but <see cref="ReferenceEquals"/> to null is false.
+	/// Do not use <c>obj != null &amp;&amp; !obj</c> — both sides use Unity's overload and never match destroyed objects.
+	/// </summary>
+	static bool IsUnityObjectDestroyed(UnityEngine.Object obj) {
+		return !ReferenceEquals(obj, null) && obj == null;
+	}
+
+	void SanitizeDestroyedPanelRefs() {
+		if (IsUnityObjectDestroyed(_panel))
+			ClearAddonManagerPanelRefs();
+		if (IsUnityObjectDestroyed(_addonsListParent)) {
+			// Connectivity: list parent gone means the manager UI is not usable; do not leave _panel/buttons/toggles
+			// pointing at a torn hierarchy. Rebuild via CreatePanelIfNeeded after full clear + destroy when possible.
+			if (_panel != null)
+				DestroyAddonManagerPanelHierarchy();
+			else
+				ClearAddonManagerPanelRefs();
+		}
+	}
+
+	/// <summary>
+	/// If the inspector or a partial build set <see cref="_panel"/> but not <see cref="_addonsListParent"/>,
+	/// recover the scroll content <see cref="RectTransform"/> from the expected hierarchy.
+	/// </summary>
+	void TryResolveAddonsListParentFromPanel() {
+		if (_panel == null || _addonsListParent != null) return;
+		Transform t = _panel.transform.Find("ListArea/ScrollView/Content");
+		if (t == null)
+			t = _panel.transform.Find("ScrollView/Content");
+		if (t is RectTransform rt) {
+			_addonsListParent = rt;
+			if (_blocker == null) {
+				Transform p = _panel.transform.parent;
+				if (p != null && p.name == "Blocker")
+					_blocker = p.gameObject;
+			}
+			if (_blocker != null && _blockerDimImage == null)
+				_blockerDimImage = _blocker.GetComponent<Image>();
+			if (_panelModalGroup == null && _panel != null)
+				_panelModalGroup = _panel.GetComponent<CanvasGroup>();
+		}
+	}
+	
+	/// <summary>
+	/// Creates the UI panel dynamically if it wasn't assigned in the inspector
+	/// </summary>
+	void CreatePanelIfNeeded() {
+		SanitizeDestroyedPanelRefs();
+		if (_panel != null && _addonsListParent == null)
+			TryResolveAddonsListParentFromPanel();
+		if (AddonManagerPanelSetupIsComplete())
+			return;
+		if (_panel != null)
+			DestroyAddonManagerPanelHierarchy();
+		
+		// Use a dedicated canvas so the panel is always on top and blocks input (no click-through to viewport)
+		const int UILayer = 5; // Unity "UI" layer so Canvas and children render
+		GameObject canvasObj = new GameObject("AddonManager_Canvas");
+		canvasObj.layer = UILayer;
+		Canvas canvas = canvasObj.AddComponent<Canvas>();
+		canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+		canvas.overrideSorting = true;
+		canvas.sortingOrder = AddonManagerCanvasSortOrder; // Topmost so Add-on Manager captures input
+		canvas.pixelPerfect = false;
+		var scaler = canvasObj.AddComponent<UnityEngine.UI.CanvasScaler>();
+		scaler.uiScaleMode = UnityEngine.UI.CanvasScaler.ScaleMode.ScaleWithScreenSize;
+		scaler.referenceResolution = new Vector2(1920, 1080);
+		scaler.matchWidthOrHeight = 0.5f;
+		canvasObj.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+		
+		// Full-screen blocker: panel is a CHILD so every click hits blocker or panel, nothing passes through
+		GameObject blockerObj = new GameObject("Blocker");
+		blockerObj.layer = UILayer;
+		blockerObj.transform.SetParent(canvas.transform, false);
+		var blockerRect = blockerObj.AddComponent<RectTransform>();
+		blockerRect.anchorMin = Vector2.zero;
+		blockerRect.anchorMax = Vector2.one;
+		blockerRect.sizeDelta = Vector2.zero;
+		blockerRect.anchoredPosition = Vector2.zero;
+		var blockerImage = blockerObj.AddComponent<UnityEngine.UI.Image>();
+		blockerImage.color = RefBgModalDim;
+		blockerImage.raycastTarget = true;
+		var blockerCanvasGroup = blockerObj.AddComponent<CanvasGroup>();
+		blockerCanvasGroup.blocksRaycasts = true;
+		blockerCanvasGroup.interactable = true;
+		// So MainViewport_UI_EventListener stops treating the 3D view as "hovered" (wheel zoom / UV zoom stay off while this UI is up).
+		blockerObj.AddComponent<MainViewport_RaycastBlocker>();
+		blockerObj.SetActive(false);
+		_blockerDimImage = blockerImage;
+		
+		// Dimmed-area shortcut hints (reference: technical 3D tool aesthetic; matches navigation scripts — CameraMove / Orbit / Panning)
+		GameObject shortcutRoot = new GameObject("ShortcutBackdropHints");
+		shortcutRoot.layer = UILayer;
+		shortcutRoot.transform.SetParent(blockerObj.transform, false);
+		var sRootRt = shortcutRoot.AddComponent<RectTransform>();
+		sRootRt.anchorMin = Vector2.zero;
+		sRootRt.anchorMax = Vector2.one;
+		sRootRt.sizeDelta = Vector2.zero;
+		var shortcutCg = shortcutRoot.AddComponent<CanvasGroup>();
+		shortcutCg.blocksRaycasts = false;
+		shortcutCg.interactable = false;
+		GameObject hintBlock = new GameObject("HintText");
+		hintBlock.transform.SetParent(shortcutRoot.transform, false);
+		var hbRt = hintBlock.AddComponent<RectTransform>();
+		hbRt.anchorMin = new Vector2(0f, 0f);
+		hbRt.anchorMax = new Vector2(0f, 0f);
+		hbRt.pivot = new Vector2(0f, 0f);
+		hbRt.anchoredPosition = new Vector2(32f, 32f);
+		hbRt.sizeDelta = new Vector2(560f, 240f);
+		var hintTmp = hintBlock.AddComponent<TextMeshProUGUI>();
+		hintTmp.text =
+			"VIEWPORT\n"
+			+ "RMB + WASD · QE   fly\n"
+			+ "LMB drag          orbit\n"
+			+ "MMB               pan\n"
+			+ "Alt + MMB         pan (alt.)\n"
+			+ "Scroll            zoom          F   focus\n"
+			+ "Ctrl + RMB        menu";
+		hintTmp.fontSize = 12;
+		hintTmp.color = new Color(1f, 1f, 1f, 0.26f);
+		hintTmp.alignment = TextAlignmentOptions.BottomLeft;
+		hintTmp.textWrappingMode = TextWrappingModes.Normal;
+		hintTmp.raycastTarget = false;
+		hintTmp.fontStyle = FontStyles.Bold;
+		
+		// Panel as child of blocker so all input is under the blocker (drawn above shortcut layer)
+		GameObject panelObj = new GameObject("AddonManager_Panel");
+		panelObj.layer = UILayer;
+		panelObj.transform.SetParent(blockerObj.transform, false);
+		_panel = panelObj;
+		
+		var rectTransform = panelObj.AddComponent<RectTransform>();
+		rectTransform.anchorMin = rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+		rectTransform.pivot = new Vector2(0.5f, 0.5f);
+		rectTransform.sizeDelta = new Vector2(1040f, 680f);
+		rectTransform.anchoredPosition = Vector2.zero;
+		
+		var image = panelObj.AddComponent<UnityEngine.UI.Image>();
+		image.sprite = UiRuntimeSprites.RoundedRectSliced;
+		image.type = UnityEngine.UI.Image.Type.Sliced;
+		image.color = RefPanel;
+		image.raycastTarget = true; // Block clicks from passing through
+		
+		var canvasGroup = panelObj.AddComponent<CanvasGroup>();
+		canvasGroup.blocksRaycasts = true;
+		canvasGroup.interactable = true;
+		_panelModalGroup = canvasGroup;
+		
+		// 8px grid — same base as ProjectUiScale.SpaceUnit / Space(n) for project-wide spacing.
+		const float Grid = ProjectUiScale.SpaceUnit;
+		const float PanelPadding = Grid * 3;   // 24
+		const float SectionSpacing = Grid * 2; // 16
+		const float RowSpacing = Grid * 1;    // 8
+		
+		var verticalLayout = panelObj.AddComponent<UnityEngine.UI.VerticalLayoutGroup>();
+		verticalLayout.spacing = SectionSpacing;
+		verticalLayout.padding = new RectOffset((int)PanelPadding, (int)PanelPadding, (int)PanelPadding, (int)PanelPadding);
+		verticalLayout.childControlHeight = true;
+		verticalLayout.childControlWidth = true;
+		verticalLayout.childForceExpandHeight = true;
+		verticalLayout.childForceExpandWidth = true;
+		
+		// —— Reference layout: header (title + action row like App.tsx) ——
+		GameObject headerObj = new GameObject("Header");
+		headerObj.transform.SetParent(panelObj.transform, false);
+		var headerLE = headerObj.AddComponent<LayoutElement>();
+		headerLE.preferredHeight = 56f;
+		headerLE.minHeight = 52f;
+		var headerLayout = headerObj.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+		headerLayout.childControlWidth = true;
+		headerLayout.childControlHeight = true;
+		headerLayout.childForceExpandWidth = false;
+		headerLayout.childForceExpandHeight = true;
+		headerLayout.spacing = (int)Grid * 2;
+		headerLayout.padding = new RectOffset(0, 0, 0, 0);
+		var headerVLayout = headerObj.AddComponent<UnityEngine.UI.VerticalLayoutGroup>();
+		headerVLayout.spacing = 12;
+		headerVLayout.padding = new RectOffset(0, 0, 0, 0);
+		headerVLayout.childControlWidth = true;
+		headerVLayout.childControlHeight = false;
+		headerVLayout.childForceExpandWidth = true;
+		headerVLayout.childForceExpandHeight = false;
+		headerVLayout.enabled = false;
+		
+		GameObject titleObj = new GameObject("Title");
+		titleObj.transform.SetParent(headerObj.transform, false);
+		var titleLE = titleObj.AddComponent<LayoutElement>();
+		titleLE.minWidth = 200f;
+		titleLE.flexibleWidth = 1f;
+		var titleText = titleObj.AddComponent<TextMeshProUGUI>();
+		titleText.text = "Add-on Manager";
+		titleText.fontSize = 36;
+		titleText.color = Color.white;
+		titleText.fontStyle = FontStyles.Bold;
+		titleText.alignment = TextAlignmentOptions.Left;
+		titleText.textWrappingMode = TextWrappingModes.NoWrap;
+		titleText.overflowMode = TMPro.TextOverflowModes.Ellipsis;
+		titleText.raycastTarget = false;
+		
+		GameObject actionsRow = new GameObject("HeaderActions");
+		actionsRow.transform.SetParent(headerObj.transform, false);
+		var actionsRowLE = actionsRow.AddComponent<LayoutElement>();
+		actionsRowLE.flexibleWidth = 0f;
+		var actionsHLG = actionsRow.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+		actionsHLG.spacing = 10;
+		actionsHLG.childControlWidth = false;
+		actionsHLG.childControlHeight = true;
+		actionsHLG.childForceExpandHeight = true;
+		
+		void AddRefActionButton(Transform parent, string goName, string label, Color bg, Color fg, UnityEngine.Events.UnityAction onClick, Vector2 size, out Button outBtn) {
+			var go = new GameObject(goName);
+			go.transform.SetParent(parent, false);
+			var le = go.AddComponent<LayoutElement>();
+			le.preferredWidth = size.x;
+			le.minHeight = size.y;
+			le.preferredHeight = size.y;
+			var img = go.AddComponent<UnityEngine.UI.Image>();
+			img.sprite = UiRuntimeSprites.RoundedRectSliced;
+			img.type = UnityEngine.UI.Image.Type.Sliced;
+			img.color = bg;
+			img.raycastTarget = true;
+			var btn = go.AddComponent<Button>();
+			btn.targetGraphic = img;
+			btn.transition = Selectable.Transition.None;
+			btn.onClick.AddListener(onClick);
+			var to = new GameObject("Text");
+			to.transform.SetParent(go.transform, false);
+			var tr = to.AddComponent<RectTransform>();
+			tr.anchorMin = Vector2.zero;
+			tr.anchorMax = Vector2.one;
+			tr.offsetMin = new Vector2(10f, 6f);
+			tr.offsetMax = new Vector2(-10f, -6f);
+			var tx = to.AddComponent<TextMeshProUGUI>();
+			tx.text = label;
+			tx.fontSize = 13;
+			tx.fontStyle = FontStyles.Bold;
+			tx.alignment = TextAlignmentOptions.Center;
+			tx.color = fg;
+			tx.raycastTarget = false;
+			tx.enableAutoSizing = true;
+			tx.fontSizeMin = 9;
+			tx.fontSizeMax = 13;
+			tx.textWrappingMode = TextWrappingModes.NoWrap;
+			tx.overflowMode = TMPro.TextOverflowModes.Ellipsis;
+			outBtn = btn;
+		}
+		
+		AddRefActionButton(actionsRow.transform, "InstallButton", "+ Install from File", RefBtnDefault, new Color(0.9f, 0.9f, 0.9f), OnInstallFromFile, new Vector2(188f, 40f), out var installBtn);
+		_installFromFile_button = installBtn;
+		AddRefActionButton(actionsRow.transform, "RefreshButton", "↻ Refresh", RefBtnDefault, new Color(0.9f, 0.9f, 0.9f), RefreshAddonsList, new Vector2(118f, 40f), out var refreshBtn);
+		_refresh_button = refreshBtn;
+		AddRefActionButton(actionsRow.transform, "LoadAddonsNowButton", "▶ Load addons now", RefGreen, Color.white, OnLoadAddonsNow, new Vector2(168f, 40f), out var _ignoredLoadBtn);
+		AddRefActionButton(actionsRow.transform, "RunWithAddonsButton", "↻ Restart with addons", RefBlue, Color.white, OnRestartWithAddons, new Vector2(188f, 40f), out var _ignoredRestartBtn);
+		AddRefActionButton(actionsRow.transform, "CloseButton", "Close", RefBtnDefault, new Color(0.9f, 0.9f, 0.9f), ClosePanel, new Vector2(88f, 40f), out var closeBtn);
+		_closePanel_button = closeBtn;
+		
+		// Filter + search: narrow = stacked (VLG); wide ≥ md = filter column + search inline (HLG)
+		GameObject filterSearchBlock = new GameObject("FilterSearchBlock");
+		filterSearchBlock.transform.SetParent(panelObj.transform, false);
+		var fsbLE = filterSearchBlock.AddComponent<LayoutElement>();
+		fsbLE.preferredHeight = 100f;
+		fsbLE.minHeight = 88f;
+		var fsbVLG = filterSearchBlock.AddComponent<UnityEngine.UI.VerticalLayoutGroup>();
+		fsbVLG.spacing = 10;
+		fsbVLG.childControlWidth = true;
+		fsbVLG.childControlHeight = false;
+		fsbVLG.childForceExpandWidth = true;
+		var fsbHLG = filterSearchBlock.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+		fsbHLG.spacing = 16;
+		fsbHLG.padding = new RectOffset(0, 0, 0, 0);
+		fsbHLG.childControlWidth = true;
+		fsbHLG.childControlHeight = true;
+		fsbHLG.childForceExpandHeight = true;
+		fsbHLG.childForceExpandWidth = false;
+		fsbHLG.enabled = false;
+		
+		GameObject filterLeftCol = new GameObject("FilterLeftColumn");
+		filterLeftCol.transform.SetParent(filterSearchBlock.transform, false);
+		var flcLE = filterLeftCol.AddComponent<LayoutElement>();
+		flcLE.flexibleWidth = 1f;
+		var flcVLG = filterLeftCol.AddComponent<UnityEngine.UI.VerticalLayoutGroup>();
+		flcVLG.spacing = 10;
+		flcVLG.childControlWidth = true;
+		flcVLG.childControlHeight = false;
+		flcVLG.childForceExpandWidth = true;
+		
+		GameObject filterLabelRow = new GameObject("FilterLabelRow");
+		filterLabelRow.transform.SetParent(filterLeftCol.transform, false);
+		var flrLE = filterLabelRow.AddComponent<LayoutElement>();
+		flrLE.preferredHeight = 22f;
+		var flrTxt = filterLabelRow.AddComponent<TextMeshProUGUI>();
+		flrTxt.text = "FILTER";
+		flrTxt.fontSize = 12;
+		flrTxt.fontStyle = FontStyles.Bold;
+		flrTxt.color = RefTextMuted;
+		flrTxt.alignment = TextAlignmentOptions.Left;
+		flrTxt.raycastTarget = false;
+		
+		GameObject filterBarObj = new GameObject("FilterBar");
+		filterBarObj.transform.SetParent(filterLeftCol.transform, false);
+		var filterBarLE = filterBarObj.AddComponent<LayoutElement>();
+		filterBarLE.preferredHeight = 44f;
+		var filterBarBg = filterBarObj.AddComponent<UnityEngine.UI.Image>();
+		filterBarBg.sprite = UiRuntimeSprites.RoundedRectSliced;
+		filterBarBg.type = UnityEngine.UI.Image.Type.Sliced;
+		filterBarBg.color = RefSurface;
+		filterBarBg.raycastTarget = false;
+		var filterBarHLG = filterBarObj.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+		filterBarHLG.padding = new RectOffset(6, 6, 6, 6);
+		filterBarHLG.spacing = 4;
+		filterBarHLG.childControlWidth = false;
+		filterBarHLG.childControlHeight = true;
+		filterBarHLG.childForceExpandHeight = true;
+		
+		var toggleGroup = filterBarObj.AddComponent<ToggleGroup>();
+		toggleGroup.allowSwitchOff = false;
+		_filterAllToggle = CreateFilterRadio("All", filterBarObj.transform, toggleGroup, 0).GetComponentInChildren<Toggle>(true);
+		_filterEnabledToggle = CreateFilterRadio("Enabled", filterBarObj.transform, toggleGroup, 1).GetComponentInChildren<Toggle>(true);
+		_filterDisabledToggle = CreateFilterRadio("Disabled", filterBarObj.transform, toggleGroup, 2).GetComponentInChildren<Toggle>(true);
+		
+		GameObject searchRow = new GameObject("SearchRow");
+		searchRow.transform.SetParent(filterSearchBlock.transform, false);
+		var searchRowLE = searchRow.AddComponent<LayoutElement>();
+		searchRowLE.flexibleWidth = 1f;
+		searchRowLE.preferredHeight = 44f;
+		var searchRowHLG = searchRow.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+		searchRowHLG.childControlWidth = true;
+		searchRowHLG.childControlHeight = true;
+		searchRowHLG.childForceExpandWidth = true;
+		
+		GameObject searchFieldGo = new GameObject("SearchField");
+		searchFieldGo.transform.SetParent(searchRow.transform, false);
+		var sBg = searchFieldGo.AddComponent<UnityEngine.UI.Image>();
+		sBg.sprite = UiRuntimeSprites.RoundedRectSliced;
+		sBg.type = UnityEngine.UI.Image.Type.Sliced;
+		sBg.color = RefSurface;
+		sBg.raycastTarget = true;
+		var sLE = searchFieldGo.AddComponent<LayoutElement>();
+		sLE.flexibleWidth = 1f;
+		sLE.minHeight = 40f;
+		sLE.preferredHeight = 40f;
+		
+		var phGo = new GameObject("Placeholder");
+		phGo.transform.SetParent(searchFieldGo.transform, false);
+		var phRt = phGo.AddComponent<RectTransform>();
+		phRt.anchorMin = Vector2.zero;
+		phRt.anchorMax = Vector2.one;
+		phRt.offsetMin = new Vector2(14f, 6f);
+		phRt.offsetMax = new Vector2(-12f, -6f);
+		var phTmp = phGo.AddComponent<TextMeshProUGUI>();
+		phTmp.text = "⌕ Search extensions...";
+		phTmp.fontSize = 14;
+		phTmp.color = RefTextMuted;
+		phTmp.raycastTarget = false;
+		
+		var txtGo = new GameObject("Text");
+		txtGo.transform.SetParent(searchFieldGo.transform, false);
+		var txtRt = txtGo.AddComponent<RectTransform>();
+		txtRt.anchorMin = Vector2.zero;
+		txtRt.anchorMax = Vector2.one;
+		txtRt.offsetMin = new Vector2(14f, 6f);
+		txtRt.offsetMax = new Vector2(-12f, -6f);
+		var txtTmp = txtGo.AddComponent<TextMeshProUGUI>();
+		txtTmp.fontSize = 14;
+		txtTmp.color = Color.white;
+		txtTmp.raycastTarget = false;
+		
+		_searchInput = searchFieldGo.AddComponent<TMP_InputField>();
+		_searchInput.textComponent = txtTmp;
+		_searchInput.placeholder = phTmp;
+		_searchInput.text = "";
+		_searchInput.lineType = TMP_InputField.LineType.SingleLine;
+		_searchInput.onValueChanged.AddListener(v => { _searchQuery = v ?? ""; RefreshAddonsList(); });
+		
+		// List area: scroll + empty overlay (reference empty state)
+		GameObject listArea = new GameObject("ListArea");
+		listArea.transform.SetParent(panelObj.transform, false);
+		var listAreaLE = listArea.AddComponent<LayoutElement>();
+		listAreaLE.flexibleHeight = 1f;
+		listAreaLE.minHeight = 360f;
+		listAreaLE.preferredHeight = 400f;
+		
+		const float scrollAreaHeight = 400f;
+		var listAreaVLG = listArea.AddComponent<UnityEngine.UI.VerticalLayoutGroup>();
+		listAreaVLG.spacing = 0;
+		listAreaVLG.padding = new RectOffset(0, 0, 0, 0);
+		listAreaVLG.childControlHeight = true;
+		listAreaVLG.childControlWidth = true;
+		listAreaVLG.childForceExpandHeight = true;
+		listAreaVLG.childForceExpandWidth = true;
+		
+		GameObject scrollViewObj = new GameObject("ScrollView");
+		scrollViewObj.layer = UILayer;
+		scrollViewObj.transform.SetParent(listArea.transform, false);
+		var scrollViewRect = scrollViewObj.AddComponent<RectTransform>();
+		scrollViewRect.anchorMin = new Vector2(0, 0);
+		scrollViewRect.anchorMax = new Vector2(1, 1);
+		scrollViewRect.sizeDelta = Vector2.zero;
+		scrollViewRect.pivot = new Vector2(0.5f, 0.5f);
+		var layoutElementScroll = scrollViewObj.AddComponent<UnityEngine.UI.LayoutElement>();
+		layoutElementScroll.flexibleHeight = 1f;
+		layoutElementScroll.preferredHeight = scrollAreaHeight;
+		layoutElementScroll.minHeight = scrollAreaHeight;
+		var scrollViewImage = scrollViewObj.AddComponent<UnityEngine.UI.Image>();
+		scrollViewImage.sprite = UiRuntimeSprites.RoundedRectSliced;
+		scrollViewImage.type = UnityEngine.UI.Image.Type.Sliced;
+		scrollViewImage.color = RefSurface;
+		scrollViewImage.raycastTarget = true;
+		var scrollViewMask = scrollViewObj.AddComponent<UnityEngine.UI.Mask>();
+		scrollViewMask.showMaskGraphic = false;
+		var scrollView = scrollViewObj.AddComponent<UnityEngine.UI.ScrollRect>();
+		scrollView.horizontal = false;
+		scrollView.vertical = true;
+		scrollView.scrollSensitivity = 20f;
+		scrollView.movementType = ScrollRect.MovementType.Clamped;
+		scrollView.inertia = true;
+		scrollView.decelerationRate = 0.135f;
+		scrollView.viewport = scrollViewRect; // viewport = self (like 3D panel prefab)
+		scrollView.content = null; // set below
+		
+		// Content = direct child of ScrollView; height grows with addon count so list scrolls when many addons
+		GameObject contentObj = new GameObject("Content");
+		contentObj.layer = UILayer;
+		contentObj.transform.SetParent(scrollViewObj.transform, false);
+		var contentRect = contentObj.AddComponent<RectTransform>();
+		contentRect.anchorMin = new Vector2(0, 1);
+		contentRect.anchorMax = new Vector2(1, 1);
+		contentRect.pivot = new Vector2(0.5f, 1f);
+		contentRect.sizeDelta = new Vector2(0, 0);
+		contentRect.anchoredPosition = Vector2.zero;
+		var contentLayout = contentObj.AddComponent<UnityEngine.UI.VerticalLayoutGroup>();
+		contentLayout.spacing = RowSpacing;
+		contentLayout.padding = new RectOffset((int)Grid, (int)Grid, (int)Grid, (int)Grid);
+		contentLayout.childControlHeight = false;
+		contentLayout.childControlWidth = true;
+		contentLayout.childForceExpandHeight = false;
+		contentLayout.childForceExpandWidth = true; // rows get full width so grid aligns
+		var contentSizeFitter = contentObj.AddComponent<UnityEngine.UI.ContentSizeFitter>();
+		contentSizeFitter.verticalFit = UnityEngine.UI.ContentSizeFitter.FitMode.PreferredSize;
+		contentSizeFitter.horizontalFit = UnityEngine.UI.ContentSizeFitter.FitMode.Unconstrained;
+		scrollView.content = contentRect;
+		_addonsListParent = contentRect;
+		Debug.Log($"[AddonManager_UI] Set _addonsListParent to {contentRect.name} (active: {contentRect.gameObject.activeSelf})");
+		
+		// Set default filter selection after _addonsListParent exists so RefreshAddonsList() in the listener can run
+		_filterAllToggle.isOn = true;
+		
+		// Status row (above footer, reference order)
+		GameObject statusObj = new GameObject("StatusText");
+		statusObj.transform.SetParent(panelObj.transform, false);
+		var statusLE = statusObj.AddComponent<LayoutElement>();
+		statusLE.preferredHeight = 28;
+		statusLE.minHeight = 24;
+		GameObject statusTextObj = new GameObject("Text");
+		statusTextObj.transform.SetParent(statusObj.transform, false);
+		var statusTextRect = statusTextObj.AddComponent<RectTransform>();
+		statusTextRect.anchorMin = Vector2.zero;
+		statusTextRect.anchorMax = Vector2.one;
+		statusTextRect.sizeDelta = Vector2.zero;
+		var statusText = statusTextObj.AddComponent<TextMeshProUGUI>();
+		statusText.text = "Ready";
+		statusText.fontSize = 12;
+		statusText.color = RefGreen;
+		statusText.alignment = TextAlignmentOptions.Left;
+		statusText.raycastTarget = false;
+		_statusText = statusText;
+		
+		GameObject footerDivider = new GameObject("FooterDivider");
+		footerDivider.transform.SetParent(panelObj.transform, false);
+		footerDivider.AddComponent<LayoutElement>().preferredHeight = 1f;
+		var divImg = footerDivider.AddComponent<UnityEngine.UI.Image>();
+		divImg.color = RefBorderSoft;
+		divImg.raycastTarget = false;
+		
+		// Footer (reference App.tsx — border-t, links)
+		GameObject footerObj = new GameObject("Footer");
+		footerObj.transform.SetParent(panelObj.transform, false);
+		var footerLE = footerObj.AddComponent<LayoutElement>();
+		footerLE.preferredHeight = 44f;
+		footerLE.minHeight = 40f;
+		var footerImg = footerObj.AddComponent<UnityEngine.UI.Image>();
+		footerImg.color = new Color(0f, 0f, 0f, 0f);
+		footerImg.raycastTarget = false;
+		var footerHLG = footerObj.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+		footerHLG.padding = new RectOffset(0, 0, 14, 0);
+		footerHLG.spacing = 16;
+		footerHLG.childAlignment = TextAnchor.MiddleLeft;
+		footerHLG.childControlWidth = true;
+		footerHLG.childControlHeight = true;
+		footerHLG.childForceExpandWidth = true;
+		var footerLeft = new GameObject("FooterLeft");
+		footerLeft.transform.SetParent(footerObj.transform, false);
+		var flLE = footerLeft.AddComponent<LayoutElement>();
+		flLE.flexibleWidth = 1f;
+		var footerLeftTxt = footerLeft.AddComponent<TextMeshProUGUI>();
+		footerLeftTxt.text = "© 2026 STABLEPROJECTORZ ADD-ON MANAGER • BUILD " + Application.version;
+		footerLeftTxt.fontSize = 10;
+		footerLeftTxt.color = RefTextMuted;
+		footerLeftTxt.fontStyle = FontStyles.Bold;
+		footerLeftTxt.alignment = TextAlignmentOptions.Left;
+		footerLeftTxt.raycastTarget = false;
+		var footerLinks = new GameObject("FooterLinks");
+		footerLinks.transform.SetParent(footerObj.transform, false);
+		footerLinks.AddComponent<LayoutElement>().flexibleWidth = 0f;
+		var flinksHLG = footerLinks.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+		flinksHLG.spacing = 20;
+		flinksHLG.childControlWidth = false;
+		void AddFooterLink(string label, string url) {
+			var lg = new GameObject("Link_" + label.Replace(" ", ""));
+			lg.transform.SetParent(footerLinks.transform, false);
+			var limg = lg.AddComponent<UnityEngine.UI.Image>();
+			limg.sprite = UiRuntimeSprites.RoundedRectSliced;
+			limg.type = UnityEngine.UI.Image.Type.Sliced;
+			limg.color = new Color(0f, 0f, 0f, 0.01f);
+			limg.raycastTarget = true;
+			var lbtn = lg.AddComponent<Button>();
+			lbtn.targetGraphic = limg;
+			lbtn.transition = Selectable.Transition.None;
+			lbtn.onClick.AddListener(() => { if (!string.IsNullOrEmpty(url)) Application.OpenURL(url); });
+			var lle = lg.AddComponent<LayoutElement>();
+			lle.preferredWidth = 110f;
+			lle.minHeight = 24f;
+			var ltx = new GameObject("T");
+			ltx.transform.SetParent(lg.transform, false);
+			var ltxRt = ltx.AddComponent<RectTransform>();
+			ltxRt.anchorMin = Vector2.zero;
+			ltxRt.anchorMax = Vector2.one;
+			ltxRt.sizeDelta = Vector2.zero;
+			var ltmp = ltx.AddComponent<TextMeshProUGUI>();
+			ltmp.text = label;
+			ltmp.fontSize = 10;
+			ltmp.fontStyle = FontStyles.Bold;
+			ltmp.color = RefTextMuted;
+			ltmp.alignment = TextAlignmentOptions.Center;
+			ltmp.raycastTarget = false;
+			lg.AddComponent<FooterLinkHover>().Init(ltmp, RefTextMuted, new Color(0.75f, 0.75f, 0.75f, 1f));
+		}
+		AddFooterLink("Documentation", "https://stableprojectorz.com/lessons-and-videos/");
+		AddFooterLink("Support", "https://discord.gg/aWbnX2qan2");
+		{
+			var apiGo = new GameObject("Link_API");
+			apiGo.transform.SetParent(footerLinks.transform, false);
+			var apiImg = apiGo.AddComponent<UnityEngine.UI.Image>();
+			apiImg.sprite = UiRuntimeSprites.RoundedRectSliced;
+			apiImg.type = UnityEngine.UI.Image.Type.Sliced;
+			apiImg.color = new Color(0f, 0f, 0f, 0.01f);
+			apiImg.raycastTarget = true;
+			var apiBtn = apiGo.AddComponent<Button>();
+			apiBtn.targetGraphic = apiImg;
+			apiBtn.transition = Selectable.Transition.None;
+			apiBtn.onClick.AddListener(() => {
+				int p = Addon_MGR.instance != null ? Addon_MGR.instance.GetHttpServerPort() : 5557;
+				Application.OpenURL("http://127.0.0.1:" + p + "/docs");
+			});
+			apiGo.AddComponent<LayoutElement>().preferredWidth = 80f;
+			var apiTx = new GameObject("T");
+			apiTx.transform.SetParent(apiGo.transform, false);
+			var apiTxRt = apiTx.AddComponent<RectTransform>();
+			apiTxRt.anchorMin = Vector2.zero;
+			apiTxRt.anchorMax = Vector2.one;
+			apiTxRt.sizeDelta = Vector2.zero;
+			var apiTmp = apiTx.AddComponent<TextMeshProUGUI>();
+			apiTmp.text = "API";
+			apiTmp.fontSize = 10;
+			apiTmp.fontStyle = FontStyles.Bold;
+			apiTmp.color = RefTextMuted;
+			apiTmp.alignment = TextAlignmentOptions.Center;
+			apiTmp.raycastTarget = false;
+			apiGo.AddComponent<FooterLinkHover>().Init(apiTmp, RefTextMuted, new Color(0.75f, 0.75f, 0.75f, 1f));
+		}
+		
+		var addonResponsive = panelObj.AddComponent<AddonManager_ResponsiveLayout>();
+		addonResponsive.Configure(
+			blockerRect,
+			rectTransform,
+			headerLayout,
+			headerVLayout,
+			headerLE,
+			fsbVLG,
+			fsbHLG,
+			flcLE,
+			fsbLE,
+			listAreaLE,
+			layoutElementScroll,
+			titleText);
+		
+		SetLayerRecursively(_panel.transform, UILayer);
+		_panel.SetActive(false);
+		_blocker = blockerObj;
+		Debug.Log("[AddonManager_UI] Panel creation completed, set inactive initially");
+	}
+	
+	static void SetLayerRecursively(Transform t, int layer) {
+		t.gameObject.layer = layer;
+		for (int i = 0; i < t.childCount; i++)
+			SetLayerRecursively(t.GetChild(i), layer);
+	}
+
+		/// <summary>
+		/// Clears references into a torn-down add-on manager UI hierarchy so <see cref="CreatePanelIfNeeded"/> can rebuild cleanly.
+		/// </summary>
+		void ClearAddonManagerPanelRefs() {
+			_panel = null;
+			_blocker = null;
+			_blockerDimImage = null;
+			_panelModalGroup = null;
+			_addonsListParent = null;
+			_closePanel_button = null;
+			_installFromFile_button = null;
+			_refresh_button = null;
+			_statusText = null;
+			_filterAllToggle = null;
+			_filterEnabledToggle = null;
+			_filterDisabledToggle = null;
+			_searchInput = null;
+			_searchQuery = "";
+			_addonUIItems.Clear();
+		}
+
+		/// <summary>
+		/// Removes the entire overlay (canvas + blocker + panel). Destroying only <see cref="_panel"/> leaves <see cref="_blocker"/>
+		/// and its canvas alive, so the next <see cref="CreatePanelIfNeeded"/> would stack duplicate fullscreen blockers.
+		/// </summary>
+		void DestroyAddonManagerPanelHierarchy() {
+			StopModalAnim();
+			if (_hidViewportStatusForModal && Viewport_StatusText.instance != null) {
+				Viewport_StatusText.instance.PreferVIsible(this);
+				_hidViewportStatusForModal = false;
+			}
+			if (_panel == null) return;
+			Canvas canvas = _panel.GetComponentInParent<Canvas>();
+			if (canvas != null && canvas.gameObject.name == "AddonManager_Canvas") {
+				canvas.gameObject.SetActive(false);
+				Destroy(canvas.gameObject);
+			} else if (_panel.transform.parent != null && _panel.transform.parent.name == "Blocker") {
+				var blockerGo = _panel.transform.parent.gameObject;
+				blockerGo.SetActive(false);
+				Destroy(blockerGo);
+			} else {
+				_panel.SetActive(false);
+				Destroy(_panel);
+			}
+			ClearAddonManagerPanelRefs();
+		}
+
+		/// <summary>
+		/// Ensures <see cref="MainViewport_RaycastBlocker"/> is on the fullscreen blocker so wheel/input does not affect the 3D/UV viewport
+		/// while the add-on manager is open (scroll stays in the manager list via UI raycasts).
+		/// </summary>
+		void EnsureViewportRaycastBlockerOnBlocker() {
+			GameObject blockerGo = _blocker;
+			if (blockerGo == null && _panel != null && _panel.transform.parent != null
+			    && _panel.transform.parent.name == "Blocker")
+				blockerGo = _panel.transform.parent.gameObject;
+			if (blockerGo == null) return;
+			// Keep _blocker in sync so OpenPanel/ClosePanel activate the same fullscreen root as the panel.
+			_blocker = blockerGo;
+			if (_blockerDimImage == null)
+				_blockerDimImage = blockerGo.GetComponent<Image>();
+			if (blockerGo.GetComponent<MainViewport_RaycastBlocker>() == null)
+				blockerGo.AddComponent<MainViewport_RaycastBlocker>();
+		}
+		
+		/// <summary>
+		/// Opens the add-on manager panel
+		/// </summary>
+		public void OpenPanel() {
+			CreatePanelIfNeeded();
+			StopModalAnim();
+			
+			if (_panel == null) {
+				Debug.LogError("[AddonManager_UI] Failed to open panel: _panel is null and could not be created.");
+				return;
+			}
+			
+			EnsureViewportRaycastBlockerOnBlocker();
+			if (_blocker != null && _blockerDimImage == null)
+				_blockerDimImage = _blocker.GetComponent<Image>();
+			if (_panelModalGroup == null)
+				_panelModalGroup = _panel.GetComponent<CanvasGroup>();
+			
+			// Activate hierarchy: canvas (parent of blocker) must be active for anything to render.
+			Canvas rootCanvas = _panel.GetComponentInParent<Canvas>(true);
+			if (rootCanvas != null) {
+				rootCanvas.gameObject.SetActive(true);
+				rootCanvas.overrideSorting = true;
+				rootCanvas.sortingOrder = AddonManagerCanvasSortOrder;
+				rootCanvas.enabled = true;
+			}
+			if (_blocker != null) _blocker.SetActive(true);
+			_panel.SetActive(true);
+			ApplyModalOpenStartState();
+			
+			if (!_hidViewportStatusForModal && Viewport_StatusText.instance != null) {
+				Viewport_StatusText.instance.PreferHidden(this);
+				_hidViewportStatusForModal = true;
+			}
+			
+			try {
+				var addonResponsive = _panel.GetComponent<AddonManager_ResponsiveLayout>();
+				if (addonResponsive != null)
+					addonResponsive.RefreshNow();
+				var panelRect = _panel.GetComponent<RectTransform>();
+				if (panelRect != null) {
+					LayoutRebuilder.ForceRebuildLayoutImmediate(panelRect);
+					Canvas.ForceUpdateCanvases();
+					var scrollRect = _panel.GetComponentInChildren<ScrollRect>(true);
+					if (scrollRect != null) {
+						var scrollViewRect = scrollRect.GetComponent<RectTransform>();
+						if (scrollViewRect != null)
+							LayoutRebuilder.ForceRebuildLayoutImmediate(scrollViewRect);
+					}
+				}
+			} catch (System.Exception e) {
+				Debug.LogWarning($"[AddonManager_UI] Layout pass threw (non-fatal): {e.Message}");
+			}
+			
+			// Start fade BEFORE refresh so an exception in RefreshAddonsList cannot leave alpha at 0.
+			// Unity does not run coroutines on a disabled MonoBehaviour — ApplyModalOpenStartState() would leave alpha at 0 forever.
+			if (_blockerDimImage != null && _panelModalGroup != null && isActiveAndEnabled)
+				_modalAnimCo = StartCoroutine(CoModalOpenVisuals());
+			else
+				SnapModalShown();
+			
+			try {
+				if (Addon_MGR.instance != null)
+					Addon_MGR.instance.RefreshAddons();
+				RefreshAddonsList();
+			} catch (System.Exception e) {
+				Debug.LogError($"[AddonManager_UI] RefreshAddonsList threw: {e.Message}\n{e.StackTrace}");
+			}
+			
+			// Safety: if the coroutine never ran or alpha is still 0, force visible now.
+			if (_panelModalGroup != null && _panelModalGroup.alpha < 0.01f && _modalAnimCo == null)
+				SnapModalShown();
+		}
+		
+		/// <summary>
+		/// Closes the add-on manager panel
+		/// </summary>
+		public void ClosePanel() {
+			StopModalAnim();
+			if (_blocker == null || !_blocker.activeSelf) {
+				if (_hidViewportStatusForModal && Viewport_StatusText.instance != null) {
+					Viewport_StatusText.instance.PreferVIsible(this);
+					_hidViewportStatusForModal = false;
+				}
+				// Do not return without hiding UI: inspector / partial setups can leave _panel active with no active blocker.
+				if (_blocker != null) _blocker.SetActive(false);
+				if (_panel != null) {
+					_panel.SetActive(false);
+					Canvas oc = _panel.GetComponentInParent<Canvas>(true);
+					if (oc != null && oc.gameObject.name == "AddonManager_Canvas")
+						oc.gameObject.SetActive(false);
+				}
+				return;
+			}
+			if (_blockerDimImage == null || _panelModalGroup == null) {
+				if (_hidViewportStatusForModal && Viewport_StatusText.instance != null) {
+					Viewport_StatusText.instance.PreferVIsible(this);
+					_hidViewportStatusForModal = false;
+				}
+				if (_blocker != null) _blocker.SetActive(false);
+				if (_panel != null) _panel.SetActive(false);
+				return;
+			}
+			_panelModalGroup.interactable = false;
+			_modalAnimCo = StartCoroutine(CoModalCloseVisuals());
+		}
+		
+		/// <summary>
+		/// Requests Python to load all enabled addons so their panels appear (e.g. in the ctrl tab). No save needed — enable then click this.
+		/// </summary>
+		void OnLoadAddonsNow() {
+			if (_statusText != null) _statusText.text = "Loading addons...";
+			if (Addon_MGR.instance != null) {
+				Addon_MGR.instance.RequestLoadAllEnabledAddonsNow(() => {
+					if (_statusText != null) _statusText.text = "Ready";
+					RefreshAddonsList();
+				});
+			} else {
+				if (_statusText != null) _statusText.text = "Ready";
+			}
+		}
+
+		/// <summary>
+		/// Launches Run_with_Addons.bat (same way Run_noQuickEdit runs for WebUI) then quits so the bat starts the game with Python on PATH.
+		/// </summary>
+		void OnRestartWithAddons() {
+			Launch_Addons_Bat_File.RestartWithAddons();
+		}
+
+		/// <summary>
+		/// Opens file browser to select a zip file for installation
+		/// </summary>
+		void OnInstallFromFile() {
+			FileBrowser.SetFilters(true, new FileBrowser.Filter("Add-on", "zip"));
+			FileBrowser.SetDefaultFilter("zip");
+
+			// SimpleFileBrowser prefab uses sortingOrder ~2016; our overlay uses AddonManagerCanvasSortOrder — browser would render underneath.
+			Canvas fbCanvas = FileBrowser.Instance != null ? FileBrowser.Instance.GetComponent<Canvas>() : null;
+			int prevFbSort = fbCanvas != null ? fbCanvas.sortingOrder : 0;
+			bool prevFbOverride = fbCanvas != null && fbCanvas.overrideSorting;
+			if (fbCanvas != null) {
+				fbCanvas.overrideSorting = true;
+				fbCanvas.sortingOrder = AddonManagerCanvasSortOrder + 100;
+			}
+
+			void RestoreFileBrowserSortOrder() {
+				var inst = FileBrowser.Instance;
+				if (inst == null) return;
+				var c = inst.GetComponent<Canvas>();
+				if (c == null) return;
+				c.sortingOrder = prevFbSort;
+				c.overrideSorting = prevFbOverride;
+			}
+
+			FileBrowser.ShowLoadDialog((paths) => {
+				RestoreFileBrowserSortOrder();
+				if (paths != null && paths.Length > 0)
+					InstallAddon(paths[0]);
+			}, RestoreFileBrowserSortOrder, FileBrowser.PickMode.Files, false, null, null, "Install Add-on", "Install");
+		}
+		
+		/// <summary>
+		/// Installs an add-on from a zip file
+		/// </summary>
+		void InstallAddon(string zipPath) {
+			// Validate input
+			if (string.IsNullOrEmpty(zipPath)) {
+				ShowStatus("Invalid file path", false);
+				return;
+			}
+			
+			if (AddonInstaller_MGR.instance == null) {
+				ShowStatus("Add-on installer not available", false);
+				return;
+			}
+			
+			ShowStatus("Installing add-on...", true);
+			
+			AddonInstaller_MGR.instance.InstallAddonFromZip(zipPath, (success, message, addonId) => {
+				if (success) {
+					ShowStatus($"Add-on '{addonId}' installed successfully!", true);
+					RefreshAddonsList();
+				} else {
+					ShowStatus($"Installation failed: {message}", false);
+				}
+			});
+		}
+		
+		/// <summary>
+		/// Filter option: classic radio control (ring + inner dot when on) in a rounded hit box; <see cref="ToggleGroup"/> enforces single selection.
+		/// </summary>
+		GameObject CreateFilterRadio(string label, Transform parent, ToggleGroup toggleGroup, int filterValue) {
+			var toggleObj = new GameObject($"Filter_{label}");
+			toggleObj.transform.SetParent(parent, false);
+			var toggleLE = toggleObj.AddComponent<LayoutElement>();
+			toggleLE.minWidth = 108f;
+			toggleLE.preferredWidth = 120f;
+			toggleLE.preferredHeight = 32f;
+			var hitBg = new GameObject("Hit");
+			hitBg.transform.SetParent(toggleObj.transform, false);
+			hitBg.transform.SetAsFirstSibling();
+			var hitRt = hitBg.AddComponent<RectTransform>();
+			hitRt.anchorMin = Vector2.zero;
+			hitRt.anchorMax = Vector2.one;
+			hitRt.sizeDelta = Vector2.zero;
+			var hitImg = hitBg.AddComponent<UnityEngine.UI.Image>();
+			hitImg.sprite = UiRuntimeSprites.RoundedRectSliced;
+			hitImg.type = UnityEngine.UI.Image.Type.Sliced;
+			hitImg.color = new Color(1f, 1f, 1f, 0.04f);
+			hitImg.raycastTarget = true;
+			var row = new GameObject("Row");
+			row.transform.SetParent(toggleObj.transform, false);
+			var rowRt = row.AddComponent<RectTransform>();
+			rowRt.anchorMin = Vector2.zero;
+			rowRt.anchorMax = Vector2.one;
+			rowRt.offsetMin = new Vector2(8f, 4f);
+			rowRt.offsetMax = new Vector2(-8f, -4f);
+			var rowHLG = row.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+			rowHLG.spacing = 8;
+			rowHLG.childAlignment = TextAnchor.MiddleLeft;
+			rowHLG.childControlWidth = false;
+			rowHLG.childControlHeight = true;
+			rowHLG.childForceExpandHeight = true;
+			var outerGo = new GameObject("RadioOuter");
+			outerGo.transform.SetParent(row.transform, false);
+			var outerLE = outerGo.AddComponent<LayoutElement>();
+			outerLE.preferredWidth = 22f;
+			outerLE.preferredHeight = 22f;
+			var outerImg = outerGo.AddComponent<UnityEngine.UI.Image>();
+			outerImg.sprite = UiRuntimeSprites.CircleRing;
+			outerImg.color = RefTextMuted;
+			outerImg.raycastTarget = false;
+			var innerGo = new GameObject("RadioInner");
+			innerGo.transform.SetParent(outerGo.transform, false);
+			var innerRt = innerGo.AddComponent<RectTransform>();
+			innerRt.anchorMin = innerRt.anchorMax = new Vector2(0.5f, 0.5f);
+			innerRt.sizeDelta = new Vector2(12f, 12f);
+			innerRt.anchoredPosition = Vector2.zero;
+			var innerImg = innerGo.AddComponent<UnityEngine.UI.Image>();
+			innerImg.sprite = UiRuntimeSprites.CircleFilled;
+			innerImg.color = RefGreen;
+			innerImg.raycastTarget = false;
+			var labelObj = new GameObject("Label");
+			labelObj.transform.SetParent(row.transform, false);
+			var labelLE = labelObj.AddComponent<LayoutElement>();
+			labelLE.flexibleWidth = 1f;
+			labelLE.minWidth = 40f;
+			var labelText = labelObj.AddComponent<TextMeshProUGUI>();
+			labelText.text = label;
+			labelText.fontSize = 13;
+			labelText.fontStyle = FontStyles.Bold;
+			labelText.alignment = TextAlignmentOptions.Left;
+			labelText.color = RefTextMuted;
+			labelText.raycastTarget = false;
+			labelText.enableAutoSizing = true;
+			labelText.fontSizeMin = 9;
+			labelText.fontSizeMax = 13;
+			labelText.textWrappingMode = TextWrappingModes.NoWrap;
+			labelText.overflowMode = TMPro.TextOverflowModes.Ellipsis;
+			var toggle = hitBg.AddComponent<Toggle>();
+			toggle.group = toggleGroup;
+			toggle.targetGraphic = hitImg;
+			toggle.graphic = innerImg;
+			toggle.transition = Selectable.Transition.None;
+			void ApplyRadioVisual(bool isOn) {
+				hitImg.color = isOn
+					? new Color(RefSegmentSelected.r, RefSegmentSelected.g, RefSegmentSelected.b, 0.42f)
+					: new Color(1f, 1f, 1f, 0.04f);
+				labelText.color = isOn ? Color.white : RefTextMuted;
+				outerImg.color = isOn ? RefGreen : RefTextMuted;
+			}
+			toggle.onValueChanged.AddListener((isOn) => {
+				ApplyRadioVisual(isOn);
+				if (isOn) {
+					_filterState = filterValue;
+					RefreshAddonsList();
+				}
+			});
+			ApplyRadioVisual(toggle.isOn);
+			return toggleObj;
+		}
+		
+		/// <summary>
+		/// Refreshes the list of add-ons with current filter applied
+		/// </summary>
+		public void RefreshAddonsList() {
+			if (_addonsListParent == null) {
+				Debug.LogError("[AddonManager_UI] RefreshAddonsList: _addonsListParent is null! Cannot create items.");
+				ShowStatus("Error: List parent not initialized", false);
+				return;
+			}
+			
+			Debug.Log($"[AddonManager_UI] RefreshAddonsList: _addonsListParent = {_addonsListParent.name}, active = {_addonsListParent.gameObject.activeSelf}");
+			
+			// Clear existing items
+			foreach (var item in _addonUIItems.Values) {
+				if (item != null) {
+					Destroy(item);
+				}
+			}
+			_addonUIItems.Clear();
+			
+			// Get list of add-ons
+			if (Addon_MGR.instance == null) {
+				ShowStatus("Add-on manager not available", false);
+				Debug.LogError("[AddonManager_UI] Addon_MGR.instance is null!");
+				return;
+			}
+			
+			var addons = Addon_MGR.instance.GetAddons();
+			string q = (_searchQuery ?? "").Trim().ToLowerInvariant();
+			
+			Debug.Log($"[AddonManager_UI] Found {addons.Count} addon(s) in registry, filter: {_filterState}, search: '{q}'");
+			
+			var filteredAddons = new List<KeyValuePair<string, Addon_MGR.AddonInfo>>();
+			int enabledCount = 0;
+			int disabledCount = 0;
+			
+			foreach (var kvp in addons) {
+				if (kvp.Value.isEnabled) enabledCount++;
+				else disabledCount++;
+				
+				bool passesFilter = false;
+				if (_filterState == 0)
+					passesFilter = true;
+				else if (_filterState == 1)
+					passesFilter = kvp.Value.isEnabled;
+				else
+					passesFilter = !kvp.Value.isEnabled;
+				
+				string subQ = (kvp.Value.listSubtitle ?? "").ToLowerInvariant();
+				bool passesSearch = string.IsNullOrEmpty(q)
+					|| kvp.Key.ToLowerInvariant().Contains(q)
+					|| (!string.IsNullOrEmpty(subQ) && subQ.Contains(q));
+				if (passesFilter && passesSearch)
+					filteredAddons.Add(kvp);
+			}
+			
+			Debug.Log($"[AddonManager_UI] After filter + search: {filteredAddons.Count} addon(s) (filter state: {_filterState})");
+			
+			if (filteredAddons.Count == 0)
+				CreateEmptyListPlaceholder(_addonsListParent, addons.Count == 0, string.IsNullOrEmpty(q));
+			
+			foreach (var kvp in filteredAddons) {
+				Debug.Log($"[AddonManager_UI] Creating UI item for addon: {kvp.Key}");
+				CreateAddonListItem(kvp.Key, kvp.Value);
+			}
+			
+			// Force layout rebuild so scroll content height updates and list items are visible
+			if (_addonsListParent != null) {
+				UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_addonsListParent);
+				Canvas.ForceUpdateCanvases();
+			}
+			
+			Debug.Log($"[AddonManager_UI] Created {_addonUIItems.Count} UI items");
+			
+			string filterText = _filterState == 0 ? "All" : (_filterState == 1 ? "Enabled" : "Disabled");
+			if (addons.Count == 0)
+				ShowStatus("No add-ons installed. Add-ons live in StreamingAssets/Addons/", false);
+			else if (filteredAddons.Count == 0)
+				ShowStatus("No add-ons match your filter or search.", false);
+			else
+				ShowStatus($"Showing {filteredAddons.Count} of {addons.Count} ({enabledCount} on, {disabledCount} off) · {filterText}", true);
+		}
+		
+		void CreateEmptyListPlaceholder(Transform parent, bool noAddonsInstalled, bool searchWasEmpty) {
+			var root = new GameObject("EmptyListPlaceholder");
+			root.transform.SetParent(parent, false);
+			root.layer = parent.gameObject.layer;
+			var le = root.AddComponent<LayoutElement>();
+			le.minHeight = 280f;
+			le.preferredHeight = 320f;
+			var vlg = root.AddComponent<UnityEngine.UI.VerticalLayoutGroup>();
+			vlg.childAlignment = TextAnchor.MiddleCenter;
+			vlg.spacing = 12;
+			vlg.padding = new RectOffset(24, 24, 48, 48);
+			var iconWrap = new GameObject("IconWrap");
+			iconWrap.transform.SetParent(root.transform, false);
+			iconWrap.AddComponent<LayoutElement>().preferredHeight = 56f;
+			var iconBg = iconWrap.AddComponent<UnityEngine.UI.Image>();
+			iconBg.color = new Color(1f, 1f, 1f, 0.05f);
+			iconBg.raycastTarget = false;
+			var iconTxt = new GameObject("Icon");
+			iconTxt.transform.SetParent(iconWrap.transform, false);
+			var iconTxtRt = iconTxt.AddComponent<RectTransform>();
+			iconTxtRt.anchorMin = Vector2.zero;
+			iconTxtRt.anchorMax = Vector2.one;
+			iconTxtRt.sizeDelta = Vector2.zero;
+			var iconTmp = iconTxt.AddComponent<TextMeshProUGUI>();
+			iconTmp.text = "⌕";
+			iconTmp.fontSize = 28;
+			iconTmp.color = RefTextMuted;
+			iconTmp.alignment = TextAlignmentOptions.Center;
+			iconTmp.raycastTarget = false;
+			var msg = new GameObject("Message");
+			msg.transform.SetParent(root.transform, false);
+			var msgTmp = msg.AddComponent<TextMeshProUGUI>();
+			if (noAddonsInstalled)
+				msgTmp.text = "No add-ons installed yet.\nInstall from File or add a folder with __init__.py under StreamingAssets/Addons.";
+			else if (!searchWasEmpty)
+				msgTmp.text = "No add-ons found matching your search.";
+			else
+				msgTmp.text = "No add-ons found matching your criteria.";
+			msgTmp.fontSize = 18;
+			msgTmp.color = RefTextMuted;
+			msgTmp.alignment = TextAlignmentOptions.Center;
+			msgTmp.textWrappingMode = TextWrappingModes.Normal;
+			msgTmp.raycastTarget = false;
+		}
+
+		void OnAddonEnabledStateChanged(string addonId) {
+			RefreshAddonsList();
+		}
+		
+		/// <summary>
+		/// Creates a UI item for an add-on in the list
+		/// </summary>
+		void CreateAddonListItem(string addonId, Addon_MGR.AddonInfo addonInfo) {
+			if (_addonsListParent == null) {
+				Debug.LogError($"[AddonManager_UI] CreateAddonListItem: _addonsListParent is null for addon {addonId}");
+				return;
+			}
+			
+			// Remove existing item if it exists (shouldn't happen, but safety check)
+			if (_addonUIItems.ContainsKey(addonId)) {
+				var existingItem = _addonUIItems[addonId];
+				if (existingItem != null) {
+					Destroy(existingItem);
+				}
+				_addonUIItems.Remove(addonId);
+			}
+			
+			var itemObj = new GameObject($"AddonItem_{addonId}");
+			itemObj.transform.SetParent(_addonsListParent, false);
+			itemObj.layer = _addonsListParent.gameObject.layer;
+			
+			var rowBg = itemObj.AddComponent<UnityEngine.UI.Image>();
+				rowBg.sprite = UiRuntimeSprites.RoundedRectSliced;
+				rowBg.type = UnityEngine.UI.Image.Type.Sliced;
+				rowBg.color = RefItemRow;
+				rowBg.raycastTarget = true;
+				itemObj.AddComponent<ListRowHover>().Init(rowBg, RefItemRow, RefItemRowHover);
+				var itemLayout = itemObj.AddComponent<LayoutElement>();
+				itemLayout.minHeight = 80f;
+				itemLayout.preferredHeight = 84f;
+				var rowHLG = itemObj.AddComponent<HorizontalLayoutGroup>();
+				rowHLG.spacing = 16;
+				rowHLG.padding = new RectOffset(16, 16, 14, 14);
+				rowHLG.childControlWidth = true;
+				rowHLG.childControlHeight = true;
+				rowHLG.childForceExpandWidth = false;
+				rowHLG.childForceExpandHeight = true;
+				
+				// Enable indicator: solid green when on; hollow ring when off (reference mock)
+				var enableDotGo = new GameObject("EnableDot");
+				enableDotGo.transform.SetParent(itemObj.transform, false);
+				var enableDotLE = enableDotGo.AddComponent<LayoutElement>();
+				enableDotLE.preferredWidth = 28f;
+				enableDotLE.preferredHeight = 28f;
+				var enableDotImg = enableDotGo.AddComponent<UnityEngine.UI.Image>();
+				enableDotImg.raycastTarget = true;
+				var enableBtn = enableDotGo.AddComponent<Button>();
+				enableBtn.targetGraphic = enableDotImg;
+				enableBtn.transition = Selectable.Transition.None;
+				if (addonInfo.isEnabled) {
+					enableDotImg.color = RefGreen;
+				} else {
+					enableDotImg.color = new Color(1f, 1f, 1f, 0.02f);
+					var ringOuter = new GameObject("RingOuter");
+					ringOuter.transform.SetParent(enableDotGo.transform, false);
+					var oRt = ringOuter.AddComponent<RectTransform>();
+					oRt.anchorMin = oRt.anchorMax = new Vector2(0.5f, 0.5f);
+					oRt.sizeDelta = new Vector2(26f, 26f);
+					oRt.anchoredPosition = Vector2.zero;
+					var oImg = ringOuter.AddComponent<UnityEngine.UI.Image>();
+					oImg.color = new Color(RefTextMuted.r, RefTextMuted.g, RefTextMuted.b, 0.9f);
+					oImg.raycastTarget = false;
+					var ringInner = new GameObject("RingInner");
+					ringInner.transform.SetParent(enableDotGo.transform, false);
+					var iRt = ringInner.AddComponent<RectTransform>();
+					iRt.anchorMin = iRt.anchorMax = new Vector2(0.5f, 0.5f);
+					iRt.sizeDelta = new Vector2(17f, 17f);
+					iRt.anchoredPosition = Vector2.zero;
+					var iImg = ringInner.AddComponent<UnityEngine.UI.Image>();
+					iImg.color = RefItemRow;
+					iImg.raycastTarget = false;
+				}
+				string capturedId = addonId;
+				enableBtn.onClick.AddListener(() => {
+					if (Addon_MGR.instance == null) return;
+					var map = Addon_MGR.instance.GetAddons();
+					if (!map.TryGetValue(capturedId, out var inf)) return;
+					if (inf.isEnabled)
+						Addon_MGR.instance.DisableAddon(capturedId);
+					else
+						Addon_MGR.instance.EnableAddon(capturedId);
+					RefreshAddonsList();
+				});
+				
+				var textCol = new GameObject("TextColumn");
+				textCol.transform.SetParent(itemObj.transform, false);
+				var textColLE = textCol.AddComponent<LayoutElement>();
+				textColLE.flexibleWidth = 1f;
+				textColLE.minWidth = 120f;
+				var textVLG = textCol.AddComponent<UnityEngine.UI.VerticalLayoutGroup>();
+				textVLG.spacing = 4;
+				textVLG.childControlHeight = false;
+				textVLG.childControlWidth = true;
+				textVLG.childForceExpandWidth = true;
+				var titleGo = new GameObject("Title");
+				titleGo.transform.SetParent(textCol.transform, false);
+				var titleTmp = titleGo.AddComponent<TextMeshProUGUI>();
+				titleTmp.text = addonId;
+				titleTmp.fontSize = 18;
+				titleTmp.fontStyle = FontStyles.Bold;
+				titleTmp.color = Color.white;
+				titleTmp.alignment = TextAlignmentOptions.Left;
+				titleTmp.textWrappingMode = TextWrappingModes.NoWrap;
+				titleTmp.overflowMode = TMPro.TextOverflowModes.Ellipsis;
+				titleTmp.raycastTarget = false;
+				titleGo.AddComponent<LayoutElement>().minHeight = 24f;
+				string sub = !string.IsNullOrEmpty(addonInfo.listSubtitle)
+					? addonInfo.listSubtitle
+					: (string.IsNullOrEmpty(addonInfo.path) ? "Installed add-on" : addonInfo.path);
+				if (sub.Length > 120)
+					sub = sub.Substring(0, 117) + "...";
+				var subGo = new GameObject("Subtitle");
+				subGo.transform.SetParent(textCol.transform, false);
+				var subTmp = subGo.AddComponent<TextMeshProUGUI>();
+				subTmp.text = sub;
+				subTmp.fontSize = 13;
+				subTmp.color = RefTextMuted;
+				subTmp.alignment = TextAlignmentOptions.Left;
+				subTmp.textWrappingMode = TextWrappingModes.Normal;
+				subTmp.raycastTarget = false;
+				
+				var actions = new GameObject("Actions");
+				actions.transform.SetParent(itemObj.transform, false);
+				var actionsLE = actions.AddComponent<LayoutElement>();
+				actionsLE.flexibleWidth = 0f;
+				actionsLE.minWidth = 172f;
+				var actionsHLG = actions.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+				actionsHLG.spacing = 8;
+				actionsHLG.childAlignment = TextAnchor.MiddleRight;
+				actionsHLG.childControlWidth = false;
+				actionsHLG.childControlHeight = true;
+				
+				void AddIconAction(string name, string glyph, UnityEngine.Events.UnityAction onClick) {
+					var g = new GameObject(name);
+					g.transform.SetParent(actions.transform, false);
+					var iconLE = g.AddComponent<LayoutElement>();
+					iconLE.preferredWidth = 36f;
+					iconLE.preferredHeight = 36f;
+					var im = g.AddComponent<UnityEngine.UI.Image>();
+					im.sprite = UiRuntimeSprites.RoundedRectSliced;
+					im.type = UnityEngine.UI.Image.Type.Sliced;
+					im.color = new Color(1f, 1f, 1f, 0.06f);
+					im.raycastTarget = true;
+					var b = g.AddComponent<Button>();
+					b.targetGraphic = im;
+					b.transition = Selectable.Transition.None;
+					b.onClick.AddListener(onClick);
+					var tgo = new GameObject("G");
+					tgo.transform.SetParent(g.transform, false);
+					var rt = tgo.AddComponent<RectTransform>();
+					rt.anchorMin = Vector2.zero;
+					rt.anchorMax = Vector2.one;
+					rt.offsetMin = new Vector2(2f, 2f);
+					rt.offsetMax = new Vector2(-2f, -2f);
+					var tx = tgo.AddComponent<TextMeshProUGUI>();
+					tx.text = glyph;
+					tx.fontSize = 11;
+					tx.fontStyle = FontStyles.Bold;
+					tx.color = RefTextMuted;
+					tx.alignment = TextAlignmentOptions.Center;
+					tx.raycastTarget = false;
+					tx.enableAutoSizing = true;
+					tx.fontSizeMin = 8;
+					tx.fontSizeMax = 11;
+					tx.overflowMode = TMPro.TextOverflowModes.Ellipsis;
+				}
+				AddIconAction("OpenFolder", "Dir", () => TryRevealPathInOS(addonInfo.path));
+				AddIconAction("Info", "i", () => {
+					string p = string.IsNullOrEmpty(addonInfo.path) ? "(unknown path)" : addonInfo.path;
+					ShowStatus($"{addonId} — {p}", true);
+				});
+				
+				var removeBtnObj = new GameObject("RemoveButton");
+				removeBtnObj.transform.SetParent(actions.transform, false);
+				var rmLE = removeBtnObj.AddComponent<LayoutElement>();
+				rmLE.preferredWidth = 100f;
+				rmLE.preferredHeight = 34f;
+				var removeBtnImage = removeBtnObj.AddComponent<UnityEngine.UI.Image>();
+				removeBtnImage.sprite = UiRuntimeSprites.RoundedRectSliced;
+				removeBtnImage.type = UnityEngine.UI.Image.Type.Sliced;
+				removeBtnImage.color = new Color(RefRedText.r, RefRedText.g, RefRedText.b, 0.12f);
+				removeBtnImage.raycastTarget = true;
+				var removeBtn = removeBtnObj.AddComponent<Button>();
+				removeBtn.targetGraphic = removeBtnImage;
+				removeBtn.transition = Selectable.Transition.None;
+				var removeBtnText = new GameObject("Text");
+				removeBtnText.transform.SetParent(removeBtnObj.transform, false);
+				var rtr = removeBtnText.AddComponent<RectTransform>();
+				rtr.anchorMin = Vector2.zero;
+				rtr.anchorMax = Vector2.one;
+				rtr.offsetMin = new Vector2(6f, 4f);
+				rtr.offsetMax = new Vector2(-6f, -4f);
+				var removeBtnTextComp = removeBtnText.AddComponent<TextMeshProUGUI>();
+				removeBtnTextComp.text = "Uninstall";
+				removeBtnTextComp.fontSize = 13;
+				removeBtnTextComp.fontStyle = FontStyles.Bold;
+				removeBtnTextComp.alignment = TextAlignmentOptions.Center;
+				removeBtnTextComp.color = RefRedText;
+				removeBtnTextComp.raycastTarget = false;
+				removeBtnTextComp.enableAutoSizing = true;
+				removeBtnTextComp.fontSizeMin = 8;
+				removeBtnTextComp.fontSizeMax = 13;
+				removeBtnTextComp.textWrappingMode = TextWrappingModes.NoWrap;
+				removeBtnTextComp.overflowMode = TMPro.TextOverflowModes.Ellipsis;
+			removeBtn.onClick.AddListener(() => OnRemoveAddon(addonId));
+			
+			// Ensure item is active and visible
+			itemObj.SetActive(true);
+			var itemRect = itemObj.GetComponent<RectTransform>();
+			if (itemRect != null) {
+				itemRect.localScale = Vector3.one;
+			}
+			
+			_addonUIItems[addonId] = itemObj;
+			Debug.Log($"[AddonManager_UI] Successfully created and registered UI item for {addonId}, active: {itemObj.activeSelf}, parent: {itemObj.transform.parent?.name}");
+		}
+		
+		void TryRevealPathInOS(string path) {
+			if (string.IsNullOrEmpty(path)) {
+				ShowStatus("No folder path for this add-on.", false);
+				return;
+			}
+			try {
+				string full = Path.GetFullPath(path);
+				if (!Directory.Exists(full)) {
+					ShowStatus("Folder not found on disk.", false);
+					return;
+				}
+				string uri = "file:///" + full.Replace("\\", "/");
+				Application.OpenURL(uri);
+			} catch (Exception ex) {
+				ShowStatus("Could not open folder: " + ex.Message, false);
+			}
+		}
+		
+		/// <summary>
+		/// Handles removal of an add-on
+		/// </summary>
+		void OnRemoveAddon(string addonId) {
+			// Show confirmation dialog
+			if (ConfirmPopup_UI.instance != null) {
+				ConfirmPopup_UI.instance.Show(
+					$"Remove add-on '{addonId}'?\n\nThis cannot be undone.",
+					() => {
+						if (AddonInstaller_MGR.instance != null) {
+							AddonInstaller_MGR.instance.RemoveAddon(addonId, (success, message) => {
+								if (success) {
+									ShowStatus(message, true);
+									RefreshAddonsList();
+								} else {
+									ShowStatus(message, false);
+								}
+							});
+						}
+					},
+					null
+				);
+			} else {
+				// Fallback if no confirmation popup
+				if (AddonInstaller_MGR.instance != null) {
+					AddonInstaller_MGR.instance.RemoveAddon(addonId, (success, message) => {
+						ShowStatus(message, success);
+						if (success) {
+							RefreshAddonsList();
+						}
+					});
+				}
+			}
+		}
+		
+		/// <summary>
+		/// Shows status message
+		/// </summary>
+		void ShowStatus(string message, bool isSuccess) {
+			if (_statusText != null) {
+				_statusText.text = message;
+				_statusText.color = isSuccess ? RefGreen : RefRedText;
+			}
+			UnityEngine.Debug.Log($"[AddonManager_UI] {message}");
+		}
+		
+		void StopModalAnim() {
+			if (_modalAnimCo != null) {
+				StopCoroutine(_modalAnimCo);
+				_modalAnimCo = null;
+			}
+		}
+		
+		void ApplyModalOpenStartState() {
+			if (_blockerDimImage != null) {
+				Color c = RefBgModalDim;
+				c.a = 0f;
+				_blockerDimImage.color = c;
+			}
+			if (_panelModalGroup != null) {
+				_panelModalGroup.alpha = 0f;
+				_panelModalGroup.interactable = false;
+			}
+			if (_panel != null) {
+				var rt = _panel.GetComponent<RectTransform>();
+				if (rt != null)
+					rt.localScale = new Vector3(0.985f, 0.985f, 1f);
+			}
+		}
+		
+		void SnapModalShown() {
+			if (_blockerDimImage != null)
+				_blockerDimImage.color = RefBgModalDim;
+			if (_panelModalGroup != null) {
+				_panelModalGroup.alpha = 1f;
+				_panelModalGroup.interactable = true;
+			}
+			if (_panel != null) {
+				var rt = _panel.GetComponent<RectTransform>();
+				if (rt != null)
+					rt.localScale = Vector3.one;
+			}
+		}
+		
+		static float SmoothStep01(float t) {
+			t = Mathf.Clamp01(t);
+			return t * t * (3f - 2f * t);
+		}
+		
+		IEnumerator CoModalOpenVisuals() {
+			var prt = _panel != null ? _panel.GetComponent<RectTransform>() : null;
+			float dur = ModalOpenDuration;
+			float el = 0f;
+			while (el < dur) {
+				el += Time.unscaledDeltaTime;
+				float u = SmoothStep01(el / dur);
+				if (_blockerDimImage != null) {
+					Color c = RefBgModalDim;
+					c.a = RefBgModalDim.a * u;
+					_blockerDimImage.color = c;
+				}
+				if (_panelModalGroup != null)
+					_panelModalGroup.alpha = u;
+				if (prt != null)
+					prt.localScale = Vector3.Lerp(new Vector3(0.985f, 0.985f, 1f), Vector3.one, u);
+				yield return null;
+			}
+			SnapModalShown();
+			_modalAnimCo = null;
+		}
+		
+		IEnumerator CoModalCloseVisuals() {
+			float dur = ModalCloseDuration;
+			float el = 0f;
+			float startDimA = _blockerDimImage != null ? _blockerDimImage.color.a : RefBgModalDim.a;
+			float startPanelA = _panelModalGroup != null ? _panelModalGroup.alpha : 1f;
+			var prt = _panel != null ? _panel.GetComponent<RectTransform>() : null;
+			Vector3 startScale = prt != null ? prt.localScale : Vector3.one;
+			Vector3 endScale = Vector3.Lerp(startScale, new Vector3(0.98f, 0.98f, 1f), 0.5f);
+			while (el < dur) {
+				el += Time.unscaledDeltaTime;
+				float t = SmoothStep01(el / dur);
+				float u = 1f - t;
+				if (_blockerDimImage != null) {
+					Color c = RefBgModalDim;
+					c.a = startDimA * u;
+					_blockerDimImage.color = c;
+				}
+				if (_panelModalGroup != null)
+					_panelModalGroup.alpha = startPanelA * u;
+				if (prt != null)
+					prt.localScale = Vector3.Lerp(endScale, startScale, u);
+				yield return null;
+			}
+			if (_hidViewportStatusForModal && Viewport_StatusText.instance != null) {
+				Viewport_StatusText.instance.PreferVIsible(this);
+				_hidViewportStatusForModal = false;
+			}
+			if (_blocker != null) _blocker.SetActive(false);
+			if (_panel != null) _panel.SetActive(false);
+			ApplyModalOpenStartState();
+			_modalAnimCo = null;
+		}
+		
+		sealed class FooterLinkHover : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler {
+			TextMeshProUGUI _tmp;
+			Color _muted, _hover;
+			public void Init(TextMeshProUGUI t, Color muted, Color hover) {
+				_tmp = t;
+				_muted = muted;
+				_hover = hover;
+			}
+			public void OnPointerEnter(PointerEventData eventData) {
+				if (_tmp != null) _tmp.color = _hover;
+			}
+			public void OnPointerExit(PointerEventData eventData) {
+				if (_tmp != null) _tmp.color = _muted;
+			}
+		}
+		
+		sealed class ListRowHover : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler {
+			Image _bg;
+			Color _base, _hover;
+			public void Init(Image bg, Color b, Color h) {
+				_bg = bg;
+				_base = b;
+				_hover = h;
+				if (_bg != null) _bg.color = _base;
+			}
+			public void OnPointerEnter(PointerEventData e) {
+				if (_bg != null) _bg.color = _hover;
+			}
+			public void OnPointerExit(PointerEventData e) {
+				if (_bg != null) _bg.color = _base;
+			}
+		}
+		
+		/// <summary>
+		/// Cleanup when object is destroyed
+		/// </summary>
+		void OnDestroy() {
+			if (instance != this) return;
+			StopModalAnim();
+
+			if (_hidViewportStatusForModal && Viewport_StatusText.instance != null) {
+				Viewport_StatusText.instance.PreferVIsible(this);
+				_hidViewportStatusForModal = false;
+			}
+			
+			// Unsubscribe from StaticEvents to prevent memory leaks
+			StaticEvents.Unsubscribe("AddonManager:OpenPanel", OpenPanel);
+			
+			// Clear instance reference
+			instance = null;
+		}
+	}
+}

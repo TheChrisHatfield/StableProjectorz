@@ -73,8 +73,8 @@ MonoBehaviour:
     drawing order of all projections\r\nshow projection area (checker)\r\n\r\nchange
     mask-painting-brush color\r\nbrush hardness  /  brush visibility\r\nChange brush
     Size\n\nGenerate Art (Projection)\nGenerate Background\r\nopen context menu (if
-    Art tab is shown)\ntoggle wireframe\n\r\nRight-Click any Slider to reset it\r\n\r\n<#fcba03>There
-    is no CTRL+Z yet, \r\nsave your texture often!</color>\r\n\r\nstableprojectorz.com\r\nStableProjectorz
+    Art tab is shown)\ntoggle wireframe\n\r\nRight-Click any Slider to reset it\r\n\r\n<#fcba03>Paint
+    undo: Ctrl+Z (Cmd+Z on Mac).\r\nRedo: Ctrl+Y or Ctrl+Shift+Z (Cmd+Shift+Z on Mac).</color>\r\n\r\nstableprojectorz.com\r\nStableProjectorz
     <sp_version_and_date>\r\n\r\nIgor Aherne & Github Contributors (You!)"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8c45e186b0c4284498cea9e97889e753, type: 2}

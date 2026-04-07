@@ -245,15 +245,38 @@ def main():
         print("Game could not bind the addon socket (Unity Editor is likely running and has port 5555).")
         print("This addon server was started by the game but cannot connect. Close the Editor and run the game alone, or run addons from the Editor.")
         sys.exit(1)
+    bind_fail_path = os.path.join(tempfile.gettempdir(), f"spz_addon_{args.port}_bind_failed.txt")
     marker_timeout = 90  # seconds to wait for game to load and bind
-    print(f"Waiting for Unity socket ready marker (up to {marker_timeout}s): {marker_path}")
+    spz_host = os.environ.get("SPZ_HOST", "127.0.0.1")
+    print(f"Waiting for Unity addon socket (Forge-style TCP probe + marker, up to {marker_timeout}s)")
+    print(f"  Marker: {marker_path}")
+    print(f"  TCP probe: {spz_host}:{args.port} (same pattern as checking WebUI on :7861)")
     for wait in range(marker_timeout):
+        if os.path.isfile(bind_fail_path):
+            try:
+                msg = open(bind_fail_path, "r", encoding="utf-8", errors="replace").read().strip()
+            except OSError:
+                msg = ""
+            print("")
+            print("Unity reported that it could NOT bind the add-on socket (marker file: bind_failed).")
+            if msg:
+                print(f"  Detail: {msg}")
+            print("  Fix: Close Unity Editor if it is open (it uses port 5555), or stop any other app on 127.0.0.1:5555, then restart StableProjectorz.exe.")
+            try:
+                os.remove(bind_fail_path)
+            except OSError:
+                pass
+            return 1
         if os.path.isfile(marker_path):
-            print(f"Unity socket ready marker found (game has bound port {args.port}). Connecting...")
+            print(f"Unity ready marker found (port {args.port} bound). Connecting...")
+            break
+        # Forge-like: if Unity listens on 5555, TCP connect succeeds even when no marker file (old build / write failure).
+        if spz.tcp_port_accepting_connections(spz_host, args.port):
+            print(f"Unity TCP port {args.port} is accepting connections (probe OK; no marker required). Connecting...")
             break
         if wait < marker_timeout - 1:
             if wait % 10 == 0 and wait > 0:
-                print(f"  ... still waiting for game to start and bind ({wait}s)")
+                print(f"  ... still waiting for game to bind {spz_host}:{args.port} ({wait}s)")
             time.sleep(1)
     else:
         print("")
@@ -263,6 +286,7 @@ def main():
         print("  - Rebuild the game so Tool_AddonSystem and Addon_SocketServer are in the build.")
         print("  - Check Player.log for: [Addon_SocketServer] Started listening on 127.0.0.1:5555")
         print("     If that line never appears, the socket server is not running in your build.")
+        print("  - If you see 'Port 5555 already in use', close the Unity Editor — only one listener on 5555.")
         return 1
 
     # Connect to Unity: Python (client) -> Unity Addon_SocketServer at 127.0.0.1:args.port.

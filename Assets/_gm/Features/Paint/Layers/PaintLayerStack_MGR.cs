@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -39,6 +40,7 @@ namespace spz {
 		RenderUdims _compositeTempB;
 		/// <summary>Used only during in-place collapse: composite into this then copy to layer0 so we never use a layer as CompositeTo dest (avoids read-write hazard).</summary>
 		RenderUdims _collapseResultTemp;
+		Coroutine _collapseSliceCopyCrt;
 
 		/// <summary>Layers from bottom (index 0) to top. Do not modify list directly; use AddLayer/RemoveLayer/MoveLayer. </summary>
 		public IReadOnlyList<PaintLayer> Layers => _layers;
@@ -69,15 +71,37 @@ namespace spz {
 			if (_compositeBlendShader == null)
 				_compositeBlendShader = Shader.Find("Unlit/PaintLayer_CompositeBlend");
 			if (_compositeBlendShader != null)
+			{
 				_compositeBlendMat = new Material(_compositeBlendShader);
+				// Ranged composite shader: _SliceCompositeEnd==0 means “all slices” until SetCompositeBlendSliceRange* runs on each Blit.
+				_compositeBlendMat.SetInt("_SliceCompositeBegin", 0);
+				_compositeBlendMat.SetInt("_SliceCompositeEnd", 0);
+			}
 			else
 				UnityEngine.Debug.LogError("[PaintLayerStack] Awake: _compositeBlendShader is null! Compositor will not work.");
 			EnsureAtLeastOneLayer();
 			UnityEngine.Debug.Log($"[PaintLayerStack] Awake complete: {_layers.Count} layers, active={_activeIndex}.");
 		}
 
+		/// <summary>
+		/// Clears scheduled-collapse coroutine ref, resets <see cref="Inpaint_MaskPainter.IsCollapsingLayers"/>, and nudges a full re-render.
+		/// Call after <see cref="MonoBehaviour.StopCoroutine"/> on the scheduled collapse coroutine: Unity does not reliably run iterator <c>finally</c> when a coroutine is stopped.
+		/// </summary>
+		void CleanupAfterScheduledCollapse()
+		{
+			_collapseSliceCopyCrt = null;
+			var mp = Inpaint_MaskPainter.instance;
+			if (mp != null) mp.IsCollapsingLayers = false;
+			if (Objects_Renderer_MGR.instance != null)
+				Objects_Renderer_MGR.instance.ReRenderAll_soon();
+		}
+
 		void OnDestroy()
 		{
+			if (_collapseSliceCopyCrt != null) {
+				StopCoroutine(_collapseSliceCopyCrt);
+				CleanupAfterScheduledCollapse();
+			}
 			if (_compositeBlendMat != null) { UnityEngine.Object.DestroyImmediate(_compositeBlendMat); _compositeBlendMat = null; }
 			_compositeTempA?.Dispose();
 			_compositeTempB?.Dispose();
@@ -283,11 +307,9 @@ namespace spz {
 			return name;
 		}
 
-		/// <summary>Read ALL visible layers to CPU, alpha-blend them on CPU, write the merged result into a new layer.
-		/// Bypasses all GPU compositing/shader issues. Does NOT remove any existing layer.</summary>
+		/// <summary>Merge visible layers into one new layer. Heavy stacks: scheduled coroutine composites UDIM slices in batches across frames (same scheduler as undo slice uploads). Light stacks: full GPU composite then copy. CPU fallback if no blend shader.</summary>
 		public bool CollapseVisibleLayersIntoOne()
 		{
-			// Gather visible layers
 			var visibleLayers = new List<PaintLayer>();
 			foreach (var l in _layers)
 				if (l.Visible && l.Content != null && l.Content.texArray != null)
@@ -299,12 +321,159 @@ namespace spz {
 				return false;
 			}
 
+			if (_compositeBlendMat != null)
+			{
+				RenderUdims first = visibleLayers[0].Content;
+
+				if (ShouldScheduleCollapseSliceCopy(first, visibleLayers.Count))
+				{
+					if (_collapseSliceCopyCrt != null) {
+						StopCoroutine(_collapseSliceCopyCrt);
+						CleanupAfterScheduledCollapse();
+					}
+					_collapseSliceCopyCrt = StartCoroutine(CollapseVisibleLayersIntoOne_GpuScheduledCoroutine(first));
+					return true;
+				}
+
+				EnsureCollapseResultTemp(first);
+				CompositeTo(_collapseResultTemp);
+
+				var maskPainter = Inpaint_MaskPainter.instance;
+				PaintLayer newLayer = null;
+				try {
+					if (maskPainter != null) maskPainter.IsCollapsingLayers = true;
+					newLayer = AddLayer(ConsumeNextDefaultCollapseLayerName());
+					EnsureContentForLayerIfNeeded(newLayer);
+				}
+				finally {
+					if (maskPainter != null) maskPainter.IsCollapsingLayers = false;
+				}
+
+				if (newLayer != null && newLayer.Content != null && newLayer.Content.texArray != null
+				    && newLayer.Content.width == _collapseResultTemp.width
+				    && newLayer.Content.height == _collapseResultTemp.height
+				    && newLayer.Content.UdimsCount == _collapseResultTemp.UdimsCount)
+				{
+					CopyAllSlices(_collapseResultTemp, newLayer.Content);
+					newLayer.SyncDataFromContent();
+					newLayer.HasReceivedSceneInject = true;
+				}
+				else
+					UnityEngine.Debug.LogWarning("[PaintLayerStack] Collapse: new layer has no Content; GPU path paste skipped.");
+
+				return true;
+			}
+
+			return CollapseVisibleLayersIntoOne_CpuFallback(visibleLayers);
+		}
+
+		void EnsureCollapseResultTemp(RenderUdims first)
+		{
+			if (_collapseResultTemp == null
+			    || _collapseResultTemp.width != first.width || _collapseResultTemp.height != first.height
+			    || _collapseResultTemp.UdimsCount != first.UdimsCount)
+			{
+				_collapseResultTemp?.Dispose();
+				_collapseResultTemp = new RenderUdims(first.udims_sectors, first.widthHeight,
+					GenData_Masks.colorBrushFormat, GenData_Masks.colorBrushFilter, Color.clear, 0);
+			}
+		}
+
+		static bool ShouldScheduleCollapseSliceCopy(RenderUdims first, int visibleLayerCount)
+		{
+			if (first == null || first.UdimsCount <= 0) return false;
+			float refPx = 512f * 512f;
+			if (PaintUndo_MGR.instance != null) {
+				var probe = new PaintUndo_Scheduler();
+				PaintUndo_MGR.instance.CopyRestoreSchedulerPolicyTo(probe);
+				refPx = probe.referencePixelsPerSlice;
+			}
+			PaintUndo_Scheduler.EvaluateWorkload(first.width, first.height, first.UdimsCount, refPx,
+				out _, out float complexity01, out _);
+			if (complexity01 >= 0.12f) return true;
+			if (first.UdimsCount >= 6) return true;
+			if (visibleLayerCount >= 3 && first.UdimsCount >= 3) return true;
+			return visibleLayerCount * first.UdimsCount >= 18;
+		}
+
+		IEnumerator CollapseVisibleLayersIntoOne_GpuScheduledCoroutine(RenderUdims firstRef)
+		{
+			var maskPainter = Inpaint_MaskPainter.instance;
+			PaintLayer newLayer = null;
+			try {
+				if (firstRef == null || firstRef.UdimsCount <= 0) {
+					UnityEngine.Debug.LogWarning("[PaintLayerStack] Collapse (scheduled): invalid layer dimensions.");
+					yield break;
+				}
+
+				if (maskPainter != null) maskPainter.IsCollapsingLayers = true;
+
+				newLayer = AddLayer(ConsumeNextDefaultCollapseLayerName());
+				if (newLayer == null) {
+					UnityEngine.Debug.LogWarning("[PaintLayerStack] Collapse (scheduled): AddLayer returned null.");
+					yield break;
+				}
+				EnsureContentForLayerIfNeeded(newLayer);
+
+				if (newLayer.Content == null || newLayer.Content.texArray == null
+				    || newLayer.Content.width != firstRef.width
+				    || newLayer.Content.height != firstRef.height
+				    || newLayer.Content.UdimsCount != firstRef.UdimsCount)
+				{
+					UnityEngine.Debug.LogWarning("[PaintLayerStack] Collapse (scheduled): new layer Content missing or size mismatch.");
+					yield break;
+				}
+
+				int excludeIdx = _layers.IndexOf(newLayer);
+				if (excludeIdx < 0) {
+					UnityEngine.Debug.LogWarning("[PaintLayerStack] Collapse (scheduled): new layer not in stack.");
+					yield break;
+				}
+
+				var sched = PaintUndo_MGR.CreateCollapseSliceScheduler();
+				sched.BeginRestoreSession(firstRef.width, firstRef.height, firstRef.UdimsCount);
+				int totalSlices = firstRef.UdimsCount;
+				int cursor = 0;
+				while (cursor < totalSlices) {
+					float dt = Time.deltaTime;
+					if (dt <= 1e-4f) dt = 1f / 60f;
+					sched.BeginRestoreTick(dt);
+					int remaining = totalSlices - cursor;
+					sched.GetFrameBudget(remaining, out float budgetMs, out int maxSlices);
+					float start = Time.realtimeSinceStartup;
+					int sliceBegin = cursor;
+					int batch = 0;
+					while (batch < maxSlices && cursor < totalSlices) {
+						if ((Time.realtimeSinceStartup - start) * 1000f >= budgetMs && batch > 0) break;
+						batch++;
+						cursor++;
+					}
+					if (batch > 0) {
+						CompositeVisibleLayersIntoDestSliceRange(newLayer.Content, sliceBegin, sliceBegin + batch, excludeIdx);
+						float hitchMs = Mathf.Max(0f, (Time.deltaTime - (1f / 60f)) * 1000f);
+						sched.RegisterRestoreBanditObservation(hitchMs, batch);
+					}
+					if (cursor < totalSlices)
+						yield return null;
+				}
+
+				newLayer.SyncDataFromContent();
+				newLayer.HasReceivedSceneInject = true;
+			}
+			finally {
+				if (maskPainter != null)
+					maskPainter.IsCollapsingLayers = false;
+				CleanupAfterScheduledCollapse();
+			}
+		}
+
+		bool CollapseVisibleLayersIntoOne_CpuFallback(List<PaintLayer> visibleLayers)
+		{
 			RenderUdims first = visibleLayers[0].Content;
 			int w = first.width;
 			int h = first.height;
 			int slices = first.UdimsCount;
 
-			// Read every visible layer's pixel data to CPU (list of Texture2D per layer, one per UDIM slice)
 			var allLayerSlices = new List<List<Texture2D>>();
 			var allLayerOpacities = new List<float>();
 			foreach (var l in visibleLayers)
@@ -321,12 +490,10 @@ namespace spz {
 				allLayerOpacities.Add(Mathf.Clamp01(l.Opacity));
 			}
 
-			// CPU-side alpha blend: for each UDIM slice, blend all layers bottom-to-top
 			var resultTextures = new List<Texture2D>();
 			for (int s = 0; s < slices; s++)
 			{
 				Color[] accum = new Color[w * h];
-				// Start with all-transparent
 				for (int p = 0; p < accum.Length; p++)
 					accum[p] = Color.clear;
 
@@ -358,21 +525,22 @@ namespace spz {
 				resultTextures.Add(result);
 			}
 
-			// Destroy CPU textures from layers (no longer needed)
 			foreach (var layerSlices in allLayerSlices)
 				foreach (var t in layerSlices) if (t != null) UnityEngine.Object.DestroyImmediate(t);
 			allLayerSlices.Clear();
 
-			// Suppress scene injection, add new layer, write result
 			var maskPainter = Inpaint_MaskPainter.instance;
-			if (maskPainter != null) maskPainter.IsCollapsingLayers = true;
+			PaintLayer newLayer = null;
+			try {
+				if (maskPainter != null) maskPainter.IsCollapsingLayers = true;
+				newLayer = AddLayer(ConsumeNextDefaultCollapseLayerName());
+				EnsureContentForLayerIfNeeded(newLayer);
+			}
+			finally {
+				if (maskPainter != null) maskPainter.IsCollapsingLayers = false;
+			}
 
-			PaintLayer newLayer = AddLayer(ConsumeNextDefaultCollapseLayerName());
-			EnsureContentForLayerIfNeeded(newLayer);
-
-			if (maskPainter != null) maskPainter.IsCollapsingLayers = false;
-
-			if (newLayer.Content != null && newLayer.Content.texArray != null)
+			if (newLayer != null && newLayer.Content != null && newLayer.Content.texArray != null)
 			{
 				TextureTools_SPZ.TextureArray_Fill_N_Slices(newLayer.Content.texArray, resultTextures, 0);
 				newLayer.SyncDataFromContent();
@@ -381,7 +549,6 @@ namespace spz {
 			else
 				UnityEngine.Debug.LogWarning("[PaintLayerStack] Collapse: new layer has no Content; paste skipped.");
 
-			// Dispose CPU result textures
 			foreach (var t in resultTextures) if (t != null) UnityEngine.Object.DestroyImmediate(t);
 
 			return true;
@@ -405,6 +572,20 @@ namespace spz {
 		}
 
 		// --- Compositing (used by Inpaint_MaskPainter for new-layer injection and for APIs that need a flat image) ---
+		void SetCompositeBlendSliceRange(RenderUdims udimsCountSource, int sliceBegin, int sliceEndExclusive)
+		{
+			if (_compositeBlendMat == null || udimsCountSource == null) return;
+			RenderUdims.SetNumUdims(udimsCountSource, _compositeBlendMat);
+			_compositeBlendMat.SetInt("_SliceCompositeBegin", sliceBegin);
+			_compositeBlendMat.SetInt("_SliceCompositeEnd", sliceEndExclusive);
+		}
+
+		void SetCompositeBlendSliceRangeFull(RenderUdims udimsCountSource)
+		{
+			if (udimsCountSource == null) return;
+			SetCompositeBlendSliceRange(udimsCountSource, 0, udimsCountSource.UdimsCount);
+		}
+
 		/// <summary>Build composite of base + layers [0..layerIndexExclusive-1] into dest. Use to inject into a new layer so it starts with scene + everything below (no empty override).</summary>
 		public void CompositeBelowInto(RenderUdims baseLayer, RenderUdims dest, int layerIndexExclusive)
 		{
@@ -425,7 +606,7 @@ namespace spz {
 				if (!l.Visible || l.Content == null) continue;
 				_compositeBlendMat.SetTexture("_Background", a.texArray);
 				_compositeBlendMat.SetFloat("_Opacity", Mathf.Clamp01(l.Opacity));
-				RenderUdims.SetNumUdims(a, _compositeBlendMat);
+				SetCompositeBlendSliceRangeFull(a);
 				Graphics.Blit(l.Content.texArray, b.texArray, _compositeBlendMat);
 				var t = a; a = b; b = t;
 			}
@@ -457,7 +638,7 @@ namespace spz {
 				if (!l.Visible || l.Content == null) continue;
 				_compositeBlendMat.SetTexture("_Background", a.texArray);
 				_compositeBlendMat.SetFloat("_Opacity", Mathf.Clamp01(l.Opacity));
-				RenderUdims.SetNumUdims(a, _compositeBlendMat);
+				SetCompositeBlendSliceRangeFull(a);
 				Graphics.Blit(l.Content.texArray, b.texArray, _compositeBlendMat);
 				var t = a; a = b; b = t;
 			}
@@ -534,7 +715,7 @@ namespace spz {
 					a.ClearTheTextures(Color.clear);
 					_compositeBlendMat.SetTexture("_Background", a.texArray);
 					_compositeBlendMat.SetFloat("_Opacity", Mathf.Clamp01(l.Opacity));
-					RenderUdims.SetNumUdims(a, _compositeBlendMat);
+					SetCompositeBlendSliceRangeFull(a);
 					Graphics.Blit(l.Content.texArray, b.texArray, _compositeBlendMat);
 					tmp = a; a = b; b = tmp;
 					foundFirst = true;
@@ -547,11 +728,128 @@ namespace spz {
 				}
 				_compositeBlendMat.SetTexture("_Background", a.texArray);
 				_compositeBlendMat.SetFloat("_Opacity", Mathf.Clamp01(l.Opacity));
-				RenderUdims.SetNumUdims(a, _compositeBlendMat);
+				SetCompositeBlendSliceRangeFull(a);
 				Graphics.Blit(l.Content.texArray, b.texArray, _compositeBlendMat);
 				tmp = a; a = b; b = tmp;
 			}
 			Graphics.CopyTexture(a.texArray, dest.texArray);
+		}
+
+		/// <summary>GPU composite of visible layers into <paramref name="dest"/> for UDIM slices <c>[sliceBegin, sliceEndExclusive)</c>. Skips <paramref name="excludeLayerIndex"/> (e.g. the new collapse layer). Restores full-slice shader range after the call.</summary>
+		public void CompositeVisibleLayersIntoDestSliceRange(RenderUdims dest, int sliceBegin, int sliceEndExclusive, int excludeLayerIndex)
+		{
+			if (dest == null || sliceBegin < 0 || sliceEndExclusive <= sliceBegin || sliceEndExclusive > dest.UdimsCount) return;
+			if (_compositeBlendMat == null)
+			{
+				for (int s = sliceBegin; s < sliceEndExclusive; s++)
+				{
+					Graphics.SetRenderTarget(dest.texArray, 0, CubemapFace.Unknown, s);
+					GL.Clear(false, true, Color.clear);
+				}
+				RenderTexture.active = null;
+				return;
+			}
+
+			int visibleCount = 0;
+			for (int i = 0; i < _layers.Count; i++)
+			{
+				if (i == excludeLayerIndex) continue;
+				var l = _layers[i];
+				if (l.Visible && l.Content != null) visibleCount++;
+			}
+			if (visibleCount == 0)
+			{
+				for (int s = sliceBegin; s < sliceEndExclusive; s++)
+				{
+					Graphics.SetRenderTarget(dest.texArray, 0, CubemapFace.Unknown, s);
+					GL.Clear(false, true, Color.clear);
+				}
+				RenderTexture.active = null;
+				return;
+			}
+
+			RenderUdims first = null;
+			for (int i = 0; i < _layers.Count; i++)
+			{
+				if (i == excludeLayerIndex) continue;
+				var l = _layers[i];
+				if (!l.Visible || l.Content == null) continue;
+				first = l.Content;
+				break;
+			}
+			if (first == null) return;
+
+			if (_resolution.x <= 0 && first.width > 0 && first.height > 0 && first.UdimsCount > 0)
+			{
+				_resolution = new Vector2Int(first.width, first.height);
+				_udimsCount = first.UdimsCount;
+			}
+			RenderUdims.assertSameSize(dest, first);
+
+			RenderUdims a = GetOrCreateCompositeTemp(ref _compositeTempA);
+			RenderUdims b = GetOrCreateCompositeTemp(ref _compositeTempB);
+			if (a == null || b == null)
+			{
+				a = GetOrCreateCompositeTempFromBase(ref _compositeTempA, first);
+				b = GetOrCreateCompositeTempFromBase(ref _compositeTempB, first);
+			}
+			if (a == null || b == null)
+			{
+				UnityEngine.Debug.LogWarning("[PaintLayerStack] CompositeVisibleLayersIntoDestSliceRange: temps null; clearing dest slices.");
+				for (int s = sliceBegin; s < sliceEndExclusive; s++)
+				{
+					Graphics.SetRenderTarget(dest.texArray, 0, CubemapFace.Unknown, s);
+					GL.Clear(false, true, Color.clear);
+				}
+				RenderTexture.active = null;
+				return;
+			}
+
+			bool foundFirst = false;
+			RenderUdims tmp;
+			try
+			{
+				for (int i = 0; i < _layers.Count; i++)
+				{
+					if (i == excludeLayerIndex) continue;
+					var l = _layers[i];
+					if (!l.Visible || l.Content == null) continue;
+					if (!foundFirst)
+					{
+						for (int s = sliceBegin; s < sliceEndExclusive; s++)
+						{
+							Graphics.SetRenderTarget(a.texArray, 0, CubemapFace.Unknown, s);
+							GL.Clear(false, true, Color.clear);
+						}
+						RenderTexture.active = null;
+
+						SetCompositeBlendSliceRange(a, sliceBegin, sliceEndExclusive);
+						_compositeBlendMat.SetTexture("_Background", a.texArray);
+						_compositeBlendMat.SetFloat("_Opacity", Mathf.Clamp01(l.Opacity));
+						Graphics.Blit(l.Content.texArray, b.texArray, _compositeBlendMat);
+						tmp = a; a = b; b = tmp;
+						foundFirst = true;
+						if (visibleCount == 1)
+						{
+							for (int s = sliceBegin; s < sliceEndExclusive; s++)
+								Graphics.CopyTexture(a.texArray, s, 0, dest.texArray, s, 0);
+							return;
+						}
+						continue;
+					}
+					SetCompositeBlendSliceRange(a, sliceBegin, sliceEndExclusive);
+					_compositeBlendMat.SetTexture("_Background", a.texArray);
+					_compositeBlendMat.SetFloat("_Opacity", Mathf.Clamp01(l.Opacity));
+					Graphics.Blit(l.Content.texArray, b.texArray, _compositeBlendMat);
+					tmp = a; a = b; b = tmp;
+				}
+				for (int s = sliceBegin; s < sliceEndExclusive; s++)
+					Graphics.CopyTexture(a.texArray, s, 0, dest.texArray, s, 0);
+			}
+			finally
+			{
+				SetCompositeBlendSliceRangeFull(first);
+			}
 		}
 
 		/// <summary>Direct GPU memory copy of all UDIM slices from src to dest. Uses Graphics.CopyTexture —

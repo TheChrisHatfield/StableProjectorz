@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -47,6 +48,35 @@ namespace spz {
 	    [Tooltip("button_active from button_active_inactive_horiz; checkmark face.")]
 	    [SerializeField] Sprite _settingsToggleCheckSprite;
 	    bool _paintUndoSettingsRowsCreated;
+	    bool _addonManagerClickRegistered;
+
+	    void OnEnable() {
+	        EnsureAddonManagerButtonWired();
+	    }
+
+	    /// <summary>Wired in OnEnable so the first click after the panel activates cannot happen before Start().</summary>
+	    void EnsureAddonManagerButtonWired() {
+	        if (_addonManagerClickRegistered) return;
+	        if (_openAddonManager_button == null) {
+	            foreach (var b in GetComponentsInChildren<Button>(true)) {
+	                if (b != null && b.gameObject.name.IndexOf("Add-on Manager", StringComparison.OrdinalIgnoreCase) >= 0) {
+	                    _openAddonManager_button = b;
+	                    break;
+	                }
+	            }
+	        }
+	        if (_openAddonManager_button == null) return;
+	        _openAddonManager_button.onClick.AddListener(OnAddonManagerButtonClicked);
+	        _addonManagerClickRegistered = true;
+	        var text = _openAddonManager_button.GetComponentInChildren<TMPro.TextMeshProUGUI>();
+	        if (text != null) {
+	            text.horizontalAlignment = TMPro.HorizontalAlignmentOptions.Center;
+	            text.verticalAlignment = TMPro.VerticalAlignmentOptions.Middle;
+	        }
+	    }
+
+	    void OnAddonManagerButtonClicked() => AddonManager_UI.OpenFromMenu();
+
 	    void Start(){
 	        EnsureUseVSyncRowExists();
 	        EnsureSDGpuRowExists();
@@ -58,16 +88,7 @@ namespace spz {
 	        EventsBinder.Bind_Clickable_to_event("Settings:OnButton_WireframeColor", _wireframeColor_button);
 	        EventsBinder.Bind_Clickable_to_event("Settings:OnButton_NoiseColor", _noiseColor_button);
 	        EventsBinder.Bind_Clickable_to_event("Settings:OnButton_RestoreDefaults", _restoreDefaults_button);
-	        EventsBinder.Bind_Clickable_to_event("Settings:OnButton_OpenAddonManager", _openAddonManager_button);
-	        
-	        // Force center alignment for Add-on Manager button text
-	        if (_openAddonManager_button != null) {
-	            var text = _openAddonManager_button.GetComponentInChildren<TMPro.TextMeshProUGUI>();
-	            if (text != null) {
-	                text.horizontalAlignment = TMPro.HorizontalAlignmentOptions.Center;
-	                text.verticalAlignment = TMPro.VerticalAlignmentOptions.Middle;
-	            }
-	        }
+	        EnsureAddonManagerButtonWired();
 
 	        // Toggles
 	        EventsBinder.Bind_Clickable_to_event("Settings:set_brushPrecision_res", _brushPrecision_4k_toggle);
@@ -280,7 +301,7 @@ namespace spz {
 	        labelEnLE.preferredWidth = 220f;
 	        labelEnLE.preferredHeight = 26f;
 	        var labelEnText = labelEnGo.AddComponent<TMPro.TextMeshProUGUI>();
-	        labelEnText.text = "Paint undo (Ctrl+Z / Y):";
+	        labelEnText.text = "Paint undo & redo (Ctrl+Z; Ctrl+Y or Ctrl+Shift+Z):";
 	        labelEnText.fontSize = 14;
 	        labelEnText.color = new Color(0.9f, 0.9f, 0.9f, 1f);
 	        labelEnText.raycastTarget = false;

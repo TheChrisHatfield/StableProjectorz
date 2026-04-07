@@ -440,7 +440,6 @@ MonoBehaviour:
   _installFromFile_button: {fileID: 0}
   _refresh_button: {fileID: 0}
   _addonsListParent: {fileID: 0}
-  _addonItemPrefab: {fileID: 0}
   _statusText: {fileID: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:

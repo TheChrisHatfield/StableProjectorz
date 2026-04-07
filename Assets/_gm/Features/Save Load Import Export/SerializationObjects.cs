@@ -474,8 +474,10 @@ namespace spz {
 	    public int maskBrush_scatterMode;
 	    /// <summary> 0 = fixed angle from ribbon, 1 = add stroke direction to angle. </summary>
 	    public int maskBrush_tipAngleMode;
-	    /// <summary> 0 = auto (selection bounds + mesh right), 1 = view (camera.right through bounds center), 2 = face pick (stored point+normal). </summary>
+	    /// <summary> 0 = auto, 1 = view, 2 = face pick, 3 = mesh axes (avg transform.right). </summary>
 	    public int maskBrush_symmetryPlaneSource;
+	    /// <summary> ±1 lateral sign for mesh-axis mode (3); default +1. </summary>
+	    public int maskBrush_symmetryObjectLocalSign = 1;
 	    public Vector3Serializable maskBrush_symmetryPlanePoint;
 	    public Vector3Serializable maskBrush_symmetryPlaneNormal;
 	    public bool maskBrush_showText;
