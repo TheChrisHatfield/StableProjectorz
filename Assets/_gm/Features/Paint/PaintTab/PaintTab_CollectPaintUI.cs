@@ -1215,39 +1215,17 @@ namespace spz {
 			});
 		}
 
-		/// <summary>Label + horizontal slider row inside Brush options expando (same track style as depth limit).</summary>
-		static Slider MakeBrushOptsSliderRow(Transform parent, string rowName, string labelText, float min, float max,
-			float initialValue, UnityEngine.Events.UnityAction<float> onChanged)
+		/// <summary>Horizontal track + fill + handle (depth-limit style). Parent must supply layout (row / column).</summary>
+		static Slider BuildBrushOptsSliderTrack(Transform parent, float min, float max, float initialValue,
+			UnityEngine.Events.UnityAction<float> onChanged)
 		{
-			var row = new GameObject(rowName);
-			row.transform.SetParent(parent, false);
-			row.AddComponent<RectTransform>();
-			var rowLe = row.AddComponent<LayoutElement>();
-			rowLe.minHeight = 30;
-			rowLe.preferredHeight = 30;
-			rowLe.flexibleWidth = 1;
-			var h = row.AddComponent<HorizontalLayoutGroup>();
-			h.spacing = 8;
-			h.padding = new RectOffset(0, 0, 0, 0);
-			h.childAlignment = TextAnchor.MiddleLeft;
-			h.childControlWidth = false;
-			h.childControlHeight = true;
-			h.childForceExpandWidth = true;
-			h.childForceExpandHeight = false;
-
-			var lblGo = new GameObject("Lbl");
-			lblGo.transform.SetParent(row.transform, false);
-			var lblLe = lblGo.AddComponent<LayoutElement>();
-			lblLe.minWidth = 88;
-			lblLe.preferredWidth = 88;
-			var lbl = lblGo.AddComponent<TextMeshProUGUI>();
-			StylePaintTabTmp(lbl, labelText, 9f, TextAlignmentOptions.Left);
-
 			var go = new GameObject("Slider");
-			go.transform.SetParent(row.transform, false);
+			go.transform.SetParent(parent, false);
 			var le = go.AddComponent<LayoutElement>();
 			le.flexibleWidth = 1f;
-			le.minWidth = 72;
+			le.minWidth = 120;
+			le.minHeight = 28;
+			le.preferredHeight = 28;
 
 			var bg = go.AddComponent<Image>();
 			bg.color = new Color(0.22f, 0.28f, 0.35f, 0.95f);
@@ -1298,6 +1276,70 @@ namespace spz {
 			slider.SetValueWithoutNotify(initialValue);
 			slider.onValueChanged.AddListener(onChanged);
 			return slider;
+		}
+
+		/// <summary>Label + horizontal slider row inside Brush options expando (tool row / grid).</summary>
+		static Slider MakeBrushOptsSliderRow(Transform parent, string rowName, string labelText, float min, float max,
+			float initialValue, UnityEngine.Events.UnityAction<float> onChanged)
+		{
+			var row = new GameObject(rowName);
+			row.transform.SetParent(parent, false);
+			row.AddComponent<RectTransform>();
+			var rowLe = row.AddComponent<LayoutElement>();
+			rowLe.minHeight = 30;
+			rowLe.preferredHeight = 30;
+			rowLe.flexibleWidth = 1;
+			var h = row.AddComponent<HorizontalLayoutGroup>();
+			h.spacing = 8;
+			h.padding = new RectOffset(0, 0, 0, 0);
+			h.childAlignment = TextAnchor.MiddleLeft;
+			h.childControlWidth = false;
+			h.childControlHeight = true;
+			h.childForceExpandWidth = true;
+			h.childForceExpandHeight = false;
+
+			var lblGo = new GameObject("Lbl");
+			lblGo.transform.SetParent(row.transform, false);
+			var lblLe = lblGo.AddComponent<LayoutElement>();
+			lblLe.minWidth = 88;
+			lblLe.preferredWidth = 88;
+			var lbl = lblGo.AddComponent<TextMeshProUGUI>();
+			StylePaintTabTmp(lbl, labelText, 9f, TextAlignmentOptions.Left);
+
+			return BuildBrushOptsSliderTrack(row.transform, min, max, initialValue, onChanged);
+		}
+
+		/// <summary>Stacked label above full-width slider (matches readability of Scatter / Mirror rows in narrow Brush options panel).</summary>
+		static Slider MakeBrushOptsStackedSliderRow(Transform parent, string rowName, string labelText, float min, float max,
+			float initialValue, UnityEngine.Events.UnityAction<float> onChanged)
+		{
+			var row = new GameObject(rowName);
+			row.transform.SetParent(parent, false);
+			row.AddComponent<RectTransform>();
+			var rowLe = row.AddComponent<LayoutElement>();
+			rowLe.minHeight = 58;
+			rowLe.preferredHeight = 58;
+			rowLe.flexibleWidth = 1;
+			var v = row.AddComponent<VerticalLayoutGroup>();
+			v.spacing = 6;
+			v.padding = new RectOffset(0, 0, 0, 0);
+			v.childAlignment = TextAnchor.UpperLeft;
+			v.childControlWidth = true;
+			v.childControlHeight = true;
+			v.childForceExpandWidth = true;
+			v.childForceExpandHeight = false;
+
+			var lblGo = new GameObject("Lbl");
+			lblGo.transform.SetParent(row.transform, false);
+			var lblLe = lblGo.AddComponent<LayoutElement>();
+			lblLe.minHeight = 22;
+			lblLe.preferredHeight = 22;
+			lblLe.flexibleWidth = 1;
+			var lbl = lblGo.AddComponent<TextMeshProUGUI>();
+			lbl.color = new Color(0.88f, 0.89f, 0.92f, 1f);
+			StylePaintTabTmp(lbl, labelText, kPaintTabUiFontSize, TextAlignmentOptions.Left);
+
+			return BuildBrushOptsSliderTrack(row.transform, min, max, initialValue, onChanged);
 		}
 
 		/// <summary> Collapsible dropdown-style block: compact header in tool row + panel below with radio groups. </summary>
@@ -1429,17 +1471,27 @@ namespace spz {
 			smudgeOptsRoot.AddComponent<RectTransform>();
 			var smudgeBlockLe = smudgeOptsRoot.AddComponent<LayoutElement>();
 			smudgeBlockLe.flexibleWidth = 1;
-			smudgeBlockLe.minHeight = 1;
+			smudgeBlockLe.minHeight = 8;
+			var smudgeVlg = smudgeOptsRoot.AddComponent<VerticalLayoutGroup>();
+			smudgeVlg.spacing = 6;
+			smudgeVlg.padding = new RectOffset(0, 0, 2, 4);
+			smudgeVlg.childAlignment = TextAnchor.UpperLeft;
+			smudgeVlg.childControlWidth = true;
+			smudgeVlg.childControlHeight = true;
+			smudgeVlg.childForceExpandWidth = true;
+			smudgeVlg.childForceExpandHeight = false;
 
-			MakeBrushOptsSectionLabel(smudgeOptsRoot.transform, "Smudge");
-			var smudgeStrSlider = MakeBrushOptsSliderRow(smudgeOptsRoot.transform, "SmudgeStrengthRow", "Strength", 0f, 1f,
+			MakeBrushOptsSectionLabel(smudgeOptsRoot.transform, "Smudge (inpaint)");
+			var smudgeStrSlider = MakeBrushOptsStackedSliderRow(smudgeOptsRoot.transform, "SmudgeStrengthRow",
+				"Strength (0–100% × brush opacity)", 0f, 1f,
 				PaintTab_SmudgeBrushOptions.Strength01, v =>
 				{
 					PaintTab_SmudgeBrushOptions.SetStrength01(v);
 					Viewport_StatusText.instance?.ShowStatusText(
 						$"Smudge strength {Mathf.RoundToInt(Mathf.Clamp01(v) * 100)}%", false, 0.65f, false);
 				});
-			var smudgeAngSlider = MakeBrushOptsSliderRow(smudgeOptsRoot.transform, "SmudgeAngleRow", "Angle °", 0f, 360f,
+			var smudgeAngSlider = MakeBrushOptsStackedSliderRow(smudgeOptsRoot.transform, "SmudgeAngleRow",
+				"Smear angle (0°–360°)", 0f, 360f,
 				PaintTab_SmudgeBrushOptions.AngleDeg, v =>
 				{
 					PaintTab_SmudgeBrushOptions.SetAngleDeg(v);
