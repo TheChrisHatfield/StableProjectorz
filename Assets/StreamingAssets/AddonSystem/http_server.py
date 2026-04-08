@@ -3,7 +3,8 @@
 FastAPI HTTP Server for StableProjectorz
 Provides REST API endpoints that forward to Unity via JSON-RPC.
 
-Scene/control: ``/api/v1/cameras``, ``projection/*``, ``meshes`` (transforms, selection, batch), ``scene``, ``sd``, ``project``, ``gen3d/*``, ``export/*`` → ``spz.cmd.*``.
+Scene/control: ``/api/v1/cameras``, ``/api/v1/view-cameras/*`` (multi-slot view camera enable/current/projection),
+``projection/*``, ``meshes`` (transforms, selection, batch), ``scene``, ``sd``, ``project``, ``gen3d/*``, ``export/*`` → ``spz.cmd.*``.
 
 Paint/brush: ``/api/v1/paint/*`` → ``spz.cmd.get_brush_settings``, ``get_paint_layers``, ``set_brush_*``, ``set_active_paint_layer``.
 
@@ -16,6 +17,18 @@ Add-on panel UI (same as Python ``api.ui`` over TCP): ``/api/v1/ui/*`` → ``spz
 Meta / discovery: ``GET /api/v1/meta`` → ``spz.cmd.get_api_capabilities`` (method list + RPC version);
 ``GET /api/v1/context`` → ``spz.cmd.get_addon_context`` (scene + SD + brush snapshot).
 
+Editor chrome: ``GET/POST /api/v1/editor/layout`` → ``spz.cmd.get_editor_layout`` / ``set_editor_layout``
+(left/right column visibility, ``viewport_focus`` / ``fullscreen_center`` mode for center viewport width).
+
+Display / OS fullscreen: ``GET/POST /api/v1/display/mode`` → ``spz.cmd.get_display_mode`` / ``set_display_mode``
+(windowed, ``exclusive_fullscreen``, ``borderless_fullscreen``; optional width/height/refresh_rate_hz).
+
+UI chrome (ribbon + cursor): ``GET/POST /api/v1/chrome/ribbon/tabs|tab``, ``GET/POST /api/v1/chrome/cursor``
+→ ``spz.cmd.get_ribbon_tabs``, ``set_ribbon_tab``, ``get_cursor_state``, ``set_cursor_state``.
+
+UI chrome (scale / targets / status / EventSystem): ``/api/v1/chrome/ui-scale``, ``/api/v1/chrome/ui-targets``,
+``/api/v1/chrome/status-text``, ``/api/v1/chrome/event-system`` → matching ``spz.cmd.*``.
+
 Blocking work (Unity JSON-RPC over TCP, connection-ready probe, import/exec in
 load_addon / invoke_callback) runs in asyncio.to_thread so the event loop stays free.
 """
@@ -23,7 +36,7 @@ load_addon / invoke_callback) runs in asyncio.to_thread so the event loop stays 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, List, Dict, Any
 import asyncio
 import uvicorn
@@ -98,6 +111,103 @@ class Rotation(BaseModel):
 class Prompt(BaseModel):
     positive: Optional[str] = None
     negative: Optional[str] = None
+
+class EditorLayoutBody(BaseModel):
+    """Optional ``mode`` (``default`` | ``viewport_focus`` | ``fullscreen_center``) overrides side visibility unless explicit flags are set."""
+    mode: Optional[str] = None
+    left_visible: Optional[bool] = None
+    right_visible: Optional[bool] = None
+
+
+class DisplayModeBody(BaseModel):
+    """``mode``: ``windowed`` | ``exclusive_fullscreen`` | ``borderless_fullscreen`` (aliases: ``exclusive``, ``borderless``)."""
+    mode: str
+    width: Optional[int] = None
+    height: Optional[int] = None
+    refresh_rate_hz: Optional[int] = None
+
+
+class RibbonTabBody(BaseModel):
+    """Ribbon strip tab title (case-insensitive); add-ons use ``addon_<folderId>``."""
+    tab: str
+
+
+class CursorChromeBody(BaseModel):
+    """At least one of ``lock_mode`` or ``visible`` should be set. ``lock_mode``: ``None`` | ``Locked`` | ``Confined``."""
+    lock_mode: Optional[str] = None
+    visible: Optional[bool] = None
+
+
+class UiScaleBody(BaseModel):
+    scale_multiplier: float
+
+
+class UiTargetActiveBody(BaseModel):
+    id: str
+    active: bool
+
+
+class StatusTextBody(BaseModel):
+    message: str = ""
+    text_is_eta: bool = False
+    duration: float = 2.0
+    progress_visibility: bool = False
+
+
+class EventSystemBody(BaseModel):
+    enabled: bool
+
+
+class ViewCamerasEnabledCountBody(BaseModel):
+    count: int
+
+    @field_validator("count")
+    @classmethod
+    def count_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("count must be >= 0")
+        return v
+
+
+class ViewCameraActiveBody(BaseModel):
+    camera_index: int
+
+    @field_validator("camera_index")
+    @classmethod
+    def camera_index_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("camera_index must be >= 0")
+        return v
+
+    active: bool
+
+
+class ViewCameraCurrentBody(BaseModel):
+    camera_index: int
+
+    @field_validator("camera_index")
+    @classmethod
+    def camera_index_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("camera_index must be >= 0")
+        return v
+
+
+class ViewCameraProjectionBody(BaseModel):
+    """At least one of ``orthographic``, ``orthographic_size``, ``field_of_view`` should be set."""
+    camera_index: int
+
+    @field_validator("camera_index")
+    @classmethod
+    def camera_index_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("camera_index must be >= 0")
+        return v
+
+    orthographic: Optional[bool] = None
+    orthographic_size: Optional[float] = None
+    field_of_view: Optional[float] = None
+
 
 class ProjectPath(BaseModel):
     filepath: str
@@ -255,6 +365,124 @@ async def api_context():
     """
     return await call_unity_async("spz.cmd.get_addon_context", {})
 
+
+@app.get("/api/v1/editor/layout", tags=["editor"])
+async def get_editor_layout():
+    """Left/right panel visibility and whether the center viewport span is expanded (no FastPath required)."""
+    return await call_unity_async("spz.cmd.get_editor_layout", {})
+
+
+@app.post("/api/v1/editor/layout", tags=["editor"])
+async def set_editor_layout(body: EditorLayoutBody):
+    """Set side column visibility; use ``mode=viewport_focus`` to collapse both sides (wide center viewport)."""
+    params: Dict[str, Any] = {}
+    if body.mode is not None:
+        params["mode"] = body.mode
+    if body.left_visible is not None:
+        params["left_visible"] = body.left_visible
+    if body.right_visible is not None:
+        params["right_visible"] = body.right_visible
+    return await call_unity_async("spz.cmd.set_editor_layout", params)
+
+
+@app.get("/api/v1/display/mode", tags=["display"])
+async def get_display_mode():
+    """Current fullscreen flag, Unity ``FullScreenMode`` name, resolution, primary display size."""
+    return await call_unity_async("spz.cmd.get_display_mode", {})
+
+
+@app.post("/api/v1/display/mode", tags=["display"])
+async def set_display_mode(body: DisplayModeBody):
+    """Switch windowed, OS exclusive fullscreen, or borderless fullscreen; optional resolution and refresh (exclusive)."""
+    params: Dict[str, Any] = {"mode": body.mode}
+    if body.width is not None:
+        params["width"] = int(body.width)
+    if body.height is not None:
+        params["height"] = int(body.height)
+    if body.refresh_rate_hz is not None:
+        params["refresh_rate_hz"] = int(body.refresh_rate_hz)
+    return await call_unity_async("spz.cmd.set_display_mode", params)
+
+
+@app.get("/api/v1/chrome/ribbon/tabs", tags=["chrome"])
+async def get_ribbon_tabs():
+    """Titles of command-ribbon tabs (built-in + add-on)."""
+    return await call_unity_async("spz.cmd.get_ribbon_tabs", {})
+
+
+@app.post("/api/v1/chrome/ribbon/tab", tags=["chrome"])
+async def set_ribbon_tab(body: RibbonTabBody):
+    """Activate a ribbon tab by title (same strings as ``GET .../ribbon/tabs``)."""
+    return await call_unity_async("spz.cmd.set_ribbon_tab", {"tab": body.tab})
+
+
+@app.get("/api/v1/chrome/cursor", tags=["chrome"])
+async def get_cursor_chrome():
+    """Cursor lock mode and visibility."""
+    return await call_unity_async("spz.cmd.get_cursor_state", {})
+
+
+@app.post("/api/v1/chrome/cursor", tags=["chrome"])
+async def set_cursor_chrome(body: CursorChromeBody):
+    """Set cursor lock (None/Locked/Confined) and/or visibility."""
+    if body.lock_mode is None and body.visible is None:
+        raise HTTPException(status_code=400, detail="Provide lock_mode and/or visible")
+    params: Dict[str, Any] = {}
+    if body.lock_mode is not None:
+        params["lock_mode"] = body.lock_mode
+    if body.visible is not None:
+        params["visible"] = body.visible
+    return await call_unity_async("spz.cmd.set_cursor_state", params)
+
+
+@app.get("/api/v1/chrome/ui-scale", tags=["chrome"])
+async def get_ui_scale():
+    """Skeleton canvas UI scale (Scale With Screen Size reference resolution)."""
+    return await call_unity_async("spz.cmd.get_ui_scale", {})
+
+
+@app.post("/api/v1/chrome/ui-scale", tags=["chrome"])
+async def set_ui_scale(body: UiScaleBody):
+    """``scale_multiplier`` 1 = baseline; higher enlarges UI (clamped ~0.5–2)."""
+    return await call_unity_async("spz.cmd.set_ui_scale", {"scale_multiplier": float(body.scale_multiplier)})
+
+
+@app.get("/api/v1/chrome/ui-targets", tags=["chrome"])
+async def list_ui_targets():
+    """Named GameObject ids for show/hide (built-in + optional registry)."""
+    return await call_unity_async("spz.cmd.list_ui_targets", {})
+
+
+@app.get("/api/v1/chrome/ui-targets/{target_id}/active", tags=["chrome"])
+async def get_ui_target_active(target_id: str):
+    return await call_unity_async("spz.cmd.get_ui_target_active", {"id": target_id})
+
+
+@app.post("/api/v1/chrome/ui-targets/active", tags=["chrome"])
+async def set_ui_target_active(body: UiTargetActiveBody):
+    return await call_unity_async("spz.cmd.set_ui_target_active", {"id": body.id, "active": body.active})
+
+
+@app.post("/api/v1/chrome/status-text", tags=["chrome"])
+async def show_status_text(body: StatusTextBody):
+    """Viewport status line (same pipeline as in-app tips)."""
+    return await call_unity_async("spz.cmd.show_status_text", {
+        "message": body.message,
+        "text_is_eta": body.text_is_eta,
+        "duration": float(body.duration),
+        "progress_visibility": body.progress_visibility,
+    })
+
+
+@app.get("/api/v1/chrome/event-system", tags=["chrome"])
+async def get_event_system_chrome():
+    return await call_unity_async("spz.cmd.get_event_system", {})
+
+
+@app.post("/api/v1/chrome/event-system", tags=["chrome"])
+async def set_event_system_chrome(body: EventSystemBody):
+    return await call_unity_async("spz.cmd.set_event_system", {"enabled": body.enabled})
+
 # ============================================
 # Camera Endpoints
 # ============================================
@@ -342,9 +570,55 @@ async def get_all_camera_fovs():
     result = await call_unity_async("spz.cmd.get_all_camera_fovs", {})
     return result
 
-# ============================================
-# Projection cameras (separate from viewport cameras above)
-# ============================================
+
+@app.get("/api/v1/view-cameras/state", tags=["cameras"])
+async def get_view_cameras_state():
+    """Per-slot active flags, current index, and count (layered composite, not a 2x2 grid)."""
+    return await call_unity_async("spz.cmd.get_view_cameras", {})
+
+
+@app.post("/api/v1/view-cameras/enabled-count", tags=["cameras"])
+async def set_view_cameras_enabled_count(body: ViewCamerasEnabledCountBody):
+    """Enable the first ``count`` view cameras, disable the rest."""
+    return await call_unity_async(
+        "spz.cmd.set_view_cameras_enabled_count", {"count": int(body.count)})
+
+
+@app.post("/api/v1/view-cameras/active", tags=["cameras"])
+async def set_view_camera_active(body: ViewCameraActiveBody):
+    return await call_unity_async(
+        "spz.cmd.set_view_camera_active",
+        {"camera_index": int(body.camera_index), "active": bool(body.active)},
+    )
+
+
+@app.post("/api/v1/view-cameras/current", tags=["cameras"])
+async def set_current_view_camera(body: ViewCameraCurrentBody):
+    return await call_unity_async(
+        "spz.cmd.set_current_view_camera", {"camera_index": int(body.camera_index)})
+
+
+@app.get("/api/v1/view-cameras/{camera_index}/projection", tags=["cameras"])
+async def get_view_camera_projection(camera_index: int):
+    return await call_unity_async("spz.cmd.get_view_camera_projection", {"camera_index": camera_index})
+
+
+@app.post("/api/v1/view-cameras/projection", tags=["cameras"])
+async def set_view_camera_projection(body: ViewCameraProjectionBody):
+    params: Dict[str, Any] = {"camera_index": int(body.camera_index)}
+    if body.orthographic is not None:
+        params["orthographic"] = body.orthographic
+    if body.orthographic_size is not None:
+        params["orthographic_size"] = float(body.orthographic_size)
+    if body.field_of_view is not None:
+        params["field_of_view"] = float(body.field_of_view)
+    if len(params) <= 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Set at least one of orthographic, orthographic_size, field_of_view",
+        )
+    return await call_unity_async("spz.cmd.set_view_camera_projection", params)
+
 
 @app.get("/api/v1/projection/cameras/count", tags=["projection"])
 async def projection_camera_count():
@@ -1110,6 +1384,7 @@ async def root():
         "paint_brush_http": "/api/v1/paint/* (tag 'paint') — brush settings, layer stack, set size/spacing/angle/roundness/opacity/stamp, active layer → spz.cmd.*",
         "sd_forge_http": "/api/v1/sd/* (tag 'sd') — prompts, generate, workflow mode, generation options (denoise/blur/toggles), ControlNet, skybox → spz.cmd.*",
         "add_on_ui_http": "/api/v1/ui/* (OpenAPI tag 'ui') — panel, button, slider, text_input, dropdown, value get/set → spz.ui.*",
+        "chrome_http": "/api/v1/chrome/* — ribbon, cursor, ui-scale, named ui-targets, status text, EventSystem → spz.cmd.*",
         "note": "Like Forge: this URL means FastAPI is listening; unity_linked follows once Python connects to Unity TCP.",
     }
 

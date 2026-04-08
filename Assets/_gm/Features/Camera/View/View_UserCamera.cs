@@ -149,6 +149,14 @@ namespace spz {
 	        float mainCameraAspect = _camera.aspect;
 	        float contentCameraAspect = _contentCam.cameraAspect;
 	        Camera c = _camera;
+	        // Orthographic view cameras skip horizontal FOV expansion (used for DCC-style add-on workflows).
+	        if (c.orthographic) {
+		        var prevOrtho = new ParamsBeforeRender(c);
+		        if (with_ShiftPerspectiveCenter) { ShiftPerspectiveCenter(); }
+		        Matrix4x4 prj = c.projectionMatrix;
+		        prevOrtho.RestoreCam(c);
+		        return prj;
+	        }
 	        // I have 2 cameras: main (this one), and a second (Content camera).
 	        // The main camera has fov 20. And Content camera always has the same fov(it copies).
 	        // However,  the viewport might be very wide for the main camera, meaning it's aspect can be 4 to 1. 

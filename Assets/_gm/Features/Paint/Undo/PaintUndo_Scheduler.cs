@@ -289,7 +289,7 @@ namespace spz {
 
 		/// <summary>
 		/// Arm 0 = prefer full multi-layer underlay for smudge sampling; arm 1 = skip the multi-layer under pass (cheaper; see <c>Inpaint_MaskPainter.ResolveSmudgeDestinationAndAccum</c>).
-		/// Writes to the active layer are not switched to mesh-only here — use smudge target preference <c>GeneratedMesh</c> for that.
+		/// Does not change smudge <em>write</em> destination; when no paint layer stack, project setting <c>GeneratedMesh</c> still selects mesh writes in <see cref="SmudgeStrokeRouter"/> — with a stack, writes stay on the active layer.
 		/// Call once per smudge stroke (e.g. first frame) with <paramref name="registerStrokePull"/> true.
 		/// </summary>
 		/// <returns>True for arm 0 (PreferLayer underlay policy); false for arm 1 (PreferMesh underlay policy).</returns>

@@ -69,10 +69,18 @@ namespace spz {
 	    }
 
 
-	    void OnViewCamera_Toggled(int camIx, bool isOn){
-	        int numCams =  UserCameras_MGR.instance.numActiveViewCameras();
-	        _wantedNumCams = numCams;
-	        _numCams_numberText.text = numCams.ToString();                          
+	    void OnViewCamera_Toggled(int camIx, bool isOn) => SyncNumCamerasSliderUiFromScene();
+
+	    void SyncNumCamerasSliderUiFromScene(){
+	        if (UserCameras_MGR.instance == null) { return; }
+	        _wantedNumCams = UserCameras_MGR.instance.numActiveViewCameras();
+	        if (_numCams_numberText != null) {
+		        _numCams_numberText.text = _wantedNumCams.ToString();
+	        }
+	        if (_numCameras_slider != null) {
+		        _numCameras_slider.SetSliderValue(_wantedNumCams, invokeCallback:false);
+		        _prevSliderValue = _wantedNumCams;
+	        }
 	    }
 
 
@@ -88,8 +96,8 @@ namespace spz {
 	    void OnOrderPins_Button(){
 	        int numCamsSlider = Mathf.RoundToInt(_numCameras_slider.value);
 	        int numCamsIcon   = currIcon_numPovs();
-	        int _wantedNumCams = Mathf.Max(numCamsSlider, numCamsIcon);
-	        CamerasMGR_PinsZone_UI.instance.OnOrderPinsButton();
+	        _wantedNumCams = Mathf.Max(numCamsSlider, numCamsIcon);
+	        CamerasMGR_PinsZone_UI.instance?.OnOrderPinsButton();
 	        _stopEdit_args = MultiView_StopEdit_Args.RestoreToPriorPositions;
 	    }
 

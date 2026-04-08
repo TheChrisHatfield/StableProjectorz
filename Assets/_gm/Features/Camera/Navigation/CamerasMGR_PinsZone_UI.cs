@@ -131,7 +131,9 @@ namespace spz {
 	        //  areModifiersPressed |= KeyMousePenInput.isKey_alt_pressed(); 
 	        bool isRMBpressed = KeyMousePenInput.isRMBpressed();
 	        bool is_dimension_3d = DimensionMode_MGR.instance._dimensionMode == DimensionMode.dim_gen_3d;
+	        bool is_dimension_sd = DimensionMode_MGR.instance._dimensionMode == DimensionMode.dim_sd;
 	        bool is_dimension_uv = DimensionMode_MGR.instance._dimensionMode == DimensionMode.dim_uv;
+	        bool isMultiViewEditing = MultiView_Ribbon_UI.instance != null && MultiView_Ribbon_UI.instance._isEditingMode;
 
 	        if(!isHoveringViewport){return;}
 	        if(!isMousePressed){ return; }
@@ -141,7 +143,9 @@ namespace spz {
 	                                          // This way, we'll make it possible to pan further than main view window allows.
 	        int nearestPinIx = FindNearestPin();
 	        if(nearestPinIx < 0){ return;}
-	        if(is_dimension_3d && isLMBpressed){ return; }//left click is for capturing screenshots. But MMB allowed
+	        // LMB is for paint / mesh tools / screenshots in these modes — pin drag used MMB (same idea as dim_gen_3d).
+	        if(isLMBpressed && is_dimension_3d){ return; }
+	        if(isLMBpressed && is_dimension_sd && !isMultiViewEditing){ return; }
 	        if(is_dimension_uv){ return; }//no draggnig of pins during inspection of UV.
 
 	        OnPinGrabbed(nearestPinIx, isMMBpressed);

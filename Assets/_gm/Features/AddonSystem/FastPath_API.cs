@@ -123,6 +123,100 @@ namespace spz {
 			
 			return false;
 		}
+
+		/// <summary>
+		/// Snapshot of view cameras (the 3D viewports that render into the main viewport RT). Not projection / SD cams.
+		/// </summary>
+		public JObject GetViewCamerasStateJson() {
+			if (!_isInitialized) return null;
+			var mgr = UserCameras_MGR.instance;
+			if (mgr == null) return null;
+			int n = mgr.GetViewCameraCount();
+			var arr = new JArray();
+			for (int i = 0; i < n; i++) {
+				var vc = mgr.GetViewCamera(i);
+				arr.Add(vc != null && vc.gameObject.activeSelf);
+			}
+			return new JObject {
+				["count"] = n,
+				["max_count"] = UserCameras_MGR.MAX_NUM_VIEW_CAMERAS,
+				["current_index"] = mgr.CurrentViewCameraIndex,
+				["num_active"] = mgr.numActiveViewCameras(),
+				["active"] = arr,
+				["note"] = "Active cameras composite into one full-viewport RT.",
+			};
+		}
+
+		public JObject GetViewCameraProjectionJson(int cameraIndex) {
+			if (!_isInitialized) return null;
+			var mgr = UserCameras_MGR.instance;
+			var vc = mgr?.GetViewCamera(cameraIndex);
+			if (vc == null || vc.myCamera == null) return null;
+			var cam = vc.myCamera;
+			float fovReport = vc.fovMgr._trueCameraFov >= 1f && vc.fovMgr._trueCameraFov <= 179f
+				? vc.fovMgr._trueCameraFov
+				: cam.fieldOfView;
+			return new JObject {
+				["orthographic"] = cam.orthographic,
+				["orthographic_size"] = cam.orthographicSize,
+				["field_of_view"] = fovReport,
+			};
+		}
+
+		public bool SetViewCamerasEnabledCount(int num) {
+			if (!_isInitialized) return false;
+			var mgr = UserCameras_MGR.instance;
+			if (mgr == null) return false;
+			return mgr.TryEnableExactlyActiveViewCameras(num);
+		}
+
+		public bool SetViewCameraActiveRpc(int index, bool active) {
+			if (!_isInitialized) return false;
+			var mgr = UserCameras_MGR.instance;
+			if (mgr == null) return false;
+			return mgr.TrySetViewCameraActive(index, active);
+		}
+
+		public bool SetCurrentViewCameraIndexRpc(int index) {
+			if (!_isInitialized) return false;
+			var mgr = UserCameras_MGR.instance;
+			if (mgr == null) return false;
+			return mgr.TrySetCurrentViewCameraIndex(index);
+		}
+
+		/// <summary>Optional orthographic / size / FOV; at least one must apply. <paramref name="orthographicSize"/> alone enables orthographic mode.</summary>
+		public bool SetViewCameraProjectionRpc(int cameraIndex, bool? orthographic, float? orthographicSize, float? fieldOfView) {
+			if (!_isInitialized) return false;
+			var mgr = UserCameras_MGR.instance;
+			var vc = mgr?.GetViewCamera(cameraIndex);
+			if (vc == null || !vc.gameObject.activeInHierarchy || vc.myCamera == null) return false;
+			var cam = vc.myCamera;
+			if (orthographicSize.HasValue && !IsValidFloat(orthographicSize.Value)) return false;
+			if (fieldOfView.HasValue && !IsValidFloat(fieldOfView.Value)) return false;
+
+			bool any = false;
+			if (orthographic == false) {
+				cam.orthographic = false;
+				any = true;
+			}
+			else if (orthographic == true || (orthographic == null && orthographicSize.HasValue)) {
+				cam.orthographic = true;
+				if (orthographicSize.HasValue)
+					cam.orthographicSize = Mathf.Clamp(orthographicSize.Value, 0.01f, 5000f);
+				any = true;
+			}
+			else if (orthographicSize.HasValue && cam.orthographic) {
+				cam.orthographicSize = Mathf.Clamp(orthographicSize.Value, 0.01f, 5000f);
+				any = true;
+			}
+			if (fieldOfView.HasValue) {
+				float f = Mathf.Clamp(fieldOfView.Value, 1f, 179f);
+				cam.orthographic = false;
+				vc.fovMgr.SetFieldOfView(f);
+				any = true;
+			}
+			return any;
+		}
 		
 		// ============================================
 		// SELECTION OPERATIONS (Real-time)
