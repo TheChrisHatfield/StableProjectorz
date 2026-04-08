@@ -5,6 +5,46 @@ This file tracks changes on top of that baseline until the next release bump.
 
 ---
 
+## [Unreleased] — 2026-04-07 — Add-on API: editor layout, display mode, UI chrome (refactor notes)
+
+### Summary
+
+Expanded **JSON-RPC `spz.cmd.*`** (TCP **5555**) and the mirrored **FastAPI** routes / shipped **`spz.py`** so Python (and HTTP) add-ons can drive main-window chrome: skeleton column widths, OS/window display mode, ribbon tabs, cursor lock, global UI scale, named `GameObject` visibility, viewport status line, and `EventSystem` toggling. **`get_api_capabilities`** reports **`addon_rpc_version` `1.6`** — clients should not assume the old list or version.
+
+**If you refactor:** keep **`Addon_SocketServer.BuildAddonApiCapabilities()`** in sync with **`ExecuteFastPathCommand`** early handlers (`TryExecuteEditorLayoutCommand`, `TryExecutePlayerDisplayCommand`, `TryExecuteUiChromeCommand`). Missing entries break discovery; missing `switch` cases break runtime calls. **`ExecuteCommand`** now does **`@params ??= new JObject()`** so omitting `params` never null-derefs handlers.
+
+### New / changed C# (Unity)
+
+| Area | Files | Notes |
+|------|--------|--------|
+| Editor columns | `Global_Skeleton_UI.cs` | Snapshots left/right `LayoutElement` widths; `SetSidePanelVisibility` zeroes or restores; `TryGetSidePanelVisibility` gates **get/set** RPC parity. |
+| Socket routing | `Addon_SocketServer.cs` | Early RPCs **before** `FastPath_API` ready (except `get_addon_context`). UI chrome, display, editor layout grouped in static try-methods. |
+| Display | `SpzPlayerDisplay_API.cs` | Windowed / borderless / exclusive fullscreen; batch-mode no-op on set; optional resolution + `refresh_rate_hz`. |
+| Cursor | `SpzCursor_API.cs` | `None` / `Locked` / `Confined`; **`set_cursor_state`** treats JSON **`null`** keys as omitted (`TryGetValue` + `JTokenType.Null`). |
+| Ribbon | `TabsGroup_UI.cs`, `CommandRibbon_UI.cs` | `TrySwitchTab`, `GetTabTitles`; `TrySwitchRibbonTabByTitle`, `GetRibbonTabTitles`. |
+| UI scale & targets | `SpzUiChromeOps.cs`, `SpzUiChromeRegistry.cs` | Main scaler = **`Global_Skeleton_UI`** + **`CanvasScaler`** (**Scale With Screen Size** only). **`_referenceBaseline`** captured **once per session** (do not overwrite on scaler refresh). Built-in target ids resolved before registry extras. |
+| Registry (optional extras) | `SpzUiChromeRegistry.cs` | **Added to** `UI_Global_Skeleton.unity` on skeleton canvas root; inspector **`_extraTargets`** for more named ids. |
+
+### New `spz.cmd.*` surface (non-exhaustive; see capabilities)
+
+- **Layout:** `get_editor_layout`, `set_editor_layout` (`mode`, `left_visible`, `right_visible`).
+- **Display:** `get_display_mode`, `set_display_mode` (`mode`, optional `width` / `height` / `refresh_rate_hz`; validation + partial-dimension normalize in `SpzPlayerDisplay_API`).
+- **Ribbon / cursor:** `get_ribbon_tabs`, `set_ribbon_tab`, `get_cursor_state`, `set_cursor_state`.
+- **UI chrome:** `get_ui_scale`, `set_ui_scale`, `list_ui_targets`, `get_ui_target_active`, `set_ui_target_active`, `show_status_text`, `get_event_system`, `set_event_system`.
+
+### Shipped Python / HTTP (`Assets/StreamingAssets/AddonSystem/`)
+
+- **`spz.py`:** `api.editor`, `api.display`, `api.ui_chrome` (+ `editor()`, `display()`, `ui_chrome()` helpers).
+- **`http_server.py`:** `/api/v1/editor/layout`, `/api/v1/display/mode`, `/api/v1/chrome/*` (ribbon, cursor, ui-scale, ui-targets, status-text, event-system).
+
+### Risk / testing flags for refactors
+
+- **UI scale:** Wrong baseline logic breaks multiplier; scaler must stay **Scale With Screen Size** on skeleton for set/get to succeed.
+- **Hiding targets:** `global_skeleton_canvas` / disabling **EventSystem** can brick input — API allows it on purpose.
+- **IL2CPP / headless:** Display and some UI paths may no-op or return errors; batch mode guarded where noted.
+
+---
+
 ## [Unreleased] — 2026-04-05 — Command ribbon tab strip (many add-ons, resize)
 
 ### Summary

@@ -370,6 +370,7 @@ namespace spz {
 		/// Executes a command on the main thread
 		/// </summary>
 		JObject ExecuteCommand(string method, JObject @params) {
+			@params ??= new JObject();
 			var result = new JObject();
 			
 			// Route to appropriate handler
@@ -418,6 +419,10 @@ namespace spz {
 				"spz.cmd.get_camera_fov", "spz.cmd.get_camera_rot",
 				"spz.cmd.get_controlnet_unit_count", "spz.cmd.get_controlnet_unit_enabled",
 				"spz.cmd.get_controlnet_unit_model", "spz.cmd.get_controlnet_unit_weight",
+				"spz.cmd.get_cursor_state",
+				"spz.cmd.get_display_mode",
+				"spz.cmd.get_editor_layout",
+				"spz.cmd.get_event_system", "spz.cmd.get_ribbon_tabs",
 				"spz.cmd.get_mesh_bounds", "spz.cmd.get_mesh_name", "spz.cmd.get_mesh_pos", "spz.cmd.get_mesh_rot",
 				"spz.cmd.get_mesh_scale", "spz.cmd.get_mesh_visibility", "spz.cmd.get_negative_prompt",
 				"spz.cmd.get_paint_layers", "spz.cmd.get_positive_prompt", "spz.cmd.get_projection_camera_count",
@@ -425,22 +430,31 @@ namespace spz {
 				"spz.cmd.get_project_data_dir", "spz.cmd.get_project_path", "spz.cmd.get_project_version",
 				"spz.cmd.get_sd_workflow_options", "spz.cmd.get_selected_mesh_count", "spz.cmd.get_selected_meshes",
 				"spz.cmd.get_selected_meshes_bounds", "spz.cmd.get_skybox_bottom_color", "spz.cmd.get_skybox_top_color",
-				"spz.cmd.get_total_mesh_count", "spz.cmd.get_workflow_mode", "spz.cmd.is_3d_connected",
+				"spz.cmd.get_total_mesh_count", 				"spz.cmd.get_ui_scale", "spz.cmd.get_ui_target_active",
+				"spz.cmd.get_view_camera_projection", "spz.cmd.get_view_cameras",
+				"spz.cmd.get_workflow_mode", "spz.cmd.is_3d_connected",
 				"spz.cmd.is_3d_generation_in_progress", "spz.cmd.is_3d_generation_ready", "spz.cmd.is_generating",
 				"spz.cmd.is_project_operation_in_progress", "spz.cmd.is_sd_connected",
-				"spz.cmd.is_skybox_gradient_clear", "spz.cmd.load_project", "spz.cmd.save_project",
+				"spz.cmd.is_skybox_gradient_clear", "spz.cmd.list_ui_targets", "spz.cmd.load_project", "spz.cmd.save_project",
 				"spz.cmd.select_all_meshes", "spz.cmd.select_mesh", "spz.cmd.set_active_paint_layer",
 				"spz.cmd.set_brush_angle", "spz.cmd.set_brush_opacity", "spz.cmd.set_brush_roundness",
 				"spz.cmd.set_brush_size", "spz.cmd.set_brush_spacing", "spz.cmd.set_brush_stamp_index",
 				"spz.cmd.set_camera_fov", "spz.cmd.set_camera_pos", "spz.cmd.set_camera_rot",
-				"spz.cmd.set_controlnet_unit_enabled", "spz.cmd.set_controlnet_unit_weight",
+				"spz.cmd.set_current_view_camera", "spz.cmd.set_controlnet_unit_enabled", "spz.cmd.set_controlnet_unit_weight",
+				"spz.cmd.set_cursor_state",
+				"spz.cmd.set_display_mode",
+				"spz.cmd.set_editor_layout",
+				"spz.cmd.set_event_system",
+				"spz.cmd.set_ribbon_tab",
 				"spz.cmd.set_mesh_pos", "spz.cmd.set_mesh_positions", "spz.cmd.set_mesh_rot",
 				"spz.cmd.set_mesh_rotations", "spz.cmd.set_mesh_scale", "spz.cmd.set_mesh_scales",
 				"spz.cmd.set_mesh_visibility", "spz.cmd.set_negative_prompt", "spz.cmd.set_positive_prompt",
 				"spz.cmd.set_projection_camera_pos", "spz.cmd.set_projection_camera_rot",
 				"spz.cmd.set_sd_denoising_strength", "spz.cmd.set_sd_ignore_depth_or_normals",
 				"spz.cmd.set_sd_mask_blur", "spz.cmd.set_sd_soft_inpaint", "spz.cmd.set_sd_tileable_inpaint",
-				"spz.cmd.set_skybox_color", "spz.cmd.set_workflow_mode", "spz.cmd.stop_generation",
+				"spz.cmd.set_skybox_color", 				"spz.cmd.set_ui_scale", "spz.cmd.set_ui_target_active",
+				"spz.cmd.set_view_camera_active", "spz.cmd.set_view_camera_projection", "spz.cmd.set_view_cameras_enabled_count",
+				"spz.cmd.set_workflow_mode", "spz.cmd.show_status_text", "spz.cmd.stop_generation",
 				"spz.cmd.trigger_3d_generation", "spz.cmd.trigger_texture_generation",
 			};
 			var ui = new JArray {
@@ -449,12 +463,418 @@ namespace spz {
 			};
 			return new JObject {
 				["success"] = true,
-				["addon_rpc_version"] = "1.2",
+				["addon_rpc_version"] = "1.8",
 				["spz_cmd"] = cmd,
 				["spz_ui"] = ui,
 				["context_command"] = "spz.cmd.get_addon_context",
-				["note"] = "get_api_capabilities is available before FastPath finishes initializing; get_addon_context requires FastPath ready.",
+				["note"] = "get_api_capabilities, editor/display/chrome UI helpers are available before FastPath; get_addon_context requires FastPath ready.",
 			};
+		}
+
+		/// <summary>
+		/// Main editor chrome (left input column, center viewport, right ribbon column) via <see cref="Global_Skeleton_UI"/>.
+		/// Does not require FastPath_API (runs as soon as the skeleton scene is loaded).
+		/// </summary>
+		static JObject TryExecuteEditorLayoutCommand(string method, JObject @params) {
+			if (method == "spz.cmd.get_editor_layout") {
+				var result = new JObject { ["success"] = false };
+				if (Global_Skeleton_UI.instance == null) {
+					result["error"] = "Global_Skeleton_UI not available";
+					return result;
+				}
+				if (!Global_Skeleton_UI.instance.TryGetSidePanelVisibility(out bool left, out bool right)) {
+					result["error"] = "Editor layout not ready (missing column RectTransforms, LayoutElements, or width snapshot)";
+					return result;
+				}
+				result["success"] = true;
+				result["left_visible"] = left;
+				result["right_visible"] = right;
+				result["viewport_expanded"] = !left && !right;
+				return result;
+			}
+
+			if (method == "spz.cmd.set_editor_layout") {
+				var result = new JObject { ["success"] = false };
+				if (Global_Skeleton_UI.instance == null) {
+					result["error"] = "Global_Skeleton_UI not available";
+					return result;
+				}
+				if (!Global_Skeleton_UI.instance.TryGetSidePanelVisibility(out _, out _)) {
+					result["error"] = "Editor layout not ready (missing column RectTransforms, LayoutElements, or width snapshot)";
+					return result;
+				}
+
+				bool left = true;
+				bool right = true;
+				string mode = @params["mode"]?.ToString();
+				if (!string.IsNullOrEmpty(mode)) {
+					if (mode == "viewport_focus" || mode == "fullscreen_center") {
+						left = false;
+						right = false;
+					}
+					else if (mode == "default") {
+						left = true;
+						right = true;
+					}
+					else {
+						result["error"] = "Unknown mode; use default, viewport_focus, or fullscreen_center";
+						return result;
+					}
+				}
+
+				try {
+					if (@params["left_visible"] != null) {
+						left = @params["left_visible"].ToObject<bool>();
+					}
+					if (@params["right_visible"] != null) {
+						right = @params["right_visible"].ToObject<bool>();
+					}
+				}
+				catch {
+					result["error"] = "Invalid left_visible or right_visible (use boolean JSON values)";
+					return result;
+				}
+
+				bool ok = Global_Skeleton_UI.instance.SetSidePanelVisibility(left, right);
+				result["success"] = ok;
+				if (!ok) {
+					result["error"] = "Failed to apply editor layout";
+				}
+				return result;
+			}
+
+			return null;
+		}
+
+		/// <summary>
+		/// Player window: windowed, borderless fullscreen, OS exclusive fullscreen via <see cref="SpzPlayerDisplay_API"/>.
+		/// </summary>
+		static JObject TryExecutePlayerDisplayCommand(string method, JObject @params) {
+			if (method == "spz.cmd.get_display_mode") {
+				SpzPlayerDisplay_API.GetScreenState(out bool fs, out FullScreenMode fsMode, out int w, out int h);
+				SpzPlayerDisplay_API.GetPrimaryDisplaySize(out int mainW, out int mainH);
+				return new JObject {
+					["success"] = true,
+					["fullscreen"] = fs,
+					["fullscreen_mode"] = fsMode.ToString(),
+					["exclusive_fullscreen"] = SpzPlayerDisplay_API.IsExclusiveFullScreen(fsMode),
+					["width"] = w,
+					["height"] = h,
+					["main_display_width"] = mainW,
+					["main_display_height"] = mainH,
+					["batch_mode"] = Application.isBatchMode,
+				};
+			}
+
+			if (method == "spz.cmd.set_display_mode") {
+				var result = new JObject { ["success"] = false };
+				if (Application.isBatchMode) {
+					result["error"] = "Display mode cannot be changed in batch mode";
+					return result;
+				}
+
+				string mode = @params["mode"]?.ToString();
+				if (string.IsNullOrEmpty(mode)) {
+					result["error"] = "Missing mode (windowed, exclusive_fullscreen, borderless_fullscreen)";
+					return result;
+				}
+
+				int w;
+				int h;
+				int hz;
+				try {
+					w = @params["width"]?.ToObject<int>() ?? 0;
+					h = @params["height"]?.ToObject<int>() ?? 0;
+					hz = @params["refresh_rate_hz"]?.ToObject<int>() ?? 0;
+				}
+				catch {
+					result["error"] = "Invalid width, height, or refresh_rate_hz (use integer JSON values)";
+					return result;
+				}
+
+				if (w < 0 || h < 0) {
+					result["error"] = "width and height must be >= 0 when specified";
+					return result;
+				}
+				if (hz < 0) {
+					result["error"] = "refresh_rate_hz must be >= 0";
+					return result;
+				}
+				const int maxResolution = 16384;
+				if ((w > 0 && w > maxResolution) || (h > 0 && h > maxResolution)) {
+					result["error"] = $"width and height must be <= {maxResolution}";
+					return result;
+				}
+				if (hz > 1000) {
+					result["error"] = "refresh_rate_hz is unrealistically large";
+					return result;
+				}
+
+				bool ok;
+				switch (mode) {
+					case "windowed":
+						ok = SpzPlayerDisplay_API.SetWindowed(w, h);
+						break;
+					case "exclusive_fullscreen":
+					case "exclusive":
+						ok = SpzPlayerDisplay_API.SetExclusiveFullScreen(w, h, hz);
+						break;
+					case "borderless_fullscreen":
+					case "borderless":
+					case "fullscreen_window":
+						ok = SpzPlayerDisplay_API.SetBorderlessFullScreen(w, h);
+						break;
+					default:
+						result["error"] = "Unknown mode; use windowed, exclusive_fullscreen, borderless_fullscreen";
+						return result;
+				}
+
+				result["success"] = ok;
+				if (!ok) {
+					result["error"] = "Failed to apply display mode";
+				}
+				return result;
+			}
+
+			return null;
+		}
+
+		/// <summary>
+		/// Ribbon tab strip, cursor lock/visibility — no FastPath required.
+		/// </summary>
+		static JObject TryExecuteUiChromeCommand(string method, JObject @params) {
+			if (method == "spz.cmd.get_ribbon_tabs") {
+				var ribbon = AddonRibbonIntegration.ResolveCommandRibbon();
+				if (ribbon == null) {
+					return new JObject { ["success"] = false, ["error"] = "CommandRibbon_UI not available" };
+				}
+				var titles = ribbon.GetRibbonTabTitles();
+				var arr = new JArray();
+				foreach (var t in titles) {
+					arr.Add(t);
+				}
+				var addonNote = "Add-on tabs use ids like \"addon_<folderId>\" (see AddonRibbonIntegration.TabIdForAddon). Built-in examples: art list, art bg list, mesh, controlnet, paint.";
+				return new JObject {
+					["success"] = true,
+					["tabs"] = arr,
+					["note"] = addonNote,
+				};
+			}
+
+			if (method == "spz.cmd.set_ribbon_tab") {
+				var result = new JObject { ["success"] = false };
+				string tab = @params["tab"]?.ToString();
+				if (string.IsNullOrEmpty(tab)) {
+					result["error"] = "Missing tab (ribbon tab title, case-insensitive)";
+					return result;
+				}
+				var ribbon = AddonRibbonIntegration.ResolveCommandRibbon();
+				if (ribbon == null) {
+					result["error"] = "CommandRibbon_UI not available";
+					return result;
+				}
+				bool ok = ribbon.TrySwitchRibbonTabByTitle(tab);
+				result["success"] = ok;
+				if (!ok) {
+					result["error"] = $"No ribbon tab matched \"{tab}\". Use spz.cmd.get_ribbon_tabs to list titles.";
+				}
+				return result;
+			}
+
+			if (method == "spz.cmd.get_cursor_state") {
+				SpzCursor_API.GetState(out CursorLockMode lm, out bool vis);
+				return new JObject {
+					["success"] = true,
+					["lock_mode"] = lm.ToString(),
+					["visible"] = vis,
+				};
+			}
+
+			if (method == "spz.cmd.set_cursor_state") {
+				var result = new JObject { ["success"] = false };
+				bool hasLock = @params.TryGetValue("lock_mode", out JToken lockTok) && lockTok != null && lockTok.Type != JTokenType.Null;
+				bool hasVis = @params.TryGetValue("visible", out JToken visTok) && visTok != null && visTok.Type != JTokenType.Null;
+				if (!hasLock && !hasVis) {
+					result["error"] = "Provide lock_mode and/or visible";
+					return result;
+				}
+				SpzCursor_API.GetState(out CursorLockMode lm, out bool vis);
+				try {
+					if (hasLock) {
+						if (!SpzCursor_API.TryParseLockMode(lockTok.ToString(), out lm)) {
+							result["error"] = "Invalid lock_mode; use None, Locked, or Confined";
+							return result;
+						}
+					}
+					if (hasVis) {
+						vis = visTok.ToObject<bool>();
+					}
+				}
+				catch {
+					result["error"] = "Invalid lock_mode or visible parameter";
+					return result;
+				}
+				SpzCursor_API.Apply(lm, vis);
+				result["success"] = true;
+				return result;
+			}
+
+			if (method == "spz.cmd.get_ui_scale") {
+				if (Application.isBatchMode) {
+					return new JObject { ["success"] = false, ["error"] = "UI scale not available in batch mode" };
+				}
+				if (!SpzUiChromeOps.TryGetUiScale(out float mult, out float rx, out float ry)) {
+					return new JObject { ["success"] = false, ["error"] = "Main CanvasScaler not available (Global_Skeleton_UI)" };
+				}
+				return new JObject {
+					["success"] = true,
+					["scale_multiplier"] = mult,
+					["reference_resolution_x"] = rx,
+					["reference_resolution_y"] = ry,
+					["note"] = "scale_multiplier 1 = session baseline; applies to Scale With Screen Size reference resolution on skeleton canvas.",
+				};
+			}
+
+			if (method == "spz.cmd.set_ui_scale") {
+				var result = new JObject { ["success"] = false };
+				if (Application.isBatchMode) {
+					result["error"] = "UI scale not available in batch mode";
+					return result;
+				}
+				float m = float.NaN;
+				if (@params.TryGetValue("scale_multiplier", out JToken smTok) && smTok != null && smTok.Type != JTokenType.Null) {
+					try {
+						m = smTok.ToObject<float>();
+					}
+					catch {
+						m = float.NaN;
+					}
+				}
+				if (float.IsNaN(m) && @params.TryGetValue("multiplier", out JToken multTok) && multTok != null && multTok.Type != JTokenType.Null) {
+					try {
+						m = multTok.ToObject<float>();
+					}
+					catch {
+						m = float.NaN;
+					}
+				}
+				if (float.IsNaN(m) || float.IsInfinity(m)) {
+					result["error"] = "Missing or invalid scale_multiplier (float, typically 0.5–2)";
+					return result;
+				}
+				bool applied = SpzUiChromeOps.SetUiScaleMultiplier(m);
+				result["success"] = applied;
+				if (!applied)
+					result["error"] = "Could not apply UI scale (needs Scale With Screen Size on skeleton CanvasScaler)";
+				return result;
+			}
+
+			if (method == "spz.cmd.list_ui_targets") {
+				var ids = SpzUiChromeOps.ListUiTargetIds();
+				var arr = new JArray();
+				foreach (var id in ids)
+					arr.Add(id);
+				return new JObject {
+					["success"] = true,
+					["targets"] = arr,
+					["note"] = "Built-ins: global_skeleton_canvas, viewport_statusline, command_ribbon. Add SpzUiChromeRegistry to scene for more.",
+				};
+			}
+
+			if (method == "spz.cmd.get_ui_target_active") {
+				var result = new JObject { ["success"] = false };
+				string id = @params["id"]?.ToString();
+				if (string.IsNullOrEmpty(id)) {
+					result["error"] = "Missing id (use list_ui_targets)";
+					return result;
+				}
+				if (!SpzUiChromeOps.TryGetUiTargetActive(id, out bool ac)) {
+					result["error"] = $"Unknown or unresolved id \"{id}\"";
+					return result;
+				}
+				result["success"] = true;
+				result["active"] = ac;
+				return result;
+			}
+
+			if (method == "spz.cmd.set_ui_target_active") {
+				var result = new JObject { ["success"] = false };
+				string id = @params["id"]?.ToString();
+				if (string.IsNullOrEmpty(id)) {
+					result["error"] = "Missing id";
+					return result;
+				}
+				if (!@params.TryGetValue("active", out JToken activeTok) || activeTok == null || activeTok.Type == JTokenType.Null) {
+					result["error"] = "Missing or invalid active (boolean)";
+					return result;
+				}
+				try {
+					bool active = activeTok.ToObject<bool>();
+					if (!SpzUiChromeOps.SetUiTargetActive(id, active)) {
+						result["error"] = $"Unknown or unresolved id \"{id}\"";
+						return result;
+					}
+					result["success"] = true;
+				}
+				catch {
+					result["error"] = "Missing or invalid active (boolean)";
+				}
+				return result;
+			}
+
+			if (method == "spz.cmd.show_status_text") {
+				var result = new JObject { ["success"] = false };
+				string msg = @params["message"]?.ToString() ?? @params["text"]?.ToString() ?? "";
+				bool eta = false;
+				float dur = 2f;
+				bool prog = false;
+				try {
+					if (@params.TryGetValue("text_is_eta", out JToken etaTok) && etaTok != null && etaTok.Type != JTokenType.Null)
+						eta = etaTok.ToObject<bool>();
+					if (@params.TryGetValue("duration", out JToken durTok) && durTok != null && durTok.Type != JTokenType.Null)
+						dur = durTok.ToObject<float>();
+					if (@params.TryGetValue("progress_visibility", out JToken progTok) && progTok != null && progTok.Type != JTokenType.Null)
+						prog = progTok.ToObject<bool>();
+					if (!SpzUiChromeOps.ShowStatusText(msg, eta, dur, prog)) {
+						result["error"] = "Viewport_StatusText not available";
+						return result;
+					}
+					result["success"] = true;
+				}
+				catch {
+					result["error"] = "Invalid status text parameters";
+				}
+				return result;
+			}
+
+			if (method == "spz.cmd.get_event_system") {
+				if (!SpzUiChromeOps.TryGetEventSystemEnabled(out bool en)) {
+					return new JObject { ["success"] = false, ["error"] = "EventSystem.current is null" };
+				}
+				return new JObject { ["success"] = true, ["enabled"] = en };
+			}
+
+			if (method == "spz.cmd.set_event_system") {
+				var result = new JObject { ["success"] = false };
+				if (!@params.TryGetValue("enabled", out JToken enTok) || enTok == null || enTok.Type == JTokenType.Null) {
+					result["error"] = "Missing or invalid enabled (boolean)";
+					return result;
+				}
+				try {
+					bool en = enTok.ToObject<bool>();
+					if (!SpzUiChromeOps.SetEventSystemEnabled(en)) {
+						result["error"] = "EventSystem.current is null";
+						return result;
+					}
+					result["success"] = true;
+				}
+				catch {
+					result["error"] = "Missing or invalid enabled (boolean)";
+				}
+				return result;
+			}
+
+			return null;
 		}
 
 		/// <summary>
@@ -463,6 +883,21 @@ namespace spz {
 		JObject ExecuteFastPathCommand(string method, JObject @params) {
 			if (method == "spz.cmd.get_api_capabilities") {
 				return BuildAddonApiCapabilities();
+			}
+
+			var editorLayoutResult = TryExecuteEditorLayoutCommand(method, @params);
+			if (editorLayoutResult != null) {
+				return editorLayoutResult;
+			}
+
+			var playerDisplayResult = TryExecutePlayerDisplayCommand(method, @params);
+			if (playerDisplayResult != null) {
+				return playerDisplayResult;
+			}
+
+			var uiChromeResult = TryExecuteUiChromeCommand(method, @params);
+			if (uiChromeResult != null) {
+				return uiChromeResult;
 			}
 
 			if (FastPath_API.instance == null || !FastPath_API.instance.IsReady()) {
@@ -534,7 +969,117 @@ namespace spz {
 							result["success"] = false;
 						}
 						break;
-						
+
+					case "spz.cmd.get_view_cameras": {
+						var state = fastPath.GetViewCamerasStateJson();
+						if (state == null) {
+							return new JObject { ["success"] = false, ["error"] = "View cameras not available (FastPath or UserCameras_MGR)" };
+						}
+						state["success"] = true;
+						return state;
+					}
+
+					case "spz.cmd.get_view_camera_projection": {
+						int projIdx = @params["camera_index"]?.ToObject<int>() ?? -1;
+						var proj = fastPath.GetViewCameraProjectionJson(projIdx);
+						if (proj == null) {
+							return new JObject { ["success"] = false, ["error"] = "Invalid camera_index or view camera not found" };
+						}
+						proj["success"] = true;
+						proj["camera_index"] = projIdx;
+						return proj;
+					}
+
+					case "spz.cmd.set_view_cameras_enabled_count":
+						try {
+							int cnt = @params["count"]?.ToObject<int>() ?? -1;
+							if (cnt < 0) {
+								result["error"] = "count must be >= 0 (omitted count defaults to invalid -1)";
+								break;
+							}
+							bool okCnt = fastPath.SetViewCamerasEnabledCount(cnt);
+							result["success"] = okCnt;
+							if (!okCnt) {
+								result["error"] = "FastPath not ready or UserCameras_MGR missing";
+							}
+						}
+						catch {
+							result["error"] = "Invalid count (integer)";
+						}
+						break;
+
+					case "spz.cmd.set_view_camera_active":
+						try {
+							int vix = @params["camera_index"]?.ToObject<int>() ?? -1;
+							if (!@params.TryGetValue("active", out JToken actTok) || actTok == null || actTok.Type == JTokenType.Null) {
+								result["error"] = "Missing or invalid active (boolean)";
+								break;
+							}
+							bool vact = actTok.ToObject<bool>();
+							bool okV = fastPath.SetViewCameraActiveRpc(vix, vact);
+							result["success"] = okV;
+							if (!okV) {
+								result["error"] = "Invalid camera_index or FastPath not ready";
+							}
+						}
+						catch {
+							result["error"] = "Invalid camera_index or active";
+						}
+						break;
+
+					case "spz.cmd.set_current_view_camera":
+						try {
+							int curIx = @params["camera_index"]?.ToObject<int>() ?? -1;
+							bool okCur = fastPath.SetCurrentViewCameraIndexRpc(curIx);
+							result["success"] = okCur;
+							if (!okCur) {
+								result["error"] = "Invalid index or view camera not active (set_view_camera_active first)";
+							}
+						}
+						catch {
+							result["error"] = "Invalid camera_index";
+						}
+						break;
+
+					case "spz.cmd.set_view_camera_projection": {
+						int pix = @params["camera_index"]?.ToObject<int>() ?? -1;
+						bool? orthoP = null;
+						if (@params.TryGetValue("orthographic", out JToken orthoTok) && orthoTok != null && orthoTok.Type != JTokenType.Null) {
+							try {
+								orthoP = orthoTok.ToObject<bool>();
+							}
+							catch {
+								return new JObject { ["success"] = false, ["error"] = "Invalid orthographic (boolean)" };
+							}
+						}
+						float? orthoSz = null;
+						if (@params.TryGetValue("orthographic_size", out JToken osTok) && osTok != null && osTok.Type != JTokenType.Null) {
+							try {
+								orthoSz = osTok.ToObject<float>();
+							}
+							catch {
+								return new JObject { ["success"] = false, ["error"] = "Invalid orthographic_size (float)" };
+							}
+						}
+						float? fovP = null;
+						if (@params.TryGetValue("field_of_view", out JToken fovTok) && fovTok != null && fovTok.Type != JTokenType.Null) {
+							try {
+								fovP = fovTok.ToObject<float>();
+							}
+							catch {
+								return new JObject { ["success"] = false, ["error"] = "Invalid field_of_view (float)" };
+							}
+						}
+						if (orthoP == null && !orthoSz.HasValue && !fovP.HasValue) {
+							return new JObject { ["success"] = false, ["error"] = "Provide orthographic and/or orthographic_size and/or field_of_view" };
+						}
+						bool okP = fastPath.SetViewCameraProjectionRpc(pix, orthoP, orthoSz, fovP);
+						if (!okP) {
+							return new JObject { ["success"] = false, ["error"] = "Could not apply (invalid index, inactive camera, or no effective change)" };
+						}
+						return new JObject { ["success"] = true };
+					}
+
 					case "spz.cmd.select_mesh":
 						ushort meshId = @params["mesh_id"]?.ToObject<ushort>() ?? 0;
 						result["success"] = fastPath.SelectMesh(meshId);

@@ -218,6 +218,63 @@ class CameraAPI:
         return []
 
 
+class ViewCamerasAPI:
+    """
+    Multi viewport camera slots (same indices as ``CameraAPI`` / ``camera_index``).
+    Active cameras layer into one main viewport render target.
+    """
+
+    def __init__(self, client):
+        self._client = client
+
+    def get_state(self):
+        """Unity dict: ``count``, ``current_index``, ``active`` (bools), ``num_active``, ``note``."""
+        return self._client._send_request("spz.cmd.get_view_cameras", {})
+
+    def set_enabled_count(self, count):
+        """Enable the first ``count`` view cameras, disable the rest. Returns True if Unity accepted."""
+        r = self._client._send_request(
+            "spz.cmd.set_view_cameras_enabled_count", {"count": int(count)})
+        return r.get("success", False)
+
+    def set_active(self, camera_index, active):
+        """Turn one view camera on or off."""
+        r = self._client._send_request("spz.cmd.set_view_camera_active", {
+            "camera_index": int(camera_index),
+            "active": bool(active),
+        })
+        return r.get("success", False)
+
+    def set_current(self, camera_index):
+        """Focus/orbit target: must be an active camera index."""
+        r = self._client._send_request(
+            "spz.cmd.set_current_view_camera", {"camera_index": int(camera_index)})
+        return r.get("success", False)
+
+    def get_projection(self, camera_index):
+        """``orthographic``, ``orthographic_size``, ``field_of_view`` for one view camera slot (active or not)."""
+        return self._client._send_request(
+            "spz.cmd.get_view_camera_projection", {"camera_index": int(camera_index)})
+
+    def set_projection(self, camera_index, orthographic=None, orthographic_size=None, field_of_view=None):
+        """
+        Set projection mode / ortho size / FOV. Pass only keys you need (orthographic True/False, sizes, etc.).
+        ``orthographic_size`` alone switches the slot to orthographic and sets size.
+        Returns True if Unity applied at least one change.
+        """
+        if orthographic is None and orthographic_size is None and field_of_view is None:
+            return False
+        p = {"camera_index": int(camera_index)}
+        if orthographic is not None:
+            p["orthographic"] = bool(orthographic)
+        if orthographic_size is not None:
+            p["orthographic_size"] = float(orthographic_size)
+        if field_of_view is not None:
+            p["field_of_view"] = float(field_of_view)
+        r = self._client._send_request("spz.cmd.set_view_camera_projection", p)
+        return r.get("success", False)
+
+
 # ============================================
 # Models API
 # ============================================
@@ -1244,6 +1301,157 @@ class PaintAPI:
 
 
 # ============================================
+# Main editor layout (skeleton: left column, center viewport, right column)
+# ============================================
+
+class EditorLayoutAPI:
+    """Show/hide left and right editor columns (center viewport expands). Same JSON-RPC as ``/api/v1/editor/layout``."""
+
+    def __init__(self, client):
+        self._client = client
+
+    def get_layout(self):
+        """Returns Unity result dict: ``left_visible``, ``right_visible``, ``viewport_expanded``, ``success``."""
+        return self._client._send_request("spz.cmd.get_editor_layout", {})
+
+    def set_side_panels(self, left_visible=True, right_visible=True):
+        """Restore or hide side columns. Returns True if Unity reported success."""
+        r = self._client._send_request("spz.cmd.set_editor_layout", {
+            "left_visible": bool(left_visible),
+            "right_visible": bool(right_visible),
+        })
+        return r.get("success", False)
+
+    def set_layout(self, left_visible=True, right_visible=True):
+        """Alias of ``set_side_panels``."""
+        return self.set_side_panels(left_visible, right_visible)
+
+    def set_mode(self, mode):
+        """
+        ``mode``: ``default`` (both sides on), ``viewport_focus`` or ``fullscreen_center`` (both off / wide center).
+        Returns True if Unity reported success.
+        """
+        r = self._client._send_request("spz.cmd.set_editor_layout", {"mode": str(mode)})
+        return r.get("success", False)
+
+
+# ============================================
+# Player window / OS fullscreen (Unity Screen)
+# ============================================
+
+class DisplayAPI:
+    """Windowed, borderless fullscreen, exclusive fullscreen — same JSON-RPC as ``/api/v1/display/mode``."""
+
+    def __init__(self, client):
+        self._client = client
+
+    def get_mode(self):
+        """Unity dict: ``fullscreen``, ``fullscreen_mode``, ``exclusive_fullscreen``, ``width``, ``height``, etc."""
+        return self._client._send_request("spz.cmd.get_display_mode", {})
+
+    def set_mode(self, mode, width=None, height=None, refresh_rate_hz=None):
+        """
+        ``mode``: ``windowed``, ``exclusive_fullscreen`` (alias ``exclusive``), ``borderless_fullscreen`` (alias ``borderless``).
+        Optional ``width``/``height`` for resolution; ``refresh_rate_hz`` for exclusive mode with explicit resolution.
+        Returns True if Unity reported success.
+        """
+        p = {"mode": str(mode)}
+        if width is not None:
+            p["width"] = int(width)
+        if height is not None:
+            p["height"] = int(height)
+        if refresh_rate_hz is not None:
+            p["refresh_rate_hz"] = int(refresh_rate_hz)
+        r = self._client._send_request("spz.cmd.set_display_mode", p)
+        return r.get("success", False)
+
+    def set_windowed(self, width=None, height=None):
+        return self.set_mode("windowed", width=width, height=height)
+
+    def set_exclusive_fullscreen(self, width=None, height=None, refresh_rate_hz=None):
+        return self.set_mode("exclusive_fullscreen", width=width, height=height, refresh_rate_hz=refresh_rate_hz)
+
+    def set_borderless_fullscreen(self, width=None, height=None):
+        return self.set_mode("borderless_fullscreen", width=width, height=height)
+
+
+# ============================================
+# Ribbon + cursor (command strip / input) — same JSON-RPC as ``/api/v1/chrome/*``
+# ============================================
+
+class UiChromeAPI:
+    """Ribbon tab titles/switching and cursor lock — complements ``api.ui`` widget API."""
+
+    def __init__(self, client):
+        self._client = client
+
+    @staticmethod
+    def addon_tab_id(addon_folder_id):
+        """Tab title for an add-on panel: ``addon_<folderId>`` (matches Unity ``AddonRibbonIntegration``)."""
+        aid = str(addon_folder_id or "").strip()
+        return "addon_" + aid if aid else "addon_"
+
+    def get_ribbon_tabs(self):
+        """Unity dict with ``tabs`` list and optional ``note``."""
+        return self._client._send_request("spz.cmd.get_ribbon_tabs", {})
+
+    def select_ribbon_tab(self, tab_title):
+        """Activate ribbon tab by title (case-insensitive). Returns True if Unity matched a tab."""
+        r = self._client._send_request("spz.cmd.set_ribbon_tab", {"tab": str(tab_title)})
+        return r.get("success", False)
+
+    def get_cursor(self):
+        """``lock_mode``, ``visible``."""
+        return self._client._send_request("spz.cmd.get_cursor_state", {})
+
+    def set_cursor(self, lock_mode=None, visible=None):
+        """Set ``lock_mode`` (``None``/``Locked``/``Confined``) and/or ``visible``; pass only what you need."""
+        p = {}
+        if lock_mode is not None:
+            p["lock_mode"] = str(lock_mode)
+        if visible is not None:
+            p["visible"] = bool(visible)
+        if not p:
+            return False
+        r = self._client._send_request("spz.cmd.set_cursor_state", p)
+        return r.get("success", False)
+
+    def get_ui_scale(self):
+        return self._client._send_request("spz.cmd.get_ui_scale", {})
+
+    def set_ui_scale(self, scale_multiplier):
+        r = self._client._send_request("spz.cmd.set_ui_scale", {"scale_multiplier": float(scale_multiplier)})
+        return r.get("success", False)
+
+    def list_ui_targets(self):
+        return self._client._send_request("spz.cmd.list_ui_targets", {})
+
+    def get_ui_target_active(self, target_id):
+        return self._client._send_request("spz.cmd.get_ui_target_active", {"id": str(target_id)})
+
+    def set_ui_target_active(self, target_id, active):
+        r = self._client._send_request(
+            "spz.cmd.set_ui_target_active", {"id": str(target_id), "active": bool(active)})
+        return r.get("success", False)
+
+    def show_status_text(self, message, duration=2.0, text_is_eta=False, progress_visibility=False):
+        r = self._client._send_request("spz.cmd.show_status_text", {
+            "message": str(message),
+            "duration": float(duration),
+            "text_is_eta": bool(text_is_eta),
+            "progress_visibility": bool(progress_visibility),
+        })
+        return r.get("success", False)
+
+    def get_event_system(self):
+        return self._client._send_request("spz.cmd.get_event_system", {})
+
+    def set_event_system(self, enabled):
+        r = self._client._send_request("spz.cmd.set_event_system", {"enabled": bool(enabled)})
+        return r.get("success", False)
+
+
+# ============================================
 # Add-on discovery / context (TCP JSON-RPC)
 # ============================================
 
@@ -1273,6 +1481,7 @@ class SPZAPI:
         self._client = _get_client()
         self.addon = AddonAPI(self._client)
         self.cameras = CameraAPI(self._client)
+        self.view_cameras = ViewCamerasAPI(self._client)
         self.models = ModelsAPI(self._client)
         self.scene = SceneAPI(self._client)
         self.sd = StableDiffusionAPI(self._client)
@@ -1284,6 +1493,9 @@ class SPZAPI:
         self.project = ProjectAPI(self._client)
         self.projection = ProjectionAPI(self._client)
         self.ui = UIAPI(self._client)
+        self.editor = EditorLayoutAPI(self._client)
+        self.display = DisplayAPI(self._client)
+        self.ui_chrome = UiChromeAPI(self._client)
         self.paint = PaintAPI(self._client)
     
     def close(self):
@@ -1312,6 +1524,11 @@ def addon():
 def cameras():
     """Get cameras API"""
     return get_api().cameras
+
+
+def view_cameras():
+    """Multi-slot view camera state (enable count, current, ortho/persp)."""
+    return get_api().view_cameras
 
 
 def models():
@@ -1367,6 +1584,21 @@ def projection():
 def ui():
     """Get UI API"""
     return get_api().ui
+
+
+def editor():
+    """Get main editor layout API (left/right columns, center viewport span)."""
+    return get_api().editor
+
+
+def display():
+    """Get player display / OS fullscreen API."""
+    return get_api().display
+
+
+def ui_chrome():
+    """Ribbon tabs and cursor control (not widget ``api.ui``)."""
+    return get_api().ui_chrome
 
 
 def paint():

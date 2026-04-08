@@ -308,6 +308,20 @@ namespace spz {
 	    public void clickArtBGList_toggle_manual() { if (_tabGroup != null) _tabGroup.SwitchTab("art bg list"); }
 	    public void clickPaint_toggle_manual() { if (_tabGroup != null) _tabGroup.SwitchTab("paint"); }
 
+	    /// <summary>Add-on / automation: switch ribbon tab by <see cref="TabsGroupElem_UI.title"/> (e.g. <c>paint</c>, <c>addon_MyAddon</c>).</summary>
+	    public bool TrySwitchRibbonTabByTitle(string tabTitle) {
+		    EnsureTabGroupResolved();
+		    if (_tabGroup == null || string.IsNullOrEmpty(tabTitle)) return false;
+		    return _tabGroup.TrySwitchTab(tabTitle);
+	    }
+
+	    /// <summary>Tab titles currently registered on the strip (for discovery via JSON-RPC).</summary>
+	    public List<string> GetRibbonTabTitles() {
+		    EnsureTabGroupResolved();
+		    if (_tabGroup == null) return new List<string>();
+		    return _tabGroup.GetTabTitles();
+	    }
+
 
 	    IEnumerator Attention_toCtrlNetButton_crtn(){
 	        if (_ctrlNetButton_anim == null || _ctrlNetButton_anim.transform.childCount < 1) yield break;

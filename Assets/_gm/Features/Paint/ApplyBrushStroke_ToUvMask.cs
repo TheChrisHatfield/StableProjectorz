@@ -33,28 +33,51 @@ namespace spz {
 	    }
 
 
-	    public void Apply_into_ColorBrushTex( RenderTexture prevBrushStroke_R8, RenderTexture currBrushStroke_R8,
-	                                          float sign, float maxPossibleBrushStrength01, RenderUdims destin ){
+	    /// <summary>True when <see cref="Apply_into_ColorBrushTex"/> can dispatch (chunks, kernel, RTs). Use before <see cref="PaintUndo_MGR.SchedulePreStrokeCapture"/> so undo runs on the first frame that actually mutates.</summary>
+	    public bool CanDispatch_ColorBrushTex( RenderTexture currBrushStroke_R8, RenderUdims destin ){
+		    if (destin?.texArray == null || currBrushStroke_R8 == null) return false;
+		    if (Objects_Renderer_MGR.instance?.chunksTexture_ref()?.texArray == null) return false;
+		    if (_brushStroke_intoMask == null) return false;
+		    return _brushStroke_intoMask.FindKernel("CSMain") >= 0;
+	    }
+
+	    /// <param name="useBrushStrokeDelta">When true (inpaint color), applies curr−prev each frame while dragging — fluid like projection masks. When false, one-shot full stroke (curr only, prev ignored).</param>
+	    /// <returns>False if inputs or scene data were missing and nothing was dispatched.</returns>
+	    public bool Apply_into_ColorBrushTex( RenderTexture prevBrushStroke_R8, RenderTexture currBrushStroke_R8,
+	                                          float sign, float maxPossibleBrushStrength01, RenderUdims destin,
+	                                          bool useBrushStrokeDelta = true ){
+	        if (!CanDispatch_ColorBrushTex(currBrushStroke_R8, destin))
+		        return false;
 	        int kernel = _brushStroke_intoMask.FindKernel("CSMain");
+	        try {
+		        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "BLEND_RGBA_ONCE", true);
+		        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "RGBA_BRUSH_DELTA", useBrushStrokeDelta);
 
-	        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "BLEND_RGBA_ONCE", true);
+		        Color paintColor = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.brushColor : Color.black;
+		        _brushStroke_intoMask.SetVector("_PaintColor", paintColor);
+		        _brushStroke_intoMask.SetTexture(kernel, "_CurrBrushStroke_R8", currBrushStroke_R8);
+		        if (useBrushStrokeDelta)
+			        _brushStroke_intoMask.SetTexture(kernel, "_PrevBrushStroke_R8", prevBrushStroke_R8);
 
-	        Color paintColor = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.brushColor : Color.black;
-	        _brushStroke_intoMask.SetVector("_PaintColor", paintColor);
-	        _brushStroke_intoMask.SetTexture(kernel, "_CurrBrushStroke_R8", currBrushStroke_R8);//only 'curr', 'previous' is not needed.
+		        _brushStroke_intoMask.SetFloat("_Sign", sign); //to know if erasing or adding.
+		        _brushStroke_intoMask.SetFloat("_MaxPossibleBrushStrength01", maxPossibleBrushStrength01);
+		        _brushStroke_intoMask.SetTexture(kernel, "_PaintedMask", destin.texArray);
 
-	        _brushStroke_intoMask.SetFloat("_Sign", sign); //to know if erasing or adding.
-	        _brushStroke_intoMask.SetFloat("_MaxPossibleBrushStrength01", maxPossibleBrushStrength01);
-	        _brushStroke_intoMask.SetTexture(kernel, "_PaintedMask", destin.texArray);
+		        RenderTexture chunksTex = Objects_Renderer_MGR.instance.chunksTexture_ref().texArray;
+		        _brushStroke_intoMask.SetTexture(kernel, "_UV_Chunks_R8", chunksTex);
 
-	        RenderTexture chunksTex = Objects_Renderer_MGR.instance.chunksTexture_ref().texArray;
-	        _brushStroke_intoMask.SetTexture(kernel, "_UV_Chunks_R8", chunksTex);
+		        Vector4 chunks_scale = new Vector4(chunksTex.width/(float)currBrushStroke_R8.width, chunksTex.height/(float)currBrushStroke_R8.height, 0,0);
+		        _brushStroke_intoMask.SetVector("_UV_Chunks_scale", chunks_scale);
 
-	        Vector4 chunks_scale = new Vector4(chunksTex.width/(float)currBrushStroke_R8.width, chunksTex.height/(float)currBrushStroke_R8.height, 0,0);
-	        _brushStroke_intoMask.SetVector("_UV_Chunks_scale", chunks_scale);
-
-	        Vector3Int grps = destin.CalcGroups_for_ComputeShader();
-	        _brushStroke_intoMask.Dispatch(kernel, grps.x, grps.y, grps.z);
+		        Vector3Int grps = destin.CalcGroups_for_ComputeShader();
+		        _brushStroke_intoMask.Dispatch(kernel, grps.x, grps.y, grps.z);
+		        return true;
+	        } finally {
+		        if (_brushStroke_intoMask != null) {
+			        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "RGBA_BRUSH_DELTA", false);
+			        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "BLEND_RGBA_ONCE", false);
+		        }
+	        }
 	    }
 
 
@@ -78,6 +101,7 @@ namespace spz {
 	        Assert_TexturesSameSize( new List<RenderTexture>(){prevBrushStroke_R8, currBrushStroke_R8, 
 	                                                           uvMask.texArray, visibil.texArray} );
 
+	        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "RGBA_BRUSH_DELTA", false);
 	        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "BLEND_RGBA_ONCE", false);
 	        int kernel = _brushStroke_intoMask.FindKernel("CSMain");
 	        _brushStroke_intoMask.SetTexture(kernel, "_Visibility_R8G8", visibil.texArray);
@@ -166,7 +190,8 @@ namespace spz {
 	                                                RenderUdims meshAccumulationForSmudge = null,
 	                                                float kernelSpacingMultiplier = 1f,
 	                                                float smudgeAngleDeg = 0f,
-	                                                float smudgeDirBoost = 1.35f ){
+	                                                float smudgeDirBoost = 1.35f,
+	                                                bool sampleLayerPaintOnly = false ){
 	        if (destin == null || destin.texArray == null || currBrushStroke_R8 == null) return false;
 
 	        var orm = Objects_Renderer_MGR.instance;
@@ -182,37 +207,46 @@ namespace spz {
 	        else
 		        TextureTools_SPZ.ClearRenderTexture(_smudgeAccumCopyRT, Color.clear, clearColor: true, clearDepth: false);
 
-	        int kernel = _brushStroke_intoMask.FindKernel("CSSmudge");
+	        int kernel = _brushStroke_intoMask != null ? _brushStroke_intoMask.FindKernel("CSSmudge") : -1;
+	        if (kernel < 0)
+		        return false;
 
-	        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "BLEND_RGBA_ONCE", true);
-	        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "SMUDGE_MODE", true);
+	        try {
+		        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "BLEND_RGBA_ONCE", true);
+		        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "SMUDGE_MODE", true);
+		        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "SMUDGE_LAYER_PAINT_ONLY", sampleLayerPaintOnly);
 
-	        _brushStroke_intoMask.SetTexture(kernel, "_CurrBrushStroke_R8", currBrushStroke_R8);
-	        _brushStroke_intoMask.SetTexture(kernel, "_PaintedMask", destin.texArray);
-	        _brushStroke_intoMask.SetTexture(kernel, "_SmudgeSourceCopy", _smudgeCopyRT);
-	        _brushStroke_intoMask.SetTexture(kernel, "_SmudgeAccumCopy", _smudgeAccumCopyRT);
-	        _brushStroke_intoMask.SetFloat("_MaxPossibleBrushStrength01", smudgeStrength01);
-	        // >0: favor neighbors similar to brush-center (hover) color — edge-aware smudge. 0 = pure distance blur.
-	        _brushStroke_intoMask.SetFloat("_SmudgeAdaptiveColorSigma", 10f);
+		        _brushStroke_intoMask.SetTexture(kernel, "_CurrBrushStroke_R8", currBrushStroke_R8);
+		        _brushStroke_intoMask.SetTexture(kernel, "_PaintedMask", destin.texArray);
+		        _brushStroke_intoMask.SetTexture(kernel, "_SmudgeSourceCopy", _smudgeCopyRT);
+		        _brushStroke_intoMask.SetTexture(kernel, "_SmudgeAccumCopy", _smudgeAccumCopyRT);
+		        _brushStroke_intoMask.SetFloat("_MaxPossibleBrushStrength01", smudgeStrength01);
+		        // 0 = distance/direction kernel only; high sigma was zeroing weights vs differently colored neighbors (looked like erase).
+		        _brushStroke_intoMask.SetFloat("_SmudgeAdaptiveColorSigma", 0f);
 
-	        float kernelSpacing = Mathf.Max(1f, brushSize01 * destin.width * 0.04f) * Mathf.Max(0.25f, kernelSpacingMultiplier);
-	        _brushStroke_intoMask.SetFloat("_SmudgeKernelSpacing", kernelSpacing);
-	        _brushStroke_intoMask.SetInt("_SmudgeTexWidth", destin.width);
-	        _brushStroke_intoMask.SetInt("_SmudgeTexHeight", destin.height);
-	        _brushStroke_intoMask.SetFloat(_SmudgeAngleRadId, smudgeAngleDeg * Mathf.Deg2Rad);
-	        _brushStroke_intoMask.SetFloat(_SmudgeDirBoostId, Mathf.Max(0f, smudgeDirBoost));
+		        float kernelSpacing = Mathf.Max(1f, brushSize01 * destin.width * 0.04f) * Mathf.Max(0.25f, kernelSpacingMultiplier);
+		        _brushStroke_intoMask.SetFloat("_SmudgeKernelSpacing", kernelSpacing);
+		        _brushStroke_intoMask.SetInt("_SmudgeTexWidth", destin.width);
+		        _brushStroke_intoMask.SetInt("_SmudgeTexHeight", destin.height);
+		        _brushStroke_intoMask.SetFloat(_SmudgeAngleRadId, smudgeAngleDeg * Mathf.Deg2Rad);
+		        _brushStroke_intoMask.SetFloat(_SmudgeDirBoostId, Mathf.Max(0f, smudgeDirBoost));
 
-	        _brushStroke_intoMask.SetTexture(kernel, "_UV_Chunks_R8", chunksTex);
-	        Vector4 chunks_scale = new Vector4(chunksTex.width/(float)currBrushStroke_R8.width,
-	                                            chunksTex.height/(float)currBrushStroke_R8.height, 0,0);
-	        _brushStroke_intoMask.SetVector("_UV_Chunks_scale", chunks_scale);
+		        _brushStroke_intoMask.SetTexture(kernel, "_UV_Chunks_R8", chunksTex);
+		        Vector4 chunks_scale = new Vector4(chunksTex.width/(float)currBrushStroke_R8.width,
+		            chunksTex.height/(float)currBrushStroke_R8.height, 0,0);
+		        _brushStroke_intoMask.SetVector("_UV_Chunks_scale", chunks_scale);
 
-	        Vector3Int grps = destin.CalcGroups_for_ComputeShader();
-	        _brushStroke_intoMask.Dispatch(kernel, grps.x, grps.y, grps.z);
-
-	        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "SMUDGE_MODE", false);
-	        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "BLEND_RGBA_ONCE", false);
-	        return true;
+		        Vector3Int grps = destin.CalcGroups_for_ComputeShader();
+		        _brushStroke_intoMask.Dispatch(kernel, grps.x, grps.y, grps.z);
+		        return true;
+	        } finally {
+		        if (_brushStroke_intoMask != null) {
+			        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "SMUDGE_MODE", false);
+			        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "SMUDGE_LAYER_PAINT_ONLY", false);
+			        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "RGBA_BRUSH_DELTA", false);
+			        TextureTools_SPZ.SetKeyword_ComputeShader(_brushStroke_intoMask, "BLEND_RGBA_ONCE", false);
+		        }
+	        }
 	    }
 
 	    void EnsureSmudgeCopies(RenderTexture layerSource){

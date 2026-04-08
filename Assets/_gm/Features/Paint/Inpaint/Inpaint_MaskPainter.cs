@@ -72,7 +72,7 @@ namespace spz {
 	    /// <summary>Format passed to <see cref="AsyncGPUReadback.Request"/> for the in-flight smudge cursor sample (decode must match).</summary>
 	    GraphicsFormat _smudgeCursorPendingReadbackFormat;
 
-	    [Tooltip("Auto: contextual Thompson + layer opacity picks smudge on active layer vs mesh/SD accumulation when both match. LayerStack / GeneratedMesh fix the target.")]
+	    [Tooltip("Auto: contextual Thompson + layer opacity steers underlay policy. With a paint layer stack present, smudge writes are fenced to ActiveLayer.Content; GeneratedMesh applies only when no layer stack is active.")]
 	    [SerializeField] SmudgeWriteTargetPreference _smudgeWriteTargetPreference = SmudgeWriteTargetPreference.Auto;
 
 	    SmudgeAdaptiveRouteLock _smudgeRouteLockForStroke;
@@ -84,6 +84,8 @@ namespace spz {
 	    RenderUdims _smudgeStrokeLockedPaintContent;
 	    /// <summary>Last destination that had a pre-smudge undo capture this stroke; new <c>RenderUdims</c> triggers another capture.</summary>
 	    RenderUdims _smudgeUndoSegmentDest;
+	    /// <summary>Pre-stroke undo snapshot for normal (non-smudge) paint — scheduled on the first frame we actually dispatch compute, not <c>isFirstFrameOfStroke</c> (parent clears that flag even when this callback early-outs).</summary>
+	    bool _undoPreStrokeScheduledForStroke;
 
 	    // --- Paint target: active layer Content (used by brush stroke application) ---
 	    /// <summary>Paint target: active layer Content directly. Compute shader writes strokes into the same
@@ -326,7 +328,7 @@ namespace spz {
 		    return _artIconUvColorWrapper;
 	    }
 
-	    /// <summary>Delegates to <see cref="SmudgeStrokeRouter"/> for domain barriers, write target (layer vs mesh when explicitly <see cref="SmudgeWriteTargetPreference.GeneratedMesh"/>), and kernel spacing; Auto PreferMesh affects underlay here only.</summary>
+	    /// <summary>Delegates to <see cref="SmudgeStrokeRouter"/> for domain barriers, write destination, and kernel spacing. With a paint layer stack, writes are fenced to <c>ActiveLayer.Content</c>; when no stack, <see cref="SmudgeWriteTargetPreference.GeneratedMesh"/> can target mesh accumulation.</summary>
 	    void ResolveSmudgeDestinationAndAccum(RenderUdims layerPaintTarget, PaintLayerStack_MGR stack,
 		    out RenderUdims smudgeDest, out RenderUdims smudgeAcc, out PaintUndoNonStackTarget undoNonStackKind,
 		    out float smudgeKernelSpacingMultiplier)
@@ -336,6 +338,8 @@ namespace spz {
 		    undoNonStackKind = PaintUndoNonStackTarget.InpaintColor;
 		    smudgeKernelSpacingMultiplier = 1f;
 		    if (layerPaintTarget == null) return;
+
+		    layerPaintTarget = AlignSmudgePaintTargetToActiveLayerContentIfNeeded(layerPaintTarget, stack);
 
 		    if (_smudgeStrokeLockedPaintContent != null
 		        && _smudgeRouteLockForStroke != SmudgeAdaptiveRouteLock.Inactive
@@ -348,12 +352,19 @@ namespace spz {
 		    var meshAcc = Objects_Renderer_MGR.instance?.accumulationTextures_ref();
 		    bool meshOk = meshAcc != null && SmudgeSameUdimsShape(layerPaintTarget, meshAcc);
 		    bool layerGate = SmudgeStrokeRouter.LayerSmudgeGateOpen(stack, layerPaintTarget);
-		    bool skipMultiLayerUnder = meshOk && (_smudgeWriteTargetPreference == SmudgeWriteTargetPreference.GeneratedMesh
-		                                         || (_smudgeWriteTargetPreference == SmudgeWriteTargetPreference.Auto
+		    bool hasLayerStack = stack != null && stack.Layers != null && stack.Layers.Count > 0;
+		    // Keep underlay policy consistent with router's layer-stack fence:
+		    // GeneratedMesh does not force mesh-style underlay skipping when a layer stack exists.
+		    var effectiveWritePreference = _smudgeWriteTargetPreference;
+		    if (hasLayerStack && effectiveWritePreference == SmudgeWriteTargetPreference.GeneratedMesh)
+			    effectiveWritePreference = SmudgeWriteTargetPreference.LayerStack;
+		    bool skipMultiLayerUnder = meshOk && (effectiveWritePreference == SmudgeWriteTargetPreference.GeneratedMesh
+		                                         || (effectiveWritePreference == SmudgeWriteTargetPreference.Auto
 		                                             && _smudgeRouteLockForStroke == SmudgeAdaptiveRouteLock.PreferMesh));
 
+		    bool layerPaintSmudgeOnly = hasLayerStack && layerGate;
 		    RenderUdims preUnder = null;
-		    if (!skipMultiLayerUnder && layerGate && stack != null && stack.Layers != null && stack.Layers.Count > 1)
+		    if (!skipMultiLayerUnder && !layerPaintSmudgeOnly && layerGate && stack != null && stack.Layers != null && stack.Layers.Count > 1)
 			    preUnder = TryBuildSmudgeUnderTextureForSmudge(layerPaintTarget, stack);
 
 		    var artWrap = EnsureArtIconUvColorWrapper();
@@ -363,6 +374,18 @@ namespace spz {
 		    smudgeAcc = plan.Underlay;
 		    undoNonStackKind = plan.UndoKind;
 		    smudgeKernelSpacingMultiplier = plan.KernelSpacingMultiplier;
+	    }
+
+	    /// <summary>When a layer stack is active, route smudge off the legacy object color buffer onto <c>ActiveLayer.Content</c> so gating and paint detection match the layer.</summary>
+	    RenderUdims AlignSmudgePaintTargetToActiveLayerContentIfNeeded(RenderUdims layerPaintTarget, PaintLayerStack_MGR stack)
+	    {
+		    if (layerPaintTarget == null || stack == null || stack.Layers == null || stack.Layers.Count <= 0)
+			    return layerPaintTarget;
+		    var content = stack.ActiveLayer?.Content;
+		    if (content == null || _ObjectUV_brushedColorRGBA == null) return layerPaintTarget;
+		    if (!ReferenceEquals(layerPaintTarget, content) && ReferenceEquals(layerPaintTarget, _ObjectUV_brushedColorRGBA))
+			    return content;
+		    return layerPaintTarget;
 	    }
 
 	    /// <summary>First smudge frame (Auto only): lock underlay policy (full multi-layer under vs skip) and register bandit pull; does not change write target.</summary>
@@ -1015,13 +1038,14 @@ namespace spz {
 	                _applyBrushStroke_toUvMask = FindObjectOfType<ApplyBrushStroke_ToUvMask>(true);
 	            if (_applyBrushStroke_toUvMask != null){
 	                var stackForSmudge = PaintLayerStack_MGR.instance;
+	                var smudgeTarget = AlignSmudgePaintTargetToActiveLayerContentIfNeeded(target, stackForSmudge);
 	                if (isFirstFrameOfStroke)
 		                _smudgeUndoSegmentDest = null;
 	                if (isFirstFrameOfStroke)
-		                BeginSmudgeStrokeAdaptiveRoutingIfNeeded(target, stackForSmudge);
+		                BeginSmudgeStrokeAdaptiveRoutingIfNeeded(smudgeTarget, stackForSmudge);
 	                else
 		                _smudgeStrokeMaxUnscaledDt = Mathf.Max(_smudgeStrokeMaxUnscaledDt, Time.unscaledDeltaTime);
-	                ResolveSmudgeDestinationAndAccum(target, stackForSmudge, out RenderUdims smudgeDest, out RenderUdims smudgeAcc,
+	                ResolveSmudgeDestinationAndAccum(smudgeTarget, stackForSmudge, out RenderUdims smudgeDest, out RenderUdims smudgeAcc,
 		                out PaintUndoNonStackTarget smudgeUndoKind, out float smudgeKernelSpacingMul);
 	                if (smudgeDest != null && smudgeDest.texArray != null)
 	                {
@@ -1037,22 +1061,47 @@ namespace spz {
 		                float smudgeStr = (sdRibbon != null ? sdRibbon.maskBrushOpacity : 1f) * PaintTab_SmudgeBrushOptions.Strength01;
 		                float smudgeAngle = PaintTab_SmudgeBrushOptions.AngleDeg;
 		                float brushSize = BrushRibbon_UI_Size.GetBrushSize01();
-		                if (_applyBrushStroke_toUvMask.Apply_smudge_to_ColorBrushTex(currBrushStroke_R8, smudgeStr, brushSize, smudgeDest, smudgeAcc, smudgeKernelSpacingMul, smudgeAngle, 1.35f))
+		                bool layerPaintOnly = stackForSmudge != null && stackForSmudge.Layers != null && stackForSmudge.Layers.Count > 0
+		                    && SmudgeStrokeRouter.LayerSmudgeGateOpen(stackForSmudge, smudgeDest);
+		                RenderUdims accForSmudge = layerPaintOnly ? null : smudgeAcc;
+		                if (_applyBrushStroke_toUvMask.Apply_smudge_to_ColorBrushTex(currBrushStroke_R8, smudgeStr, brushSize, smudgeDest, accForSmudge, smudgeKernelSpacingMul, smudgeAngle, 1.35f, layerPaintOnly))
 			                _smudgeUndoSegmentDest = smudgeDest;
 		                Objects_Renderer_MGR.instance?.ReRenderAll_soon();
 	                }
 	            }
+	        }
+	        else
+	        {
+		        // Normal paint: commit curr−prev into the color layer each frame (same idea as Projections_MaskPainter), not only on mouse-up.
+		        if (_applyBrushStroke_toUvMask == null)
+			        _applyBrushStroke_toUvMask = FindObjectOfType<ApplyBrushStroke_ToUvMask>(true);
+		        if (_applyBrushStroke_toUvMask != null
+		            && _applyBrushStroke_toUvMask.CanDispatch_ColorBrushTex(currBrushStroke_R8, target))
+		        {
+			        if (!_undoPreStrokeScheduledForStroke)
+			        {
+				        PaintUndo_MGR.EnsureExists();
+				        PaintUndo_MGR.instance?.SchedulePreStrokeCapture(target);
+				        _undoPreStrokeScheduledForStroke = true;
+			        }
+			        float sign = Mathf.Sign(suggested_brushStrength);
+			        float maxStrength = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity : 1f;
+			        if (_applyBrushStroke_toUvMask.Apply_into_ColorBrushTex(prevBrushStroke_R8, currBrushStroke_R8, sign, maxStrength, target, useBrushStrokeDelta: true))
+				        Objects_Renderer_MGR.instance?.ReRenderAll_soon();
+		        }
 	        }
 	    }
 
 
 	    protected override void OnFinal_ApplyIncomingVals_intoMask( RenderTexture prevBrushStroke_R8, 
 	                                                                RenderTexture currBrushStroke_R8 ){
+	        _undoPreStrokeScheduledForStroke = false;
 	        // Smudge already applies each frame during drag; just fire stroke end and re-render.
 	        bool smudgeActive = SD_WorkflowOptionsRibbon_UI.instance != null && SD_WorkflowOptionsRibbon_UI.instance.isSmudge;
 	        if (smudgeActive){
 	            var layerPt = GetPaintTarget();
 	            if (layerPt != null){
+	                layerPt = AlignSmudgePaintTargetToActiveLayerContentIfNeeded(layerPt, PaintLayerStack_MGR.instance);
 	                ResolveSmudgeDestinationAndAccum(layerPt, PaintLayerStack_MGR.instance, out RenderUdims smudgeWritten, out _, out _, out _);
 	                Objects_Renderer_MGR.instance?.ReRenderAll_soon();
 	                if (smudgeWritten != null)
@@ -1095,11 +1144,7 @@ namespace spz {
 	            Debug.LogError("Inpaint_MaskPainter: ApplyBrushStroke_ToUvMask not found. Brush strokes will not persist on the model.");
 	            return;
 	        }
-	        float sign =  Mathf.Sign(_prevStrength);
-	        float maxStrength = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity : 1f;
-
-	        PaintUndo_MGR.instance?.SchedulePreStrokeCapture(target);
-	        _applyBrushStroke_toUvMask.Apply_into_ColorBrushTex( prevBrushStroke_R8, currBrushStroke_R8, sign,  maxStrength,  target );
+	        // Stroke pixels are already written each frame via Apply_into_ColorBrushTex(..., useBrushStrokeDelta: true) in OnRenderIntoCurrTex_please.
 	        Objects_Renderer_MGR.instance?.ReRenderAll_soon();
 	        RequestReRenderAfterGpuCommit(target);
 	        var activeLayer = PaintLayerStack_MGR.instance?.ActiveLayer;

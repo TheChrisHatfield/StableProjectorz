@@ -6,6 +6,42 @@ This file tracks changes on top of that baseline until the next release bump.
 
 -------------------------------------------------------------------------------
 
+[Unreleased]  |  Date: 2026-04-07  |  Topic: Add-on API — editor layout, display, UI chrome (refactor notes)
+-------------------------------------------------------------------------------
+
+Summary
+  Expanded spz.cmd.* JSON-RPC (TCP 5555) + mirrored FastAPI + shipped spz.py for
+  add-on control of: skeleton column widths (Global_Skeleton_UI), window/fullscreen
+  mode, ribbon tabs, cursor lock, global UI scale (skeleton CanvasScaler), named
+  GameObject visibility, viewport status line, EventSystem. get_api_capabilities
+  reports addon_rpc_version 1.6 — sync method list with handlers when refactoring.
+
+Refactor / maintenance
+  * Addon_SocketServer: BuildAddonApiCapabilities must match TryExecute* early paths
+    (TryExecuteEditorLayoutCommand, TryExecutePlayerDisplayCommand,
+    TryExecuteUiChromeCommand) + FastPath switch for other spz.cmd.
+  * ExecuteCommand uses @params ??= new JObject() — omitting params is safe.
+
+Key new C# (under Assets/_gm unless noted)
+  * Global_Skeleton_UI.cs — side panel LayoutElement snapshot + visibility.
+  * Addon_SocketServer.cs — RPC dispatch + validation.
+  * SpzPlayerDisplay_API.cs, SpzCursor_API.cs, SpzUiChromeOps.cs, SpzUiChromeRegistry.cs
+  * TabsGroup_UI.cs, CommandRibbon_UI.cs — ribbon tab discovery / programmatic switch.
+
+Scene
+  * UI_Global_Skeleton.unity — SpzUiChromeRegistry on skeleton canvas root (_extraTargets).
+
+StreamingAssets/AddonSystem
+  * spz.py — api.editor, api.display, api.ui_chrome
+  * http_server.py — /api/v1/editor/layout, display/mode, chrome/*
+
+Risks
+  * UI scale: session baseline _referenceBaseline in SpzUiChromeOps is one-shot;
+    scaler must be Scale With Screen Size on skeleton.
+  * set_ui_target_active / set_event_system can disable core UI input if misused.
+
+-------------------------------------------------------------------------------
+
 [Unreleased]  |  Date: 2026-04-05  |  Topic: Command ribbon tab strip (many add-ons, resize)
 -------------------------------------------------------------------------------
 

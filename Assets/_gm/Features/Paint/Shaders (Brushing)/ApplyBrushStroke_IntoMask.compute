@@ -5,12 +5,15 @@
 #define THREADS_Z 1
 
 #pragma multi_compile _ BLEND_RGBA_ONCE
+#pragma multi_compile _ RGBA_BRUSH_DELTA
 #pragma multi_compile _ SMUDGE_MODE
+#pragma multi_compile _ SMUDGE_LAYER_PAINT_ONLY
 
 
 #ifdef BLEND_RGBA_ONCE // destination is going to be four-channel RGBA:
 
   Texture2DArray<float> _CurrBrushStroke_R8;
+  Texture2DArray<float> _PrevBrushStroke_R8;
   RWTexture2DArray<float4> _PaintedMask;
 
   // What absolute strength was for used this brush stroke. For example, 10%.  
@@ -61,7 +64,11 @@ bool IsTexelInEmptyRegion(int3 coord){
 // Helper function to sample the brush stroke difference at a given coordinate
 float SampleBrushStrokeDifference(int3 coord){
   #ifdef BLEND_RGBA_ONCE
-    float prevPaint = 0; 
+    #ifdef RGBA_BRUSH_DELTA
+    float prevPaint = _PrevBrushStroke_R8[coord] * _Sign;
+    #else
+    float prevPaint = 0;
+    #endif
   #else
     float prevPaint = _PrevBrushStroke_R8[coord] * _Sign;
   #endif
@@ -101,7 +108,7 @@ float FindNearbyVisibleDifference(uint3 id, out int3 neighborId){
 // Update the painted mask based on the difference
 void ApplyDifference(float diff_m1_p1, uint3 fromId, uint3 destId){
 
-    #ifdef BLEND_RGBA_ONCE //only done once, when mouse is released:
+    #ifdef BLEND_RGBA_ONCE // RGBA: full stroke once (prev=0) or per-frame delta (RGBA_BRUSH_DELTA + prev/curr)
         float4 currMask = _PaintedMask[fromId.xyz];
         float4 targetColor = _PaintColor;
         
@@ -155,6 +162,10 @@ void CSMain (uint3 id : SV_DispatchThreadID){
 // ---------------------------------------------------------------------------
 #ifdef BLEND_RGBA_ONCE
 float4 SmudgeCombinedLayerOverAccum(int3 c){
+#ifdef SMUDGE_LAYER_PAINT_ONLY
+    // Active paint layer only — do not composite mesh/SD underlay into samples (avoids “erasing” / baking gens into the layer).
+    return _SmudgeSourceCopy[c];
+#else
     float4 L = _SmudgeSourceCopy[c];
     float4 A = _SmudgeAccumCopy[c];
     float4 Lpm = float4(L.rgb * L.a, L.a);
@@ -162,6 +173,7 @@ float4 SmudgeCombinedLayerOverAccum(int3 c){
     float4 Opm = Lpm + (1.0 - Lpm.a) * Apm;
     if (Opm.a < 1e-5) return float4(0,0,0,0);
     return float4(Opm.rgb / Opm.a, Opm.a);
+#endif
 }
 
 [numthreads(THREADS_X, THREADS_Y, THREADS_Z)]
@@ -172,8 +184,9 @@ void CSSmudge (uint3 id : SV_DispatchThreadID){
     if (brushCoverage < 0.001) return;
 
     float4 currColor = SmudgeCombinedLayerOverAccum(int3((int)id.x, (int)id.y, (int)id.z));
-    float4 weightedSum = float4(0,0,0,0);
-    float totalWeight = 0;
+    // Alpha-aware average in premultiplied space so empty/trivial-alpha texels do not dilute toward "erase".
+    float4 sumPm = float4(0, 0, 0, 0);
+    float sumPaintW = 0;
 
     int spacing = max(1, (int)_SmudgeKernelSpacing);
     const int RADIUS = 2;
@@ -201,12 +214,20 @@ void CSSmudge (uint3 id : SV_DispatchThreadID){
                 float3 cd = samp.rgb - currColor.rgb;
                 w *= exp(-dot(cd, cd) * _SmudgeAdaptiveColorSigma);
             }
-            weightedSum += samp * w;
-            totalWeight += w;
+            // Only blend texels that actually carry paint; skip near-transparent so kernel mass isn't wasted on empty UV.
+            float paintMask = smoothstep(0.002, 0.02, samp.a);
+            float wp = w * paintMask;
+            float4 pm = float4(samp.rgb * samp.a, samp.a);
+            sumPm += pm * wp;
+            sumPaintW += wp;
         }
     }
 
-    float4 neighborAvg = weightedSum / max(totalWeight, 0.001);
+    float4 neighborAvg = currColor;
+    if (sumPaintW > 1e-5 && sumPm.a > 1e-6){
+        float4 avgPm = sumPm / sumPaintW;
+        neighborAvg = float4(avgPm.rgb / max(avgPm.a, 1e-5), avgPm.a);
+    }
     float4 result = apply_brush_stroke_smudge(currColor, neighborAvg, brushCoverage, _MaxPossibleBrushStrength01);
     _PaintedMask[id] = result;
 }

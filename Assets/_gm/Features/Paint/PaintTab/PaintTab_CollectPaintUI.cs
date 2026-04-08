@@ -186,6 +186,7 @@ namespace spz {
 			if (_layout != null)
 			{
 				CollectNow();
+				SyncBrushPanelModalBlockStateForToolSection(_layout.ToolOptionsSection);
 				StartCoroutine(RefreshBrushPresetsLayoutWhenReady());
 			}
 		}
@@ -193,6 +194,8 @@ namespace spz {
 		/// <summary>Paint tab inactive: drop brush-size listeners and smudge store/visibility subscriptions (rebound on next CollectNow when UI exists).</summary>
 		void OnDisable()
 		{
+			if (_layout != null && TryGetToolOptionsRowAndExpando(_layout.ToolOptionsSection, out var row, out var expando))
+				SetToolOptionsRowBehindBrushPanelBlocked(row, expando, false);
 			UnregisterBrushSettingsHandlers();
 			UnregisterSmudgeBrushOptsHandlers();
 			if (_paintTabTmpStyleSource == this)
@@ -236,20 +239,22 @@ namespace spz {
 				RegisterBrushSettingsHandler(_cachedSymmetryOnSettingsChanged);
 		}
 
+		/// <summary>Inpaint color/no-color and smudge tool — single predicate for smudge block visibility and scroll-into-view.</summary>
+		static bool ComputeSmudgeBrushOptsShouldBeVisible()
+		{
+			var wf = WorkflowRibbon_UI.instance;
+			var sd = SD_WorkflowOptionsRibbon_UI.instance;
+			if (wf == null || sd == null) return false;
+			var m = wf.currentMode();
+			bool inpaint = m == WorkflowRibbon_CurrMode.Inpaint_Color || m == WorkflowRibbon_CurrMode.Inpaint_NoColor;
+			return inpaint && sd.isSmudge;
+		}
+
 		/// <summary>Shows the smudge block only for inpaint workflows (color / no-color) while the brush tool is smudge.</summary>
 		static void SyncSmudgeBrushOptsVisibilityForRoot(GameObject smudgeOptsRoot)
 		{
 			if (smudgeOptsRoot == null) return;
-			bool show = false;
-			var wf = WorkflowRibbon_UI.instance;
-			var sd = SD_WorkflowOptionsRibbon_UI.instance;
-			if (wf != null && sd != null)
-			{
-				var m = wf.currentMode();
-				bool inpaint = m == WorkflowRibbon_CurrMode.Inpaint_Color || m == WorkflowRibbon_CurrMode.Inpaint_NoColor;
-				show = inpaint && sd.isSmudge;
-			}
-			smudgeOptsRoot.SetActive(show);
+			smudgeOptsRoot.SetActive(ComputeSmudgeBrushOptsShouldBeVisible());
 		}
 
 		/// <summary>Removes smudge listeners from <see cref="PaintTab_SmudgeBrushOptions.Changed"/>, direction toggles, and workflow mode.</summary>
@@ -335,6 +340,56 @@ namespace spz {
 			RegisterSmudgeBrushOptsHandlersForUi(s, a, root);
 		}
 
+		static bool SmudgeBrushOptsShouldShowForScroll() => ComputeSmudgeBrushOptsShouldBeVisible();
+
+		/// <summary>Adjusts vertical scroll so <paramref name="target"/> is inside the viewport (iterative; world-space corners).</summary>
+		static void ScrollRectVerticalClampChildVisible(ScrollRect scrollRect, RectTransform target)
+		{
+			if (scrollRect == null || target == null || !target.gameObject.activeInHierarchy) return;
+			RectTransform viewport = scrollRect.viewport;
+			RectTransform content = scrollRect.content;
+			if (viewport == null || content == null) return;
+
+			const float padWorld = 6f;
+			for (int iter = 0; iter < 8; iter++)
+			{
+				Canvas.ForceUpdateCanvases();
+				Vector3[] vCorners = new Vector3[4];
+				viewport.GetWorldCorners(vCorners);
+				float viewTop = Mathf.Max(vCorners[0].y, vCorners[1].y, vCorners[2].y, vCorners[3].y);
+				float viewBottom = Mathf.Min(vCorners[0].y, vCorners[1].y, vCorners[2].y, vCorners[3].y);
+
+				Vector3[] tCorners = new Vector3[4];
+				target.GetWorldCorners(tCorners);
+				float tTop = Mathf.Max(tCorners[0].y, tCorners[1].y, tCorners[2].y, tCorners[3].y);
+				float tBottom = Mathf.Min(tCorners[0].y, tCorners[1].y, tCorners[2].y, tCorners[3].y);
+
+				float adjust = 0f;
+				if (tBottom < viewBottom + padWorld)
+					adjust = (tBottom - viewBottom) - padWorld;
+				else if (tTop > viewTop - padWorld)
+					adjust = (tTop - viewTop) + padWorld;
+
+				if (Mathf.Abs(adjust) < 0.5f)
+					break;
+
+				float scrollRange = content.rect.height - viewport.rect.height;
+				if (scrollRange <= 1f)
+					break;
+
+				// Map world-space Y delta to normalized scroll: scrollRange is local; adjust is world (Canvas scale safe).
+				float viewWorldH = Mathf.Max(1e-4f, viewTop - viewBottom);
+				float viewLocalH = Mathf.Max(1e-4f, viewport.rect.height);
+				float adjustLocal = adjust * (viewLocalH / viewWorldH);
+				float normDelta = adjustLocal / scrollRange;
+				float prev = scrollRect.verticalNormalizedPosition;
+				float newNorm = Mathf.Clamp01(prev + normDelta);
+				if (Mathf.Approximately(newNorm, prev))
+					break;
+				scrollRect.verticalNormalizedPosition = newNorm;
+			}
+		}
+
 		System.Collections.IEnumerator RefreshBrushPresetsLayoutWhenReady()
 		{
 			yield return null; // wait one frame so panel is active and has valid rect
@@ -347,6 +402,17 @@ namespace spz {
 				LayoutRebuilder.ForceRebuildLayoutImmediate(scrollContent);
 				Canvas.ForceUpdateCanvases();
 			}
+		}
+
+		/// <summary>After Brush options expand, layout + ContentSizeFitter need a frame before scroll metrics are final.</summary>
+		System.Collections.IEnumerator CoScrollSmudgeBlockIntoViewAfterOpen(ScrollRect sr, RectTransform smudgeBlockRt, RectTransform toolSectionForRebuild)
+		{
+			yield return null;
+			if (toolSectionForRebuild != null)
+				LayoutRebuilder.ForceRebuildLayoutImmediate(toolSectionForRebuild);
+			Canvas.ForceUpdateCanvases();
+			if (sr != null && smudgeBlockRt != null && smudgeBlockRt.gameObject.activeInHierarchy)
+				ScrollRectVerticalClampChildVisible(sr, smudgeBlockRt);
 		}
 
 		/// <summary>Synchronous populate. Safe to call multiple times from any context.</summary>
@@ -1042,6 +1108,57 @@ namespace spz {
 				UnityEngine.Debug.Log("[Paint Tab] " + toolName + " triggered.");
 		}
 
+		static void SetSelectablesInteractableOnSubtree(Transform t, bool interactable)
+		{
+			if (t == null) return;
+			var selectables = t.GetComponentsInChildren<Selectable>(true);
+			for (int i = 0; i < selectables.Length; i++)
+			{
+				if (selectables[i] != null)
+					selectables[i].interactable = interactable;
+			}
+		}
+
+		/// <summary>While Brush options panel is open, depth/tools in the same row cannot steal drags/clicks; expando header stays active.</summary>
+		static void SetToolOptionsRowBehindBrushPanelBlocked(Transform toolOptionsRow, Transform brushExpandoRoot, bool blockRowTools)
+		{
+			if (toolOptionsRow == null) return;
+			for (int i = 0; i < toolOptionsRow.childCount; i++)
+			{
+				var ch = toolOptionsRow.GetChild(i);
+				if (brushExpandoRoot != null && ch == brushExpandoRoot)
+					continue;
+				SetSelectablesInteractableOnSubtree(ch, !blockRowTools);
+			}
+		}
+
+		static bool TryGetToolOptionsRowAndExpando(RectTransform section, out Transform row, out Transform expando)
+		{
+			row = null;
+			expando = null;
+			if (section == null) return false;
+			for (int i = 0; i < section.childCount; i++)
+			{
+				var c = section.GetChild(i);
+				if (c != null && c.name == "ToolOptionsRow")
+				{
+					row = c;
+					expando = c.Find("BrushToolOptionsExpando");
+					return true;
+				}
+			}
+			return false;
+		}
+
+		/// <summary>Keep depth/tools row blocked iff <c>BrushOptsPanel</c> is open (e.g. after tab re-enable).</summary>
+		static void SyncBrushPanelModalBlockStateForToolSection(RectTransform section)
+		{
+			if (!TryGetToolOptionsRowAndExpando(section, out var row, out var expando)) return;
+			Transform panel = section.Find("BrushOptsPanel");
+			bool open = panel != null && panel.gameObject.activeSelf;
+			SetToolOptionsRowBehindBrushPanelBlocked(row, expando, open);
+		}
+
 		static void MakeToolButton(Transform parent, string label, string shortcut, Color bgColor, UnityEngine.Events.UnityAction onClick)
 		{
 			var go = new GameObject("Btn_" + label.Replace(" ", ""));
@@ -1397,7 +1514,8 @@ namespace spz {
 			panelLe.flexibleHeight = 0;
 			var panelImg = panelGo.AddComponent<Image>();
 			panelImg.color = new Color(0.16f, 0.18f, 0.22f, 0.98f);
-			panelImg.raycastTarget = false;
+			// Block raycasts for the full panel rect so holes/gaps do not click through to ToolOptionsRow (depth slider, etc.).
+			panelImg.raycastTarget = true;
 			var panelVlg = panelGo.AddComponent<VerticalLayoutGroup>();
 			panelVlg.spacing = 4;
 			panelVlg.padding = new RectOffset(6, 6, 6, 6);
@@ -1682,6 +1800,7 @@ namespace spz {
 					collapseBtnGo.SetActive(open);
 				panelLe.preferredHeight = open ? -1f : 0f;
 				headerTxt.text = open ? "Brush options ▴" : "Brush options ▼";
+				SetToolOptionsRowBehindBrushPanelBlocked(toolRowParent, root.transform, open);
 				if (open) SyncBrushToolRadiosFromSize();
 				if (open) SyncSmudgeBrushOptsVisibilityForRoot(smudgeOptsRoot);
 				if (open)
@@ -1689,7 +1808,20 @@ namespace spz {
 					LayoutRebuilder.ForceRebuildLayoutImmediate(toolSectionParent);
 					Canvas.ForceUpdateCanvases();
 					var sr = toolSectionParent.GetComponentInParent<ScrollRect>();
-					if (sr != null) sr.verticalNormalizedPosition = 0f;
+					if (sr != null)
+					{
+						if (SmudgeBrushOptsShouldShowForScroll() && smudgeOptsRoot.activeSelf)
+						{
+							var host = headerGo.GetComponentInParent<PaintTab_CollectPaintUI>();
+							var smudgeRt = smudgeOptsRoot.GetComponent<RectTransform>();
+							if (host != null && smudgeRt != null && host.isActiveAndEnabled)
+								host.StartCoroutine(host.CoScrollSmudgeBlockIntoViewAfterOpen(sr, smudgeRt, toolSectionParent));
+							else
+								ScrollRectVerticalClampChildVisible(sr, smudgeRt);
+						}
+						else
+							sr.verticalNormalizedPosition = 0f;
+					}
 					if (pinCollapseToToolViewport)
 						collapseBtnGo.transform.SetAsLastSibling();
 				}
@@ -1702,6 +1834,7 @@ namespace spz {
 					collapseBtnGo.SetActive(false);
 				panelLe.preferredHeight = 0f;
 				headerTxt.text = "Brush options ▼";
+				SetToolOptionsRowBehindBrushPanelBlocked(toolRowParent, root.transform, false);
 				LayoutRebuilder.ForceRebuildLayoutImmediate(toolSectionParent);
 			});
 

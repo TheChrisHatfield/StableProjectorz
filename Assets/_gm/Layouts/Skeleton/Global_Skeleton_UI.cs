@@ -13,6 +13,105 @@ namespace spz {
 	    [SerializeField] RectTransform _mainViewport_rTransf;
 	    [SerializeField] RectTransform _rightColumn_rTransf;
 
+	    struct SideWidthSnapshot {
+		    public float minWidth;
+		    public float preferredWidth;
+		    public float flexibleWidth;
+	    }
+
+	    SideWidthSnapshot _sceneLeftWidths;
+	    SideWidthSnapshot _sceneRightWidths;
+	    bool _capturedSceneWidths;
+	    bool _leftPanelCollapsed;
+	    bool _rightPanelCollapsed;
+
+	    /// <summary>Same readiness as <see cref="SetSidePanelVisibility"/> (columns + <see cref="LayoutElement"/> + width snapshot).</summary>
+	    public bool TryGetSidePanelVisibility(out bool leftVisible, out bool rightVisible) {
+		    leftVisible = !_leftPanelCollapsed;
+		    rightVisible = !_rightPanelCollapsed;
+		    if (_leftColumn_rTransf == null || _rightColumn_rTransf == null) {
+			    return false;
+		    }
+		    if (_leftColumn_rTransf.GetComponent<LayoutElement>() == null ||
+		        _rightColumn_rTransf.GetComponent<LayoutElement>() == null) {
+			    return false;
+		    }
+		    EnsureSceneWidthsCaptured();
+		    return _capturedSceneWidths;
+	    }
+
+	    /// <summary>
+	    /// Collapse side columns by zeroing horizontal <see cref="LayoutElement"/> widths on the skeleton
+	    /// (tracked placeholders under the main horizontal layout). Restores scene widths from Awake snapshot.
+	    /// </summary>
+	    public bool SetSidePanelVisibility(bool leftVisible, bool rightVisible) {
+		    if (_leftColumn_rTransf == null || _rightColumn_rTransf == null) {
+			    return false;
+		    }
+		    EnsureSceneWidthsCaptured();
+		    var leL = _leftColumn_rTransf.GetComponent<LayoutElement>();
+		    var leR = _rightColumn_rTransf.GetComponent<LayoutElement>();
+		    if (leL == null || leR == null) {
+			    return false;
+		    }
+		    if (!_capturedSceneWidths) {
+			    return false;
+		    }
+
+		    ApplySideWidth(leL, leftVisible, _sceneLeftWidths);
+		    ApplySideWidth(leR, rightVisible, _sceneRightWidths);
+		    _leftPanelCollapsed = !leftVisible;
+		    _rightPanelCollapsed = !rightVisible;
+
+		    var row = _leftColumn_rTransf.parent as RectTransform;
+		    if (row != null) {
+			    LayoutRebuilder.ForceRebuildLayoutImmediate(row);
+		    }
+		    return true;
+	    }
+
+	    void EnsureSceneWidthsCaptured() {
+		    if (_capturedSceneWidths) {
+			    return;
+		    }
+		    CaptureSceneWidths();
+	    }
+
+	    void CaptureSceneWidths() {
+		    if (_leftColumn_rTransf == null || _rightColumn_rTransf == null) {
+			    return;
+		    }
+		    var leL = _leftColumn_rTransf.GetComponent<LayoutElement>();
+		    var leR = _rightColumn_rTransf.GetComponent<LayoutElement>();
+		    if (leL == null || leR == null) {
+			    return;
+		    }
+		    _sceneLeftWidths = new SideWidthSnapshot {
+			    minWidth = leL.minWidth,
+			    preferredWidth = leL.preferredWidth,
+			    flexibleWidth = leL.flexibleWidth,
+		    };
+		    _sceneRightWidths = new SideWidthSnapshot {
+			    minWidth = leR.minWidth,
+			    preferredWidth = leR.preferredWidth,
+			    flexibleWidth = leR.flexibleWidth,
+		    };
+		    _capturedSceneWidths = true;
+	    }
+
+	    static void ApplySideWidth(LayoutElement le, bool visible, SideWidthSnapshot scene) {
+		    if (visible) {
+			    le.minWidth = scene.minWidth;
+			    le.preferredWidth = scene.preferredWidth;
+			    le.flexibleWidth = scene.flexibleWidth;
+		    }
+		    else {
+			    le.minWidth = 0f;
+			    le.preferredWidth = 0f;
+			    le.flexibleWidth = 0f;
+		    }
+	    }
+
 	    public void Place_onto_LeftColumn(RectTransform place_me){
 	        place_me.CopyValsFrom(_leftColumn_rTransf);
 	    }
@@ -51,6 +150,7 @@ namespace spz {
 	    void Awake(){
 	        if(instance != null){ DestroyImmediate(this); return; }
 	        instance = this;
+	        CaptureSceneWidths();
 	    }
 	}
 }//end namespace

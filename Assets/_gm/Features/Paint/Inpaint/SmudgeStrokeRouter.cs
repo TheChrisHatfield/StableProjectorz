@@ -4,7 +4,7 @@ namespace spz {
 
 	/// <summary>Where smudge writes when both layer stack and mesh accumulation are valid shape.</summary>
 	public enum SmudgeWriteTargetPreference {
-		/// <summary>Thompson + opacity at stroke start steers multi-layer <em>underlay</em> (full composite under active vs skip that pass); writes stay on the active layer when <see cref="LayerSmudgeGateOpen"/>.</summary>
+		/// <summary>Thompson + opacity at stroke start steers multi-layer <em>underlay</em> (full composite under active vs skip that pass); with a layer stack present, writes stay on the active layer when <see cref="LayerSmudgeGateOpen"/>.</summary>
 		Auto,
 		LayerStack,
 		GeneratedMesh
@@ -121,16 +121,27 @@ namespace spz {
 
 			bool layerGate = LayerSmudgeGateOpen(stack, layerPaintTarget);
 			bool meshOk = meshAccumulation != null && SameShape(layerPaintTarget, meshAccumulation);
+			bool hasLayerStack = stack != null && stack.Layers != null && stack.Layers.Count > 0;
+			var effectiveWritePreference = writePreference;
 
-			if (writePreference == SmudgeWriteTargetPreference.GeneratedMesh) {
+			// Layer-stack fence: once a layer stack exists, smudge writes are confined to ActiveLayer.Content.
+			// If gate is closed (e.g. transient new-layer setup), return no-op so later frames can retry safely.
+			if (hasLayerStack) {
+				if (!layerGate)
+					return plan;
+				if (effectiveWritePreference == SmudgeWriteTargetPreference.GeneratedMesh)
+					effectiveWritePreference = SmudgeWriteTargetPreference.LayerStack;
+			}
+
+			if (effectiveWritePreference == SmudgeWriteTargetPreference.GeneratedMesh) {
 				if (meshOk)
 					return MeshAccumulationPlan(meshAccumulation);
 				// Explicit mesh target but accumulation does not match paint resolution: do not fall through to layer/art (misleading write).
 				return plan;
 			}
 
-			if (layerGate && (writePreference == SmudgeWriteTargetPreference.LayerStack
-			                  || writePreference == SmudgeWriteTargetPreference.Auto)) {
+			if (layerGate && (effectiveWritePreference == SmudgeWriteTargetPreference.LayerStack
+			                  || effectiveWritePreference == SmudgeWriteTargetPreference.Auto)) {
 				plan.Dest = layerPaintTarget;
 				plan.UndoKind = PaintUndoNonStackTarget.InpaintColor;
 				plan.Domain = WriteDomain.LayerStack;

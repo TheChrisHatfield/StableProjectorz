@@ -262,6 +262,7 @@ GameObject:
   - component: {fileID: 700500303}
   - component: {fileID: 700500302}
   - component: {fileID: 700500305}
+  - component: {fileID: 700500306}
   m_Layer: 5
   m_Name: canvas + ui raycaster (Global_Skeleton_UI)
   m_TagString: Untagged
@@ -367,6 +368,19 @@ MonoBehaviour:
   _leftColumn_rTransf: {fileID: 1611288633}
   _mainViewport_rTransf: {fileID: 700729735}
   _rightColumn_rTransf: {fileID: 285311214}
+--- !u!114 &700500306
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 700500300}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d4e3f2a1b0c94d8e7f6a5b4c3d2e1f00, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _extraTargets: []
 --- !u!1 &700729734
 GameObject:
   m_ObjectHideFlags: 0

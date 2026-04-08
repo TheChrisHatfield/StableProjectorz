@@ -32,7 +32,9 @@ namespace spz {
 	    public static readonly int MAX_NUM_VIEW_CAMERAS = 6;//how many can show at the same time.
 	    public View_UserCamera _curr_viewCamera { get; private set; }
 	    public int ix_currentViewCam => _viewCameras.IndexOf(_curr_viewCamera);
-	    public int numActiveViewCameras() => _viewCameras.Count(c=>c.gameObject.activeSelf);
+	    /// <summary>Index of the camera that receives orbit/pan priority and drives primary view RT layering order expectations.</summary>
+	    public int CurrentViewCameraIndex => ix_currentViewCam >= 0 ? ix_currentViewCam : 0;
+	    public int numActiveViewCameras() => _viewCameras.Count(c => c != null && c.gameObject.activeSelf);
 	    public int ix_specificViewCam(View_UserCamera cam) => _viewCameras.IndexOf(cam);
 	    
 	    // For add-on system: get camera by index
@@ -42,6 +44,9 @@ namespace spz {
 	    }
 	    
 	    public int GetViewCameraCount() => _viewCameras.Count;
+
+	    /// <summary>UV preview warp in [0,1]; when &gt; 0 the view pipeline uses single composite.</summary>
+	    public float UvWarpIntoUv01 => _uv_warp_helper != null ? _uv_warp_helper.warp_into_uv01 : 0f;
 
 	    public static Action<int,bool> _Act_OnTogledViewCamera { get; set; } = null;//ix, isOn.
 	    public static Action<int> _Act_OnViewCamera_BecameCurrent { get; set; }
@@ -59,38 +64,94 @@ namespace spz {
 	    //passing ix=-1 will toggle any first camera that's not equal to 'isOn'.
 	    public void ToggleViewCamera(int ix, bool isOn, bool doCallback=true){
 	        if (ix == -1){//from 0 onwards:
-	            ix = _viewCameras.FindIndex(vc=>vc.gameObject.activeSelf!=isOn);
+	            ix = _viewCameras.FindIndex(vc => vc != null && vc.gameObject.activeSelf != isOn);
+	        }
+	        if (ix < 0 || ix >= _viewCameras.Count || _viewCameras[ix] == null) {
+		        return;
 	        }
 	        if(_viewCameras[ix].gameObject.activeSelf==isOn){ return; }
 	        _viewCameras[ix].gameObject.SetActive(isOn);//entire gameObject, which also affects its move/focus components.
 	        if(!isOn  &&  _viewCameras[ix] == _curr_viewCamera){
-	            SetCurrViewCamera( _viewCameras.FindIndex( c=>c.gameObject.activeInHierarchy ) );
+	            int next = _viewCameras.FindIndex(c => c != null && c.gameObject.activeInHierarchy);
+	            if (next >= 0) {
+		            SetCurrViewCamera(next);
+	            } else {
+		            _curr_viewCamera = null;
+	            }
 	        }
 	        if(doCallback){ _Act_OnTogledViewCamera?.Invoke(ix,isOn); }
 	    }
 
 	    public void DisableAll_but_CurrViewCam(bool doCallbacks=true){
-	        for(int i=0;  i<MAX_NUM_VIEW_CAMERAS; ++i){
-	            if(i == ix_currentViewCam){ continue; }
-	            ToggleViewCamera(i,false, doCallbacks);
+		    int skipIx = ix_currentViewCam;
+		    if (skipIx < 0) {
+			    skipIx = _viewCameras.FindIndex(c => c != null && c.gameObject.activeInHierarchy);
+		    }
+	        for (int i = 0; i < _viewCameras.Count; ++i) {
+	            if (i == skipIx) { continue; }
+	            ToggleViewCamera(i, false, doCallbacks);
 	        }
 	    }
 
 	    public void EnableExactly_N_ViewCameras(int num){
-	        for(int i=0; i<UserCameras_MGR.MAX_NUM_VIEW_CAMERAS; ++i){
-	            bool isEnable = i<num;
-	            ToggleViewCamera(i, isEnable);
-	            if(i==ix_currentViewCam){ continue; }
-	        }
-	        if(ix_currentViewCam>=num){
-	            SetCurrViewCamera(0);
-	        }
+	        TryEnableExactlyActiveViewCameras(num);
+	    }
+
+	    /// <summary>
+	    /// Enable the first <paramref name="num"/> view cameras (indices <c>0 .. num-1</c>), disable the rest.
+	    /// Caps at installed camera count. Ensures the current camera stays active when possible.
+	    /// </summary>
+	    public bool TryEnableExactlyActiveViewCameras(int num) {
+		    if (num < 0) {
+			    return false;
+		    }
+		    int cap = Mathf.Min(num, _viewCameras.Count);
+		    for (int i = 0; i < _viewCameras.Count; i++) {
+			    ToggleViewCamera(i, i < cap);
+		    }
+		    if (_curr_viewCamera == null || !_curr_viewCamera.gameObject.activeInHierarchy) {
+			    int first = _viewCameras.FindIndex(c => c != null && c.gameObject.activeInHierarchy);
+			    if (first >= 0) {
+				    SetCurrViewCamera(first);
+			    }
+		    }
+		    return true;
+	    }
+
+	    /// <summary>Turn a single view camera on or off (add-on / automation). Bounds-checked.</summary>
+	    public bool TrySetViewCameraActive(int index, bool active) {
+		    if (index < 0 || index >= _viewCameras.Count || _viewCameras[index] == null) {
+			    return false;
+		    }
+		    ToggleViewCamera(index, active);
+		    return true;
+	    }
+
+	    /// <summary>
+	    /// Make an active view camera the current one (orbit / primary). Returns false if index invalid or camera inactive.
+	    /// </summary>
+	    public bool TrySetCurrentViewCameraIndex(int index) {
+		    if (index < 0 || index >= _viewCameras.Count) {
+			    return false;
+		    }
+		    if (_viewCameras[index] == null || !_viewCameras[index].gameObject.activeInHierarchy) {
+			    return false;
+		    }
+		    SetCurrViewCamera(index);
+		    return true;
 	    }
 
     
 	    //even though multile ViewCameras might be on, only 1 is "Current".
 	    void SetCurrViewCamera(int ix){
-	        if(ix<0){ ix = 0; }
+		    if (_viewCameras.Count == 0) {
+			    return;
+		    }
+	        if (ix < 0) { ix = 0; }
+		    if (ix >= _viewCameras.Count) { ix = _viewCameras.Count - 1; }
+		    if (_viewCameras[ix] == null) {
+			    return;
+		    }
 	        if(ix == ix_currentViewCam){ return; }
 	        _curr_viewCamera = _viewCameras[ix];
 	        _Act_OnViewCamera_BecameCurrent?.Invoke(ix);
@@ -103,9 +164,12 @@ namespace spz {
     
 	    public View_UserCamera NearestToCursor(){
 	        var pins = CamerasMGR_PinsZone_UI.instance;
+	        if (pins == null) {
+		        return _curr_viewCamera;
+	        }
 	        //Check if possibly dragging something. If so, don't update currViewCamera for now:
 	        int nearestPin = pins.FindNearestPin();
-	        if(nearestPin < 0){ return _curr_viewCamera; }
+	        if (nearestPin < 0 || nearestPin >= _viewCameras.Count) { return _curr_viewCamera; }
 	        return _viewCameras[nearestPin];
 	    }
 
@@ -126,6 +190,9 @@ namespace spz {
 	        bool atLeastOneWasActive = false;
 	        for(int i=0; i<_viewCameras.Count; ++i){
 	            View_UserCamera vcam = _viewCameras[i];
+	            if (vcam == null) {
+		            continue;
+	            }
 	            bool isActive  =  (maxOneActive && atLeastOneWasActive)?  false : vcam.gameObject.activeInHierarchy;
 	            var camGenInfo =  new CameraPovInfo( isActive,  vcam.transform.position,  vcam.transform.rotation, 
 	                                                 vcam.fovMgr._trueCameraFov,  vcam._projectionMat_center );
@@ -143,8 +210,10 @@ namespace spz {
 	            CameraPovInfo inf = povs[i];
 	            ToggleViewCamera(i, inf.wasEnabled, doCallback:true);
 	            if(!inf.wasEnabled){ continue; }
+	            if (i < 0 || i >= _viewCameras.Count) { continue; }
 
 	            View_UserCamera vcam = _viewCameras[i];
+	            if (vcam == null) { continue; }
 	            vcam.cameraFocus.Restore_CameraPlacement(inf, selectedObjectCenter);
 	            vcam.fovMgr.Restore_FieldOfView( inf.camera_fov );
 	        }
@@ -161,8 +230,9 @@ namespace spz {
 	        _selectedObj_center_beforeEditMode = ModelsHandler_3D.instance.GetTotalBounds_ofSelectedMeshes().center;
 
 	        for(int i=0; i<_viewCameras.Count; ++i){
-	            if(_viewCameras[i] == _curr_viewCamera){ continue; }
-	            _viewCameras[i].transform.SetParent(_editMode_disabledGO.transform, worldPositionStays:true);
+	            var vc = _viewCameras[i];
+	            if (vc == null || vc == _curr_viewCamera){ continue; }
+	            vc.transform.SetParent(_editMode_disabledGO.transform, worldPositionStays:true);
 	        }
 
 	        bool canFocus = args.HasFlag(MultiView_StartEditMode_Args.DontFocusTheCamera) == false;
@@ -174,7 +244,9 @@ namespace spz {
 
 	    void OnStopEditMode( MultiView_StopEdit_Args howToStop ){
 	        for(int i=0; i<_viewCameras.Count; ++i){
-	            _viewCameras[i].transform.SetParent(_noEditMode_enabledGO.transform, worldPositionStays:true);
+	            var vc = _viewCameras[i];
+	            if (vc == null) { continue; }
+	            vc.transform.SetParent(_noEditMode_enabledGO.transform, worldPositionStays:true);
 	        }
         
 	        if(howToStop.HasFlag(MultiView_StopEdit_Args.RestoreToPriorPositions)){
@@ -190,11 +262,11 @@ namespace spz {
 
 
 	    public void StartFOV_compensatedAdjustment(){
-	        _viewCameras.ForEach( vc=>vc.fovMgr.Start_offsetCompensated_FOV() );
+	        _viewCameras.ForEach(vc => { if (vc != null) { vc.fovMgr.Start_offsetCompensated_FOV(); } });
 	    }
 
 	    public void SetFieldOfView_allCameras(float fov){
-	        _viewCameras.ForEach(vc => vc.fovMgr.SetFieldOfView(fov,compensateByDistanceOffset:true));
+	        _viewCameras.ForEach(vc => { if (vc != null) { vc.fovMgr.SetFieldOfView(fov, compensateByDistanceOffset: true); } });
 	        _Act_OnFovChanged?.Invoke(fov);
 	    }
 
@@ -202,10 +274,13 @@ namespace spz {
 
 	#region Update + rendering
 	    void OnUpdate_CameraParams(){
-	        _viewCameras.ForEach( v=>v.OnUpdateParams() );
-	        _viewCameras.ForEach( v=>v.depthCam.OnUpdateParams() );
-	        _viewCameras.ForEach( v=>v.contentCam.OnUpdateParams() );
-	        _viewCameras.ForEach( v=>v.vertexColorsCam.OnUpdateParams() );
+	        _viewCameras.ForEach(v => {
+		        if (v == null) { return; }
+		        v.OnUpdateParams();
+		        v.depthCam.OnUpdateParams();
+		        v.contentCam.OnUpdateParams();
+		        v.vertexColorsCam.OnUpdateParams();
+	        });
 	    }
 
 
@@ -225,7 +300,7 @@ namespace spz {
 
 	            for (int i=0; i<_viewCameras.Count; ++i){
 	                View_UserCamera vcam = _viewCameras[i];
-	                if(vcam.gameObject.activeInHierarchy==false){ continue; }
+	                if (vcam == null || vcam.gameObject.activeInHierarchy==false){ continue; }
 
 	                //clear both depth and Color. Because we want to clear the ID view-texture,  and the depth buffer.
 	                var flags =  clear? CameraClearFlags.Color : CameraClearFlags.Nothing;
@@ -257,7 +332,7 @@ namespace spz {
 
 	        for (int i=0; i<_viewCameras.Count; ++i){
 	            View_UserCamera vcam = _viewCameras[i];
-	            if(vcam.gameObject.activeInHierarchy==false){ continue; }
+	            if (vcam == null || vcam.gameObject.activeInHierarchy==false){ continue; }
 
 	            //the camera will only render "Geometry" layer.
 	            var flags =  clear? CameraClearFlags.Depth : CameraClearFlags.Nothing;
@@ -278,25 +353,28 @@ namespace spz {
    
 	    void Render_ViewCameras(){ //depth, normals, view
 	        UserCameras_MGR_CamTextures ct = _camTextures;//for convenience.
+	        float warp_into_uv01 = UvWarpIntoUv01;
+
 	        TextureTools_SPZ.ClearRenderTexture(ct._viewCam_RT_ref, Color.black);
 
 	        // see if we should make our preview shaders morph into UV representation.
-	        // Assign shader variables for this:
-	        float warp_into_uv01 = _uv_warp_helper.warp_into_uv01;
+	        if (_curr_viewCamera == null || _curr_viewCamera.myCamera == null) {
+		        return;
+	        }
 	        bool dontFrustumCull = warp_into_uv01 > 0;
 	        Shader.SetGlobalFloat("_GLOBAL_WarpIntoUVSpace01", warp_into_uv01);
 	        Shader.SetGlobalFloat("_GLOBAL_inv_cameraAspect01", 1.0f/_curr_viewCamera.myCamera.aspect);
-	        Shader.SetGlobalVector("_GLOBAL_InspectUV_Navigate", _uv_navigate_helper.vec4_InspectUV_Navigate);
+	        Shader.SetGlobalVector("_GLOBAL_InspectUV_Navigate",
+		        _uv_navigate_helper != null ? _uv_navigate_helper.vec4_InspectUV_Navigate : new Vector4(0f, 0f, 1f, 1f));
 
 	        //render view and vertex cams:
-	        bool clear = true;//Using this bool because 'i==0' might actually be inactive cam.
+	        bool clear = true;
 	        for (int i=0; i<_viewCameras.Count; ++i){
 	            View_UserCamera vcam = _viewCameras[i];
-	            if(vcam.gameObject.activeInHierarchy==false){ continue; }
+	            if (vcam == null || vcam.gameObject.activeInHierarchy==false){ continue; }
             
 	            CameraClearFlags flags;
 	            flags =  clear? CameraClearFlags.Skybox : CameraClearFlags.Nothing;
-	            //the camera will only render "Geometry" layer:
 	            vcam.RenderImmediate(ct._viewCam_RT_ref, ignore_nonSelected_meshes:false, flags, 
 	                                 allowMSAA:true, dontFrustumCull:dontFrustumCull );
 
@@ -304,7 +382,6 @@ namespace spz {
 	            clear = false;
 	        }
         
-	        // if we are in the UV mode, slap a grid-texture onto the resulting texture, to show UDIM sectors:
 	        if (warp_into_uv01 > 0){
 	            _uv_preview_bg_mat_cpy.SetFloat("_Visibility", Mathf.Pow(warp_into_uv01,3));
 	            TextureTools_SPZ.Blit(null, ct._viewCam_RT_ref, _uv_preview_bg_mat_cpy);
@@ -328,7 +405,7 @@ namespace spz {
 	        for(int i=0; i<_viewCameras.Count; ++i){
             
 	            View_UserCamera vcam = _viewCameras[i];
-	            if(vcam.gameObject.activeInHierarchy==false){ continue; }
+	            if (vcam == null || vcam.gameObject.activeInHierarchy==false){ continue; }
             
 	            flags =  clear? flags : CameraClearFlags.Nothing;
 	            vcam.contentCam.OnUpdateParams();
@@ -356,7 +433,7 @@ namespace spz {
 	        for(int i=0; i<_viewCameras.Count; ++i){
 
 	            View_UserCamera vcam = _viewCameras[i];
-	            if(vcam.gameObject.activeInHierarchy==false){ continue; }
+	            if (vcam == null || vcam.gameObject.activeInHierarchy==false){ continue; }
 
 	            if(clear){  SkyboxBackground_MGR.instance.MomentaryOverride_Texture(bgNormals_tex);  }
                 
@@ -423,7 +500,7 @@ namespace spz {
 	    void Awake(){
 	        if(instance != null){ DestroyImmediate(this.gameObject); return; }
 	        instance = this;
-	        _viewCameras.ForEach( cam=>cam.OnInit() );
+	        _viewCameras.ForEach(cam => { if (cam != null) { cam.OnInit(); } });
         
 	        MultiView_Ribbon_UI.OnStartEditMode += OnStartEditMode;
 	        MultiView_Ribbon_UI.OnStop1_EditMode  += OnStopEditMode;

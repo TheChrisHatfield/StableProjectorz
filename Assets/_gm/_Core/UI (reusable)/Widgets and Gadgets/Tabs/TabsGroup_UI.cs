@@ -88,6 +88,27 @@ namespace spz {
 	        tab.Toggle(true);
 	    }
 
+	    /// <summary>Returns false if no tab matches (same matching rules as <see cref="SwitchTab"/>).</summary>
+	    public bool TrySwitchTab(string tabName){
+		    if (_tabs == null || string.IsNullOrEmpty(tabName)) return false;
+		    string nameLower = tabName.ToLower();
+		    var tab = _tabs.FirstOrDefault(t => t != null && t.title != null && t.title.ToLower() == nameLower);
+		    if (tab == null) return false;
+		    SwitchTab(tabName);
+		    return true;
+	    }
+
+	    /// <summary>Visible tab titles in list order (built-in + runtime add-on tabs).</summary>
+	    public List<string> GetTabTitles(){
+		    var r = new List<string>();
+		    if (_tabs == null) return r;
+		    foreach (var t in _tabs) {
+			    if (t != null && !string.IsNullOrEmpty(t.title))
+				    r.Add(t.title);
+		    }
+		    return r;
+	    }
+
 	    void OnTabClicked(TabsGroupElem_UI elem){
 	        if (_tabs == null) return;
 	        int ixOfClicked = -1;
