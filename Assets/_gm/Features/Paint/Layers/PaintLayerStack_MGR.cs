@@ -13,7 +13,7 @@ namespace spz {
 	// holds a reference to this and calls AddLayer(), SetActiveLayer(), SetLayerVisible(),
 	// SetLayerName() (rename only — does not fire OnLayersChanged; see RebuildList / undo). RemoveLayer().
 	// Inpaint_MaskPainter subscribes to OnLayerAdded to inject scene into new layers; uses ActiveLayerRenderUdims as the paint target; display blits each
-	// visible layer's Content in order (see ApplyColorLayer_To_UV_Textures). Paint undo clears on OnLayerStackStructureChanged only (structure/res/load), not visibility/opacity.
+	// visible layer's Content in order (see ApplyColorLayer_To_UV_Textures). Paint undo clears on OnLayerStackStructureChanged (layer Content realloc, remove/move, load), not visibility/opacity or metadata-only EnsureResolution sync.
 	// =============================================================================
 
 	/// <summary>
@@ -41,6 +41,8 @@ namespace spz {
 		/// <summary>Used only during in-place collapse: composite into this then copy to layer0 so we never use a layer as CompositeTo dest (avoids read-write hazard).</summary>
 		RenderUdims _collapseResultTemp;
 		Coroutine _collapseSliceCopyCrt;
+		int _collapsePathObsBucket;
+		int _collapsePathObsArm;
 
 		/// <summary>Layers from bottom (index 0) to top. Do not modify list directly; use AddLayer/RemoveLayer/MoveLayer. </summary>
 		public IReadOnlyList<PaintLayer> Layers => _layers;
@@ -128,10 +130,17 @@ namespace spz {
 				UnityEngine.Debug.Log($"[PaintLayerStack] EnsureResolution: {_resolution.x}x{_resolution.y}x{_udimsCount} → {w}x{h}x{slices} (will re-init {_layers.Count} layers).");
 			_resolution = new Vector2Int(w, h);
 			_udimsCount = slices;
+			// Only invalidate paint undo when at least one layer's GPU buffers were actually (re)allocated.
+			// Cached _resolution can lag behind real Content (e.g. after SD / composite adopt paths); resChanged
+			// alone would spuriously clear undo even though every EnsureContent no-ops.
+			bool anyLayerContentRebuilt = false;
 			for (int i = 0; i < _layers.Count; i++)
-				_layers[i].EnsureContent(udims, _resolution, GenData_Masks.colorBrushFormat, GenData_Masks.colorBrushFilter);
+			{
+				if (_layers[i].EnsureContent(udims, _resolution, GenData_Masks.colorBrushFormat, GenData_Masks.colorBrushFilter))
+					anyLayerContentRebuilt = true;
+			}
 			EnsureAtLeastOneLayer();
-			if (resChanged)
+			if (anyLayerContentRebuilt)
 				OnLayerStackStructureChanged?.Invoke();
 		}
 
@@ -307,7 +316,7 @@ namespace spz {
 			return name;
 		}
 
-		/// <summary>Merge visible layers into one new layer. Heavy stacks: scheduled coroutine composites UDIM slices in batches across frames (same scheduler as undo slice uploads). Light stacks: full GPU composite then copy. CPU fallback if no blend shader.</summary>
+		/// <summary>Merge visible layers into one new layer. Heavy stacks: scheduled coroutine composites UDIM slices in batches across frames using <see cref="PaintUndo_MGR.GetCollapseSliceScheduler"/> (Thompson slice arms persist across collapses; immediate vs scheduled chosen by contextual bandit after cold-start heuristics). Light stacks: full GPU composite then copy. CPU fallback if no blend shader.</summary>
 		public bool CollapseVisibleLayersIntoOne()
 		{
 			var visibleLayers = new List<PaintLayer>();
@@ -324,17 +333,41 @@ namespace spz {
 			if (_compositeBlendMat != null)
 			{
 				RenderUdims first = visibleLayers[0].Content;
+				int visCount = visibleLayers.Count;
+				var collapseSched = PaintUndo_MGR.GetCollapseSliceScheduler();
+				bool useScheduled;
+				int pathBucket, pathArm;
+				if (collapseSched != null) {
+					useScheduled = collapseSched.SelectCollapseScheduledVersusImmediate(
+						first.width, first.height, first.UdimsCount, visCount, true, out pathBucket, out pathArm);
+				} else {
+					float refPx = 512f * 512f;
+					useScheduled = PaintUndo_Scheduler.EvaluateCollapseScheduleHeuristic(
+						first.width, first.height, first.UdimsCount, visCount, refPx);
+					pathBucket = 0;
+					pathArm = useScheduled ? 1 : 0;
+				}
 
-				if (ShouldScheduleCollapseSliceCopy(first, visibleLayers.Count))
+				// Amortized slice composite requires the shared collapse scheduler (same as undo).
+				if (useScheduled && PaintUndo_MGR.GetCollapseSliceScheduler() == null) {
+					useScheduled = false;
+					pathArm = 0;
+					pathBucket = 0;
+				}
+
+				if (useScheduled)
 				{
 					if (_collapseSliceCopyCrt != null) {
 						StopCoroutine(_collapseSliceCopyCrt);
 						CleanupAfterScheduledCollapse();
 					}
+					_collapsePathObsBucket = pathBucket;
+					_collapsePathObsArm = pathArm;
 					_collapseSliceCopyCrt = StartCoroutine(CollapseVisibleLayersIntoOne_GpuScheduledCoroutine(first));
 					return true;
 				}
 
+				float tImmediate = Time.realtimeSinceStartup;
 				EnsureCollapseResultTemp(first);
 				CompositeTo(_collapseResultTemp);
 
@@ -361,6 +394,14 @@ namespace spz {
 				else
 					UnityEngine.Debug.LogWarning("[PaintLayerStack] Collapse: new layer has no Content; GPU path paste skipped.");
 
+				if (collapseSched != null) {
+					float elapsedMs = (Time.realtimeSinceStartup - tImmediate) * 1000f;
+					PaintUndo_Scheduler.EvaluateWorkload(first.width, first.height, first.UdimsCount, collapseSched.referencePixelsPerSlice,
+						out _, out float complexity01, out _);
+					bool ok = PaintUndo_Scheduler.CollapseImmediateObservationSuccess(elapsedMs, complexity01, visCount);
+					collapseSched.RegisterCollapsePathObservation(pathBucket, pathArm, ok);
+				}
+
 				return true;
 			}
 
@@ -379,27 +420,13 @@ namespace spz {
 			}
 		}
 
-		static bool ShouldScheduleCollapseSliceCopy(RenderUdims first, int visibleLayerCount)
-		{
-			if (first == null || first.UdimsCount <= 0) return false;
-			float refPx = 512f * 512f;
-			if (PaintUndo_MGR.instance != null) {
-				var probe = new PaintUndo_Scheduler();
-				PaintUndo_MGR.instance.CopyRestoreSchedulerPolicyTo(probe);
-				refPx = probe.referencePixelsPerSlice;
-			}
-			PaintUndo_Scheduler.EvaluateWorkload(first.width, first.height, first.UdimsCount, refPx,
-				out _, out float complexity01, out _);
-			if (complexity01 >= 0.12f) return true;
-			if (first.UdimsCount >= 6) return true;
-			if (visibleLayerCount >= 3 && first.UdimsCount >= 3) return true;
-			return visibleLayerCount * first.UdimsCount >= 18;
-		}
-
 		IEnumerator CollapseVisibleLayersIntoOne_GpuScheduledCoroutine(RenderUdims firstRef)
 		{
 			var maskPainter = Inpaint_MaskPainter.instance;
 			PaintLayer newLayer = null;
+			float worstHitchMs = 0f;
+			bool completedComposite = false;
+			var collapseSched = PaintUndo_MGR.GetCollapseSliceScheduler();
 			try {
 				if (firstRef == null || firstRef.UdimsCount <= 0) {
 					UnityEngine.Debug.LogWarning("[PaintLayerStack] Collapse (scheduled): invalid layer dimensions.");
@@ -430,16 +457,19 @@ namespace spz {
 					yield break;
 				}
 
-				var sched = PaintUndo_MGR.CreateCollapseSliceScheduler();
-				sched.BeginRestoreSession(firstRef.width, firstRef.height, firstRef.UdimsCount);
+				if (collapseSched == null) {
+					UnityEngine.Debug.LogWarning("[PaintLayerStack] Collapse (scheduled): PaintUndo_MGR missing; cannot amortize slices.");
+					yield break;
+				}
+				collapseSched.BeginCollapseCompositeSession(firstRef.width, firstRef.height, firstRef.UdimsCount);
 				int totalSlices = firstRef.UdimsCount;
 				int cursor = 0;
 				while (cursor < totalSlices) {
 					float dt = Time.deltaTime;
 					if (dt <= 1e-4f) dt = 1f / 60f;
-					sched.BeginRestoreTick(dt);
+					collapseSched.BeginRestoreTick(dt);
 					int remaining = totalSlices - cursor;
-					sched.GetFrameBudget(remaining, out float budgetMs, out int maxSlices);
+					collapseSched.GetFrameBudget(remaining, out float budgetMs, out int maxSlices);
 					float start = Time.realtimeSinceStartup;
 					int sliceBegin = cursor;
 					int batch = 0;
@@ -451,7 +481,8 @@ namespace spz {
 					if (batch > 0) {
 						CompositeVisibleLayersIntoDestSliceRange(newLayer.Content, sliceBegin, sliceBegin + batch, excludeIdx);
 						float hitchMs = Mathf.Max(0f, (Time.deltaTime - (1f / 60f)) * 1000f);
-						sched.RegisterRestoreBanditObservation(hitchMs, batch);
+						worstHitchMs = Mathf.Max(worstHitchMs, hitchMs);
+						collapseSched.RegisterRestoreBanditObservation(hitchMs, batch);
 					}
 					if (cursor < totalSlices)
 						yield return null;
@@ -459,10 +490,15 @@ namespace spz {
 
 				newLayer.SyncDataFromContent();
 				newLayer.HasReceivedSceneInject = true;
+				completedComposite = true;
 			}
 			finally {
 				if (maskPainter != null)
 					maskPainter.IsCollapsingLayers = false;
+				if (collapseSched != null) {
+					bool ok = completedComposite && collapseSched.CollapseScheduledObservationSuccess(worstHitchMs);
+					collapseSched.RegisterCollapsePathObservation(_collapsePathObsBucket, _collapsePathObsArm, ok);
+				}
 				CleanupAfterScheduledCollapse();
 			}
 		}
@@ -945,6 +981,7 @@ namespace spz {
 			_nextCollapseNumber = sl.nextCollapseNumber > 0 ? sl.nextCollapseNumber : InferNextCollapseNumber(sl);
 			var format = GenData_Masks.colorBrushFormat;
 			var filter = GenData_Masks.colorBrushFilter;
+			bool anyLayerHadSavedPaintContent = false;
 			if (sl.layers != null)
 			{
 				for (int i = 0; i < sl.layers.Count; i++)
@@ -964,6 +1001,7 @@ namespace spz {
 							{
 								ru.Load(spz.filepath_dataDir, layerSL.content, format, filter);
 								layer.SetContentFromLoad(ru);
+								anyLayerHadSavedPaintContent = true;
 							}
 							catch (Exception ex)
 							{
@@ -976,6 +1014,7 @@ namespace spz {
 				}
 			}
 			_activeIndex = Mathf.Clamp(sl.activeLayerIndex, 0, Mathf.Max(0, _layers.Count - 1));
+			Inpaint_MaskPainter.instance?.NotifyPaintLayersRestoredFromDisk(anyLayerHadSavedPaintContent);
 			OnLayersChanged?.Invoke();
 			OnLayerStackStructureChanged?.Invoke();
 			OnActiveLayerChanged?.Invoke();

@@ -63,10 +63,21 @@ namespace SimpleFileBrowser
 			pinToQuickAccessButton.gameObject.SetActive( false );
 		}
 
+		private void RefreshPinQuickAccessButtonLabel()
+		{
+			if ( pinToQuickAccessButton == null ) return;
+			TextMeshProUGUI label = pinToQuickAccessButton.GetComponentInChildren<TextMeshProUGUI>( true );
+			if ( label != null )
+				label.text = FileBrowser.IsCurrentFolderInFavorites() ? "Unpin from Quick access" : "Pin to Quick access";
+		}
+
 		private void OnPinToQuickAccessClicked()
 		{
 			Hide();
-			FileBrowser.AddCurrentFolderToFavorites();
+			if ( FileBrowser.IsCurrentFolderInFavorites() )
+				FileBrowser.RemoveCurrentFolderFromFavorites();
+			else
+				FileBrowser.AddCurrentFolderToFavorites();
 		}
 
 		internal void Show( bool selectAllButtonVisible, bool deselectAllButtonVisible, bool deleteButtonVisible, bool renameButtonVisible, Vector2 position, bool isMoreOptionsMenu )
@@ -79,7 +90,11 @@ namespace SimpleFileBrowser
 
 			EnsurePinToQuickAccessButton();
 			if ( pinToQuickAccessButton != null )
+			{
 				pinToQuickAccessButton.gameObject.SetActive( isMoreOptionsMenu );
+				if ( isMoreOptionsMenu )
+					RefreshPinQuickAccessButtonLabel();
+			}
 
 			rectTransform.anchoredPosition = position;
 			gameObject.SetActive( true );
@@ -154,6 +169,7 @@ namespace SimpleFileBrowser
 				pinToQuickAccessButton.image.color = skin.ContextMenuBackgroundColor;
 				LayoutElement le = pinToQuickAccessButton.GetComponent<LayoutElement>();
 				if( le != null ) le.preferredHeight = skin.RowHeight + 1;
+				RefreshPinQuickAccessButtonLabel();
 				TextMeshProUGUI pinText = pinToQuickAccessButton.GetComponentInChildren<TextMeshProUGUI>( true );
 				if( pinText != null ) skin.ApplyTo( pinText, skin.ContextMenuTextColor );
 			}

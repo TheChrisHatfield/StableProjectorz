@@ -279,10 +279,13 @@ namespace spz {
 
 		/// <summary>Locates runtime smudge UI under the Tool Options section: <c>BrushOptsPanel/SmudgeBrushOptsBlock</c> and row sliders.</summary>
 		static bool TryFindSmudgeBrushOptsUi(RectTransform toolOptionsSection, out Slider strengthSlider, out Slider angleSlider,
-			out GameObject smudgeOptsRoot)
+			out Slider colorMixSlider, out Slider neighborRadiusSlider, out Toggle meshUnderToggle, out GameObject smudgeOptsRoot)
 		{
 			strengthSlider = null;
 			angleSlider = null;
+			colorMixSlider = null;
+			neighborRadiusSlider = null;
+			meshUnderToggle = null;
 			smudgeOptsRoot = null;
 			if (toolOptionsSection == null) return false;
 			Transform panel = null;
@@ -304,15 +307,28 @@ namespace spz {
 			strengthSlider = strRow.GetComponentInChildren<Slider>(true);
 			angleSlider = angRow.GetComponentInChildren<Slider>(true);
 			if (strengthSlider == null || angleSlider == null) return false;
+			var mixRow = block.Find("SmudgeColorMixRow");
+			if (mixRow != null)
+				colorMixSlider = mixRow.GetComponentInChildren<Slider>(true);
+			var radRow = block.Find("SmudgeNeighborRadiusRow");
+			if (radRow != null)
+				neighborRadiusSlider = radRow.GetComponentInChildren<Slider>(true);
+			var meshRow = block.Find("SmudgeMeshUnderRow");
+			if (meshRow != null)
+				meshUnderToggle = meshRow.GetComponentInChildren<Toggle>(true);
 			smudgeOptsRoot = block.gameObject;
 			return true;
 		}
 
 		/// <summary>Unregisters any prior smudge handlers, then binds slider sync and visibility for this UI instance.</summary>
-		static void RegisterSmudgeBrushOptsHandlersForUi(Slider smudgeStrSlider, Slider smudgeAngSlider, GameObject smudgeOptsRoot)
+		static void RegisterSmudgeBrushOptsHandlersForUi(Slider smudgeStrSlider, Slider smudgeAngSlider, Slider smudgeColorMixSlider,
+			Slider smudgeNeighborRadiusSlider, Toggle smudgeMeshUnderToggle, GameObject smudgeOptsRoot)
 		{
 			if (smudgeStrSlider == null || smudgeAngSlider == null || smudgeOptsRoot == null) return;
 			UnregisterSmudgeBrushOptsHandlers();
+
+			Color meshUvUnderOff = new Color(0.34f, 0.36f, 0.4f, 1f);
+			Color meshUvUnderOn = new Color(0.22f, 0.45f, 0.55f, 1f);
 
 			void SyncSmudgeSlidersFromStore()
 			{
@@ -320,6 +336,17 @@ namespace spz {
 					smudgeStrSlider.SetValueWithoutNotify(PaintTab_SmudgeBrushOptions.Strength01);
 				if (smudgeAngSlider != null)
 					smudgeAngSlider.SetValueWithoutNotify(PaintTab_SmudgeBrushOptions.AngleDeg);
+				if (smudgeColorMixSlider != null)
+					smudgeColorMixSlider.SetValueWithoutNotify(PaintTab_SmudgeBrushOptions.ColorMixSimilarity01);
+				if (smudgeNeighborRadiusSlider != null)
+					smudgeNeighborRadiusSlider.SetValueWithoutNotify(PaintTab_SmudgeBrushOptions.NeighborGridRadius);
+				if (smudgeMeshUnderToggle != null)
+				{
+					bool on = PaintTab_SmudgeBrushOptions.IncludeUvMeshInLayerSmudge;
+					smudgeMeshUnderToggle.SetIsOnWithoutNotify(on);
+					if (smudgeMeshUnderToggle.targetGraphic is Image img)
+						img.color = on ? meshUvUnderOn : meshUvUnderOff;
+				}
 			}
 
 			void SyncSmudgeBrushOptsVisibility() => SyncSmudgeBrushOptsVisibilityForRoot(smudgeOptsRoot);
@@ -330,14 +357,16 @@ namespace spz {
 			_smudgeOptsVisibilityOnWorkflowModeHandler = (_) => SyncSmudgeBrushOptsVisibility();
 			BrushRibbon_UI_Direction.OnDirectionToggleChanged += _smudgeOptsVisibilityOnDirChangedHandler;
 			WorkflowRibbon_UI._Act_OnModeChanged += _smudgeOptsVisibilityOnWorkflowModeHandler;
+			// Store can change while the tab was inactive (API / defaults); widgets are not notified until Changed fires.
+			SyncSmudgeSlidersFromStore();
 			SyncSmudgeBrushOptsVisibility();
 		}
 
 		/// <summary>After tab re-enable when ToolOptionsRow already exists: find smudge controls and call <see cref="RegisterSmudgeBrushOptsHandlersForUi"/>.</summary>
 		static void ResubscribeSmudgeBrushOptsHandlersIfUiExists(RectTransform toolOptionsSection)
 		{
-			if (!TryFindSmudgeBrushOptsUi(toolOptionsSection, out var s, out var a, out var root)) return;
-			RegisterSmudgeBrushOptsHandlersForUi(s, a, root);
+			if (!TryFindSmudgeBrushOptsUi(toolOptionsSection, out var s, out var a, out var mix, out var rad, out var meshTgl, out var root)) return;
+			RegisterSmudgeBrushOptsHandlersForUi(s, a, mix, rad, meshTgl, root);
 		}
 
 		static bool SmudgeBrushOptsShouldShowForScroll() => ComputeSmudgeBrushOptsShouldBeVisible();
@@ -1334,7 +1363,7 @@ namespace spz {
 
 		/// <summary>Horizontal track + fill + handle (depth-limit style). Parent must supply layout (row / column).</summary>
 		static Slider BuildBrushOptsSliderTrack(Transform parent, float min, float max, float initialValue,
-			UnityEngine.Events.UnityAction<float> onChanged)
+			UnityEngine.Events.UnityAction<float> onChanged, bool wholeNumbers = false)
 		{
 			var go = new GameObject("Slider");
 			go.transform.SetParent(parent, false);
@@ -1351,7 +1380,7 @@ namespace spz {
 			var slider = go.AddComponent<Slider>();
 			slider.minValue = min;
 			slider.maxValue = max;
-			slider.wholeNumbers = false;
+			slider.wholeNumbers = wholeNumbers;
 			slider.fillRect = null;
 			slider.handleRect = null;
 			slider.direction = Slider.Direction.LeftToRight;
@@ -1423,12 +1452,12 @@ namespace spz {
 			var lbl = lblGo.AddComponent<TextMeshProUGUI>();
 			StylePaintTabTmp(lbl, labelText, 9f, TextAlignmentOptions.Left);
 
-			return BuildBrushOptsSliderTrack(row.transform, min, max, initialValue, onChanged);
+			return BuildBrushOptsSliderTrack(row.transform, min, max, initialValue, onChanged, false);
 		}
 
 		/// <summary>Stacked label above full-width slider (matches readability of Scatter / Mirror rows in narrow Brush options panel).</summary>
 		static Slider MakeBrushOptsStackedSliderRow(Transform parent, string rowName, string labelText, float min, float max,
-			float initialValue, UnityEngine.Events.UnityAction<float> onChanged)
+			float initialValue, UnityEngine.Events.UnityAction<float> onChanged, bool wholeNumbers = false)
 		{
 			var row = new GameObject(rowName);
 			row.transform.SetParent(parent, false);
@@ -1456,7 +1485,64 @@ namespace spz {
 			lbl.color = new Color(0.88f, 0.89f, 0.92f, 1f);
 			StylePaintTabTmp(lbl, labelText, kPaintTabUiFontSize, TextAlignmentOptions.Left);
 
-			return BuildBrushOptsSliderTrack(row.transform, min, max, initialValue, onChanged);
+			return BuildBrushOptsSliderTrack(row.transform, min, max, initialValue, onChanged, wholeNumbers);
+		}
+
+		/// <summary>Compact checkbox row for brush/smudge tool options (matches radio tint colors).</summary>
+		static Toggle MakeBrushOptsCheckboxRow(Transform parent, string rowName, string labelText, bool initialOn,
+			UnityEngine.Events.UnityAction<bool> onChanged)
+		{
+			Color offCol = new Color(0.34f, 0.36f, 0.4f, 1f);
+			Color onCol = new Color(0.22f, 0.45f, 0.55f, 1f);
+			var row = new GameObject(rowName);
+			row.transform.SetParent(parent, false);
+			row.AddComponent<RectTransform>();
+			var rowLe = row.AddComponent<LayoutElement>();
+			rowLe.minHeight = 28;
+			rowLe.preferredHeight = 28;
+			rowLe.flexibleWidth = 1;
+			var h = row.AddComponent<HorizontalLayoutGroup>();
+			h.spacing = 8;
+			h.padding = new RectOffset(0, 0, 0, 0);
+			h.childAlignment = TextAnchor.MiddleLeft;
+			h.childControlWidth = false;
+			h.childControlHeight = true;
+			h.childForceExpandWidth = false;
+			h.childForceExpandHeight = false;
+
+			var boxGo = new GameObject("Box");
+			boxGo.transform.SetParent(row.transform, false);
+			var boxLe = boxGo.AddComponent<LayoutElement>();
+			boxLe.minWidth = 36;
+			boxLe.preferredWidth = 36;
+			var img = boxGo.AddComponent<Image>();
+			img.color = initialOn ? onCol : offCol;
+			var toggle = boxGo.AddComponent<Toggle>();
+			toggle.targetGraphic = img;
+			toggle.graphic = null;
+			var cb = toggle.colors;
+			cb.normalColor = Color.white;
+			cb.highlightedColor = new Color(0.95f, 0.95f, 1f);
+			cb.pressedColor = new Color(0.88f, 0.88f, 0.92f);
+			cb.selectedColor = Color.white;
+			toggle.colors = cb;
+			toggle.isOn = initialOn;
+			toggle.onValueChanged.AddListener(isOn =>
+			{
+				img.color = isOn ? onCol : offCol;
+				onChanged?.Invoke(isOn);
+			});
+
+			var lblGo = new GameObject("Lbl");
+			lblGo.transform.SetParent(row.transform, false);
+			var lblLe = lblGo.AddComponent<LayoutElement>();
+			lblLe.flexibleWidth = 1;
+			lblLe.minWidth = 40;
+			var lbl = lblGo.AddComponent<TextMeshProUGUI>();
+			lbl.color = new Color(0.88f, 0.89f, 0.92f, 1f);
+			StylePaintTabTmp(lbl, labelText, kPaintTabUiFontSize, TextAlignmentOptions.Left);
+
+			return toggle;
 		}
 
 		/// <summary> Collapsible dropdown-style block: compact header in tool row + panel below with radio groups. </summary>
@@ -1616,9 +1702,36 @@ namespace spz {
 					Viewport_StatusText.instance?.ShowStatusText(
 						$"Smudge angle {Mathf.RoundToInt(v)}°", false, 0.65f, false);
 				});
+			var smudgeMixSlider = MakeBrushOptsStackedSliderRow(smudgeOptsRoot.transform, "SmudgeColorMixRow",
+				"Surface color mix (neighbor match)", 0f, 1f,
+				PaintTab_SmudgeBrushOptions.ColorMixSimilarity01, v =>
+				{
+					PaintTab_SmudgeBrushOptions.SetColorMixSimilarity01(v);
+					Viewport_StatusText.instance?.ShowStatusText(
+						$"Surface color mix {Mathf.RoundToInt(Mathf.Clamp01(v) * 100)}%", false, 0.65f, false);
+				});
+			var smudgeRadSlider = MakeBrushOptsStackedSliderRow(smudgeOptsRoot.transform, "SmudgeNeighborRadiusRow",
+				"Sample radius (UV grid steps)", 1f, 4f,
+				PaintTab_SmudgeBrushOptions.NeighborGridRadius, v =>
+				{
+					PaintTab_SmudgeBrushOptions.SetNeighborGridRadius(Mathf.RoundToInt(v));
+					Viewport_StatusText.instance?.ShowStatusText(
+						$"Smudge radius {Mathf.Clamp(Mathf.RoundToInt(v), 1, 4)}", false, 0.65f, false);
+				}, wholeNumbers: true);
+
+			var smudgeMeshUnderToggle = MakeBrushOptsCheckboxRow(smudgeOptsRoot.transform, "SmudgeMeshUnderRow",
+				"Sample mesh UV under paint layers", PaintTab_SmudgeBrushOptions.IncludeUvMeshInLayerSmudge, isOn =>
+				{
+					PaintTab_SmudgeBrushOptions.SetIncludeUvMeshInLayerSmudge(isOn);
+					Viewport_StatusText.instance?.ShowStatusText(
+						isOn
+							? "Smudge: mesh UV can show through transparent strokes"
+							: "Smudge: layers only (no mesh UV underlay)",
+						false, 0.65f, false);
+				});
 
 			// Smudge rows: sync sliders when PaintTab_SmudgeBrushOptions changes (API); show/hide block for inpaint + smudge tool. Handlers cleared on tab OnDisable.
-			RegisterSmudgeBrushOptsHandlersForUi(smudgeStrSlider, smudgeAngSlider, smudgeOptsRoot);
+			RegisterSmudgeBrushOptsHandlersForUi(smudgeStrSlider, smudgeAngSlider, smudgeMixSlider, smudgeRadSlider, smudgeMeshUnderToggle, smudgeOptsRoot);
 
 			MakeBrushOptsSectionLabel(panelGo.transform, "Mirror plane (mesh symmetry)");
 			var planeRow = new GameObject("SymmetryPlaneRow");

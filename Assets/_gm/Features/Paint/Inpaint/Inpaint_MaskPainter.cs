@@ -17,7 +17,7 @@ namespace spz {
 	// =============================================================================
 	// Paint target: GetPaintTarget() returns active layer Content (from PaintLayerStack_MGR).
 	// Display: ApplyColorLayer_To_UV_Textures() uses CompositeVisibleLayersIntoTemp (EntireColorLayer shader, bottom→top)
-	// when 2+ layers, else active Content; one blit onto accumulation (same scaling as single-layer).
+	// when 2+ layers, else active Content; if no source, TryResolveArtThenSceneThenMeshUvSource (Art tab UV → scene → mesh, skipping self-blits).
 	// New-layer injection: subscribes to PaintLayerStack_MGR.OnLayerAdded
 	// (OnLayerAdded_InjectScene) to inject scene + layers below into the new layer.
 	// =============================================================================
@@ -43,11 +43,18 @@ namespace spz {
 
 	    Material _blitApplyEntireColorLayer_mat;
 	    RenderUdims _layerStackCompositeTemp; // when using layer stack, composite output for blit
-	    /// <summary>Multi-layer smudge: scene + visible layers below active, so smudge samples mesh/SD through transparent strokes (see <see cref="TryBuildSmudgeUnderTextureForSmudge"/>).</summary>
+	    /// <summary>Multi-layer smudge: scene buffer + visible layers below active; mesh accumulation is optional via <see cref="PaintTab_SmudgeBrushOptions.IncludeUvMeshInLayerSmudge"/> (see <see cref="TryBuildSmudgeUnderTextureForSmudge"/>).</summary>
 	    RenderUdims _smudgeUnderActiveTemp;
 	    /// <summary>Non-owning wrapper for main Art tab icon UV color; invalidated when <see cref="GenData2D.total_GUID"/> or texture ref changes.</summary>
 	    RenderUdims _artIconUvColorWrapper;
 	    Guid _artIconUvColorWrapperGenGuid;
+	    /// <summary>Last <see cref="GenData2D.total_GUID"/> for the focused UV-painted brush while smudge art routing is armed (updated on Art-tab selection; routing uses kind + commit serial, not GUID equality).</summary>
+	    Guid _smudgePreferArtIconUntilLayerPaintGenGuid;
+	    /// <summary>When non-negative, smudge may prefer the active Art tab <see cref="GenerationData_Kind.UvPaintedBrush"/> icon only while <see cref="_inpaintLayerColorCommitSerial"/> matches this snapshot (no new layer color milestones / disk paint / collapse since arm).</summary>
+	    int _smudgePreferArt_ArmedAtCommitSerial = -1;
+	    /// <summary>Bumps on meaningful layer color milestones (once per color brush stroke, bucket fill, collapse, load) so smudge art-routing does not hijack a stack that already carries paint.</summary>
+	    int _inpaintLayerColorCommitSerial;
+	    bool _inpaintLayerColorSerialBumpedThisBrushStroke;
 
 	    public bool isPaintMaskEmpty { get; private set; } = true;
 	    /// <summary>Single-layer paint target (when PaintLayerStack_MGR is not used). When layer stack is used, paint goes to active layer. </summary>
@@ -133,7 +140,7 @@ namespace spz {
 
 	    // --- Display / SD bridge: blit paint layers onto accumulation (called from Objects_Renderer_MGR) ---
 	    // Single path for both 1 layer and N layers:
-	    //   1. Determine `source` (single layer: ActiveLayer.Content; multi-layer: composite all visible into _layerStackCompositeTemp)
+	    //   1. Determine `source` (single visible layer: ActiveLayer.Content; multi-layer or hidden sole layer: composite / fallback)
 	    //   2. One blit: source → ontoHere (accumulation) via EntireColorLayer_BlitApply shader (handles scaling, UDIMs, etc.)
 	    // This replicates the proven single-layer mechanism at any layer count.
 	    /// <param name="forStableDiffusionCapture">When true, always composite/blit even if a project save is in progress (save guard would otherwise skip and SD would capture paint-free accumulation).</param>
@@ -177,18 +184,24 @@ namespace spz {
 			        if (!_loggedDisplaySourceOnce)
 			        {
 				        _loggedDisplaySourceOnce = true;
-				        UnityEngine.Debug.LogWarning("[Inpaint] Multi-layer composite produced null source. Falling back to ActiveLayer.Content.");
+				        UnityEngine.Debug.LogWarning("[Inpaint] Multi-layer composite produced null source. Falling back to ActiveLayer.Content or scene buffer.");
 			        }
 			        source = stack.ActiveLayer?.Content;
+			        // If every layer is hidden (or none contributed), do not blit the active layer's hidden Content —
+			        // let the next line pick _ObjectUV_brushedColorRGBA so the viewport matches smudge fallbacks.
+			        var al = stack.ActiveLayer;
+			        if (al != null && !al.Visible && source != null && ReferenceEquals(source, al.Content))
+				        source = null;
 		        }
 	        }
-	        else if (stack != null && stack.Layers != null && stack.Layers.Count == 1 && stack.ActiveLayer?.Content != null)
+	        else if (stack != null && stack.Layers != null && stack.Layers.Count == 1 && stack.ActiveLayer?.Content != null
+	                 && stack.ActiveLayer.Visible)
 	        {
 		        source = stack.ActiveLayer.Content;
 	        }
 
-	        if (source == null && _ObjectUV_brushedColorRGBA != null)
-		        source = _ObjectUV_brushedColorRGBA;
+	        if (source == null)
+		        source = TryResolveArtThenSceneThenMeshUvSource(ontoHere, ontoHere);
 
 	        if (source == null)
 	        {
@@ -307,6 +320,79 @@ namespace spz {
 		           && a.width == b.width && a.height == b.height && a.UdimsCount == b.UdimsCount;
 	    }
 
+	    /// <summary>When the layer stack does not supply pixels, same priority as smudge: Art-tab UV wrapper, scene buffer, then mesh accumulation (skipped if same texture as <paramref name="excludeSameTexAs"/> — e.g. blitting accumulation onto itself).</summary>
+	    RenderUdims TryResolveArtThenSceneThenMeshUvSource(RenderUdims shapeRef, RenderUdims excludeSameTexAs)
+	    {
+		    if (shapeRef == null) return null;
+		    var artWrap = EnsureArtIconUvColorWrapper();
+		    if (artWrap != null && SmudgeSameUdimsShape(shapeRef, artWrap))
+			    return artWrap;
+		    if (_ObjectUV_brushedColorRGBA != null && SmudgeSameUdimsShape(shapeRef, _ObjectUV_brushedColorRGBA))
+			    return _ObjectUV_brushedColorRGBA;
+		    var meshAcc = Objects_Renderer_MGR.instance?.accumulationTextures_ref();
+		    if (meshAcc != null && SmudgeSameUdimsShape(shapeRef, meshAcc)
+		        && (excludeSameTexAs == null || meshAcc.texArray != excludeSameTexAs.texArray))
+			    return meshAcc;
+		    return null;
+	    }
+
+	    /// <summary>When the stack is empty or scene buffer is missing, use mesh accumulation dimensions (if any) so Art-tab / mesh fallbacks match SD output resolution.</summary>
+	    RenderUdims ResolveSmudgeFallbackUsingMeshShapeIfNeeded(RenderUdims layerPaintTarget)
+	    {
+		    var meshForShape = Objects_Renderer_MGR.instance?.accumulationTextures_ref();
+		    var shapeRef = layerPaintTarget;
+		    if (meshForShape != null && (shapeRef == null || !SmudgeSameUdimsShape(shapeRef, meshForShape)))
+			    shapeRef = meshForShape;
+		    return TryResolveArtThenSceneThenMeshUvSource(shapeRef, excludeSameTexAs: null);
+	    }
+
+	    /// <summary>Call after Bake Colors imports a <see cref="GenerationData_Kind.UvPaintedBrush"/> so smudge targets the UV-painted brush icon(s) until layer color paint clears it; switching the selected Art icon keeps smudge on the new selection while the arm matches.</summary>
+	    public void NotifyBakedColorsEvictedToArtIcon()
+	    {
+		    var icon = Art2D_IconsUI_List.instance?._mainSelectedIcon;
+		    if (icon?._genData != null && icon._genData.kind == GenerationData_Kind.UvPaintedBrush) {
+			    _smudgePreferArtIconUntilLayerPaintGenGuid = icon._genData.total_GUID;
+			    _smudgePreferArt_ArmedAtCommitSerial = _inpaintLayerColorCommitSerial;
+		    }
+		    else {
+			    _smudgePreferArtIconUntilLayerPaintGenGuid = default;
+			    _smudgePreferArt_ArmedAtCommitSerial = -1;
+		    }
+	    }
+
+	    /// <summary>Call after loading a project whose paint layer stack included saved content — prevents smudge from targeting the Art icon over restored layer pixels.</summary>
+	    public void NotifyPaintLayersRestoredFromDisk(bool anyLayerHadSavedPaintContent)
+	    {
+		    ClearSmudgePreferArtIconUntilLayerPaint();
+		    // Replace (do not +=) so a prior session’s serial cannot leak across project loads.
+		    _inpaintLayerColorCommitSerial = anyLayerHadSavedPaintContent ? 1 : 0;
+		    _inpaintLayerColorSerialBumpedThisBrushStroke = false;
+	    }
+
+	    void ClearSmudgePreferArtIconUntilLayerPaint()
+	    {
+		    _smudgePreferArtIconUntilLayerPaintGenGuid = default;
+		    _smudgePreferArt_ArmedAtCommitSerial = -1;
+	    }
+
+	    void OnMainArtIconSelected_ArmSmudgeToUvPaintedBrushIfLayerStackIdle(IconUI icon)
+	    {
+		    if (icon?._genData == null || icon._genData.kind != GenerationData_Kind.UvPaintedBrush) return;
+
+		    // No layer color commits yet: arm toward whichever UV-painted brush icon is selected (session start).
+		    if (_inpaintLayerColorCommitSerial == 0) {
+			    _smudgePreferArtIconUntilLayerPaintGenGuid = icon._genData.total_GUID;
+			    _smudgePreferArt_ArmedAtCommitSerial = 0;
+			    return;
+		    }
+
+		    // After bake (or any prior arm): same commit milestone — follow the newly selected UV-painted brush (multiple icons / merged groups).
+		    if (_smudgePreferArt_ArmedAtCommitSerial >= 0
+		        && _inpaintLayerColorCommitSerial == _smudgePreferArt_ArmedAtCommitSerial) {
+			    _smudgePreferArtIconUntilLayerPaintGenGuid = icon._genData.total_GUID;
+		    }
+	    }
+
 	    /// <summary>Wraps the selected Art tab icon’s primary UV color texture array for smudge / undo when it matches mesh brush resolution.</summary>
 	    public RenderUdims EnsureArtIconUvColorWrapper()
 	    {
@@ -326,6 +412,22 @@ namespace spz {
 		    _artIconUvColorWrapper = new RenderUdims(tr.texArray, udims.ToList(), texturesBelongToMe: false);
 		    _artIconUvColorWrapperGenGuid = g;
 		    return _artIconUvColorWrapper;
+	    }
+
+	    /// <summary>After bake-to-art, <see cref="AlignSmudgePaintTargetToActiveLayerContentIfNeeded"/> may keep <c>ActiveLayer.Content</c> when the art UV wrapper is not ready; mesh underlay must still apply so smudge samples visible UV on the empty layer.</summary>
+	    bool SmudgePreferArtArmNeedsMeshUnderActiveLayerContent(PaintLayerStack_MGR stack, RenderUdims alignedTarget)
+	    {
+		    if (stack?.ActiveLayer?.Content == null || alignedTarget == null) return false;
+		    var active = stack.ActiveLayer;
+		    if (!active.Visible) return false;
+		    if (!ReferenceEquals(alignedTarget, active.Content)) return false;
+		    if (_smudgePreferArt_ArmedAtCommitSerial < 0) return false;
+		    if (_inpaintLayerColorCommitSerial != _smudgePreferArt_ArmedAtCommitSerial) return false;
+		    var sel = Art2D_IconsUI_List.instance?._mainSelectedIcon;
+		    if (sel?._genData == null || sel._genData.kind != GenerationData_Kind.UvPaintedBrush) return false;
+		    var artWrap = EnsureArtIconUvColorWrapper();
+		    if (artWrap != null && SmudgeSameUdimsShape(alignedTarget, artWrap)) return false;
+		    return true;
 	    }
 
 	    /// <summary>Delegates to <see cref="SmudgeStrokeRouter"/> for domain barriers, write destination, and kernel spacing. With a paint layer stack, writes are fenced to <c>ActiveLayer.Content</c>; when no stack, <see cref="SmudgeWriteTargetPreference.GeneratedMesh"/> can target mesh accumulation.</summary>
@@ -362,29 +464,70 @@ namespace spz {
 		                                         || (effectiveWritePreference == SmudgeWriteTargetPreference.Auto
 		                                             && _smudgeRouteLockForStroke == SmudgeAdaptiveRouteLock.PreferMesh));
 
-		    bool layerPaintSmudgeOnly = hasLayerStack && layerGate;
+		    // Single-layer + layer gate: no multi-layer “under” texture pass (router handles underlay policy). Multi-layer + gate: composite layers below / scene; do not skip that path when layerGate is on.
+		    bool skipTryBuildForSingleLayerStackOnly = hasLayerStack && layerGate && stack.Layers != null && stack.Layers.Count <= 1;
+		    bool includeUvMeshUser = PaintTab_SmudgeBrushOptions.IncludeUvMeshInLayerSmudge;
+		    bool includeUvMeshEffective = includeUvMeshUser || SmudgePreferArtArmNeedsMeshUnderActiveLayerContent(stack, layerPaintTarget);
 		    RenderUdims preUnder = null;
-		    if (!skipMultiLayerUnder && !layerPaintSmudgeOnly && layerGate && stack != null && stack.Layers != null && stack.Layers.Count > 1)
-			    preUnder = TryBuildSmudgeUnderTextureForSmudge(layerPaintTarget, stack);
+		    if (!skipMultiLayerUnder && !skipTryBuildForSingleLayerStackOnly && layerGate && stack != null && stack.Layers != null && stack.Layers.Count > 1)
+			    preUnder = TryBuildSmudgeUnderTextureForSmudge(layerPaintTarget, stack, includeUvMeshEffective);
 
 		    var artWrap = EnsureArtIconUvColorWrapper();
 		    var plan = SmudgeStrokeRouter.Build(layerPaintTarget, stack, meshAcc, artWrap, preUnder,
-			    _smudgeWriteTargetPreference);
+			    _smudgeWriteTargetPreference, includeUvMeshEffective);
 		    smudgeDest = plan.Dest;
 		    smudgeAcc = plan.Underlay;
 		    undoNonStackKind = plan.UndoKind;
 		    smudgeKernelSpacingMultiplier = plan.KernelSpacingMultiplier;
 	    }
 
-	    /// <summary>When a layer stack is active, route smudge off the legacy object color buffer onto <c>ActiveLayer.Content</c> so gating and paint detection match the layer.</summary>
+	    /// <summary>Align smudge sampling/write buffer with what the viewport shows: active <c>Content</c> when the layer stack contributes; otherwise <see cref="TryResolveArtThenSceneThenMeshUvSource"/> (same as <see cref="ApplyColorLayer_To_UV_Textures"/> when no layer composite).</summary>
 	    RenderUdims AlignSmudgePaintTargetToActiveLayerContentIfNeeded(RenderUdims layerPaintTarget, PaintLayerStack_MGR stack)
 	    {
-		    if (layerPaintTarget == null || stack == null || stack.Layers == null || stack.Layers.Count <= 0)
-			    return layerPaintTarget;
-		    var content = stack.ActiveLayer?.Content;
-		    if (content == null || _ObjectUV_brushedColorRGBA == null) return layerPaintTarget;
+		    if (layerPaintTarget == null)
+			    return null;
+		    // No stack or all layers removed: GetPaintTarget() falls back to _ObjectUV_brushedColorRGBA — that buffer can be
+		    // stale size vs mesh/Art gen; still run Art → scene → mesh resolution using mesh shape when needed.
+		    if (stack == null || stack.Layers == null || stack.Layers.Count <= 0) {
+			    var resolvedEmpty = ResolveSmudgeFallbackUsingMeshShapeIfNeeded(layerPaintTarget);
+			    return resolvedEmpty ?? layerPaintTarget;
+		    }
+		    var active = stack.ActiveLayer;
+		    var content = active?.Content;
+		    if (content == null) {
+			    var resolvedNoContent = ResolveSmudgeFallbackUsingMeshShapeIfNeeded(layerPaintTarget);
+			    return resolvedNoContent ?? layerPaintTarget;
+		    }
+		    if (_ObjectUV_brushedColorRGBA == null) {
+			    var resolvedNoScene = ResolveSmudgeFallbackUsingMeshShapeIfNeeded(layerPaintTarget);
+			    if (resolvedNoScene != null) return resolvedNoScene;
+		    }
+
+		    // No visible layer with Content (all hidden or no allocated buffers): SD / Art tab output — same resolver as display.
+		    if (!SmudgeStrokeRouter.StackHasAnyVisiblePaintLayer(stack)) {
+			    var resolved = TryResolveArtThenSceneThenMeshUvSource(layerPaintTarget, excludeSameTexAs: null);
+			    return resolved ?? layerPaintTarget;
+		    }
+
+		    // Active layer hidden: same Art → scene → mesh priority (excludeSameTexAs null — smudge may write mesh).
+		    if (active != null && !active.Visible && ReferenceEquals(layerPaintTarget, content)) {
+			    var resolved = TryResolveArtThenSceneThenMeshUvSource(layerPaintTarget, excludeSameTexAs: null);
+			    return resolved ?? layerPaintTarget;
+		    }
 		    if (!ReferenceEquals(layerPaintTarget, content) && ReferenceEquals(layerPaintTarget, _ObjectUV_brushedColorRGBA))
 			    return content;
+		    if (_smudgePreferArt_ArmedAtCommitSerial >= 0
+		        && _inpaintLayerColorCommitSerial == _smudgePreferArt_ArmedAtCommitSerial) {
+			    var sel = Art2D_IconsUI_List.instance?._mainSelectedIcon;
+			    if (sel?._genData != null
+			        && sel._genData.kind == GenerationData_Kind.UvPaintedBrush
+			        && active != null && active.Visible
+			        && ReferenceEquals(layerPaintTarget, content)) {
+				    var artWrapPrefer = EnsureArtIconUvColorWrapper();
+				    if (artWrapPrefer != null && SmudgeSameUdimsShape(layerPaintTarget, artWrapPrefer))
+					    return artWrapPrefer;
+			    }
+		    }
 		    return layerPaintTarget;
 	    }
 
@@ -429,8 +572,9 @@ namespace spz {
 		    _smudgeStrokeLockedPaintContent = target;
 	    }
 
-	    /// <summary>Builds what lies <em>under</em> the active layer for smudge sampling: mesh/SD scene buffer and/or visible layers with index &lt; active. Avoids multi-layer smudge using an empty accum slot (no UV/SD under transparent paint).</summary>
-	    RenderUdims TryBuildSmudgeUnderTextureForSmudge(RenderUdims target, PaintLayerStack_MGR stack)
+	    /// <summary>Builds what lies <em>under</em> the active layer for smudge sampling: scene buffer, visible layers with index &lt; active, and optionally mesh accumulation when <paramref name="allowMeshAccumUnder"/> is true.</summary>
+	    /// <param name="allowMeshAccumUnder">When false, mesh UV accumulation is not copied into the underlay (scene buffer and lower paint layers still used).</param>
+	    RenderUdims TryBuildSmudgeUnderTextureForSmudge(RenderUdims target, PaintLayerStack_MGR stack, bool allowMeshAccumUnder)
 	    {
 		    if (target == null || stack?.Layers == null || stack.Layers.Count <= 1 || _blitApplyEntireColorLayer_mat == null)
 			    return null;
@@ -454,11 +598,14 @@ namespace spz {
 				    Graphics.CopyTexture(_ObjectUV_brushedColorRGBA.texArray, _smudgeUnderActiveTemp.texArray);
 				    return _smudgeUnderActiveTemp;
 			    }
-			    var accBottom = Objects_Renderer_MGR.instance?.accumulationTextures_ref();
-			    if (accBottom != null && SmudgeSameUdimsShape(target, accBottom))
+			    if (allowMeshAccumUnder)
 			    {
-				    Graphics.CopyTexture(accBottom.texArray, _smudgeUnderActiveTemp.texArray);
-				    return _smudgeUnderActiveTemp;
+				    var accBottom = Objects_Renderer_MGR.instance?.accumulationTextures_ref();
+				    if (accBottom != null && SmudgeSameUdimsShape(target, accBottom))
+				    {
+					    Graphics.CopyTexture(accBottom.texArray, _smudgeUnderActiveTemp.texArray);
+					    return _smudgeUnderActiveTemp;
+				    }
 			    }
 			    return null;
 		    }
@@ -495,7 +642,7 @@ namespace spz {
 		    {
 			    if (_ObjectUV_brushedColorRGBA != null && SmudgeSameUdimsShape(target, _ObjectUV_brushedColorRGBA))
 				    Graphics.CopyTexture(_ObjectUV_brushedColorRGBA.texArray, _smudgeUnderActiveTemp.texArray);
-			    else
+			    else if (allowMeshAccumUnder)
 			    {
 				    var accFallback = Objects_Renderer_MGR.instance?.accumulationTextures_ref();
 				    if (accFallback != null && SmudgeSameUdimsShape(target, accFallback))
@@ -503,6 +650,8 @@ namespace spz {
 				    else
 					    return null;
 			    }
+			    else
+				    return null;
 		    }
 
 		    return _smudgeUnderActiveTemp;
@@ -570,6 +719,8 @@ namespace spz {
 			    }
 		    }
 		    _isCollapsingLayers = false;
+		    ClearSmudgePreferArtIconUntilLayerPaint();
+		    _inpaintLayerColorCommitSerial++;
 		    if (Objects_Renderer_MGR.instance != null)
 			    Objects_Renderer_MGR.instance.ReRenderAll_soon();
 		    UnityEngine.Debug.Log("[Inpaint_MaskPainter] CollapseLayersIntoScene: composite → scene buffer → single enumerated Collapse N layer (synchronous).");
@@ -615,6 +766,9 @@ namespace spz {
 	        }
 	        _ObjectUV_brushedColorRGBA?.ClearTheTextures(Color.clear);
 	        isPaintMaskEmpty=true;
+	        ClearSmudgePreferArtIconUntilLayerPaint();
+	        _inpaintLayerColorCommitSerial = 0;
+	        _inpaintLayerColorSerialBumpedThisBrushStroke = false;
 	    }
 
 
@@ -630,6 +784,8 @@ namespace spz {
 	        PaintUndo_MGR.instance?.SchedulePreStrokeCapture(target);
 	        OnBucketFill_orDelete_button( col, target.texArray,  visibilTex:null );
 	        isPaintMaskEmpty = false;
+	        ClearSmudgePreferArtIconUntilLayerPaint();
+	        _inpaintLayerColorCommitSerial++;
 	    }
 	    protected override void OnDelete_button(){//different to ResetPaintMask(), might be only for some isolated mesh.
 	        if (MainViewport_UI.instance?.showing != MainViewport_UI.Showing.UsualView) return;
@@ -925,17 +1081,29 @@ namespace spz {
 	        // uses scene texture quality breaks multi-layer (several array blits); single-layer often still looked OK due to one scaled blit.
 	        if (numSlices > 0 && Objects_Renderer_MGR.instance != null)
 	        {
-		        var acc = Objects_Renderer_MGR.instance.accumulationTextures_ref();
-		        if (acc != null && acc.texArray != null && acc.width > 0 && acc.height > 0 && acc.UdimsCount == numSlices)
+		        // SceneResolution_MGR briefly upscales accumulation to 5k for img2img (and 4k for save composite). If we read that
+		        // boosted size here, InitTextures → EnsureResolution reallocates every layer at 5k and clears all paint.
+		        int stableBoost = SceneResolution_MGR.PaintLayerSquareSizeDuringImg2ImgAccumBoost;
+		        if (stableBoost <= 0)
+			        stableBoost = SceneResolution_MGR.PaintLayerSquareSizeDuringSaveCompositeBoost;
+		        if (stableBoost > 0)
 		        {
-			        w = acc.width;
-			        h = acc.height;
+			        w = h = stableBoost;
 		        }
 		        else
 		        {
-			        // Accumulation not allocated yet (e.g. before Objects_Renderer_MGR.Start) — still match scene UV size, not brush-precision-only.
-			        int rq = SceneResolution_MGR.resultTexQuality;
-			        if (rq > 0) { w = h = rq; }
+			        var acc = Objects_Renderer_MGR.instance.accumulationTextures_ref();
+			        if (acc != null && acc.texArray != null && acc.width > 0 && acc.height > 0 && acc.UdimsCount == numSlices)
+			        {
+				        w = acc.width;
+				        h = acc.height;
+			        }
+			        else
+			        {
+				        // Accumulation not allocated yet (e.g. before Objects_Renderer_MGR.Start) — still match scene UV size, not brush-precision-only.
+				        int rq = SceneResolution_MGR.resultTexQuality;
+				        if (rq > 0) { w = h = rq; }
+			        }
 		        }
 	        }
 	        return new Vector3Int(w, h, numSlices);
@@ -1012,7 +1180,10 @@ namespace spz {
 		        return;
 
 	        isPaintMaskEmpty = false;
-	        if(isFirstFrameOfStroke){ _prevStrength = suggested_brushStrength; }
+	        if (isFirstFrameOfStroke) {
+		        _prevStrength = suggested_brushStrength;
+		        _inpaintLayerColorSerialBumpedThisBrushStroke = false;
+	        }
         
 	        RenderUdims.SetNumUdims(target, _brushMaterial);
 
@@ -1061,9 +1232,12 @@ namespace spz {
 		                float smudgeStr = (sdRibbon != null ? sdRibbon.maskBrushOpacity : 1f) * PaintTab_SmudgeBrushOptions.Strength01;
 		                float smudgeAngle = PaintTab_SmudgeBrushOptions.AngleDeg;
 		                float brushSize = BrushRibbon_UI_Size.GetBrushSize01();
-		                bool layerPaintOnly = stackForSmudge != null && stackForSmudge.Layers != null && stackForSmudge.Layers.Count > 0
+		                // LayerSmudgeGateOpen alone used to force SMUDGE_LAYER_PAINT_ONLY and drop mesh underlay — that prevented
+		                // sampling layer-over-accumulation (Objects_Renderer puts UV gen art in accum before layer blit; see ApplyBrushStroke_IntoMask SmudgeCombinedLayerOverAccum).
+		                bool layerGateForDest = stackForSmudge != null && stackForSmudge.Layers != null && stackForSmudge.Layers.Count > 0
 		                    && SmudgeStrokeRouter.LayerSmudgeGateOpen(stackForSmudge, smudgeDest);
-		                RenderUdims accForSmudge = layerPaintOnly ? null : smudgeAcc;
+		                bool layerPaintOnly = layerGateForDest && smudgeAcc == null;
+		                RenderUdims accForSmudge = smudgeAcc;
 		                if (_applyBrushStroke_toUvMask.Apply_smudge_to_ColorBrushTex(currBrushStroke_R8, smudgeStr, brushSize, smudgeDest, accForSmudge, smudgeKernelSpacingMul, smudgeAngle, 1.35f, layerPaintOnly))
 			                _smudgeUndoSegmentDest = smudgeDest;
 		                Objects_Renderer_MGR.instance?.ReRenderAll_soon();
@@ -1086,8 +1260,14 @@ namespace spz {
 			        }
 			        float sign = Mathf.Sign(suggested_brushStrength);
 			        float maxStrength = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity : 1f;
-			        if (_applyBrushStroke_toUvMask.Apply_into_ColorBrushTex(prevBrushStroke_R8, currBrushStroke_R8, sign, maxStrength, target, useBrushStrokeDelta: true))
+			        if (_applyBrushStroke_toUvMask.Apply_into_ColorBrushTex(prevBrushStroke_R8, currBrushStroke_R8, sign, maxStrength, target, useBrushStrokeDelta: true)) {
+				        ClearSmudgePreferArtIconUntilLayerPaint();
+				        if (!_inpaintLayerColorSerialBumpedThisBrushStroke) {
+					        _inpaintLayerColorSerialBumpedThisBrushStroke = true;
+					        _inpaintLayerColorCommitSerial++;
+				        }
 				        Objects_Renderer_MGR.instance?.ReRenderAll_soon();
+			        }
 		        }
 	        }
 	    }
@@ -1210,6 +1390,8 @@ namespace spz {
 		        ? WorkflowRibbon_UI.instance.currentMode()
 		        : WorkflowRibbon_CurrMode.ProjectionsMasking;
 	        WorkflowRibbon_UI._Act_OnModeChanged += OnWorkflowModeChanged_ClearStaleSceneBuffer;
+	        Art2D_IconsUI_List._Act_mainIcon_selected += OnMainArtIconSelected_ArmSmudgeToUvPaintedBrushIfLayerStackIdle;
+	        OnMainArtIconSelected_ArmSmudgeToUvPaintedBrushIfLayerStackIdle(Art2D_IconsUI_List.instance?._mainSelectedIcon);
 
 	        if (SystemInfo.supportsConservativeRaster == false){
 	            DestroyImmediate(base._brushMaterial); //secretly swap the parent's material with a more suitable one
@@ -1385,9 +1567,10 @@ namespace spz {
 			    if (stack.Layers.Count > 0 && stack.Layers[0].Visible && stack.Layers[0].Content != null)
 				    return stack.Layers[0].Content;
 		    }
-		    // Single layer: use active layer Content when it exists. Scene buffer may be null before first multi-layer setup;
+		    // Single layer: use active layer Content when it exists and is visible. Scene buffer may be null before first multi-layer setup;
 		    // returning null here broke GetDisposable_ScreenMask / SD mask despite valid paint on the layer.
-		    if (stack != null && stack.Layers != null && stack.Layers.Count <= 1 && stack.ActiveLayer?.Content != null)
+		    if (stack != null && stack.Layers != null && stack.Layers.Count <= 1 && stack.ActiveLayer?.Content != null
+		        && stack.ActiveLayer.Visible)
 		    {
 			    var activeContent = stack.ActiveLayer.Content;
 			    if (_ObjectUV_brushedColorRGBA == null)
@@ -1434,6 +1617,7 @@ namespace spz {
 
 	    protected override void OnDestroy(){
 	        WorkflowRibbon_UI._Act_OnModeChanged -= OnWorkflowModeChanged_ClearStaleSceneBuffer;
+	        Art2D_IconsUI_List._Act_mainIcon_selected -= OnMainArtIconSelected_ArmSmudgeToUvPaintedBrushIfLayerStackIdle;
 	        if (PaintLayerStack_MGR.instance != null)
 		        PaintLayerStack_MGR.instance.OnActiveLayerChanged -= OnActiveLayerChanged_EnsureContent;
 	        PaintLayerStack_MGR.OnLayerAdded -= OnLayerAdded_InjectScene;

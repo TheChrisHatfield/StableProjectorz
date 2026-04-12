@@ -19,7 +19,7 @@ namespace spz {
 	    void OnUpdateDirection_Mode( WorkflowRibbon_CurrMode currMode ){
 	        switch (currMode){
 	            case WorkflowRibbon_CurrMode.ProjectionsMasking:
-	                if(Keyboard.current.rKey.isPressed){ return; }
+	                if (Keyboard.current != null && Keyboard.current.rKey.isPressed){ return; }
 	                SetToolMode(BrushToolMode.Erase);
 	                break;
 	            case WorkflowRibbon_CurrMode.Inpaint_Color: SetToolMode(BrushToolMode.Paint); break;
@@ -31,11 +31,14 @@ namespace spz {
 	    }
 
 	    protected void OnStartedEditMode_MultiView( MultiView_StartEditMode_Args args ){
-	        IconUI icon = Art2D_IconsUI_List.instance._mainSelectedIcon;
-	        if (icon != null){
-	            bool isMultiPOV =  icon._genData.povInfos.numEnabled > 1;
-	            if(isMultiPOV){  SetToolMode(BrushToolMode.Paint);  }
-	        }
+	        var icon = Art2D_IconsUI_List.instance?._mainSelectedIcon;
+	        if (icon?._genData?.povInfos?.povs == null){ return; }
+	        bool isMultiPOV = icon._genData.povInfos.numEnabled > 1;
+	        if (isMultiPOV){ SetToolMode(BrushToolMode.Paint); }
+	    }
+
+	    void OnBrushColorUpdated_ForcePaintMode(Color _){
+	        SetToolMode(BrushToolMode.Paint);
 	    }
 
 	    void OnUpdateDirection_Toggle(Toggle toggle, bool isOn){
@@ -63,7 +66,7 @@ namespace spz {
 	        MultiView_Ribbon_UI.OnStartEditMode += OnStartedEditMode_MultiView;
         
 	        if(_colors != null){ 
-	            _colors._onBrushColorUpdated += (Color col)=>SetToolMode(BrushToolMode.Paint);
+	            _colors._onBrushColorUpdated += OnBrushColorUpdated_ForcePaintMode;
 	        }
 	        if(_rib!=null){
 	            WorkflowRibbon_UI._Act_OnModeChanged += OnUpdateDirection_Mode;
@@ -75,6 +78,18 @@ namespace spz {
 	        _brushErase_Toggle.onValueChanged.AddListener( (isOn)=>OnUpdateDirection_Toggle(_brushErase_Toggle, isOn) );
 	        if (_brushSmudge_Toggle != null)
 	            _brushSmudge_Toggle.onValueChanged.AddListener( (isOn)=>OnUpdateDirection_Toggle(_brushSmudge_Toggle, isOn) );
+	    }
+
+	    void OnDestroy(){
+	        MultiView_Ribbon_UI.OnStartEditMode -= OnStartedEditMode_MultiView;
+	        if (_rib != null){
+	            WorkflowRibbon_UI._Act_OnModeChanged -= OnUpdateDirection_Mode;
+	        }
+	        if (_colors != null){
+	            _colors._onBrushColorUpdated -= OnBrushColorUpdated_ForcePaintMode;
+	        }
+	        Projections_MaskPainter.Act_OnPaintStrokeEnd -= OnBrushStrokeEnd;
+	        Inpaint_MaskPainter.Act_OnPaintStrokeEnd -= OnBrushStrokeEnd;
 	    }
 
     

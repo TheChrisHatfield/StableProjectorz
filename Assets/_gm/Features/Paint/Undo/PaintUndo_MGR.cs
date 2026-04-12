@@ -18,11 +18,15 @@ namespace spz {
 		[SerializeField] int _captureBanditMinPullsPerBucket = 3;
 		[SerializeField] bool _smudgeRouteBanditEnabled = true;
 		[SerializeField] int _smudgeRouteMinPullsPerBucket = 3;
+		[SerializeField] bool _collapsePathBanditEnabled = true;
+		[SerializeField] int _collapsePathMinPullsPerBucket = 3;
 		[SerializeField] bool _capturePingPongScratches = true;
 		[SerializeField] bool _captureEagerGpuCopy = false;
 
 		readonly PaintUndo_Storage _storage = new PaintUndo_Storage();
 		readonly PaintUndo_Scheduler _scheduler = new PaintUndo_Scheduler();
+		/// <summary>Slice-batch Thompson/UCB for layer collapse composites; posteriors persist across collapses (unlike per-undo-restore decay).</summary>
+		readonly PaintUndo_Scheduler _collapseSliceScheduler = new PaintUndo_Scheduler();
 
 		/// <summary>Live undo scheduler (restore + capture bandits). Used by smudge spacing to share capture Thompson context without extra observations.</summary>
 		public PaintUndo_Scheduler UndoScheduler => _scheduler;
@@ -80,11 +84,15 @@ namespace spz {
 			_scheduler.captureBanditMinPullsPerBucket = Mathf.Max(0, _captureBanditMinPullsPerBucket);
 			_scheduler.smudgeRouteBanditEnabled = _smudgeRouteBanditEnabled;
 			_scheduler.smudgeRouteMinPullsPerBucket = Mathf.Max(0, _smudgeRouteMinPullsPerBucket);
+			_scheduler.collapsePathBanditEnabled = _collapsePathBanditEnabled;
+			_scheduler.collapsePathMinPullsPerBucket = Mathf.Max(0, _collapsePathMinPullsPerBucket);
+			// Must not call CopyRestoreSchedulerPolicyTo here — that method calls Push again and would recurse until stack overflow (player builds crash immediately).
+			PropagateSchedulerPolicyFromMainTo(_collapseSliceScheduler);
 		}
 
-		public void CopyRestoreSchedulerPolicyTo(PaintUndo_Scheduler target) {
+		/// <summary>Copies scalar policy from the live main <see cref="_scheduler"/> to another scheduler (learned bandit posteriors on <paramref name="target"/> are left unchanged).</summary>
+		void PropagateSchedulerPolicyFromMainTo(PaintUndo_Scheduler target) {
 			if (target == null) return;
-			PushSchedulerInspectorSettings();
 			var src = _scheduler;
 			target.restoreBudgetPolicy = src.restoreBudgetPolicy;
 			target.baseBudgetMs = src.baseBudgetMs;
@@ -103,12 +111,21 @@ namespace spz {
 			target.smudgeRouteOpacityPriorLow = src.smudgeRouteOpacityPriorLow;
 			target.smudgeRouteOpacityPriorHigh = src.smudgeRouteOpacityPriorHigh;
 			target.smudgeRouteSuccessMaxFrameTimeSec = src.smudgeRouteSuccessMaxFrameTimeSec;
+			target.collapsePathBanditEnabled = src.collapsePathBanditEnabled;
+			target.collapsePathMinPullsPerBucket = src.collapsePathMinPullsPerBucket;
 		}
 
-		public static PaintUndo_Scheduler CreateCollapseSliceScheduler() {
-			var s = new PaintUndo_Scheduler();
-			if (instance != null) instance.CopyRestoreSchedulerPolicyTo(s);
-			return s;
+		public void CopyRestoreSchedulerPolicyTo(PaintUndo_Scheduler target) {
+			if (target == null) return;
+			PushSchedulerInspectorSettings();
+			PropagateSchedulerPolicyFromMainTo(target);
+		}
+
+		/// <summary>Scheduler used for amortized collapse slice compositing; shares policy with undo restore and retains learned slice-batch arms across collapses.</summary>
+		public static PaintUndo_Scheduler GetCollapseSliceScheduler() {
+			if (instance == null) return null;
+			instance.CopyRestoreSchedulerPolicyTo(instance._collapseSliceScheduler);
+			return instance._collapseSliceScheduler;
 		}
 
 		void OnDestroy() {

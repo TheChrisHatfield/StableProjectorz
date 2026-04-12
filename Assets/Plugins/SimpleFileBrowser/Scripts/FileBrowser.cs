@@ -964,7 +964,12 @@ namespace SimpleFileBrowser
 #else
 					if( Input.GetKeyDown( KeyCode.B ) && IsCtrlKeyHeld() )
 #endif
-						AddCurrentFolderToFavorites();
+					{
+						if( IsCurrentFolderInFavorites() )
+							RemoveCurrentFolderFromFavorites();
+						else
+							AddCurrentFolderToFavorites();
+					}
 				}
 			}
 #endif
@@ -2980,6 +2985,76 @@ namespace SimpleFileBrowser
 
 		private const string FAVORITES_PLAYERPREFS_KEY = "SimpleFileBrowser_Favorites";
 
+		/// <summary>Same path key as <see cref="AddQuickLink"/> / favorites file (trim + trailing separator strip).</summary>
+		private string NormalizePathForFavoriteEntry( string absolutePath )
+		{
+			if( string.IsNullOrEmpty( absolutePath ) )
+				return null;
+			string path = absolutePath.Trim().TrimEnd( Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar );
+			return GetPathWithoutTrailingDirectorySeparator( path.Trim() );
+		}
+
+		private bool FavoritePlayerPrefsContainsPath( string normalizedPath )
+		{
+			if( string.IsNullOrEmpty( normalizedPath ) )
+				return false;
+			string raw = PlayerPrefs.GetString( FAVORITES_PLAYERPREFS_KEY, "" );
+			if( string.IsNullOrEmpty( raw ) )
+				return false;
+			string[] lines = raw.Split( new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries );
+			for( int i = 0; i < lines.Length; i++ )
+			{
+				int tab = lines[i].IndexOf( '\t' );
+				if( tab <= 0 )
+					continue;
+				string p = lines[i].Substring( tab + 1 ).Trim();
+				if( string.Equals( p, normalizedPath, StringComparison.OrdinalIgnoreCase ) )
+					return true;
+			}
+			return false;
+		}
+
+		private bool RemoveFavoritePathFromPlayerPrefs( string normalizedPath )
+		{
+			string raw = PlayerPrefs.GetString( FAVORITES_PLAYERPREFS_KEY, "" );
+			if( string.IsNullOrEmpty( raw ) )
+				return false;
+			StringBuilder sb = new StringBuilder( raw.Length );
+			bool removed = false;
+			string[] lines = raw.Split( new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries );
+			for( int i = 0; i < lines.Length; i++ )
+			{
+				int tab = lines[i].IndexOf( '\t' );
+				if( tab <= 0 )
+				{
+					sb.Append( lines[i] ).Append( '\n' );
+					continue;
+				}
+				string p = lines[i].Substring( tab + 1 ).Trim();
+				if( string.Equals( p, normalizedPath, StringComparison.OrdinalIgnoreCase ) )
+				{
+					removed = true;
+					continue;
+				}
+				sb.Append( lines[i] ).Append( '\n' );
+			}
+			if( !removed )
+				return false;
+			PlayerPrefs.SetString( FAVORITES_PLAYERPREFS_KEY, sb.ToString() );
+			PlayerPrefs.Save();
+			return true;
+		}
+
+		private void RelayoutQuickLinksVertical()
+		{
+			if( m_skin == null )
+				return;
+			float h = m_skin.FileHeight;
+			for( int i = 0; i < allQuickLinks.Count; i++ )
+				allQuickLinks[i].TransformComponent.anchoredPosition = new Vector2( 0f, -i * h );
+			quickLinksContainer.sizeDelta = new Vector2( 0f, allQuickLinks.Count > 0 ? allQuickLinks.Count * h : 0f );
+		}
+
 		private void LoadFavoritesIntoQuickLinks()
 		{
 			string raw = PlayerPrefs.GetString( FAVORITES_PLAYERPREFS_KEY, "" );
@@ -2996,7 +3071,47 @@ namespace SimpleFileBrowser
 			}
 		}
 
-		/// <summary>Add the current folder to Quick access (favorites). Persisted so it appears next time. Use Ctrl+B when browser is open.</summary>
+		/// <summary>True if the current folder is in Quick access (favorites).</summary>
+		public static bool IsCurrentFolderInFavorites()
+		{
+			if( Instance == null || string.IsNullOrEmpty( Instance.m_currentPath ) ) return false;
+#if !UNITY_EDITOR && UNITY_ANDROID
+			if( FileBrowserHelpers.ShouldUseSAFForPath( Instance.m_currentPath ) ) return false;
+#endif
+			string path = Instance.NormalizePathForFavoriteEntry( Instance.m_currentPath );
+			if( string.IsNullOrEmpty( path ) ) return false;
+			return Instance.FavoritePlayerPrefsContainsPath( path );
+		}
+
+		/// <summary>Remove the current folder from Quick access (favorites) and destroy its quick link if present.</summary>
+		public static bool RemoveCurrentFolderFromFavorites()
+		{
+			if( Instance == null || string.IsNullOrEmpty( Instance.m_currentPath ) ) return false;
+#if !UNITY_EDITOR && UNITY_ANDROID
+			if( FileBrowserHelpers.ShouldUseSAFForPath( Instance.m_currentPath ) ) return false;
+#endif
+			string path = Instance.NormalizePathForFavoriteEntry( Instance.m_currentPath );
+			if( string.IsNullOrEmpty( path ) ) return false;
+
+			bool prefsRemoved = Instance.RemoveFavoritePathFromPlayerPrefs( path );
+			bool uiRemoved = false;
+			for( int i = 0; i < Instance.allQuickLinks.Count; i++ )
+			{
+				if( string.Equals( Instance.allQuickLinks[i].TargetPath, path, StringComparison.OrdinalIgnoreCase ) )
+				{
+					Destroy( Instance.allQuickLinks[i].gameObject );
+					Instance.allQuickLinks.RemoveAt( i );
+					uiRemoved = true;
+					i--;
+				}
+			}
+			if( uiRemoved )
+				Instance.RelayoutQuickLinksVertical();
+
+			return prefsRemoved || uiRemoved;
+		}
+
+		/// <summary>Add the current folder to Quick access (favorites). Persisted so it appears next time. Ctrl+B toggles pin when the browser is open.</summary>
 		public static bool AddCurrentFolderToFavorites()
 		{
 			if( Instance == null || string.IsNullOrEmpty( Instance.m_currentPath ) ) return false;
@@ -3004,16 +3119,23 @@ namespace SimpleFileBrowser
 			if( FileBrowserHelpers.ShouldUseSAFForPath( Instance.m_currentPath ) ) return false;
 #endif
 			if( !FileBrowserHelpers.DirectoryExists( Instance.m_currentPath ) ) return false;
-			string path = Instance.m_currentPath.Trim().TrimEnd( Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar );
+			string path = Instance.NormalizePathForFavoriteEntry( Instance.m_currentPath );
+			if( string.IsNullOrEmpty( path ) ) return false;
 			string name = Path.GetFileName( path );
 			if( string.IsNullOrEmpty( name ) ) name = path;
-			string raw = PlayerPrefs.GetString( FAVORITES_PLAYERPREFS_KEY, "" );
+			if( Instance.FavoritePlayerPrefsContainsPath( path ) ) return false;
+			string rawBefore = PlayerPrefs.GetString( FAVORITES_PLAYERPREFS_KEY, "" );
 			string newEntry = name + "\t" + path + "\n";
-			if( raw.IndexOf( path, StringComparison.OrdinalIgnoreCase ) >= 0 ) return false;
-			raw += newEntry;
+			string raw = rawBefore + newEntry;
 			PlayerPrefs.SetString( FAVORITES_PLAYERPREFS_KEY, raw );
 			PlayerPrefs.Save();
-			return Instance.AddQuickLink( Instance.m_skin != null ? Instance.m_skin.FolderIcon : null, name, path );
+			bool added = Instance.AddQuickLink( Instance.m_skin != null ? Instance.m_skin.FolderIcon : null, name, path );
+			if( !added )
+			{
+				PlayerPrefs.SetString( FAVORITES_PLAYERPREFS_KEY, rawBefore );
+				PlayerPrefs.Save();
+			}
+			return added;
 		}
 
 		public static bool AddQuickLink( string name, string path, Sprite icon = null )
