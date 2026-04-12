@@ -182,6 +182,7 @@ namespace spz {
 	    /// Call each frame during drag when smudge mode is active. Returns false if UV chunks or temps are unavailable (no GPU write).</summary>
 	    static readonly int _SmudgeAngleRadId = Shader.PropertyToID("_SmudgeAngleRad");
 	    static readonly int _SmudgeDirBoostId = Shader.PropertyToID("_SmudgeDirBoost");
+	    static readonly int _SmudgeNeighborRadiusId = Shader.PropertyToID("_SmudgeNeighborRadius");
 
 	    /// <param name="smudgeAngleDeg">0° = +X in UV texel space; favors smearing along this direction in the neighbor kernel.</param>
 	    /// <param name="smudgeDirBoost">0 = isotropic smudge; higher = stronger directional bias (typical 1–2).</param>
@@ -221,11 +222,14 @@ namespace spz {
 		        _brushStroke_intoMask.SetTexture(kernel, "_SmudgeSourceCopy", _smudgeCopyRT);
 		        _brushStroke_intoMask.SetTexture(kernel, "_SmudgeAccumCopy", _smudgeAccumCopyRT);
 		        _brushStroke_intoMask.SetFloat("_MaxPossibleBrushStrength01", smudgeStrength01);
-		        // 0 = distance/direction kernel only; high sigma was zeroing weights vs differently colored neighbors (looked like erase).
-		        _brushStroke_intoMask.SetFloat("_SmudgeAdaptiveColorSigma", 0f);
+		        float mix01 = PaintTab_SmudgeBrushOptions.ColorMixSimilarity01;
+		        // 0 = distance/direction kernel only; >0 tightens neighbor weights to surface (luminance + alpha metric in compute).
+		        float colorSigma = mix01 <= 1e-4f ? 0f : Mathf.Lerp(4f, 26f, mix01 * mix01);
+		        _brushStroke_intoMask.SetFloat("_SmudgeAdaptiveColorSigma", colorSigma);
 
 		        float kernelSpacing = Mathf.Max(1f, brushSize01 * destin.width * 0.04f) * Mathf.Max(0.25f, kernelSpacingMultiplier);
 		        _brushStroke_intoMask.SetFloat("_SmudgeKernelSpacing", kernelSpacing);
+		        _brushStroke_intoMask.SetInt(_SmudgeNeighborRadiusId, Mathf.Clamp(PaintTab_SmudgeBrushOptions.NeighborGridRadius, 1, 4));
 		        _brushStroke_intoMask.SetInt("_SmudgeTexWidth", destin.width);
 		        _brushStroke_intoMask.SetInt("_SmudgeTexHeight", destin.height);
 		        _brushStroke_intoMask.SetFloat(_SmudgeAngleRadId, smudgeAngleDeg * Mathf.Deg2Rad);

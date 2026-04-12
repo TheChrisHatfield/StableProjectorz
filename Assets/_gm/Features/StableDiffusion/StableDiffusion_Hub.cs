@@ -150,6 +150,8 @@ namespace spz {
 
     
 	    void OnAfterRequested_img2img(){
+	        // Before other listeners: restore scene / layer-RT resolution state (must not depend on delegate order or exceptions in UI subscribers).
+	        SceneResolution_MGR.ApplyImg2ImgResolutionCleanupAfterPayloadSent();
 	        Guid guid = GenData2D_Archive.instance.latestGeneration_GUID;
 	        GenData2D latestData = GenData2D_Archive.instance.GenerationGUID_toData(guid);
 	        _Act_img2img_requested?.Invoke(latestData);

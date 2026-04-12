@@ -22,6 +22,7 @@ namespace spz {
 	/// Kernel spacing follows <see cref="PaintUndo_Scheduler.GetSmudgeKernelSpacingMultiplier"/> when undo manager exists (same contextual bucket + capture Thompson arms as readback/yield; no smudge-only bandit).
 	/// For <see cref="SmudgeWriteTargetPreference.Auto"/>, stroke-locked <see cref="SmudgeAdaptiveRouteLock.PreferMesh"/> does <em>not</em> redirect the write off the active layer when
 	/// <see cref="LayerSmudgeGateOpen"/> is true — paint stays on <c>ActiveLayer.Content</c>. PreferMesh only steers underlay policy in <c>Inpaint_MaskPainter</c> (multi-layer under pass).
+	/// When the active layer is hidden, <c>Inpaint_MaskPainter</c> retargets smudge onto mesh accumulation (same resolution); this router then routes to <see cref="WriteDomain.MeshAccumulation"/> instead of returning no destination.
 	/// </summary>
 	public static class SmudgeStrokeRouter {
 
@@ -50,7 +51,7 @@ namespace spz {
 			       && a.width == b.width && a.height == b.height && a.UdimsCount == b.UdimsCount;
 		}
 
-		/// <summary>True if any layer is visible and has content (used only for diagnostics / future UI).</summary>
+		/// <summary>True if any layer is visible with allocated <c>Content</c> (matches multi-layer composite iteration). Single-layer viewport blit does not multiply by layer opacity the same way; do not use opacity here or smudge alignment diverges from <see cref="Inpaint_MaskPainter.ApplyColorLayer_To_UV_Textures"/>.</summary>
 		public static bool StackHasAnyVisiblePaintLayer(PaintLayerStack_MGR stack) {
 			if (stack?.Layers == null) return false;
 			foreach (var l in stack.Layers) {
@@ -100,13 +101,15 @@ namespace spz {
 		}
 
 		/// <param name="prebuiltMultiLayerUnderlay">From <see cref="Inpaint_MaskPainter"/> multi-layer under pass; may be null.</param>
+		/// <param name="includeUvMeshUnderLayerSmudge">When true, mesh accumulation may be used as smudge underlay for single-layer stack and <see cref="WriteDomain.LayerOnlyNoUnderlay"/>; when false, those paths skip mesh (multi-layer prebuilt underlay still follows <see cref="Inpaint_MaskPainter.TryBuildSmudgeUnderTextureForSmudge"/> rules).</param>
 		public static Plan Build(
 			RenderUdims layerPaintTarget,
 			PaintLayerStack_MGR stack,
 			RenderUdims meshAccumulation,
 			RenderUdims artIconUvWrapper,
 			RenderUdims prebuiltMultiLayerUnderlay,
-			SmudgeWriteTargetPreference writePreference) {
+			SmudgeWriteTargetPreference writePreference,
+			bool includeUvMeshUnderLayerSmudge = false) {
 
 			var plan = new Plan {
 				Dest = null,
@@ -122,13 +125,15 @@ namespace spz {
 			bool layerGate = LayerSmudgeGateOpen(stack, layerPaintTarget);
 			bool meshOk = meshAccumulation != null && SameShape(layerPaintTarget, meshAccumulation);
 			bool hasLayerStack = stack != null && stack.Layers != null && stack.Layers.Count > 0;
+			var activeContent = stack?.ActiveLayer?.Content;
+			bool targetIsActiveLayerBuffer = activeContent != null && ReferenceEquals(layerPaintTarget, activeContent);
 			var effectiveWritePreference = writePreference;
 
-			// Layer-stack fence: once a layer stack exists, smudge writes are confined to ActiveLayer.Content.
-			// If gate is closed (e.g. transient new-layer setup), return no-op so later frames can retry safely.
+			// Layer-stack fence: when the stroke target *is* the active layer buffer, require the gate (visible + same Content ref).
+			// If the target is something else (e.g. art UV wrapper / same-res alias), do not no-op — fall through to mesh/art paths.
 			if (hasLayerStack) {
-				if (!layerGate)
-					return plan;
+				// If the stroke target is the active layer Content but that layer is hidden, do not return an
+				// empty plan — fall through so mesh UV accumulation / Art UV can receive smudge (SD mesh output).
 				if (effectiveWritePreference == SmudgeWriteTargetPreference.GeneratedMesh)
 					effectiveWritePreference = SmudgeWriteTargetPreference.LayerStack;
 			}
@@ -151,20 +156,17 @@ namespace spz {
 				if (multi) {
 					if (prebuiltMultiLayerUnderlay != null && UnderlayBarrierOk(plan.Dest, prebuiltMultiLayerUnderlay))
 						plan.Underlay = prebuiltMultiLayerUnderlay;
-				} else if (meshAccumulation != null && SameShape(layerPaintTarget, meshAccumulation)
+				} else if (includeUvMeshUnderLayerSmudge
+				           && meshAccumulation != null && SameShape(layerPaintTarget, meshAccumulation)
 				           && UnderlayBarrierOk(plan.Dest, meshAccumulation)) {
 					plan.Underlay = meshAccumulation;
 				}
 				return plan;
 			}
 
-			// --- Isolation: not allowed to treat as layer-stack smudge → mesh accumulation or Art UV only ---
-
-			if (meshAccumulation != null && SameShape(layerPaintTarget, meshAccumulation)) {
-				return MeshAccumulationPlan(meshAccumulation);
-			}
-
-			if (artIconUvWrapper != null && SameShape(layerPaintTarget, artIconUvWrapper)) {
+			// --- Isolation: not allowed to treat as layer-stack smudge → Art UV, then mesh accumulation ---
+			// Art wrapper must be checked before mesh: same UDIM resolution would otherwise return MeshAccumulationPlan and smudge the wrong buffer after AlignSmudge routes to the icon UV RenderUdims.
+			if (artIconUvWrapper != null && ReferenceEquals(layerPaintTarget, artIconUvWrapper)) {
 				plan.Dest = artIconUvWrapper;
 				plan.Underlay = null;
 				plan.UndoKind = PaintUndoNonStackTarget.ArtIconUvColor;
@@ -173,9 +175,25 @@ namespace spz {
 				return plan;
 			}
 
-			// Hidden active (or no gate) and no mesh/art match: do not write hidden layer UVs (avoids “ghost” smudge into invisible stack).
+			if (meshAccumulation != null && SameShape(layerPaintTarget, meshAccumulation)) {
+				return MeshAccumulationPlan(meshAccumulation);
+			}
+
+			// Same backing as the art wrapper but a different RenderUdims shell (do not use SameShape alone — another buffer can match resolution).
+			if (artIconUvWrapper != null && SameShape(layerPaintTarget, artIconUvWrapper)
+			    && layerPaintTarget.texArray != null && layerPaintTarget.texArray == artIconUvWrapper.texArray
+			    && !ReferenceEquals(layerPaintTarget, artIconUvWrapper)) {
+				plan.Dest = artIconUvWrapper;
+				plan.Underlay = null;
+				plan.UndoKind = PaintUndoNonStackTarget.ArtIconUvColor;
+				plan.Domain = WriteDomain.ArtIconUvTexture;
+				plan.KernelSpacingMultiplier = ComputeKernelSpacingMultiplier(artIconUvWrapper);
+				return plan;
+			}
+
+			// Do not smudge into a hidden active layer buffer; other domains (mesh / art) already handled above.
 			var active = stack?.ActiveLayer;
-			if (active != null && !active.Visible) {
+			if (active != null && !active.Visible && ReferenceEquals(layerPaintTarget, active.Content)) {
 				plan.Domain = WriteDomain.None;
 				return plan;
 			}
@@ -185,7 +203,7 @@ namespace spz {
 			plan.UndoKind = PaintUndoNonStackTarget.InpaintColor;
 			plan.Domain = WriteDomain.LayerOnlyNoUnderlay;
 			plan.KernelSpacingMultiplier = ComputeKernelSpacingMultiplier(layerPaintTarget);
-			if (meshAccumulation != null && SameShape(layerPaintTarget, meshAccumulation)
+			if (includeUvMeshUnderLayerSmudge && meshAccumulation != null && SameShape(layerPaintTarget, meshAccumulation)
 			    && UnderlayBarrierOk(plan.Dest, meshAccumulation))
 				plan.Underlay = meshAccumulation;
 

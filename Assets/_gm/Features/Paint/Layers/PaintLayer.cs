@@ -45,12 +45,13 @@ namespace spz {
 
 		// --- Allocation / resolution (called by PaintLayerStack_MGR when resolution is set) ---
 		/// <summary>Allocate content and data with same layout as inpaint brush (UDIMs, resolution, format). Call when stack resolution is known. New/rezised content needs scene injection again.</summary>
-		public void EnsureContent(IReadOnlyList<UDIM_Sector> udims, Vector2Int resolution, GraphicsFormat format, FilterMode filter)
+		/// <returns>True if <see cref="Content"/> was (re)allocated; false if existing buffers already matched and were left unchanged.</returns>
+		public bool EnsureContent(IReadOnlyList<UDIM_Sector> udims, Vector2Int resolution, GraphicsFormat format, FilterMode filter)
 		{
 			if (Content != null)
 			{
 				if (Content.width == resolution.x && Content.height == resolution.y && Content.UdimsCount == udims.Count)
-					return;
+					return false;
 				Content.Dispose();
 				Data?.Dispose();
 				Data = null;
@@ -58,6 +59,7 @@ namespace spz {
 			Content = new RenderUdims(udims, resolution, format, filter, Color.clear, depthBits: 0);
 			Data = new RenderUdims(udims, resolution, format, filter, Color.clear, depthBits: 0);
 			HasReceivedSceneInject = false; // new/rezised vessel; painter will inject static scene once
+			return true;
 		}
 
 		// --- Save/load helpers (Content = live paint buffer; Data = mirror for serialization) ---

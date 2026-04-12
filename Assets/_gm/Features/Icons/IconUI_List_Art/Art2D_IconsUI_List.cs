@@ -131,6 +131,7 @@ namespace spz {
 	            textures_without_owner.Add(t,u);
 	        }
 	        base.OnImportCustomImage_OK(kind, textures_without_owner);
+	        Inpaint_MaskPainter.instance?.NotifyBakedColorsEvictedToArtIcon();
 	    }
 
 

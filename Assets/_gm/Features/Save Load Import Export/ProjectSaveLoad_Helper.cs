@@ -208,6 +208,8 @@ namespace spz {
 	                }
 	                PaintLayerStack_MGR.instance.Load(spz);
 	            }
+	            else
+		            Inpaint_MaskPainter.instance?.NotifyPaintLayersRestoredFromDisk(false);
 	            //2D BACKGROUND mgr?
 
 	            UserCameras_MGR.instance.OnAfter_AllLoaded();

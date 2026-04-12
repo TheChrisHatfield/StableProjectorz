@@ -119,7 +119,11 @@ namespace spz {
 
 	    IEnumerator Generate_img2img_crtn(bool isMakingBackgrounds,  Action onRequested=null){
         
-	        if( !Start_GenerationRequest(Generate_RequestingWhat.img2img) ){ yield break; }
+	        if( !Start_GenerationRequest(Generate_RequestingWhat.img2img) ){
+	            if (SceneResolution_MGR.LastImg2imgWillAppliedPrep)
+		            SceneResolution_MGR.RevertImg2ImgAccumBoostIfPreRequestFailed();
+	            yield break;
+	        }
 
 	        //for inpaint to apply itself, etc. (or to avoid checker pattern if had No-Color Mask)
 	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
@@ -154,7 +158,11 @@ namespace spz {
 
 	    IEnumerator Upscale_img2extra_crtn( float upscaleBy, GenData2D fromGen_canBeNull=null, 
 	                                        Texture2D tex2D=null,  Action onRequested=null ){
-	        if(!Start_GenerationRequest(Generate_RequestingWhat.upscale)){ yield break; }
+	        if(!Start_GenerationRequest(Generate_RequestingWhat.upscale)){
+	            if (SceneResolution_MGR.LastImg2imgWillAppliedPrep)
+		            SceneResolution_MGR.RevertImg2ImgAccumBoostIfPreRequestFailed();
+	            yield break;
+	        }
 
 	        if(fromGen_canBeNull == null){ //genData not provided, render the scene to submit the ViewTexture for upscale.
 	            UserCameras_Permissions.Force_KeepRenderingCameras(true);

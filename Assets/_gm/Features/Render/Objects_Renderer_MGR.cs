@@ -237,10 +237,20 @@ namespace spz {
 	    void Apply_InpaintSketch_ColorLayer(){
 	        if(MainViewport_UI.instance.showing != MainViewport_UI.Showing.UsualView){ return; }
 	        if(Inpaint_MaskPainter.instance == null){ return; }
-	        // Multi-layer stack must always composite onto accumulation for viewport + SD; do not gate on allowed_to_showBrushMask() (that only reflects inpaint ribbon modes and skipped the blit entirely).
+	        // Any paint layer stack (1+ layers): always composite onto accumulation for viewport + SD. Do not gate on
+	        // allowed_to_showBrushMask() — that flag only tracks inpaint brush/mask UI modes; skipping here left a single
+	        // layer invisible after SD finished (while _generating was false) until a second layer was added (Count>1 used
+	        // to be the only bypass). Multi-layer already behaved; single-layer must match.
 	        var stack = PaintLayerStack_MGR.instance;
-	        bool multiLayerStack = stack != null && stack.Layers != null && stack.Layers.Count > 1;
-	        if (!multiLayerStack && (WorkflowRibbon_UI.instance == null || WorkflowRibbon_UI.instance.allowed_to_showBrushMask() == false))
+	        bool layerStackPresent = stack != null && stack.Layers != null && stack.Layers.Count >= 1;
+	        var wf = WorkflowRibbon_UI.instance;
+	        bool ribbonAllowsInpaintBlit = wf == null || wf.allowed_to_showBrushMask();
+	        // Progress polling calls ReRenderAll_soon each tick while SD runs; ApplyStartingColor clears accumulation every rebuild.
+	        // Legacy path with no stack: still respect ribbon + SD prep so non–layer-stack modes are unchanged.
+	        bool sdGenPrepOrWait = StableDiffusion_Hub.instance != null
+		        && (StableDiffusion_Hub.instance._generating || StableDiffusion_Hub.instance._finalPreparations_beforeGen);
+	        bool img2imgLikeWorkflow = wf != null && wf.isMode_using_img2img();
+	        if (!layerStackPresent && !ribbonAllowsInpaintBlit && !(sdGenPrepOrWait && img2imgLikeWorkflow))
 		        return;
 	        Inpaint_MaskPainter.instance.ApplyColorLayer_To_UV_Textures( _accumulation_uv_RT );
 	    }

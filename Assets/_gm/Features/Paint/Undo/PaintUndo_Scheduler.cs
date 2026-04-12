@@ -88,6 +88,93 @@ namespace spz {
 		double[,] _smudgeRouteThompsonAlpha;
 		double[,] _smudgeRouteThompsonBeta;
 
+		const int CollapsePathArmCount = 2;
+		/// <summary>Thompson over immediate (sync) vs scheduled (multi-frame) collapse; same workload buckets as restore/capture.</summary>
+		public bool collapsePathBanditEnabled = true;
+		public int collapsePathMinPullsPerBucket = 3;
+		int[] _collapsePathJobsSeenPerBucket;
+		int[,] _collapsePathPulls;
+		double[,] _collapsePathThompsonAlpha;
+		double[,] _collapsePathThompsonBeta;
+
+		void EnsureCollapsePathBucketArrays() {
+			int b = Mathf.Max(2, restoreContextBucketCount);
+			if (_collapsePathPulls != null && _collapsePathPulls.GetLength(0) == b) return;
+			_collapsePathJobsSeenPerBucket = new int[b];
+			_collapsePathPulls = new int[b, CollapsePathArmCount];
+			_collapsePathThompsonAlpha = new double[b, CollapsePathArmCount];
+			_collapsePathThompsonBeta = new double[b, CollapsePathArmCount];
+			for (int i = 0; i < b; i++) {
+				_collapsePathJobsSeenPerBucket[i] = 0;
+				for (int a = 0; a < CollapsePathArmCount; a++) {
+					_collapsePathPulls[i, a] = 0;
+					_collapsePathThompsonAlpha[i, a] = 1;
+					_collapsePathThompsonBeta[i, a] = 1;
+				}
+			}
+		}
+
+		/// <summary>Legacy thresholds for collapse: multi-frame slice composite when workload is heavy. Used as cold-start until the collapse-path bandit has enough pulls per bucket.</summary>
+		public static bool EvaluateCollapseScheduleHeuristic(int width, int height, int sliceCount, int visibleLayerCount, float referencePixelsPerSlice) {
+			if (width <= 0 || height <= 0 || sliceCount <= 0) return false;
+			EvaluateWorkload(width, height, sliceCount, referencePixelsPerSlice, out _, out float complexity01, out _);
+			if (complexity01 >= 0.12f) return true;
+			if (sliceCount >= 6) return true;
+			if (visibleLayerCount >= 3 && sliceCount >= 3) return true;
+			return visibleLayerCount * sliceCount >= 18;
+		}
+
+		/// <summary>Arm 0 = one-frame GPU collapse; arm 1 = amortized slice composite. Observations via <see cref="RegisterCollapsePathObservation"/>.</summary>
+		public bool SelectCollapseScheduledVersusImmediate(int width, int height, int sliceCount, int visibleLayerCount, bool registerPull, out int contextBucket, out int chosenArm) {
+			chosenArm = 0;
+			contextBucket = 0;
+			if (width <= 0 || height <= 0 || sliceCount <= 0) return false;
+			EvaluateWorkload(width, height, sliceCount, referencePixelsPerSlice, out _, out float complexity01, out _);
+			int b = QuantizeContextBucket(complexity01, sliceCount, restoreContextBucketCount);
+			contextBucket = b;
+			bool heuristic = EvaluateCollapseScheduleHeuristic(width, height, sliceCount, visibleLayerCount, referencePixelsPerSlice);
+			if (!collapsePathBanditEnabled) {
+				chosenArm = heuristic ? 1 : 0;
+				return heuristic;
+			}
+			EnsureCollapsePathBucketArrays();
+			if (registerPull)
+				_collapsePathJobsSeenPerBucket[b]++;
+			bool coldStart = collapsePathMinPullsPerBucket > 0
+			                  && _collapsePathJobsSeenPerBucket[b] <= collapsePathMinPullsPerBucket;
+			if (coldStart) {
+				chosenArm = heuristic ? 1 : 0;
+				return heuristic;
+			}
+			double s0 = SampleBeta01(_collapsePathThompsonAlpha[b, 0], _collapsePathThompsonBeta[b, 0]);
+			double s1 = SampleBeta01(_collapsePathThompsonAlpha[b, 1], _collapsePathThompsonBeta[b, 1]);
+			bool scheduled = s1 >= s0;
+			chosenArm = scheduled ? 1 : 0;
+			return scheduled;
+		}
+
+		public void RegisterCollapsePathObservation(int contextBucket, int chosenArm, bool success) {
+			if (!collapsePathBanditEnabled) return;
+			EnsureCollapsePathBucketArrays();
+			int b = Mathf.Clamp(contextBucket, 0, _collapsePathThompsonAlpha.GetLength(0) - 1);
+			int a = Mathf.Clamp(chosenArm, 0, CollapsePathArmCount - 1);
+			_collapsePathPulls[b, a]++;
+			if (success) _collapsePathThompsonAlpha[b, a] += 1;
+			else _collapsePathThompsonBeta[b, a] += 1;
+		}
+
+		/// <summary>Reward for one-frame collapse: wall time under a workload-scaled budget counts as success for <see cref="RegisterCollapsePathObservation"/>.</summary>
+		public static bool CollapseImmediateObservationSuccess(float elapsedMs, float complexity01, int visibleLayerCount) {
+			float budgetMs = Mathf.Lerp(32f, 280f, Mathf.Clamp01(complexity01))
+			                 * Mathf.Lerp(1f, 1.5f, Mathf.Sqrt(Mathf.Max(1, visibleLayerCount)));
+			return elapsedMs <= budgetMs;
+		}
+
+		/// <summary>Reward for scheduled collapse: worst per-frame hitch proxy vs <see cref="restoreThompsonSuccessHitchMs"/>.</summary>
+		public bool CollapseScheduledObservationSuccess(float worstFrameHitchMs) {
+			return worstFrameHitchMs <= restoreThompsonSuccessHitchMs * 1.35f;
+		}
+
 		void EnsureSmudgeRouteBucketArrays() {
 			int b = Mathf.Max(2, restoreContextBucketCount);
 			if (_smudgeRoutePulls != null && _smudgeRoutePulls.GetLength(0) == b) return;
@@ -362,6 +449,15 @@ namespace spz {
 
 		/// <summary>Start a new restore: reset bandit state, EWMA, and derive batch/budget multipliers from workload (no user tuning).</summary>
 		public void BeginRestoreSession(int width, int height, int sliceCount) {
+			BeginRestoreOrCollapseSession(width, height, sliceCount, decayRestorePosteriors: true);
+		}
+
+		/// <summary>Per-collapse amortized composite: same slice budget / Thompson arms as undo restore, but posteriors are <b>not</b> decayed so repeated collapses learn a faster policy.</summary>
+		public void BeginCollapseCompositeSession(int width, int height, int sliceCount) {
+			BeginRestoreOrCollapseSession(width, height, sliceCount, decayRestorePosteriors: false);
+		}
+
+		void BeginRestoreOrCollapseSession(int width, int height, int sliceCount, bool decayRestorePosteriors) {
 			_restoreStartedRealtime = Time.realtimeSinceStartup;
 			_ewmaHitchMs = 0f;
 			_totalPullsUcb = 0;
@@ -371,7 +467,8 @@ namespace spz {
 			}
 
 			EnsureRestoreBucketArrays();
-			DecayRestorePosteriorsTowardUniform();
+			if (decayRestorePosteriors)
+				DecayRestorePosteriorsTowardUniform();
 
 			if (width <= 0 || height <= 0 || sliceCount <= 0) {
 				LastSessionTotalPixels = 0;

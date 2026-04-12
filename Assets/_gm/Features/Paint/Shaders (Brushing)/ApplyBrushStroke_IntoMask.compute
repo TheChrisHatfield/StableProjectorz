@@ -33,6 +33,7 @@
   float _SmudgeAdaptiveColorSigma;
   float _SmudgeAngleRad;
   float _SmudgeDirBoost;
+  int _SmudgeNeighborRadius;
   int _SmudgeTexWidth;
   int _SmudgeTexHeight;
 
@@ -176,6 +177,8 @@ float4 SmudgeCombinedLayerOverAccum(int3 c){
 #endif
 }
 
+static const float3 kSmudgeSurfLumW = float3(0.2126, 0.7152, 0.0722);
+
 [numthreads(THREADS_X, THREADS_Y, THREADS_Z)]
 void CSSmudge (uint3 id : SV_DispatchThreadID){
     if ((int)id.x >= _SmudgeTexWidth || (int)id.y >= _SmudgeTexHeight) return;
@@ -189,18 +192,20 @@ void CSSmudge (uint3 id : SV_DispatchThreadID){
     float sumPaintW = 0;
 
     int spacing = max(1, (int)_SmudgeKernelSpacing);
-    const int RADIUS = 2;
+    int R = clamp(_SmudgeNeighborRadius, 1, 4);
+    float radFalloff = (float)R + 1.0;
     float2 dirU = float2(cos(_SmudgeAngleRad), sin(_SmudgeAngleRad));
 
-    for (int dy = -RADIUS; dy <= RADIUS; dy++){
-        for (int dx = -RADIUS; dx <= RADIUS; dx++){
+    // R=2 matches legacy 5×5 neighbor grid in UV steps (dx,dy each in [-R,R]).
+    for (int dy = -R; dy <= R; dy++){
+        for (int dx = -R; dx <= R; dx++){
             int3 nc = int3(
                 clamp((int)id.x + dx * spacing, 0, _SmudgeTexWidth  - 1),
                 clamp((int)id.y + dy * spacing, 0, _SmudgeTexHeight - 1),
                 id.z);
 
             float dist = length(float2(dx, dy));
-            float w = max(0.0, 1.0 - dist / (RADIUS + 1.0));
+            float w = max(0.0, 1.0 - dist / radFalloff);
             w *= w;
 
             if (_SmudgeDirBoost > 1e-5 && dist > 1e-5){
@@ -211,8 +216,12 @@ void CSSmudge (uint3 id : SV_DispatchThreadID){
 
             float4 samp = SmudgeCombinedLayerOverAccum(nc);
             if (_SmudgeAdaptiveColorSigma > 1e-5){
+                // Surface-adaptive: luminance-weighted RGB difference + alpha difference vs center texel.
                 float3 cd = samp.rgb - currColor.rgb;
-                w *= exp(-dot(cd, cd) * _SmudgeAdaptiveColorSigma);
+                float colorDist2 = dot(cd * cd, kSmudgeSurfLumW);
+                float da = samp.a - currColor.a;
+                float surfaceDist2 = colorDist2 + da * da * 0.65;
+                w *= exp(-surfaceDist2 * _SmudgeAdaptiveColorSigma);
             }
             // Only blend texels that actually carry paint; skip near-transparent so kernel mass isn't wasted on empty UV.
             float paintMask = smoothstep(0.002, 0.02, samp.a);

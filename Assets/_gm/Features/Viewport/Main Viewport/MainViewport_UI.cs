@@ -27,6 +27,9 @@ namespace spz {
 	    [SerializeField] RawImage_with_aspect _contentCamera_rawImg;
 	    [Space]
 	    [SerializeField] Viewport_ContextMenu_MGR_UI _viewportContextMenu_mgr;
+	    [SerializeField, Tooltip("Unity Editor only: when enabled, logs (throttled) if add-on modal is open but viewport raycast still reports hover.")]
+	    bool _logAddonModalViewportDisagreementsInEditor;
+	    float _nextAddonModalHoverDiagUnscaledTime = -999f;
 
 	    Vector2 _viewport_initial_offset_min;
 	    Vector2 _viewport_initial_offset_max;
@@ -51,8 +54,21 @@ namespace spz {
 	        if(WelcomeScreenNovices_MGR.instance._isShowing){ return false; }
 	        if(LoadIntroScreen_Panel_UI.isShowing){ return false; }
 	        if(_viewportContextMenu_mgr.isShowing){ return false; }
-	        if(AddonManager_UI.IsModalOpen){ return false; }
-	        return MainViewport_UI_EventListener.instance.TryRaycastTowardsSelf();
+	        // No AddonManager_UI.IsModalOpen gate (matches OLD_TEST_REPO): raycast order already reflects modal overlay; a blunt false could stall pin/MMB pan.
+	        bool over = MainViewport_UI_EventListener.instance.TryRaycastTowardsSelf();
+	        DiagnoseAddonModalViewportRaycast(over);
+	        return over;
+	    }
+
+	    void DiagnoseAddonModalViewportRaycast(bool overViewport){
+#if UNITY_EDITOR
+	        if (!_logAddonModalViewportDisagreementsInEditor){ return; }
+	        if (!AddonManager_UI.IsModalOpen || !overViewport){ return; }
+	        if (Time.unscaledTime < _nextAddonModalHoverDiagUnscaledTime){ return; }
+	        _nextAddonModalHoverDiagUnscaledTime = Time.unscaledTime + 2f;
+	        Debug.LogWarning(
+	            "[MainViewport_UI] AddonManager_UI.IsModalOpen is true but TryRaycastTowardsSelf() is still true — input may leak under the add-on overlay or canvas sort/blocker needs review (see AddonManager_UI blocker + MainViewport_RaycastBlocker).");
+#endif
 	    }
 
 
@@ -62,7 +78,6 @@ namespace spz {
 	        if(WelcomeScreenCMD_MGR._isShowing){ return false; }
 	        if(WelcomeScreenNovices_MGR.instance._isShowing){ return false; }
 	        if(LoadIntroScreen_Panel_UI.isShowing){ return false; }
-	        if(AddonManager_UI.IsModalOpen){ return false; }
 	        return MainViewport_UI_EventListener.instance.IsCursorIn_my_width();
 	    }
 

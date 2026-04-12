@@ -2,7 +2,6 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
-using System.Collections;
 using System.Linq;
 using System;
 using UnityEngine.EventSystems;
@@ -69,18 +68,10 @@ namespace spz {
 	    }
 
 
-	    void OnViewCamera_Toggled(int camIx, bool isOn) => SyncNumCamerasSliderUiFromScene();
-
-	    void SyncNumCamerasSliderUiFromScene(){
-	        if (UserCameras_MGR.instance == null) { return; }
-	        _wantedNumCams = UserCameras_MGR.instance.numActiveViewCameras();
-	        if (_numCams_numberText != null) {
-		        _numCams_numberText.text = _wantedNumCams.ToString();
-	        }
-	        if (_numCameras_slider != null) {
-		        _numCameras_slider.SetSliderValue(_wantedNumCams, invokeCallback:false);
-		        _prevSliderValue = _wantedNumCams;
-	        }
+	    void OnViewCamera_Toggled(int camIx, bool isOn){
+	        int numCams =  UserCameras_MGR.instance.numActiveViewCameras();
+	        _wantedNumCams = numCams;
+	        _numCams_numberText.text = numCams.ToString();                          
 	    }
 
 
@@ -96,6 +87,7 @@ namespace spz {
 	    void OnOrderPins_Button(){
 	        int numCamsSlider = Mathf.RoundToInt(_numCameras_slider.value);
 	        int numCamsIcon   = currIcon_numPovs();
+	        // OG had `int _wantedNumCams` here (shadowed field — pins never updated wanted count). Assign the field.
 	        _wantedNumCams = Mathf.Max(numCamsSlider, numCamsIcon);
 	        CamerasMGR_PinsZone_UI.instance?.OnOrderPinsButton();
 	        _stopEdit_args = MultiView_StopEdit_Args.RestoreToPriorPositions;

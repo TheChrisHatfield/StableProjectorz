@@ -25,6 +25,15 @@ namespace spz {
 	    public bool _isWillGenArt_keepResolution5k { get; private set; } = false;
 	    public static FilterMode resultTexFilterMode { get; private set; } = FilterMode.Bilinear;
 
+	    /// <summary>While accumulation is temporarily upscaled for img2img capture, <see cref="Inpaint_MaskPainter.maskResolution"/> must keep using this square size for layer RTs — otherwise <c>InitTextures</c> calls <c>EnsureResolution</c> at the boosted size and wipes all paint.</summary>
+	    public static int PaintLayerSquareSizeDuringImg2ImgAccumBoost { get; private set; } = -1;
+	    /// <summary>Same idea as <see cref="PaintLayerSquareSizeDuringImg2ImgAccumBoost"/> for the brief 4k bump during project save composite.</summary>
+	    public static int PaintLayerSquareSizeDuringSaveCompositeBoost { get; private set; } = -1;
+
+	    /// <summary>Set by the latest <see cref="OnWillRequest_img2img"/> only when that invocation actually changed prep (not a no-op duplicate while already boosted).
+	    /// Used so <see cref="RevertImg2ImgAccumBoostIfPreRequestFailed"/> does not undo an in-flight request's prep.</summary>
+	    public static bool LastImg2imgWillAppliedPrep { get; private set; }
+
 	    public bool HasMemorizeRes() 
 	        => _memorized_res != -1;
     
@@ -115,27 +124,68 @@ namespace spz {
 	    // And we would be projecting such returned result into our 1k or 2k accumulation-texture.
 	    // This would cause quality to degrade with each generation inside that inpaint location.
 	    void OnWillRequest_img2img(){
+	        // Second Will while the first img2img coroutine is still preparing would overwrite memorized res and
+	        // confuse revert / OnRequested; accumulation is already boosted — skip.
+	        if (_isWillGenArt_keepResolution5k){
+		        LastImg2imgWillAppliedPrep = false;
+		        return;
+	        }
+	        LastImg2imgWillAppliedPrep = true;
 	        _isWillGenArt_keepResolution5k = true;
 	        _memorized_res_b4_pixels_boost = resultTexQuality;
+	        if (PaintLayerSquareSizeDuringImg2ImgAccumBoost < 0 && resultTexQuality > 0)
+		        PaintLayerSquareSizeDuringImg2ImgAccumBoost = resultTexQuality;
 	        if(resultTexQuality >= 5120){ return; }
 	        OnAdd_texResolutionQuality(true, force_pickThisRes:5120);//while generating, ensure at least 5k res.
 	    }
 
-	    void OnRequested_img2img(GenData2D genData){
-	        _isWillGenArt_keepResolution5k = false;
+	    /// <summary>Call after img2img/upscale payload is sent (same moment as <c>_Act_img2img_requested</c>).
+	    /// Invoked from <see cref="StableDiffusion_Hub"/> <em>before</em> the multicast event so other subscribers cannot block or preempt this cleanup.</summary>
+	    public static void ApplyImg2ImgResolutionCleanupAfterPayloadSent(){
+	        var mgr = Object.FindObjectOfType<SceneResolution_MGR>(true);
+	        mgr?.ApplyImg2ImgResolutionCleanupAfterPayloadSent_Instance();
+	    }
+
+	    void ApplyImg2ImgResolutionCleanupAfterPayloadSent_Instance(){
+	        // No-op if nothing applied this session (avoids forcing resolution from stale _memorized_res_b4_pixels_boost, e.g. default 0).
+	        if (!_isWillGenArt_keepResolution5k && PaintLayerSquareSizeDuringImg2ImgAccumBoost < 0 && !LastImg2imgWillAppliedPrep){ return; }
+	        // Restore accumulation before clearing the layer-RT hold; otherwise maskResolution() can briefly
+	        // see 5k accumulation with no stable override and EnsureResolution wipes paint.
 	        OnAdd_texResolutionQuality(false, force_pickThisRes:_memorized_res_b4_pixels_boost);
+	        PaintLayerSquareSizeDuringImg2ImgAccumBoost = -1;
+	        _isWillGenArt_keepResolution5k = false;
+	        LastImg2imgWillAppliedPrep = false;
+	    }
+
+	    /// <summary><see cref="OnWillRequest_img2img"/> runs before the coroutine's <c>Start_GenerationRequest</c>.
+	    /// If that start fails, <see cref="ApplyImg2ImgResolutionCleanupAfterPayloadSent"/> never runs — call this from the failure path
+	    /// so accumulation and flags are not left at the 5k prep state.</summary>
+	    public static void RevertImg2ImgAccumBoostIfPreRequestFailed(){
+	        var mgr = Object.FindObjectOfType<SceneResolution_MGR>(true);
+	        mgr?.RevertImg2ImgAccumBoostIfPreRequestFailed_Instance();
+	    }
+
+	    void RevertImg2ImgAccumBoostIfPreRequestFailed_Instance(){
+	        if (!_isWillGenArt_keepResolution5k && PaintLayerSquareSizeDuringImg2ImgAccumBoost < 0){ return; }
+	        OnAdd_texResolutionQuality(false, force_pickThisRes:_memorized_res_b4_pixels_boost);
+	        PaintLayerSquareSizeDuringImg2ImgAccumBoost = -1;
+	        _isWillGenArt_keepResolution5k = false;
+	        LastImg2imgWillAppliedPrep = false;
 	    }
     
 	    void OnWillMake_FinalCompositeImg(){
 	        _isSavingProject_keepResolution4k = true;
 	        _memorized_res_b4_projectSave = resultTexQuality;
+	        if (PaintLayerSquareSizeDuringSaveCompositeBoost < 0 && resultTexQuality > 0)
+		        PaintLayerSquareSizeDuringSaveCompositeBoost = resultTexQuality;
 	        if(resultTexQuality >= 4096){ return; }
 	        OnAdd_texResolutionQuality(true, force_pickThisRes:4096);//while saving, ensure at least 4k res.
 	    }
 
 	    void OnMade_FinalCompositeImg(){
-	        _isSavingProject_keepResolution4k = false;
 	        OnAdd_texResolutionQuality(false, force_pickThisRes:_memorized_res_b4_projectSave);
+	        PaintLayerSquareSizeDuringSaveCompositeBoost = -1;
+	        _isSavingProject_keepResolution4k = false;
 	    }
 
 
@@ -168,7 +218,6 @@ namespace spz {
 	        _save_texResQuality_text.text = "SAVE " + textureRes_to_abbreviation();
 
 	        StableDiffusion_Hub._Act_img2img_willRequest += OnWillRequest_img2img;
-	        StableDiffusion_Hub._Act_img2img_requested += OnRequested_img2img;
 
 	        ProjectSaveLoad_Helper._onWillMake_FinalCompositeImg += OnWillMake_FinalCompositeImg;
 	        ProjectSaveLoad_Helper._onMade_FinalCompositeImg += OnMade_FinalCompositeImg;
