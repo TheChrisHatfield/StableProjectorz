@@ -16,8 +16,15 @@ namespace spz {
 	    [SerializeField] CanvasGroup _canvGrp;
 	    [SerializeField] float _fadeSpeed = 5;
 
+	    /// <summary>Rect mirrored onto the skeleton left column — used to hide the whole 3D strip in viewport full view.</summary>
+	    public RectTransform MirroredColumnRoot => _place_me;
+
 	    void Update(){
 	        Global_Skeleton_UI.instance?.Place_onto_LeftColumn( _place_me );
+	        if (ViewportFullViewOnScreen_Driver.IsActive) {
+	            FadePanel(_canvGrp, 0f);
+	            return;
+	        }
 	        DimensionMode currMode = DimensionMode_MGR.instance._dimensionMode;
 	        switch (currMode){
 	            case DimensionMode.dim_uv:

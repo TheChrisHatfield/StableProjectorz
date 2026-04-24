@@ -150,8 +150,7 @@ namespace spz {
 			    return false;
 		    EnsureTabGroupResolved();
 		    if (_tabGroup == null) return false;
-		    _tabGroup.SwitchTab(AddonRibbonIntegration.TabIdForAddon(addonId));
-		    return true;
+		    return _tabGroup.TrySwitchTab(AddonRibbonIntegration.TabIdForAddon(addonId));
 	    }
 
 	    /// <summary>Copy anchors/sizeDelta/position from a built-in ribbon panel so add-on shells occupy the same region below the tab strip.</summary>

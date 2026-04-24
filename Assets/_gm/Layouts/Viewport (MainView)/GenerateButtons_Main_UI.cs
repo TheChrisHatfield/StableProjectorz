@@ -11,6 +11,10 @@ namespace spz {
 	public class GenerateButtons_Main_UI : GenerateButtons_UI{
 	    public static GenerateButtons_Main_UI instance { get; private set; } = null;
 
+	    /// <summary>Viewport left-ribbon Generate Art button (for sibling UI such as full-view toggle).</summary>
+	    public RectTransform GenArtButtonRectTransform =>
+		    _generateART_button != null ? _generateART_button.transform as RectTransform : null;
+
 	    protected void OnStartedGenerate_cb(){
 	        _cancelGeneration_button.gameObject.SetActive(true);
 	        _cancelGeneration_button.interactable = true;

@@ -1128,6 +1128,23 @@ class UIAPI:
             self._panels[panel_id] = Panel(self._client, panel_id, addon_id)
             return self._panels[panel_id]
         return None
+
+    def attach_viewport_fullview_ribbon_toggle(self, button_label=None, command=None):
+        """
+        Dock FULL/SCREEN above the main viewport Gen Art control (not a command-ribbon tab). One-shot; safe to retry until Unity returns success.
+
+        JSON-RPC: ``spz.ui.attach_viewport_fullview_toggle`` with optional params:
+        ``button_label`` (str), ``command`` (str, default ``viewport_fullview_toggle`` → ``RibbonDock_CommandBridge``).
+
+        Omit both to use transport defaults for legacy callers; add-ons should pass explicit ``button_label`` / ``command``.
+        """
+        params = {}
+        if button_label is not None:
+            params["button_label"] = button_label
+        if command is not None:
+            params["command"] = command
+        r = self._client._send_request("spz.ui.attach_viewport_fullview_toggle", params)
+        return r.get("success", False)
     
     def get_panel(self, panel_id):
         """Get a panel by ID"""
@@ -1305,7 +1322,12 @@ class PaintAPI:
 # ============================================
 
 class EditorLayoutAPI:
-    """Show/hide left and right editor columns (center viewport expands). Same JSON-RPC as ``/api/v1/editor/layout``."""
+    """Show/hide left and right editor columns (center viewport expands). Same JSON-RPC as ``/api/v1/editor/layout``.
+
+    When both columns are off (``viewport_focus``, ``fullscreen_center``, ``center_max``, or explicit flags),
+    Unity also suppresses outer right command-panel chrome that would otherwise paint outside the collapsed layout slot
+    (``ViewportFullViewOnScreen_Driver`` + ``FullView_OuterPanel_Chrome_Binder``); add-ons use this API rather than bespoke UI hooks.
+    """
 
     def __init__(self, client):
         self._client = client
@@ -1328,11 +1350,19 @@ class EditorLayoutAPI:
 
     def set_mode(self, mode):
         """
-        ``mode``: ``default`` (both sides on), ``viewport_focus`` or ``fullscreen_center`` (both off / wide center).
+        ``mode``:
+        ``default`` — both side columns on;
+        ``viewport_focus`` / ``fullscreen_center`` — both off (widest center);
+        ``center_max`` / ``ribbon_right`` — on-screen full view: both skeleton side columns off (center viewport + inner ribbons only; same as in-app toggle);
+        ``center_max_off`` — restore layout saved when entering ``center_max``.
         Returns True if Unity reported success.
         """
         r = self._client._send_request("spz.cmd.set_editor_layout", {"mode": str(mode)})
         return r.get("success", False)
+
+    def set_center_max(self, on: bool):
+        """On-screen full view (both side columns hidden): ``on`` → ``center_max``; ``off`` → ``center_max_off``."""
+        return self.set_mode("center_max" if on else "center_max_off")
 
 
 # ============================================
@@ -1353,6 +1383,7 @@ class DisplayAPI:
         """
         ``mode``: ``windowed``, ``exclusive_fullscreen`` (alias ``exclusive``), ``borderless_fullscreen`` (alias ``borderless``).
         Optional ``width``/``height`` for resolution; ``refresh_rate_hz`` for exclusive mode with explicit resolution.
+        Omitting width/height: fullscreen modes use the primary monitor size; windowed restores the last saved window size (or 1920x1080).
         Returns True if Unity reported success.
         """
         p = {"mode": str(mode)}

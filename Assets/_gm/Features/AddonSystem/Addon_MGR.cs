@@ -241,6 +241,16 @@ namespace spz {
 					UnityEngine.Debug.Log("[Addon_MGR] AddonUI_MGR was missing in scene; created at runtime so addon panels can be built.");
 				}
 			}
+			// Zip install / remove (drag-drop, Add-on Manager) — same connectivity as socket + UI.
+			if (AddonInstaller_MGR.instance == null) {
+				var installer = FindObjectOfType<AddonInstaller_MGR>(true);
+				if (installer == null) {
+					var go = new GameObject("AddonInstaller_MGR_Runtime");
+					go.transform.SetParent(transform, false);
+					go.AddComponent<AddonInstaller_MGR>();
+					UnityEngine.Debug.Log("[Addon_MGR] AddonInstaller_MGR was missing in scene; created at runtime for zip install / remove.");
+				}
+			}
 			if (GetComponent<AddonDebugCapture>() == null)
 				gameObject.AddComponent<AddonDebugCapture>();
 			if (GetComponent<Launch_Addons_Bat_File>() == null)
@@ -726,6 +736,45 @@ namespace spz {
 				OnAddonEnabledStateChanged?.Invoke(addonId);
 			}
 		}
+
+		/// <summary>StreamingAssets add-on id for on-screen full view ribbon dock (matches folder name and Python <c>ADDON_ID</c>).</summary>
+		public const string RibbonOnlyFullscreenAddonId = "RibbonOnlyFullscreen";
+
+		bool IsAddonEnabled(string addonId) {
+			if (string.IsNullOrEmpty(addonId) || _registeredAddons == null) {
+				return false;
+			}
+			return _registeredAddons.TryGetValue(addonId, out var info) && info != null && info.isEnabled;
+		}
+
+		/// <summary>
+		/// <see cref="RibbonOnlyFullscreenAddonId"/>: run <c>spz.ui.attach_viewport_fullview_toggle</c> from Unity on the main thread
+		/// until the Gen Art column dock is visible. Does not use the right command-ribbon tab strip; add-on is driven from <see cref="EnableAddon"/> only.
+		/// When HTTP is off, Python <c>register()</c> may not run, so this path is required.
+		/// </summary>
+		IEnumerator CoEnsureRibbonOnlyFullscreenViewportDock() {
+			yield return null;
+			const int maxFrames = 600;
+			for (int f = 0; f < maxFrames; f++) {
+				if (this == null) {
+					yield break;
+				}
+				if (!IsAddonEnabled(RibbonOnlyFullscreenAddonId)) {
+					yield break;
+				}
+				Addon_SocketServer.TryAttachViewportFullViewToggleFromCore(null);
+				if (RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyVisibleBuiltDock()) {
+					UnityEngine.Debug.Log(
+						"[Addon_MGR] RibbonOnlyFullscreen: viewport FULL/SRN dock next to Gen Art is visible (add-on manager path).");
+					yield break;
+				}
+				yield return null;
+			}
+			UnityEngine.Debug.LogWarning(
+				"[Addon_MGR] RibbonOnlyFullscreen: no visible viewport dock after "
+				+ maxFrames
+				+ " frames. Use Play with the main scene, SD/Gen Art UI loaded, and enable the add-on. If HTTP is on, check Python <c>register()</c> and the Console for attach errors.");
+		}
 		
 		/// <summary>
 		/// Registers UI elements created by an add-on
@@ -744,6 +793,10 @@ namespace spz {
 			
 			var addon = _registeredAddons[addonId];
 			addon.isEnabled = false;
+
+			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal)) {
+				RibbonViewportFullViewOnScreen_Toggle_UI.TeardownAllDocksForAddonDisabled();
+			}
 			
 			// 1) AddonUI_MGR: destroy panel content + buttons and clear its state (callbacks, element refs)
 			if (AddonUI_MGR.instance != null)
@@ -770,6 +823,21 @@ namespace spz {
 		public IReadOnlyDictionary<string, AddonInfo> GetAddons() {
 			return _registeredAddons;
 		}
+
+		/// <summary>
+		/// The Gen Art column dock may live on a host that is disabled when switching right-panel tabs. Call from
+		/// <see cref="RibbonViewportFullViewOnScreen_Toggle_UI.OnDisable"/> to decide whether to remove injected UI:
+		/// only when <see cref="RibbonOnlyFullscreenAddonId"/> is <b>off</b> in the manager, not on every parent deactivate.
+		/// </summary>
+		public static bool ShouldTearDownViewportFullViewDockOnHostDisabled() {
+			if (instance == null) {
+				return false;
+			}
+			if (!instance._registeredAddons.TryGetValue(RibbonOnlyFullscreenAddonId, out var info) || info == null) {
+				return false;
+			}
+			return !info.isEnabled;
+		}
 		
 		/// <summary>
 		/// Enables an add-on and requests Python server to load it (so panel appears).
@@ -784,6 +852,18 @@ namespace spz {
 			UnityEngine.Debug.Log($"[Addon_MGR] Enabled add-on: {addonId}");
 			if (_enableHttpServer) {
 				StartCoroutine(RequestLoadAddon(addonId));
+			}
+			else {
+				UnityEngine.Debug.LogWarning(
+					"[Addon_MGR] Add-on HTTP is disabled: Python will not run register().");
+			}
+			// On-screen full view: must run from Unity (Python register may never run, or may race). No command-ribbon tab.
+			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal)) {
+				var ribbon = AddonRibbonIntegration.ResolveCommandRibbon();
+				if (ribbon != null) {
+					ribbon.RemoveAddonPanel(addonId);
+				}
+				StartCoroutine(CoEnsureRibbonOnlyFullscreenViewportDock());
 			}
 		}
 		

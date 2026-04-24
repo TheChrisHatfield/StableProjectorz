@@ -9,6 +9,9 @@ namespace spz {
 	    public static Connection_MGR instance { get; private set; } = null;
 
 	    [SerializeField] RectTransform _placeOnTopOfMainView;
+
+		/// <summary>SD / 3D server strip parented to the main viewport; hidden with <see cref="FullView_OuterPanel_Chrome_Binder"/> in on-screen full view.</summary>
+		public RectTransform ViewportTopConnectionStrip => _placeOnTopOfMainView;
 	    [SerializeField] GraphicRaycaster _raycaster; //will raycast towards the help button
 	    [Space(10)]
 	    [SerializeField] ConnectionPanel_UI _a1111_connPanel;

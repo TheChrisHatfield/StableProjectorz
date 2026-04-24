@@ -85,6 +85,19 @@ namespace spz {
 
 	    public bool IsEyeDropperMagnified => _brushColor.IsEyeDropperMagnified;
 
+	    /// <summary>Root of the SD workflow tool-options panel (for ribbon-attached controls such as on-screen full view toggle).</summary>
+	    public RectTransform WholePanelRoot => _wholePanel_canvGrp != null ? _wholePanel_canvGrp.transform as RectTransform : null;
+
+	    /// <summary>Generate Art button rect (row for full-view toggle is parented immediately above this). Falls back to main viewport Gen Art when unset in prefab.</summary>
+	    public RectTransform GenArtButtonRect =>
+		    _genArt_RectTransf != null
+			    ? _genArt_RectTransf
+			    : (GenerateButtons_Main_UI.instance != null ? GenerateButtons_Main_UI.instance.GenArtButtonRectTransform : null);
+
+	    /// <summary>Mini redo circle slider parked on Gen Art — full-view dock aligns its row bottom to this control's world top.</summary>
+	    public RectTransform ReThinkSliderMiniRect =>
+		    _reThink_slider_mini != null ? _reThink_slider_mini.transform as RectTransform : null;
+
 
 	    /// <summary>Depth falloff range for brush painting (fraction of far clip plane).
 	    /// 0 = disabled (paint through everything, classic behaviour).
@@ -225,9 +238,11 @@ namespace spz {
 	        _wholePanel_canvGrp.alpha = Mathf.MoveTowards(_wholePanel_canvGrp.alpha, targAlpha, Time.deltaTime*7);
 	        _wholePanel_canvGrp.gameObject.SetActive(_wholePanel_canvGrp.alpha!=0);
 	        //also adjust the visibility of elements on the other ui side:
-	        _reThink_slider_mini_canvGrp.alpha = _wholePanel_canvGrp.alpha;
-	        if (_wholePanel_canvGrp.alpha == 0){
-	            _reThink_slider_mini_canvGrp.gameObject.SetActive(false);
+	        if (_reThink_slider_mini_canvGrp != null) {
+		        _reThink_slider_mini_canvGrp.alpha = _wholePanel_canvGrp.alpha;
+		        if (_wholePanel_canvGrp.alpha == 0) {
+			        _reThink_slider_mini_canvGrp.gameObject.SetActive(false);
+		        }
 	        }
 	    }
     
@@ -235,7 +250,9 @@ namespace spz {
 	    void UpdateSliderTexts(){
 	        string redo_str    =  Mathf.RoundToInt(_reThink_slider.value * 100).ToString();
 	        _reThink_text.text =  redo_str.Length>2? $"<size=90%>{redo_str}</size>" : redo_str;
-	        _reThink_text_mini.text = _reThink_text.text;
+	        if (_reThink_text_mini != null) {
+		        _reThink_text_mini.text = _reThink_text.text;
+	        }
 
 	        _mask_blur_text.text  = _blur_slider.value.ToString("0.0");
 	    }
@@ -302,10 +319,18 @@ namespace spz {
 
 
 	    void Toggle_the_GOs(bool isOn, List<Component> mbs){
-	        for(int i=0; i<mbs.Count; i++){  mbs[i].gameObject.SetActive(isOn); }
+	        for (int i = 0; i < mbs.Count; i++) {
+		        if (mbs[i] == null) {
+			        continue;
+		        }
+		        mbs[i].gameObject.SetActive(isOn);
+	        }
 	    }
 
 	    void Reposition_ReDoMini_slider(){
+	        if (_reThink_slider_mini == null) {
+		        return;
+	        }
 	        if (StableDiffusion_Hub.instance==null){ return; }//scenes are probably loading
 
 	        bool isGen = StableDiffusion_Hub.instance._generating ||
@@ -315,12 +340,20 @@ namespace spz {
 	            _reThink_slider_mini.transform.localScale = Vector3.one;//to ensure animation doesn't affec it.
 	        }
 
-	        if (_del_Last_rectTransf.gameObject.activeSelf){
+	        if (_del_Last_rectTransf != null && _del_Last_rectTransf.gameObject.activeSelf){
 	            _reThink_slider_mini.transform.parent.position = _del_Last_rectTransf.position 
 	                                                            + Vector3.up*_del_Last_rectTransf.rect.height;
 	        }else{
-	            _reThink_slider_mini.transform.parent.position = _genArt_RectTransf.position 
-	                                                            + Vector3.up*_genArt_RectTransf.rect.height*0.5f;
+		        RectTransform genRt = GenArtButtonRect;
+		        if (genRt == null) {
+			        return;
+		        }
+	            Vector3 pos = genRt.position + Vector3.up * genRt.rect.height * 0.5f;
+	            if (RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyVisibleBuiltDock()) {
+		            // FULL SRN dock sits above Gen Art; nudge mini re-do down so it does not overlap the dock edge/text.
+		            pos -= Vector3.up * genRt.rect.height * 0.34f;
+	            }
+	            _reThink_slider_mini.transform.parent.position = pos;
 	        }
 	    }
 
@@ -332,7 +365,7 @@ namespace spz {
 
 	        if(hovering && _genArt_hoveredBefore==false){  
 	            _reThink_slider.GetComponentInChildren<Animation>().Play();  
-	            _reThink_slider_mini.GetComponentInChildren<Animation>().Play();  
+	            _reThink_slider_mini?.GetComponentInChildren<Animation>()?.Play();  
 	        }
 	       _genArt_hoveredBefore = hovering;
 	    }
@@ -386,7 +419,7 @@ namespace spz {
 	        =>_reThink_slider.SetSliderValue(val, invokeCallback:false);
 
 	    void OnReThinkSlider(float val) //usual slider was adjusted, set the mini:
-	        => _reThink_slider_mini.SetSliderValue(val, invokeCallback:false);
+	        => _reThink_slider_mini?.SetSliderValue(val, invokeCallback:false);
     
 	    //tiling can affect the quality, reducing it. So user needs to pay attention to this toggle.
 	    void OnWillSendOptions_AmmendPlz(SD_OptionsPacket opt)  => opt.tiling = _tileableInpaint.isOn;
@@ -436,7 +469,9 @@ namespace spz {
 	        StableDiffusion_Hub._Act_img2img_requested += On_img2img_requested;
 
 	        _reThink_slider.onValueChanged.AddListener( OnReThinkSlider );
-	        _reThink_slider_mini.onValueChanged.AddListener( OnReThinkSliderMini );
+	        if (_reThink_slider_mini != null) {
+		        _reThink_slider_mini.onValueChanged.AddListener( OnReThinkSliderMini);
+	        }
 
 	        _blur_slider.onValueChanged.AddListener(OnBlurSlider);
 	        _edgeThresh_slider.onValueChanged.AddListener(OnEdgeThreshSlider);

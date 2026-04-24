@@ -43,6 +43,10 @@ namespace spz {
 		/// </summary>
 		public string CreatePanel(string addonId, string title) {
 			UnityEngine.Debug.Log($"[AddonUI_MGR] CreatePanel requested for addon: {addonId}, title: {title}");
+			if (string.Equals(addonId, Addon_MGR.RibbonOnlyFullscreenAddonId, StringComparison.Ordinal)) {
+				UnityEngine.Debug.Log("[AddonUI_MGR] Skipping command-ribbon tab/panel for RibbonOnlyFullscreen (viewport Gen Art strip only; enable in Add-on Manager).");
+				return null;
+			}
 			RectTransform parentForThisAddon = null;
 			var commandRibbon = AddonRibbonIntegration.ResolveCommandRibbon();
 			if (CommandRibbon_UI.instance == null && commandRibbon != null)
@@ -100,6 +104,29 @@ namespace spz {
 			if (parentForThisAddon == null) {
 				UnityEngine.Debug.LogError("[AddonUI_MGR] No parent found for add-on panels (ribbon and fallbacks failed). Returning null.");
 				return null;
+			}
+			// Reuse an existing content child under the ribbon shell so Python and Unity fallback don't stack duplicates.
+			if (ribbonResolved) {
+				for (int ch = 0; ch < parentForThisAddon.childCount; ch++) {
+					var t = parentForThisAddon.GetChild(ch);
+					if (t == null) {
+						continue;
+					}
+					if (t.name.Contains("AddonPanel_" + addonId, StringComparison.Ordinal)) {
+						var go = t.gameObject;
+						if (!_addonUIElements.ContainsKey(addonId)) {
+							_addonUIElements[addonId] = new List<GameObject>();
+						}
+						if (!_addonUIElements[addonId].Contains(go)) {
+							_addonUIElements[addonId].Add(go);
+						}
+						if (Addon_MGR.instance != null) {
+							Addon_MGR.instance.RegisterAddonUI(addonId, go);
+						}
+						UnityEngine.Debug.Log($"[AddonUI_MGR] Reusing existing panel for {addonId} under {parentForThisAddon.name}");
+						return go.GetInstanceID().ToString();
+					}
+				}
 			}
 			UnityEngine.Debug.Log($"[AddonUI_MGR] Creating panel content under: {parentForThisAddon.name}");
 
@@ -649,7 +676,7 @@ namespace spz {
 			// For now, just log it
 			UnityEngine.Debug.Log($"[AddonUI_MGR] Value changed: {addonId}.{elementId} ({elementType}) = {value}");
 		}
-		
+
 		/// <summary>
 		/// Destroys all UI elements for an add-on
 		/// </summary>

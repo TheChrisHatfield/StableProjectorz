@@ -63,6 +63,15 @@ namespace spz {
 	        return new Vector2(width, height); 
 	    }
 
+	    /// <summary>Set generation resolution fields from code (used by viewport full-view enter/exit restore).</summary>
+	    public void SetWidthHeight(int widthPx, int heightPx) {
+	        if (_width_input == null || _height_input == null) {
+	            return;
+	        }
+	        _width_input.SetValue(Mathf.Max(64, widthPx).ToString());
+	        _height_input.SetValue(Mathf.Max(64, heightPx).ToString());
+	    }
+
 	    public void PasteSeedValue(int seed){
 	        _seed_intField.SetValue( seed.ToString() );
 	        _seed_intFieldAnim.Play();

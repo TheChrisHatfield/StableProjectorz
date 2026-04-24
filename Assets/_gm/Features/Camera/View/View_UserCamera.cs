@@ -197,8 +197,14 @@ namespace spz {
      
 
 	    void ShiftPerspectiveCenter(){
+	        if (MainViewport_UI.instance == null) {
+		        return;
+	        }
 	        Vector2 vc_viewportSize = MainViewport_UI.instance.mainViewportRect.rect.size;
 	        Vector2 cc_viewportSize = MainViewport_UI.instance.innerViewportRect.rect.size;
+	        if (ViewportFullViewOnScreen_Driver.IsActive) {
+		        cc_viewportSize = vc_viewportSize;
+	        }
 	        Vector2 sizeFactor = vc_viewportSize / cc_viewportSize;
 	        Vector2 perspCenterShift01 = (_projectionMat_center - Vector2.one * 0.5f) / sizeFactor + Vector2.one * 0.5f;
 	        CameraTools.ShiftViewportCenter_ofProjMat(_camera, perspCenterShift01);

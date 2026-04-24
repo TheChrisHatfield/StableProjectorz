@@ -1,0 +1,920 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using TMPro;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
+
+namespace spz {
+
+	/// <summary>
+	/// Docks FULL/SCREEN directly <b>above</b> the GEN ART control by inserting a sibling wrapper under the <see cref="VerticalLayoutGroup"/> ancestor of GEN ART (prefab <c>GenerateButtons_Main_UI (vertGroup)</c>) and letting the VLG + <see cref="LayoutElement"/> own sizing. GEN ART's immediate parent (<c>stretch me (mask)</c>) uses anchor-based placement, so a sibling there overflows the parent rect and never shows—hence the VLG-ancestor insertion. Matches GEN ART's sliced sprite, fill, two-line bold black label and optional corner triangle. Not a right-panel command-ribbon tab.
+	/// Uses <see cref="SD_WorkflowOptionsRibbon_UI"/> or <see cref="GenerateButtons_Main_UI"/> to host this behaviour + JSON-RPC <c>spz.ui.attach_viewport_fullview_toggle</c> / <see cref="RibbonDock_ButtonSpec"/>. Build coroutines are hosted from <see cref="Addon_MGR"/> / <see cref="MainViewport_UI"/> (not the right panel tab strip). Enable the StreamingAssets add-on <c>RibbonOnlyFullscreen</c> via <see cref="Addon_MGR"/> to attach the dock.
+	/// </summary>
+	public class RibbonViewportFullViewOnScreen_Toggle_UI : MonoBehaviour {
+
+		const string RowName = "RibbonRow_FullViewOnScreen";
+		const string SpacerName = "RibbonRow_FullViewOnScreen_Spacer";
+		const int MaxWaitFrames = 240;
+		/// <summary>Spacer row height under FULL SRN in the VLG; pushes Gen Art and re-do down without stretching the button face.</summary>
+		const float ExtraBottomGapPx = 152f;
+
+		static readonly Color FallbackFill = new Color(217f / 255f, 144f / 255f, 88f / 255f, 1f);
+
+		static readonly Dictionary<int, RibbonDock_ButtonSpec> PendingDockSpecs = new Dictionary<int, RibbonDock_ButtonSpec>();
+		static readonly List<RibbonViewportFullViewOnScreen_Toggle_UI> RegisteredInstances = new List<RibbonViewportFullViewOnScreen_Toggle_UI>();
+
+		SD_WorkflowOptionsRibbon_UI _host;
+		RibbonDock_ButtonSpec _spec;
+		Image _bgImage;
+		Color _fillBase = Color.white;
+		bool _built;
+		Coroutine _buildRoutine;
+		MonoBehaviour _buildCoroutineOwner;
+
+		RectTransform _genArtAnchorRestoreTarget;
+		Vector2 _genArtSavedAnchorMin;
+		Vector2 _genArtSavedAnchorMax;
+		Vector2 _genArtSavedOffsetMin;
+		Vector2 _genArtSavedOffsetMax;
+		bool _savedGenArtAnchors;
+		RectTransform _builtRowRt;
+		RectTransform _spacerRowRt;
+
+		static bool SpecsEqual(in RibbonDock_ButtonSpec a, in RibbonDock_ButtonSpec b) {
+			return string.Equals(a.CommandId, b.CommandId, StringComparison.Ordinal)
+				&& string.Equals(a.Label ?? string.Empty, b.Label ?? string.Empty, StringComparison.Ordinal);
+		}
+
+		public static void EnsureCreated(SD_WorkflowOptionsRibbon_UI host, RibbonDock_ButtonSpec spec) {
+			if (host == null) {
+				return;
+			}
+			ApplyComponentToGameObject(host.gameObject, spec);
+		}
+
+		/// <summary>When <see cref="SD_WorkflowOptionsRibbon_UI"/> is not in the scene yet, still mount the dock on the same GameObject as <see cref="GenerateButtons_Main_UI"/> so the strip above GEN ART can build (add-on enable / HTTP-off path).</summary>
+		public static bool TryEnsureOnGenerateButtonsStrip(RibbonDock_ButtonSpec spec) {
+			var gbm = ResolveGenerateButtonsMain();
+			if (gbm == null) {
+				return false;
+			}
+			ApplyComponentToGameObject(gbm.gameObject, spec);
+			return true;
+		}
+
+		static void ApplyComponentToGameObject(GameObject go, RibbonDock_ButtonSpec spec) {
+			if (go == null) {
+				return;
+			}
+			var c = go.GetComponent<RibbonViewportFullViewOnScreen_Toggle_UI>();
+			bool createdNow = false;
+			bool specChanged = false;
+			if (c == null) {
+				createdNow = true;
+				int gid = go.GetInstanceID();
+				PendingDockSpecs[gid] = spec;
+				try {
+					c = go.AddComponent<RibbonViewportFullViewOnScreen_Toggle_UI>();
+				}
+				finally {
+					PendingDockSpecs.Remove(gid);
+				}
+			} else {
+				specChanged = !SpecsEqual(c._spec, spec);
+				c.ApplySpec(spec);
+			}
+			bool rowMissing = c._builtRowRt == null || c._builtRowRt.gameObject == null || !c._builtRowRt.gameObject.activeInHierarchy;
+			bool spacerMissing = c._spacerRowRt == null || c._spacerRowRt.gameObject == null || !c._spacerRowRt.gameObject.activeInHierarchy;
+			if (createdNow || specChanged || !c._built || rowMissing || (c._built && spacerMissing)) {
+				c.NotifyAttachRequested();
+			}
+		}
+
+		/// <summary>True if any instance finished layout with an active row (for <see cref="Addon_MGR"/>; RPC can return before async build completes).</summary>
+		public static bool IsAnyVisibleBuiltDock() {
+			for (int i = 0; i < RegisteredInstances.Count; i++) {
+				var c = RegisteredInstances[i];
+				if (c == null) {
+					continue;
+				}
+				if (c._built && c._builtRowRt != null && c._builtRowRt && c._builtRowRt.gameObject.activeInHierarchy) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		/// <summary>Nudge all dock instances without full tear (used by paint toolchest layout; avoids wiping the button when switching to Paint / other tabs).</summary>
+		public static void NotifyAllAttachRequested() {
+			for (int i = RegisteredInstances.Count - 1; i >= 0; i--) {
+				var c = RegisteredInstances[i];
+				if (c == null) {
+					RegisteredInstances.RemoveAt(i);
+					continue;
+				}
+				c.NudgeOrRebuildWithoutTear();
+			}
+		}
+
+		/// <summary>Removes all dock <see cref="MonoBehaviour"/> instances (e.g. when <see cref="Addon_MGR.RibbonOnlyFullscreenAddonId"/> is disabled). Destroys injected ribbon rows in each instance's <c>OnDestroy</c>.</summary>
+		public static void TeardownAllDocksForAddonDisabled() {
+			var all = UnityEngine.Object.FindObjectsOfType<RibbonViewportFullViewOnScreen_Toggle_UI>(true);
+			for (int i = 0; i < all.Length; i++) {
+				var c = all[i];
+				if (c != null) {
+					UnityEngine.Object.Destroy(c);
+				}
+			}
+		}
+
+		public void ApplySpec(RibbonDock_ButtonSpec spec) {
+			bool specChanged =
+				!string.Equals(_spec.CommandId, spec.CommandId, StringComparison.Ordinal)
+				|| !string.Equals(_spec.Label ?? string.Empty, spec.Label ?? string.Empty, StringComparison.Ordinal);
+			if (specChanged) {
+				TearDownBuiltDock();
+			}
+			_spec = spec;
+		}
+
+		/// <summary>Stops wait/build, removes dock row(s), restores Gen Art anchors. Called on every <see cref="NotifyAttachRequested"/>, <see cref="ApplySpec"/> when spec changes, and <see cref="OnDestroy"/>.</summary>
+		void TearDownBuiltDock() {
+			StopBuildCoroutineIfAny();
+			DestroyStaleFullViewRowsUnderHost();
+			_builtRowRt = null;
+			_spacerRowRt = null;
+			_bgImage = null;
+			_built = false;
+			RestoreGenArtAnchorsIfSaved();
+		}
+
+		void DestroyStaleFullViewRowsUnderHost() {
+			DestroyNamedRowsUnderTransform(_host != null ? _host.transform : null);
+			// Row is often parented in the viewport inner-left (Gen Art column), not under the SD host transform.
+			DestroyNamedRowsUnderTransform(ViewportInnerLeftRibbonRoot());
+			var gbm = GenerateButtons_Main_UI.instance;
+			if (gbm != null) {
+				DestroyNamedRowsUnderTransform(gbm.transform);
+				var gar = gbm.GenArtButtonRectTransform;
+				if (gar != null && gar.parent != null) {
+					DestroyNamedRowsUnderTransform(gar.parent);
+				}
+			}
+		}
+
+		static void DestroyNamedRowsUnderTransform(Transform hostRoot) {
+			if (hostRoot == null) {
+				return;
+			}
+			var all = hostRoot.GetComponentsInChildren<Transform>(true);
+			for (int i = 0; i < all.Length; i++) {
+				var t = all[i];
+				if (t == null || t == hostRoot) {
+					continue;
+				}
+				if (string.Equals(t.name, RowName, StringComparison.Ordinal)
+				    || string.Equals(t.name, SpacerName, StringComparison.Ordinal)) {
+					Destroy(t.gameObject);
+				}
+			}
+		}
+
+		void RestoreGenArtAnchorsIfSaved() {
+			if (!_savedGenArtAnchors || _genArtAnchorRestoreTarget == null) {
+				return;
+			}
+			_genArtAnchorRestoreTarget.anchorMin = _genArtSavedAnchorMin;
+			_genArtAnchorRestoreTarget.anchorMax = _genArtSavedAnchorMax;
+			_genArtAnchorRestoreTarget.offsetMin = _genArtSavedOffsetMin;
+			_genArtAnchorRestoreTarget.offsetMax = _genArtSavedOffsetMax;
+			_savedGenArtAnchors = false;
+		}
+
+		/// <summary>Full reset + async build. Used for attach, spec change, and explicit reattach — not for <see cref="OnEnable"/> (that would remove the button every time another ribbon tab hid this host).</summary>
+		public void NotifyAttachRequested() {
+			if (_built && (_builtRowRt == null || _builtRowRt.gameObject == null)) {
+				_built = false;
+				_builtRowRt = null;
+			}
+			TearDownBuiltDock();
+			TryBeginBuildRoutine();
+		}
+
+		/// <summary>Refresh or complete build without tearing an existing row (tab switches / paint layout nudges). Does not call <see cref="TearDownBuiltDock"/>.</summary>
+		void NudgeOrRebuildWithoutTear() {
+			if (_built && _builtRowRt != null && _builtRowRt.gameObject != null) {
+				RefreshActiveFill();
+			}
+			TryBeginBuildRoutine();
+		}
+
+		void Awake() {
+			_host = GetComponent<SD_WorkflowOptionsRibbon_UI>();
+			int id = gameObject.GetInstanceID();
+			if (PendingDockSpecs.TryGetValue(id, out var pending)) {
+				_spec = pending;
+			}
+			RegisteredInstances.Add(this);
+			TryBeginBuildRoutine();
+		}
+
+		void Start() {
+			TryBeginBuildRoutine();
+		}
+
+		void OnEnable() {
+			ViewportFullViewOnScreen_Driver.ActiveChanged += OnDriverActiveChanged;
+			// Do not use NotifyAttachRequested() here: it always TearDownBuiltDock(), so the button vanishes
+			// whenever the host re-enables after Art / Paint / other command-ribbon tab changes.
+			NudgeOrRebuildWithoutTear();
+		}
+
+		void OnDisable() {
+			ViewportFullViewOnScreen_Driver.ActiveChanged -= OnDriverActiveChanged;
+			StopBuildCoroutineIfAny();
+			// Host (e.g. generate strip) is often disabled when switching other ribbon tabs—do not destroy the dock
+			// then, or the button is gone when returning. Only remove rows when the add-on is off in Add-on Manager.
+			if (Addon_MGR.ShouldTearDownViewportFullViewDockOnHostDisabled()) {
+				TearDownBuiltDock();
+			}
+		}
+
+		void OnDestroy() {
+			StopBuildCoroutineIfAny();
+			RegisteredInstances.Remove(this);
+			if (_builtRowRt != null) {
+				Destroy(_builtRowRt.gameObject);
+			}
+			if (_spacerRowRt != null) {
+				Destroy(_spacerRowRt.gameObject);
+			}
+			_builtRowRt = null;
+			_spacerRowRt = null;
+			RestoreGenArtAnchorsIfSaved();
+		}
+
+		static MonoBehaviour ResolveCoroutineRunner() {
+			// Prefer add-on / viewport hosts — do not depend on the right command-ribbon tab strip.
+			var addons = Addon_MGR.instance;
+			if (addons != null && addons.isActiveAndEnabled) {
+				return addons;
+			}
+			var mv = MainViewport_UI.instance;
+			if (mv != null && mv.isActiveAndEnabled) {
+				return mv;
+			}
+			var es = UnityEngine.Object.FindFirstObjectByType<EventSystem>(FindObjectsInactive.Exclude);
+			if (es != null && es.isActiveAndEnabled) {
+				return es;
+			}
+			return RibbonViewportDockRoutineHost.Get();
+		}
+
+		void StopBuildCoroutineIfAny() {
+			if (_buildRoutine != null) {
+				if (_buildCoroutineOwner != null) {
+					_buildCoroutineOwner.StopCoroutine(_buildRoutine);
+				}
+				_buildRoutine = null;
+			}
+			_buildCoroutineOwner = null;
+		}
+
+		void TryBeginBuildRoutine() {
+			if (_built && (_builtRowRt == null || _builtRowRt.gameObject == null)) {
+				_built = false;
+				_builtRowRt = null;
+			}
+			if (_built) {
+				return;
+			}
+			if (_buildRoutine != null) {
+				return;
+			}
+			var runner = isActiveAndEnabled ? (MonoBehaviour)this : ResolveCoroutineRunner();
+			if (runner == null) {
+				return;
+			}
+			_buildCoroutineOwner = runner;
+			_buildRoutine = runner.StartCoroutine(CoBuildWhenGenArtReady());
+		}
+
+		IEnumerator CoBuildWhenGenArtReady() {
+			try {
+				for (int f = 0; f < MaxWaitFrames && !_built; f++) {
+					if (this == null) {
+						yield break;
+					}
+					if (TryBuildOnce()) {
+						yield break;
+					}
+					yield return null;
+				}
+				if (this != null) {
+					TryBuildOnce();
+				}
+			}
+			finally {
+				_buildRoutine = null;
+				_buildCoroutineOwner = null;
+			}
+		}
+
+		static bool IsUnderSubtree(RectTransform root, RectTransform candidate) {
+			if (root == null || candidate == null) {
+				return false;
+			}
+			Transform t = candidate;
+			while (t != null) {
+				if (t == root) {
+					return true;
+				}
+				t = t.parent;
+			}
+			return false;
+		}
+
+		static bool NameLooksLikeGenArtRow(string n) {
+			if (string.IsNullOrEmpty(n)) {
+				return false;
+			}
+			bool hasButton = n.IndexOf("button", StringComparison.OrdinalIgnoreCase) >= 0;
+			if (n.IndexOf("Generate Art", StringComparison.OrdinalIgnoreCase) >= 0 && hasButton) {
+				return true;
+			}
+			if (n.IndexOf("Gen Art", StringComparison.OrdinalIgnoreCase) >= 0 && hasButton) {
+				return true;
+			}
+			if (n.IndexOf("GEN", StringComparison.OrdinalIgnoreCase) >= 0
+			    && n.IndexOf("ART", StringComparison.OrdinalIgnoreCase) >= 0) {
+				return true;
+			}
+			return false;
+		}
+
+		static RectTransform FindGenArtRectRecursive(RectTransform rt) {
+			if (rt == null) {
+				return null;
+			}
+			if (NameLooksLikeGenArtRow(rt.name)) {
+				return rt;
+			}
+			for (int i = 0; i < rt.childCount; i++) {
+				var ch = rt.GetChild(i) as RectTransform;
+				var hit = FindGenArtRectRecursive(ch);
+				if (hit != null) {
+					return hit;
+				}
+			}
+			return null;
+		}
+
+		/// <summary>When object names are generic, find a <see cref="Button"/> under the same label tree as a TMP that looks like the Gen Art affordance. Fails on icon-only or fully localized strings with no "gen/art" tokens.</summary>
+		static bool LabelLooksLikeGenArtButton(string t) {
+			if (string.IsNullOrEmpty(t)) {
+				return false;
+			}
+			if (t.Length > 200) {
+				return false; // very long: likely a log / tooltip, not a row label
+			}
+			// "Generate Art", "Générer" won't match "generat" — cover common phrasing + compact UI.
+			if (t.IndexOf("gen art", StringComparison.OrdinalIgnoreCase) >= 0) {
+				return true;
+			}
+			if (t.IndexOf("genart", StringComparison.OrdinalIgnoreCase) >= 0) {
+				return true;
+			}
+			if (t.IndexOf("generat", StringComparison.OrdinalIgnoreCase) >= 0
+			    && t.IndexOf("art", StringComparison.OrdinalIgnoreCase) >= 0) {
+				return true;
+			}
+			return t.IndexOf("GEN", StringComparison.OrdinalIgnoreCase) >= 0
+				&& t.IndexOf("ART", StringComparison.OrdinalIgnoreCase) >= 0
+				&& t.Length <= 64;
+		}
+
+		/// <summary>Gen Art row inside the SD workflow panel often has no "Generate Art" object name; find a Button whose label matches <see cref="LabelLooksLikeGenArtButton"/>.</summary>
+		static RectTransform FindGenArtRectByGenerateLabel(RectTransform root) {
+			if (root == null) {
+				return null;
+			}
+			var tmps = root.GetComponentsInChildren<TextMeshProUGUI>(true);
+			for (int i = 0; i < tmps.Length; i++) {
+				var tmp = tmps[i];
+				if (!LabelLooksLikeGenArtButton(tmp.text)) {
+					continue;
+				}
+				Transform tr = tmp.transform;
+				for (int g = 0; g < 12 && tr != null; g++) {
+					if (tr.GetComponent<Button>() != null && tr is RectTransform rr) {
+						return rr;
+					}
+					tr = tr.parent;
+				}
+			}
+			return null;
+		}
+
+		static RectTransform ViewportInnerLeftRibbonRoot() {
+			var mv = MainViewport_UI.instance;
+			return mv != null ? mv.innerLeftRibbonRect : null;
+		}
+
+		/// <summary>Viewport inner-left strip (GEN ART / GEN BG). Dock row is parented to <see cref="SD_WorkflowOptionsRibbon_UI.WholePanelRoot"/> when Gen Art resolves here so we do not stack over those buttons.</summary>
+		static bool IsUnderViewportInnerLeftRibbon(RectTransform rt) {
+			var leftR = ViewportInnerLeftRibbonRoot();
+			return rt != null && leftR != null && rt.IsChildOf(leftR);
+		}
+
+		/// <summary>Singleton or scene search (Awake order can leave <see cref="GenerateButtons_Main_UI.instance"/> null for a few frames).</summary>
+		static GenerateButtons_Main_UI ResolveGenerateButtonsMain() {
+			if (GenerateButtons_Main_UI.instance != null) {
+				return GenerateButtons_Main_UI.instance;
+			}
+			return UnityEngine.Object.FindObjectOfType<GenerateButtons_Main_UI>(true);
+		}
+
+		static RectTransform ResolveGenArtRect(SD_WorkflowOptionsRibbon_UI host, RectTransform wholePanelRoot) {
+			// Must run first: works when the dock is on the Gen strip only (_host is null) and is not blocked by a null host.
+			var gbm = ResolveGenerateButtonsMain();
+			if (gbm != null) {
+				var fromMain = gbm.GenArtButtonRectTransform;
+				if (fromMain != null) {
+					return fromMain;
+				}
+			}
+			RectTransform hostRt = host != null ? host.transform as RectTransform : null;
+			RectTransform pick = null;
+			if (wholePanelRoot != null) {
+				pick = FindGenArtRectRecursive(wholePanelRoot);
+				if (pick == null) {
+					pick = FindGenArtRectByGenerateLabel(wholePanelRoot);
+				}
+			}
+			if (pick == null && hostRt != null) {
+				pick = FindGenArtRectRecursive(hostRt);
+				if (pick == null) {
+					pick = FindGenArtRectByGenerateLabel(hostRt);
+				}
+			}
+			if (host != null) {
+				var fromProperty = host.GenArtButtonRect;
+				if (pick == null && fromProperty) {
+					if (IsUnderSubtree(wholePanelRoot, fromProperty) || IsUnderSubtree(hostRt, fromProperty)) {
+						pick = fromProperty;
+					}
+				}
+				if (pick == null && fromProperty) {
+					pick = fromProperty;
+				}
+			}
+			if (pick == null && host != null) {
+				var rootRt = host.transform.root as RectTransform;
+				if (rootRt != null) {
+					pick = FindGenArtRectRecursive(rootRt);
+					if (pick == null) {
+						pick = FindGenArtRectByGenerateLabel(rootRt);
+					}
+				}
+			}
+			return pick;
+		}
+
+		static TextMeshProUGUI FindPrimaryTmp(RectTransform genRoot) {
+			if (genRoot == null) {
+				return null;
+			}
+			var tmps = genRoot.GetComponentsInChildren<TextMeshProUGUI>(true);
+			for (int i = 0; i < tmps.Length; i++) {
+				if (tmps[i].transform.parent == genRoot) {
+					return tmps[i];
+				}
+			}
+			return tmps.Length > 0 ? tmps[0] : null;
+		}
+
+		/// <summary>GEN ART is often a <c>Button</c> with the target graphic on a child; match that sprite, not a missing <c>Image</c> on the root.</summary>
+		static Image FindGenArtReferenceImage(RectTransform genRoot) {
+			if (genRoot == null) {
+				return null;
+			}
+			var btn = genRoot.GetComponent<Button>();
+			if (btn != null && btn.targetGraphic is Image btnImg) {
+				return btnImg;
+			}
+			var onRoot = genRoot.GetComponent<Image>();
+			if (onRoot != null) {
+				return onRoot;
+			}
+			return genRoot.GetComponentInChildren<Image>(true);
+		}
+
+		static float GetClampedGenArtButtonHeightPx(RectTransform genArt) {
+			if (genArt == null) {
+				return 56f;
+			}
+			var srcLe = genArt.GetComponent<LayoutElement>();
+			float genArtH = srcLe != null && srcLe.preferredHeight > 1f
+				? srcLe.preferredHeight
+				: (genArt.rect.height > 1f ? genArt.rect.height : 56f);
+			return Mathf.Clamp(genArtH, 40f, 96f);
+		}
+
+		/// <summary>Prefer actual GEN ART target-graphic rect height (visual face), then fall back to clamped root height.</summary>
+		static float GetVisualGenArtFaceHeightPx(RectTransform genArt, Image genRefImg) {
+			if (genRefImg != null && genRefImg.rectTransform != null) {
+				float h = genRefImg.rectTransform.rect.height;
+				if (h > 1f) {
+					return Mathf.Clamp(h, 32f, 96f);
+				}
+			}
+			return GetClampedGenArtButtonHeightPx(genArt);
+		}
+
+		/// <summary>
+		/// Walk up from GEN ART until we find an ancestor with <see cref="VerticalLayoutGroup"/>. The **direct child** of that VLG on the GEN ART branch is the wrapper slot we must insert **above** for natural top-down stacking. In the GenerateButtons_Main_UI (vertGroup) prefab this is the <c>generate holder</c> wrapper.
+		/// </summary>
+		static bool TryResolveVerticalStackInsertion(RectTransform genArt, out RectTransform vlgRoot, out RectTransform genArtWrapper) {
+			vlgRoot = null;
+			genArtWrapper = null;
+			if (genArt == null) {
+				return false;
+			}
+			Transform prev = genArt;
+			Transform t = genArt.parent;
+			while (t != null) {
+				if (t is RectTransform trt && trt.GetComponent<VerticalLayoutGroup>() != null) {
+					vlgRoot = trt;
+					genArtWrapper = prev as RectTransform;
+					return genArtWrapper != null;
+				}
+				prev = t;
+				t = t.parent;
+			}
+			return false;
+		}
+
+		static void CopyLittleTriangleIfPresent(RectTransform genArtRt, RectTransform targetButtonRt) {
+			if (genArtRt == null || targetButtonRt == null) {
+				return;
+			}
+			for (int i = 0; i < genArtRt.childCount; i++) {
+				var c = genArtRt.GetChild(i);
+				if (c.name.IndexOf("triangle", StringComparison.OrdinalIgnoreCase) < 0) {
+					continue;
+				}
+				if (!(c is RectTransform srcRt)) {
+					continue;
+				}
+				var srcImg = c.GetComponent<Image>();
+				var triGo = new GameObject(c.name);
+				triGo.layer = targetButtonRt.gameObject.layer;
+				var triRt = triGo.AddComponent<RectTransform>();
+				triRt.SetParent(targetButtonRt, false);
+				triRt.localRotation = srcRt.localRotation;
+				triRt.localScale = srcRt.localScale;
+				triRt.anchorMin = srcRt.anchorMin;
+				triRt.anchorMax = srcRt.anchorMax;
+				triRt.pivot = srcRt.pivot;
+				triRt.anchoredPosition = srcRt.anchoredPosition;
+				triRt.sizeDelta = srcRt.sizeDelta;
+				if (srcImg != null) {
+					var img = triGo.AddComponent<Image>();
+					img.sprite = srcImg.sprite;
+					img.color = srcImg.color;
+					img.preserveAspect = srcImg.preserveAspect;
+					img.raycastTarget = false;
+				}
+				return;
+			}
+		}
+
+		/// <summary>Match GEN ART: sliced sprite, fill, two-line black label, optional corner triangle; border look comes from the shared sprite.</summary>
+		void ApplyGenArtStyleDockButton(GameObject row, RectTransform rowRt, RectTransform genArt, Image genRefImg, TextMeshProUGUI genRefTmp) {
+			// Use an inner face so width follows Gen Art's horizontal insets (e.g. -4 sizeDelta in prefab), not the full wrapper width.
+			var faceGo = new GameObject("DockButtonFace");
+			faceGo.layer = row.layer;
+			var faceRt = faceGo.AddComponent<RectTransform>();
+			faceRt.SetParent(rowRt, false);
+			ApplyFaceRectLayout(faceRt, genArt, genRefImg);
+
+			_bgImage = faceGo.AddComponent<Image>();
+			if (genRefImg != null && genRefImg.sprite != null) {
+				_bgImage.sprite = genRefImg.sprite;
+				_bgImage.type = genRefImg.type;
+				_bgImage.pixelsPerUnitMultiplier = genRefImg.pixelsPerUnitMultiplier;
+				_fillBase = genRefImg.color;
+				_bgImage.color = _fillBase;
+			} else {
+				_fillBase = FallbackFill;
+				_bgImage.color = _fillBase;
+			}
+
+			var button = faceGo.AddComponent<Button>();
+			button.targetGraphic = _bgImage;
+			var genBtn = genArt != null ? genArt.GetComponent<Button>() : null;
+			if (genBtn != null) {
+				button.transition = genBtn.transition;
+				button.colors = genBtn.colors;
+				button.spriteState = genBtn.spriteState;
+				button.animationTriggers = genBtn.animationTriggers;
+			} else {
+				button.transition = Selectable.Transition.ColorTint;
+				var cb = button.colors;
+				cb.normalColor = Color.white;
+				cb.highlightedColor = new Color(0.96f, 0.96f, 0.96f, 1f);
+				cb.pressedColor = new Color(0.78f, 0.78f, 0.78f, 1f);
+				cb.selectedColor = cb.highlightedColor;
+				cb.disabledColor = new Color(0.78f, 0.78f, 0.78f, 0.5f);
+				cb.colorMultiplier = 1f;
+				cb.fadeDuration = 0.1f;
+				button.colors = cb;
+			}
+			button.onClick.AddListener(OnDockedButtonClicked);
+
+			CopyLittleTriangleIfPresent(genArt, faceRt);
+
+			var textGo = new GameObject("Text (TMP)");
+			textGo.layer = faceGo.layer;
+			var textRt = textGo.AddComponent<RectTransform>();
+			textRt.SetParent(faceRt, false);
+			var tmp = textGo.AddComponent<TextMeshProUGUI>();
+			ApplyFullSrnLabelStyle(tmp, genRefTmp, textRt);
+		}
+
+		/// <summary>Thin outline and generous left/right insets so glyph bounds for "FULL" do not meet the button side edges (outline is drawn outside the fill; padding buys clearance).</summary>
+		static void ApplyFullSrnLabelStyle(TextMeshProUGUI tmp, TextMeshProUGUI genRefTmp, RectTransform textRt) {
+			if (tmp == null) {
+				return;
+			}
+			// How far the text block sits from the left/right of <see cref="DockButtonFace"/>; primary fix when "FULL" touches the sides.
+			const float padH = 12f;
+			const float padV = 2.5f;
+			if (textRt != null) {
+				textRt.anchorMin = Vector2.zero;
+				textRt.anchorMax = Vector2.one;
+				textRt.offsetMin = new Vector2(padH, padV);
+				textRt.offsetMax = new Vector2(-padH, -padV);
+			}
+			string raw = "FULL\nSRN";
+			tmp.text = raw.ToUpperInvariant();
+			tmp.color = Color.black;
+			tmp.fontStyle = FontStyles.Bold;
+			tmp.alignment = TextAlignmentOptions.Center;
+			tmp.horizontalAlignment = HorizontalAlignmentOptions.Center;
+			tmp.verticalAlignment = VerticalAlignmentOptions.Middle;
+			tmp.raycastTarget = false;
+			tmp.textWrappingMode = TextWrappingModes.NoWrap;
+			if (genRefTmp != null) {
+				tmp.font = genRefTmp.font;
+				tmp.fontSharedMaterial = genRefTmp.fontSharedMaterial;
+				tmp.fontSize = Mathf.Max(12f, genRefTmp.fontSize);
+				tmp.fontWeight = FontWeight.Bold;
+				tmp.lineSpacing = genRefTmp.lineSpacing;
+				tmp.characterSpacing = genRefTmp.characterSpacing;
+			} else {
+				tmp.fontSize = 18f;
+			}
+			tmp.outlineWidth = 0.012f;
+			tmp.outlineColor = new Color(0.12f, 0.12f, 0.12f, 0.92f);
+		}
+
+		/// <summary>Keep frame/fill/text under one RectTransform so vertical movement never splits the button visuals.</summary>
+		static void ApplyFaceRectLayout(RectTransform faceRt, RectTransform genArt, Image genRefImg) {
+			if (faceRt == null) {
+				return;
+			}
+			// Anchor face to the TOP of the wrapper so the visible button sits at the top of its VLG slot.
+			faceRt.anchorMin = new Vector2(0f, 1f);
+			faceRt.anchorMax = new Vector2(1f, 1f);
+			faceRt.pivot = new Vector2(0.5f, 1f);
+			float insetL = 0f;
+			float insetR = 0f;
+			if (genArt != null) {
+				insetL = genArt.offsetMin.x;
+				insetR = genArt.offsetMax.x;
+			}
+			float faceH = GetVisualGenArtFaceHeightPx(genArt, genRefImg);
+			faceRt.anchoredPosition = Vector2.zero;
+			faceRt.offsetMin = new Vector2(insetL, -faceH);
+			faceRt.offsetMax = new Vector2(insetR, 0f);
+		}
+
+		/// <summary>Remove legacy visuals outside DockButtonFace so frame/fill cannot split onto different rects.</summary>
+		static void NormalizeReusableRow(RectTransform rowRt, RectTransform faceRt) {
+			if (rowRt == null || faceRt == null) {
+				return;
+			}
+			var rowImg = rowRt.GetComponent<Image>();
+			if (rowImg != null) {
+				Destroy(rowImg);
+			}
+			var rowBtn = rowRt.GetComponent<Button>();
+			if (rowBtn != null) {
+				Destroy(rowBtn);
+			}
+			for (int i = rowRt.childCount - 1; i >= 0; i--) {
+				var ch = rowRt.GetChild(i);
+				if (ch != faceRt) {
+					Destroy(ch.gameObject);
+				}
+			}
+		}
+
+		static RectTransform FindChildRectByName(RectTransform parent, string name) {
+			if (parent == null) {
+				return null;
+			}
+			for (int i = 0; i < parent.childCount; i++) {
+				var ch = parent.GetChild(i);
+				if (ch.name == name && ch is RectTransform rr) {
+					return rr;
+				}
+			}
+			return null;
+		}
+
+		static RectTransform EnsureSpacerRow(RectTransform vlgRoot, int siblingIndex, float gapPx, int layer) {
+			var spacerRt = FindChildRectByName(vlgRoot, SpacerName);
+			if (spacerRt == null) {
+				var spacer = new GameObject(SpacerName);
+				spacer.layer = layer;
+				spacerRt = spacer.AddComponent<RectTransform>();
+				spacerRt.SetParent(vlgRoot, false);
+			}
+			spacerRt.SetSiblingIndex(Mathf.Clamp(siblingIndex, 0, vlgRoot.childCount - 1));
+			spacerRt.anchorMin = Vector2.zero;
+			spacerRt.anchorMax = Vector2.zero;
+			spacerRt.pivot = new Vector2(0.5f, 0.5f);
+			spacerRt.sizeDelta = new Vector2(0f, gapPx);
+			var le = spacerRt.GetComponent<LayoutElement>();
+			if (le == null) {
+				le = spacerRt.gameObject.AddComponent<LayoutElement>();
+			}
+			le.ignoreLayout = false;
+			le.preferredHeight = gapPx;
+			le.minHeight = gapPx;
+			le.flexibleHeight = 0f;
+			le.flexibleWidth = 0f;
+			return spacerRt;
+		}
+
+		void RefreshActiveFill() {
+			if (_bgImage == null) {
+				return;
+			}
+			if (!string.Equals(_spec.CommandId, "viewport_fullview_toggle", StringComparison.Ordinal)) {
+				return;
+			}
+			bool on = ViewportFullViewOnScreen_Driver.IsActive;
+			_bgImage.color = on ? Color.Lerp(_fillBase, Color.black, 0.14f) : _fillBase;
+		}
+
+		static bool HasNamedChild(Transform parent, string objectName) {
+			if (parent == null) {
+				return false;
+			}
+			for (int i = 0; i < parent.childCount; i++) {
+				if (parent.GetChild(i).name == objectName) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		/// <returns>True if done (created, already present, or cannot parent).</returns>
+		bool TryBuildOnce() {
+			if (this == null || _built) {
+				return true;
+			}
+			if (string.IsNullOrEmpty(_spec.CommandId)) {
+				_spec = RibbonDock_ButtonSpec.FromRpc(null);
+			}
+			RectTransform wholePanel = _host != null ? _host.WholePanelRoot : null;
+			RectTransform genArt = ResolveGenArtRect(_host, wholePanel);
+			if (genArt == null) {
+				return false;
+			}
+			// "Above Gen Art" is only meaningful in the VerticalLayoutGroup ancestor (prefab: GenerateButtons_Main_UI (vertGroup)); Gen Art's immediate parent uses anchor-based placement so a sibling there overflows outside the parent rect (this is the reason the button never showed).
+			if (!TryResolveVerticalStackInsertion(genArt, out RectTransform vlgRoot, out _)) {
+				return false;
+			}
+			Image genRefImg = FindGenArtReferenceImage(genArt);
+			TextMeshProUGUI genRefTmp = FindPrimaryTmp(genArt);
+			float btnPx = GetVisualGenArtFaceHeightPx(genArt, genRefImg);
+			if (HasNamedChild(vlgRoot, RowName)) {
+				_builtRowRt = null;
+				for (int ci = 0; ci < vlgRoot.childCount; ci++) {
+					var ch = vlgRoot.GetChild(ci);
+					if (ch.name == RowName && ch is RectTransform rr) {
+						// Ignore stale legacy rows that don't contain the current canonical face node.
+						if (rr.Find("DockButtonFace") is RectTransform) {
+							_builtRowRt = rr;
+							break;
+						}
+						Destroy(rr.gameObject);
+					}
+				}
+				if (_builtRowRt == null) {
+					return false;
+				}
+				var reuseFace = _builtRowRt.Find("DockButtonFace") as RectTransform;
+				var reuseBtn = reuseFace != null ? reuseFace.GetComponent<Button>() : null;
+				var reuseImg = reuseFace != null ? reuseFace.GetComponent<Image>() : null;
+				var reuseTmp = reuseFace != null ? reuseFace.GetComponentInChildren<TextMeshProUGUI>(true) : null;
+				if (reuseFace != null && reuseBtn != null && reuseImg != null && reuseTmp != null) {
+					// Keep this control at the top of the left-ribbon stack (above re-do / generate holder rows).
+					_builtRowRt.SetSiblingIndex(0);
+					var reuseLe = _builtRowRt.GetComponent<LayoutElement>();
+					if (reuseLe != null) {
+						reuseLe.preferredHeight = btnPx;
+						reuseLe.minHeight = btnPx;
+					}
+					_builtRowRt.sizeDelta = new Vector2(0f, btnPx);
+					NormalizeReusableRow(_builtRowRt, reuseFace);
+					ApplyFaceRectLayout(reuseFace, genArt, genRefImg);
+					ApplyFullSrnLabelStyle(reuseTmp, genRefTmp, reuseTmp.rectTransform);
+					_spacerRowRt = EnsureSpacerRow(vlgRoot, _builtRowRt.GetSiblingIndex() + 1, ExtraBottomGapPx, _builtRowRt.gameObject.layer);
+					reuseBtn.onClick.RemoveAllListeners();
+					reuseBtn.onClick.AddListener(OnDockedButtonClicked);
+					reuseBtn.targetGraphic = reuseImg;
+					_bgImage = reuseImg;
+					_fillBase = reuseImg.color;
+					_built = true;
+					LayoutRebuilder.ForceRebuildLayoutImmediate(vlgRoot);
+					RefreshActiveFill();
+					return true;
+				}
+				Destroy(_builtRowRt.gameObject);
+				_builtRowRt = null;
+				return false;
+			}
+
+			// Wrapper slot under the VLG root. LayoutElement.preferredHeight replicates how "generate holder" (containing Gen Art / Gen BG) claims vertical space in the same VLG; ignoreLayout = false so VLG controls its height.
+			var wrapper = new GameObject(RowName);
+			wrapper.layer = vlgRoot.gameObject.layer;
+			var wrapperRt = wrapper.AddComponent<RectTransform>();
+			wrapperRt.SetParent(vlgRoot, false);
+			// Keep this control at the top of the left-ribbon stack (above re-do / generate holder rows).
+			wrapperRt.SetSiblingIndex(0);
+			// Match existing wrapper anchors so VLG's SetChildAlongAxis sizes the rect predictably (ChildControlWidth/Height/ForceExpandWidth all on in prefab).
+			wrapperRt.anchorMin = Vector2.zero;
+			wrapperRt.anchorMax = Vector2.zero;
+			wrapperRt.pivot = new Vector2(0.5f, 0.5f);
+			float slotH = btnPx;
+			wrapperRt.sizeDelta = new Vector2(0f, slotH);
+
+			var wrapperLe = wrapper.AddComponent<LayoutElement>();
+			wrapperLe.ignoreLayout = false;
+			wrapperLe.preferredHeight = slotH;
+			wrapperLe.minHeight = slotH;
+			wrapperLe.flexibleWidth = 0f;
+			wrapperLe.flexibleHeight = 0f;
+			_spacerRowRt = EnsureSpacerRow(vlgRoot, wrapperRt.GetSiblingIndex() + 1, ExtraBottomGapPx, wrapper.layer);
+
+			ApplyGenArtStyleDockButton(wrapper, wrapperRt, genArt, genRefImg, genRefTmp);
+
+			LayoutRebuilder.ForceRebuildLayoutImmediate(vlgRoot);
+			ViewportFullViewOnScreen_Driver.SyncFromCurrentSkeleton();
+			RefreshActiveFill();
+			_builtRowRt = wrapperRt;
+			_built = true;
+			return true;
+		}
+
+		/// <summary>Intentionally disabled: never spawn this control in non-ribbon fallback locations.</summary>
+		bool TryBuildFallbackTopBar() {
+			return false;
+		}
+
+		void OnDriverActiveChanged(bool _) {
+			RefreshActiveFill();
+		}
+
+		void OnDockedButtonClicked() {
+			if (!RibbonDock_CommandBridge.TryInvoke(_spec.CommandId)) {
+				return;
+			}
+			if (string.Equals(_spec.CommandId, "viewport_fullview_toggle", StringComparison.Ordinal)) {
+				RefreshActiveFill();
+			}
+		}
+	}
+
+	/// <summary>Last-resort coroutine host when ribbon/viewport/add-on managers are not yet enabled (attach RPC during early load).</summary>
+	sealed class RibbonViewportDockRoutineHost : MonoBehaviour {
+
+		static RibbonViewportDockRoutineHost s_inst;
+
+		internal static RibbonViewportDockRoutineHost Get() {
+			if (s_inst == null) {
+				var go = new GameObject("[spz] RibbonDockCoroutineHost");
+				DontDestroyOnLoad(go);
+				s_inst = go.AddComponent<RibbonViewportDockRoutineHost>();
+			}
+			return s_inst;
+		}
+	}
+}

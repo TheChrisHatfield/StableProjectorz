@@ -18,6 +18,9 @@ namespace spz {
 	    float _originalPreffered;
 
 	    void Start(){
+	        if (_layoutElem == null) {
+		        return;
+	        }
 	        _originalPreffered = _isWidth ? _layoutElem.preferredWidth : _layoutElem.preferredHeight;
 	        if(_start_if_parentLessThan < _max_if_parentLessThan){
 	            Debug.LogError("_start_if_parentLessThan has to be greater than '_max_if_parentLessThan'"); 
@@ -25,6 +28,18 @@ namespace spz {
 	    }
 
 	    void Update(){
+	        if (_layoutElem == null) {
+		        return;
+	        }
+	        if (ViewportFullViewOnScreen_Driver.IsActive) {
+		        if (_isWidth) {
+			        _layoutElem.preferredWidth = _max_prefferedSize;
+		        }
+		        else {
+			        _layoutElem.preferredHeight = _max_prefferedSize;
+		        }
+		        return;
+	        }
 	        Rect parentRect = (transform.parent as RectTransform).rect;
 	        float curr = _isWidth? parentRect.width : parentRect.height;
 

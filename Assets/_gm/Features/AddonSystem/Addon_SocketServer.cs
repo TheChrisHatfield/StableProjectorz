@@ -459,6 +459,7 @@ namespace spz {
 			};
 			var ui = new JArray {
 				"spz.ui.add_button", "spz.ui.add_dropdown", "spz.ui.add_slider", "spz.ui.add_text_input",
+				"spz.ui.attach_viewport_fullview_toggle",
 				"spz.ui.create_panel", "spz.ui.get_value", "spz.ui.set_value",
 			};
 			return new JObject {
@@ -473,6 +474,8 @@ namespace spz {
 
 		/// <summary>
 		/// Main editor chrome (left input column, center viewport, right ribbon column) via <see cref="Global_Skeleton_UI"/>.
+		/// When both sides are hidden, <see cref="ViewportFullViewOnScreen_Driver"/> updates and
+		/// <see cref="FullView_OuterPanel_Chrome_Binder"/> suppresses outer right panel draw overflow (same path as in-app full view).
 		/// Does not require FastPath_API (runs as soon as the skeleton scene is loaded).
 		/// </summary>
 		static JObject TryExecuteEditorLayoutCommand(string method, JObject @params) {
@@ -490,6 +493,8 @@ namespace spz {
 				result["left_visible"] = left;
 				result["right_visible"] = right;
 				result["viewport_expanded"] = !left && !right;
+				// Legacy name: same as viewport_expanded (both skeleton columns hidden; inner viewport ribbons remain).
+				result["center_max"] = !left && !right;
 				return result;
 			}
 
@@ -504,9 +509,27 @@ namespace spz {
 					return result;
 				}
 
+				string mode = @params["mode"]?.ToString();
+				if (!string.IsNullOrEmpty(mode) && (mode == "center_max" || mode == "ribbon_right")) {
+					bool okEnter = ViewportFullViewOnScreen_Driver.TryEnter();
+					result["success"] = okEnter;
+					if (!okEnter) {
+						result["error"] = "Failed to apply on-screen full view (skeleton not ready)";
+					}
+					return result;
+				}
+
+				if (!string.IsNullOrEmpty(mode) && mode == "center_max_off") {
+					bool okExit = ViewportFullViewOnScreen_Driver.TryExit();
+					result["success"] = okExit;
+					if (!okExit) {
+						result["error"] = "Failed to restore editor layout from on-screen full view";
+					}
+					return result;
+				}
+
 				bool left = true;
 				bool right = true;
-				string mode = @params["mode"]?.ToString();
 				if (!string.IsNullOrEmpty(mode)) {
 					if (mode == "viewport_focus" || mode == "fullscreen_center") {
 						left = false;
@@ -517,7 +540,7 @@ namespace spz {
 						right = true;
 					}
 					else {
-						result["error"] = "Unknown mode; use default, viewport_focus, or fullscreen_center";
+						result["error"] = "Unknown mode; use default, viewport_focus, fullscreen_center, center_max, ribbon_right, center_max_off";
 						return result;
 					}
 				}
@@ -535,9 +558,12 @@ namespace spz {
 					return result;
 				}
 
-				bool ok = Global_Skeleton_UI.instance.SetSidePanelVisibility(left, right);
-				result["success"] = ok;
-				if (!ok) {
+				bool ok2 = Global_Skeleton_UI.instance.SetSidePanelVisibility(left, right);
+				if (ok2) {
+					ViewportFullViewOnScreen_Driver.SyncFromCurrentSkeleton();
+				}
+				result["success"] = ok2;
+				if (!ok2) {
 					result["error"] = "Failed to apply editor layout";
 				}
 				return result;
@@ -553,7 +579,8 @@ namespace spz {
 			if (method == "spz.cmd.get_display_mode") {
 				SpzPlayerDisplay_API.GetScreenState(out bool fs, out FullScreenMode fsMode, out int w, out int h);
 				SpzPlayerDisplay_API.GetPrimaryDisplaySize(out int mainW, out int mainH);
-				return new JObject {
+				bool hasPref = SpzPlayerDisplay_API.TryGetPreferredWindowedSize(out int prefW, out int prefH);
+				var jo = new JObject {
 					["success"] = true,
 					["fullscreen"] = fs,
 					["fullscreen_mode"] = fsMode.ToString(),
@@ -562,8 +589,14 @@ namespace spz {
 					["height"] = h,
 					["main_display_width"] = mainW,
 					["main_display_height"] = mainH,
+					["preferred_window_saved"] = hasPref,
 					["batch_mode"] = Application.isBatchMode,
 				};
+				if (hasPref) {
+					jo["preferred_window_width"] = prefW;
+					jo["preferred_window_height"] = prefH;
+				}
+				return jo;
 			}
 
 			if (method == "spz.cmd.set_display_mode") {
@@ -1735,12 +1768,131 @@ namespace spz {
 			
 			return result;
 		}
+
+		/// <summary>Picks a workflow ribbon host when <see cref="SD_WorkflowOptionsRibbon_UI.instance"/> is null or inactive (load order / toolchest).</summary>
+		static bool WorkflowHostIsUnderViewportInnerLeftRibbon(SD_WorkflowOptionsRibbon_UI host) {
+			if (host == null) {
+				return false;
+			}
+			var mv = MainViewport_UI.instance;
+			if (mv == null || mv.innerLeftRibbonRect == null) {
+				return false;
+			}
+			return host.transform.IsChildOf(mv.innerLeftRibbonRect);
+		}
+
+		static bool WorkflowHostIsUnderViewportInnerRightRibbon(SD_WorkflowOptionsRibbon_UI host) {
+			if (host == null) {
+				return false;
+			}
+			var mv = MainViewport_UI.instance;
+			if (mv == null || mv.innerRightRibbonRect == null) {
+				return false;
+			}
+			return host.transform.IsChildOf(mv.innerRightRibbonRect);
+		}
+
+		/// <summary>Inner-left duplicates Gen Art; inner-right is hidden in full view (<see cref="FullView_OuterPanel_Chrome_Binder"/>). Prefer hosts under Paint / right column instead.</summary>
+		static bool WorkflowHostIsUnderViewportInnerEdgeRibbonStrip(SD_WorkflowOptionsRibbon_UI host) {
+			return WorkflowHostIsUnderViewportInnerLeftRibbon(host) || WorkflowHostIsUnderViewportInnerRightRibbon(host);
+		}
+
+		/// <summary>Pick <see cref="SD_WorkflowOptionsRibbon_UI"/> to host the dock component (logic state). Visual row is parented from <see cref="RibbonViewportFullViewOnScreen_Toggle_UI"/> to the viewport Gen Art column — not to a command-ribbon tab body.</summary>
+		static SD_WorkflowOptionsRibbon_UI PickWorkflowRibbonHostForFullViewAttach() {
+			var all = UnityEngine.Object.FindObjectsByType<SD_WorkflowOptionsRibbon_UI>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+			var inst = SD_WorkflowOptionsRibbon_UI.instance;
+			for (int i = 0; i < all.Length; i++) {
+				var c = all[i];
+				if (c != null && c.gameObject.activeInHierarchy && !WorkflowHostIsUnderViewportInnerEdgeRibbonStrip(c)) {
+					return c;
+				}
+			}
+			if (inst != null && inst.gameObject.activeInHierarchy && !WorkflowHostIsUnderViewportInnerEdgeRibbonStrip(inst)) {
+				return inst;
+			}
+			if (inst != null && !WorkflowHostIsUnderViewportInnerEdgeRibbonStrip(inst)) {
+				return inst;
+			}
+			for (int i = 0; i < all.Length; i++) {
+				var c = all[i];
+				if (c != null && !WorkflowHostIsUnderViewportInnerEdgeRibbonStrip(c)) {
+					return c;
+				}
+			}
+			// Legacy fallbacks when every host still lives under an edge strip (should be rare).
+			for (int i = 0; i < all.Length; i++) {
+				var c = all[i];
+				if (c != null && c.gameObject.activeInHierarchy && !WorkflowHostIsUnderViewportInnerLeftRibbon(c)) {
+					return c;
+				}
+			}
+			if (inst != null && inst.gameObject.activeInHierarchy && !WorkflowHostIsUnderViewportInnerLeftRibbon(inst)) {
+				return inst;
+			}
+			if (inst != null && !WorkflowHostIsUnderViewportInnerLeftRibbon(inst)) {
+				return inst;
+			}
+			for (int i = 0; i < all.Length; i++) {
+				var c = all[i];
+				if (c != null && !WorkflowHostIsUnderViewportInnerLeftRibbon(c)) {
+					return c;
+				}
+			}
+			if (inst != null) {
+				return inst;
+			}
+			for (int i = 0; i < all.Length; i++) {
+				if (all[i] != null) {
+					return all[i];
+				}
+			}
+			return null;
+		}
+
+		/// <summary>
+		/// JSON-RPC <c>spz.ui.attach_viewport_fullview_toggle</c>: docks FULL/SCREEN above the viewport Gen Art control (not on the command-ribbon tab strip; does not switch tabs).
+		/// Params (optional): <c>button_label</c> (string), <c>command</c> (string, default <c>viewport_fullview_toggle</c> → <see cref="RibbonDock_CommandBridge"/>).
+		/// </summary>
+		static JObject TryExecuteAttachViewportFullViewToggle(JObject @params) {
+			var r = new JObject { ["success"] = false };
+			try {
+				var spec = RibbonDock_ButtonSpec.FromRpc(@params);
+				var host = PickWorkflowRibbonHostForFullViewAttach();
+				if (host != null) {
+					RibbonViewportFullViewOnScreen_Toggle_UI.EnsureCreated(host, spec);
+					r["success"] = true;
+					return r;
+				}
+				// No SD workflow-ribbon host (tab not loaded, single-scene, etc.): still attach on the viewport Gen strip so the dock actually exists.
+				if (RibbonViewportFullViewOnScreen_Toggle_UI.TryEnsureOnGenerateButtonsStrip(spec)) {
+					r["success"] = true;
+					return r;
+				}
+				r["error"] = "SD_WorkflowOptionsRibbon_UI and GenerateButtons_Main_UI not in scene; cannot mount viewport full-view toggle.";
+			}
+			catch (Exception e) {
+				r["error"] = e.Message;
+			}
+			return r;
+		}
+
+		/// <summary>
+		/// Same as JSON-RPC <c>spz.ui.attach_viewport_fullview_toggle</c>, for <see cref="Addon_MGR"/> when HTTP <c>load_addon</c> is off
+		/// (Python <c>register()</c> never runs) or as a main-thread retry until the SD workflow ribbon exists.
+		/// Call from the Unity main thread only.
+		/// </summary>
+		public static JObject TryAttachViewportFullViewToggleFromCore(JObject @params) {
+			return TryExecuteAttachViewportFullViewToggle(@params ?? new JObject());
+		}
 		
 		/// <summary>
 		/// Executes UI commands (delegates to AddonUI_MGR)
 		/// </summary>
 		JObject ExecuteUICommand(string method, JObject @params) {
 			UnityEngine.Debug.Log($"[Addon_SocketServer] Executing UI Command: {method} with params: {@params?.ToString(Formatting.None)}");
+			if (string.Equals(method, "spz.ui.attach_viewport_fullview_toggle", StringComparison.Ordinal)) {
+				return TryExecuteAttachViewportFullViewToggle(@params ?? new JObject());
+			}
 			if (AddonUI_MGR.instance == null) {
 				return new JObject { ["success"] = false, ["error"] = "AddonUI_MGR not available" };
 			}
