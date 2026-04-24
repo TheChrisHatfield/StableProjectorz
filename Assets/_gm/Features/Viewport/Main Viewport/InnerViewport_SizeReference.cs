@@ -21,8 +21,15 @@ namespace spz {
 	    [SerializeField] RectTransform _myRectTransf;
 
 	    void EarlyUpdate(){
-	        Vector2 sd_widthHeight = SD_InputPanel_UI.instance?.widthHeight() ?? new Vector2Int(512,512);
-	        _aspectFitter.aspectRatio = sd_widthHeight.x / sd_widthHeight.y;
+	        float aspect;
+	        if (ViewportFullViewOnScreen_Driver.IsActive && MainViewport_UI.instance != null) {
+		        var r = MainViewport_UI.instance.mainViewportRect.rect;
+		        aspect = r.height > 1e-4f ? r.width / r.height : 1f;
+	        } else {
+		        Vector2 sd_widthHeight = SD_InputPanel_UI.instance?.widthHeight() ?? new Vector2Int(512, 512);
+		        aspect = sd_widthHeight.x / Mathf.Max(1e-4f, sd_widthHeight.y);
+	        }
+	        _aspectFitter.aspectRatio = aspect;
 	    }
 
 	    void Awake(){

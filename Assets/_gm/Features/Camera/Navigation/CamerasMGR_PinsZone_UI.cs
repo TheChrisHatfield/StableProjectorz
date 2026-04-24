@@ -266,6 +266,7 @@ namespace spz {
 	            _cameraPins[i].GetComponent<CanvasGroup>().alpha = 0;
 	        }
 	        CameraFocus._Act_onFocused += OnWillFocus;
+	        FullView_OuterPanel_Chrome_Binder.SyncChromeToDriver();
 	    }//end()
 
 	    void Start(){

@@ -12,7 +12,7 @@ SD / Forge-style: ``/api/v1/sd/workflow/*``, ``/api/v1/sd/generation/*``, ``/api
 ``/api/v1/sd/skybox/*`` → workflow mode, denoise/blur/toggles, ControlNet units, skybox (same as ``spz.cmd.*``).
 
 Add-on panel UI (same as Python ``api.ui`` over TCP): ``/api/v1/ui/*`` → ``spz.ui.*``
-(create_panel, buttons, sliders, inputs, dropdowns, get/set widget values).
+(create_panel, buttons, sliders, inputs, dropdowns, get/set widget values; ``spz.ui.attach_viewport_fullview_toggle`` is JSON-RPC-only for the SD ribbon full-view control).
 
 Meta / discovery: ``GET /api/v1/meta`` → ``spz.cmd.get_api_capabilities`` (method list + RPC version);
 ``GET /api/v1/context`` → ``spz.cmd.get_addon_context`` (scene + SD + brush snapshot).
@@ -113,7 +113,7 @@ class Prompt(BaseModel):
     negative: Optional[str] = None
 
 class EditorLayoutBody(BaseModel):
-    """Optional ``mode`` (``default`` | ``viewport_focus`` | ``fullscreen_center``) overrides side visibility unless explicit flags are set."""
+    """Optional ``mode`` (``default`` | ``viewport_focus`` | ``fullscreen_center`` | ``center_max`` / ``ribbon_right`` = on-screen full view, both side columns off | ``center_max_off``) overrides side visibility unless explicit flags are set."""
     mode: Optional[str] = None
     left_visible: Optional[bool] = None
     right_visible: Optional[bool] = None

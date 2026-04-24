@@ -18,6 +18,10 @@ namespace spz {
 	    [SerializeField] RectTransform _viewportWithRibbons_rect;
 	    [SerializeField] RectTransform _viewport_LeftVerticalRibbon_rect;
 	    [SerializeField] RectTransform _viewport_RightVerticalRibbon_rect;
+	    /// <summary>Inner viewport left strip (e.g. Gen Art column). Hidden with <see cref="ViewportFullViewOnScreen_Driver"/> full view.</summary>
+	    public RectTransform innerLeftRibbonRect => _viewport_LeftVerticalRibbon_rect;
+	    /// <summary>Inner viewport right strip (e.g. workflow ribbon). Hidden with <see cref="ViewportFullViewOnScreen_Driver"/> full view.</summary>
+	    public RectTransform innerRightRibbonRect => _viewport_RightVerticalRibbon_rect;
 	    public RectTransform innerViewportRect => InnerViewport_SizeReference.instance.rectTransf;
 
 	    [SerializeField] GameObject _depthCamera_PreviewRect;
@@ -127,8 +131,16 @@ namespace spz {
 
 
 	    void OnEarlyUpdate(){
+	        var sk = Global_Skeleton_UI.instance;
+	        if (sk == null) {
+		        return;
+	        }
 	        // ensure our recttransform has the same placement as defined by the ui-skeleton:
-	        Global_Skeleton_UI.instance.Place_onto_MainViewport(_container_rectTransf);
+	        if (ViewportFullViewOnScreen_Driver.IsActive) {
+		        sk.Place_onto_MainViewport_between_ribbons(_container_rectTransf);
+	        } else {
+		        sk.Place_onto_MainViewport(_container_rectTransf);
+	        }
 
 	        //refresh our cursor pos, so that others can query (reuse) our cursor pos during their Update()
 	        if (Application.isFocused){//only if focused, else bothers people who work in other windows.

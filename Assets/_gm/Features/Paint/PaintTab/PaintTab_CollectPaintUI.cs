@@ -697,6 +697,9 @@ namespace spz {
 
 			if (did) _collected = true;
 			if (toolchestDid) _toolchestCollected = true;
+			if (toolchestDid) {
+				RibbonViewportFullViewOnScreen_Toggle_UI.NotifyAllAttachRequested();
+			}
 
 			var root = _layout.transform as RectTransform;
 			if (root != null)

@@ -1,0 +1,19 @@
+RibbonOnlyFullscreen
+
+====================
+
+
+
+**No right-panel command-ribbon tab.** This add-on only adds the **FULL / SRN** (full view) control on the **viewport** next to **Gen Art**, when the add-on is **enabled in Add-on Manager**.
+
+
+
+- **With HTTP / Python:** `register()` calls `spz.ui.attach_viewport_fullview_toggle` only. It does **not** call `create_panel`.
+
+- **HTTP off:** Add-on Manager still runs the Unity coroutine that attaches the same control (no Python `register` required).
+
+
+
+Toggling uses the same in-app full-view path as other UI (`viewport_fullview_toggle` / `ViewportFullViewOnScreen_Driver`).
+
+
