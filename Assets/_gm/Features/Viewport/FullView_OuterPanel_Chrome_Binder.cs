@@ -5,7 +5,7 @@ namespace spz {
 	/// <summary>
 	/// Outer columns and overlays can still draw when skeleton widths hit zero (no clipping).
 	/// Hides mirrored <see cref="RightColumn_UI"/>, <see cref="Left_Column_SD_Placement_UI"/> / <see cref="Left_Column_3D_Placement_UI"/> roots,
-	/// optional <see cref="CommandRibbon_UI"/> when not under a right column, <see cref="CamerasMGR_PinsZone_UI"/>,
+	/// optional <see cref="CommandRibbon_UI"/> when not under a right column,
 	/// the top <see cref="ExportSave_UI_MGR"/> bar (SAVE 2K, +, launch buttons), and <see cref="Connection_MGR"/> viewport-top strip.
 	/// Does <b>not</b> hide <see cref="MainViewport_UI"/> <c>innerLeftRibbonRect</c> / <c>innerRightRibbonRect</c> — those viewport
 	/// vertical tool ribbons stay visible in on-screen full view (see <see cref="ViewportFullViewOnScreen_Driver"/> doc).
@@ -65,10 +65,8 @@ namespace spz {
 				}
 			}
 
-			var pins = CamerasMGR_PinsZone_UI.instance;
-			if (pins != null) {
-				ApplyCanvasGroupHide(pins.gameObject, hide);
-			}
+			// Keep camera pins/indices visible in fullscreen. These are viewport guides, not outer chrome.
+			// Their own scripts already gate fade/visibility based on interaction mode.
 
 			// Top strip over the viewport/left: +, SAVE 2K, SD SERV, 3D SERV (ExportSave on same root as res controls).
 			var topBar = ExportSave_UI_MGR.instance;
