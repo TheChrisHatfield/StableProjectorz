@@ -1057,7 +1057,8 @@ namespace spz {
 				nameLE.minWidth = colNameWidth;
 				var nameText = nameObj.AddComponent<TextMeshProUGUI>();
 				string statusIcon = addonInfo.isEnabled ? "\u2713" : "\u25CB";
-				nameText.text = $"{statusIcon} {addonId}";
+				string nameLabel = !string.IsNullOrEmpty(addonInfo.displayName) ? addonInfo.displayName : addonId;
+				nameText.text = $"{statusIcon} {nameLabel}";
 				nameText.fontSize = 14;
 				nameText.color = addonInfo.isEnabled ? new Color(0.4f, 1f, 0.4f) : new Color(0.95f, 0.95f, 0.95f);
 				nameText.alignment = TextAlignmentOptions.Left;

@@ -11,7 +11,7 @@ namespace spz {
 
 	/// <summary> World-space mirror plane for mesh symmetry (paint / projections). </summary>
 	public enum PaintSymmetryPlaneSource {
-		/// <summary> Plane through selection bounds center; with a view camera uses camera +X (same idea as ViewAligned). Without a camera, falls back to average mesh +X. </summary>
+		/// <summary> Prefer model-local bilateral plane (average mesh +X, centered from projected mesh extents) for true opposite-side mirroring; fall back to ViewAligned when local axis is unavailable. </summary>
 		Auto = 0,
 		/// <summary> Vertical plane through bounds center, normal = view camera +X (screen “left/right” in world). </summary>
 		ViewAligned = 1,

@@ -288,6 +288,14 @@ namespace spz {
 	        float roundness01 = BrushRibbon_UI_Size.GetBrushRoundness01();
 	        _brushMaterial.SetFloat(_BrushAngleRad_ID, angleDeg * Mathf.Deg2Rad);
 	        _brushMaterial.SetFloat(_BrushRoundness01_ID, roundness01 > 0f ? roundness01 : 1f);
+
+	        bool symXOn = BrushRibbon_UI_Size.GetPaintSymmetryXOn();
+	        Camera paintCam = UserCameras_MGR.instance?._curr_viewCamera?.myCamera;
+	        // Mesh splotch symmetry: twins are appended in C# (shader splotch uses _SymmetryMode 0; see BrushEffects.cginc). If we
+	        // place up to MaxSplotchStamps primary stamps, stampCount is already 64 and the mirror loop is skipped — no twin side.
+	        bool meshSplotchCSharpDupe = symXOn && useMeshPaintSymmetry() && paintCam != null;
+	        int maxPrimaryStampsForSplotch = meshSplotchCSharpDupe ? MaxSplotchStamps / 2 : MaxSplotchStamps;
+
 	        int stampCount = 0;
 	        if (spacing01 > 0.001f && !_isFirstFrameOfStroke)
 	        {
@@ -298,8 +306,8 @@ namespace spz {
 	            float dist = Vector2.Distance(from, to);
 	            if (dist >= step)
 	            {
-	                int n = Mathf.Min(MaxSplotchStamps, Mathf.FloorToInt(dist / step) + 1);
-	                for (int k = 0; k < n && stampCount < MaxSplotchStamps; k++)
+	                int n = Mathf.Min(maxPrimaryStampsForSplotch, Mathf.FloorToInt(dist / step) + 1);
+	                for (int k = 0; k < n && stampCount < maxPrimaryStampsForSplotch; k++)
 	                {
 	                    float t = (n > 1) ? (k / (float)n) : 0f;
 	                    Vector2 pos = Vector2.Lerp(from, to, t);
@@ -326,9 +334,7 @@ namespace spz {
 		        brushEndpointForRender01.y = Mathf.Clamp01(brushEndpointForRender01.y);
 	        }
 
-	        bool symOn = BrushRibbon_UI_Size.GetPaintSymmetryXOn();
-	        Camera paintCam = UserCameras_MGR.instance?._curr_viewCamera?.myCamera;
-	        if (!symOn) {
+	        if (!symXOn) {
 		        _brushMaterial.SetFloat(_SymmetryMode_ID, 0f);
 		        _brushMaterial.SetVector(_MirrorPrevNewBrushScreenCoord_ID, Vector4.zero);
 		        _brushMaterial.SetFloat(_SymmetryMirrorAngleDeltaRad_ID, 0f);
@@ -354,7 +360,7 @@ namespace spz {
 				        PaintSymmetryMesh.ComputeScreenMirrorAngleDelta(_prevPaintPosition, cursorRaw01));
 		        }
 	        } else {
-		        PaintSymmetryMesh.SetMaterialSymmetry(_brushMaterial, paintCam, _prevPaintPosition, cursorRaw01, symOn,
+		        PaintSymmetryMesh.SetMaterialSymmetry(_brushMaterial, paintCam, _prevPaintPosition, cursorRaw01, symXOn,
 			        useMeshPaintSymmetry() && paintCam != null);
 	        }
 

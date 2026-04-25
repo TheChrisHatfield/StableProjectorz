@@ -46,6 +46,9 @@ namespace spz {
 		
 		// Maximum commands to process per frame
 		private const int MAX_COMMANDS_PER_FRAME = 10;
+		// JSON-RPC response wait budgets (background thread waiting for main-thread execution).
+		private const int COMMAND_TIMEOUT_DEFAULT_MS = 10000;   // fast commands
+		private const int COMMAND_TIMEOUT_LONG_OP_MS = 120000;  // mesh import/export/save/load
 		
 		void Awake() {
 			// Diagnostic: if you search "Addon_SocketServer" in Player.log and never see this line, the scene/GameObject/script is not running (scene not loaded, GO disabled, or script missing).
@@ -347,7 +350,7 @@ namespace spz {
 			// Wait for command to execute (with timeout)
 			// Note: This blocks the background thread, but is necessary for synchronous response
 			// Consider using async/await pattern in future for better scalability
-			int timeout = 5000; // Increased to 5 seconds for complex operations
+			int timeout = IsLongRunningMethod(method) ? COMMAND_TIMEOUT_LONG_OP_MS : COMMAND_TIMEOUT_DEFAULT_MS;
 			int elapsed = 0;
 			int checkInterval = 50; // Check every 50ms instead of 10ms to reduce CPU usage
 			
@@ -364,6 +367,24 @@ namespace spz {
 			_pendingResponses.TryRemove(id, out _);
 			UnityEngine.Debug.LogWarning($"[Addon_SocketServer] Command '{method}' timed out after {timeout}ms");
 			return CreateErrorResponse(-32603, "Command execution timeout", JToken.FromObject(id));
+		}
+
+		static bool IsLongRunningMethod(string method) {
+			if (string.IsNullOrEmpty(method)) {
+				return false;
+			}
+			switch (method) {
+				case "spz.cmd.import_3d_model":
+				case "spz.cmd.export_3d_with_textures":
+				case "spz.cmd.export_3d_with_textures_to_path":
+				case "spz.cmd.save_project":
+				case "spz.cmd.load_project":
+				case "spz.cmd.export_projection_textures":
+				case "spz.cmd.export_view_textures":
+					return true;
+				default:
+					return false;
+			}
 		}
 		
 		/// <summary>
@@ -412,7 +433,8 @@ namespace spz {
 		static JObject BuildAddonApiCapabilities() {
 			var cmd = new JArray {
 				"spz.cmd.deselect_all_meshes", "spz.cmd.deselect_mesh", "spz.cmd.export_3d_with_textures",
-				"spz.cmd.export_projection_textures", "spz.cmd.export_view_textures",
+				"spz.cmd.export_3d_with_textures_to_path", "spz.cmd.export_projection_textures", "spz.cmd.export_view_textures",
+				"spz.cmd.import_3d_model",
 				"spz.cmd.get_active_controlnet_unit_count", "spz.cmd.get_addon_context", "spz.cmd.get_all_camera_fovs",
 				"spz.cmd.get_all_camera_positions", "spz.cmd.get_all_camera_rotations", "spz.cmd.get_all_mesh_ids",
 				"spz.cmd.get_api_capabilities", "spz.cmd.get_brush_settings", "spz.cmd.get_camera_pos",
@@ -464,7 +486,7 @@ namespace spz {
 			};
 			return new JObject {
 				["success"] = true,
-				["addon_rpc_version"] = "1.8",
+				["addon_rpc_version"] = "1.9",
 				["spz_cmd"] = cmd,
 				["spz_ui"] = ui,
 				["context_command"] = "spz.cmd.get_addon_context",
@@ -1380,6 +1402,26 @@ namespace spz {
 					case "spz.cmd.export_3d_with_textures":
 						result["success"] = fastPath.Export3DWithTextures();
 						break;
+					
+					case "spz.cmd.import_3d_model": {
+						string imPath = @params["filepath"]?.ToString() ?? "";
+						bool imOk = fastPath.Import3DModelFromFile(imPath);
+						result["success"] = imOk;
+						if (!imOk) {
+							result["error"] = "import failed (invalid path, file missing, or import busy)";
+						}
+						break;
+					}
+					
+					case "spz.cmd.export_3d_with_textures_to_path": {
+						string exPath = @params["mesh_filepath"]?.ToString() ?? "";
+						bool exOk = fastPath.Export3DWithTexturesToPath(exPath);
+						result["success"] = exOk;
+						if (!exOk) {
+							result["error"] = "export to path failed (invalid path, Save_MGR not ready, or could not create directory)";
+						}
+						break;
+					}
 						
 					case "spz.cmd.export_projection_textures":
 						bool dilate = @params["is_dilate"]?.ToObject<bool>() ?? true;
@@ -1620,10 +1662,11 @@ namespace spz {
 						break;
 						
 					case "spz.cmd.get_project_data_dir":
-						string dataDir = fastPath.GetProjectDataDir();
+						string dataDir = fastPath.GetProjectDataDirOrSession();
 						if (dataDir != null) {
 							result["success"] = true;
 							result["data_dir"] = dataDir;
+							result["data_dir_is_session"] = fastPath.IsSpzGoSessionDataDir();
 						} else {
 							result["success"] = false;
 						}

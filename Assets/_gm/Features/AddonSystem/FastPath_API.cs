@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
 
@@ -1041,6 +1042,70 @@ namespace spz {
 		}
 		
 		/// <summary>
+		/// Load a 3D file from an absolute path (DCC / automation; same as Load model, no file dialog).
+		/// </summary>
+		public bool Import3DModelFromFile(string absolutePath) {
+			if (!_isInitialized) {
+				UnityEngine.Debug.LogWarning("[FastPath_API] Import3DModelFromFile: API not initialized yet.");
+				return false;
+			}
+			if (string.IsNullOrEmpty(absolutePath)) {
+				UnityEngine.Debug.LogWarning("[FastPath_API] Import3DModelFromFile: empty path.");
+				return false;
+			}
+			if (!File.Exists(absolutePath)) {
+				UnityEngine.Debug.LogWarning("[FastPath_API] Import3DModelFromFile: file not found: " + absolutePath);
+				return false;
+			}
+			var mh = ModelsHandler_3D.instance;
+			if (mh == null) {
+				UnityEngine.Debug.LogWarning("[FastPath_API] Import3DModelFromFile: ModelsHandler_3D.instance is null.");
+				return false;
+			}
+			return mh.TryImportModelFromFile(absolutePath);
+		}
+		
+		/// <summary>
+		/// Export 3D + associated textures to a known full mesh path (no file dialog; textures share base name).
+		/// </summary>
+		public bool Export3DWithTexturesToPath(string meshFilePath) {
+			if (!_isInitialized) {
+				UnityEngine.Debug.LogWarning("[FastPath_API] Export3DWithTexturesToPath: API not initialized yet.");
+				return false;
+			}
+			if (string.IsNullOrEmpty(meshFilePath)) {
+				UnityEngine.Debug.LogWarning("[FastPath_API] Export3DWithTexturesToPath: empty mesh file path.");
+				return false;
+			}
+			var sm = Save_MGR.instance;
+			if (sm == null) {
+				UnityEngine.Debug.LogWarning("[FastPath_API] Export3DWithTexturesToPath: Save_MGR.instance is null.");
+				return false;
+			}
+			string norm;
+			try {
+				norm = Path.GetFullPath(meshFilePath);
+			} catch {
+				UnityEngine.Debug.LogWarning("[FastPath_API] Export3DWithTexturesToPath: invalid path: " + meshFilePath);
+				return false;
+			}
+			if (string.IsNullOrEmpty(Path.GetFileName(norm))) {
+				UnityEngine.Debug.LogWarning("[FastPath_API] Export3DWithTexturesToPath: missing filename in path: " + norm);
+				return false;
+			}
+			try {
+				var dir = Path.GetDirectoryName(norm);
+				if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) {
+					Directory.CreateDirectory(dir);
+				}
+			} catch {
+				UnityEngine.Debug.LogWarning("[FastPath_API] Export3DWithTexturesToPath: cannot create directory for: " + norm);
+				return false;
+			}
+			return sm.Export3D_with_textures_ToPath(norm);
+		}
+		
+		/// <summary>
 		/// Export projection textures
 		/// </summary>
 		public bool ExportProjectionTextures(bool isDilate = true) {
@@ -1384,19 +1449,93 @@ namespace spz {
 		}
 		
 		/// <summary>
+		/// Data directory for a saved project: folder containing the .spz + <c>ProjectName_Data</c> — or null if not saved.
+		/// Does not require <see cref="_isInitialized"/>; uses <see cref="Save_MGR"/> / <see cref="ProjectSaveLoad_Helper"/> only.
+		/// </summary>
+		static string GetSavedProjectDataDirIfAny() {
+			var saveMGR = Save_MGR.instance;
+			if (saveMGR == null) {
+				return null;
+			}
+			var helper = saveMGR.GetComponent<ProjectSaveLoad_Helper>();
+			if (helper == null) {
+				return null;
+			}
+			string projectPath = helper.GetLastSaveFilepath();
+			if (string.IsNullOrEmpty(projectPath)) {
+				return null;
+			}
+			string projectDir = System.IO.Path.GetDirectoryName(projectPath);
+			if (string.IsNullOrEmpty(projectDir)) {
+				return null;
+			}
+			return System.IO.Path.Combine(
+				projectDir,
+				System.IO.Path.GetFileNameWithoutExtension(projectPath) + "_Data"
+			);
+		}
+
+		/// <summary>
 		/// Get project data directory (if project is saved)
 		/// </summary>
 		public string GetProjectDataDir() {
-			if (!_isInitialized) return null;
-			
-			string projectPath = GetProjectPath();
-			if (string.IsNullOrEmpty(projectPath)) return null;
-			
-			// Data directory is typically: project_path + "_Data"
-			return System.IO.Path.Combine(
-				System.IO.Path.GetDirectoryName(projectPath),
-				System.IO.Path.GetFileNameWithoutExtension(projectPath) + "_Data"
-			);
+			if (!_isInitialized) {
+				return null;
+			}
+			return GetSavedProjectDataDirIfAny();
+		}
+
+		const string SessionDataDirSubfolder = "StableProjectorzGO_session";
+
+		/// <summary>True when there is no on-disk .spz path, so <see cref="GetProjectDataDirOrSession"/> uses the session exchange folder — independent of <see cref="_isInitialized"/>.</summary>
+		public bool IsSpzGoSessionDataDir() {
+			return string.IsNullOrEmpty(GetSavedProjectDataDirIfAny());
+		}
+
+		/// <summary>
+		/// <see cref="GetProjectDataDir"/> when a .spz is saved, otherwise a persistent session folder
+		/// so HTTP/Blender SPZ GO (exchange FBX) works without a saved file — similar to a temp work directory.
+		/// Works before the FastPath coroutine flips <see cref="_isInitialized"/>, as long as <see cref="Save_MGR"/> exists.
+		/// </summary>
+		public string GetProjectDataDirOrSession() {
+			string saved = GetSavedProjectDataDirIfAny();
+			if (!string.IsNullOrEmpty(saved)) {
+				return saved;
+			}
+			// Unsaved: session is valid even before the FastPath init coroutine (_isInitialized), so early HTTP/Blender works.
+			try {
+				string root = System.IO.Path.Combine(Application.persistentDataPath, SessionDataDirSubfolder);
+				System.IO.Directory.CreateDirectory(root);
+				return root;
+			} catch (System.Exception) {
+				return null;
+			}
+		}
+
+		/// <summary>
+		/// Delete the SPZ GO session root under <see cref="Application.persistentDataPath"/> on exit so
+		/// unsaved-session FBX/texture exchange files do not accumulate. When a .spz is saved, the real
+		/// <c>_Data</c> path is used instead, so this folder is only the temporary SPZ GO bridge.
+		/// </summary>
+		/// <remarks>
+		/// <b>Player only:</b> In the Unity Editor, stopping Play Mode calls <see cref="Addon_MGR"/>'s
+		/// <c>OnDestroy</c> → <see cref="Addon_MGR.ShutdownAddonApiBeforeQuit"/> — the same as a real
+		/// application exit. Skipping here avoids deleting the exchange as soon as you leave Play
+		/// (e.g. Blender can still be using <c>from_spz.fbx</c> under the same session path).
+		/// Closing the whole Editor is not forced-cleaned here; delete under LocalLow if needed.
+		/// </remarks>
+		public static void TryDeleteSpzGoSessionFolderOnQuit() {
+			if (Application.isEditor) {
+				return;
+			}
+			try {
+				string root = System.IO.Path.Combine(Application.persistentDataPath, SessionDataDirSubfolder);
+				if (System.IO.Directory.Exists(root)) {
+					System.IO.Directory.Delete(root, true);
+				}
+			} catch (System.Exception ex) {
+				UnityEngine.Debug.LogWarning("[FastPath_API] SPZ GO session folder cleanup: " + ex.Message);
+			}
 		}
 		
 		/// <summary>
@@ -1517,8 +1656,9 @@ namespace spz {
 			root["project_operation_in_progress"] = IsProjectOperationInProgress();
 			string pp = GetProjectPath();
 			root["project_path"] = pp != null ? pp : (JToken)JValue.CreateNull();
-			string dd = GetProjectDataDir();
+			string dd = GetProjectDataDirOrSession();
 			root["project_data_dir"] = dd != null ? dd : (JToken)JValue.CreateNull();
+			root["project_data_dir_is_session"] = IsSpzGoSessionDataDir();
 			string ver = GetProjectVersion();
 			root["spz_release_version"] = ver != null ? ver : (JToken)JValue.CreateNull();
 

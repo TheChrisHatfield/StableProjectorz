@@ -21,6 +21,8 @@ namespace spz {
 	public class AddonJsonManifest {
 		public string version;
 		public string description;
+		/// <summary>Short label in Add-on Manager (optional; else folder <c>addonId</c>).</summary>
+		public string displayName;
 	}
 
 	/// <summary>Kill any process listening on the given port (Windows). Avoids [Errno 10048] when starting FastAPI on 5557. Never kills Unity.exe or Unity Hub.</summary>
@@ -135,6 +137,7 @@ namespace spz {
 		[SerializeField] bool _enableHttpServer = true; // FastAPI in Python (recommended)
 		[SerializeField] bool _enableCSharpHttpServer = false; // Legacy C# HttpListener (deprecated)
 		[SerializeField] bool _enableWebSocketServer = false;
+		[SerializeField] bool _autoRestartWithAddonsOnServerFail = false; // Avoid surprise relaunch/flicker in player unless explicitly enabled.
 		
 #if UNITY_EDITOR
 		private Process _pythonProcess;
@@ -182,6 +185,11 @@ namespace spz {
 			} catch (Exception e) {
 				UnityEngine.Debug.LogWarning("[Addon_MGR] ShutdownAddonApiBeforeQuit (socket): " + e.Message);
 			}
+			try {
+				FastPath_API.TryDeleteSpzGoSessionFolderOnQuit();
+			} catch (Exception e) {
+				UnityEngine.Debug.LogWarning("[Addon_MGR] ShutdownAddonApiBeforeQuit (SPZ GO session dir): " + e.Message);
+			}
 		}
 
 		void TerminatePythonAddonServerProcess() {
@@ -219,6 +227,8 @@ namespace spz {
 			public string path;
 			public bool isEnabled;
 			public List<GameObject> uiElements = new List<GameObject>();
+			/// <summary>Optional; from <c>addon.json</c> <c>displayName</c> (Add-on Manager row title).</summary>
+			public string displayName;
 			/// <summary>List row subtitle: e.g. <c>v1.2.0 • Advanced camera controls…</c> from <c>addon.json</c> or <c>__init__.py</c>.</summary>
 			public string listSubtitle;
 		}
@@ -290,7 +300,7 @@ namespace spz {
 			StartPythonServer();
 			
 			// If server failed and we have addons, auto-restart via Run_with_Addons.bat (built player only; never in Editor to avoid quitting Unity)
-			if (!_isServerRunning && _enableHttpServer && HasAnyEnabledAddon() && !WasLaunchedByAddonsBat() && !Application.isEditor) {
+			if (_autoRestartWithAddonsOnServerFail && !_isServerRunning && _enableHttpServer && HasAnyEnabledAddon() && !WasLaunchedByAddonsBat() && !Application.isEditor) {
 				StartCoroutine(AutoRestartWithAddonsAfterDelay());
 				yield break;
 			}
@@ -347,6 +357,7 @@ namespace spz {
 					if (m != null) {
 						if (!string.IsNullOrWhiteSpace(m.version)) ver = m.version.Trim();
 						if (!string.IsNullOrWhiteSpace(m.description)) desc = m.description.Trim();
+						if (!string.IsNullOrWhiteSpace(m.displayName)) info.displayName = m.displayName.Trim();
 					}
 				} catch (Exception e) {
 					UnityEngine.Debug.LogWarning($"[Addon_MGR] addon.json read failed for {info.id}: {e.Message}");
@@ -568,8 +579,15 @@ namespace spz {
 				string socketBound = (Addon_SocketServer.instance != null && Addon_SocketServer.instance.IsListening) ? "1" : "0";
 				string batContent = "@echo off\r\ncd /d \"" + workDir + "\"\r\nset SPZ_SOCKET_BOUND=" + socketBound + "\r\n\"" + pythonExe.Replace("\"", "\"\"") + "\" \"" + serverScriptPath.Replace("\"", "\"\"") + "\" --port " + _serverPort + " --addons-dir \"" + addonsPath.Replace("\"", "\"\"") + "\" " + httpArg + "\r\n";
 				File.WriteAllText(batPath, batContent);
-				UnityEngine.Debug.Log("[Addon_MGR] Addon server console will open; any Python errors (e.g. missing uvicorn/fastapi) appear there.");
-				uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(batPath, isJustFile: true, workDir, keepWindow: true, hidden: false, attachToConsole: false);
+				UnityEngine.Debug.Log("[Addon_MGR] Starting addon server in background (hidden console).");
+				uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
+					batPath,
+					isJustFile: true,
+					workDir,
+					keepWindow: false,
+					hidden: true,
+					attachToConsole: false
+				);
 				if (pid != 0) {
 					_pythonServerPid = pid;
 					_isServerRunning = true;

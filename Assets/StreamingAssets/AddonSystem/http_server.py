@@ -4,7 +4,8 @@ FastAPI HTTP Server for StableProjectorz
 Provides REST API endpoints that forward to Unity via JSON-RPC.
 
 Scene/control: ``/api/v1/cameras``, ``/api/v1/view-cameras/*`` (multi-slot view camera enable/current/projection),
-``projection/*``, ``meshes`` (transforms, selection, batch), ``scene``, ``sd``, ``project``, ``gen3d/*``, ``export/*`` → ``spz.cmd.*``.
+``projection/*``, ``meshes`` (transforms, selection, batch, import), ``scene``, ``sd``, ``project``, ``gen3d/*``,
+``export/*`` (including non-interactive ``export/3d_to_path``) → ``spz.cmd.*``.
 
 Paint/brush: ``/api/v1/paint/*`` → ``spz.cmd.get_brush_settings``, ``get_paint_layers``, ``set_brush_*``, ``set_active_paint_layer``.
 
@@ -211,6 +212,18 @@ class ViewCameraProjectionBody(BaseModel):
 
 class ProjectPath(BaseModel):
     filepath: str
+
+
+class Import3DFileBody(BaseModel):
+    """Absolute path to a mesh file on disk (FBX, OBJ, etc. — same as in-app Load model)."""
+
+    filepath: str
+
+
+class Export3DToPathBody(BaseModel):
+    """Full path for the written mesh file; textures use the same path with extension removed + image ext."""
+
+    mesh_filepath: str
 
 class LoadAddonRequest(BaseModel):
     addon_id: str
@@ -1065,7 +1078,8 @@ async def stop_sd_generation():
 async def get_project_info():
     """
     Get project information. Unity ``spz.cmd.get_project_path`` returns ``path`` only (never ``filepath``).
-    When no project is saved, path/data_dir RPCs return ``success: false`` — response uses JSON null, not empty string.
+    When no project is saved, ``path`` is unavailable, but ``data_dir`` can still be set to a
+    per-machine session folder (``data_dir_is_session: true``) so SPZ GO/Blender exchange works without a saved .spz.
     """
     path, version, data_dir = await asyncio.gather(
         call_unity_async("spz.cmd.get_project_path", {}),
@@ -1099,6 +1113,7 @@ async def get_project_info():
             detail="spz.cmd.get_project_data_dir succeeded but omitted 'data_dir'",
         )
     dd_value = data_dir.get("data_dir") if dd_ok else None
+    dd_is_session = bool(data_dir.get("data_dir_is_session")) if isinstance(data_dir, dict) else False
 
     return {
         "path": path_value,
@@ -1106,6 +1121,7 @@ async def get_project_info():
         "version": ver,
         "data_dir": dd_value,
         "data_dir_available": dd_ok,
+        "data_dir_is_session": dd_is_session,
     }
 
 
@@ -1160,6 +1176,21 @@ async def gen3d_trigger():
 @app.post("/api/v1/export/3d_with_textures", tags=["export"])
 async def export_3d_with_textures():
     return await call_unity_async("spz.cmd.export_3d_with_textures", {})
+
+
+@app.post("/api/v1/meshes/import", tags=["meshes"])
+async def import_3d_model(body: Import3DFileBody):
+    """Load a 3D model from an absolute file path (no OS dialog; same Assimp path as the app)."""
+    return await call_unity_async("spz.cmd.import_3d_model", {"filepath": body.filepath})
+
+
+@app.post("/api/v1/export/3d_to_path", tags=["export"])
+async def export_3d_with_textures_to_path(body: Export3DToPathBody):
+    """Export current scene mesh + texture pack to a known file path (no save dialog)."""
+    return await call_unity_async(
+        "spz.cmd.export_3d_with_textures_to_path",
+        {"mesh_filepath": body.mesh_filepath},
+    )
 
 
 @app.post("/api/v1/export/projection_textures", tags=["export"])
@@ -1380,7 +1411,8 @@ async def root():
         "meshes_http": "/api/v1/meshes/* — selection, transforms, bounds, visibility, name, batch pos/rot/scale → spz.cmd.*",
         "scene_http": "/api/v1/scene/* — info, selected_bounds, select/deselect all",
         "gen3d_http": "/api/v1/gen3d/* — connected, ready, in_progress, trigger",
-        "export_http": "/api/v1/export/* — 3d_with_textures, projection_textures, view_textures",
+        "export_http": "/api/v1/export/* — 3d_with_textures, 3d_to_path, projection_textures, view_textures; "
+        "POST /api/v1/meshes/import for DCC file path import",
         "paint_brush_http": "/api/v1/paint/* (tag 'paint') — brush settings, layer stack, set size/spacing/angle/roundness/opacity/stamp, active layer → spz.cmd.*",
         "sd_forge_http": "/api/v1/sd/* (tag 'sd') — prompts, generate, workflow mode, generation options (denoise/blur/toggles), ControlNet, skybox → spz.cmd.*",
         "add_on_ui_http": "/api/v1/ui/* (OpenAPI tag 'ui') — panel, button, slider, text_input, dropdown, value get/set → spz.ui.*",

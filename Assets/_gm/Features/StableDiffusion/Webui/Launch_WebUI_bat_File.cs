@@ -211,6 +211,34 @@ namespace spz {
 
 	    /// <summary>Returns path to launch (or a wrapper that sets COMMANDLINE_ARGS and runs launch.py so GPU id is applied). Forge reads args from COMMANDLINE_ARGS, not from bat arguments. Public so RestartTheWebui can apply GPU when user restarts from UI.</summary>
 	    public static string GetLaunchPathWithGpuSetting(string webuiFilePath, out string workingDir) {
+	        string SplitLaunchPathAndExtraArgs(string raw, out string extraArgs) {
+	            extraArgs = "";
+	            if (string.IsNullOrWhiteSpace(raw))
+	                return raw;
+	            string t = raw.Trim();
+	            // If it's quoted path + args: "C:\...\run.bat" --precision full
+	            if (t.StartsWith("\"")) {
+	                int q2 = t.IndexOf('"', 1);
+	                if (q2 > 1) {
+	                    string p = t.Substring(1, q2 - 1);
+	                    extraArgs = t.Substring(q2 + 1).Trim();
+	                    return p;
+	                }
+	            }
+	            // If unquoted path + args, split after known launch extensions.
+	            string[] exts = { ".bat", ".cmd", ".lnk", ".exe", ".py" };
+	            foreach (string ext in exts) {
+	                int i = t.IndexOf(ext + " ", StringComparison.OrdinalIgnoreCase);
+	                if (i > 0) {
+	                    int end = i + ext.Length;
+	                    extraArgs = t.Substring(end).Trim();
+	                    return t.Substring(0, end).Trim();
+	                }
+	            }
+	            return t;
+	        }
+
+	        webuiFilePath = SplitLaunchPathAndExtraArgs(webuiFilePath, out string launchExtraArgs);
 	        var parent = Directory.GetParent(webuiFilePath);
 	        workingDir = parent != null ? parent.FullName : Path.GetDirectoryName(webuiFilePath) ?? "";
 	        // Settings (PlayerPrefs) always wins when user has set a device (>= 0). File is fallback when Settings is "default" (-1) so external .bat can set device.
@@ -236,9 +264,15 @@ namespace spz {
 	            pythonExe = Path.Combine(workingDir, "venv", "Scripts", "python.exe");
 	        if (!File.Exists(pythonExe))
 	            pythonExe = Path.Combine(workingDir, "system", "python", "python.exe");
-	        // Do not pass --gpu-device-id / --device-id: Forge sets CUDA_VISIBLE_DEVICES from them and overrides our env (see modules/launch_utils.py, modules_forge/initialization.py).
-	        const string args = "--api";
-	        bool canDirectLaunch = File.Exists(launchPy) && File.Exists(pythonExe);
+	        // When user picked an SD GPU in Settings, pass both:
+	        // 1) CUDA_VISIBLE_DEVICES (hard mask)
+	        // 2) --gpu-device-id (Forge CLI hint)
+	        // This avoids ambiguous fallback to GPU 0 across different Forge launch paths.
+	        string argsBase = gpuId >= 0 ? ("--api --gpu-device-id " + gpuId) : "--api";
+	        string args = string.IsNullOrWhiteSpace(launchExtraArgs) ? argsBase : (argsBase + " " + launchExtraArgs);
+	        bool hasLaunchPy = File.Exists(launchPy);
+	        bool hasVenvPython = File.Exists(pythonExe);
+	        bool canDirectLaunch = hasLaunchPy;
 	        if (canDirectLaunch) {
 	            try {
 	                string wrapperPath = Path.Combine(Path.GetTempPath(), "spz_webui_gpu_wrapper.bat");
@@ -246,19 +280,21 @@ namespace spz {
 	                string envBat = Path.Combine(workingDir, "environment.bat");
 	                string envLine = File.Exists(envBat) ? "call \"" + envBat.Replace("\"", "\"\"") + "\"\r\n" : "";
 	                // webui-user.bat forces "--api --gpu-device-id 0"; bypassing run.bat/webui-user.bat avoids always locking to physical GPU 0 when Settings = default (-1).
-	                string cudaLine = gpuId >= 0 ? "set CUDA_VISIBLE_DEVICES=" + gpuId + "\r\n" : "";
-	                string content = "@echo off\r\nset COMMANDLINE_ARGS=" + args + "\r\nset REDUCE_DISPLAY_GPU_LOAD=1\r\n" + envLine + cudaLine + "cd /d \"" + launchDir.Replace("\"", "\"\"") + "\"\r\n\"" + pythonExe.Replace("\"", "\"\"") + "\" \"" + launchPy.Replace("\"", "\"\"") + "\"\r\n";
+	                string cudaLine = gpuId >= 0 ? ("set CUDA_DEVICE_ORDER=PCI_BUS_ID\r\nset CUDA_VISIBLE_DEVICES=" + gpuId + "\r\n") : "";
+	                string pythonCmd = hasVenvPython ? ("\"" + pythonExe.Replace("\"", "\"\"") + "\"") : "python";
+	                string content = "@echo off\r\nset COMMANDLINE_ARGS=" + args + "\r\nset REDUCE_DISPLAY_GPU_LOAD=1\r\n" + envLine + cudaLine + "cd /d \"" + launchDir.Replace("\"", "\"\"") + "\"\r\n" + pythonCmd + " \"" + launchPy.Replace("\"", "\"\"") + "\"\r\n";
 	                File.WriteAllText(wrapperPath, content);
 	                if (gpuId >= 0)
-	                    UnityEngine.Debug.Log($"[LaunchWebUI] Direct launch.py with CUDA_VISIBLE_DEVICES={gpuId} (physical index). Wrapper: {wrapperPath}");
+	                    UnityEngine.Debug.Log($"[LaunchWebUI] Direct launch.py with SD GPU={gpuId}, CUDA_VISIBLE_DEVICES={gpuId}, COMMANDLINE_ARGS='{args}', python={(hasVenvPython ? "venv" : "PATH")}. Wrapper: {wrapperPath}");
 	                else
-	                    UnityEngine.Debug.Log($"[LaunchWebUI] Direct launch.py (default GPU; webui-user.bat bypassed). Wrapper: {wrapperPath}");
+	                    UnityEngine.Debug.Log($"[LaunchWebUI] Direct launch.py (default GPU; webui-user.bat bypassed), python={(hasVenvPython ? "venv" : "PATH")}. Wrapper: {wrapperPath}");
 	                workingDir = Path.GetTempPath();
 	                return wrapperPath;
 	            } catch (Exception e) {
 	                UnityEngine.Debug.LogWarning($"[LaunchWebUI] Could not create direct-launch wrapper: {e.Message}");
 	            }
 	        }
+	        UnityEngine.Debug.LogWarning($"[LaunchWebUI] Direct launch path unavailable (launch.py exists={hasLaunchPy}, venv python exists={hasVenvPython}). Falling back to bat/lnk path.");
 	        if (gpuId < 0)
 	            return webuiFilePath;
 	        try {
@@ -270,7 +306,7 @@ namespace spz {
 	                : "call \"" + webuiFilePath.Replace("\"", "\"\"") + "\"";
 	            if (ext == ".lnk")
 	                UnityEngine.Debug.Log($"[LaunchWebUI] Using GPU {gpuId} (CUDA_VISIBLE_DEVICES; launch.py/venv not found for direct launch).");
-	            string content2 = "@echo off\r\nset CUDA_VISIBLE_DEVICES=" + gpuId + "\r\nset COMMANDLINE_ARGS=" + args + "\r\ncd /d \"" + workingDir.Replace("\"", "\"\"") + "\"\r\n" + callLine + "\r\n";
+	            string content2 = "@echo off\r\nset CUDA_DEVICE_ORDER=PCI_BUS_ID\r\nset CUDA_VISIBLE_DEVICES=" + gpuId + "\r\nset COMMANDLINE_ARGS=" + args + "\r\ncd /d \"" + workingDir.Replace("\"", "\"\"") + "\"\r\n" + callLine + "\r\n";
 	            File.WriteAllText(wrapperPath2, content2);
 	            workingDir = Path.GetTempPath();
 	            return wrapperPath2;

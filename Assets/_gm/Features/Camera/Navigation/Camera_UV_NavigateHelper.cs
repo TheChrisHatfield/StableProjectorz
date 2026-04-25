@@ -92,7 +92,7 @@ namespace spz {
 	    //for zooming, requires viewport-hover to begin. Continues even if outside, until button release.
 	    void HandleZoomingState(){
 	        bool hasCtrl = KeyMousePenInput.isKey_CtrlOrCommand_pressed();
-	        float mouseScroll = hasCtrl ? 0 : Mouse.current.scroll.ReadValue().y;
+	        float mouseScroll = (hasCtrl || GlobalClickBlocker.isLocked()) ? 0 : Mouse.current.scroll.ReadValue().y;
 	        bool hasMouseScroll = mouseScroll != 0 && MainViewport_UI.instance.isCursorHoveringMe();
         
 	        bool isRMBPressed = KeyMousePenInput.isRMBpressed();
@@ -140,7 +140,7 @@ namespace spz {
 	        Vector2 delta = KeyMousePenInput.delta_while_RMBpressed();
 	        float mouseMovementMagnitude;
 	        float zoomDirection;
-	        float mouseScroll = Mouse.current.scroll.ReadValue().y;
+	        float mouseScroll = GlobalClickBlocker.isLocked() ? 0 : Mouse.current.scroll.ReadValue().y;
 
 	        // Use mouse wheel if there's scroll input, else use delta from right mouse button
 	        if (mouseScroll != 0){

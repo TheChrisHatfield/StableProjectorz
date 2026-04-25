@@ -27,6 +27,15 @@ def tcp_port_accepting_connections(host: str, port: int, timeout: float = 0.35) 
 
 class SPZClient:
     """Client for communicating with StableProjectorz via JSON-RPC"""
+    DEFAULT_TIMEOUT_S = 5.0
+    LONG_OP_TIMEOUT_S = 120.0
+    _LONG_OP_METHODS = {
+        "spz.cmd.export_3d_with_textures_to_path",
+        "spz.cmd.export_3d_with_textures",
+        "spz.cmd.import_3d_model",
+        "spz.cmd.save_project",
+        "spz.cmd.load_project",
+    }
     
     def __init__(self, host='127.0.0.1', port=5555):
         self.host = host
@@ -45,7 +54,7 @@ class SPZClient:
         """Establish connection to server"""
         if self.socket is None or self.socket.fileno() == -1:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.settimeout(5.0)
+            self.socket.settimeout(self.DEFAULT_TIMEOUT_S)
             try:
                 self.socket.connect((self.host, self.port))
             except Exception as e:
@@ -56,6 +65,8 @@ class SPZClient:
         """Send a JSON-RPC request and return the response (thread-safe)."""
         with self._lock:
             self._connect()
+            timeout_s = self.LONG_OP_TIMEOUT_S if method in self._LONG_OP_METHODS else self.DEFAULT_TIMEOUT_S
+            self.socket.settimeout(timeout_s)
             
             self._request_id += 1
             req_id = self._request_id
@@ -511,6 +522,13 @@ class ModelsAPI:
             return result.get("name", "")
         return None
 
+    def import_from_file(self, filepath):
+        """Load a 3D model from an absolute file path (non-interactive; same as in-app Load model)."""
+        result = self._client._send_request("spz.cmd.import_3d_model", {
+            "filepath": str(filepath)
+        })
+        return result.get("success", False)
+
 
 # ============================================
 # Scene API
@@ -765,6 +783,13 @@ class ExportAPI:
     def export_view_textures(self):
         """Export view textures (what camera sees)"""
         result = self._client._send_request("spz.cmd.export_view_textures", {})
+        return result.get("success", False)
+
+    def export_3d_with_textures_to_path(self, mesh_filepath):
+        """Export the current 3D model and associated textures to a full mesh file path (no save dialog)."""
+        result = self._client._send_request("spz.cmd.export_3d_with_textures_to_path", {
+            "mesh_filepath": str(mesh_filepath)
+        })
         return result.get("success", False)
 
 
