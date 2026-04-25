@@ -26,6 +26,8 @@ namespace spz {
 	    static readonly float[] AutoLaunchRetryDelays = new float[] { 0.5f, 1.5f, 3f, 6f, 12f };
 
 	    static uint _lastLaunchedWebUiPid;
+	    Coroutine _waitForWebUiReady_crtn;
+	    bool _isWaitingForWebUiReady;
 
 	    /// <summary>Attempts to close the previously launched WebUI process (and its tree on Windows). Call before launching a new instance so the old window closes automatically.</summary>
 	    public static void TryCloseLastLaunchedWebUi() {
@@ -53,6 +55,76 @@ namespace spz {
 	    /// <summary>Record the PID of the WebUI launcher we just started so we can close it on next restart.</summary>
 	    public static void SetLastLaunchedWebUiPid(uint pid) {
 	        _lastLaunchedWebUiPid = pid;
+	    }
+
+	    /// <summary>Show "loading" status and then "ready" when Connection_MGR reports SD connected.</summary>
+	    public static void NotifyWebUiLaunchStarted() {
+	        if (instance == null) return;
+	        instance.BeginWebUiReadyWait();
+	    }
+
+	    void BeginWebUiReadyWait() {
+	        if (Viewport_StatusText.instance != null) {
+	            Viewport_StatusText.instance.ShowStatusText("Stable Diffusion is loading...", false, 8f, true);
+	        }
+	        if (_waitForWebUiReady_crtn != null) {
+	            StopCoroutine(_waitForWebUiReady_crtn);
+	            _waitForWebUiReady_crtn = null;
+	        }
+	        _isWaitingForWebUiReady = false;
+	        _waitForWebUiReady_crtn = StartCoroutine(WaitForWebUiReadyCoroutine());
+	    }
+
+	    IEnumerator WaitForWebUiReadyCoroutine() {
+	        _isWaitingForWebUiReady = true;
+	        float timeoutSec = 180f;
+	        float elapsed = 0f;
+	        // Restart path can momentarily keep stale "connected" state from the previous process.
+	        // Prefer disconnect->reconnect. If disconnect is never observed, allow sustained
+	        // connected fallback after a short window to avoid false "still loading" stalls.
+	        bool sawDisconnected = !Connection_MGR.is_sd_connected;
+	        const float warmupSec = 1.5f; // avoid immediate false-positive on stale connection state
+	        const float connectedFallbackSec = 6f; // accept steady connected if panel state never drops
+	        float connectedSince = -1f;
+	        int connectedStreak = 0;
+	        const int readyDebounceTicks = 3; // 3 * 0.5s = 1.5s stable connected before announcing ready
+	        while (elapsed < timeoutSec) {
+	            bool connected = Connection_MGR.is_sd_connected;
+	            if (!connected) {
+	                sawDisconnected = true;
+	                connectedSince = -1f;
+	                connectedStreak = 0;
+	            } else if (sawDisconnected && elapsed >= warmupSec) {
+	                connectedStreak++;
+	                if (connectedStreak >= readyDebounceTicks) {
+	                    if (Viewport_StatusText.instance != null)
+	                        Viewport_StatusText.instance.ShowStatusText("Stable Diffusion is ready.", false, 3f, false);
+	                    _isWaitingForWebUiReady = false;
+	                    _waitForWebUiReady_crtn = null;
+	                    yield break;
+	                }
+	            } else if (!sawDisconnected && elapsed >= warmupSec) {
+	                if (connectedSince < 0f) connectedSince = elapsed;
+	                if (elapsed - connectedSince >= connectedFallbackSec) {
+	                    connectedStreak++;
+	                    if (connectedStreak >= readyDebounceTicks) {
+	                        if (Viewport_StatusText.instance != null)
+	                            Viewport_StatusText.instance.ShowStatusText("Stable Diffusion is ready.", false, 3f, false);
+	                        _isWaitingForWebUiReady = false;
+	                        _waitForWebUiReady_crtn = null;
+	                        yield break;
+	                    }
+	                }
+	            } else {
+	                connectedStreak = 0;
+	            }
+	            yield return new WaitForSecondsRealtime(0.5f);
+	            elapsed += 0.5f;
+	        }
+	        if (Viewport_StatusText.instance != null)
+	            Viewport_StatusText.instance.ShowStatusText("Stable Diffusion still loading... (check connection/logs)", false, 4f, false);
+	        _isWaitingForWebUiReady = false;
+	        _waitForWebUiReady_crtn = null;
 	    }
 
 	    /// <summary>Cached result of nvidia-smi query for Settings UI to show "0: Name0, 1: Name1". Empty if not yet queried or nvidia-smi failed.</summary>
@@ -338,10 +410,19 @@ namespace spz {
 	            workingDir = Path.GetTempPath();
 
 	        try {
-	            uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(launchPath, isJustFile: true, workingDir, keepWindow: true, hidden: false, attachToConsole: false);
+	            bool showExternalWindows = UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1;
+	            uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
+	                launchPath,
+	                isJustFile: true,
+	                workingDir,
+	                keepWindow: showExternalWindows,
+	                hidden: !showExternalWindows,
+	                attachToConsole: false
+	            );
 	            if (pid != 0) {
 	                SetLastLaunchedWebUiPid(pid);
 	                UnityEngine.Debug.Log($"[LaunchWebUI] Process launched successfully with PID: {pid}");
+	                NotifyWebUiLaunchStarted();
 	            } else {
 	                UnityEngine.Debug.LogError("[LaunchWebUI] Failed to launch process (PID 0).");
 	            }

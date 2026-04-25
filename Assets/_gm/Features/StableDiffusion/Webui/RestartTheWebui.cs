@@ -89,14 +89,21 @@ namespace spz {
 	        full_path = OnWillLaunchWebui_AdjustArgs(full_path);
 	        string workingDir;
 	        string launchPath = LaunchWebUIBatFile.GetLaunchPathWithGpuSetting(full_path, out workingDir);
-	        uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(launchPath, isJustFile:true, workingDir, keepWindow:true, hidden:false, attachToConsole:false);
+	        bool showExternalWindows = UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1;
+	        uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
+	            launchPath,
+	            isJustFile:true,
+	            workingDir,
+	            keepWindow:showExternalWindows,
+	            hidden:!showExternalWindows,
+	            attachToConsole:false
+	        );
 	        if (pid == 0){
 	            Debug.LogError("Failed to launch the file. Consider launching StableProjectorz as Admin.");
 	            return;
 	        }
 	        LaunchWebUIBatFile.SetLastLaunchedWebUiPid(pid);
-	        string message = "WebUI restarted with current GPU setting.";
-	        Viewport_StatusText.instance.ShowStatusText(message, false, 3, false);
+	        LaunchWebUIBatFile.NotifyWebUiLaunchStarted();
 	        OnClicked?.Invoke();
 	    }
 

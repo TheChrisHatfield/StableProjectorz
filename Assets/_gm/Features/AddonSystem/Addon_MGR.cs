@@ -565,6 +565,7 @@ namespace spz {
 			
 			string pythonExe = TryResolvePythonExe();
 			if (string.IsNullOrEmpty(pythonExe)) pythonExe = "python";
+			bool showExternalWindows = UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1;
 			UnityEngine.Debug.Log($"[Addon_MGR] Starting Python server: socket port {_serverPort}, HTTP port {_httpServerPort}, exe: {pythonExe}");
 			
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
@@ -579,13 +580,15 @@ namespace spz {
 				string socketBound = (Addon_SocketServer.instance != null && Addon_SocketServer.instance.IsListening) ? "1" : "0";
 				string batContent = "@echo off\r\ncd /d \"" + workDir + "\"\r\nset SPZ_SOCKET_BOUND=" + socketBound + "\r\n\"" + pythonExe.Replace("\"", "\"\"") + "\" \"" + serverScriptPath.Replace("\"", "\"\"") + "\" --port " + _serverPort + " --addons-dir \"" + addonsPath.Replace("\"", "\"\"") + "\" " + httpArg + "\r\n";
 				File.WriteAllText(batPath, batContent);
-				UnityEngine.Debug.Log("[Addon_MGR] Starting addon server in background (hidden console).");
+				UnityEngine.Debug.Log(showExternalWindows
+					? "[Addon_MGR] Starting addon server with visible console (Settings)."
+					: "[Addon_MGR] Starting addon server in background (hidden console).");
 				uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
 					batPath,
 					isJustFile: true,
 					workDir,
-					keepWindow: false,
-					hidden: true,
+					keepWindow: showExternalWindows,
+					hidden: !showExternalWindows,
 					attachToConsole: false
 				);
 				if (pid != 0) {
