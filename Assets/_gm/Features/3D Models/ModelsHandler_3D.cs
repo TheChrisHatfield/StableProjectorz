@@ -196,6 +196,23 @@ namespace spz {
 	        }
 	    }
 
+	    public void ExportModelToPath( string absolutePath ){
+		    if( _importHelper==null){ return; }
+		    _importHelper.ExportModelToPath( absolutePath );
+	    }
+
+	    /// <summary>Import a mesh from a file (same as Load model). Returns false if busy or file invalid.</summary>
+	    public bool TryImportModelFromFile( string absolutePath ){
+		    if( _importHelper==null || string.IsNullOrEmpty( absolutePath ) ){
+			    return false;
+		    }
+		    if( ! _importHelper.CanImportFile( absolutePath ) ){
+			    return false;
+		    }
+		    _importHelper.ImportModel_via_Filepath( absolutePath );
+		    return true;
+	    }
+
 
 	    public byte[] Get_3dModel_asBytes(out string mesh_extension_){
 	        if (_importHelper._modelBytesCache != null){

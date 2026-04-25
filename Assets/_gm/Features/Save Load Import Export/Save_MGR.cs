@@ -90,6 +90,9 @@ namespace spz {
 
 
 	    public void Export3D_with_textures(){
+	        if( ModelsHandler_3D.instance==null ){
+		        return;
+	        }
 	        _isSaving = true;
         
 	        // let the user pick path and export the 3d model:
@@ -106,6 +109,36 @@ namespace spz {
 	        void OnReady2() => Save_Mesh_Textures( onHaveAlbedo:null, path_exported3D, isDilate: true, 
 	                                               forbid_albedoDelete:false,  onComplete:OnComplete);
 	        void OnComplete()=>_isSaving=false;
+	    }
+
+	    /// <summary>
+	    /// Same as <see cref="Export3D_with_textures"/> but writes the mesh to <paramref name="meshFilePath"/> (no file dialog). Textures use the same base path (extension stripped).
+	    /// Returns <c>true</c> if the mesh write was recorded and the rest of the pipeline was started; <c>false</c> on failure to produce a mesh path.
+	    /// </summary>
+	    public bool Export3D_with_textures_ToPath( string meshFilePath ){
+		    if( string.IsNullOrEmpty( meshFilePath ) ){
+			    return false;
+		    }
+		    var mh = ModelsHandler_3D.instance;
+		    if( mh==null ){
+			    return false;
+		    }
+		    _isSaving = true;
+		    mh.ExportModelToPath( meshFilePath );
+		    string path_exported3D = mh._path_recentlyExported;
+		    if( string.IsNullOrEmpty( path_exported3D ) ){
+			    _isSaving = false;
+			    if( Viewport_StatusText.instance!=null ){
+				    Viewport_StatusText.instance.ShowStatusText( "Export: mesh path not written.", false, 5f, false );
+			    }
+			    return false;
+		    }
+		    path_exported3D = Path.ChangeExtension( path_exported3D, null );
+		    _saveLoad_helper.Save_FinalCompositeTexture( OnReady1 );
+		    void OnReady1() => StartCoroutine( WaitForRenderAll_crtn( skipAO_blit:true, OnReady2 ) );
+		    void OnReady2() => Save_Mesh_Textures( onHaveAlbedo:null, path_exported3D, isDilate: true, forbid_albedoDelete:false, onComplete:OnComplete );
+		    void OnComplete() => _isSaving = false;
+		    return true;
 	    }
 
 

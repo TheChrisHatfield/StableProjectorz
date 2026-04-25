@@ -5,6 +5,64 @@ This file tracks changes on top of that baseline until the next release bump.
 
 ---
 
+## [Unreleased] — 2026-04-25 — SPZ GO bridge hardening, startup stability, WebUI GPU selection
+
+### Summary
+
+Stabilized Blender/SPZ GO exchange and in-app add-on behavior, reduced startup window flicker from addon server launch/restart paths, and improved Stable Diffusion GPU device selection so Restart WebUI respects the selected CUDA device more reliably.
+
+### SPZ GO / Blender bridge
+
+- **`External/Blender_SpzBridge/__init__.py`:**
+  - `spz.go_export` / exchange FBX export now supports:
+    - **selection present:** export active object (fallback first selected),
+    - **no selection:** default full-scene FBX behavior (`use_selection=False`).
+  - Added texture auto-assign after SPZ import:
+    - finds best exchange texture beside exported FBX,
+    - ensures node graph on target mesh material (`UV Map -> Image Texture -> Principled Base Color`),
+    - applies to selected/imported mesh objects.
+  - Added new operator/button: **`Apply SPZ maps only`** (`spz.go_apply_maps_only`) to refresh maps from SPZ and apply to selected meshes without reimporting geometry.
+
+### SPZ GO (in-app add-on + RPC reliability)
+
+- **`Assets/StreamingAssets/Addons/StableProjectorzGO/__init__.py`:**
+  - Added detailed import/export diagnostics (raw/normalized paths, existence/size checks, RPC payload/response, exception traceback) to console for troubleshooting.
+- **`Assets/_gm/Features/AddonSystem/AddonUI_MGR.cs`:**
+  - SPZ GO native in-process import/export button path now **falls back to Python callback** automatically when native fast-path fails.
+- **`Assets/_gm/Features/AddonSystem/Addon_SocketServer.cs`:**
+  - Replaced single 5s RPC wait with method-aware timeouts:
+    - default commands: 10s
+    - long ops (import/export/save/load, texture export): 120s
+- **`Assets/StreamingAssets/AddonSystem/spz.py`:**
+  - Client method-aware timeouts aligned for long operations (120s).
+- **`Assets/_gm/Features/3D Models/ModelsHandler3D_ImportHelper.cs`:**
+  - `.fbx` export-to-path favors binary-capable scene re-export when live model exists;
+  - improved fallback/logging when only cached bytes are available.
+
+### Startup / launch behavior
+
+- **`Assets/_gm/Features/AddonSystem/Addon_MGR.cs`:**
+  - Add-on Python server now launches hidden in player builds (reduced visible console flicker).
+  - Added `_autoRestartWithAddonsOnServerFail` (default `false`) so relaunch via `Run_with_Addons.bat` is opt-in, avoiding surprise restart/flicker.
+
+### Stable Diffusion GPU selection
+
+- **`Assets/_gm/Features/StableDiffusion/Webui/Launch_WebUI_bat_File.cs`:**
+  - Hardened `GetLaunchPathWithGpuSetting`:
+    - parses launch path + appended args robustly,
+    - prefers direct `launch.py` execution whenever available,
+    - uses venv python when present, else PATH python fallback,
+    - preserves extra launch args in `COMMANDLINE_ARGS`,
+    - keeps `CUDA_VISIBLE_DEVICES` flow and adds clearer logs for selected path/fallback.
+
+### Notes for testers
+
+- SPZ GO in-app Import/Export: check Unity console for detailed diagnostics if failure occurs.
+- Blender SPZ GO: test both **Import from StableProjectorz** and **Apply SPZ maps only** on selected mesh.
+- GPU switching: change Settings `SD GPU`, click **Restart WebUI (apply GPU)**, verify `[LaunchWebUI]` logs show direct launch path and selected CUDA device.
+
+---
+
 ## [Unreleased] — 2026-04-07 — Add-on API: editor layout, display mode, UI chrome (refactor notes)
 
 ### Summary

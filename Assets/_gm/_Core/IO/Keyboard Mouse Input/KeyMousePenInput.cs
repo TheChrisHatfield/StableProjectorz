@@ -13,6 +13,10 @@ namespace spz {
 	    static bool _haveLastPenOrHoverScreenPos;
 	    const float MouseDeltaToBreakPenLatchSq = 2.25f; // 1.5 px — ignore sub-pixel jitter
 
+	    static bool IsGlobalInputBlocked(){
+	        return GlobalClickBlocker.isLocked();
+	    }
+
 	    /// <summary>True when pen tip is pressed (and no barrel/eraser). Used for Wacom stylus: tip = brush mode.</summary>
 	    public static bool isPenTipPressed(){
 	        if (Pen.current == null) return false;
@@ -35,6 +39,7 @@ namespace spz {
 	    }
 
 	    public static bool isLMBpressed(bool checkOnlyPen=false){
+	        if (IsGlobalInputBlocked()) { return false; }
 	        bool isMousePressed =  Mouse.current!=null  &&  Mouse.current.leftButton.isPressed;
 	        bool isPenTip  =  Pen.current != null  &&  Pen.current.tip.isPressed;
 	        if(isPenTip){
@@ -51,6 +56,7 @@ namespace spz {
 	    }
 
 	    public static bool isLMBpressedThisFrame(){
+	        if (IsGlobalInputBlocked()) { return false; }
 	        bool isMousePressed = Mouse.current!=null  &&  Mouse.current.leftButton.wasPressedThisFrame;
 	        bool isPenTip  =  Pen.current != null  &&  Pen.current.tip.wasPressedThisFrame;
 	        if(isPenTip){
@@ -66,6 +72,7 @@ namespace spz {
 	    }
 
 	    public static bool isLMBreleasedThisFrame(){
+	        if (IsGlobalInputBlocked()) { return false; }
 	        bool isMouseReleased =  Mouse.current!=null  &&  Mouse.current.leftButton.wasReleasedThisFrame;
 	        bool isPenTipReleased   =  Pen.current != null  &&  Pen.current.tip.wasReleasedThisFrame;
 	        bool isPenEraserReleased = Pen.current != null && Pen.current.eraser.wasReleasedThisFrame;
@@ -74,12 +81,14 @@ namespace spz {
 
 
 	    public static bool isRMBpressed(){
+	        if (IsGlobalInputBlocked()) { return false; }
 	        bool isMousePressed =  Mouse.current!=null  &&  Mouse.current.rightButton.isPressed;
 	        bool isPenPressed  =  Pen.current != null  &&  Pen.current.firstBarrelButton.isPressed;
 	        return isMousePressed || isPenPressed;
 	    }
 
 	    public static bool isRMBpressedThisFrame(){
+	        if (IsGlobalInputBlocked()) { return false; }
 	        bool isMousePressed =  Mouse.current!=null  &&  Mouse.current.rightButton.wasPressedThisFrame;
 	        bool isPenPressed  =  Pen.current != null  &&  Pen.current.firstBarrelButton.wasPressedThisFrame;
 	        return isMousePressed || isPenPressed;
@@ -87,18 +96,21 @@ namespace spz {
 
 
 	    public static bool isMMBpressed(){
+	        if (IsGlobalInputBlocked()) { return false; }
 	        bool isMousePressed =  Mouse.current!=null  &&  Mouse.current.middleButton.isPressed;
 	        bool isPenPressed  =  Pen.current != null  &&  Pen.current.secondBarrelButton.isPressed;
 	        return isMousePressed || isPenPressed;
 	    }
 
 	    public static bool isMMBpressedThisFrame(){
+	        if (IsGlobalInputBlocked()) { return false; }
 	        bool isMousePressed =  Mouse.current!=null  &&  Mouse.current.middleButton.wasPressedThisFrame;
 	        bool isPenPressed  =  Pen.current != null  &&  Pen.current.secondBarrelButton.wasPressedThisFrame;
 	        return isMousePressed || isPenPressed;
 	    }
 
 	    public static bool isMMBreleasedThisFrame(){
+	        if (IsGlobalInputBlocked()) { return false; }
 	        bool isMousePressed =  Mouse.current!=null  &&  Mouse.current.middleButton.wasReleasedThisFrame;
 	        bool isPenPressed  =  Pen.current != null  &&  Pen.current.secondBarrelButton.wasReleasedThisFrame;
 	        return isMousePressed || isPenPressed;
@@ -108,6 +120,7 @@ namespace spz {
 	    // NO NEED TO SCALE its output by Time.deltaTime
 	    // See https://discussions.unity.com/t/mouse-sensitivity-changes-between-editor-and-built-exe/20038
 	    public static Vector2 delta_cursor( bool normalizeByScreenDiagonal=true ){
+	        if (IsGlobalInputBlocked()) { return Vector2.zero; }
 	        float inv_screenDiagonal =  1.0f / Mathf.Sqrt(Screen.width*Screen.width + Screen.height*Screen.height);
 	        Vector2 mouseDT =  Mouse.current!=null ?  Mouse.current.delta.ReadValue() : Vector2.zero;
 	        Vector2 penDT   =  Pen.current != null ?  Pen.current.delta.ReadValue() : Vector2.zero;
@@ -121,6 +134,7 @@ namespace spz {
 	    // NO NEED TO SCALE its output by Time.deltaTime
 	    // See https://discussions.unity.com/t/mouse-sensitivity-changes-between-editor-and-built-exe/20038
 	    public static Vector2 delta_while_LMBpressed( bool normalizeByScreenDiagonal=true ){
+	        if (IsGlobalInputBlocked()) { return Vector2.zero; }
 	        float inv_screenDiagonal =  1.0f / Mathf.Sqrt(Screen.width*Screen.width + Screen.height*Screen.height);
 	        bool isMousePressed =  Mouse.current!=null  &&  Mouse.current.leftButton.isPressed;
 	        bool isPenTip   =  Pen.current != null  &&  Pen.current.tip.isPressed;
@@ -143,6 +157,7 @@ namespace spz {
 	    // NO NEED TO SCALE its output by Time.deltaTime
 	    // See https://discussions.unity.com/t/mouse-sensitivity-changes-between-editor-and-built-exe/20038
 	    public static Vector2 delta_while_RMBpressed( bool normalizeByScreenDiagonal=true ){
+	        if (IsGlobalInputBlocked()) { return Vector2.zero; }
 	        float inv_screenDiagonal =  1.0f / Mathf.Sqrt(Screen.width*Screen.width + Screen.height*Screen.height);
 	        bool isMousePressed =  Mouse.current!=null  &&  Mouse.current.rightButton.isPressed;
 	        bool isPenPressed   =  Pen.current != null  &&  Pen.current.firstBarrelButton.isPressed;
@@ -164,6 +179,7 @@ namespace spz {
 	    // NO NEED TO SCALE its output by Time.deltaTime
 	    // See https://discussions.unity.com/t/mouse-sensitivity-changes-between-editor-and-built-exe/20038
 	    public static Vector2 delta_while_MMBpressed( bool normalizeByScreenDiagonal=true ){
+	        if (IsGlobalInputBlocked()) { return Vector2.zero; }
 	        float inv_screenDiagonal =  1.0f / Mathf.Sqrt(Screen.width*Screen.width + Screen.height*Screen.height);
 	        bool isMousePressed =  Mouse.current!=null  &&  Mouse.current.middleButton.isPressed;
 	        bool isPenPressed   =  Pen.current != null  &&  Pen.current.secondBarrelButton.isPressed;

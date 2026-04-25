@@ -9,6 +9,12 @@ namespace spz {
 
 	//assistant-object, which helps our 'ModelsHandler_3D' to bring a 3d model into the project.
 	public class ModelsHandler3D_ImportHelper : MonoBehaviour{
+	    static bool IsFbxPath(string path){
+		    if(string.IsNullOrEmpty(path)){ return false; }
+		    string ext = Path.GetExtension(path);
+		    return string.Equals(ext, ".fbx", StringComparison.OrdinalIgnoreCase);
+	    }
+
 
 	    [SerializeField] UDIMs_Helper _udims_helper;
 	    [SerializeField] Objs3D_Container o3d;
@@ -221,7 +227,10 @@ namespace spz {
 	        void onComplete(string path){
 	            _path_recentlyExported = path;
 	            if(string.IsNullOrEmpty(path)){ return; }
-	            Directory.CreateDirectory( Path.GetDirectoryName(path) ); //ensure dir exists.
+	            var dir = Path.GetDirectoryName(path);
+	            if (!string.IsNullOrEmpty(dir)) {
+		            Directory.CreateDirectory( dir );
+	            }
 	            File.WriteAllBytes(path, _modelBytesCache);
 	            Viewport_StatusText.instance.ShowStatusText("Exported the mesh to\n"+path, false, 5, false);
 	        }
@@ -249,6 +258,12 @@ namespace spz {
         
 	        void PerformSave(string path){
 	             path = Path.ChangeExtension(path, "fbx");
+	             // Always record where the FBX was written (Export3D_with_textures* and API export-to-path rely on this).
+	             _path_recentlyExported = path;
+	            if (o3d == null || o3d.currModelRootGO == null) {
+		            UnityEngine.Debug.LogWarning("[ModelsHandler3D_ImportHelper] SaveDefaultDoor_toFile: no current model root GO; cannot re-export FBX scene.");
+		            return;
+	            }
 	            _saveFBX_helper.SaveModels(path, o3d.currModelRootGO);
 	        }
 
@@ -263,6 +278,37 @@ namespace spz {
 	        else{
 	            PerformSave(pathWithExten);
 	        }
+	    }
+
+
+	    /// <summary>Non-interactive export: write the current model to the given full path (cached original format, or FBX of scene root).</summary>
+	    public void ExportModelToPath( string absolutePath ){
+		    if( string.IsNullOrEmpty(absolutePath) ){
+			    return;
+		    }
+		    // Blender 4+ rejects ASCII FBX. For any explicit .fbx target, always re-export
+		    // from the current scene through the Unity FBX writer helper (binary-preferred),
+		    // instead of writing cached imported bytes verbatim.
+		    if( IsFbxPath( absolutePath ) ){
+			    if( o3d != null && o3d.currModelRootGO != null ){
+				    SaveDefaultDoor_toFile( absolutePath );
+				    return;
+			    }
+			    // Fallback: if no live model root exists but cached bytes do, still export those bytes
+			    // so automation does not fail hard (may still be ASCII depending on source file).
+			    if( _modelBytesCache != null ){
+				    UnityEngine.Debug.LogWarning("[ModelsHandler3D_ImportHelper] ExportModelToPath: no live model root; writing cached bytes for .fbx path.");
+				    SaveCachedMesh_toFile( absolutePath );
+				    return;
+			    }
+			    UnityEngine.Debug.LogWarning("[ModelsHandler3D_ImportHelper] ExportModelToPath: no live model root and no cached mesh bytes.");
+			    return;
+		    }
+		    if( _modelBytesCache != null ){
+			    SaveCachedMesh_toFile( absolutePath );
+		    }else{
+			    SaveDefaultDoor_toFile( absolutePath );
+		    }
 	    }
 
 

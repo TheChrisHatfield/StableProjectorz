@@ -225,6 +225,7 @@ namespace spz {
 
 
 	    void Scroll_to_ChangeMode_maybe(){
+	        if (GlobalClickBlocker.isLocked()) { return; }
 	        //we either Shift+Scroll or Ctrl+Scroll, depends on the preferences:
 	        bool use_ctrl = Settings_MGR.instance.get_useCtrlScroll_for_WorkflowMode_swaps();
 	        if (use_ctrl){ 

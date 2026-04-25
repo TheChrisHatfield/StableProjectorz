@@ -1,5 +1,7 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using UnityEngine;
 using Autodesk.Fbx;
 using System.IO;
@@ -10,23 +12,134 @@ namespace spz {
 	// Useful when saving the project.
 	public class ModelsHandler_SaveFBX_Helper : MonoBehaviour
 	{
-	    public void SaveModels(string finalFilepath_with_exten, GameObject saveMe){
-	        using(FbxManager fbxManager = FbxManager.Create ()){
-	            // configure IO settings.
-	            fbxManager.SetIOSettings (FbxIOSettings.Create (fbxManager, Globals.IOSROOT));
+		static readonly string[] s_fbxBinaryWriterDescriptionHints = {
+			"FBX binary (*.fbx)",
+			"Autodesk FBX (binary) (*.fbx)", "Autodesk FBX 2014 (binary) (*.fbx)", "Autodesk FBX 2010 (binary) (*.fbx)",
+			"FBX 6.0 binary (*.fbx)", "FBX 7.0 binary (*.fbx)", "FBX 7.4.0 binary", "FBX 6.0 binary", "Autodesk Binary FBX",
+		};
 
-	            using (FbxExporter exporter = FbxExporter.Create (fbxManager, "myExporter")){
+		static readonly string[] s_fbxAsciiOffIoKeys = {
+			"Export|FBX|Ascii", "Export|ExportInASCII", "Export|FBX|ExportInASCII", "Export|FBX|FileFormat|eASCII", "Export|FBX|ExportInAscii",
+		};
 
-	                bool status = exporter.Initialize(finalFilepath_with_exten, -1, fbxManager.GetIOSettings());
-	                FbxScene scene = FbxScene.Create (fbxManager, "StableProjectorz Scene");
-	                FbxNode fbxRootNode = scene.GetRootNode();
+		/// <summary>Blender 4+ / io_scene_fbx does not import ASCII FBX. Avoid depending on a single
+		/// <see cref="FbxIOPluginRegistry.FindWriterIDByDescription"/> string (varies by SDK) — see <see cref="ResolveFbxBinaryWriterFormatId"/>.</summary>
+		public void SaveModels(string finalFilepath_with_exten, GameObject saveMe){
+			using (FbxManager fbxManager = FbxManager.Create()) {
+				fbxManager.SetIOSettings(FbxIOSettings.Create(fbxManager, Globals.IOSROOT));
+				ApplyFbxExportPreferBinary(fbxManager.GetIOSettings());
+				int fileFormat = ResolveFbxBinaryWriterFormatId(fbxManager.GetIOPluginRegistry());
+				if (fileFormat < 0) {
+					UnityEngine.Debug.LogWarning(
+						"[SPZ] FBX: no explicit binary writer id; SDK will pick default — if Blender reports ASCII, update ResolveFbxBinaryWriterFormatId."
+					);
+				}
+				using (FbxExporter exporter = FbxExporter.Create(fbxManager, "myExporter")) {
+					if (!exporter.Initialize(finalFilepath_with_exten, fileFormat, fbxManager.GetIOSettings())) {
+						UnityEngine.Debug.LogError(
+							"[SPZ] FBX Export Initialize failed: " + exporter.GetStatus().GetErrorString()
+						);
+						return;
+					}
+					FbxScene scene = FbxScene.Create(fbxManager, "StableProjectorz Scene");
+					FbxNode fbxRootNode = scene.GetRootNode();
+					Vector3 rootLocalRot_adj = new Vector3(90, -90, 180);
+					FBX_ExportComponents(saveMe, rootLocalRot_adj, scene, fbxRootNode);
+					if (!exporter.Export(scene)) {
+						UnityEngine.Debug.LogError(
+							"[SPZ] FBX Export() failed: " + exporter.GetStatus().GetErrorString()
+						);
+					}
+				}
+			}
+		}
 
-	                Vector3 rootLocalRot_adj = new Vector3(90, -90, 180);
-	                FBX_ExportComponents(saveMe, rootLocalRot_adj, scene, fbxRootNode);
-	                status = exporter.Export(scene); // Export the scene to the file.
-	            }
-	        }//end 'using FbxManager'
-	    }
+		static int TryInvokeIntNoArgs(object target, string methodName) {
+			if (target == null) {
+				return -1;
+			}
+			try {
+				MethodInfo m = target.GetType().GetMethod(
+					methodName, BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null
+				);
+				if (m == null) {
+					return -1;
+				}
+				object o = m.Invoke(target, null);
+				if (o == null) {
+					return -1;
+				}
+				if (o is int vi) {
+					return vi >= 0 ? vi : -1;
+				}
+				try {
+					int c = System.Convert.ToInt32(o);
+					return c >= 0 ? c : -1;
+				} catch {
+					return -1;
+				}
+			} catch {
+				return -1;
+			}
+		}
+
+		/// <summary>Best effort: native binary writer, scan writers, or known <c>FindWriterIDByDescription</c> labels.</summary>
+		static int ResolveFbxBinaryWriterFormatId(FbxIOPluginRegistry reg) {
+			if (reg == null) {
+				return -1;
+			}
+			int id = TryInvokeIntNoArgs(reg, "GetNativeWriterFormat");
+			if (id >= 0) {
+				return id;
+			}
+			int n = TryInvokeIntNoArgs(reg, "GetWriterFormatCount");
+			if (n > 0) {
+				try {
+					MethodInfo getDesc = reg.GetType().GetMethod("GetWriterFormatDescription", new[] { typeof(int) });
+					if (getDesc != null) {
+						int cap = Math.Min(n, 256);
+						for (int i = 0; i < cap; i++) {
+							var o = getDesc.Invoke(reg, new object[] { i });
+							if (!(o is string desc) || string.IsNullOrEmpty(desc)) {
+								continue;
+							}
+							if (desc.IndexOf("fbx", StringComparison.OrdinalIgnoreCase) < 0) {
+								continue;
+							}
+							if (desc.IndexOf("binary", StringComparison.OrdinalIgnoreCase) < 0) {
+								continue;
+							}
+							if (desc.IndexOf("ascii", StringComparison.OrdinalIgnoreCase) >= 0) {
+								continue;
+							}
+							return i;
+						}
+					}
+				} catch { /* ignore, fall back */ }
+			}
+			foreach (string h in s_fbxBinaryWriterDescriptionHints) {
+				if (string.IsNullOrEmpty(h)) {
+					continue;
+				}
+				int k = reg.FindWriterIDByDescription(h);
+				if (k >= 0) {
+					return k;
+				}
+			}
+			return -1;
+		}
+
+		/// <summary>Try common SDK property paths to prefer binary over ASCII in IO settings (no-op if a path is unknown).</summary>
+		static void ApplyFbxExportPreferBinary(FbxIOSettings io) {
+			if (io == null) {
+				return;
+			}
+			foreach (string k in s_fbxAsciiOffIoKeys) {
+				try {
+					io.SetBoolProp(k, false);
+				} catch { /* some SDKs omit a path; ignore */ }
+			}
+		}
 
 
 	    // https://github.com/Unity-Technologies/com.autodesk.fbx/blob/master/examples/export/Assets/Editor/FbxExporter02.cs

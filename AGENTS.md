@@ -6,7 +6,7 @@
 
 ## Learned Workspace Facts
 
-- Python add-ons connect to Unity over TCP JSON-RPC on port 5555 (`Addon_SocketServer`, wired from `Addon_MGR`); `Addon_HttpServer` optionally exposes REST endpoints that delegate to the same JSON-RPC handler.
+- Python add-ons connect to Unity over TCP JSON-RPC on port 5555 (`Addon_SocketServer`, wired from `Addon_MGR`); `Addon_HttpServer` optionally exposes REST endpoints that delegate to the same JSON-RPC handler. DCC/Blender file exchange is the managed in-app add-on `Assets/StreamingAssets/Addons/StableProjectorzGO` (Add-on Manager, “StableProjectorz GO”); the separate Blender add-on is `External/Blender_SpzBridge/`. Headless mesh I/O uses `spz.cmd.import_3d_model` and `spz.cmd.export_3d_with_textures_to_path` (also `POST /api/v1/meshes/import` and `POST /api/v1/export/3d_to_path` on the HTTP server).
 - IL2CPP player builds can assert on `Resources.GetBuiltinResource` in add-on UI (`AddonManager_UI`); prefer explicit fallback sprites or project assets instead of built-in resource lookup on those paths.
 - Release builds are normally produced from the Unity Editor (e.g. Build and Run); expect output under `Build_IL2CPP` such as `StableProjectorz.exe`, not an assumed CLI build unless Unity is invoked with a known editor path.
 - Runtime brush painting uses `BrushAlphas_MGR.GetCurrentBrushStampTexOrFallback()` as the canonical stamp source for the paint pipeline.

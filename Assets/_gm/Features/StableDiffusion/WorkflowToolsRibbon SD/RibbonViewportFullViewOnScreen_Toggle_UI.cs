@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace spz {
@@ -51,7 +52,7 @@ namespace spz {
 			if (host == null) {
 				return;
 			}
-			ApplyComponentToGameObject(host.gameObject, spec);
+			_ = ApplyComponentToGameObject(host.gameObject, spec);
 		}
 
 		/// <summary>When <see cref="SD_WorkflowOptionsRibbon_UI"/> is not in the scene yet, still mount the dock on the same GameObject as <see cref="GenerateButtons_Main_UI"/> so the strip above GEN ART can build (add-on enable / HTTP-off path).</summary>
@@ -60,13 +61,13 @@ namespace spz {
 			if (gbm == null) {
 				return false;
 			}
-			ApplyComponentToGameObject(gbm.gameObject, spec);
-			return true;
+			return ApplyComponentToGameObject(gbm.gameObject, spec);
 		}
 
-		static void ApplyComponentToGameObject(GameObject go, RibbonDock_ButtonSpec spec) {
+		/// <returns>False if the dock component could not be added (e.g. <see cref="GameObject.AddComponent"/> failed).</returns>
+		static bool ApplyComponentToGameObject(GameObject go, RibbonDock_ButtonSpec spec) {
 			if (go == null) {
-				return;
+				return false;
 			}
 			var c = go.GetComponent<RibbonViewportFullViewOnScreen_Toggle_UI>();
 			bool createdNow = false;
@@ -85,11 +86,16 @@ namespace spz {
 				specChanged = !SpecsEqual(c._spec, spec);
 				c.ApplySpec(spec);
 			}
+			// AddComponent can throw (e.g. game object being destroyed); do not dereference a still-null c.
+			if (c == null) {
+				return false;
+			}
 			bool rowMissing = c._builtRowRt == null || c._builtRowRt.gameObject == null || !c._builtRowRt.gameObject.activeInHierarchy;
 			bool spacerMissing = c._spacerRowRt == null || c._spacerRowRt.gameObject == null || !c._spacerRowRt.gameObject.activeInHierarchy;
 			if (createdNow || specChanged || !c._built || rowMissing || (c._built && spacerMissing)) {
 				c.NotifyAttachRequested();
 			}
+			return true;
 		}
 
 		/// <summary>True if any instance finished layout with an active row (for <see cref="Addon_MGR"/>; RPC can return before async build completes).</summary>
@@ -118,14 +124,57 @@ namespace spz {
 			}
 		}
 
-		/// <summary>Removes all dock <see cref="MonoBehaviour"/> instances (e.g. when <see cref="Addon_MGR.RibbonOnlyFullscreenAddonId"/> is disabled). Destroys injected ribbon rows in each instance's <c>OnDestroy</c>.</summary>
+		/// <summary>Removes all dock <see cref="MonoBehaviour"/> instances (e.g. when <see cref="Addon_MGR.RibbonOnlyFullscreenAddonId"/> is disabled). Tears down rows/coroutines first, then strips orphans by name, then removes behaviours.</summary>
 		public static void TeardownAllDocksForAddonDisabled() {
-			var all = UnityEngine.Object.FindObjectsOfType<RibbonViewportFullViewOnScreen_Toggle_UI>(true);
+			var all = UnityEngine.Object.FindObjectsByType<RibbonViewportFullViewOnScreen_Toggle_UI>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+			for (int i = 0; i < all.Length; i++) {
+				if (all[i] != null) {
+					all[i].TeardownForAddonDisabled();
+				}
+			}
+			DestroyAllInjectedFullViewRowsInOpenScenes();
 			for (int i = 0; i < all.Length; i++) {
 				var c = all[i];
 				if (c != null) {
 					UnityEngine.Object.Destroy(c);
 				}
+			}
+		}
+
+		/// <summary>Stops build coroutine, removes injected row(s) + spacers, restores Gen Art layout — safe to call while add-on is disabled.</summary>
+		public void TeardownForAddonDisabled() {
+			TearDownBuiltDock();
+		}
+
+		static void DestroyAllInjectedFullViewRowsInOpenScenes() {
+			var toDestroy = new List<GameObject>(8);
+			for (int si = 0; si < SceneManager.sceneCount; si++) {
+				var sc = SceneManager.GetSceneAt(si);
+				if (!sc.isLoaded) {
+					continue;
+				}
+				var roots = sc.GetRootGameObjects();
+				for (int ri = 0; ri < roots.Length; ri++) {
+					CollectNamedFullViewRowRoots(roots[ri].transform, toDestroy);
+				}
+			}
+			for (int i = 0; i < toDestroy.Count; i++) {
+				if (toDestroy[i] != null) {
+					UnityEngine.Object.Destroy(toDestroy[i]);
+				}
+			}
+		}
+
+		static void CollectNamedFullViewRowRoots(Transform t, List<GameObject> outList) {
+			if (t == null) {
+				return;
+			}
+			if (string.Equals(t.name, RowName, StringComparison.Ordinal)
+			    || string.Equals(t.name, SpacerName, StringComparison.Ordinal)) {
+				outList.Add(t.gameObject);
+			}
+			for (int c = 0; c < t.childCount; c++) {
+				CollectNamedFullViewRowRoots(t.GetChild(c), outList);
 			}
 		}
 
@@ -433,7 +482,7 @@ namespace spz {
 			if (GenerateButtons_Main_UI.instance != null) {
 				return GenerateButtons_Main_UI.instance;
 			}
-			return UnityEngine.Object.FindObjectOfType<GenerateButtons_Main_UI>(true);
+			return UnityEngine.Object.FindFirstObjectByType<GenerateButtons_Main_UI>(FindObjectsInactive.Include);
 		}
 
 		static RectTransform ResolveGenArtRect(SD_WorkflowOptionsRibbon_UI host, RectTransform wholePanelRoot) {
@@ -744,7 +793,9 @@ namespace spz {
 				spacerRt = spacer.AddComponent<RectTransform>();
 				spacerRt.SetParent(vlgRoot, false);
 			}
-			spacerRt.SetSiblingIndex(Mathf.Clamp(siblingIndex, 0, vlgRoot.childCount - 1));
+			// If max < min, Unity's Mathf.Clamp is not reliable; guard childCount==0 the same way.
+			int lastSibling = Mathf.Max(0, vlgRoot.childCount - 1);
+			spacerRt.SetSiblingIndex(Mathf.Clamp(siblingIndex, 0, lastSibling));
 			spacerRt.anchorMin = Vector2.zero;
 			spacerRt.anchorMax = Vector2.zero;
 			spacerRt.pivot = new Vector2(0.5f, 0.5f);

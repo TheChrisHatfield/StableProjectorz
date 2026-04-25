@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.UI;
@@ -25,6 +26,8 @@ namespace spz {
 		
 		// Callback registry for button clicks
 		private Dictionary<string, Action> _buttonCallbacks = new Dictionary<string, Action>();
+		
+		const string StableProjectorzGoAddonId = "StableProjectorzGO";
 		
 		// Registry of UI element values by element ID
 		private Dictionary<string, object> _uiElementValues = new Dictionary<string, object>();
@@ -236,6 +239,7 @@ namespace spz {
 						SendCallbackToPython(addonId, callbackName);
 					}
 				});
+				RegisterSpzGoNativeButtonCallbackIfNeeded(addonId, panelId, callbackName);
 			}
 			
 			// Register with add-on
@@ -244,6 +248,105 @@ namespace spz {
 			}
 			
 			return buttonObj.GetInstanceID().ToString();
+		}
+		
+		/// <summary>
+		/// SPZ GO Import/Export must work when FastAPI is up but the add-on is registered in-Unity; HTTP /invoke_callback can fail
+		/// (Python module key mismatch) or be unreachable. In-process handlers read the same TMP fields the Python path uses.
+		/// </summary>
+		void RegisterSpzGoNativeButtonCallbackIfNeeded(string addonId, string panelId, string callbackName) {
+			if (!string.Equals(addonId, StableProjectorzGoAddonId, StringComparison.Ordinal))
+				return;
+			if (string.Equals(callbackName, "do_import_from_path", StringComparison.Ordinal)) {
+				RegisterButtonCallback(addonId, callbackName, () => SpzGoRunHeadlessImportOrExportFromPanel(addonId, panelId, callbackName, isImport: true));
+			} else if (string.Equals(callbackName, "do_export_to_path", StringComparison.Ordinal)) {
+				RegisterButtonCallback(addonId, callbackName, () => SpzGoRunHeadlessImportOrExportFromPanel(addonId, panelId, callbackName, isImport: false));
+			}
+		}
+		
+		/// <summary>Order of TextInput_* rows from register(): Blender, Import path, Export path.</summary>
+		void SpzGoRunHeadlessImportOrExportFromPanel(string addonId, string panelId, string callbackName, bool isImport) {
+			bool okNative = TrySpzGoRunHeadlessImportOrExportFromPanel(panelId, isImport);
+			if (okNative) {
+				return;
+			}
+			UnityEngine.Debug.LogWarning($"[AddonUI_MGR] SPZ GO native {(isImport ? "import" : "export")} failed; falling back to Python callback {addonId}.{callbackName}.");
+			SendCallbackToPython(addonId, callbackName);
+		}
+
+		bool TrySpzGoRunHeadlessImportOrExportFromPanel(string panelId, bool isImport) {
+			var panel = FindUIElement(panelId);
+			if (panel == null) {
+				UnityEngine.Debug.LogWarning($"[AddonUI_MGR] SPZ GO: panel {panelId} not found for headless {(isImport ? "import" : "export")}.");
+				SpzGoStatusLine(isImport ? "Import: panel not ready" : "Export: panel not ready", false);
+				return false;
+			}
+			// Do not only scan immediate children: a panel prefab can wrap the stack (Title / Content) so
+			// TextInput_* are nested; depth-first order matches add_text_input call order in register().
+			var tr = panel.transform;
+			var allT = tr.GetComponentsInChildren<Transform>(true);
+			var textRowRoots = new List<Transform>(3);
+			for (int i = 0; i < allT.Length; i++) {
+				var t = allT[i];
+				if (t == null || t == tr) continue;
+				if (t.name == null) continue;
+				if (t.name.StartsWith("TextInput_", StringComparison.Ordinal))
+					textRowRoots.Add(t);
+			}
+			var fields = new List<TMP_InputField>(3);
+			for (int i = 0; i < textRowRoots.Count; i++) {
+				var inf = textRowRoots[i].GetComponentInChildren<TMP_InputField>(true);
+				if (inf != null) fields.Add(inf);
+			}
+			if (fields.Count < 3) {
+				UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO: expected 3 text rows (blender, import, export), got " + fields.Count);
+				SpzGoStatusLine("Set mesh paths in the add-on (Autofill) or re-enable the add-on", false);
+				return false;
+			}
+			int idx = isImport ? 1 : 2;
+			string path = fields[idx].text;
+			if (string.IsNullOrWhiteSpace(path)) {
+				SpzGoStatusLine(isImport ? "Import: path is empty" : "Export: path is empty", false);
+				return false;
+			}
+			path = path.Trim().Trim('"');
+			try {
+				path = Path.GetFullPath(path);
+			} catch (Exception e) {
+				UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO path: " + e.Message);
+				SpzGoStatusLine("Invalid path", false);
+				return false;
+			}
+			if (isImport) {
+				if (!File.Exists(path)) {
+					SpzGoStatusLine("Import: file not found", false);
+					return false;
+				}
+			} else {
+				if (string.IsNullOrEmpty(Path.GetFileName(path))) {
+					SpzGoStatusLine("Export: set a file path (e.g. from_spz.fbx)", false);
+					return false;
+				}
+			}
+			var fp = FastPath_API.instance;
+			if (fp == null) {
+				SpzGoStatusLine("3D / API not ready", false);
+				return false;
+			}
+			if (isImport) {
+				bool ok = fp.Import3DModelFromFile(path);
+				SpzGoStatusLine(ok ? "Import OK" : "Import failed (see log)", ok);
+				return ok;
+			} else {
+				bool ok = fp.Export3DWithTexturesToPath(path);
+				SpzGoStatusLine(ok ? "Export OK" : "Export failed (save project, valid path?)", ok);
+				return ok;
+			}
+		}
+		
+		void SpzGoStatusLine(string text, bool ok) {
+			if (Viewport_StatusText.instance != null)
+				Viewport_StatusText.instance.ShowStatusText(text, false, ok ? 4f : 5f, false);
 		}
 		
 		/// <summary>
