@@ -48,7 +48,7 @@ namespace spz {
 
 	    void StopDollyMaybe(){
 	        bool hasCtrl      = KeyMousePenInput.isKey_CtrlOrCommand_pressed();
-	        float mouseScroll = hasCtrl || GlobalClickBlocker.isLocked() ? 0 : Mouse.current.scroll.ReadValue().y;
+	        float mouseScroll = hasCtrl || KeyMousePenInput.isFileBrowserOpen() ? 0 : Mouse.current.scroll.ReadValue().y;
 
 	        bool hasLeftAlt = KeyMousePenInput.isKey_alt_pressed();
 	        bool hasRMB     = KeyMousePenInput.isRMBpressed();
@@ -73,7 +73,7 @@ namespace spz {
 	        bool hasCtrl      = KeyMousePenInput.isKey_CtrlOrCommand_pressed();
 	        bool hasShift      = KeyMousePenInput.isKey_Shift_pressed();
 
-	        float mouseScroll = (hasCtrl||hasShift||GlobalClickBlocker.isLocked())? 0 : Mouse.current.scroll.ReadValue().y;
+	        float mouseScroll = (hasCtrl||hasShift||KeyMousePenInput.isFileBrowserOpen())? 0 : Mouse.current.scroll.ReadValue().y;
 
 	        bool hasMouseScroll = mouseScroll!=0  &&  MainViewport_UI.instance.isCursorHoveringMe();
         

@@ -136,7 +136,7 @@ namespace spz {
 	        // Stop recentering if the user is interacting with the camera:
 	        bool stop =  KeyMousePenInput.isRMBpressed() || KeyMousePenInput.isLMBpressed() || 
 	                     KeyMousePenInput.isMMBpressed();
-	             stop |= !GlobalClickBlocker.isLocked() && Input.mouseScrollDelta.y != 0;
+	             stop |= !KeyMousePenInput.isFileBrowserOpen() && Input.mouseScrollDelta.y != 0;
 	             stop |= Settings_MGR.instance.get_isAlwaysFocusCameraPivot()==false;
              
 	        if (stop){ _keepRecentering = false; }

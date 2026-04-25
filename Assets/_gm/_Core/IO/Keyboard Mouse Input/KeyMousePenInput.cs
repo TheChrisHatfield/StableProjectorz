@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using TMPro;
+using System.Reflection;
 
 namespace spz {
 
@@ -13,8 +14,24 @@ namespace spz {
 	    static bool _haveLastPenOrHoverScreenPos;
 	    const float MouseDeltaToBreakPenLatchSq = 2.25f; // 1.5 px — ignore sub-pixel jitter
 
+	    static System.Type _fileBrowserType;
+	    static PropertyInfo _fileBrowserIsOpenProp;
+	    static bool _fileBrowserReflectionTried = false;
+
+	    public static bool isFileBrowserOpen(){
+	        if (!_fileBrowserReflectionTried){
+	            _fileBrowserReflectionTried = true;
+	            _fileBrowserType = System.Type.GetType("SimpleFileBrowser.FileBrowser, SimpleFileBrowser.Runtime");
+	            _fileBrowserIsOpenProp = _fileBrowserType?.GetProperty("IsOpen", BindingFlags.Public | BindingFlags.Static);
+	        }
+
+	        if (_fileBrowserIsOpenProp == null){ return false; }
+	        object value = _fileBrowserIsOpenProp.GetValue(null, null);
+	        return value is bool b && b;
+	    }
+
 	    static bool IsGlobalInputBlocked(){
-	        return GlobalClickBlocker.isLocked();
+	        return isFileBrowserOpen();
 	    }
 
 	    /// <summary>True when pen tip is pressed (and no barrel/eraser). Used for Wacom stylus: tip = brush mode.</summary>
