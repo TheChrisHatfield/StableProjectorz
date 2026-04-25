@@ -42,6 +42,7 @@ namespace spz {
 	    [SerializeField] Toggle _layout_askServerOften_toggle;//helpful if we are developing a ui layout txt document.
 	    [SerializeField] Toggle _useCtrlScroll_WorkflowMode_swaps_toggle;//ProjMask ->Color -> No Color.
 	    [SerializeField] Toggle _ignoreCtrl_if_clickSelectMeshes_toggle;//holding ctrl will not activate the 'ClickSelect_Meshes mode'.
+	    [SerializeField] Toggle _showExternalProcessWindows_toggle; // Optional: if null, runtime row is created.
 	    [SerializeField] Toggle _useVSync_toggle; // Optional: assign in scene; otherwise created at runtime.
 	    [Tooltip("button_inactive from button_active_inactive_horiz; wired on Settings_UI.prefab for runtime toggles.")]
 	    [SerializeField] Sprite _settingsToggleFrameSprite;
@@ -79,6 +80,7 @@ namespace spz {
 
 	    void Start(){
 	        EnsureUseVSyncRowExists();
+	        EnsureExternalProcessWindowsRowExists();
 	        EnsureSDGpuRowExists();
 	        EnsurePaintUndoSettingsRowsExist();
 	        // Buttons (guard null so binding is safe when reference not assigned in scene)
@@ -102,6 +104,8 @@ namespace spz {
 	        EventsBinder.Bind_Clickable_to_event("Settings:set_layout_askServerOften", _layout_askServerOften_toggle);
 	        EventsBinder.Bind_Clickable_to_event("Settings:set_useCtrlScroll_for_WorkflowMode_swaps", _useCtrlScroll_WorkflowMode_swaps_toggle);
 	        EventsBinder.Bind_Clickable_to_event("Settings:set_ignoreCtrl_if_clickSelectingMeshes", _ignoreCtrl_if_clickSelectMeshes_toggle);
+	        if (_showExternalProcessWindows_toggle != null)
+	            EventsBinder.Bind_Clickable_to_event("Settings:set_showExternalProcessWindows", _showExternalProcessWindows_toggle);
 	        if (_useVSync_toggle != null)
 	            EventsBinder.Bind_Clickable_to_event("Settings:set_useVSync", _useVSync_toggle);
 	        // Custom Sliders
@@ -160,6 +164,46 @@ namespace spz {
 		        UnityEngine.PlayerPrefs.GetInt("UseVSync", 1) == 1, greenWhenOn: false);
 	        _useVSync_toggle = toggle;
 	        EventsBinder.Bind_Clickable_to_event("Settings:set_useVSync", _useVSync_toggle);
+	    }
+
+	    /// <summary>Creates "Show external process windows" row (WebUI + addon Python server console visibility) unless scene already provides it.</summary>
+	    void EnsureExternalProcessWindowsRowExists() {
+	        if (_showExternalProcessWindows_toggle != null) return;
+	        if (_settingsPanel_go == null) return;
+	        var scrollRect = _settingsPanel_go.GetComponentInChildren<UnityEngine.UI.ScrollRect>(true);
+	        RectTransform content = scrollRect != null ? scrollRect.content : null;
+	        if (content == null) content = _settingsPanel_go.transform as RectTransform;
+	        if (content == null) return;
+
+	        var row = new GameObject("Row_ShowExternalProcessWindows");
+	        row.transform.SetParent(content, false);
+	        var rowRect = row.AddComponent<RectTransform>();
+	        rowRect.sizeDelta = new Vector2(0, 28f);
+	        var rowLayout = row.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+	        rowLayout.spacing = 8f;
+	        rowLayout.padding = new RectOffset(4, 4, 2, 2);
+	        rowLayout.childAlignment = TextAnchor.MiddleLeft;
+	        rowLayout.childControlWidth = true;
+	        rowLayout.childControlHeight = true;
+	        rowLayout.childForceExpandWidth = false;
+	        rowLayout.childForceExpandHeight = false;
+
+	        var labelGo = new GameObject("Label");
+	        labelGo.transform.SetParent(row.transform, false);
+	        var labelLE = labelGo.AddComponent<UnityEngine.UI.LayoutElement>();
+	        labelLE.preferredWidth = 360f;
+	        labelLE.preferredHeight = 24f;
+	        var labelText = labelGo.AddComponent<TMPro.TextMeshProUGUI>();
+	        labelText.text = "Show external process windows (WebUI + add-on Python server):";
+	        labelText.fontSize = 14;
+	        labelText.color = new Color(0.9f, 0.9f, 0.9f, 1f);
+	        labelText.raycastTarget = false;
+
+	        bool current = UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1;
+	        var toggle = CreateRuntimeSpzStyledToggle(row.transform, "Toggle_ShowExternalProcessWindows", new Vector2(112f, 28f),
+		        current, greenWhenOn: false);
+	        _showExternalProcessWindows_toggle = toggle;
+	        EventsBinder.Bind_Clickable_to_event("Settings:set_showExternalProcessWindows", _showExternalProcessWindows_toggle);
 	    }
 
 	    /// <summary>Creates "SD GPU" row in Settings panel at runtime so it acts as remote control for which GPU Stable Diffusion uses when launched.</summary>
