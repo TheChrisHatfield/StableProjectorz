@@ -49,12 +49,16 @@ namespace spz {
 	    public void Send_StopGenerateRequest(){
 	        StopAllCoroutines();//stops any progress-tracking coroutines, etc.
 	        string url = Connection_MGR.A1111_SD_API_URL + "/interrupt";
-	        StartCoroutine( Send_GenerateRequest_crtn<object>(url, null, width:-1, height:-1, withProgress:false) );
+	        StartCoroutine( Send_GenerateRequest_crtn<object>(url, null, width:-1, height:-1, withProgress:false, paceGpuFlow:false) );
 	    }
 
 
-	    IEnumerator Send_GenerateRequest_crtn<T>(string urlSuffix, T payloadStruct, int width, int height, bool withProgress)
+	    IEnumerator Send_GenerateRequest_crtn<T>(string urlSuffix, T payloadStruct, int width, int height, bool withProgress, bool paceGpuFlow = true)
 	    {
+	        if (paceGpuFlow) {
+	            yield return GpuFlowUnityHooks.PaceFromAddonHttpCoroutine(source: "sd_sender", phase: "pre_request");
+	        }
+
 	        Coroutine progressRoutine = null;
 	        if (withProgress){
 	            progressRoutine = StartCoroutine(CheckProgress_crtn(width, height));
@@ -77,6 +81,9 @@ namespace spz {
 
 	            if (progressRoutine != null){
 	                StopCoroutine(progressRoutine);
+	            }
+	            if (paceGpuFlow && request.result == UnityWebRequest.Result.Success) {
+	                yield return GpuFlowUnityHooks.PaceFromAddonHttpCoroutine(source: "sd_sender", phase: "post_request");
 	            }
 	            _onCompleted?.Invoke(request);
 	        }

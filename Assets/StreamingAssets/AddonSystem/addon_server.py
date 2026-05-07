@@ -177,16 +177,26 @@ def main():
     _connection_lock = threading.Lock()  # synchronize access across connection_loop, _check_connection_ready, and main wait
 
     def _check_connection_ready():
-        """Probe Unity socket; return True only if we can reach Unity. Resets _connected_to_unity if connection is dead."""
+        """Probe Unity socket; keep check lightweight and not camera-dependent."""
         try:
-            api.cameras.get_pos(0)
+            # Prefer capability ping over camera query (camera state can be unavailable transiently).
+            caps = api.addon.get_capabilities()
+            if not isinstance(caps, dict):
+                raise RuntimeError("capabilities response not a dict")
             with _connection_lock:
                 _connected_to_unity[0] = True
             return True
         except Exception:
-            with _connection_lock:
-                _connected_to_unity[0] = False
-            return False
+            try:
+                # Fallback probe for older API surfaces.
+                api.cameras.get_pos(0)
+                with _connection_lock:
+                    _connected_to_unity[0] = True
+                return True
+            except Exception:
+                with _connection_lock:
+                    _connected_to_unity[0] = False
+                return False
 
     if FASTAPI_AVAILABLE and not args.no_http:
         try:

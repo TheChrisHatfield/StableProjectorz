@@ -361,11 +361,17 @@ namespace spz {
 		/// Sends a callback event to the Python server (HTTP POST /invoke_callback). Runs the addon's function by name.
 		/// </summary>
 		void SendCallbackToPython(string addonId, string callbackName) {
+			if (Addon_MGR.IsAddonApiShuttingDown()) {
+				UnityEngine.Debug.Log($"[AddonUI_MGR] Skipping callback during shutdown: {addonId}.{callbackName}");
+				return;
+			}
 			UnityEngine.Debug.Log($"[AddonUI_MGR] Invoking addon callback: {addonId}.{callbackName}");
 			StartCoroutine(SendCallbackToPythonCrtn(addonId, callbackName));
 		}
 
 		IEnumerator SendCallbackToPythonCrtn(string addonId, string callbackName) {
+			if (Addon_MGR.IsAddonApiShuttingDown())
+				yield break;
 			int port = Addon_MGR.instance != null ? Addon_MGR.instance.GetHttpServerPort() : 5557;
 			string url = $"http://127.0.0.1:{port}/invoke_callback";
 			string body = $"{{\"addon_id\":\"{JsonEscape(addonId)}\",\"callback\":\"{JsonEscape(callbackName)}\"}}";
@@ -373,6 +379,7 @@ namespace spz {
 				req.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(body));
 				req.downloadHandler = new DownloadHandlerBuffer();
 				req.SetRequestHeader("Content-Type", "application/json");
+				req.timeout = 8; // avoid long hangs when local addon HTTP server is down/unresponsive
 				yield return req.SendWebRequest();
 				if (req.result != UnityWebRequest.Result.Success) {
 					UnityEngine.Debug.LogWarning($"[AddonUI_MGR] invoke_callback failed: {req.error}");
@@ -443,6 +450,7 @@ namespace spz {
 			labelText.text = label;
 			labelText.fontSize = 12;
 			labelText.color = Color.white;
+			labelText.raycastTarget = false;
 			
 			// Add slider
 			var sliderObj2 = new GameObject("Slider");
@@ -493,6 +501,7 @@ namespace spz {
 			valueText.fontSize = 12;
 			valueText.color = Color.white;
 			valueText.alignment = TextAlignmentOptions.Right;
+			valueText.raycastTarget = false;
 			
 			// Update value text when slider changes
 			slider.onValueChanged.AddListener((value) => {
@@ -542,6 +551,7 @@ namespace spz {
 			labelText.text = label;
 			labelText.fontSize = 12;
 			labelText.color = Color.white;
+			labelText.raycastTarget = false;
 			
 			// Add input field
 			var fieldObj = new GameObject("InputField");
@@ -633,6 +643,9 @@ namespace spz {
 			
 			var dropdownRect = dropdownObj.AddComponent<RectTransform>();
 			dropdownRect.sizeDelta = new Vector2(200, 40);
+			// Ensure entire row can receive pointer events (not only inner field).
+			var rowBg = dropdownObj.AddComponent<Image>();
+			rowBg.color = new Color(0f, 0f, 0f, 0.001f);
 			
 			// Add label
 			var labelObj = new GameObject("Label");
@@ -645,6 +658,7 @@ namespace spz {
 			labelText.text = label;
 			labelText.fontSize = 12;
 			labelText.color = Color.white;
+			labelText.raycastTarget = false;
 			
 			// Add dropdown
 			var fieldObj = new GameObject("Dropdown");
@@ -669,6 +683,7 @@ namespace spz {
 			labelText2.text = options.Count > defaultIndex ? options[defaultIndex] : "";
 			labelText2.fontSize = 12;
 			labelText2.color = Color.white;
+			labelText2.raycastTarget = false;
 			
 			var arrowObj = new GameObject("Arrow");
 			arrowObj.transform.SetParent(fieldObj.transform, false);
@@ -682,6 +697,7 @@ namespace spz {
 			arrowText.fontSize = 10;
 			arrowText.color = Color.white;
 			arrowText.alignment = TextAlignmentOptions.Center;
+			arrowText.raycastTarget = false;
 			
 			var dropdown = fieldObj.AddComponent<TMP_Dropdown>();
 			dropdown.captionText = labelText2;
@@ -690,11 +706,41 @@ namespace spz {
 				dropdown.options.Add(new TMP_Dropdown.OptionData(option));
 			}
 			dropdown.value = defaultIndex;
+
+			void CycleDropdownValue() {
+				if (dropdown.options == null || dropdown.options.Count == 0) return;
+				int next = (dropdown.value + 1) % dropdown.options.Count;
+				dropdown.SetValueWithoutNotify(next);
+				labelText2.text = dropdown.options[next].text;
+				string idLocal = dropdownObj.GetInstanceID().ToString();
+				_uiElementValues[idLocal] = next;
+				SendValueChangeToPython(addonId, idLocal, "dropdown", next);
+			}
+			// Fallback interaction: cycle selection on click even if no TMP template is configured.
+			// This guarantees add-on dropdowns remain clickable in minimal runtime-generated UI.
+			var clickBtn = fieldObj.GetComponent<Button>();
+			if (clickBtn == null) clickBtn = fieldObj.AddComponent<Button>();
+			clickBtn.targetGraphic = fieldBg;
+			clickBtn.onClick.AddListener(CycleDropdownValue);
+			// Also make the entire row clickable (users often click label/empty area).
+			var rowBtn = dropdownObj.GetComponent<Button>();
+			if (rowBtn == null) rowBtn = dropdownObj.AddComponent<Button>();
+			rowBtn.targetGraphic = rowBg;
+			rowBtn.onClick.AddListener(CycleDropdownValue);
+			var clickSensor = fieldObj.GetComponent<MouseClickSensor_UI>();
+			if (clickSensor == null) clickSensor = fieldObj.AddComponent<MouseClickSensor_UI>();
+			clickSensor._onMouseClick += _ => CycleDropdownValue();
+			var rowClickSensor = dropdownObj.GetComponent<MouseClickSensor_UI>();
+			if (rowClickSensor == null) rowClickSensor = dropdownObj.AddComponent<MouseClickSensor_UI>();
+			rowClickSensor._onMouseClick += _ => CycleDropdownValue();
 			
 			// Update value when selection changes
 			dropdown.onValueChanged.AddListener((index) => {
 				string elementId = dropdownObj.GetInstanceID().ToString();
 				_uiElementValues[elementId] = index;
+				if (index >= 0 && index < dropdown.options.Count) {
+					labelText2.text = dropdown.options[index].text;
+				}
 				SendValueChangeToPython(addonId, elementId, "dropdown", index);
 			});
 			
@@ -788,9 +834,15 @@ namespace spz {
 			
 			foreach (var element in _addonUIElements[addonId]) {
 				if (element != null) {
-					string elementId = element.GetInstanceID().ToString();
-					_uiElementValues.Remove(elementId);
-					_uiElementComponents.Remove(elementId);
+					// Remove cached values/components for this element and all descendants.
+					var transforms = element.GetComponentsInChildren<Transform>(true);
+					for (int i = 0; i < transforms.Length; i++) {
+						var t = transforms[i];
+						if (t == null) continue;
+						string id = t.gameObject.GetInstanceID().ToString();
+						_uiElementValues.Remove(id);
+						_uiElementComponents.Remove(id);
+					}
 					Destroy(element);
 				}
 			}

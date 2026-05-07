@@ -1385,10 +1385,14 @@ async def load_addon(req: LoadAddonRequest):
     """Load a single addon by id. Called by Unity when an addon is enabled."""
     if _load_addon_callback is None:
         raise HTTPException(status_code=503, detail="Addon loader not registered")
-    if _connection_ready_callback is None:
-        raise HTTPException(status_code=503, detail="Connection readiness not available; server may not be fully initialized")
-    if not await _connection_ready_async():
-        raise HTTPException(status_code=503, detail="Not connected to Unity yet; wait for GET /ready")
+    # Keep readiness probe as advisory only.
+    # Strict gating can strand add-on load when the probe is transiently false even though
+    # the callback path would still work (or recover on immediate retry).
+    if _connection_ready_callback is not None:
+        try:
+            _ = await _connection_ready_async()
+        except Exception:
+            pass
     try:
         ok = await asyncio.to_thread(_load_addon_callback, req.addon_id)
         return {"success": ok, "addon_id": req.addon_id}
@@ -1401,10 +1405,15 @@ async def invoke_callback(req: InvokeCallbackRequest):
     """Invoke an addon function by name. Called by Unity when user clicks an addon panel button."""
     if _invoke_callback is None:
         raise HTTPException(status_code=503, detail="Invoke callback not registered")
-    if _connection_ready_callback is None:
-        raise HTTPException(status_code=503, detail="Connection readiness not available; server may not be fully initialized")
-    if not await _connection_ready_async():
-        raise HTTPException(status_code=503, detail="Not connected to Unity yet; wait for GET /ready")
+    # Do not hard-gate callbacks on connection-ready probes.
+    # Button clicks originate from Unity itself, and callbacks may not need an immediate
+    # round-trip probe before entering Python. A transient probe failure here makes
+    # command-ribbon buttons appear "dead" even when invocation would otherwise work.
+    if _connection_ready_callback is not None:
+        try:
+            _ = await _connection_ready_async()
+        except Exception:
+            pass
     try:
         ok = await asyncio.to_thread(_invoke_callback, req.addon_id, req.callback)
         return {"success": ok, "addon_id": req.addon_id, "callback": req.callback}

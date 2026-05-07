@@ -132,6 +132,17 @@ namespace spz {
 	    void tryLoad_avoid_NSFW_generations()
 	        => set_avoid_NSFW_generations(PlayerPrefs.GetInt("_avoid_NSFW_generations", 1) == 1);
 
+	    // Optional strict mask isolation for img2img/redo.
+	    // Default OFF to stay aligned with original StableProjectorz behavior.
+	    bool _sd_strictMaskIsolation = false;
+	    public bool get_sd_strictMaskIsolation() => _sd_strictMaskIsolation;
+	    public void set_sd_strictMaskIsolation(bool on) {
+	        _sd_strictMaskIsolation = on;
+	        PlayerPrefs.SetInt("SD_StrictMaskIsolation", _sd_strictMaskIsolation ? 1 : 0); PlayerPrefs.Save();
+	    }
+	    void tryLoad_sd_strictMaskIsolation()
+	        => set_sd_strictMaskIsolation(PlayerPrefs.GetInt("SD_StrictMaskIsolation", 0) == 1);
+
 	    // Stable Diffusion GPU: -1 = default (auto), 0/1/2... = use that CUDA device (sets CUDA_VISIBLE_DEVICES when launching WebUI).
 	    public const int SD_GPU_ID_MAX = 31; // reasonable upper bound for GPU index (UI + launch clamp)
 	    int _sdGpuDeviceId = -1;
@@ -508,6 +519,7 @@ namespace spz {
 	            set_wireframeOpacity(_default_wireframeOpacity);
 	            set_isAlwaysFocusCameraPivot(true);
 	            set_avoid_NSFW_generations(false);
+	            set_sd_strictMaskIsolation(false);
 	            set_viewport_in_center(true);
 	            set_viewport_isSwapVerticalRibbons(false);
 	            set_uvWarpSpeed01(_default_uvWarpSpeed01);
@@ -618,6 +630,7 @@ namespace spz {
 	        StaticEvents.SubscribeUnique<int>("Settings:set_sdGpuDeviceId", set_sdGpuDeviceId);
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_showExternalProcessWindows", set_showExternalProcessWindows);
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_webUiOpenBrowserOnStartup", set_webUiOpenBrowserOnStartup);
+	        StaticEvents.SubscribeUnique<bool>("Settings:set_sd_strictMaskIsolation", set_sd_strictMaskIsolation);
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_paintUndo_enabled", set_paintUndo_enabled);
 	        StaticEvents.SubscribeUnique<int>("Settings:set_paintUndo_maxDepth", set_paintUndo_maxDepth);
 	        tryLoad_useVSync();
@@ -632,6 +645,7 @@ namespace spz {
 	        tryLoad_ShadowR_chunkSize();
 	        tryLoad_isAlwaysFocusCameraPivot();
 	        tryLoad_avoid_NSFW_generations();
+	        tryLoad_sd_strictMaskIsolation();
 	        tryLoad_viewport_in_center();
 	        tryLoad_viewport_isSwapVerticalRibbons();
 	        tryLoad_uvWarpSpeed01();
@@ -696,6 +710,7 @@ namespace spz {
 	        StaticEvents.Unsubscribe<int>("Settings:set_sdGpuDeviceId", set_sdGpuDeviceId);
 	        StaticEvents.Unsubscribe<bool>("Settings:set_showExternalProcessWindows", set_showExternalProcessWindows);
 	        StaticEvents.Unsubscribe<bool>("Settings:set_webUiOpenBrowserOnStartup", set_webUiOpenBrowserOnStartup);
+	        StaticEvents.Unsubscribe<bool>("Settings:set_sd_strictMaskIsolation", set_sd_strictMaskIsolation);
 	        StaticEvents.Unsubscribe<bool>("Settings:set_paintUndo_enabled", set_paintUndo_enabled);
 	        StaticEvents.Unsubscribe<int>("Settings:set_paintUndo_maxDepth", set_paintUndo_maxDepth);
 	    }

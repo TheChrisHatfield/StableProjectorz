@@ -126,6 +126,8 @@ namespace spz {
 
 	        var jsonString = JsonConvert.SerializeObject(inputs);
 
+	        yield return GpuFlowUnityHooks.PaceFromAddonHttpCoroutine(source: "gen3d", phase: "pre_generate");
+
 	        // Start the generation, but don't yield yet:
 	        _generateStatus = TaskStatus.PROCESSING;
 	        _generateResponse = null;
@@ -159,6 +161,7 @@ namespace spz {
 	        }
 	        else if (_generateStatus == TaskStatus.COMPLETE){// Download the final mesh
 	            yield return StartCoroutine(Gen_downloadFinalData(callbacks, download_endpoint));
+	            yield return GpuFlowUnityHooks.PaceFromAddonHttpCoroutine(source: "gen3d", phase: "post_download");
 	        }
 	        _gen_or_resume_crtn = null;
 	    }
@@ -223,6 +226,8 @@ namespace spz {
 
     
 	    IEnumerator ResumeAfterPreview_crtn(float meshSimplifyRatio, int textureSize, GenerationCallbacks callbacks){
+	        yield return GpuFlowUnityHooks.PaceFromAddonHttpCoroutine(source: "gen3d", phase: "pre_resume");
+
 	        //not yielding the coroutine, just starting and continuing
 	        _generateStatus = TaskStatus.PROCESSING;
 	        _generateResponse = null;
@@ -239,6 +244,7 @@ namespace spz {
 
 	        if (_generateStatus == TaskStatus.COMPLETE){
 	            yield return StartCoroutine(Gen_downloadFinalData(callbacks));
+	            yield return GpuFlowUnityHooks.PaceFromAddonHttpCoroutine(source: "gen3d", phase: "post_resume_download");
 	        }
 	        else if (_generateStatus == TaskStatus.FAILED){
 	            callbacks.onError?.Invoke("Resume generation => task failed");

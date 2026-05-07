@@ -44,8 +44,7 @@ Shader "Unlit/Inpaint_UV_Mask_to_screenMask"
             //0: produce "either 0 or 1" opacity, 
             //1: produce smooth value between [0,1] based on alpha.
             float _isColorlessMask;
-
-
+            
             struct appdata{
                 float4 vertex : POSITION;
                 float3 normal : NORMAL;

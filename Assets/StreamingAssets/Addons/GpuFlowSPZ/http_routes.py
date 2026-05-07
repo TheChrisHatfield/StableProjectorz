@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
@@ -27,6 +27,9 @@ except ImportError:
 
 class PaceBody(BaseModel):
     max_wait_ms: int = Field(12000, ge=50, le=120000)
+    source: str = Field("http")
+    phase: str = Field("manual")
+    run_id: Optional[str] = None
 
 
 def register_routes(app: Any) -> bool:
@@ -42,7 +45,13 @@ def register_routes(app: Any) -> bool:
     async def gpu_flow_pace(body: PaceBody):
         rt = gfr.get_runtime()
         try:
-            return await asyncio.to_thread(rt.pace, body.max_wait_ms)
+            return await asyncio.to_thread(
+                rt.pace,
+                body.max_wait_ms,
+                body.source,
+                body.phase,
+                body.run_id,
+            )
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 

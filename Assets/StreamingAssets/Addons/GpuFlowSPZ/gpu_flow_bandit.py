@@ -40,6 +40,17 @@ ARMS: Tuple[ArmPolicy, ...] = (
 NUM_ARMS = len(ARMS)
 
 
+def _nested_schema_version(nested: Dict[str, Any]) -> int:
+    """``schema_version`` may be missing, null, or non-int in hand-edited JSON."""
+    v = nested.get("schema_version", 1)
+    if v is None:
+        return 1
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return 1
+
+
 def policy_for_arm(idx: int) -> ArmPolicy:
     return ARMS[idx % NUM_ARMS]
 
@@ -80,7 +91,7 @@ def thompson_from_nested(nested: Optional[Dict[str, Any]]) -> List[Tuple[float, 
     out: List[Tuple[float, float]] = [(1.0, 1.0) for _ in range(NUM_ARMS)]
     if not nested or not isinstance(nested, dict):
         return out
-    if int(nested.get("schema_version", 1)) > SCHEMA_VERSION:
+    if _nested_schema_version(nested) > SCHEMA_VERSION:
         return out
     ts = nested.get("thompson")
     if not isinstance(ts, list):
