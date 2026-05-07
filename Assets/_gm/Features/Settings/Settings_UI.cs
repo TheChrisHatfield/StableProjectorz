@@ -44,6 +44,7 @@ namespace spz {
 	    [SerializeField] Toggle _ignoreCtrl_if_clickSelectMeshes_toggle;//holding ctrl will not activate the 'ClickSelect_Meshes mode'.
 	    [SerializeField] Toggle _showExternalProcessWindows_toggle; // Optional: if null, runtime row is created.
 	    [SerializeField] Toggle _webUiOpenBrowserOnStartup_toggle; // Optional: if null, runtime row is created.
+	    [SerializeField] Toggle _sdStrictMaskIsolation_toggle; // Optional: if null, runtime row is created.
 	    [SerializeField] Toggle _useVSync_toggle; // Optional: assign in scene; otherwise created at runtime.
 	    [Tooltip("button_inactive from button_active_inactive_horiz; wired on Settings_UI.prefab for runtime toggles.")]
 	    [SerializeField] Sprite _settingsToggleFrameSprite;
@@ -83,6 +84,7 @@ namespace spz {
 	        EnsureUseVSyncRowExists();
 	        EnsureExternalProcessWindowsRowExists();
 	        EnsureWebUiBrowserStartupRowExists();
+	        EnsureSDStrictMaskIsolationRowExists();
 	        EnsureSDGpuRowExists();
 	        EnsurePaintUndoSettingsRowsExist();
 	        // Buttons (guard null so binding is safe when reference not assigned in scene)
@@ -110,6 +112,8 @@ namespace spz {
 	            EventsBinder.Bind_Clickable_to_event("Settings:set_showExternalProcessWindows", _showExternalProcessWindows_toggle);
 	        if (_webUiOpenBrowserOnStartup_toggle != null)
 	            EventsBinder.Bind_Clickable_to_event("Settings:set_webUiOpenBrowserOnStartup", _webUiOpenBrowserOnStartup_toggle);
+	        if (_sdStrictMaskIsolation_toggle != null)
+	            EventsBinder.Bind_Clickable_to_event("Settings:set_sd_strictMaskIsolation", _sdStrictMaskIsolation_toggle);
 	        if (_useVSync_toggle != null)
 	            EventsBinder.Bind_Clickable_to_event("Settings:set_useVSync", _useVSync_toggle);
 	        // Custom Sliders
@@ -248,6 +252,46 @@ namespace spz {
 		        current, greenWhenOn: false);
 	        _webUiOpenBrowserOnStartup_toggle = toggle;
 	        EventsBinder.Bind_Clickable_to_event("Settings:set_webUiOpenBrowserOnStartup", _webUiOpenBrowserOnStartup_toggle);
+	    }
+
+	    /// <summary>Creates optional strict mask isolation row (off by default, OG-aligned). When ON, img2img/redo keeps unmasked pixels from init image.</summary>
+	    void EnsureSDStrictMaskIsolationRowExists() {
+	        if (_sdStrictMaskIsolation_toggle != null) return;
+	        if (_settingsPanel_go == null) return;
+	        var scrollRect = _settingsPanel_go.GetComponentInChildren<UnityEngine.UI.ScrollRect>(true);
+	        RectTransform content = scrollRect != null ? scrollRect.content : null;
+	        if (content == null) content = _settingsPanel_go.transform as RectTransform;
+	        if (content == null) return;
+
+	        var row = new GameObject("Row_SD_StrictMaskIsolation");
+	        row.transform.SetParent(content, false);
+	        var rowRect = row.AddComponent<RectTransform>();
+	        rowRect.sizeDelta = new Vector2(0, 28f);
+	        var rowLayout = row.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+	        rowLayout.spacing = 8f;
+	        rowLayout.padding = new RectOffset(4, 4, 2, 2);
+	        rowLayout.childAlignment = TextAnchor.MiddleLeft;
+	        rowLayout.childControlWidth = true;
+	        rowLayout.childControlHeight = true;
+	        rowLayout.childForceExpandWidth = false;
+	        rowLayout.childForceExpandHeight = false;
+
+	        var labelGo = new GameObject("Label");
+	        labelGo.transform.SetParent(row.transform, false);
+	        var labelLE = labelGo.AddComponent<UnityEngine.UI.LayoutElement>();
+	        labelLE.preferredWidth = 360f;
+	        labelLE.preferredHeight = 24f;
+	        var labelText = labelGo.AddComponent<TMPro.TextMeshProUGUI>();
+	        labelText.text = "Strict inpaint mask isolation (redo affects only masked pixels; off = OG behavior):";
+	        labelText.fontSize = 14;
+	        labelText.color = new Color(0.9f, 0.9f, 0.9f, 1f);
+	        labelText.raycastTarget = false;
+
+	        bool current = UnityEngine.PlayerPrefs.GetInt("SD_StrictMaskIsolation", 0) == 1;
+	        var toggle = CreateRuntimeSpzStyledToggle(row.transform, "Toggle_SD_StrictMaskIsolation", new Vector2(112f, 28f),
+		        current, greenWhenOn: false);
+	        _sdStrictMaskIsolation_toggle = toggle;
+	        EventsBinder.Bind_Clickable_to_event("Settings:set_sd_strictMaskIsolation", _sdStrictMaskIsolation_toggle);
 	    }
 
 	    /// <summary>Creates "SD GPU" row in Settings panel at runtime so it acts as remote control for which GPU Stable Diffusion uses when launched.</summary>

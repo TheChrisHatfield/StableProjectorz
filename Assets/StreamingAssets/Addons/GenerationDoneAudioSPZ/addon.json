@@ -1,0 +1,5 @@
+{
+  "displayName": "Gen Complete Audio",
+  "version": "1.0.0",
+  "description": "Play a custom audio file when Stable Diffusion generation finishes."
+}

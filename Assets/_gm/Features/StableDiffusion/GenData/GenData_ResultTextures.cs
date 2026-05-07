@@ -122,10 +122,49 @@ namespace spz {
 
 	        _texturePreference.Decide_Prefer_Texture2DList();
 	        Texture2D[] subTextures =  base64_images.Select(b => TextureTools_SPZ.Base64ToTexture(b)).ToArray();
+	        TryConstrainImg2ImgResult_toScreenMask(subTextures);
 	        _texStorage.UpdateTextures_in_order(from_ix: 0, subTextures, _texturePreference.preference);
 	        _callbacks.NotifyAll(_texStorage);
 	        //Don't destroy sub textures, they were accepted into list, or were already destroyed
 	    }//end()
+
+	    /// <summary>
+	    /// For img2img redo-style requests (inpainting_fill=Original), keep unmasked pixels from the init image.
+	    /// This enforces "redo only inside mask" even when the external generator slightly drifts outside mask.
+	    /// </summary>
+	    void TryConstrainImg2ImgResult_toScreenMask(Texture2D[] generatedTexs){
+	        if (Settings_MGR.instance == null || !Settings_MGR.instance.get_sd_strictMaskIsolation()) return;
+	        if (generatedTexs == null || generatedTexs.Length == 0) return;
+	        if (genData == null || genData.img2img_req == null) return;
+	        if ((InpaintingFill)genData.img2img_req.inpainting_fill != InpaintingFill.Original) return;
+	        var byp = genData._byproductsOfRequest;
+	        if (byp == null || byp.usualView_disposableTexture == null || byp.screenSpaceMask_NE_disposableTex == null) return;
+
+	        Texture2D initTex = byp.usualView_disposableTexture;
+	        Texture2D maskTex = byp.screenSpaceMask_NE_disposableTex;
+	        if (initTex == null || maskTex == null) return;
+
+	        for (int i = 0; i < generatedTexs.Length; i++){
+	            var outTex = generatedTexs[i];
+	            if (outTex == null) continue;
+	            if (outTex.width != initTex.width || outTex.height != initTex.height) continue;
+	            if (maskTex.width != initTex.width || maskTex.height != initTex.height) continue;
+
+	            Color32[] outPx = outTex.GetPixels32();
+	            Color32[] initPx = initTex.GetPixels32();
+	            Color32[] maskPx = maskTex.GetPixels32();
+	            int n = Mathf.Min(outPx.Length, Mathf.Min(initPx.Length, maskPx.Length));
+	            for (int p = 0; p < n; p++){
+	                // Strict isolation: only masked pixels are replaced by generated output.
+	                bool masked = maskPx[p].r > 0;
+	                if (!masked){
+	                    outPx[p] = initPx[p];
+	                }
+	            }
+	            outTex.SetPixels32(outPx);
+	            outTex.Apply(updateMipmaps:false, makeNoLongerReadable:false);
+	        }
+	    }
 
 
    

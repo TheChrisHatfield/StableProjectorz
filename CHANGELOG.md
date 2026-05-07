@@ -5,6 +5,64 @@ This file tracks changes on top of that baseline until the next release bump.
 
 ---
 
+## [Unreleased] — 2026-05-07 — Add-on UX updates + No-Color/Mask behavior alignment
+
+### Summary
+
+Improved add-on reliability and usability (audio completion alert + GPU Flow mode controls), restored No-Color mask behavior to match OG defaults, and added an optional strict img2img mask-isolation safety mode (default OFF).
+
+### Add-ons (StreamingAssets)
+
+- **`Assets/StreamingAssets/Addons/GenerationDoneAudioSPZ`** (new):
+  - Added add-on to play a user-selected audio file when SD generation transitions from running to finished.
+  - Added persistent `settings.json` (enable flag, poll interval, audio path) loaded on register and saved on apply/browse/unregister.
+  - Added file picker button (**Browse Audio File...**) so users can select sound files instead of typing paths.
+  - Replaced dropdown enable control with button-based selection (`Enable`, `Disable`, `Toggle`) for better runtime compatibility.
+  - Added watcher lifecycle hardening to reduce duplicate-thread race on reload.
+
+- **`Assets/StreamingAssets/Addons/GpuFlowSPZ/__init__.py`**:
+  - Replaced dropdown mode selector with explicit mode buttons (`Off`, `Adaptive`, `Fixed`) + state field.
+  - Added persistent `settings.json` for mode + fixed ceiling, restored on register.
+  - Added startup logging of runtime mode/source/phase for easier validation.
+
+### GPU Flow wiring (Unity ↔ Add-on HTTP)
+
+- **`Assets/_gm/Features/AddonSystem/GpuFlowUnityHooks.cs`**,  
+  **`Assets/_gm/Features/StableDiffusion/Input Panel/SD_Generate_NetworkSender.cs`**,  
+  **`Assets/_gm/Features/3D Generate/Gen3D_API.cs`**:
+  - Confirmed pre/post pacing hooks call add-on HTTP route `/api/v1/gpu-flow/pace` around SD/Gen3D request phases.
+
+- **`Assets/StreamingAssets/AddonSystem/http_server.py`**,  
+  **`Assets/StreamingAssets/Addons/GpuFlowSPZ/http_routes.py`**:
+  - Confirmed optional route mount for `/api/v1/gpu-flow/status` and `/api/v1/gpu-flow/pace`.
+
+### No-Color / inpaint mask behavior
+
+- **OG comparison baseline used**:  
+  `d:/DRIVE_DOWNLOADS/STABLE_PROJECTORZ_OG_GITHUB/StableProjectorz`
+
+- Restored OG-style No-Color mask behavior:
+  - **`Assets/_gm/Features/Paint/Inpaint/Shaders/Inpaint_UV_Mask_to_screenMask.shader`**:
+    - Restored `_isColorlessMask` path and strict/smooth blend (`lerp(strict, smooth, _isColorlessMask)`).
+  - **`Assets/_gm/Features/Paint/Inpaint/Inpaint_ScreenMasker_Original.cs`**:
+    - Restored No-Color-specific dilation branch and `_isColorlessMask` material wiring.
+
+### Optional strict mask isolation (default OFF)
+
+- **`Assets/_gm/Features/StableDiffusion/GenData/GenData_ResultTextures.cs`**:
+  - Added optional post-process for img2img `InpaintingFill.Original` to preserve unmasked pixels from init image.
+  - Gated by setting; no behavior change unless enabled.
+
+- **`Assets/_gm/Features/Settings/Settings_MGR.cs`**:
+  - Added setting `SD_StrictMaskIsolation` (`get_sd_strictMaskIsolation` / `set_sd_strictMaskIsolation`), default OFF.
+  - Added load + restore-default handling and event subscription for runtime setting updates.
+
+- **`Assets/_gm/Features/Settings/Settings_UI.cs`**:
+  - Added runtime settings row and toggle binding:
+    - "Strict inpaint mask isolation (redo affects only masked pixels; off = OG behavior)".
+
+---
+
 ## [Unreleased] — 2026-04-25 — File browser input focus lock (viewport command isolation)
 
 ### Summary

@@ -268,6 +268,11 @@ namespace spz {
 			}
 		}
 
+		/// <summary>True once add-on API shutdown started (quitting / destroy path). Use to skip new HTTP/socket work.</summary>
+		public static bool IsAddonApiShuttingDown() {
+			return s_addonApiQuitShutdownDone;
+		}
+
 		void TerminatePythonAddonServerProcess(bool waitForExit = true) {
 #if UNITY_EDITOR
 			if (_pythonProcess != null) {
@@ -773,6 +778,8 @@ namespace spz {
 		
 		/// <summary>Polls GET /ready until Python has connected to Unity (socket 5555), so create_panel works when we POST /load_addon. Same pattern as SD: Unity is HTTP client, confirms connection by getting a successful response.</summary>
 		IEnumerator WaitForAddonServerReady(int maxAttempts = 60, float interval = 0.5f) {
+			if (IsAddonApiShuttingDown())
+				yield break;
 			if (!_isServerRunning) {
 				UnityEngine.Debug.LogWarning("[Addon_MGR] Python server not running; attempting to start it now...");
 				StartPythonServer();
@@ -787,8 +794,11 @@ namespace spz {
 			bool loggedHttpReachable = false;
 			int consecutiveConnectionErrors = 0;
 			for (int i = 0; i < maxAttempts; i++) {
+				if (IsAddonApiShuttingDown())
+					yield break;
 				using (var req = new UnityWebRequest(readyUrl)) {
 					req.downloadHandler = new DownloadHandlerBuffer();
+					req.timeout = 4; // keep polling responsive when local addon HTTP server is unresponsive
 					yield return req.SendWebRequest();
 					if (req.result == UnityWebRequest.Result.Success) {
 						consecutiveConnectionErrors = 0;
@@ -816,7 +826,11 @@ namespace spz {
 		}
 
 		IEnumerator RequestLoadAddon(string addonId) {
+			if (IsAddonApiShuttingDown())
+				yield break;
 			yield return WaitForAddonServerReady();
+			if (IsAddonApiShuttingDown())
+				yield break;
 			UnityEngine.Debug.Log($"[Addon_MGR] Sending load request to Python for: {addonId}");
 			string url = $"http://127.0.0.1:{_httpServerPort}/load_addon";
 			string body = "{\"addon_id\":\"" + JsonEscape(addonId) + "\"}";
@@ -824,6 +838,7 @@ namespace spz {
 				req.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(body));
 				req.downloadHandler = new DownloadHandlerBuffer();
 				req.SetRequestHeader("Content-Type", "application/json");
+				req.timeout = 8; // avoid indefinite stalls on addon load wiring
 				yield return req.SendWebRequest();
 				if (req.result != UnityWebRequest.Result.Success) {
 					UnityEngine.Debug.LogError($"[Addon_MGR] load_addon failed for {addonId}: {req.error}. Ensure Python server is running on port {_httpServerPort}");

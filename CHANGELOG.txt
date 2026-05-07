@@ -6,6 +6,56 @@ This file tracks changes on top of that baseline until the next release bump.
 
 -------------------------------------------------------------------------------
 
+[Unreleased]  |  Date: 2026-05-07  |  Topic: Add-on UX updates + No-Color/Mask behavior alignment
+-------------------------------------------------------------------------------
+
+Summary
+  Improved add-on reliability/usability (generation-complete audio alert + GPU
+  Flow controls), restored No-Color masking defaults to OG behavior, and added
+  optional strict img2img mask isolation (default OFF).
+
+Add-ons (StreamingAssets)
+  * Assets/StreamingAssets/Addons/GenerationDoneAudioSPZ (new)
+    - Plays user-selected audio when SD generation finishes.
+    - Persistent settings.json (enabled, poll interval, sound path).
+    - Added Browse Audio File button and file picker.
+    - Replaced dropdown enable selector with button-based On/Off/Toggle controls.
+    - Added watcher lifecycle hardening on unload/reload.
+
+  * Assets/StreamingAssets/Addons/GpuFlowSPZ/__init__.py
+    - Replaced dropdown mode selector with explicit mode buttons:
+      Mode Off / Adaptive / Fixed.
+    - Added persistent settings.json for mode + fixed ceiling and restore on load.
+    - Added startup mode/source/phase debug logging.
+
+GPU Flow inference wiring check
+  * Confirmed pacing hooks are wired around SD + Gen3D requests:
+    - Assets/_gm/Features/StableDiffusion/Input Panel/SD_Generate_NetworkSender.cs
+    - Assets/_gm/Features/3D Generate/Gen3D_API.cs
+    - Assets/_gm/Features/AddonSystem/GpuFlowUnityHooks.cs
+  * Confirmed add-on HTTP routes are mounted/available:
+    - Assets/StreamingAssets/AddonSystem/http_server.py
+    - Assets/StreamingAssets/Addons/GpuFlowSPZ/http_routes.py
+
+No-Color / inpaint mask behavior alignment
+  * OG baseline compared against:
+    d:/DRIVE_DOWNLOADS/STABLE_PROJECTORZ_OG_GITHUB/StableProjectorz
+  * Restored OG-style No-Color behavior:
+    - Assets/_gm/Features/Paint/Inpaint/Shaders/Inpaint_UV_Mask_to_screenMask.shader
+      (restored _isColorlessMask strict/smooth blend path)
+    - Assets/_gm/Features/Paint/Inpaint/Inpaint_ScreenMasker_Original.cs
+      (restored No-Color dilation branch and _isColorlessMask material wiring)
+
+Optional strict mask isolation (default OFF)
+  * Assets/_gm/Features/StableDiffusion/GenData/GenData_ResultTextures.cs
+    - Optional post-process for img2img (Original fill) to preserve unmasked init pixels.
+  * Assets/_gm/Features/Settings/Settings_MGR.cs
+    - Added SD_StrictMaskIsolation setting load/save/default/reset/event path.
+  * Assets/_gm/Features/Settings/Settings_UI.cs
+    - Added runtime settings toggle row for strict mask isolation.
+
+-------------------------------------------------------------------------------
+
 [Unreleased]  |  Date: 2026-04-25  |  Topic: File browser input focus lock (viewport command isolation)
 -------------------------------------------------------------------------------
 
