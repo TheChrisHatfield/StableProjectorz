@@ -20,11 +20,11 @@ namespace spz {
 	    public RectTransform MirroredColumnRoot => _place_me;
 
 	    void Update(){
-	        Global_Skeleton_UI.instance?.Place_onto_LeftColumn( _place_me );
-	        if (ViewportFullViewOnScreen_Driver.IsActive) {
+	        if (ViewportFullViewOnScreen_Driver.ShouldHideMirroredLeftColumnContent()) {
 	            FadePanel(_canvGrp, 0f);
 	            return;
 	        }
+	        Global_Skeleton_UI.instance?.Place_onto_LeftColumn( _place_me );
 	        DimensionMode currMode = DimensionMode_MGR.instance._dimensionMode;
 	        switch (currMode){
 	            case DimensionMode.dim_uv:

@@ -445,7 +445,7 @@ namespace spz {
 				"spz.cmd.get_display_mode",
 				"spz.cmd.get_editor_layout",
 				"spz.cmd.get_event_system", "spz.cmd.get_ribbon_tabs",
-				"spz.cmd.get_mesh_bounds", "spz.cmd.get_mesh_name", "spz.cmd.get_mesh_pos", "spz.cmd.get_mesh_rot",
+				"spz.cmd.get_manipulation_target_mesh_id", "spz.cmd.get_mesh_bounds", "spz.cmd.get_mesh_name", "spz.cmd.get_mesh_pos", "spz.cmd.get_mesh_rot",
 				"spz.cmd.get_mesh_scale", "spz.cmd.get_mesh_visibility", "spz.cmd.get_negative_prompt",
 				"spz.cmd.get_paint_layers", "spz.cmd.get_positive_prompt", "spz.cmd.get_projection_camera_count",
 				"spz.cmd.get_projection_camera_pos", "spz.cmd.get_projection_camera_rot",
@@ -535,7 +535,13 @@ namespace spz {
 				if (!string.IsNullOrEmpty(mode) && (mode == "center_max" || mode == "ribbon_right")) {
 					bool okEnter = ViewportFullViewOnScreen_Driver.TryEnter();
 					result["success"] = okEnter;
-					if (!okEnter) {
+					if (okEnter) {
+						FullView_OuterPanel_Chrome_Binder.SyncChromeToDriver();
+						if (Global_Skeleton_UI.instance != null) {
+							Global_Skeleton_UI.instance.ForceLayoutRefreshAfterPanelResize();
+						}
+						ViewportFullViewOnScreen_Driver.NotifyLayoutRefreshedForPendingGenRefit();
+					} else {
 						result["error"] = "Failed to apply on-screen full view (skeleton not ready)";
 					}
 					return result;
@@ -583,6 +589,10 @@ namespace spz {
 				bool ok2 = Global_Skeleton_UI.instance.SetSidePanelVisibility(left, right);
 				if (ok2) {
 					ViewportFullViewOnScreen_Driver.SyncFromCurrentSkeleton();
+					FullView_OuterPanel_Chrome_Binder.SyncChromeToDriver();
+					if (Global_Skeleton_UI.instance != null) {
+						Global_Skeleton_UI.instance.ForceLayoutRefreshAfterPanelResize();
+					}
 				}
 				result["success"] = ok2;
 				if (!ok2) {
@@ -1151,6 +1161,13 @@ namespace spz {
 						result["mesh_ids"] = JArray.FromObject(selectedIds);
 						break;
 						
+					case "spz.cmd.get_manipulation_target_mesh_id": {
+						ushort tid = fastPath.GetManipulationTargetMeshId();
+						result["success"] = true;
+						result["mesh_id"] = tid;
+						break;
+					}
+					
 					case "spz.cmd.select_all_meshes":
 						result["success"] = fastPath.SelectAllMeshes();
 						break;
@@ -2139,7 +2156,8 @@ namespace spz {
 				_listener?.Stop();
 			} catch { }
 			if (_listenerThread != null && _listenerThread.IsAlive) {
-				_listenerThread.Join(1500);
+				// Keep quit path responsive: do not block app close waiting on background accept loop.
+				_listenerThread.Join(100);
 				if (_listenerThread.IsAlive)
 					UnityEngine.Debug.LogWarning("[Addon_SocketServer] Listener thread did not terminate within timeout (quit).");
 			}

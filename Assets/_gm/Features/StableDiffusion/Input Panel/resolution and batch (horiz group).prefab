@@ -1189,7 +1189,7 @@ MonoBehaviour:
   _inputField: {fileID: 3471374901029149832}
   _default: 512
   _min_val: 256
-  _max_val: 4096
+  _max_val: 8192
   onValidInput:
     m_PersistentCalls:
       m_Calls: []
@@ -1851,7 +1851,7 @@ MonoBehaviour:
   _inputField: {fileID: 5973082974546125545}
   _default: 512
   _min_val: 256
-  _max_val: 4096
+  _max_val: 8192
   onValidInput:
     m_PersistentCalls:
       m_Calls: []

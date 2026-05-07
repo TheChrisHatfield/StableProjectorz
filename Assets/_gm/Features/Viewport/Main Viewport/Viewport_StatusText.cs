@@ -41,7 +41,7 @@ namespace spz {
 	    }
 	    public void PreferVIsible(object originalRequestor) {
 	        _keepHidden_lock.Unlock(originalRequestor);
-	        _selfHide_GO.SetActive( _keepHidden_lock.isLocked() );
+	        _selfHide_GO.SetActive( !_keepHidden_lock.isLocked() );
 	    }
 
 
@@ -53,6 +53,11 @@ namespace spz {
 
 	    //textIsETA_number: appends eta to existing text, or updates previous substring with new ETA.
 	    public void ShowStatusText(string text, bool textIsETA_number, float textVisibleDur, bool progressVisibility){
+	        // Recover from accidental hidden state when no lock requests hiding.
+	        if (_selfHide_GO != null && !_keepHidden_lock.isLocked() && !_selfHide_GO.activeSelf) {
+	            _selfHide_GO.SetActive(true);
+	        }
+
 	        _fadeOutText_after = Time.time + textVisibleDur;
 
 	        _progressTotal.gameObject.SetActive(progressVisibility);

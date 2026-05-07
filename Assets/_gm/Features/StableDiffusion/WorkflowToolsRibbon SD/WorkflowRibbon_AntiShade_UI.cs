@@ -22,6 +22,10 @@ namespace spz {
 	        if(playAttentionAnim){ _anim.Play(); }
 	    }
 
+	    public void SetOffWithoutNotify(){
+	        _toggle.SetIsOnWithoutNotify(false);
+	    }
+
 	    void OnValueChanged(bool isOn){
 	        if(_isDoingCallback){ return; }//avoid recursion
 	        _isDoingCallback = true;

@@ -218,6 +218,7 @@ namespace spz {
 		private Toggle _filterAllToggle;
 		private Toggle _filterEnabledToggle;
 		private Toggle _filterDisabledToggle;
+		Toggle _rememberEnabledAddonToggle; // assigned in Create / TryAddRememberPreferenceRowIfMissing
 		private GameObject _blocker; // full-screen click blocker, shown/hidden with panel
 		Image _blockerDimImage; // dimmer on blocker root
 		CanvasGroup _panelModalGroup;
@@ -298,6 +299,97 @@ namespace spz {
 		return _panel.transform.Find("FilterBar") != null;
 	}
 
+		void OnRememberEnabledAddonsToggleChanged(bool remember) {
+			Addon_MGR.SetRememberEnabledAddonsPreference(remember);
+		}
+
+		void TryAddRememberPreferenceRowIfMissing() {
+			if (_panel == null) {
+				return;
+			}
+			Transform found = _panel.transform.Find("RememberEnabledRow");
+			if (found != null) {
+				_rememberEnabledAddonToggle = found.GetComponentInChildren<Toggle>(true);
+				if (_rememberEnabledAddonToggle != null) {
+					_rememberEnabledAddonToggle.onValueChanged.RemoveListener(OnRememberEnabledAddonsToggleChanged);
+					_rememberEnabledAddonToggle.onValueChanged.AddListener(OnRememberEnabledAddonsToggleChanged);
+				}
+				return;
+			}
+			Transform scroll = _panel.transform.Find("ScrollView");
+			int idx = scroll != null ? scroll.GetSiblingIndex() : _panel.transform.childCount;
+			var row = BuildRememberEnabledPreferenceRow(8f);
+			row.transform.SetParent(_panel.transform, false);
+			row.transform.SetSiblingIndex(idx);
+		}
+
+		void SyncRememberEnabledToggleFromPrefs() {
+			if (_rememberEnabledAddonToggle == null) {
+				return;
+			}
+			_rememberEnabledAddonToggle.SetIsOnWithoutNotify(Addon_MGR.GetRememberEnabledAddonsPreference());
+		}
+
+		GameObject BuildRememberEnabledPreferenceRow(float grid) {
+			var row = new GameObject("RememberEnabledRow");
+			row.layer = _panel != null ? _panel.gameObject.layer : 5;
+			var rowLE = row.AddComponent<LayoutElement>();
+			rowLE.preferredHeight = 40f;
+			rowLE.minHeight = 32f;
+			var rowH = row.AddComponent<HorizontalLayoutGroup>();
+			rowH.spacing = grid;
+			rowH.childAlignment = TextAnchor.MiddleLeft;
+			rowH.childControlWidth = true;
+			rowH.childControlHeight = true;
+			rowH.childForceExpandWidth = true;
+			rowH.childForceExpandHeight = true;
+			var labelObj = new GameObject("Label");
+			labelObj.transform.SetParent(row.transform, false);
+			var labelLE = labelObj.AddComponent<LayoutElement>();
+			labelLE.minWidth = 200f;
+			labelLE.preferredWidth = 420f;
+			labelLE.flexibleWidth = 1f;
+			var labelT = labelObj.AddComponent<TextMeshProUGUI>();
+			labelT.text = "Save enabled add-ons: restore them the next time you start StableProjectorz.";
+			labelT.fontSize = 14;
+			labelT.color = new Color(0.9f, 0.9f, 0.9f, 1f);
+			labelT.alignment = TextAlignmentOptions.MidlineLeft;
+			labelT.raycastTarget = false;
+			var toggleContainer = new GameObject("ToggleWrap");
+			toggleContainer.transform.SetParent(row.transform, false);
+			var tLE = toggleContainer.AddComponent<LayoutElement>();
+			tLE.preferredWidth = 52f;
+			tLE.minWidth = 48f;
+			tLE.flexibleWidth = 0f;
+			tLE.preferredHeight = 24f;
+			tLE.minHeight = 20f;
+			var bg = new GameObject("Background");
+			bg.transform.SetParent(toggleContainer.transform, false);
+			var bgR = bg.AddComponent<RectTransform>();
+			bgR.anchorMin = Vector2.zero;
+			bgR.anchorMax = Vector2.one;
+			bgR.sizeDelta = Vector2.zero;
+			var bgI = bg.AddComponent<UnityEngine.UI.Image>();
+			bgI.color = new Color(0.3f, 0.3f, 0.3f, 1f);
+			bgI.raycastTarget = true;
+			var ck = new GameObject("Checkmark");
+			ck.transform.SetParent(bg.transform, false);
+			var ckR = ck.AddComponent<RectTransform>();
+			ckR.anchorMin = Vector2.zero;
+			ckR.anchorMax = Vector2.one;
+			ckR.sizeDelta = Vector2.zero;
+			var ckI = ck.AddComponent<UnityEngine.UI.Image>();
+			ckI.color = new Color(0.2f, 0.8f, 0.2f, 1f);
+			ckI.raycastTarget = false;
+			var tgl = toggleContainer.AddComponent<Toggle>();
+			tgl.isOn = Addon_MGR.GetRememberEnabledAddonsPreference();
+			tgl.targetGraphic = bgI;
+			tgl.graphic = ckI;
+			tgl.onValueChanged.AddListener(OnRememberEnabledAddonsToggleChanged);
+			_rememberEnabledAddonToggle = tgl;
+			return row;
+		}
+
 	/// <summary>
 	/// Unity keeps a managed wrapper after native destroy; <c>== null</c> is true but <see cref="ReferenceEquals"/> to null is false.
 	/// Do not use <c>obj != null &amp;&amp; !obj</c> — both sides use Unity's overload and never match destroyed objects.
@@ -349,8 +441,11 @@ namespace spz {
 		SanitizeDestroyedPanelRefs();
 		if (_panel != null && _addonsListParent == null)
 			TryResolveAddonsListParentFromPanel();
-		if (AddonManagerPanelSetupIsComplete())
+		if (AddonManagerPanelSetupIsComplete()) {
+			TryAddRememberPreferenceRowIfMissing();
+			SyncRememberEnabledToggleFromPrefs();
 			return;
+		}
 		if (_panel != null)
 			DestroyAddonManagerPanelHierarchy();
 		
@@ -637,6 +732,9 @@ namespace spz {
 		statusText.raycastTarget = false;
 		_statusText = statusText;
 		
+		TryAddRememberPreferenceRowIfMissing();
+		SyncRememberEnabledToggleFromPrefs();
+		
 		SetLayerRecursively(_panel.transform, UILayer);
 		_panel.SetActive(false);
 		_blocker = blockerObj;
@@ -665,6 +763,7 @@ namespace spz {
 			_filterAllToggle = null;
 			_filterEnabledToggle = null;
 			_filterDisabledToggle = null;
+			_rememberEnabledAddonToggle = null;
 			_addonUIItems.Clear();
 		}
 

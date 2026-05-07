@@ -9,6 +9,7 @@ using UnityEngine.Networking;
 #if UNITY_EDITOR
 using System.Diagnostics;
 #endif
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
 using Lavender.Systems;
@@ -149,10 +150,85 @@ namespace spz {
 		private bool _isServerRunning = false;
 
 		static bool s_addonApiQuitShutdownDone;
+		static bool s_appliedRememberedEnabledOnFirstDiscover;
 
 		[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
 		static void ResetAddonQuitStatics() {
 			s_addonApiQuitShutdownDone = false;
+			s_appliedRememberedEnabledOnFirstDiscover = false;
+		}
+
+		const string PrefsKeyRememberEnabledAddons = "spz.addons.rememberEnabled";
+		const string PrefsKeyEnabledAddonIdsJson = "spz.addons.enabledIdsJson";
+
+		/// <summary>When true (default), enabled add-on ids are saved and restored on the next app launch.</summary>
+		public static bool GetRememberEnabledAddonsPreference() {
+			return PlayerPrefs.GetInt(PrefsKeyRememberEnabledAddons, 1) == 1;
+		}
+
+		/// <summary>Persists the “remember add-ons” option. When set to true, also saves the current enabled set.</summary>
+		public static void SetRememberEnabledAddonsPreference(bool remember) {
+			PlayerPrefs.SetInt(PrefsKeyRememberEnabledAddons, remember ? 1 : 0);
+			PlayerPrefs.Save();
+			if (remember && instance != null) {
+				instance.MaybePersistEnabledAddonSelection();
+			}
+		}
+
+		/// <summary>Writes the list of currently enabled add-on folder ids to disk when the remember option is on.</summary>
+		public void MaybePersistEnabledAddonSelection() {
+			if (!GetRememberEnabledAddonsPreference() || _registeredAddons == null) {
+				return;
+			}
+			var arr = new JArray();
+			foreach (var kvp in _registeredAddons) {
+				if (kvp.Value != null && kvp.Value.isEnabled) {
+					arr.Add(kvp.Key);
+				}
+			}
+			PlayerPrefs.SetString(PrefsKeyEnabledAddonIdsJson, arr.ToString(Formatting.None));
+			PlayerPrefs.Save();
+		}
+
+		static void ApplyRememberedEnabledStateFromPlayerPrefsOnFirstDiscover() {
+			if (s_appliedRememberedEnabledOnFirstDiscover) {
+				return;
+			}
+			s_appliedRememberedEnabledOnFirstDiscover = true;
+			if (!GetRememberEnabledAddonsPreference()) {
+				return;
+			}
+			if (instance == null || instance._registeredAddons == null) {
+				return;
+			}
+			string s = PlayerPrefs.GetString(PrefsKeyEnabledAddonIdsJson, "[]");
+			JArray arr;
+			try {
+				arr = JArray.Parse(s);
+			} catch {
+				return;
+			}
+			var set = new HashSet<string>(StringComparer.Ordinal);
+			foreach (var t in arr) {
+				if (t == null) {
+					continue;
+				}
+				string id = t.ToString();
+				if (!string.IsNullOrEmpty(id)) {
+					set.Add(id);
+				}
+			}
+			foreach (var kvp in instance._registeredAddons) {
+				if (kvp.Value == null) {
+					continue;
+				}
+				kvp.Value.isEnabled = set.Contains(kvp.Key);
+			}
+			UnityEngine.Debug.Log(
+				"[Addon_MGR] Restored enabled add-on selection from saved preferences ("
+				+ set.Count
+				+ " add-on id(s))."
+			);
 		}
 
 		static void HandleApplicationQuitting() {
@@ -175,7 +251,7 @@ namespace spz {
 			}
 			try {
 				if (instance != null)
-					instance.TerminatePythonAddonServerProcess();
+					instance.TerminatePythonAddonServerProcess(waitForExit: false);
 			} catch (Exception e) {
 				UnityEngine.Debug.LogWarning("[Addon_MGR] ShutdownAddonApiBeforeQuit (Python): " + e.Message);
 			}
@@ -192,9 +268,14 @@ namespace spz {
 			}
 		}
 
-		void TerminatePythonAddonServerProcess() {
+		void TerminatePythonAddonServerProcess(bool waitForExit = true) {
 #if UNITY_EDITOR
 			if (_pythonProcess != null) {
+				// Clear async stdout/stderr handlers BEFORE Cancel/Kill: late callbacks marshalling Debug.Log into Unity
+				// during shutdown have been observed to stall the Editor on quit (background ThreadPool thread vs
+				// Unity main thread tearing down logging). Drop them first so any in-flight callback is a no-op.
+				try { _pythonProcess.OutputDataReceived -= OnPythonStdout_LogToUnity; } catch { }
+				try { _pythonProcess.ErrorDataReceived  -= OnPythonStderr_LogToUnity; } catch { }
 				try {
 					_pythonProcess.CancelOutputRead();
 					_pythonProcess.CancelErrorRead();
@@ -211,7 +292,7 @@ namespace spz {
 					string workDir = Path.GetTempPath();
 					string cmd = "taskkill /PID " + _pythonServerPid + " /T /F";
 					uint killPid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(cmd, isJustFile: false, workDir, keepWindow: false, hidden: true, attachToConsole: false);
-					if (killPid != 0)
+					if (waitForExit && killPid != 0)
 						StartExternalProcess.WaitForProcessExit(killPid, 3000);
 				} catch (Exception e) {
 					UnityEngine.Debug.LogWarning("[Addon_MGR] Could not terminate Python addon server: " + e.Message);
@@ -221,7 +302,20 @@ namespace spz {
 #endif
 			_isServerRunning = false;
 		}
-		
+
+#if UNITY_EDITOR
+		/// <summary>Static so an in-flight callback after we set _pythonProcess=null is still safe (no instance state).
+		/// Bails out if Editor has begun teardown (ApplicationQuitting fired) — guarded by <see cref="s_addonApiQuitShutdownDone"/>.</summary>
+		static void OnPythonStdout_LogToUnity(object sender, System.Diagnostics.DataReceivedEventArgs e) {
+			if (s_addonApiQuitShutdownDone) return;
+			if (!string.IsNullOrEmpty(e.Data)) UnityEngine.Debug.Log("[Python Server] " + e.Data);
+		}
+		static void OnPythonStderr_LogToUnity(object sender, System.Diagnostics.DataReceivedEventArgs e) {
+			if (s_addonApiQuitShutdownDone) return;
+			if (!string.IsNullOrEmpty(e.Data)) UnityEngine.Debug.LogError("[Python Server Error] " + e.Data);
+		}
+#endif
+
 		public class AddonInfo {
 			public string id;
 			public string path;
@@ -297,7 +391,7 @@ namespace spz {
 			}
 			
 			// Start Python server (includes FastAPI HTTP server if enabled)
-			StartPythonServer();
+			StartPythonServer(forceHiddenWindow: true);
 			
 			// If server failed and we have addons, auto-restart via Run_with_Addons.bat (built player only; never in Editor to avoid quitting Unity)
 			if (_autoRestartWithAddonsOnServerFail && !_isServerRunning && _enableHttpServer && HasAnyEnabledAddon() && !WasLaunchedByAddonsBat() && !Application.isEditor) {
@@ -500,6 +594,8 @@ namespace spz {
 				foreach (var key in toRemove) {
 					_registeredAddons.Remove(key);
 				}
+
+				ApplyRememberedEnabledStateFromPlayerPrefsOnFirstDiscover();
 				
 				UnityEngine.Debug.Log($"[Addon_MGR] Total addons discovered: {_registeredAddons.Count}");
 			} catch (System.Exception e) {
@@ -539,7 +635,7 @@ namespace spz {
 		/// <summary>
 		/// Starts the Python server process (dual-trigger: runs automatically when exe loads, like quick-start flow).
 		/// </summary>
-		void StartPythonServer() {
+		void StartPythonServer(bool forceHiddenWindow = false) {
 			if (_isServerRunning) return;
 
 			string serverScriptPath = null;
@@ -565,7 +661,7 @@ namespace spz {
 			
 			string pythonExe = TryResolvePythonExe();
 			if (string.IsNullOrEmpty(pythonExe)) pythonExe = "python";
-			bool showExternalWindows = UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1;
+			bool showExternalWindows = !forceHiddenWindow && UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1;
 			UnityEngine.Debug.Log($"[Addon_MGR] Starting Python server: socket port {_serverPort}, HTTP port {_httpServerPort}, exe: {pythonExe}");
 			
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
@@ -580,9 +676,11 @@ namespace spz {
 				string socketBound = (Addon_SocketServer.instance != null && Addon_SocketServer.instance.IsListening) ? "1" : "0";
 				string batContent = "@echo off\r\ncd /d \"" + workDir + "\"\r\nset SPZ_SOCKET_BOUND=" + socketBound + "\r\n\"" + pythonExe.Replace("\"", "\"\"") + "\" \"" + serverScriptPath.Replace("\"", "\"\"") + "\" --port " + _serverPort + " --addons-dir \"" + addonsPath.Replace("\"", "\"\"") + "\" " + httpArg + "\r\n";
 				File.WriteAllText(batPath, batContent);
-				UnityEngine.Debug.Log(showExternalWindows
-					? "[Addon_MGR] Starting addon server with visible console (Settings)."
-					: "[Addon_MGR] Starting addon server in background (hidden console).");
+				UnityEngine.Debug.Log(forceHiddenWindow
+					? "[Addon_MGR] Starting addon server in background (startup always hidden)."
+					: (showExternalWindows
+						? "[Addon_MGR] Starting addon server with visible console (Settings)."
+						: "[Addon_MGR] Starting addon server in background (hidden console)."));
 				uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
 					batPath,
 					isJustFile: true,
@@ -621,12 +719,11 @@ namespace spz {
 						WorkingDirectory = Path.GetDirectoryName(serverScriptPath)
 					}
 				};
-				_pythonProcess.OutputDataReceived += (sender, e) => {
-					if (!string.IsNullOrEmpty(e.Data)) UnityEngine.Debug.Log($"[Python Server] {e.Data}");
-				};
-				_pythonProcess.ErrorDataReceived += (sender, e) => {
-					if (!string.IsNullOrEmpty(e.Data)) UnityEngine.Debug.LogError($"[Python Server Error] {e.Data}");
-				};
+				// Named handlers (instead of inline lambdas) so TerminatePythonAddonServerProcess can detach them
+				// before Cancel/Kill — prevents shutdown stalls from late stdout callbacks calling Debug.Log
+				// during Unity teardown.
+				_pythonProcess.OutputDataReceived += OnPythonStdout_LogToUnity;
+				_pythonProcess.ErrorDataReceived  += OnPythonStderr_LogToUnity;
 				_pythonProcess.Start();
 				_pythonProcess.BeginOutputReadLine();
 				_pythonProcess.BeginErrorReadLine();
@@ -755,6 +852,7 @@ namespace spz {
 			if (_registeredAddons.TryGetValue(addonId, out var addon)) {
 				addon.isEnabled = false;
 				OnAddonEnabledStateChanged?.Invoke(addonId);
+				MaybePersistEnabledAddonSelection();
 			}
 		}
 
@@ -831,6 +929,8 @@ namespace spz {
 			addon.uiElements.Clear();
 			
 			UnityEngine.Debug.Log($"[Addon_MGR] Unloaded add-on: {addonId}");
+			OnAddonEnabledStateChanged?.Invoke(addonId);
+			MaybePersistEnabledAddonSelection();
 		}
 		
 		static string JsonEscape(string s) {
@@ -886,6 +986,8 @@ namespace spz {
 				}
 				StartCoroutine(CoEnsureRibbonOnlyFullscreenViewportDock());
 			}
+			OnAddonEnabledStateChanged?.Invoke(addonId);
+			MaybePersistEnabledAddonSelection();
 		}
 		
 		/// <summary>

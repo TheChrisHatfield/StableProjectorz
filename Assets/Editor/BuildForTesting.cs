@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
@@ -21,6 +22,13 @@ public static class BuildForTesting
 	/// <summary>Folder name in project root; cloned automatically during build if missing, then copied into the build.</summary>
 	public const string WebuiForgeFolderName = "stable-diffusion-webui-forge";
 	const string WebuiForgeCloneUrl = "https://github.com/lllyasviel/stable-diffusion-webui-forge.git";
+	static readonly string[] BeeStateFilesRelative =
+	{
+		"Library/Bee/TundraBuildState.state",
+		"Library/Bee/TundraBuildState.state.map",
+		"Library/Bee/tundra.digestcache",
+		"Library/Bee/tundra.digestcache.tmp",
+	};
 
 	/// <summary>
 	/// Entry point for: Unity -batchmode -executeMethod BuildForTesting.BuildWin64 -quit
@@ -71,6 +79,7 @@ public static class BuildForTesting
 		}
 		if (!Directory.Exists(outputDir))
 			Directory.CreateDirectory(outputDir);
+		TryPrepareBeeStateFilesForBatchBuild(projectRoot);
 
 		var scenes = EditorBuildSettings.scenes;
 		var enabledScenes = new System.Collections.Generic.List<string>();
@@ -122,10 +131,57 @@ public static class BuildForTesting
 				hint += "Free disk space on the drive containing the project and Library, then run Build → Clean and Build Win64 (IL2CPP).";
 			else if (summarized != null && summarized.Contains("user-mapped section open"))
 				hint += "Close StableProjectorz.exe (and any copy), then run Build → Clean and Build Win64 (IL2CPP).";
+			else if (summarized != null && (summarized.Contains("TundraBuildState.state") || summarized.Contains("tundra.digestcache")))
+				hint += "Bee state file lock detected. Close Unity Editor/other build instances and antivirus scanners touching Library/Bee, then rerun Clean and Build.";
 			else
 				hint += "If you see 'user-mapped section open', close the exe and Clean+Build. If you see 'No space left on device', free disk space and Clean+Build.";
 			Debug.LogError($"[BuildForTesting] Build failed: {summary.result}, errors: {summary.totalErrors}. {hint}");
 			EditorApplication.Exit(1);
+		}
+	}
+
+	/// <summary>
+	/// Bee can fail with "Unable to rename state file" when stale/locked files exist in Library/Bee.
+	/// Pre-clear known state files with retries so batch builds fail less often after interrupted runs.
+	/// </summary>
+	static void TryPrepareBeeStateFilesForBatchBuild(string projectRoot)
+	{
+		for (int i = 0; i < BeeStateFilesRelative.Length; i++)
+		{
+			string rel = BeeStateFilesRelative[i];
+			string full = Path.Combine(projectRoot, rel.Replace('/', Path.DirectorySeparatorChar));
+			TryDeleteFileWithRetry(full, rel, attempts: 8, sleepMs: 125);
+		}
+	}
+
+	static void TryDeleteFileWithRetry(string fullPath, string relPath, int attempts, int sleepMs)
+	{
+		if (!File.Exists(fullPath))
+			return;
+		for (int i = 0; i < attempts; i++)
+		{
+			try
+			{
+				File.SetAttributes(fullPath, FileAttributes.Normal);
+				File.Delete(fullPath);
+				Debug.Log("[BuildForTesting] Cleared stale Bee state: " + relPath);
+				return;
+			}
+			catch (System.Exception e)
+			{
+				bool isLast = i == attempts - 1;
+				if (isLast)
+				{
+					Debug.LogWarning(
+						"[BuildForTesting] Could not clear Bee state file '" + relPath + "'. " +
+						"Another process may be locking Library/Bee. Close Unity Editor/other builds, then retry. " +
+						"Error: " + e.Message);
+				}
+				else
+				{
+					Thread.Sleep(sleepMs);
+				}
+			}
 		}
 	}
 

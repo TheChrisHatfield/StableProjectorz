@@ -30,8 +30,73 @@ namespace spz {
 	    Vector2 _draggedPin_cursorOffset;
 	    float _flyControlsHint_recentTime = -999; //when did we print the 'helper-status-text' reminding user they can use WASD.
 
+	    // MMB: only when cursor is within this radius (px) of the *nearest* pin in screen space.
+	    // ROLLBACK NOTE: Before 2026-04, any MMB near the viewport grabbed the nearest pin (no distance gate);
+	    //   re-remove this field and the MMB+radius line in GrabPin_maybe to restore that behavior.
+	    [SerializeField] float _mmbPinGrabRadiusPx = 64f;
+
 	    int NumVisiblePins(){ return _cameraPins.Count(p=>p.gameObject.activeInHierarchy); }
 
+	    /// <summary>True while a camera pin is being moved (LMB or MMB drag).</summary>
+	    public bool IsDraggingViewPin => _draggedPin != null;
+
+	    /// <summary>True if the user is currently dragging the pin for <paramref name="cameraIndex"/>.</summary>
+	    public bool IsDraggingThisCameraPin(int cameraIndex) {
+		    return _draggedPin != null && _draggedPinIx == cameraIndex;
+	    }
+
+	    /// <summary>
+	    /// Re-apply one pin's UI anchors from <see cref="UserCameras_MGR.get_viewCams_PovInfos"/>
+	    /// (same as <see cref="UpdatePins_to_Locations"/>) so POV numbers move immediately after
+	    /// <see cref="UserCameras_MGR.Set_ProjMatrixCenter_ofCamera"/> (e.g. MMB pan lock in multi-view).
+	    /// </summary>
+	    public void RepositionPinUIFromPovData(int cameraIndex) {
+		    if (_cameraPins == null || cameraIndex < 0 || cameraIndex >= _cameraPins.Count) { return; }
+		    if (UserCameras_MGR.instance == null) { return; }
+		    var povInfos = UserCameras_MGR.instance.get_viewCams_PovInfos();
+		    if (povInfos == null || cameraIndex >= povInfos.Count) { return; }
+		    CameraPovInfo inf = povInfos[cameraIndex];
+		    RectTransform pinRectTr = _cameraPins[cameraIndex].transform as RectTransform;
+		    if (pinRectTr == null) { return; }
+		    Vector2 center01 = inf.perspectiveCenter01;
+		    pinRectTr.anchorMin = center01;
+		    pinRectTr.anchorMax = center01;
+		    pinRectTr.anchoredPosition = Vector2.zero;
+	    }
+
+	    /// <summary>
+	    /// True if a middle-mouse *press this frame* would be consumed by the nearest camera pin, not <see cref="CameraPanning"/>.
+	    /// Kept in sync with <see cref="GrabPin_maybe"/> preconditions; see also <see cref="_mmbPinGrabRadiusPx"/> rollback note.
+	    /// </summary>
+	    public bool MmbDownWouldGrabNearestPin() {
+	        if (KeyMousePenInput.isMMBpressedThisFrame() == false) { return false; }
+	        if (MainViewport_UI.instance == null || !MainViewport_UI.instance.isCursorHoveringMe()) { return false; }
+	        if (KeyMousePenInput.isKey_CtrlOrCommand_pressed() || KeyMousePenInput.isKey_Shift_pressed()) { return false; }
+	        if (KeyMousePenInput.isRMBpressed()) { return false; }
+	        if (NumVisiblePins() == 0) { return false; }
+	        if (DimensionMode_MGR.instance == null) { return false; }
+	        if (DimensionMode_MGR.instance._dimensionMode == DimensionMode.dim_uv) { return false; }
+	        // Mirror GrabPin_maybe: LMB+mode combinations block pin; do not let MmbDown "reserve" a grab that will not run.
+	        bool lmb = KeyMousePenInput.isLMBpressed();
+	        var dim = DimensionMode_MGR.instance._dimensionMode;
+	        bool isMultiViewEditing = MultiView_Ribbon_UI.instance != null && MultiView_Ribbon_UI.instance._isEditingMode;
+	        if (lmb && dim == DimensionMode.dim_gen_3d) { return false; }
+	        if (lmb && dim == DimensionMode.dim_sd && !isMultiViewEditing) { return false; }
+
+	        int nearestPinIx = FindNearestPin();
+	        if (nearestPinIx < 0) { return false; }
+	        return IsCursorWithinMmbGrabRadiusToPin(nearestPinIx);
+	    }
+
+	    bool IsCursorWithinMmbGrabRadiusToPin(int pinIx) {
+	        if (pinIx < 0 || _cameraPins == null || pinIx >= _cameraPins.Count) { return false; }
+	        var pinGO = _cameraPins[pinIx];
+	        if (pinGO == null || pinGO.activeInHierarchy == false) { return false; }
+	        float r = _mmbPinGrabRadiusPx;
+	        var pinPos = (Vector2)pinGO.transform.position;
+	        float sqr = Vector2.SqrMagnitude(pinPos - KeyMousePenInput.cursorScreenPos());
+	        return sqr <= r * r;
+	    }
 
 	    //gives ability to initialize when scenes load.
 	    public static System.Action OnStartInvoked { get; set; } = null;
@@ -147,6 +212,7 @@ namespace spz {
 	        if(isLMBpressed && is_dimension_3d){ return; }
 	        if(isLMBpressed && is_dimension_sd && !isMultiViewEditing){ return; }
 	        if(is_dimension_uv){ return; }//no draggnig of pins during inspection of UV.
+	        if (KeyMousePenInput.isMMBpressedThisFrame() && !IsCursorWithinMmbGrabRadiusToPin(nearestPinIx)) { return; }
 
 	        OnPinGrabbed(nearestPinIx, isMMBpressed);
 	    }

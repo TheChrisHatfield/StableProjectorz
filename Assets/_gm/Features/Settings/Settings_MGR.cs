@@ -157,6 +157,19 @@ namespace spz {
 	    void tryLoad_showExternalProcessWindows()
 	        => set_showExternalProcessWindows(PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1);
 
+	    // When false (default): launch wrappers set SD_WEBUI_RESTARTING=1 and GRADIO_INBROWSER=0, and the app
+	    // will not OpenURL when SD is ready. When true: same Forge envs (one tab from Unity at "ready" only; Forge webui.py ignores Gradio for "Local" autolaunch).
+	    bool _webUiOpenBrowserOnStartup = false;
+	    public bool get_webUiOpenBrowserOnStartup() => _webUiOpenBrowserOnStartup;
+	    void set_webUiOpenBrowserOnStartup(bool isOn) {
+	        _webUiOpenBrowserOnStartup = isOn;
+	        PlayerPrefs.SetInt("WebUI_OpenBrowserOnStartup", _webUiOpenBrowserOnStartup ? 1 : 0); PlayerPrefs.Save();
+	        var toggle = EventsBinder.FindComponent<Toggle>("Settings:set_webUiOpenBrowserOnStartup");
+	        if (toggle != null) toggle.SetIsOnWithoutNotify(isOn);
+	    }
+	    void tryLoad_webUiOpenBrowserOnStartup()
+	        => set_webUiOpenBrowserOnStartup(PlayerPrefs.GetInt("WebUI_OpenBrowserOnStartup", 0) == 1);
+
 	    public static Action<bool> _Act_viewportInCenterChanged { get; set; } = null;
 	    bool _viewport_in_center = true;
 	    public bool get_viewport_in_center() => _viewport_in_center;
@@ -505,6 +518,7 @@ namespace spz {
 	            set_useCtrlScroll_for_WorkflowMode_swaps(false);
 	            set_sdGpuDeviceId(-1);
 	            set_showExternalProcessWindows(false);
+	            set_webUiOpenBrowserOnStartup(false);
 	            set_paintUndo_enabled(true);
 	            set_paintUndo_maxDepth(8);
 	        }
@@ -603,6 +617,7 @@ namespace spz {
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_ignoreCtrl_if_clickSelectingMeshes", set_ignoreCtrl_if_clickSelectingMeshes);
 	        StaticEvents.SubscribeUnique<int>("Settings:set_sdGpuDeviceId", set_sdGpuDeviceId);
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_showExternalProcessWindows", set_showExternalProcessWindows);
+	        StaticEvents.SubscribeUnique<bool>("Settings:set_webUiOpenBrowserOnStartup", set_webUiOpenBrowserOnStartup);
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_paintUndo_enabled", set_paintUndo_enabled);
 	        StaticEvents.SubscribeUnique<int>("Settings:set_paintUndo_maxDepth", set_paintUndo_maxDepth);
 	        tryLoad_useVSync();
@@ -627,6 +642,7 @@ namespace spz {
 	        tryLoad_ignoreCtrl_if_clickSelectingMeshes();
 	        tryLoad_sdGpuDeviceId();
 	        tryLoad_showExternalProcessWindows();
+	        tryLoad_webUiOpenBrowserOnStartup();
 	        tryLoad_paintUndo_enabled();
 	        tryLoad_paintUndo_maxDepth();
 	        isLaunchFastWebui = PlayerPrefs.GetInt("isLaunchFastWebui", 0) > 0;
@@ -679,6 +695,7 @@ namespace spz {
 	        StaticEvents.Unsubscribe<bool>("Settings:set_ignoreCtrl_if_clickSelectingMeshes", set_ignoreCtrl_if_clickSelectingMeshes);
 	        StaticEvents.Unsubscribe<int>("Settings:set_sdGpuDeviceId", set_sdGpuDeviceId);
 	        StaticEvents.Unsubscribe<bool>("Settings:set_showExternalProcessWindows", set_showExternalProcessWindows);
+	        StaticEvents.Unsubscribe<bool>("Settings:set_webUiOpenBrowserOnStartup", set_webUiOpenBrowserOnStartup);
 	        StaticEvents.Unsubscribe<bool>("Settings:set_paintUndo_enabled", set_paintUndo_enabled);
 	        StaticEvents.Unsubscribe<int>("Settings:set_paintUndo_maxDepth", set_paintUndo_maxDepth);
 	    }

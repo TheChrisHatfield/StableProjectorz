@@ -36,6 +36,10 @@ namespace spz {
 	        ShowHint_maybe();
 	    }
 
+	    public void SetOffWithoutNotify(){
+	        _toggle.SetIsOnWithoutNotify(false);
+	    }
+
 	    void ShowHint_maybe(){
 	        if(Time.time < _next_hintTime){ return; }
 	        if(_num_hintsShown > 3){ return; }

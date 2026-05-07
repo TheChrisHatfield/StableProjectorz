@@ -16,6 +16,9 @@ namespace spz {
 
 	    public static CameraOrbit _theCurrentlyOrbiting { get; private set; } = null;//there can be several cameras (with our script).
 	    float _clickStartTime;
+	    /// <summary>Captured at the first Alt+LMB rotate frame; used for the entire orbit drag so a moving cursor cannot re-pick another character mid-rotation.</summary>
+	    Vector3 _lockedPivotWorld;
+	    bool _havePivotLock;
 
 
 	    void OnApplicationFocus(bool focus){
@@ -54,7 +57,32 @@ namespace spz {
 	        bool stopNow  =  _theCurrentlyOrbiting!=this || !hasALT|| !KeyMousePenInput.isLMBpressed();
 	             stopNow |=  KeyMousePenInput.isMMBpressed() || KeyMousePenInput.isRMBpressed();
        
-	        if(stopNow){ StopOrbit_ifWas(); return; }
+	        if(stopNow){ ClearPivotLock(); StopOrbit_ifWas(); return; }
+
+	        // First Alt+LMB frame: pick the character under the cursor and LOCK the pivot for the whole drag.
+	        // Without this, the cursor moving during the drag re-picks a different character every frame
+	        // (depth / mesh-ID / focus list fallback), which feels like "rotation snaps to character 1".
+	        //
+	        // Multi-view: prefer mesh-ID composite (camera-independent) for picking which mesh to focus on.
+	        // The previous physics-raycast-only path could only hit meshes inside _myViewCam's frustum, so
+	        // a mesh that's only visible through a different sub-view stayed unselectable -> orbit kept
+	        // snapping back to the first character.
+	        // ROLLBACK NOTE: the prior single-path call was just TryRaycastSelectedMeshUnderMainViewport(...)
+	        // (still kept below as the precise-hit-point fallback when the camera ray *does* hit the
+	        // picked mesh's collider).
+	        if (hasALT && !_havePivotLock) {
+		        if (ModelsHandler_3D.instance != null
+		            && ClickSelect_Meshes_MGR.TryPickSelectedMeshAndPoint(_myViewCam, out var smHit, out var hitPt) && smHit != null) {
+			        ModelsHandler_3D.instance.SetManipulationFocusMesh(smHit);
+			        _lockedPivotWorld = hitPt;
+		        } else if (ModelsHandler_3D.instance != null
+		                   && ModelsHandler_3D.instance.TryGetNavigationReferenceWorldPoint(_myViewCam, out var navRefStart)) {
+			        _lockedPivotWorld = navRefStart;
+		        } else {
+			        _lockedPivotWorld = ModelsHandler_3D.instance.GetTotalBounds_ofSelectedMeshes().center;
+		        }
+		        _havePivotLock = true;
+	        }
 
 	        Bounds bounds = ModelsHandler_3D.instance.GetTotalBounds_ofSelectedMeshes();
 
@@ -67,8 +95,11 @@ namespace spz {
 
 
 	    void StopOrbit_ifWas(){
+	        if (_theCurrentlyOrbiting == this) { ClearPivotLock(); }
 	        _theCurrentlyOrbiting =  _theCurrentlyOrbiting==this?  null : _theCurrentlyOrbiting;
 	    }
+
+	    void ClearPivotLock(){ _havePivotLock = false; }
     
 
 	    //allows to face the camera towards the 6 sides of the world. 
@@ -81,7 +112,7 @@ namespace spz {
 	        if(isUp || isDown){ localUp = nearest45DegreeDir(transform.up); }
 
 	        _tempPivot.SetParent(transform.parent, worldPositionStays:true);
-	        _tempPivot.position = bounds.center;
+	        _tempPivot.position = _havePivotLock ? _lockedPivotWorld : ResolveOrbitPivotWorld(bounds);
 	        _tempPivot.LookAt(transform.position, transform.up);
 
 	        transform.SetParent(_tempPivot, worldPositionStays:true);
@@ -98,12 +129,18 @@ namespace spz {
 	        float inputX = inputDelta.x * speed;
 	        float inputY = -inputDelta.y * speed;
 
-	        //for multiview cameras only spin around bounds center. Else, around the orbit-pivot.
-	        Vector3 coord = MultiView_Ribbon_UI.instance._isEditingMode ?
-	                                           CameraOrbit_ClickPivot.instance.transform.position
-	                                         : bounds.center;
+	        // Use the pivot LOCKED at orbit start (so a moving cursor mid-drag can't switch the target character).
+	        Vector3 coord = _havePivotLock ? _lockedPivotWorld : ResolveOrbitPivotWorld(bounds);
 	        transform.RotateAround(coord, Vector3.up, inputX);
 	        transform.RotateAround(coord, transform.right, inputY);
+	    }
+
+	    Vector3 ResolveOrbitPivotWorld(Bounds boundsFallback) {
+		    if (ModelsHandler_3D.instance != null
+		        && ModelsHandler_3D.instance.TryGetNavigationReferenceWorldPoint(_myViewCam, out var navRef)) {
+			    return navRef;
+		    }
+		    return boundsFallback.center;
 	    }
 
 

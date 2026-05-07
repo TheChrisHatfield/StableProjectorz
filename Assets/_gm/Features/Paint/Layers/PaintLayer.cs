@@ -35,6 +35,13 @@ namespace spz {
 		/// <summary>Secondary buffer for save/load round-trips. Not used during live painting (strokes go directly into Content). </summary>
 		public RenderUdims Data { get; private set; }
 
+		/// <summary>Per-layer mask for strokes painted in <see cref="WorkflowRibbon_CurrMode.Inpaint_NoColor"/> mode.
+		/// Kept separate from <see cref="Content"/> so colorless strokes never pollute color RGB and switching modes
+		/// in the ribbon doesn't reveal "secret color" or hide colorless strokes. Lazily allocated by
+		/// <see cref="EnsureNoColorMaskMatchesContent"/> on the first No-Color stroke; same shape/format as Content.
+		/// Composite blits this on top of Content with <c>_isColorlessMask = 1</c> so it always renders as the checker pattern.</summary>
+		public RenderUdims NoColorMask { get; private set; }
+
 		/// <summary>True after the painter has injected static scene into this layer once. Prevents overwriting user paint; ensures we only inject when layer is still an empty vessel.</summary>
 		public bool HasReceivedSceneInject { get; set; }
 
@@ -55,11 +62,27 @@ namespace spz {
 				Content.Dispose();
 				Data?.Dispose();
 				Data = null;
+				NoColorMask?.Dispose();
+				NoColorMask = null;
 			}
 			Content = new RenderUdims(udims, resolution, format, filter, Color.clear, depthBits: 0);
 			Data = new RenderUdims(udims, resolution, format, filter, Color.clear, depthBits: 0);
 			HasReceivedSceneInject = false; // new/rezised vessel; painter will inject static scene once
 			return true;
+		}
+
+		/// <summary>Lazily allocate <see cref="NoColorMask"/> with the same shape as <see cref="Content"/>. No-op if already matches. Caller should ensure Content exists first (use <see cref="PaintLayerStack_MGR.EnsureContentForLayerIfNeeded"/>).</summary>
+		public void EnsureNoColorMaskMatchesContent()
+		{
+			if (Content == null) return;
+			if (NoColorMask != null
+			    && NoColorMask.width == Content.width
+			    && NoColorMask.height == Content.height
+			    && NoColorMask.UdimsCount == Content.UdimsCount)
+				return;
+			NoColorMask?.Dispose();
+			NoColorMask = new RenderUdims(Content.udims_sectors, Content.widthHeight,
+				Content.graphicsFormat, Content.filterMode, Color.clear, depthBits: 0);
 		}
 
 		// --- Save/load helpers (Content = live paint buffer; Data = mirror for serialization) ---
@@ -99,6 +122,8 @@ namespace spz {
 			Content = null;
 			Data?.Dispose();
 			Data = null;
+			NoColorMask?.Dispose();
+			NoColorMask = null;
 		}
 	}
 

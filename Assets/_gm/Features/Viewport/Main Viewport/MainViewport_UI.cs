@@ -136,8 +136,16 @@ namespace spz {
 		        return;
 	        }
 	        // ensure our recttransform has the same placement as defined by the ui-skeleton:
-	        if (ViewportFullViewOnScreen_Driver.IsActive) {
-		        sk.Place_onto_MainViewport_between_ribbons(_container_rectTransf);
+	        if (ViewportFullViewOnScreen_Driver.ShouldUseBetweenRibbonsMainViewportPlacement()) {
+		        // "Between ribbons" matches the HORIZ block to the inner mainViewportRect. When the paint / right
+		        // column is also open (OPEN RIGHT from full view), that can leave the block mis-sized vs. the
+		        // skeleton main cell — the inner right workflow strip sits on the wrong (far) edge. The skeleton
+		        // main slot is authoritative when both edges of the center row are defined by layout.
+		        if (sk.TryGetSidePanelVisibility(out _, out bool rightOpen) && rightOpen) {
+			        sk.Place_onto_MainViewport(_container_rectTransf);
+		        } else {
+			        sk.Place_onto_MainViewport_between_ribbons(_container_rectTransf);
+		        }
 	        } else {
 		        sk.Place_onto_MainViewport(_container_rectTransf);
 	        }
@@ -263,6 +271,18 @@ namespace spz {
 
 	        _viewport_initial_offset_min = _viewport_holder_rect.offsetMin = new Vector2(leftRect.sizeDelta.x, 0);
 	        _viewport_initial_offset_max = _viewport_holder_rect.offsetMax = new Vector2(-rightRect.sizeDelta.x, 0);
+	    }
+
+	    /// <summary>
+	    /// Re-run viewport-in-center and left/right inner vertical ribbon anchoring after the skeleton side columns
+	    /// change size (e.g. OPEN RIGHT from full view) so Gen Art / workflow strips stay on the correct edges.
+	    /// </summary>
+	    public void ReapplyInnerRibbonLayoutFromSettings() {
+		    if (Settings_MGR.instance == null) {
+			    return;
+		    }
+		    OnSettings_ViewportInCenter(Settings_MGR.instance.get_viewport_in_center());
+		    OnSettings_VerticalRibbonsSwapped(Settings_MGR.instance.get_viewport_isSwapVerticalRibbons());
 	    }
 
 

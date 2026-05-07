@@ -8,6 +8,8 @@ namespace spz {
 
 	public interface IWorkflowModeToggle{
 	    void EnableToggle(bool playAttentionAnim = false);
+	    /// <summary>Clears this toggle without firing onValueChanged — used so only one workflow mode stays on.</summary>
+	    void SetOffWithoutNotify();
 	}
 
 
@@ -36,6 +38,10 @@ namespace spz {
 	        _toggle.isOn = true;
 	        if(playAttentionAnim){ _anim.Play(); }
 	        ShowHint_maybe();
+	    }
+
+	    public void SetOffWithoutNotify(){
+	        _toggle.SetIsOnWithoutNotify(false);
 	    }
 
 	    void ShowHint_maybe(){

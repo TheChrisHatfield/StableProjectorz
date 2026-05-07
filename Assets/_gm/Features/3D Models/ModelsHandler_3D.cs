@@ -36,6 +36,9 @@ namespace spz {
 	    // Allows us to keep remembering what we care about during the importing process.
 	    ModelsHandler_ImporingInfo _importingInfo = null;
 
+	    /// <summary>When several submeshes are selected, this is the one the user is steering (hover ray or last select). Add-ons and tools should use <see cref="GetManipulationTargetMesh"/> for single-mesh transform, not <c>selectedMeshes[0]</c>.</summary>
+	    SD_3D_Mesh _manipulationFocusMesh;
+
 	    public bool _isImportingModel => _importHelper._isImportingModel;
 	    public string _path_recentlyExported => _importHelper._path_recentlyExported;
 	    public static Action<ModelsHandler_ImporingInfo> Act_onWillLoadModel { get; set; } = null;
@@ -98,6 +101,91 @@ namespace spz {
 	    //box that encapsulates all mesh renderers.
 	    public Bounds GetTotalBounds_ofSelectedMeshes() => o3d.GetTotalBounds_ofSelectedMeshes();
 
+    /// <summary>
+    /// Orbit/pan/zoom reference world point under the cursor.
+    /// Priority (multi-view safe):
+    ///   1) <paramref name="vCam"/>'s ray hits a *selected* mesh's collider -> precise hit point.
+    ///   2) ANY active view camera's ray (multi-camera "directional raycast") -> precise hit point.
+    ///      This recovers cases where the picked mesh is only visible through a different sub-view.
+    ///   3) Mesh-ID composite buffer identifies the mesh under the cursor (camera-independent) -> mesh.bounds.center.
+    ///   4) Depth buffer + vCam unproject. ONLY trustworthy in single-view: in multi-view the depth
+    ///      pixel may have been written by a *different* camera, but we'd unproject through vCam,
+    ///      yielding a world point off the actual surface. So we skip this in multi-view.
+    ///   5) Focused mesh (from <see cref="GetManipulationTargetMesh"/>) bounds center.
+    ///   6) Total selected bounds center.
+    /// ROLLBACK NOTE: original priority was 1) single-cam ray, 2) depth, 3) ID, 4) focused, 5) union.
+    ///   Reordered + added multi-camera raycast + gated depth by single-view to fix multi-view
+    ///   pan/zoom snapping to the wrong character.
+    /// </summary>
+	    public bool TryGetNavigationReferenceWorldPoint(View_UserCamera vCam, out Vector3 worldRef) {
+		    worldRef = default;
+		    if (MainViewport_UI.instance == null) { return false; }
+		    if (ClickSelect_Meshes_MGR.TryRaycastSelectedMeshUnderMainViewport(vCam, out var raySel, out var hitPt) && raySel != null) {
+			    worldRef = hitPt;
+			    return true;
+		    }
+		    if (ClickSelect_Meshes_MGR.TryRaycastSelectedMeshUnder_AnyActiveViewCamera(out var rayAny, out var hitAny) && rayAny != null) {
+			    worldRef = hitAny;
+			    return true;
+		    }
+		    Vector2 vp = MainViewport_UI.instance.cursorMainViewportPos01;
+		    ushort id = ClickSelect_Meshes_MGR.SampleMeshIdAtViewport01_static(vp);
+		    if (id != 0) {
+			    var m = getMesh_byUniqueID(id);
+			    if (m != null) {
+				    worldRef = m.bounds.center;
+				    return true;
+			    }
+		    }
+		    bool isSingleView = UserCameras_MGR.instance == null
+		                        || UserCameras_MGR.instance.numActiveViewCameras() <= 1;
+		    if (isSingleView
+		        && UserCameras_MGR.instance != null
+		        && UserCameras_MGR.instance.TryGetWorldPoint_UnderMainViewportCursorDepth(vCam, out var depthPt)) {
+			    worldRef = depthPt;
+			    return true;
+		    }
+		    // Several characters selected but pointer not on a surface / id miss: frame the focused mesh, not the union blob.
+		    var sel = o3d.selectedMeshes;
+		    if (sel != null && sel.Count > 1) {
+			    var focus = GetManipulationTargetMesh();
+			    if (focus != null) {
+				    worldRef = focus.bounds.center;
+				    return true;
+			    }
+		    }
+		    Bounds b = GetTotalBounds_ofSelectedMeshes();
+		    if (b.size.sqrMagnitude < 1e-12f) { return false; }
+		    worldRef = b.center;
+		    return true;
+	    }
+
+	    /// <summary>Prefer this over <c>selectedMeshes[0]</c> when you need a single transform target and multiple submeshes may be selected.</summary>
+	    public SD_3D_Mesh GetManipulationTargetMesh() {
+		    var sel = o3d.selectedMeshes;
+		    if (sel == null || sel.Count == 0) {
+			    return null;
+		    }
+		    if (sel.Count == 1) {
+			    return sel[0];
+		    }
+		    if (_manipulationFocusMesh != null && sel.Contains(_manipulationFocusMesh)) {
+			    return _manipulationFocusMesh;
+		    }
+		    return sel[0];
+	    }
+
+	    /// <summary>Sets the mesh that receives one-at-a-time transform when several are selected; no-op if <paramref name="m"/> is not in the current selection.</summary>
+	    public void SetManipulationFocusMesh(SD_3D_Mesh m) {
+		    if (m == null) {
+			    _manipulationFocusMesh = null;
+			    return;
+		    }
+		    if (o3d.selectedMeshes.Contains(m)) {
+			    _manipulationFocusMesh = m;
+		    }
+	    }
+
 
 
 	    //keep_art_icons: preserve projections, textures etc. Useful if user wants to merely update the mesh.
@@ -150,6 +238,7 @@ namespace spz {
 	        o3d.selectedMeshes.Clear();
 	        o3d.nonSelectedMeshes.Clear();
 	        o3d.selectedRenderers.Clear();
+	        _manipulationFocusMesh = null;
 	        _udims_helper.Recalc_selected_UDIMS();
 
 	        foreach (SD_3D_Mesh m in meshesCopy){  m?.DestroySelf();  }
@@ -163,6 +252,7 @@ namespace spz {
 	        o3d.selectedRenderers.Add(mesh._meshRenderer);
 	        o3d.nonSelectedMeshes.Remove(mesh);
 	        _udims_helper.Add_to_selected_UDIMS(mesh);
+	        _manipulationFocusMesh = mesh;
 	    }
 
 	    void OnDeselected_Mesh(SD_3D_Mesh mesh){
@@ -172,6 +262,9 @@ namespace spz {
 	            o3d.nonSelectedMeshes.Add(mesh);
 	        }//to avoid duplicates (sometimes there are duplicate invocations)
 	        _udims_helper.Recalc_selected_UDIMS();
+	        if (_manipulationFocusMesh == mesh) {
+		        _manipulationFocusMesh = o3d.selectedMeshes.Count > 0 ? o3d.selectedMeshes[0] : null;
+	        }
 	    }
 
 
@@ -180,9 +273,13 @@ namespace spz {
 	        o3d.meshes.Remove(mesh);
 	        o3d.meshID_to_mesh.Remove(mesh.unique_id);
 	        o3d.renderers.Remove(mesh._meshRenderer);
+	        bool wasFocus = (_manipulationFocusMesh == mesh);
 	        o3d.selectedMeshes.Remove(mesh);
 	        o3d.nonSelectedMeshes.Remove(mesh);
 	        o3d.selectedRenderers.Remove(mesh._meshRenderer);
+	        if (wasFocus) {
+		        _manipulationFocusMesh = o3d.selectedMeshes.Count > 0 ? o3d.selectedMeshes[0] : null;
+	        }
 	        if(o3d.meshes.Count==0){ Remove_CurrentModel(); }
 	        _udims_helper.Recalc_selected_UDIMS(); //MODIF already happens in OnDeselected_Mesh()?
 	    }

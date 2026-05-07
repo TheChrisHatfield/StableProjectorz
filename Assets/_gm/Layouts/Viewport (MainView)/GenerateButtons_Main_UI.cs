@@ -38,7 +38,12 @@ namespace spz {
 	        //subscribe to our base class's action:
 	        GenerateButtons_UI._Act_OnGenerate_started += OnStartedGenerate_cb;
 	        GenerateButtons_UI._Act_OnGenerate_finished += OnFinishedGenerate_cb;
-	        OnConfirmed_FinishedGenerate(canceled: true);//makes sure some buttons are hidden.
+	        // Sync this newly-created UI instance to current global generation state.
+	        if (GenerateButtons_UI.isGenerating){
+	            OnStartedGenerate_cb();
+	        }else{
+	            OnFinishedGenerate_cb(canceled: true);
+	        }
 	    }
 	}
 
@@ -240,7 +245,16 @@ namespace spz {
 	        _generate3D_retexture_button.onClick.AddListener( OnButton_Gen3D_Retexture_if_allowed );
 
 	        DimensionMode_MGR._Act_OnDimensionChanged += OnDimensionChanged;
-	        OnConfirmed_FinishedGenerate(canceled:true);//makes sure some buttons are hidden.
+	        // Keep local visuals consistent without mutating global generation state during late init.
+	        if(isGenerating){
+	            _cancelGeneration_button.gameObject.SetActive(true);
+	            _cancelGeneration_button.interactable = true;
+	            if(_deleteLast_button != null){ _deleteLast_button.gameObject.SetActive(false); }
+	        }else{
+	            _cancelGeneration_button.gameObject.SetActive(false);
+	            _cancelGeneration_button.interactable = false;
+	            if(_deleteLast_button != null){ _deleteLast_button.gameObject.SetActive(false); }
+	        }
 	    }
     
 	}

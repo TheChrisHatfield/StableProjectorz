@@ -54,6 +54,7 @@ namespace spz {
 	    [SerializeField] Vector2 _minAndPreferredWidth_whenHidden;
 
 	    int _zoomRes_numHints_shown = 0;
+	    int _resolutionSyncTicket = 0;
 
 
 	    public Vector2 widthHeight(){
@@ -70,6 +71,36 @@ namespace spz {
 	        }
 	        _width_input.SetValue(Mathf.Max(64, widthPx).ToString());
 	        _height_input.SetValue(Mathf.Max(64, heightPx).ToString());
+	    }
+
+	    /// <summary>Deferred adaptive viewport-mode apply (FULL SRN vs OPEN RIGHT) after layout settles.</summary>
+	    public void ScheduleAdaptiveResolutionFromViewportModeNextFrame() {
+		    int ticket = ++_resolutionSyncTicket;
+		    if (isActiveAndEnabled) {
+			    StartCoroutine(CoAdaptiveResolutionAfterLayout(ticket));
+		    }
+		    else {
+			    ViewportFullViewOnScreen_Driver.ApplyAdaptiveResolutionToSdInputsForCurrentSideState();
+		    }
+	    }
+
+	    IEnumerator CoAdaptiveResolutionAfterLayout(int ticket) {
+		    // Next player loop + end of frame so skeleton/main-viewport placement has settled.
+		    yield return null;
+		    yield return new WaitForEndOfFrame();
+		    if (this == null) { yield break; }
+		    if (ticket != _resolutionSyncTicket) { yield break; }
+		    ViewportFullViewOnScreen_Driver.ApplyAdaptiveResolutionToSdInputsForCurrentSideState();
+	    }
+
+	    /// <summary>OPEN RIGHT path wrapper; now routed through unified adaptive scheduling.</summary>
+	    public void ScheduleOpenRightMainSlotGenResolutionNextFrame() {
+		    ScheduleAdaptiveResolutionFromViewportModeNextFrame();
+	    }
+
+	    /// <summary>FULL SRN path wrapper; now routed through unified adaptive scheduling.</summary>
+	    public void ScheduleFullSrnScreenResolutionApplyNextFrame() {
+		    ScheduleAdaptiveResolutionFromViewportModeNextFrame();
 	    }
 
 	    public void PasteSeedValue(int seed){
@@ -155,6 +186,22 @@ namespace spz {
 	        _resolutionPreset_1024.onClick.AddListener( ()=>OnResolutionPresetButton(1024) );
 	        _resolutionPreset_1536.onClick.AddListener( ()=>OnResolutionPresetButton(1536) );
 	        _resolutionPreset_2048.onClick.AddListener( ()=>OnResolutionPresetButton(2048) );
+	        TrySyncResolutionFromCurrentViewportMode();
+	    }
+
+	    void OnEnable() {
+	        TrySyncResolutionFromCurrentViewportMode();
+	    }
+
+	    void TrySyncResolutionFromCurrentViewportMode() {
+	        var sk = Global_Skeleton_UI.instance;
+	        if (sk == null || !sk.TryGetSidePanelVisibility(out bool left, out bool right)) {
+	            return;
+	        }
+	        // If panel initializes late, recover missed one-shot fullscreen/right-dock resolution sync.
+	        if (!left) {
+	            ScheduleAdaptiveResolutionFromViewportModeNextFrame();
+	        }
 	    }
 	}
 }//end namespace

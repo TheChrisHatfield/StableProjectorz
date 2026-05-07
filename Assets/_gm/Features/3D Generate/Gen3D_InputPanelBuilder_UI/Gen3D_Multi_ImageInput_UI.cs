@@ -4,6 +4,7 @@ using System.Linq;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
+using UnityEngine.UI;
 
 namespace spz {
 
@@ -27,6 +28,29 @@ namespace spz {
 	    bool isMySlot(Trellis_ImageSlot slot)//if true - maybe it's be from SingleImage_inputs, so skip.
 	    => slot.transform.parent == _grid.transform;
 
+	    void FocusSlotInScrollCenter(RectTransform slotRt){
+	        if(slotRt == null){ return; }
+
+	        // Wait one frame so layout/content size is updated before computing normalized focus position.
+	        StartCoroutine(CoFocusSlotInScrollCenter(slotRt));
+	    }
+
+	    IEnumerator CoFocusSlotInScrollCenter(RectTransform slotRt){
+	        yield return null;
+	        if(slotRt == null){ yield break; }
+
+	        var focuser = GetComponentInParent<ScrollRect_ItemFocuser_UI>(includeInactive:true);
+	        if(focuser != null){
+	            focuser.FocusOnItemLocalPos(slotRt, dur:0.22f, land_at_pcntInViewport:0.5f);
+	            yield break;
+	        }
+
+	        var sr = GetComponentInParent<ScrollRect>(includeInactive:true);
+	        if(sr != null){
+	            sr.FocusOnItem(slotRt, land_at_pcntInViewport:0.5f);
+	        }
+	    }
+
 
 	    protected override void OnTakeScreenshotTexture(Vector2 screen_min01, Vector2 screen_max01, Texture2D tex2D_takeOwnership){ 
 	        if(gameObject.activeSelf==false){ return; }
@@ -36,6 +60,7 @@ namespace spz {
 	        new_slot.transform.SetSiblingIndex( new_slot.transform.parent.childCount-2 );
 	        _multiFiles_hint_text.gameObject.SetActive(false);
 	        _currentSlots.Add(new_slot);
+	        FocusSlotInScrollCenter(new_slot.transform as RectTransform);
 	        Viewport_StatusText.instance.ShowStatusText("Screenshot added", false, 2, false);
 	    }
 
@@ -53,8 +78,10 @@ namespace spz {
 	            slot.transform.SetAsLastSibling();
 	            _currentSlots.Add(new_slot);
 	            _multiFiles_hint_text.gameObject.SetActive( false );
+	            FocusSlotInScrollCenter(new_slot.transform as RectTransform);
 	        }else{
 	            slot.SwapWithNewImage(tex);
+	            FocusSlotInScrollCenter(slot.transform as RectTransform);
 	        }
 	    }
 
@@ -80,6 +107,7 @@ namespace spz {
 	        //set as -2 (one before last), because last one should always be the clickable dummy slot:
 	        new_slot.transform.SetSiblingIndex(new_slot.transform.parent.childCount - 2);
 	        _currentSlots.Add(new_slot);
+	        FocusSlotInScrollCenter(new_slot.transform as RectTransform);
 	    }
 
 	    public override void OnDragAndDroppedTextures(List<string> filepaths){

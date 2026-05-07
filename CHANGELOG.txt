@@ -6,6 +6,40 @@ This file tracks changes on top of that baseline until the next release bump.
 
 -------------------------------------------------------------------------------
 
+[Unreleased]  |  Date: 2026-04-25  |  Topic: File browser input focus lock (viewport command isolation)
+-------------------------------------------------------------------------------
+
+Summary
+  While SimpleFileBrowser is open, viewport/workflow mouse commands no longer
+  react behind the dialog. Input gating now keys off file-browser-open state
+  (not generic global click locks), preserving normal 3D orbit behavior once
+  the dialog closes.
+
+Input focus lock behavior
+  * Assets/_gm/_Core/IO/Keyboard Mouse Input/KeyMousePenInput.cs
+    - Added isFileBrowserOpen() via reflection to
+      SimpleFileBrowser.FileBrowser.IsOpen
+    - Mouse button press/release + delta helpers return neutral values while
+      file browser is open
+    - Scope intentionally narrowed to file-browser-open only
+
+Viewport / workflow scroll paths aligned
+  * Assets/_gm/Features/Camera/Navigation/CameraDolly.cs
+    - Wheel zoom ignores scroll while file browser is open
+  * Assets/_gm/Features/Camera/Navigation/Camera_UV_NavigateHelper.cs
+    - UV zoom wheel ignores scroll while file browser is open
+  * Assets/_gm/Features/Camera/Navigation/CameraOrbit_ClickPivot.cs
+    - Pivot recenter wheel stop path treats scroll as inactive while browser open
+  * Assets/_gm/Features/StableDiffusion/WorkflowToolsRibbon SD/WorkflowRibbon_UI.cs
+    - Shift/Ctrl + wheel workflow-mode switching disabled while browser open
+
+Notes for testers
+  * Open a file dialog and use wheel/right-click: viewport/workflow should not
+    react until the dialog closes.
+  * After closing dialog, verify 3D orbit/rotation/pan/zoom resumes normally.
+
+-------------------------------------------------------------------------------
+
 [Unreleased]  |  Date: 2026-04-25  |  Topic: SPZ GO bridge hardening, startup stability, WebUI GPU selection
 -------------------------------------------------------------------------------
 

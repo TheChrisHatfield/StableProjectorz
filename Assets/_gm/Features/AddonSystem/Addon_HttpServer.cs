@@ -108,7 +108,8 @@ namespace spz {
 			_quitShutdownDone = true;
 			StopServer();
 			if (_listenerThread != null && _listenerThread.IsAlive) {
-				_listenerThread.Join(1500);
+				// Keep quit path responsive: do not block app close waiting on listener unwind.
+				_listenerThread.Join(100);
 				if (_listenerThread.IsAlive)
 					UnityEngine.Debug.LogWarning("[Addon_HttpServer] Listener thread did not terminate within timeout (quit).");
 			}
