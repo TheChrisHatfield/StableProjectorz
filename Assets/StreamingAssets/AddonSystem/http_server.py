@@ -40,7 +40,9 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 from typing import Optional, List, Dict, Any
 import asyncio
+import importlib.util
 import uvicorn
+from pathlib import Path
 
 # Import spz for Unity communication
 try:
@@ -96,6 +98,28 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _mount_optional_gpu_flow_routes() -> None:
+    """Mount ``GpuFlowSPZ`` REST helpers if ``StreamingAssets/Addons/GpuFlowSPZ/http_routes.py`` exists."""
+    try:
+        addon_dir = Path(__file__).resolve().parent.parent / "Addons" / "GpuFlowSPZ"
+        route_path = addon_dir / "http_routes.py"
+        if not route_path.is_file():
+            return
+        spec = importlib.util.spec_from_file_location("spz_gpu_flow_http", route_path)
+        if spec is None or spec.loader is None:
+            return
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        reg = getattr(mod, "register_routes", None)
+        if callable(reg) and reg(app):
+            print("[HTTP Server] GPU Flow: GET/POST /api/v1/gpu-flow/status | /api/v1/gpu-flow/pace")
+    except Exception as e:
+        print(f"[HTTP Server] GPU Flow routes not mounted: {e}")
+
+
+_mount_optional_gpu_flow_routes()
 
 # Pydantic models for request bodies
 class Position(BaseModel):
