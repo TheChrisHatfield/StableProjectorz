@@ -23,11 +23,90 @@ namespace spz {
 
 		/// <summary>Re-apply column / overlay chrome for the current driver state (e.g. UI spawned after the first full-view apply).</summary>
 		public static void SyncChromeToDriver() {
+			var sk = Global_Skeleton_UI.instance;
+			if (sk != null && sk.TryGetSidePanelVisibility(out bool left, out bool right)) {
+				ApplyOuterPanelChromeForSideState(left, right);
+				return;
+			}
+			// Skeleton not ready: keep legacy all-or-nothing pass.
 			ApplyRightOuterPanelChrome(ViewportFullViewOnScreen_Driver.IsActive);
 		}
 
 		static void OnFullViewActiveChanged(bool fullViewOn) {
-			ApplyRightOuterPanelChrome(fullViewOn);
+			// Recompute from real column widths, not the bool alone — "open right" from fullscreen
+			// leaves the driver inactive but the left column is still collapsed.
+			SyncChromeToDriver();
+		}
+
+		/// <summary>
+		/// Per-side visibility: when only the right column is open (left width 0), we must still hide
+		/// mirrored left-column chrome, otherwise it snaps back to alpha=1 and reads as blank/phantom UI.
+		/// </summary>
+		static void ApplyOuterPanelChromeForSideState(bool leftVisible, bool rightVisible) {
+			bool hideRightColumn = !rightVisible;
+			bool hideLeftMirror = !leftVisible;
+			bool hideTopAndConnection = !leftVisible && !rightVisible;
+			// Free-floating command strip (not parented under the right column): show only when the left SD column
+			// is visible (default layout). When the left column is collapsed (!left) — center full view, or OPEN RIGHT
+			// with the paint column — the docked ribbon in RightColumn is canonical; the duplicate floater was on
+			// the wrong side if we unhid it for OPEN RIGHT.
+			bool hideFloatingCommandRibbon = !leftVisible;
+
+			var cols = Object.FindObjectsByType<RightColumn_UI>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+			for (int i = 0; i < cols.Length; i++) {
+				var col = cols[i];
+				if (col == null) {
+					continue;
+				}
+				ApplyCanvasGroupHide(col.gameObject, hideRightColumn);
+			}
+
+			var leftSd = Object.FindObjectsByType<Left_Column_SD_Placement_UI>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+			for (int i = 0; i < leftSd.Length; i++) {
+				var c = leftSd[i];
+				if (c == null || c.MirroredColumnRoot == null) {
+					continue;
+				}
+				ApplyCanvasGroupHide(c.MirroredColumnRoot.gameObject, hideLeftMirror);
+			}
+			var left3d = Object.FindObjectsByType<Left_Column_3D_Placement_UI>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+			for (int i = 0; i < left3d.Length; i++) {
+				var c = left3d[i];
+				if (c == null || c.MirroredColumnRoot == null) {
+					continue;
+				}
+				ApplyCanvasGroupHide(c.MirroredColumnRoot.gameObject, hideLeftMirror);
+			}
+
+			var ribbon = CommandRibbon_UI.instance;
+			if (ribbon != null) {
+				var rgo = ribbon.gameObject;
+				if (rgo.GetComponentInParent<RightColumn_UI>(true) == null) {
+					ApplyCanvasGroupHide(rgo, hideFloatingCommandRibbon);
+				}
+			}
+
+			// Top strip + connection: hidden only in true center (both columns collapsed).
+			var topBar = ExportSave_UI_MGR.instance;
+			if (topBar != null) {
+				ApplyCanvasGroupHide(topBar.gameObject, hideTopAndConnection);
+			}
+
+			var conn = Connection_MGR.instance;
+			if (conn != null && conn.ViewportTopConnectionStrip != null) {
+				ApplyCanvasGroupHide(conn.ViewportTopConnectionStrip.gameObject, hideTopAndConnection);
+			}
+
+			// Viewport tool ribbons (Gen Art / workflow strips) always stay on.
+			var mainVp = MainViewport_UI.instance;
+			if (mainVp != null) {
+				if (mainVp.innerLeftRibbonRect != null) {
+					ApplyCanvasGroupHide(mainVp.innerLeftRibbonRect.gameObject, false);
+				}
+				if (mainVp.innerRightRibbonRect != null) {
+					ApplyCanvasGroupHide(mainVp.innerRightRibbonRect.gameObject, false);
+				}
+			}
 		}
 
 		static void ApplyRightOuterPanelChrome(bool hide) {

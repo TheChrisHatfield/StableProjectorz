@@ -322,6 +322,7 @@ namespace spz {
 	        if (request.result == UnityWebRequest.Result.ConnectionError || request.result == UnityWebRequest.Result.ProtocolError){
 	            Viewport_StatusText.instance.ReportProgress(0);
 	            Viewport_StatusText.instance.ShowStatusText("Error fetching progress: "+request.error,  false,  5,  progressVisibility:false );
+	            return;
 	        }
 	        // Deserialize the JSON response to the ProgressResponse class
 	        // Use class-type information, to support inheritance of objects:
@@ -331,37 +332,29 @@ namespace spz {
 
 	        if(progressResponse==null){ return; }//ComfyUI doesn't return progress (Forge and A1111 would).
 
-	       // Format a string with all the relevant information
-	        string debugMessage = string.Format(
-	            "Progress: {0:P2}, ETA: {1} seconds\n" +
-	            "Job: {2}, Job Count: {3}, Job No: {4}, Job Timestamp: {5}\n" +
-	            "Sampling Step: {6} / {7}\n" +
-	            "State: Skipped - {8}, Interrupted - {9}\n" +
-	            "Text Info: {10}",
-	            progressResponse.progress, // P2 format specifier for percentage
-	            progressResponse.eta_relative,
-	            progressResponse.state.job,
-	            progressResponse.state.job_count,
-	            progressResponse.state.job_no,
-	            progressResponse.state.job_timestamp,
-	            progressResponse.state.sampling_step,
-	            progressResponse.state.sampling_steps,
-	            progressResponse.state.skipped,
-	            progressResponse.state.interrupted,
-	            progressResponse.textinfo ?? "N/A" // Handling null case
-	        );
-	        //Debug.Log(debugMessage);
+
+	        float progressTotal = Mathf.Clamp01(progressResponse.progress);
+	        Viewport_StatusText.instance.ReportProgress( progressTotal );
+
+	        int percent = Mathf.RoundToInt(progressTotal * 100f);
+	        int stepNow = progressResponse.state != null ? progressResponse.state.sampling_step : 0;
+	        int stepMax = progressResponse.state != null ? progressResponse.state.sampling_steps : 0;
+	        int etaSec = Mathf.Max(0, Mathf.RoundToInt(progressResponse.eta_relative));
+
+	        string progressMsg = stepMax > 0
+	            ? $"Generating... {percent}% ({stepNow}/{stepMax})  ETA: {etaSec}s"
+	            : $"Generating... {percent}%  ETA: {etaSec}s";
+
+	        bool isTextETA = false;
+	        Viewport_StatusText.instance.ShowStatusText(progressMsg, isTextETA, textVisibleDur:999999, progressVisibility:true );
+
+	        // Current preview frame can be empty for some backends at parts of generation.
+	        // Keep ETA/progress UI updates above, and only gate preview texture updates here.
 	        if(progressResponse.current_image == null || progressResponse.current_image==""){ return; }
+	        if (progressResponse.state == null) { return; }
 
 	        //using ? in case SD had exception
 	        _latestGenData?.Update_PendingImages( progressResponse.state.job_no,  progressResponse.current_image ); 
-
-	        float progressTotal = progressResponse.progress;
-	        Viewport_StatusText.instance.ReportProgress( progressTotal );
-
-	        string etaStr = Mathf.RoundToInt(progressResponse.eta_relative).ToString() + " sec";
-	        bool isTextETA = true;
-	        Viewport_StatusText.instance.ShowStatusText(etaStr, isTextETA, textVisibleDur:999999, progressVisibility:true );
 	    }
 
 

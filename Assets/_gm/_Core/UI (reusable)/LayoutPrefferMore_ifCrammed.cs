@@ -31,7 +31,7 @@ namespace spz {
 	        if (_layoutElem == null) {
 		        return;
 	        }
-	        if (ViewportFullViewOnScreen_Driver.IsActive) {
+	        if (ViewportFullViewOnScreen_Driver.ShouldUseBetweenRibbonsMainViewportPlacement()) {
 		        if (_isWidth) {
 			        _layoutElem.preferredWidth = _max_prefferedSize;
 		        }

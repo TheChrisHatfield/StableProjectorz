@@ -17,6 +17,7 @@ namespace spz {
 
 		const string RowName = "RibbonRow_FullViewOnScreen";
 		const string SpacerName = "RibbonRow_FullViewOnScreen_Spacer";
+		const string MenuRowName = "RibbonRow_FullViewOnScreen_Menu";
 		const int MaxWaitFrames = 240;
 		/// <summary>Spacer row height under FULL SRN in the VLG; pushes Gen Art and re-do down without stretching the button face.</summary>
 		const float ExtraBottomGapPx = 152f;
@@ -29,10 +30,18 @@ namespace spz {
 		SD_WorkflowOptionsRibbon_UI _host;
 		RibbonDock_ButtonSpec _spec;
 		Image _bgImage;
+		Button _dockButton;
 		Color _fillBase = Color.white;
 		bool _built;
 		Coroutine _buildRoutine;
 		MonoBehaviour _buildCoroutineOwner;
+		RectTransform _fullViewMenuRt;
+		CanvasGroup _fullViewMenuCg;
+		Coroutine _fullViewMenuAnimRoutine;
+		bool _fullViewMenuOpen;
+		float _fullViewMenuOpenedAtUnscaledTime;
+		/// <summary>Label on the secondary "open/hide right dock" control (OPEN RIGHT vs HIDE RIGHT).</summary>
+		TextMeshProUGUI _openRightDockLabel;
 
 		RectTransform _genArtAnchorRestoreTarget;
 		Vector2 _genArtSavedAnchorMin;
@@ -190,11 +199,16 @@ namespace spz {
 
 		/// <summary>Stops wait/build, removes dock row(s), restores Gen Art anchors. Called on every <see cref="NotifyAttachRequested"/>, <see cref="ApplySpec"/> when spec changes, and <see cref="OnDestroy"/>.</summary>
 		void TearDownBuiltDock() {
+			ForceHideFullViewMenuInstant();
 			StopBuildCoroutineIfAny();
 			DestroyStaleFullViewRowsUnderHost();
 			_builtRowRt = null;
 			_spacerRowRt = null;
 			_bgImage = null;
+			_dockButton = null;
+			_fullViewMenuRt = null;
+			_fullViewMenuCg = null;
+			_openRightDockLabel = null;
 			_built = false;
 			RestoreGenArtAnchorsIfSaved();
 		}
@@ -224,7 +238,8 @@ namespace spz {
 					continue;
 				}
 				if (string.Equals(t.name, RowName, StringComparison.Ordinal)
-				    || string.Equals(t.name, SpacerName, StringComparison.Ordinal)) {
+				    || string.Equals(t.name, SpacerName, StringComparison.Ordinal)
+				    || string.Equals(t.name, MenuRowName, StringComparison.Ordinal)) {
 					Destroy(t.gameObject);
 				}
 			}
@@ -281,6 +296,7 @@ namespace spz {
 		}
 
 		void OnDisable() {
+			ForceHideFullViewMenuInstant();
 			ViewportFullViewOnScreen_Driver.ActiveChanged -= OnDriverActiveChanged;
 			StopBuildCoroutineIfAny();
 			// Host (e.g. generate strip) is often disabled when switching other ribbon tabs—do not destroy the dock
@@ -291,6 +307,7 @@ namespace spz {
 		}
 
 		void OnDestroy() {
+			ForceHideFullViewMenuInstant();
 			StopBuildCoroutineIfAny();
 			RegisteredInstances.Remove(this);
 			if (_builtRowRt != null) {
@@ -682,6 +699,7 @@ namespace spz {
 				button.colors = cb;
 			}
 			button.onClick.AddListener(OnDockedButtonClicked);
+			_dockButton = button;
 
 			CopyLittleTriangleIfPresent(genArt, faceRt);
 
@@ -691,6 +709,119 @@ namespace spz {
 			textRt.SetParent(faceRt, false);
 			var tmp = textGo.AddComponent<TextMeshProUGUI>();
 			ApplyFullSrnLabelStyle(tmp, genRefTmp, textRt);
+			EnsureFullViewMenu(faceRt, genRefImg, genRefTmp);
+		}
+
+		void EnsureFullViewMenu(RectTransform faceRt, Image genRefImg, TextMeshProUGUI genRefTmp) {
+			if (faceRt == null) {
+				return;
+			}
+			RectTransform rowRt = faceRt.parent as RectTransform;
+			RectTransform vlgRoot = rowRt != null ? rowRt.parent as RectTransform : null;
+			_fullViewMenuRt = vlgRoot != null ? vlgRoot.Find(MenuRowName) as RectTransform : null;
+			if (_fullViewMenuRt == null) {
+				if (vlgRoot == null) {
+					return;
+				}
+				var menuGo = new GameObject(MenuRowName);
+				menuGo.layer = faceRt.gameObject.layer;
+				_fullViewMenuRt = menuGo.AddComponent<RectTransform>();
+				_fullViewMenuRt.SetParent(vlgRoot, false);
+				_fullViewMenuRt.anchorMin = Vector2.zero;
+				_fullViewMenuRt.anchorMax = Vector2.zero;
+				_fullViewMenuRt.pivot = new Vector2(0.5f, 0.5f);
+				_fullViewMenuRt.sizeDelta = new Vector2(0f, 52f);
+				var menuLe = menuGo.AddComponent<LayoutElement>();
+				menuLe.preferredHeight = 52f;
+				menuLe.minHeight = 52f;
+				menuLe.flexibleHeight = 0f;
+				menuLe.flexibleWidth = 0f;
+				var vlg = menuGo.AddComponent<VerticalLayoutGroup>();
+				vlg.childAlignment = TextAnchor.UpperCenter;
+				vlg.childControlWidth = true;
+				vlg.childControlHeight = false;
+				vlg.childForceExpandWidth = true;
+				vlg.childForceExpandHeight = false;
+				vlg.spacing = 0f;
+				vlg.padding = new RectOffset(0, 0, 0, 0);
+				CreateFullViewMenuButton(menuGo.transform, "OpenRightDock", "OPEN\nRIGHT", OnFullViewMenuOpenRightDockClicked, genRefImg, genRefTmp);
+			}
+			if (rowRt != null && _fullViewMenuRt.parent == rowRt.parent) {
+				_fullViewMenuRt.SetSiblingIndex(rowRt.GetSiblingIndex() + 1);
+			}
+			_fullViewMenuCg = _fullViewMenuRt.GetComponent<CanvasGroup>();
+			if (_fullViewMenuCg == null) {
+				_fullViewMenuCg = _fullViewMenuRt.gameObject.AddComponent<CanvasGroup>();
+			}
+			ForceHideFullViewMenuInstant();
+		}
+
+		void SetSecondaryButtonVisible(bool show) {
+			if (_fullViewMenuRt == null || _fullViewMenuCg == null) {
+				return;
+			}
+			if (_fullViewMenuAnimRoutine != null) {
+				StopCoroutine(_fullViewMenuAnimRoutine);
+				_fullViewMenuAnimRoutine = null;
+			}
+			// Do not set _fullViewMenuOpen here: that flag is for legacy popup/click-away; the secondary
+			// control is a layout row and should stay up while in on-screen full-view session.
+			_fullViewMenuRt.gameObject.SetActive(show);
+			_fullViewMenuCg.alpha = show ? 1f : 0f;
+			_fullViewMenuCg.interactable = show;
+			_fullViewMenuCg.blocksRaycasts = show;
+			_fullViewMenuRt.localScale = Vector3.one;
+			if (show && _builtRowRt != null && _fullViewMenuRt.parent == _builtRowRt.parent) {
+				_fullViewMenuRt.SetSiblingIndex(_builtRowRt.GetSiblingIndex() + 1);
+			}
+		}
+
+		void EnsureFullViewMenuWiringIfMissing() {
+			if (_fullViewMenuRt != null && _fullViewMenuCg != null) {
+				return;
+			}
+			var faceRt = _dockButton != null ? (_dockButton.transform as RectTransform) : null;
+			if (faceRt == null) {
+				faceRt = _bgImage != null ? (_bgImage.transform as RectTransform) : null;
+			}
+			if (faceRt == null) {
+				return;
+			}
+			var tmp = faceRt.GetComponentInChildren<TextMeshProUGUI>(true);
+			EnsureFullViewMenu(faceRt, _bgImage, tmp);
+		}
+
+		void CreateFullViewMenuButton(Transform parent, string name, string label, UnityEngine.Events.UnityAction onClick, Image genRefImg, TextMeshProUGUI genRefTmp) {
+			var rowGo = new GameObject(name);
+			rowGo.layer = parent.gameObject.layer;
+			var rowRt = rowGo.AddComponent<RectTransform>();
+			rowRt.SetParent(parent, false);
+			rowRt.sizeDelta = new Vector2(144f, 52f);
+			var le = rowGo.AddComponent<LayoutElement>();
+			le.preferredHeight = 52f;
+			var img = rowGo.AddComponent<Image>();
+			if (genRefImg != null && genRefImg.sprite != null) {
+				img.sprite = genRefImg.sprite;
+				img.type = genRefImg.type;
+				img.pixelsPerUnitMultiplier = genRefImg.pixelsPerUnitMultiplier;
+				img.color = _fillBase;
+			} else {
+				img.color = FallbackFill;
+			}
+			var btn = rowGo.AddComponent<Button>();
+			btn.targetGraphic = img;
+			btn.onClick.AddListener(onClick);
+			var txtGo = new GameObject("Text (TMP)");
+			txtGo.layer = rowGo.layer;
+			var txtRt = txtGo.AddComponent<RectTransform>();
+			txtRt.SetParent(rowRt, false);
+			var txt = txtGo.AddComponent<TextMeshProUGUI>();
+			ApplyFullSrnLabelStyle(txt, genRefTmp, txtRt);
+			txt.text = label;
+			txt.fontSize = Mathf.Max(11f, txt.fontSize - 1f);
+			if (string.Equals(name, "OpenRightDock", StringComparison.Ordinal)) {
+				_openRightDockLabel = txt;
+			}
 		}
 
 		/// <summary>Thin outline and generous left/right insets so glyph bounds for "FULL" do not meet the button side edges (outline is drawn outside the fill; padding buys clearance).</summary>
@@ -816,11 +947,79 @@ namespace spz {
 			if (_bgImage == null) {
 				return;
 			}
-			if (!string.Equals(_spec.CommandId, "viewport_fullview_toggle", StringComparison.Ordinal)) {
+			if (!IsViewportFullviewCommand()) {
 				return;
 			}
-			bool on = ViewportFullViewOnScreen_Driver.IsActive;
+			// "On" while the left column is hidden: center-only fullscreen, or right-only (paint) — same session.
+			bool on = IsInOnScreenFullViewSession();
 			_bgImage.color = on ? Color.Lerp(_fillBase, Color.black, 0.14f) : _fillBase;
+			SetSecondaryButtonVisible(on);
+			RefreshOpenRightSecondaryLabel();
+		}
+
+		void RefreshOpenRightSecondaryLabel() {
+			if (_openRightDockLabel == null && _fullViewMenuRt != null) {
+				var t = _fullViewMenuRt.Find("OpenRightDock");
+				if (t != null) {
+					_openRightDockLabel = t.GetComponentInChildren<TextMeshProUGUI>(true);
+				}
+			}
+			if (_openRightDockLabel == null) {
+				return;
+			}
+			var sk = Global_Skeleton_UI.instance;
+			if (sk == null || !sk.TryGetSidePanelVisibility(out bool left, out bool right)) {
+				_openRightDockLabel.text = "OPEN\nRIGHT";
+				return;
+			}
+			if (!left && !right) {
+				_openRightDockLabel.text = "OPEN\nRIGHT";
+			} else if (!left && right) {
+				_openRightDockLabel.text = "HIDE\nRIGHT";
+			} else {
+				_openRightDockLabel.text = "OPEN\nRIGHT";
+			}
+		}
+
+		bool IsViewportFullviewCommand() {
+			// This dock is dedicated to fullscreen toggle; tolerate empty spec during attach/rebind races.
+			return string.IsNullOrEmpty(_spec.CommandId)
+			       || string.Equals(_spec.CommandId, "viewport_fullview_toggle", StringComparison.Ordinal);
+		}
+
+		/// <summary>True in center-only full view, or in right-dock sub-state (left still collapsed).</summary>
+		static bool IsInOnScreenFullViewSession() {
+			if (ViewportFullViewOnScreen_Driver.IsActive) {
+				return true;
+			}
+			var sk = Global_Skeleton_UI.instance;
+			if (sk != null && sk.TryGetSidePanelVisibility(out bool left, out _)) {
+				return !left;
+			}
+			return false;
+		}
+
+		void Update() {
+			if (!_fullViewMenuOpen || _fullViewMenuRt == null) {
+				return;
+			}
+			if (Time.unscaledTime - _fullViewMenuOpenedAtUnscaledTime < 0.06f) {
+				return;
+			}
+			bool click = KeyMousePenInput.isLMBpressedThisFrame()
+			             || KeyMousePenInput.isRMBpressedThisFrame()
+			             || KeyMousePenInput.isMMBpressedThisFrame();
+			if (!click) {
+				return;
+			}
+			Vector2 p = KeyMousePenInput.cursorScreenPos();
+			if (RectTransformUtility.RectangleContainsScreenPoint(_fullViewMenuRt, p)) {
+				return;
+			}
+			if (_dockButton != null && RectTransformUtility.RectangleContainsScreenPoint(_dockButton.transform as RectTransform, p)) {
+				return;
+			}
+			ToggleFullViewMenu(false);
 		}
 
 		static bool HasNamedChild(Transform parent, string objectName) {
@@ -891,8 +1090,10 @@ namespace spz {
 					reuseBtn.onClick.RemoveAllListeners();
 					reuseBtn.onClick.AddListener(OnDockedButtonClicked);
 					reuseBtn.targetGraphic = reuseImg;
+					_dockButton = reuseBtn;
 					_bgImage = reuseImg;
 					_fillBase = reuseImg.color;
+					EnsureFullViewMenu(reuseFace, genRefImg, genRefTmp);
 					_built = true;
 					LayoutRebuilder.ForceRebuildLayoutImmediate(vlgRoot);
 					RefreshActiveFill();
@@ -945,12 +1146,109 @@ namespace spz {
 		}
 
 		void OnDockedButtonClicked() {
-			if (!RibbonDock_CommandBridge.TryInvoke(_spec.CommandId)) {
+			// Do not call ForceHideFullViewMenuInstant here: it would hide the secondary row before the bridge runs.
+			string commandId = string.IsNullOrEmpty(_spec.CommandId) ? "viewport_fullview_toggle" : _spec.CommandId;
+			if (!RibbonDock_CommandBridge.TryInvoke(commandId)) {
 				return;
 			}
-			if (string.Equals(_spec.CommandId, "viewport_fullview_toggle", StringComparison.Ordinal)) {
+			if (string.Equals(commandId, "viewport_fullview_toggle", StringComparison.Ordinal)) {
+				ViewportFullViewOnScreen_Driver.SyncFromCurrentSkeleton();
+				EnsureFullViewMenuWiringIfMissing();
 				RefreshActiveFill();
 			}
+		}
+
+		void OnFullViewMenuOpenRightDockClicked() {
+			var sk = Global_Skeleton_UI.instance;
+			if (sk == null || !sk.TryGetSidePanelVisibility(out bool left, out bool right)) {
+				return;
+			}
+			bool changed = false;
+			if (!left && !right) {
+				changed = sk.SetSidePanelVisibility(false, true);
+			} else if (!left && right) {
+				// Return to center-only on-screen full view (both outer columns from skeleton: no left, close right).
+				changed = sk.SetSidePanelVisibility(false, false);
+			} else {
+				return;
+			}
+			if (!changed) {
+				return;
+			}
+			FullView_OuterPanel_Chrome_Binder.SyncChromeToDriver();
+			sk.ForceLayoutRefreshAfterPanelResize();
+			ViewportFullViewOnScreen_Driver.SyncFromCurrentSkeleton();
+			// Single adaptive lane: resolve from current side state after toggle, then run a deferred settle pass.
+			ViewportFullViewOnScreen_Driver.ApplyAdaptiveResolutionToSdInputsForCurrentSideState();
+			ViewportFullViewOnScreen_Driver.ScheduleAdaptiveResolutionToSdInputsNextFrame();
+			RefreshActiveFill();
+		}
+
+		void ToggleFullViewMenu(bool show) {
+			if (_fullViewMenuRt == null || _fullViewMenuCg == null) {
+				return;
+			}
+			if (_fullViewMenuAnimRoutine != null) {
+				StopCoroutine(_fullViewMenuAnimRoutine);
+				_fullViewMenuAnimRoutine = null;
+			}
+			if (show) {
+				if (_builtRowRt != null && _fullViewMenuRt.parent == _builtRowRt.parent) {
+					_fullViewMenuRt.SetSiblingIndex(_builtRowRt.GetSiblingIndex() + 1);
+				}
+				_fullViewMenuRt.gameObject.SetActive(true);
+				_fullViewMenuOpen = true;
+				_fullViewMenuOpenedAtUnscaledTime = Time.unscaledTime;
+			}
+			_fullViewMenuAnimRoutine = StartCoroutine(CoAnimateFullViewMenu(show));
+		}
+
+		void ForceHideFullViewMenuInstant() {
+			if (_fullViewMenuAnimRoutine != null) {
+				StopCoroutine(_fullViewMenuAnimRoutine);
+				_fullViewMenuAnimRoutine = null;
+			}
+			_fullViewMenuOpen = false;
+			if (_fullViewMenuCg != null) {
+				_fullViewMenuCg.alpha = 0f;
+				_fullViewMenuCg.interactable = false;
+				_fullViewMenuCg.blocksRaycasts = false;
+			}
+			if (_fullViewMenuRt != null) {
+				_fullViewMenuRt.localScale = new Vector3(0.92f, 0.92f, 1f);
+				_fullViewMenuRt.gameObject.SetActive(false);
+			}
+		}
+
+		IEnumerator CoAnimateFullViewMenu(bool show) {
+			if (_fullViewMenuRt == null || _fullViewMenuCg == null) {
+				yield break;
+			}
+			float startA = _fullViewMenuCg.alpha;
+			float endA = show ? 1f : 0f;
+			Vector3 startS = _fullViewMenuRt.localScale;
+			Vector3 endS = show ? Vector3.one : new Vector3(0.92f, 0.92f, 1f);
+			const float dur = 0.14f;
+			float t = 0f;
+			_fullViewMenuCg.blocksRaycasts = show;
+			_fullViewMenuCg.interactable = show;
+			while (t < dur) {
+				t += Time.unscaledDeltaTime;
+				float k = Mathf.Clamp01(t / dur);
+				k = 1f - Mathf.Pow(1f - k, 3f);
+				_fullViewMenuCg.alpha = Mathf.Lerp(startA, endA, k);
+				_fullViewMenuRt.localScale = Vector3.Lerp(startS, endS, k);
+				yield return null;
+			}
+			_fullViewMenuCg.alpha = endA;
+			_fullViewMenuRt.localScale = endS;
+			if (!show) {
+				_fullViewMenuOpen = false;
+				_fullViewMenuCg.blocksRaycasts = false;
+				_fullViewMenuCg.interactable = false;
+				_fullViewMenuRt.gameObject.SetActive(false);
+			}
+			_fullViewMenuAnimRoutine = null;
 		}
 	}
 

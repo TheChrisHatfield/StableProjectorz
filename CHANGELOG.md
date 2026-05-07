@@ -5,6 +5,37 @@ This file tracks changes on top of that baseline until the next release bump.
 
 ---
 
+## [Unreleased] — 2026-04-25 — File browser input focus lock (viewport command isolation)
+
+### Summary
+
+When `SimpleFileBrowser` is open, viewport and workflow mouse commands no longer react to wheel/right-click input behind the dialog. Input gating is now tied to **file browser open state** (not generic global click locks) so normal 3D orbit/rotation behavior stays intact when the browser is closed.
+
+### Input focus lock behavior
+
+- **`Assets/_gm/_Core/IO/Keyboard Mouse Input/KeyMousePenInput.cs`:**
+  - Added `isFileBrowserOpen()` (reflection to `SimpleFileBrowser.FileBrowser.IsOpen`).
+  - Mouse button presses/releases and mouse deltas now return neutral values while file browser is open.
+  - Scope is intentionally narrowed to file-browser-open only to avoid blocking unrelated interaction modes.
+
+### Viewport / workflow scroll paths aligned to file browser lock
+
+- **`Assets/_gm/Features/Camera/Navigation/CameraDolly.cs`:**
+  - Mouse wheel zoom ignores scroll while file browser is open.
+- **`Assets/_gm/Features/Camera/Navigation/Camera_UV_NavigateHelper.cs`:**
+  - UV zoom wheel path ignores scroll while file browser is open.
+- **`Assets/_gm/Features/Camera/Navigation/CameraOrbit_ClickPivot.cs`:**
+  - Pivot recenter stop condition now treats wheel input as inactive while file browser is open.
+- **`Assets/_gm/Features/StableDiffusion/WorkflowToolsRibbon SD/WorkflowRibbon_UI.cs`:**
+  - Shift/Ctrl + scroll workflow-mode switching is disabled while file browser is open.
+
+### Notes for testers
+
+- Open any file dialog and use mouse wheel/right-click: viewport camera/workflow should not respond until dialog closes.
+- After closing dialog, confirm 3D orbit/rotation/pan/zoom resumes immediately.
+
+---
+
 ## [Unreleased] — 2026-04-25 — SPZ GO bridge hardening, startup stability, WebUI GPU selection
 
 ### Summary

@@ -116,11 +116,27 @@ namespace spz {
 				    stack.EnsureResolution(res);
 		    }
 		    EnsureSceneInjectedIntoActiveLayer();
-		    var layerContent = stack?.ActiveLayerRenderUdims;
-		    if (layerContent != null)
-			    return layerContent;
+		    var active = stack?.ActiveLayer;
+		    if (active != null && active.Content != null)
+		    {
+			    // Per-layer No Color routing: in Inpaint_NoColor mode, strokes go to a separate per-layer mask buffer
+			    // (lazy-allocated). This stops No Color paint from polluting the layer's color RGB — switching back to
+			    // Color mode no longer reveals "secret" color from strokes the user thought were colorless. OG (no
+			    // layer stack) keeps a single buffer, but with layers the user expects mode-correct strokes per layer.
+			    if (IsCurrentModeNoColor())
+			    {
+				    active.EnsureNoColorMaskMatchesContent();
+				    if (active.NoColorMask != null)
+					    return active.NoColorMask;
+			    }
+			    return active.Content;
+		    }
 		    return _ObjectUV_brushedColorRGBA;
 	    }
+
+	    static bool IsCurrentModeNoColor()
+	        => WorkflowRibbon_UI.instance != null
+	           && WorkflowRibbon_UI.instance.currentMode() == WorkflowRibbon_CurrMode.Inpaint_NoColor;
 	    public static Action Act_OnPaintStrokeEnd { get; set; } = null;
 
 
@@ -153,6 +169,12 @@ namespace spz {
 	        }
 	        bool isColorless  = WorkflowRibbon_UI.instance != null && WorkflowRibbon_UI.instance.currentMode() == WorkflowRibbon_CurrMode.Inpaint_NoColor;
 	        if (!forStableDiffusionCapture && Save_MGR.instance != null && Save_MGR.instance._isSaving){ return; }
+	        // Upstream (single-layer): when No Color + few frames before SD send, skip this blit — "Don't blit, keep as is."
+	        // Paint-layer path must still run when forStableDiffusionCapture is true so EnsureInpaintColorLayerAppliedForCapture
+	        // can composite layers onto accumulation before content-cam ReadPixels (see SD_GenRequests_Helper.Generate_img2img_crtn).
+	        bool willSendToSD = StableDiffusion_Hub.instance != null && StableDiffusion_Hub.instance._finalPreparations_beforeGen;
+	        if (isColorless && willSendToSD && !forStableDiffusionCapture)
+		        return;
 
 	        EnsureSceneInjectedIntoActiveLayer();
 	        var stack = PaintLayerStack_MGR.instance;
@@ -178,7 +200,9 @@ namespace spz {
 		        // Multi-layer: composite all visible layers into _layerStackCompositeTemp using EntireColorLayer_BlitApply
 		        // (the same shader that works for single-layer). We blit each layer onto the composite temp in order,
 		        // then use the composite temp as `source` for the final blit — identical to how single-layer uses ActiveLayer.Content.
-		        source = CompositeVisibleLayersIntoTemp(stack, isColorless);
+		        // SD init-image capture must not include NoColor checker/white overlay in RGB.
+		        // Keep NoColor for viewport preview, but exclude it when composing accumulation for capture.
+		        source = CompositeVisibleLayersIntoTemp(stack, isColorless, includeNoColorMaskInRgb: !forStableDiffusionCapture);
 		        if (source == null)
 		        {
 			        if (!_loggedDisplaySourceOnce)
@@ -214,26 +238,58 @@ namespace spz {
 	        Color brushCol = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.brushColor : Color.black;
 	        float sign = Mathf.Sign(_prevStrength);
 	        float maxStrength = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity : 1f;
-	        // Smudge mutates the layer in compute; do not overlay the live stroke with the palette brush color (would hide true smear colors).
-	        bool applyBrush = _isPainting && !multiLayer && !isSmudgeTool;
 
+	        // Single-layer fast path: blit Content (always color), then blit NoColorMask if present (always checker).
+	        // The shader uses premultiplied "draw on top" blend so the second pass overlays where mask alpha > 0.
+	        // Live brush stroke goes to the buffer matching the current mode so visible stroke matches what's stored.
+	        var activeLayerForOverlay = stack?.ActiveLayer;
+	        bool singleLayerActiveContent = !multiLayer && activeLayerForOverlay != null
+	                                         && ReferenceEquals(source, activeLayerForOverlay.Content);
+	        bool isNoColorMode = isColorless;
+
+	        // Pass 1: Content as color
+	        bool applyBrushToContent = _isPainting && !multiLayer && !isSmudgeTool && !isNoColorMode;
 	        _blitApplyEntireColorLayer_mat.SetTexture("_SrcTex", source.texArray);
 	        RenderUdims.SetNumUdims(ontoHere, _blitApplyEntireColorLayer_mat);
-	        TextureTools_SPZ.SetKeyword_Material(_blitApplyEntireColorLayer_mat, "APPLY_LATEST_BRUSH_TOO", applyBrush);
+	        TextureTools_SPZ.SetKeyword_Material(_blitApplyEntireColorLayer_mat, "APPLY_LATEST_BRUSH_TOO", applyBrushToContent);
 	        _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", _latestBrushStroke_ref);
 	        _blitApplyEntireColorLayer_mat.SetColor("_CurrBrushColor", brushCol);
 	        _blitApplyEntireColorLayer_mat.SetFloat("_Sign", sign);
 	        _blitApplyEntireColorLayer_mat.SetFloat("_MaxPossibleBrushStrength01", maxStrength);
-	        _blitApplyEntireColorLayer_mat.SetInteger("_isColorlessMask", isColorless ? 1 : 0);
-	        if (isColorless) _blitApplyEntireColorLayer_mat.SetTexture("_ColorlessCheckerTex", _colorlessMaskChecker_tex);
+	        // Always 0 here: layer Content is color RGB. Colorless overlay is the second pass below (single-layer)
+	        // or already baked per-layer in the composite temp (multi-layer).
+	        _blitApplyEntireColorLayer_mat.SetInteger("_isColorlessMask", 0);
 	        _blitApplyEntireColorLayer_mat.SetFloat("_TotalOpacity01", 1f);
 	        TextureTools_SPZ.Blit(source.texArray, ontoHere.texArray, _blitApplyEntireColorLayer_mat);
+
+	        // Pass 2: per-layer NoColorMask as checker (single-layer preview path only).
+	        // During SD capture, mask is sent separately via GetDisposable_ScreenMask; do not tint init-image RGB.
+	        if (!forStableDiffusionCapture && singleLayerActiveContent && activeLayerForOverlay.NoColorMask != null)
+	        {
+		        var ncm = activeLayerForOverlay.NoColorMask;
+		        bool applyBrushToNoColor = _isPainting && !isSmudgeTool && isNoColorMode;
+		        _blitApplyEntireColorLayer_mat.SetTexture("_SrcTex", ncm.texArray);
+		        RenderUdims.SetNumUdims(ontoHere, _blitApplyEntireColorLayer_mat);
+		        TextureTools_SPZ.SetKeyword_Material(_blitApplyEntireColorLayer_mat, "APPLY_LATEST_BRUSH_TOO", applyBrushToNoColor);
+		        _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", _latestBrushStroke_ref);
+		        _blitApplyEntireColorLayer_mat.SetColor("_CurrBrushColor", brushCol);
+		        _blitApplyEntireColorLayer_mat.SetFloat("_Sign", sign);
+		        _blitApplyEntireColorLayer_mat.SetFloat("_MaxPossibleBrushStrength01", maxStrength);
+		        _blitApplyEntireColorLayer_mat.SetInteger("_isColorlessMask", 1);
+		        _blitApplyEntireColorLayer_mat.SetTexture("_ColorlessCheckerTex", _colorlessMaskChecker_tex);
+		        _blitApplyEntireColorLayer_mat.SetFloat("_TotalOpacity01", 1f);
+		        TextureTools_SPZ.Blit(ncm.texArray, ontoHere.texArray, _blitApplyEntireColorLayer_mat);
+	        }
 	    }
 
-	    /// <summary>Composite all visible layers into _layerStackCompositeTemp using the same EntireColorLayer_BlitApply shader.
-	    /// Blits each visible layer (bottom to top) onto a cleared temp, with opacity per layer, exactly as the single-layer
-	    /// path blits one layer onto accumulation. Returns the temp, or null on failure.</summary>
-	    RenderUdims CompositeVisibleLayersIntoTemp(PaintLayerStack_MGR stack, bool isColorless)
+	    /// <summary>Composite all visible layers into _layerStackCompositeTemp using the EntireColorLayer_BlitApply shader.
+	    /// For each visible layer (bottom to top): blit Content as color (isColorless=0), then blit per-layer
+	    /// NoColorMask (if present) on top as checker (isColorless=1). The shader's premultiplied add-on-top blend
+	    /// means each pass overlays where it has alpha. Live brush stroke goes to the buffer matching the current
+	    /// mode so the active stroke is shown only once and matches what is actually being written. Returns the
+	    /// composite temp, or null on failure. (<paramref name="_isColorlessIgnored"/> kept only for back-compat
+	    /// of older callers; modes are now per-buffer.)</summary>
+	    RenderUdims CompositeVisibleLayersIntoTemp(PaintLayerStack_MGR stack, bool _isColorlessIgnored, bool includeNoColorMaskInRgb = true)
 	    {
 		    if (stack == null || stack.Layers == null || stack.Layers.Count == 0) return null;
 
@@ -259,6 +315,7 @@ namespace spz {
 		    float sign = Mathf.Sign(_prevStrength);
 		    float maxStrength = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity : 1f;
 		    int activeIdx = stack.ActiveLayerIndex;
+		    bool isNoColorMode = IsCurrentModeNoColor();
 
 		    int blitCount = 0;
 		    for (int i = 0; i < stack.Layers.Count; i++)
@@ -267,20 +324,46 @@ namespace spz {
 			    if (!layer.Visible || layer.Content == null) continue;
 
 			    float opacity = Mathf.Clamp01(layer.Opacity);
-			    bool isActiveAndPainting = (i == activeIdx) && _isPainting && !isSmudgeTool;
+			    bool isActive = (i == activeIdx);
+			    bool activeAndPainting = isActive && _isPainting && !isSmudgeTool;
+			    // Live stroke shown on the buffer matching the current mode — what you see is where it is being written.
+			    bool brushOnContent  = activeAndPainting && !isNoColorMode;
+			    bool brushOnNoColor  = activeAndPainting && isNoColorMode;
 
+			    // Pass A: layer Content as color
 			    _blitApplyEntireColorLayer_mat.SetTexture("_SrcTex", layer.Content.texArray);
 			    RenderUdims.SetNumUdims(_layerStackCompositeTemp, _blitApplyEntireColorLayer_mat);
-			    TextureTools_SPZ.SetKeyword_Material(_blitApplyEntireColorLayer_mat, "APPLY_LATEST_BRUSH_TOO", isActiveAndPainting);
+			    TextureTools_SPZ.SetKeyword_Material(_blitApplyEntireColorLayer_mat, "APPLY_LATEST_BRUSH_TOO", brushOnContent);
 			    _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", _latestBrushStroke_ref);
 			    _blitApplyEntireColorLayer_mat.SetColor("_CurrBrushColor", brushCol);
 			    _blitApplyEntireColorLayer_mat.SetFloat("_Sign", sign);
 			    _blitApplyEntireColorLayer_mat.SetFloat("_MaxPossibleBrushStrength01", maxStrength);
-			    _blitApplyEntireColorLayer_mat.SetInteger("_isColorlessMask", isColorless ? 1 : 0);
-			    if (isColorless) _blitApplyEntireColorLayer_mat.SetTexture("_ColorlessCheckerTex", _colorlessMaskChecker_tex);
+			    _blitApplyEntireColorLayer_mat.SetInteger("_isColorlessMask", 0);
 			    _blitApplyEntireColorLayer_mat.SetFloat("_TotalOpacity01", opacity);
 			    TextureTools_SPZ.Blit(layer.Content.texArray, _layerStackCompositeTemp.texArray, _blitApplyEntireColorLayer_mat);
 			    blitCount++;
+
+			    // Pass B: layer NoColorMask as checker (lazy-allocated; may not exist if no No-Color stroke yet)
+			    var ncm = layer.NoColorMask;
+			    if (ncm == null && isActive && isNoColorMode)
+			    {
+				    layer.EnsureNoColorMaskMatchesContent();
+				    ncm = layer.NoColorMask;
+			    }
+			    if (includeNoColorMaskInRgb && ncm != null)
+			    {
+				    _blitApplyEntireColorLayer_mat.SetTexture("_SrcTex", ncm.texArray);
+				    RenderUdims.SetNumUdims(_layerStackCompositeTemp, _blitApplyEntireColorLayer_mat);
+				    TextureTools_SPZ.SetKeyword_Material(_blitApplyEntireColorLayer_mat, "APPLY_LATEST_BRUSH_TOO", brushOnNoColor);
+				    _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", _latestBrushStroke_ref);
+				    _blitApplyEntireColorLayer_mat.SetColor("_CurrBrushColor", brushCol);
+				    _blitApplyEntireColorLayer_mat.SetFloat("_Sign", sign);
+				    _blitApplyEntireColorLayer_mat.SetFloat("_MaxPossibleBrushStrength01", maxStrength);
+				    _blitApplyEntireColorLayer_mat.SetInteger("_isColorlessMask", 1);
+				    _blitApplyEntireColorLayer_mat.SetTexture("_ColorlessCheckerTex", _colorlessMaskChecker_tex);
+				    _blitApplyEntireColorLayer_mat.SetFloat("_TotalOpacity01", opacity);
+				    TextureTools_SPZ.Blit(ncm.texArray, _layerStackCompositeTemp.texArray, _blitApplyEntireColorLayer_mat);
+			    }
 		    }
 
 		    if (blitCount == 0)
@@ -763,6 +846,7 @@ namespace spz {
 		        var al = PaintLayerStack_MGR.instance.ActiveLayer;
 		        al.Content?.ClearTheTextures(Color.clear);
 		        al.Data?.ClearTheTextures(Color.clear);
+		        al.NoColorMask?.ClearTheTextures(Color.clear);
 	        }
 	        _ObjectUV_brushedColorRGBA?.ClearTheTextures(Color.clear);
 	        isPaintMaskEmpty=true;
@@ -1567,11 +1651,17 @@ namespace spz {
 			    if (stack.Layers.Count > 0 && stack.Layers[0].Visible && stack.Layers[0].Content != null)
 				    return stack.Layers[0].Content;
 		    }
-		    // Single layer: use active layer Content when it exists and is visible. Scene buffer may be null before first multi-layer setup;
-		    // returning null here broke GetDisposable_ScreenMask / SD mask despite valid paint on the layer.
+		    // Single layer: if active has a NoColorMask, build a one-layer composite so SD mask capture
+		    // sees both buffers (Content + NoColorMask). Returning Content directly here drops No Color
+		    // strokes from GetDisposable_ScreenMask and causes wrong/empty masks in img2img.
 		    if (stack != null && stack.Layers != null && stack.Layers.Count <= 1 && stack.ActiveLayer?.Content != null
 		        && stack.ActiveLayer.Visible)
 		    {
+			    if (stack.ActiveLayer.NoColorMask != null)
+			    {
+				    var singleComposite = CompositeVisibleLayersIntoTemp(stack, _isColorlessIgnored: false);
+				    if (singleComposite != null) return singleComposite;
+			    }
 			    var activeContent = stack.ActiveLayer.Content;
 			    if (_ObjectUV_brushedColorRGBA == null)
 				    return activeContent;
@@ -1624,6 +1714,11 @@ namespace spz {
 	        _layerStackCompositeTemp?.Dispose();
 	        _smudgeUnderActiveTemp?.Dispose();
 	        _artIconUvColorWrapper?.Dispose();
+	        // Was leaking on shutdown after heavy painting: large legacy color RGBA UV buffer (multi-UDIM)
+	        // wasn't disposed here, only reallocated in EnsureBrushedColorBuffer. Held GPU memory + RTs alive
+	        // until process end, contributing to slow/hung quit on big projects.
+	        _ObjectUV_brushedColorRGBA?.Dispose();
+	        _ObjectUV_brushedColorRGBA = null;
 	        DestroyImmediate(_blitApplyEntireColorLayer_mat);
 	        base.OnDestroy();
 	    }

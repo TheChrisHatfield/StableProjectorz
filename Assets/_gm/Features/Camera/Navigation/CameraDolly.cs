@@ -106,8 +106,13 @@ namespace spz {
 	            _actualSpeed=_zoomSpeed; 
 	            return; //scenes are probaly still loading.
 	        }
-	        Bounds bounds  = ModelsHandler_3D.instance.GetTotalBounds_ofSelectedMeshes();
-	        float distanceToTarget =  (bounds.center - transform.position).magnitude;
+	        float distanceToTarget;
+	        if (ModelsHandler_3D.instance.TryGetNavigationReferenceWorldPoint(_myViewCam, out var refPt)) {
+	            distanceToTarget =  (refPt - transform.position).magnitude;
+	        } else {
+	            Bounds bounds  = ModelsHandler_3D.instance.GetTotalBounds_ofSelectedMeshes();
+	            distanceToTarget =  (bounds.center - transform.position).magnitude;
+	        }
 	        // Adjust the zoom speed based on distance
 	        _actualSpeed = _zoomSpeed*distanceToTarget;
 	    }

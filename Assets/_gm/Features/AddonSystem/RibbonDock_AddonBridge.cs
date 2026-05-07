@@ -40,13 +40,52 @@ namespace spz {
 
 		static RibbonDock_CommandBridge() {
 			Register("viewport_fullview_toggle", () => {
-				if (ViewportFullViewOnScreen_Driver.IsActive) {
-					ViewportFullViewOnScreen_Driver.TryExit();
+				// IsActive is only true for center-only (!left && !right). If the right paint column is open
+				// (!left && right), the next press must still exit to the saved default — not call TryEnter again.
+				var sk = Global_Skeleton_UI.instance;
+				if (sk != null && sk.TryGetSidePanelVisibility(out bool left, out bool right)) {
+					if (!left) {
+						// Center-only fullscreen, or right-only: leave back to pre-fullscreen layout.
+						if (ViewportFullViewOnScreen_Driver.TryExit()) {
+							AfterViewportFullViewLayoutChange(sk);
+						}
+						return;
+					}
+					// Default (left column visible): enter on-screen full view.
+					if (ViewportFullViewOnScreen_Driver.TryEnter()) {
+						AfterViewportFullViewLayoutChange(sk);
+					}
+					return;
 				}
-				else {
-					ViewportFullViewOnScreen_Driver.TryEnter();
+				// Skeleton not ready: legacy toggle; still run post-layout (chrome + refit) when a skeleton appears later.
+				var skLegacy = Global_Skeleton_UI.instance;
+				if (skLegacy != null && skLegacy.TryGetSidePanelVisibility(out bool _, out bool _)) {
+					if (ViewportFullViewOnScreen_Driver.IsActive) {
+						if (ViewportFullViewOnScreen_Driver.TryExit()) {
+							AfterViewportFullViewLayoutChange(skLegacy);
+						}
+					} else {
+						if (ViewportFullViewOnScreen_Driver.TryEnter()) {
+							AfterViewportFullViewLayoutChange(skLegacy);
+						}
+					}
+				} else {
+					if (ViewportFullViewOnScreen_Driver.IsActive) {
+						ViewportFullViewOnScreen_Driver.TryExit();
+					} else {
+						ViewportFullViewOnScreen_Driver.TryEnter();
+					}
 				}
 			});
+		}
+
+		static void AfterViewportFullViewLayoutChange(Global_Skeleton_UI sk) {
+			FullView_OuterPanel_Chrome_Binder.SyncChromeToDriver();
+			if (sk != null) {
+				sk.ForceLayoutRefreshAfterPanelResize();
+			}
+			// After SetSide + ForceLayout: first full-screen entry now has the correct inner-rect for SD w/h.
+			ViewportFullViewOnScreen_Driver.NotifyLayoutRefreshedForPendingGenRefit();
 		}
 
 		/// <summary>Register a command id (e.g. from another core module or test hook). Prefer stable ids; add-ons reference them by string.</summary>

@@ -19,6 +19,11 @@ namespace spz {
 
 	    public const string WebuiFolderName = "stable-diffusion-webui-forge";
 	    public static readonly string[] WebuiLaunchFileNames = new string[] { "run_noQuickEdit.bat", "run.bat", "run_forge.bat", "run_noQuickEdit.lnk" };
+	    /// <summary>Gradio: prefer not to open a browser (some versions).</summary>
+	    const string GradioSuppressInBrowser_bat = "set \"GRADIO_INBROWSER=0\"\r\n";
+	    /// <summary>Forge <c>webui.py</c> sets <c>inbrowser</c> from config ("Local") unless this env is set (same as internal UI-reload). Required; GRADIO_INBROWSER alone does not stop Forge.</summary>
+	    const string Forge_SuppressBrowserAutolaunch_bat = "set \"SD_WEBUI_RESTARTING=1\"\r\n";
+	    static readonly string SpzWebuiNoBrowserEnv_bat = GradioSuppressInBrowser_bat + Forge_SuppressBrowserAutolaunch_bat;
 
 	    /// <summary>Search up to this many parent levels from each root. Aggressive so bat is found even if exe is deep.</summary>
 	    const int MaxParentDepth = 10;
@@ -26,27 +31,45 @@ namespace spz {
 	    static readonly float[] AutoLaunchRetryDelays = new float[] { 0.5f, 1.5f, 3f, 6f, 12f };
 
 	    static uint _lastLaunchedWebUiPid;
+	    const int WebUiHttpPort = 7860;
 	    Coroutine _waitForWebUiReady_crtn;
 	    bool _isWaitingForWebUiReady;
+	    bool _openBrowserWhenReadyRequested;
+	    bool _forceHiddenForAutoLaunch;
+	    bool _suppressBrowserOpenForCurrentLaunch;
+	    bool _requireDisconnectBeforeReady;
 
 	    /// <summary>Attempts to close the previously launched WebUI process (and its tree on Windows). Call before launching a new instance so the old window closes automatically.</summary>
 	    public static void TryCloseLastLaunchedWebUi() {
-	        if (_lastLaunchedWebUiPid == 0) return;
+	        bool triedPidClose = false;
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
-	        if (!StartExternalProcess.IsProcessRunning(_lastLaunchedWebUiPid)) {
-	            _lastLaunchedWebUiPid = 0;
-	            return;
+	        if (_lastLaunchedWebUiPid != 0) {
+	            triedPidClose = true;
+	            if (StartExternalProcess.IsProcessRunning(_lastLaunchedWebUiPid)) {
+	                try {
+	                    // IL2CPP: System.Diagnostics.Process.Start triggers "Process::CreateProcess_internal" assertion. Use CreateProcessW path only.
+	                    string workDir = Path.GetTempPath();
+	                    uint cmdPid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
+	                        $"taskkill /PID {_lastLaunchedWebUiPid} /T /F", isJustFile: false, workDir, keepWindow: false, hidden: true, attachToConsole: false);
+	                    if (cmdPid != 0)
+	                        StartExternalProcess.WaitForProcessExit(cmdPid, 5000);
+	                    UnityEngine.Debug.Log($"[LaunchWebUI] Closed previous WebUI process tree (PID {_lastLaunchedWebUiPid}).");
+	                } catch (Exception e) {
+	                    UnityEngine.Debug.LogWarning($"[LaunchWebUI] Could not close previous WebUI (PID {_lastLaunchedWebUiPid}): {e.Message}");
+	                }
+	            } else {
+	                UnityEngine.Debug.Log($"[LaunchWebUI] Previous launcher PID {_lastLaunchedWebUiPid} already exited; falling back to port-based cleanup.");
+	            }
 	        }
+	        // PID can point to a short-lived wrapper cmd.exe while WebUI python keeps running.
+	        // Always sweep the WebUI listener port so GPU-switch restarts are deterministic.
 	        try {
-	            // IL2CPP: System.Diagnostics.Process.Start triggers "Process::CreateProcess_internal" assertion. Use CreateProcessW path only.
-	            string workDir = Path.GetTempPath();
-	            uint cmdPid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
-	                $"taskkill /PID {_lastLaunchedWebUiPid} /T /F", isJustFile: false, workDir, keepWindow: false, hidden: true, attachToConsole: false);
-	            if (cmdPid != 0)
-	                StartExternalProcess.WaitForProcessExit(cmdPid, 5000);
-	            UnityEngine.Debug.Log($"[LaunchWebUI] Closed previous WebUI process tree (PID {_lastLaunchedWebUiPid}).");
+	            AddonPortHelper.TryKillProcessesOnPort(WebUiHttpPort);
 	        } catch (Exception e) {
-	            UnityEngine.Debug.LogWarning($"[LaunchWebUI] Could not close previous WebUI (PID {_lastLaunchedWebUiPid}): {e.Message}");
+	            UnityEngine.Debug.LogWarning($"[LaunchWebUI] Could not run port cleanup on {WebUiHttpPort}: {e.Message}");
+	        }
+	        if (!triedPidClose) {
+	            UnityEngine.Debug.Log("[LaunchWebUI] No tracked WebUI PID; performed port-based cleanup before relaunch.");
 	        }
 	        _lastLaunchedWebUiPid = 0;
 #endif
@@ -67,6 +90,11 @@ namespace spz {
 	        if (Viewport_StatusText.instance != null) {
 	            Viewport_StatusText.instance.ShowStatusText("Stable Diffusion is loading...", false, 8f, true);
 	        }
+	        // If SD was already connected when restart started, do not declare "ready" until
+	        // we observe an actual disconnect->reconnect cycle for this launch.
+	        _requireDisconnectBeforeReady = Connection_MGR.is_sd_connected;
+	        _openBrowserWhenReadyRequested = !_suppressBrowserOpenForCurrentLaunch
+	            && UnityEngine.PlayerPrefs.GetInt("WebUI_OpenBrowserOnStartup", 0) == 1;
 	        if (_waitForWebUiReady_crtn != null) {
 	            StopCoroutine(_waitForWebUiReady_crtn);
 	            _waitForWebUiReady_crtn = null;
@@ -80,11 +108,11 @@ namespace spz {
 	        float timeoutSec = 180f;
 	        float elapsed = 0f;
 	        // Restart path can momentarily keep stale "connected" state from the previous process.
-	        // Prefer disconnect->reconnect. If disconnect is never observed, allow sustained
-	        // connected fallback after a short window to avoid false "still loading" stalls.
+	        // Prefer disconnect->reconnect. Only use sustained-connected fallback when we did not
+	        // start from an already-connected state.
 	        bool sawDisconnected = !Connection_MGR.is_sd_connected;
 	        const float warmupSec = 1.5f; // avoid immediate false-positive on stale connection state
-	        const float connectedFallbackSec = 6f; // accept steady connected if panel state never drops
+	        const float connectedFallbackSec = 6f; // only for cold-start style launches
 	        float connectedSince = -1f;
 	        int connectedStreak = 0;
 	        const int readyDebounceTicks = 3; // 3 * 0.5s = 1.5s stable connected before announcing ready
@@ -99,17 +127,19 @@ namespace spz {
 	                if (connectedStreak >= readyDebounceTicks) {
 	                    if (Viewport_StatusText.instance != null)
 	                        Viewport_StatusText.instance.ShowStatusText("Stable Diffusion is ready.", false, 3f, false);
+	                    TryOpenBrowserWhenReady();
 	                    _isWaitingForWebUiReady = false;
 	                    _waitForWebUiReady_crtn = null;
 	                    yield break;
 	                }
-	            } else if (!sawDisconnected && elapsed >= warmupSec) {
+	            } else if (!_requireDisconnectBeforeReady && !sawDisconnected && elapsed >= warmupSec) {
 	                if (connectedSince < 0f) connectedSince = elapsed;
 	                if (elapsed - connectedSince >= connectedFallbackSec) {
 	                    connectedStreak++;
 	                    if (connectedStreak >= readyDebounceTicks) {
 	                        if (Viewport_StatusText.instance != null)
 	                            Viewport_StatusText.instance.ShowStatusText("Stable Diffusion is ready.", false, 3f, false);
+	                        TryOpenBrowserWhenReady();
 	                        _isWaitingForWebUiReady = false;
 	                        _waitForWebUiReady_crtn = null;
 	                        yield break;
@@ -121,10 +151,26 @@ namespace spz {
 	            yield return new WaitForSecondsRealtime(0.5f);
 	            elapsed += 0.5f;
 	        }
-	        if (Viewport_StatusText.instance != null)
-	            Viewport_StatusText.instance.ShowStatusText("Stable Diffusion still loading... (check connection/logs)", false, 4f, false);
+	        if (Viewport_StatusText.instance != null) {
+	            string msg = _requireDisconnectBeforeReady
+	                ? "Stable Diffusion restart not confirmed yet... (waiting for reconnect)"
+	                : "Stable Diffusion still loading... (check connection/logs)";
+	            Viewport_StatusText.instance.ShowStatusText(msg, false, 4f, false);
+	        }
 	        _isWaitingForWebUiReady = false;
 	        _waitForWebUiReady_crtn = null;
+	    }
+
+	    void TryOpenBrowserWhenReady() {
+	        if (!_openBrowserWhenReadyRequested) return;
+	        _openBrowserWhenReadyRequested = false;
+	        const string webUiUrl = "http://127.0.0.1:7860";
+	        try {
+	            Application.OpenURL(webUiUrl);
+	            UnityEngine.Debug.Log($"[LaunchWebUI] Opened browser for WebUI: {webUiUrl}");
+	        } catch (Exception e) {
+	            UnityEngine.Debug.LogWarning($"[LaunchWebUI] Could not open WebUI browser URL: {e.Message}");
+	        }
 	    }
 
 	    /// <summary>Cached result of nvidia-smi query for Settings UI to show "0: Name0, 1: Name1". Empty if not yet queried or nvidia-smi failed.</summary>
@@ -354,7 +400,8 @@ namespace spz {
 	                // webui-user.bat forces "--api --gpu-device-id 0"; bypassing run.bat/webui-user.bat avoids always locking to physical GPU 0 when Settings = default (-1).
 	                string cudaLine = gpuId >= 0 ? ("set CUDA_DEVICE_ORDER=PCI_BUS_ID\r\nset CUDA_VISIBLE_DEVICES=" + gpuId + "\r\n") : "";
 	                string pythonCmd = hasVenvPython ? ("\"" + pythonExe.Replace("\"", "\"\"") + "\"") : "python";
-	                string content = "@echo off\r\nset COMMANDLINE_ARGS=" + args + "\r\nset REDUCE_DISPLAY_GPU_LOAD=1\r\n" + envLine + cudaLine + "cd /d \"" + launchDir.Replace("\"", "\"\"") + "\"\r\n" + pythonCmd + " \"" + launchPy.Replace("\"", "\"\"") + "\"\r\n";
+	                string content = "@echo off\r\n" + SpzWebuiNoBrowserEnv_bat
+	                    + "set COMMANDLINE_ARGS=" + args + "\r\nset REDUCE_DISPLAY_GPU_LOAD=1\r\n" + envLine + cudaLine + "cd /d \"" + launchDir.Replace("\"", "\"\"") + "\"\r\n" + pythonCmd + " \"" + launchPy.Replace("\"", "\"\"") + "\"\r\n";
 	                File.WriteAllText(wrapperPath, content);
 	                if (gpuId >= 0)
 	                    UnityEngine.Debug.Log($"[LaunchWebUI] Direct launch.py with SD GPU={gpuId}, CUDA_VISIBLE_DEVICES={gpuId}, COMMANDLINE_ARGS='{args}', python={(hasVenvPython ? "venv" : "PATH")}. Wrapper: {wrapperPath}");
@@ -367,8 +414,24 @@ namespace spz {
 	            }
 	        }
 	        UnityEngine.Debug.LogWarning($"[LaunchWebUI] Direct launch path unavailable (launch.py exists={hasLaunchPy}, venv python exists={hasVenvPython}). Falling back to bat/lnk path.");
-	        if (gpuId < 0)
-	            return webuiFilePath;
+	        if (gpuId < 0) {
+	            try {
+	                // Raw bat would start Grado with the default in-browser tab; only wrap to inject GRADIO_INBROWSER=0.
+	                string wrapperPathPass = Path.Combine(Path.GetTempPath(), "spz_webui_nobrowser_call.bat");
+	                string extPass = Path.GetExtension(webuiFilePath).ToLowerInvariant();
+	                string callLinePass = (extPass == ".lnk")
+	                    ? "start \"\" \"" + webuiFilePath.Replace("\"", "\"\"") + "\""
+	                    : "call \"" + webuiFilePath.Replace("\"", "\"\"") + "\"";
+	                string contentPass = "@echo off\r\n" + SpzWebuiNoBrowserEnv_bat + "cd /d \"" + workingDir.Replace("\"", "\"\"") + "\"\r\n" + callLinePass + "\r\n";
+	                File.WriteAllText(wrapperPathPass, contentPass);
+	                workingDir = Path.GetTempPath();
+	                UnityEngine.Debug.Log($"[LaunchWebUI] No direct launch: using Gradio in-browser=0 call wrapper: {webuiFilePath}");
+	                return wrapperPathPass;
+	            } catch (Exception e0) {
+	                UnityEngine.Debug.LogWarning($"[LaunchWebUI] Could not create no-browser call wrapper, falling back to direct bat: {e0.Message}");
+	                return webuiFilePath;
+	            }
+	        }
 	        try {
 	            // Fallback when venv/launch.py missing: set env then call their bat (may still run webui-user.bat).
 	            string wrapperPath2 = Path.Combine(Path.GetTempPath(), "spz_webui_gpu_wrapper.bat");
@@ -378,7 +441,8 @@ namespace spz {
 	                : "call \"" + webuiFilePath.Replace("\"", "\"\"") + "\"";
 	            if (ext == ".lnk")
 	                UnityEngine.Debug.Log($"[LaunchWebUI] Using GPU {gpuId} (CUDA_VISIBLE_DEVICES; launch.py/venv not found for direct launch).");
-	            string content2 = "@echo off\r\nset CUDA_DEVICE_ORDER=PCI_BUS_ID\r\nset CUDA_VISIBLE_DEVICES=" + gpuId + "\r\nset COMMANDLINE_ARGS=" + args + "\r\ncd /d \"" + workingDir.Replace("\"", "\"\"") + "\"\r\n" + callLine + "\r\n";
+	            string content2 = "@echo off\r\n" + SpzWebuiNoBrowserEnv_bat
+	                + "set CUDA_DEVICE_ORDER=PCI_BUS_ID\r\nset CUDA_VISIBLE_DEVICES=" + gpuId + "\r\nset COMMANDLINE_ARGS=" + args + "\r\ncd /d \"" + workingDir.Replace("\"", "\"\"") + "\"\r\n" + callLine + "\r\n";
 	            File.WriteAllText(wrapperPath2, content2);
 	            workingDir = Path.GetTempPath();
 	            return wrapperPath2;
@@ -392,10 +456,12 @@ namespace spz {
 	        return GetLaunchPathWithGpuSetting(webuiFilePath, out workingDir);
 	    }
 
-	    public void LaunchWebui_Manually(bool printStatusText_ifNotFound = false) {
+	    public void LaunchWebui_Manually(bool printStatusText_ifNotFound = false, bool suppressBrowserOpenForThisLaunch = false) {
+	        _suppressBrowserOpenForCurrentLaunch = suppressBrowserOpenForThisLaunch;
 	        string filePath = GetWebuiFilePath(printStatusText_ifNotFound);
 	        if (string.IsNullOrEmpty(filePath)) {
 	            UnityEngine.Debug.Log("[LaunchWebUI] No bat file path; skipping launch (see above for search path).");
+	            _suppressBrowserOpenForCurrentLaunch = false;
 	            return;
 	        }
 
@@ -410,7 +476,8 @@ namespace spz {
 	            workingDir = Path.GetTempPath();
 
 	        try {
-	            bool showExternalWindows = UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1;
+	            bool showExternalWindows = !_forceHiddenForAutoLaunch
+	                && UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1;
 	            uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
 	                launchPath,
 	                isJustFile: true,
@@ -425,9 +492,11 @@ namespace spz {
 	                NotifyWebUiLaunchStarted();
 	            } else {
 	                UnityEngine.Debug.LogError("[LaunchWebUI] Failed to launch process (PID 0).");
+	                _suppressBrowserOpenForCurrentLaunch = false;
 	            }
 	        } catch (Exception e) {
 	            UnityEngine.Debug.LogError($"[LaunchWebUI] Error launching process: {e.Message}");
+	            _suppressBrowserOpenForCurrentLaunch = false;
 	        }
 	    }
 
@@ -436,7 +505,7 @@ namespace spz {
 #if UNITY_EDITOR
 	        return;
 #endif
-	        UnityEngine.Debug.Log("[LaunchWebUI] Auto-launch aggressive: retries at 0.5s, 1.5s, 3s, 6s, 12s.");
+	        UnityEngine.Debug.Log("[LaunchWebUI] Auto-launch aggressive: retries at 0.5s, 1.5s, 3s, 6s, 12s (Unity OpenURL only if Settings: open WebUI in browser is on).");
 	        StartCoroutine(AggressiveAutoLaunchLoop());
 	    }
 
@@ -448,9 +517,14 @@ namespace spz {
 	            if (i > 0)
 	                UnityEngine.Debug.Log($"[LaunchWebUI] Retry {i + 1}/{AutoLaunchRetryDelays.Length} (after {AutoLaunchRetryDelays[i]}s).");
 	            try {
-	                LaunchWebui_Manually(showStatus);
+	                _forceHiddenForAutoLaunch = true; // startup launch should always hide the external window
+	                // Match Settings: only suppress Application.OpenURL when the user has left "open browser" off.
+	                bool suppressBrowser = UnityEngine.PlayerPrefs.GetInt("WebUI_OpenBrowserOnStartup", 0) == 0;
+	                LaunchWebui_Manually(showStatus, suppressBrowserOpenForThisLaunch: suppressBrowser);
 	            } catch (Exception e) {
 	                UnityEngine.Debug.LogError($"[LaunchWebUI] Auto-launch attempt failed: {e.Message}");
+	            } finally {
+	                _forceHiddenForAutoLaunch = false;
 	            }
 	            if (_lastLaunchedWebUiPid != 0) yield break;
 	        }

@@ -217,7 +217,7 @@ namespace spz {
 
 	        if(DimensionMode_MGR.instance._dimensionMode == DimensionMode.dim_sd) { 
 	            ToggleControls_based_on_mode();
-	            UpdateSliderTexts();
+	            UpdateSliderTextsIfSdDim();
 	            Reposition_ReDoMini_slider();
 	            PlayAttentionAnim_ReDo_slider();
 	        }
@@ -255,6 +255,15 @@ namespace spz {
 	        }
 
 	        _mask_blur_text.text  = _blur_slider.value.ToString("0.0");
+	    }
+
+	    /// <summary> Re-do % and mask blur labels; also called from slider events (mini syncs main with <c>invokeCallback: false</c>). </summary>
+	    void UpdateSliderTextsIfSdDim(){
+		    if (DimensionMode_MGR.instance == null
+		        || DimensionMode_MGR.instance._dimensionMode != DimensionMode.dim_sd) {
+			    return;
+		    }
+		    UpdateSliderTexts();
 	    }
 
 
@@ -405,6 +414,7 @@ namespace spz {
 	        if(currMode == WorkflowRibbon_CurrMode.TotalObject){ _recentBlur_for_TotalObject = newVal01; }
 	        if(currMode == WorkflowRibbon_CurrMode.Inpaint_Color){  _recentBlur_for_Color = newVal01; }
 	        if(currMode == WorkflowRibbon_CurrMode.Inpaint_NoColor){_recentBlur_for_NoColor = newVal01; }
+	        UpdateSliderTextsIfSdDim();
 	    }
 
 	    void OnEdgeThreshSlider(float newVal01){
@@ -415,11 +425,15 @@ namespace spz {
 	        if(currMode == WorkflowRibbon_CurrMode.Inpaint_NoColor){_recentEdgeThresh_for_NoColor = newVal01; }
 	    }
     
-	    void OnReThinkSliderMini(float val) //mini was adjusted, set the usual slider:
-	        =>_reThink_slider.SetSliderValue(val, invokeCallback:false);
+	    void OnReThinkSliderMini(float val) { //mini was adjusted, set the usual slider:
+		    _reThink_slider.SetSliderValue(val, invokeCallback:false);
+		    UpdateSliderTextsIfSdDim();
+	    }
 
-	    void OnReThinkSlider(float val) //usual slider was adjusted, set the mini:
-	        => _reThink_slider_mini?.SetSliderValue(val, invokeCallback:false);
+	    void OnReThinkSlider(float val) { //usual slider was adjusted, set the mini:
+		    _reThink_slider_mini?.SetSliderValue(val, invokeCallback:false);
+		    UpdateSliderTextsIfSdDim();
+	    }
     
 	    //tiling can affect the quality, reducing it. So user needs to pay attention to this toggle.
 	    void OnWillSendOptions_AmmendPlz(SD_OptionsPacket opt)  => opt.tiling = _tileableInpaint.isOn;

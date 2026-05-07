@@ -122,8 +122,9 @@ namespace spz {
 
 	    public WorkflowRibbon_CurrMode currentMode(){
 	        if(_projMasking.isOn){ return WorkflowRibbon_CurrMode.ProjectionsMasking;  }
-	        if(_coloring.isOn){    return WorkflowRibbon_CurrMode.Inpaint_Color;  }
+	        // No Color before Color: if both toggles were ever left true (no ToggleGroup), inpaint mask must match No Color when that mode is selected.
 	        if(_colorless.isOn){   return WorkflowRibbon_CurrMode.Inpaint_NoColor;  }
+	        if(_coloring.isOn){    return WorkflowRibbon_CurrMode.Inpaint_Color;  }
 	        if(_entireObj.isOn){   return WorkflowRibbon_CurrMode.TotalObject;  }
 	        if(_WhereEmpty_UI.isOn){ return WorkflowRibbon_CurrMode.WhereEmpty; }
 	        if(_AntiShade_UI.isOn){  return WorkflowRibbon_CurrMode.AntiShade; }
@@ -146,6 +147,12 @@ namespace spz {
 	            case WorkflowRibbon_CurrMode.AntiShade: toggle = _AntiShade_UI; break;
 	            default: break;
 	        }
+	        _projMasking.SetOffWithoutNotify();
+	        _coloring.SetOffWithoutNotify();
+	        _colorless.SetOffWithoutNotify();
+	        _entireObj.SetOffWithoutNotify();
+	        _WhereEmpty_UI.SetOffWithoutNotify();
+	        _AntiShade_UI.SetOffWithoutNotify();
 	        toggle.EnableToggle(playAttentionAnim);
 
 	        _Act_OnModeChanged?.Invoke(mode);
@@ -253,7 +260,7 @@ namespace spz {
 	            if (tog == null){ continue; } //some children (bg or frame) aren't toggles, skip them.
 
 	            _skipShortcutHint = true;
-	            tog.EnableToggle();
+	            Set_CurrentMode(GetMode_from_Toggle(tog));
 	            _skipShortcutHint = false;
 	            break;
 	            //toggleGroup will untoggle the old one.

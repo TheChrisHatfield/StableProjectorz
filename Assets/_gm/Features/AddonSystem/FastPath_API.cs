@@ -787,6 +787,15 @@ namespace spz {
 			return ids;
 		}
 		
+		/// <summary>
+		/// When multiple submeshes are selected, the mesh under the cursor (or last selected) for single-target transform; prefer over <c>GetSelectedMeshIDs()[0]</c>.
+		/// </summary>
+		public ushort GetManipulationTargetMeshId() {
+			if (!_isInitialized) return 0;
+			var m = ModelsHandler_3D.instance != null ? ModelsHandler_3D.instance.GetManipulationTargetMesh() : null;
+			return m != null ? m.unique_id : (ushort)0;
+		}
+		
 		// ============================================
 		// SCENE INFORMATION
 		// ============================================

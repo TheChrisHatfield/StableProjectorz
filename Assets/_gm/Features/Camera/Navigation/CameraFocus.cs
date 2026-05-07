@@ -38,8 +38,15 @@ namespace spz {
 
 	    //invoked every update, but you can manually invoke it (+specify forceTheFocus)
 	    public void Focus_Selection_maybe(bool forceTheFocus=false,  bool dontFly_onlyDoEvent=false){
-        
-	        if(_lerpFlyCamera_crtn!=null){ return; }//avoids initiating it twice, because might already be reparented, etc.
+	        if(_lerpFlyCamera_crtn!=null){
+	            // Import/recenter requests should win over an in-flight restore/orbit lerp so newly loaded meshes
+	            // can still snap/focus to center (e.g. camera-icon restore + quick generate/import sequence).
+	            if(forceTheFocus){
+	                StopCurrentLerpAndRestoreParent();
+	            }else{
+	                return; //avoids initiating it twice during regular input
+	            }
+	        }
 
 	        if(!forceTheFocus  &&  Keyboard.current.fKey.wasPressedThisFrame==false){ return; }
 	        if(!forceTheFocus  &&  KeyMousePenInput.isSomeInputFieldActive()){ return; }//maybe typing a prompt
@@ -49,8 +56,24 @@ namespace spz {
 
 	        IReadOnlyList<SD_3D_Mesh> selected = ModelsHandler_3D.instance.selectedMeshes;
 	        if(selected == null || selected.Count==0){ return; }
-	        // Calculate bounding box and camera destination
-	        Bounds totalBounds = ModelsHandler_3D.instance.GetTotalBounds_ofSelectedMeshes();
+	        // Prefer the mesh under the main-viewport cursor (sub-viewport in multiview too), so "F" doesn't
+	        // only frame the union of all selected AABBs—which feels like the first/older object after adding another mesh.
+	        Bounds totalBounds = default;
+	        bool haveBounds = false;
+	        if (MainViewport_UI.instance != null) {
+	            ushort underCursor = ClickSelect_Meshes_MGR.SampleMeshIdAtViewport01_static(
+	                MainViewport_UI.instance.cursorMainViewportPos01);
+	            if (underCursor != 0) {
+	                SD_3D_Mesh m = ModelsHandler_3D.instance.getMesh_byUniqueID(underCursor);
+	                if (m != null) {
+	                    totalBounds = m.bounds;
+	                    haveBounds = true;
+	                }
+	            }
+	        }
+	        if (!haveBounds) {
+	            totalBounds = ModelsHandler_3D.instance.GetTotalBounds_ofSelectedMeshes();
+	        }
 	        Vector3 boundsCenter  = totalBounds.center;
 
 	        float distanceToModel = CalcDistanceToModel(totalBounds);
@@ -142,6 +165,17 @@ namespace spz {
 
 	        transform.SetParent(_myParent_durStart, worldPositionStays:true);
 	        _lerpFlyCamera_crtn = null;
+	    }
+
+	    void StopCurrentLerpAndRestoreParent(){
+	        if(_lerpFlyCamera_crtn != null){
+	            Coroutines_MGR.instance.StopCoroutine(_lerpFlyCamera_crtn);
+	            _lerpFlyCamera_crtn = null;
+	        }
+	        _corotineCode_run_durUpdate = null;
+	        if(transform != null && _myParent_durStart != null){
+	            transform.SetParent(_myParent_durStart, worldPositionStays:true);
+	        }
 	    }
 
 

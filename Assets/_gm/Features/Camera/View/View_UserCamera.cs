@@ -202,7 +202,7 @@ namespace spz {
 	        }
 	        Vector2 vc_viewportSize = MainViewport_UI.instance.mainViewportRect.rect.size;
 	        Vector2 cc_viewportSize = MainViewport_UI.instance.innerViewportRect.rect.size;
-	        if (ViewportFullViewOnScreen_Driver.IsActive) {
+	        if (ViewportFullViewOnScreen_Driver.ShouldUseBetweenRibbonsMainViewportPlacement()) {
 		        cc_viewportSize = vc_viewportSize;
 	        }
 	        Vector2 sizeFactor = vc_viewportSize / cc_viewportSize;

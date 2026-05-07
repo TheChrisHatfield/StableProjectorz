@@ -160,17 +160,49 @@ namespace spz {
     
 	    public void FocusViewCamera(int ix)
 	        => _viewCameras[ix].cameraFocus.Focus_Selection_maybe(forceTheFocus:true);
+    /// <summary>
+    /// Route navigation to the viewport pin nearest the cursor (OG behavior), so orbit / focus / zoom
+    /// operate on the camera the user is actively hovering in multi-view.
+    /// </summary>
+    public View_UserCamera NearestToCursor(){
+		    var pins = CamerasMGR_PinsZone_UI.instance;
+		    if (pins == null || _viewCameras == null || _viewCameras.Count == 0) {
+			    return _curr_viewCamera;
+		    }
+		    int nearestPin = pins.FindNearestPin();
+		    if (nearestPin < 0 || nearestPin >= _viewCameras.Count) {
+			    return _curr_viewCamera;
+		    }
+		    var nearestCam = _viewCameras[nearestPin];
+		    if (nearestCam != null && nearestCam.gameObject.activeInHierarchy) {
+			    return nearestCam;
+		    }
+		    return _curr_viewCamera;
+    }
 
-    
-	    public View_UserCamera NearestToCursor(){
-	        var pins = CamerasMGR_PinsZone_UI.instance;
-	        if (pins == null) {
-		        return _curr_viewCamera;
-	        }
-	        //Check if possibly dragging something. If so, don't update currViewCamera for now:
-	        int nearestPin = pins.FindNearestPin();
-	        if (nearestPin < 0 || nearestPin >= _viewCameras.Count) { return _curr_viewCamera; }
-	        return _viewCameras[nearestPin];
+	    /// <summary>World position on the surface under the main-viewport cursor from the linear depth buffer; false if sky/invalid.</summary>
+	    public bool TryGetWorldPoint_UnderMainViewportCursorDepth(View_UserCamera vCam, out Vector3 worldPos) {
+		    worldPos = default;
+		    if (vCam == null || _camTextures == null || MainViewport_UI.instance == null) {
+			    return false;
+		    }
+		    var depthTex = _camTextures._viewCamDepthLast_linear_ref;
+		    if (depthTex == null) { return false; }
+		    Vector2 uv = MainViewport_UI.instance.cursorMainViewportPos01;
+		    var tex = new Texture2D(1, 1, TextureFormat.RFloat, false);
+		    RenderTexture prev = RenderTexture.active;
+		    RenderTexture.active = depthTex;
+		    tex.ReadPixels(new Rect(uv.x * depthTex.width, uv.y * depthTex.height, 1, 1), 0, 0);
+		    tex.Apply();
+		    RenderTexture.active = prev;
+		    float depth = tex.GetPixel(0, 0).r;
+		    Destroy(tex);
+		    if (depth >= 0.9995f) {
+			    return false;
+		    }
+		    float z = Mathf.Lerp(0, vCam.myCamera.farClipPlane, depth);
+		    worldPos = vCam.ViewportToWorldPoint(new Vector3(uv.x, uv.y, z));
+		    return true;
 	    }
 
 

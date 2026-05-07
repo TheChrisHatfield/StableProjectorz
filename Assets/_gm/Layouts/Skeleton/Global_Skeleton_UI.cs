@@ -70,6 +70,24 @@ namespace spz {
 		    return true;
 	    }
 
+	    /// <summary>After side panel width changes, run a second layout pass on the skeleton row, main viewport, and root canvas.
+	    /// Improves responsive sizing when toggling (e.g. open right from fullscreen) so the paint column gets correct width/height.</summary>
+	    public void ForceLayoutRefreshAfterPanelResize() {
+		    if (_leftColumn_rTransf != null) {
+			    var row = _leftColumn_rTransf.parent as RectTransform;
+			    if (row != null) {
+				    LayoutRebuilder.ForceRebuildLayoutImmediate(row);
+			    }
+		    }
+		    if (_mainViewport_rTransf != null) {
+			    LayoutRebuilder.ForceRebuildLayoutImmediate(_mainViewport_rTransf);
+		    }
+		    Canvas.ForceUpdateCanvases();
+		    if (MainViewport_UI.instance != null) {
+			    MainViewport_UI.instance.ReapplyInnerRibbonLayoutFromSettings();
+		    }
+	    }
+
 	    void EnsureSceneWidthsCaptured() {
 		    if (_capturedSceneWidths) {
 			    return;

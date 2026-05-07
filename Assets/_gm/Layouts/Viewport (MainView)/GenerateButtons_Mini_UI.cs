@@ -32,7 +32,12 @@ namespace spz {
 	        //subscribe to our base class's action:
 	        GenerateButtons_UI._Act_OnGenerate_started += OnStartedGenerate_cb;
 	        GenerateButtons_UI._Act_OnGenerate_finished += OnFinishedGenerate_cb;
-	        OnConfirmed_FinishedGenerate(canceled: true);//makes sure some buttons are hidden.
+	        // Sync this newly-created UI instance to current global generation state.
+	        if (GenerateButtons_UI.isGenerating){
+	            OnStartedGenerate_cb();
+	        }else{
+	            OnFinishedGenerate_cb(canceled: true);
+	        }
 	    }
 	}
 

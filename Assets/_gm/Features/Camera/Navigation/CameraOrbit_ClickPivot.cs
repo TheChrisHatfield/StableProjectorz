@@ -34,6 +34,9 @@ namespace spz {
     
 	    public void ForceInFrontOfCamera(){
 	        _keepRecentering = false;
+	        // ROLLBACK NOTE: reverted to OG (_curr_viewCamera). Click-pivot is gated off in multi-view
+	        // (see RecenterOntoPivot_maybe: _isEditingMode==false disables recenter), so per-cursor camera
+	        // resolution here is not needed and would just couple unrelated logic to NearestToCursor.
 	        Transform camTransf = UserCameras_MGR.instance._curr_viewCamera.myCamera.transform;
 	        float distance      = (transform.position - camTransf.position).magnitude;
 	        transform.position  = camTransf.position + camTransf.forward*distance;
@@ -61,6 +64,8 @@ namespace spz {
 	        if(Time.time - _timeStartedPress > _clickMaxPressTime){ return; }
 
 	        Vector2 viewportPos = MainViewport_UI.instance.cursorMainViewportPos01;
+	        // ROLLBACK NOTE: reverted to OG (_curr_viewCamera). Multi-view disables _keepRecentering
+	        // (see RecenterOntoPivot_maybe), so the click-pivot is single-camera by design.
 	        View_UserCamera vCam = UserCameras_MGR.instance._curr_viewCamera;
 	        Camera camera    = vCam.myCamera;
 
@@ -144,6 +149,8 @@ namespace spz {
 	        if(MultiView_Ribbon_UI.instance._isEditingMode == false){ _keepRecentering = false; }
 	        if(!_keepRecentering){ return; }
 
+	        // ROLLBACK NOTE: OG used _curr_viewCamera. _keepRecentering only true in editing mode (single cam),
+	        // so _curr_viewCamera == active cam here.
 	        View_UserCamera viewCam = UserCameras_MGR.instance._curr_viewCamera;
         
 	        float elapsed =  Time.time - _time_wasPressing;
@@ -160,6 +167,7 @@ namespace spz {
 	        Color col = Settings_MGR.instance.get_wireframeColor();
 	        col.a = opacity;
 	        _pivotSphereRender.material.SetColor("_Color", col);
+	        // ROLLBACK NOTE: OG used _curr_viewCamera (cosmetic distance for sphere scale).
 	        float dist  = (transform.position - UserCameras_MGR.instance._curr_viewCamera.transform.position).magnitude;
 	        float scale = Mathf.InverseLerp(0, 3, dist);
 	              scale = Mathf.Clamp01(scale) * 0.2f;

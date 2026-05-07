@@ -22,7 +22,7 @@ namespace spz {
 
 	    void EarlyUpdate(){
 	        float aspect;
-	        if (ViewportFullViewOnScreen_Driver.IsActive && MainViewport_UI.instance != null) {
+	        if (ViewportFullViewOnScreen_Driver.ShouldUseBetweenRibbonsMainViewportPlacement() && MainViewport_UI.instance != null) {
 		        var r = MainViewport_UI.instance.mainViewportRect.rect;
 		        aspect = r.height > 1e-4f ? r.width / r.height : 1f;
 	        } else {
