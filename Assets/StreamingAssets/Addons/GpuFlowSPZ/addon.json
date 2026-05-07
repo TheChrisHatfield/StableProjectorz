@@ -1,0 +1,5 @@
+{
+  "displayName": "GPU Flow (adaptive pacing)",
+  "version": "1.0.0",
+  "description": "Optional GPU utilization pacing for the Python add-on server: Thompson-style bandit over headroom policies (Mocap Cleaner latency_supervisor pattern), NVML/nvidia-smi sampling, and REST hooks at /api/v1/gpu-flow/*."
+}
