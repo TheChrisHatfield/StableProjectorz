@@ -113,6 +113,11 @@
       "note": "IValuePaintAssist MLP implementation awaiting user asset; see cartridge-insights T5"
     },
     {
+      "id": "mlp-dataset-recipe",
+      "status": "documented_backlog",
+      "note": "docs/specs/smart-value-paint/mlp-dataset-recipe.md — promote to tasks as T8 when user confirms"
+    },
+    {
       "id": "stroke-feature-extractor",
       "status": "backlog",
       "note": "T6 draft — not in tasks.md until user confirms"
