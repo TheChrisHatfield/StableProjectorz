@@ -1344,9 +1344,9 @@ namespace spz {
 			        }
 			        float sign = Mathf.Sign(suggested_brushStrength);
 			        float maxStrength = SD_WorkflowOptionsRibbon_UI.instance != null ? SD_WorkflowOptionsRibbon_UI.instance.maskBrushOpacity : 1f;
-			        // smart-value-paint Task 4: verify armed proposal targets ActiveLayer.Content (no stroke-math change).
-			        ValuePaintProposalApplier.OnBeforeColorBrushApply(target);
 			        if (_applyBrushStroke_toUvMask.Apply_into_ColorBrushTex(prevBrushStroke_R8, currBrushStroke_R8, sign, maxStrength, target, useBrushStrokeDelta: true)) {
+				        // smart-value-paint: only count verify after a successful UV commit (no false SawApply).
+				        ValuePaintProposalApplier.OnColorBrushApplied(target);
 				        ClearSmudgePreferArtIconUntilLayerPaint();
 				        if (!_inpaintLayerColorSerialBumpedThisBrushStroke) {
 					        _inpaintLayerColorSerialBumpedThisBrushStroke = true;
