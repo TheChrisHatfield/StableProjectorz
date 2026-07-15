@@ -1,15 +1,53 @@
+<!-- BOOTSTRAP: hive_planner + continual-learning merge — do not wipe Learned sections -->
+
+# AGENTS.md — StableProjectorz
+
+Durable operating guidance for agentic coding in this repo.
+
+## Repository root
+
+`D:/DRIVE_DOWNLOADS/Stable_Projectoz_Dev_Build/StableProjectorz`
+
+## Planning Rosetta Stone
+
+- **Search phrase:** `Planning Rosetta Stone`
+- **Hook ID:** `planning.rosetta`
+- **File:** `docs/planning-rosetta-stone.md`
+
+## Startup read order
+
+See [`START_HERE.md`](START_HERE.md).
+
+## Delta model
+
+- **Holistic** — mission, goals, constraints
+- **Macro** — architecture, modules, workflows
+- **Micro** — feature scope, tasks, files, tests
+
+## Active feature
+
+**smart-value-paint** — adaptive value-scale paint assist (`docs/specs/smart-value-paint/`, `Assets/_gm/Features/Paint/SmartValuePaint/`). MLP model not integrated yet (awaiting user asset).
+
+## Durable Workspace Facts
+
+- Behavioral truth lives in Spec Kit (`docs/specs/`); operational truth in this file. See `docs/cl-spec-integration.md`.
+- Do not replace this entire file with a hive bootstrap template — merge operational bullets only; keep historical notes below.
+- Install Hive CLI from your Hive Code Planner repo: `py -3.11 -m pip install -e ".[dev]"`.
+- Run `py -3.11 -m hive_planner ci-check` before handoff when Hive tooling is wired.
+- Runtime brush stamp source: `BrushAlphas_MGR.GetCurrentBrushStampTexOrFallback()`.
+- Code lives under `Assets/_gm`.
+
 ## Learned User Preferences
 
 - Treat Context_Ref and similar reference exports as read-only documentation of the original source; do not edit them when fixing the Unity project—use them only to understand legacy behavior.
 - When adjusting Unity UI padding, use `RectOffset` in the order left, right, top, bottom consistently across the paint and ribbon code.
 - After runtime creation or rebuild of brush preset sections, re-apply a single flush layout pass (VLG spacing, header `LayoutElement` heights, grid anchors) so thumbnails sit tight under the collapsible header.
 
-## Learned Workspace Facts
+## Project Workspace Notes
 
 - Python add-ons connect to Unity over TCP JSON-RPC on port 5555 (`Addon_SocketServer`, wired from `Addon_MGR`); `Addon_HttpServer` optionally exposes REST endpoints that delegate to the same JSON-RPC handler. DCC/Blender file exchange is the managed in-app add-on `Assets/StreamingAssets/Addons/StableProjectorzGO` (Add-on Manager, “StableProjectorz GO”); the separate Blender add-on is `External/Blender_SpzBridge/`. Headless mesh I/O uses `spz.cmd.import_3d_model` and `spz.cmd.export_3d_with_textures_to_path` (also `POST /api/v1/meshes/import` and `POST /api/v1/export/3d_to_path` on the HTTP server).
 - IL2CPP player builds can assert on `Resources.GetBuiltinResource` in add-on UI (`AddonManager_UI`); prefer explicit fallback sprites or project assets instead of built-in resource lookup on those paths.
 - Release builds are normally produced from the Unity Editor (e.g. Build and Run); expect output under `Build_IL2CPP` such as `StableProjectorz.exe`, not an assumed CLI build unless Unity is invoked with a known editor path.
-- Runtime brush painting uses `BrushAlphas_MGR.GetCurrentBrushStampTexOrFallback()` as the canonical stamp source for the paint pipeline.
 - ABR import and decode edge cases (1-bit stride alignment, RLE, v6+ samp blocks, consumed-byte caps) are documented under `docs/` including `docs/ABR_DECODE_REFERENCE.md`.
 - Viewport paint layers reach Stable Diffusion via UV accumulation, material updates, and the content camera capture path; if layers appear on meshes but not in SD payloads, suspect capture-time early-outs (e.g. save guards skipping layer apply) or GPU ordering—ensure layer composite and material updates complete before content-camera render or readback.
 - 3D mesh picking reads one pixel from the mesh-ID render target at the cursor (`ClickSelect_Meshes_MGR`), decodes a mesh id, and toggles selection through `ModelsHandler_3D`; occasional expensive CPU readback is acceptable because it runs on click only.
@@ -24,5 +62,3 @@
 - **Editor diagnostic (viewport vs modal)**: On `MainViewport_UI`, enable **`_logAddonModalViewportDisagreementsInEditor`** to log (throttled) when **`AddonManager_UI.IsModalOpen`** is true but **`TryRaycastTowardsSelf()`** is still true—signals possible click-through or canvas/blocker ordering issues (no-op in player builds).
 - **OLD vs current (camera pan feel)**: `git diff` shows **`CamerasMGR_PinsZone_UI` `DragPin_maybe` / `[0,1]` clamp unchanged** vs OLD_TEST_REPO; differences that affect feel cluster **`MainViewport_UI` hover**, **`Global_Skeleton_UI`** (side-panel collapse / layout rebuild → `innerViewportRect` geometry), and **`UserCameras_MGR`** (`NearestToCursor`, view-camera enable caps).
 - **Paint undo vs Stable Diffusion**: `PaintUndo_MGR` clears history **only** when `PaintLayerStack_MGR.OnLayerStackStructureChanged` fires (see `PaintUndo_MGR.OnLayerStackStructureChanged_ClearHistory`) — e.g. **resolution/UDIM change** (`EnsureResolution` when `w×h×slices` changes), **remove/move layer**, or **full stack `Load`**. Finishing an SD generation updates **icon / `GenData`** textures, not that event chain by itself, so **stroke undo stacks usually remain** and Ctrl+Z still restores **layer `Content`** pixels captured before each stroke. If paint resolution changes mid-session (init textures / img2img boost / new UDIM count), undo is wiped intentionally. Undo is **not** a history of SD artboard revisions—only viewport paint buffers (plus non-stack targets like projection masks per `PaintUndoNonStackTarget`).
-- Active Spec Kit feature: **smart-value-paint** (`docs/specs/smart-value-paint/`, `Assets/_gm/Features/Paint/SmartValuePaint/`). Do not replace this entire `AGENTS.md` with a hive bootstrap template — merge operational bullets only.
-
