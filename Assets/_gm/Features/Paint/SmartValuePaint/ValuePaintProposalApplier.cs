@@ -103,11 +103,11 @@ namespace spz {
 		}
 
 		/// <summary>
-		/// Called from <see cref="Inpaint_MaskPainter"/> immediately before color UV apply.
-		/// Verifies the active apply target matches the resolved color Content path when a proposal is armed.
+		/// Called from <see cref="Inpaint_MaskPainter"/> after a successful color UV apply.
+		/// Verifies destin matches the resolved color Content path when a proposal is armed.
 		/// Does not alter stroke math.
 		/// </summary>
-		public static void OnBeforeColorBrushApply(RenderUdims destin) {
+		public static void OnColorBrushApplied(RenderUdims destin) {
 			if (!_armed || destin == null)
 				return;
 			var expected = ResolveColorPaintTarget(out _);
