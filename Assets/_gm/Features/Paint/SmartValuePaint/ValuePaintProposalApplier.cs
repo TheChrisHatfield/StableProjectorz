@@ -1,0 +1,149 @@
+using UnityEngine;
+
+namespace spz {
+
+	/// <summary>
+	/// Accepts a reviewable <see cref="ValuePaintProposal"/> into the live color paint stack (Task 4 / Spec R3).
+	/// Arms brush color/size/opacity via existing ribbon APIs; subsequent strokes write through
+	/// <see cref="Inpaint_MaskPainter"/> → <see cref="ApplyBrushStroke_ToUvMask.Apply_into_ColorBrushTex"/>.
+	/// Does not invent a parallel painter and does not silent-overwrite inactive layers.
+	/// </summary>
+	public static class ValuePaintProposalApplier {
+
+		static bool _armed;
+		static ValuePaintProposal _armedProposal;
+		static bool _sawApplyOnArmedTarget;
+		static string _lastFailReason = "";
+
+		public static bool IsArmed => _armed;
+		public static ValuePaintProposal ArmedProposal => _armedProposal;
+		public static bool SawApplyOnArmedTarget => _sawApplyOnArmedTarget;
+		public static string LastFailReason => _lastFailReason;
+
+		public static Color GrayForBand(ValuePaintBand band) {
+			float lum;
+			switch (band) {
+				case ValuePaintBand.Highlight: lum = 0.92f; break;
+				case ValuePaintBand.Light: lum = 0.75f; break;
+				case ValuePaintBand.Shadow: lum = 0.30f; break;
+				case ValuePaintBand.AccentDark: lum = 0.10f; break;
+				default: lum = 0.50f; break;
+			}
+			return new Color(lum, lum, lum, 1f);
+		}
+
+		/// <summary>
+		/// Arm proposal onto active color paint tools. Returns false with reason if mode/target/ribbon not ready.
+		/// </summary>
+		public static bool TryAccept(ValuePaintProposal proposal, out string reason) {
+			_lastFailReason = "";
+			_sawApplyOnArmedTarget = false;
+
+			var workflow = WorkflowRibbon_UI.instance;
+			if (workflow == null) {
+				reason = _lastFailReason = "WorkflowRibbon_UI missing";
+				return false;
+			}
+			if (!workflow.isMode_using_img2img()) {
+				reason = _lastFailReason = "Not in img2img / inpaint workflow";
+				return false;
+			}
+			if (workflow.currentMode() == WorkflowRibbon_CurrMode.Inpaint_NoColor) {
+				reason = _lastFailReason = "Inpaint_NoColor refused (color value proposal targets Content)";
+				return false;
+			}
+			if (workflow.currentMode() != WorkflowRibbon_CurrMode.Inpaint_Color) {
+				reason = _lastFailReason = "Expected Inpaint_Color mode; got " + workflow.currentMode();
+				return false;
+			}
+
+			var sd = SD_WorkflowOptionsRibbon_UI.instance;
+			if (sd == null) {
+				reason = _lastFailReason = "SD_WorkflowOptionsRibbon_UI missing";
+				return false;
+			}
+			if (sd.isSmudge) {
+				reason = _lastFailReason = "Smudge active — refuse (normal color path only)";
+				return false;
+			}
+
+			RenderUdims target = ResolveColorPaintTarget(out string targetReason);
+			if (target == null) {
+				reason = _lastFailReason = targetReason;
+				return false;
+			}
+
+			var opacityUi = Object.FindObjectOfType<BrushRibbon_UI_Opacity>(true);
+			if (opacityUi == null) {
+				reason = _lastFailReason = "BrushRibbon_UI_Opacity missing — refuse before mutating brush color/size";
+				return false;
+			}
+
+			Color tint = GrayForBand(proposal.DesiredBin);
+			if (!sd.SetBrushColorFromApi(tint.r, tint.g, tint.b, tint.a)) {
+				reason = _lastFailReason = "SetBrushColorFromApi failed";
+				return false;
+			}
+
+			sd.SetBrushSize(Mathf.Clamp01(proposal.BrushWidthHint01));
+			opacityUi.SetOpacity01(Mathf.Clamp01(proposal.OpacityHint01));
+
+			_armedProposal = proposal;
+			_armed = true;
+			reason = "Armed on target=" + DescribeTarget(target) + " desiredBin=" + proposal.DesiredBin
+			         + " color=" + tint + " size01=" + proposal.BrushWidthHint01.ToString("F2")
+			         + " opacity01=" + proposal.OpacityHint01.ToString("F2");
+			return true;
+		}
+
+		public static void ClearArmed() {
+			_armed = false;
+			_sawApplyOnArmedTarget = false;
+			_armedProposal = default;
+		}
+
+		/// <summary>
+		/// Called from <see cref="Inpaint_MaskPainter"/> immediately before color UV apply.
+		/// Verifies the active apply target matches the resolved color Content path when a proposal is armed.
+		/// Does not alter stroke math.
+		/// </summary>
+		public static void OnBeforeColorBrushApply(RenderUdims destin) {
+			if (!_armed || destin == null)
+				return;
+			var expected = ResolveColorPaintTarget(out _);
+			if (expected != null && ReferenceEquals(expected, destin))
+				_sawApplyOnArmedTarget = true;
+		}
+
+		static RenderUdims ResolveColorPaintTarget(out string reason) {
+			reason = "";
+			var painter = Inpaint_MaskPainter.instance;
+			if (painter == null) {
+				reason = "Inpaint_MaskPainter.instance missing";
+				return null;
+			}
+			var target = painter.GetPaintTarget_Undo();
+			if (target == null) {
+				reason = "No paint target (load a 3D model / ensure active layer Content)";
+				return null;
+			}
+			var stack = PaintLayerStack_MGR.instance;
+			var active = stack?.ActiveLayer;
+			if (active != null && active.Content != null && !ReferenceEquals(target, active.Content)) {
+				// NoColor path or unexpected buffer — refuse color proposal write diversion
+				reason = "Paint target is not ActiveLayer.Content (mode/buffer mismatch)";
+				return null;
+			}
+			return target;
+		}
+
+		static string DescribeTarget(RenderUdims target) {
+			var stack = PaintLayerStack_MGR.instance;
+			var active = stack?.ActiveLayer;
+			if (active != null && ReferenceEquals(target, active.Content))
+				return "ActiveLayer.Content";
+			return "RenderUdims";
+		}
+	}
+
+}
