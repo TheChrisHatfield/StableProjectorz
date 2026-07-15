@@ -33,7 +33,7 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 
 ## Task 4 — Apply through existing paint stack (complete)
 
-- [x] Wire “accept proposal” into existing stroke/layer path (R3) — `ValuePaintProposalApplier.TryAccept` → ribbon color/size/opacity; hook `OnBeforeColorBrushApply` in `Inpaint_MaskPainter` before `Apply_into_ColorBrushTex`
+- [x] Wire “accept proposal” into existing stroke/layer path (R3) — `ValuePaintProposalApplier.TryAccept` → ribbon color/size/opacity; hook `OnColorBrushApplied` in `Inpaint_MaskPainter` after successful `Apply_into_ColorBrushTex`
 - [x] Respect active layer + paint mode — requires `Inpaint_Color`, refuses NoColor/smudge; target must be `ActiveLayer.Content` when stack present
 - [x] Integration-level validation evidence — menu `Try accept midtone proposal`; impact `chg_20260715_031053_smart-value-paint`
 
