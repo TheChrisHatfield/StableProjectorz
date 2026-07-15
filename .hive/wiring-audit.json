@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "feature": "smart-value-paint",
+  "recorded_at": "2026-07-15T03:12:52.133047+00:00",
+  "evidence": "pytest -q",
+  "summary": "",
+  "max_age_hours": 168,
+  "checks": {
+    "trace_verified": true,
+    "no_false_success": true,
+    "integration_evidence": true
+  }
+}

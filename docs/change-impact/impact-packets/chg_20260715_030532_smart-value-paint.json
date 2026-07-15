@@ -1,0 +1,25 @@
+{
+  "packet_id": "chg_20260715_030532_smart-value-paint",
+  "feature": "smart-value-paint",
+  "hook_ids": [
+    "change.impact",
+    "change.levels",
+    "change.validation"
+  ],
+  "primary": [],
+  "secondary": [
+    {
+      "path": "Assets/_gm/Features/Paint/SmartValuePaint",
+      "level": "secondary",
+      "reason": "Repo artifact connected to change scope"
+    }
+  ],
+  "tertiary": [],
+  "risk_score": "low",
+  "validations": [
+    "Run mapped pytest targets",
+    "Re-run hive_planner ingest/emit if compiler paths changed"
+  ],
+  "mode": "default",
+  "created_at": "2026-07-15T03:05:32.591117+00:00"
+}
