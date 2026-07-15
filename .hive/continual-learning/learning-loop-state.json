@@ -2,10 +2,11 @@
   "schema_version": "learning-loop-state.v1",
   "feature": "smart-value-paint",
   "hook_id": "learning.close",
-  "updated_at": "2026-07-15T05:35:00+00:00",
+  "updated_at": "2026-07-15T05:40:00+00:00",
   "gates": {
     "tasks_1_4": "closed",
     "t5_t8_draft": "backlog_unconfirmed",
+    "mlp_dataset_recipe_documented": "closed",
     "learning_loop_rosetta_tagged": "closed",
     "planning_rosetta_learning_hooks": "closed",
     "source4s_paint_transformer": "correlated",
@@ -17,30 +18,29 @@
     {
       "log": "docs/proposals/learning-loop-mine-apply-learning-loop-cartridge-20260715.md",
       "type": "mine_apply",
-      "date": "2026-07-15",
-      "cycles": 20,
-      "beacon": "context-library/sources/imported/learning-loop-rosetta.md"
+      "date": "2026-07-15"
     },
     {
       "log": "docs/proposals/learning-loop-mine-apply-source4s-20260715.md",
       "type": "mine_apply",
-      "date": "2026-07-15",
-      "cycles": 20,
-      "beacon": "context-library/sources/source4s/PAINT_Transformer.pdf + ADAPTIVE_ROUTING.pdf"
+      "date": "2026-07-15"
     },
     {
       "log": "docs/proposals/learning-loop-meta-multipass-decimacon-deltas-20260715.md",
       "type": "meta",
+      "date": "2026-07-15"
+    },
+    {
+      "log": "docs/proposals/learning-loop-beacon-mlp-dataset-recipe-20260715.md",
+      "type": "beacon",
       "date": "2026-07-15",
-      "cycles": 20,
-      "beacon": "multipass A/B/C Decimacon + LAVD + SMART_VALUE",
+      "cycles": 15,
+      "beacon": "SMART_VALUE dataset sections + Paint Transformer self-train + Decimacon ORIENT",
       "scoreboard": {
-        "confirmed": 9,
-        "promoted": 5,
+        "confirmed": 10,
+        "promoted": 3,
         "backlog": 1,
-        "fix": 2,
-        "conflict": 1,
-        "meta_only": 3
+        "fix": 1
       }
     }
   ],
@@ -53,15 +53,16 @@
     "paint_transformer_literature_only",
     "adaptive_routing_analogy_not_runtime",
     "decimacon_runtime_oos_v1",
-    "scheduler_allocator_ne_paint_reasoner"
+    "scheduler_allocator_ne_paint_reasoner",
+    "mlp_trains_on_state_decision_rows_not_full_images"
   ],
   "recommended_next": {
     "type": "implementation_gap",
-    "when": "user_confirms_T5_or_supplies_MLP",
+    "when": "user_confirms_T5_T8_or_supplies_MLP",
     "cycles": 30,
-    "beacon": "Assets/_gm/Features/Paint/SmartValuePaint/ contracts vs MLP assist",
+    "beacon": "mlp-dataset-recipe.md + SmartValuePaint contracts",
     "idle_ok": true
   },
-  "need_score_last": 11,
-  "notes": "Multipass combined Delta holistic/macro/micro. Decimacon forced into source-context via ORIENT+EXTRA."
+  "need_score_last": 10,
+  "notes": "Dataset recipe confirmed and documented. Agent understands (state→decision) manufacture path."
 }

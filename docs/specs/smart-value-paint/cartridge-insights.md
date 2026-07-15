@@ -71,10 +71,13 @@ Do **not** invent a parallel painter.
 
 ## [HOOK:compiler.pipeline] Dataset recipe (for when MLP arrives)
 
-1. SDXL generates style-consistent target paintings (optional variation).  
-2. Quantize to 5/7 value bands → value-structure maps.  
-3. Manufacture `(state → stroke/value decision)` pairs — **not** full-image generation by the MLP.  
-4. Stage training: value-structure first, then stroke-parameter policy.
+**Canonical write-up:** [`mlp-dataset-recipe.md`](./mlp-dataset-recipe.md) (learning-loop beacon 2026-07-15).
+
+1. SDXL/artist targets → quantized 5-band value maps (optional SDXL).  
+2. Manufacture `(state → decision)` rows matching `ValuePaintProposal` — **not** full images.  
+3. Teachers: heuristics / forge telemetry / human accepts.  
+4. Train bin head first, then multi-head params; export → T5.  
+5. Self-training on in-progress canvases (Paint Transformer analogue, value-aware).
 
 ## [CTX:paint_transformer] Literature — Paint Transformer (source4s)
 
