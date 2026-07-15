@@ -2,14 +2,16 @@
   "schema_version": "learning-loop-state.v1",
   "feature": "smart-value-paint",
   "hook_id": "learning.close",
-  "updated_at": "2026-07-15T05:10:00+00:00",
+  "updated_at": "2026-07-15T05:35:00+00:00",
   "gates": {
     "tasks_1_4": "closed",
     "t5_t8_draft": "backlog_unconfirmed",
     "learning_loop_rosetta_tagged": "closed",
     "planning_rosetta_learning_hooks": "closed",
     "source4s_paint_transformer": "correlated",
-    "source4s_adaptive_routing": "correlated_oos_runtime"
+    "source4s_adaptive_routing": "correlated_oos_runtime",
+    "mlp_decimacon_orientation": "correlated_oos_runtime",
+    "multipass_combined_deltas": "closed"
   },
   "prior_loops": [
     {
@@ -17,28 +19,28 @@
       "type": "mine_apply",
       "date": "2026-07-15",
       "cycles": 20,
-      "beacon": "context-library/sources/imported/learning-loop-rosetta.md",
-      "scoreboard": {
-        "confirmed": 8,
-        "promoted": 5,
-        "backlog": 4,
-        "fix": 3,
-        "conflict": 0
-      }
+      "beacon": "context-library/sources/imported/learning-loop-rosetta.md"
     },
     {
       "log": "docs/proposals/learning-loop-mine-apply-source4s-20260715.md",
       "type": "mine_apply",
       "date": "2026-07-15",
       "cycles": 20,
-      "beacon": "context-library/sources/source4s/PAINT_Transformer.pdf + ADAPTIVE_ROUTING.pdf",
+      "beacon": "context-library/sources/source4s/PAINT_Transformer.pdf + ADAPTIVE_ROUTING.pdf"
+    },
+    {
+      "log": "docs/proposals/learning-loop-meta-multipass-decimacon-deltas-20260715.md",
+      "type": "meta",
+      "date": "2026-07-15",
+      "cycles": 20,
+      "beacon": "multipass A/B/C Decimacon + LAVD + SMART_VALUE",
       "scoreboard": {
-        "confirmed": 8,
-        "promoted": 4,
-        "backlog": 3,
-        "fix": 4,
+        "confirmed": 9,
+        "promoted": 5,
+        "backlog": 1,
+        "fix": 2,
         "conflict": 1,
-        "meta_only": 1
+        "meta_only": 3
       }
     }
   ],
@@ -49,7 +51,9 @@
     "decimacon_sdxl_training_oos_v1",
     "t5_t8_require_user_confirm_before_tasks_md",
     "paint_transformer_literature_only",
-    "adaptive_routing_analogy_not_runtime"
+    "adaptive_routing_analogy_not_runtime",
+    "decimacon_runtime_oos_v1",
+    "scheduler_allocator_ne_paint_reasoner"
   ],
   "recommended_next": {
     "type": "implementation_gap",
@@ -58,6 +62,6 @@
     "beacon": "Assets/_gm/Features/Paint/SmartValuePaint/ contracts vs MLP assist",
     "idle_ok": true
   },
-  "need_score_last": 9,
-  "notes": "source4s PDFs forced into cartridge source-context. MoS router must not reopen Decimacon."
+  "need_score_last": 11,
+  "notes": "Multipass combined Delta holistic/macro/micro. Decimacon forced into source-context via ORIENT+EXTRA."
 }

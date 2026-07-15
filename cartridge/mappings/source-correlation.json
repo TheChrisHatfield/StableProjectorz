@@ -3,11 +3,17 @@
   "feature": "smart-value-paint",
   "hook_id": "context.document_sourcing",
   "updated_at": "2026-07-15",
+  "multipass": {
+    "A_paint_assist": ["SMART_VALUE_PAINT_DEV_1", "PAINT_Transformer"],
+    "B_resource_router": ["ADAPTIVE_ROUTING", "LAVAD_SMART_CPU_SCHEDULER", "LAVD_BASETEXT", "LAVD_CPU_RESEARCH"],
+    "C_decimacon_family": ["MLP_DECIMACON_DEV_1", "MLP_DECIMACON_DEV_EXTRA", "MLP_DECIMACON_ORIENT"]
+  },
   "canonical_sources": [
     {
       "id": "SMART_VALUE_PAINT_DEV_1",
       "path": "context-library/sources/imported/SMART_VALUE_PAINT_DEV_1.md",
       "role": "research_thread",
+      "pass": "A",
       "hooks": ["compiler.pipeline", "context.document_sourcing", "spec.flow"],
       "promote_insights": "docs/specs/smart-value-paint/cartridge-insights.md"
     },
@@ -29,6 +35,7 @@
       "id": "PAINT_Transformer",
       "path": "context-library/sources/source4s/PAINT_Transformer.pdf",
       "role": "literature_baseline",
+      "pass": "A",
       "hooks": ["context.document_sourcing", "compiler.pipeline", "spec.flow"],
       "promote_insights": "docs/specs/smart-value-paint/cartridge-insights.md",
       "note": "Stroke-set prediction + self-training; not a Unity dependency"
@@ -37,9 +44,58 @@
       "id": "ADAPTIVE_ROUTING",
       "path": "context-library/sources/source4s/ADAPTIVE_ROUTING.pdf",
       "role": "literature_analogy",
+      "pass": "B",
       "hooks": ["context.document_sourcing", "compiler.pipeline"],
       "promote_insights": "docs/specs/smart-value-paint/cartridge-insights.md",
       "note": "Learned router over expert policies — analogy only; Decimacon OOS v1"
+    },
+    {
+      "id": "LAVAD_SMART_CPU_SCHEDULER",
+      "path": "context-library/sources/imported/LAVAD_SMART_CPU_SCHEDULER.md",
+      "role": "scheduler_research",
+      "pass": "B",
+      "hooks": ["context.document_sourcing"],
+      "promote_insights": "docs/delta/10_macro.md"
+    },
+    {
+      "id": "LAVD_BASETEXT",
+      "path": "context-library/sources/imported/LAVD_BASETEXT.pdf",
+      "role": "scheduler_research",
+      "pass": "B",
+      "hooks": ["context.document_sourcing"],
+      "promote_insights": "docs/delta/10_macro.md"
+    },
+    {
+      "id": "LAVD_CPU_RESEARCH",
+      "path": "context-library/sources/imported/LAVD_CPU_RESEARCH.md",
+      "role": "scheduler_research",
+      "pass": "B",
+      "hooks": ["context.document_sourcing", "planning.rosetta"],
+      "promote_insights": "docs/delta/10_macro.md"
+    },
+    {
+      "id": "MLP_DECIMACON_DEV_1",
+      "path": "context-library/sources/imported/MLP_DECIMACON_DEV_1.md",
+      "role": "decimacon_blueprint",
+      "pass": "C",
+      "hooks": ["context.document_sourcing", "compiler.pipeline"],
+      "promote_insights": "docs/specs/smart-value-paint/cartridge-insights.md"
+    },
+    {
+      "id": "MLP_DECIMACON_DEV_EXTRA",
+      "path": "context-library/sources/imported/MLP_DECIMACON_DEV_EXTRA.txt",
+      "role": "decimacon_spoken_architecture",
+      "pass": "C",
+      "hooks": ["context.document_sourcing", "compiler.pipeline"],
+      "promote_insights": "docs/specs/smart-value-paint/cartridge-insights.md"
+    },
+    {
+      "id": "MLP_DECIMACON_ORIENT",
+      "path": "context-library/sources/source4s/MLP_DECIMACON_ORIENT.txt",
+      "role": "decimacon_beacon",
+      "pass": "C",
+      "hooks": ["context.document_sourcing", "learning.beacon"],
+      "promote_insights": "docs/delta/00_holistic.md"
     }
   ],
   "code_contracts": [
@@ -69,17 +125,27 @@
     {
       "id": "paint-transformer-parity",
       "status": "backlog",
-      "note": "Literature only — stroke-set Transformer not required for T5; use as CAP/read if critic/stroke-set later"
+      "note": "Literature only — stroke-set Transformer not required for T5"
     },
     {
       "id": "expert-router-runtime",
       "status": "out_of_scope_v1",
-      "note": "Adaptive Routing / MoS analogy must not reopen Decimacon runtime (locked law)"
+      "note": "Adaptive Routing / MoS / LAVD runtime must not reopen Decimacon DAG"
+    },
+    {
+      "id": "decimacon-runtime",
+      "status": "out_of_scope_v1",
+      "note": "Full Base/Router/Gate/Vault stack oriented only; not Spec Kit tasks until opened"
     },
     {
       "id": "adaptive-learning-loop-skill",
       "status": "absent",
-      "note": "Methodology lives in learning-loop-rosetta.md; optional .cursor/skills/adaptive-learning-loop not required"
+      "note": "Methodology lives in learning-loop-rosetta.md"
     }
-  ]
+  ],
+  "triangulation": {
+    "CONVERGE": "No parallel painter; proposals through existing UV/color sink",
+    "STACK": "Decimacon describes long-term family; SVP ships smallest cortex head first",
+    "CONFLICT_RESOLVED": "Runtime Decimacon/MoS before MLP weights → drop"
+  }
 }
