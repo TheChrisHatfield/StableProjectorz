@@ -68,11 +68,13 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 - Task 3: `docs/change-impact/impact-packets/chg_20260715_030532_smart-value-paint.json` (low) for `Assets/_gm/Features/Paint/SmartValuePaint/`.
 - Task 4: `docs/change-impact/impact-packets/chg_20260715_031053_smart-value-paint.json` (low) including `Inpaint_MaskPainter.cs`.
 
-## Risks
+## Open questions (from Spec + cartridge mine)
 
-- Research text may name systems not present in `_gm`; always verify types in-fork.
-- Over-scoping MLP training before a proposal sink exists.
+- Exact input feature vector schema (hand-crafted stats vs small CNN embedding) — see [`cartridge-insights.md`](./cartridge-insights.md)
+- Where proposals appear in Paint tab UI vs non-UI API-first slice
+- How SDXL/Forge outputs feed value maps without blocking offline authoring
+- When user supplies MLP weights: implement T5–T6 before critic / Decimacon
 
-## Success for this plan revision
+## Tertiary mine
 
-Tasks 1–4 complete (scaffold, discovery, proposal API, accept → existing paint stack).
+Cartridge re-emit + distillate: [`cartridge-insights.md`](./cartridge-insights.md) (`planning.rosetta` / `context.document_sourcing`).
