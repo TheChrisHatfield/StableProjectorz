@@ -3,21 +3,21 @@
 # Source Context
 
 **Feature:** `smart-value-paint`
-**Generated:** 2026-07-15T05:06:41.042471+00:00
+**Generated:** 2026-07-15T05:33:36.658566+00:00
 **Limits:** max 3 documents, max 8 excerpts
 
 ## Active documents
-- context-library/sources/source4s/ADAPTIVE_ROUTING.pdf — Adaptive_Routing
-- context-library/sources/source4s/PAINT_Transformer.pdf — Paint_Transformer
+- context-library/sources/source4s/MLP_DECIMACON_ORIENT.txt — Mlp_Decimacon_Orient
+- context-library/sources/source4s/MLP_DECIMACON_DEV_EXTRA.txt — Mlp_Decimacon_Dev_Extra
 - context-library/sources/imported/SMART_VALUE_PAINT_DEV_1.md — can we develop adaptive painting. have predictive stroke pattern in paint items of value scale. could MLP be use to capture patterns generate from the forge system.
 
 ## Retrieved excerpts
 
-### Source: context-library/sources/source4s/ADAPTIVE_ROUTING.pdf (Adaptive_Routing > Page 1, page 1)
-- ## Page 1  Mixture-of-Schedulers: An Adaptive Scheduling Agent as a Learned Router for Expert Policies Xinbo Wang∗ Shian Jia∗ xinbowang@zju.edu.cn csjsa@zju.edu.cn Zhejiang University Hangzhou, Zhejiang, China Ziyang Huang Zhejiang University Hangzhou, Zhejiang, China 3220105926@zju.edu.cn Jing Cao HangZhou City University Hangzhou, Zhejiang, China jingcao@hzcu.edu.cn Mingli Song Zhejiang Unive...
+### Source: context-library/sources/source4s/MLP_DECIMACON_ORIENT.txt (Mlp_Decimacon_Orient)
+- # Mlp_Decimacon_Orient  ﻿MLP Decimacon orientation (cartridge beacon) Keywords: MLP Decimacon, staged hybrid, shared latent vault, selective self-attention, router, gate, repo cortex, smart-value-paint, tonal MLP, stroke MLP, LAVD  Definition: MLP Decimacon is a staged hybrid: layers advance sequentially; experts within a stage may run in parallel. Shared latent workspace (latent vault). Self-a...
 
-### Source: context-library/sources/source4s/PAINT_Transformer.pdf (Paint_Transformer > Page 1, page 1)
-- ## Page 1  Paint Transformer: Feed Forward Neural Painting with Stroke Prediction Songhua Liu1,2,∗,†, Tianwei Lin1,∗, Dongliang He1, Fu Li1, Ruifeng Deng1, Xin Li1, Errui Ding1, Hao Wang3 1Department of Computer Vision Technology (VIS), Baidu Inc., 2Nanjing University, 3Rutgers University 1{liusonghua,lintianwei01,hedongliang01,lifu,dengruifeng,lixin41,dingerrui}@baidu.com, 2songhua.liu@smail.n...
+### Source: context-library/sources/source4s/MLP_DECIMACON_DEV_EXTRA.txt (Mlp_Decimacon_Dev_Extra)
+- # Mlp_Decimacon_Dev_Extra    “Hey, can you hear me?”  I hear you loud and clear! What's on your mind?   “How does a transformer work in terms of neural network architecture?”  At its core, a transformer processes input data all at once rather than sequentially. It uses something called self-attention, which means every part of the input can pay attention to every other part. The architecture is...
 
 ### Source: context-library/sources/imported/SMART_VALUE_PAINT_DEV_1.md (so explain how it would work under the hood and how end user would use it > Practical split)
 - ## Practical split  A clean system split would be:   | Layer | Function | | :-- | :-- | | SDXL | Generates target image, style prior, or local patch guidance. [^13_3][^13_4] | | Decimacon controller | Routes tasks between painting experts. [^13_5] | | Tonal MLP | Predicts value group and transition strength. | | Stroke MLP | Predicts stroke geometry and brush parameters. | | Critic | Scores whe...
@@ -33,9 +33,6 @@
 
 ### Source: context-library/sources/imported/SMART_VALUE_PAINT_DEV_1.md (let's more focus on the data need for input for the MLP. couldn't we use SDXl to create highly curated dataset > How SDXL creates a curated dataset)
 - ## How SDXL creates a curated dataset  SDXL is perfect as a **curated target and variation generator**, but you still have to build the mapping between your canvas/stroke state and the SDXL target. [^5_1][^5_7]  A practical strategy:  1. **Generate target paintings**     - Use SDXL to create thousands of images in a consistent style family (e.g., oil-like landscapes, portrait studies, monochrom...
-
-### Source: context-library/sources/imported/SMART_VALUE_PAINT_DEV_1.md (what I meant if you take traditional painting when you paint a stroke you choice different colors and apply value scales then blend. this woul utlize or single color. either way artist creates a value scale.)
-- # what I meant if you take traditional painting when you paint a stroke you choice different colors and apply value scales then blend. this woul utlize or single color. either way artist creates a value scale.  You are absolutely right: in traditional painting the “value scale” is something the artist is constantly building and navigating, regardless of how many hues are in play. [^2_1][^2_2][^...
 
 ## Why relevant
 - Tertiary context retrieved by hybrid keyword/embedding match for the active feature.

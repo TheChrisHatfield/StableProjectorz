@@ -285,8 +285,9 @@ py -3.11 -m hive_planner agents-propose --candidates docs/proposals/candidates.m
 | *(mlp-decimacon prior logs — foreign — do not re-debate)* | — | Ignored for StableProjectorz |
 | `learning-loop-mine-apply-learning-loop-cartridge-20260715.md` | `mine_apply` | Rosetta-tagged learning.loop cartridge + planning index |
 | `learning-loop-mine-apply-source4s-20260715.md` | `mine_apply` | source4s PT + Adaptive Routing correlated; MoS runtime CONFLICT dropped |
+| `learning-loop-meta-multipass-decimacon-deltas-20260715.md` | `meta` | Multipass A/B/C combined Delta; Decimacon orientation OOS runtime |
 
-**Locked laws (smart-value-paint):** tasks 1–4 sink path · deterministic stub behind `IValuePaintAssist` · accept via ribbon → `Apply_into_ColorBrushTex` · Decimacon/SDXL training out of scope v1 · Paint Transformer literature-only · Adaptive Routing analogy-not-runtime · T5–T8 backlog until user confirm.
+**Locked laws (smart-value-paint):** tasks 1–4 sink path · deterministic stub behind `IValuePaintAssist` · accept via ribbon → `Apply_into_ColorBrushTex` · Decimacon/SDXL training out of scope v1 · Paint Transformer literature-only · Adaptive Routing analogy-not-runtime · **Decimacon runtime OOS** · scheduler≠paint reasoner · T5–T8 backlog until user confirm.
 
 ***
 

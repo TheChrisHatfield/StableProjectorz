@@ -61,4 +61,24 @@ py -3.11 -m hive_planner ci-check
 
 ## Tertiary research note
 
-Cartridge `source-context.md` summarizes SMART_VALUE_PAINT research (MLP as baseline parameter predictor; SDXL as dataset/target generator; stroke pairs as training unit). Use as context only until promoted into Spec Kit requirements.
+Multipass cartridge orientation (meta loop 2026-07-15):
+
+| Pass | Beacon | Use for SVP |
+|------|--------|-------------|
+| A | SMART_VALUE + Paint Transformer | Proposal DTO + dataset self-training ideas |
+| B | Adaptive Routing + LAVD | Keep scheduler/allocator ≠ paint reasoner |
+| C | MLP Decimacon ORIENT + EXTRA (+ DEV_1) | Staged hybrid / selective attention — **understand**, don’t ship DAG in v1 |
+
+Active emit after force includes `MLP_DECIMACON_ORIENT.txt`, `MLP_DECIMACON_DEV_EXTRA.txt`, and SMART_VALUE. See [`cartridge-insights.md`](../../specs/smart-value-paint/cartridge-insights.md) and [`source-correlation.json`](../../../cartridge/mappings/source-correlation.json).
+
+## Decimacon → SVP role map (orientation only)
+
+| Decimacon idea | SVP v1 stand-in |
+|----------------|-----------------|
+| Fast control / scoring MLP | `DeterministicValuePaintAssist` → future MLP on `IValuePaintAssist` |
+| Router / expert select | **BACKLOG** — not T5; do not pull MoS runtime |
+| Shared latent vault | Not required for value-bin proposals |
+| Selective self-attention modules | Optional later Stroke MLP / critic |
+| Sequential stages | Spec Kit task stages + human accept (R3) |
+
+Full Decimacon remains **out of scope** until Spec explicitly opens it.

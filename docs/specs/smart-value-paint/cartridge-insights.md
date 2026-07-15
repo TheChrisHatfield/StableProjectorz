@@ -105,6 +105,18 @@ Do **not** invent a parallel painter.
 
 Paint Transformer ideas also appear in SMART_VALUE_PAINT_DEV_1; later work emphasizes planning “where next.” Treat PDF + thread as **literature baseline**, not a Unity package.
 
+## [HOOK:learning.loop] Multipass triangulation (meta 2026-07-15)
+
+| Pass | Sources | New insight for Delta |
+|------|---------|------------------------|
+| A | SMART_VALUE + Paint Transformer | Small decision heads + optional later stroke-set / self-training |
+| B | Adaptive Routing + LAVD_* | Scheduler allocates; model reasons — keep split |
+| C | MLP Decimacon ORIENT + EXTRA + DEV_1 | Staged hybrid, shared latent, selective attention — **orientation**, not v1 ship |
+
+**Combined Delta laws:** sink wins · small heads first · scheduler ≠ reasoner · Decimacon family OOS v1 · tertiary ≠ Spec.
+
+Role map (orientation): Base/Router/Gate/Cortex → SVP stand-ins documented in [`docs/delta/20_micro/smart-value-paint.md`](../../delta/20_micro/smart-value-paint.md).
+
 ## Recommended follow-on Spec Kit tasks (draft — not active until you confirm)
 
 | ID | Task | Hook |
