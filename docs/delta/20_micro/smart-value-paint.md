@@ -45,7 +45,7 @@ Normal **color** paint chain (proposal sink candidates):
 
 - `Assets/_gm/Features/Paint/SmartValuePaint/` — proposal API + deterministic stub + `ValuePaintProposalApplier` (Task 3–4)
 - `Assets/_gm/Features/Paint/Editor/SmartValuePaintAssistCheck.cs` — Editor propose/accept checks
-- `Assets/_gm/Features/Paint/Inpaint/Inpaint_MaskPainter.cs` — `OnBeforeColorBrushApply` verify hook (Task 4)
+- `Assets/_gm/Features/Paint/Inpaint/Inpaint_MaskPainter.cs` — `OnColorBrushApplied` verify hook after successful apply (Task 4)
 - `Assets/_gm/Features/Paint/MaskPainter.cs`
 - `Assets/_gm/Features/Paint/ApplyBrushStroke_ToUvMask.cs`
 - `Assets/_gm/Features/Paint/Layers/` (`PaintLayerStack_MGR`, `PaintLayer`)
