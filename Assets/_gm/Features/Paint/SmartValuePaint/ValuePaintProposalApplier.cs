@@ -66,6 +66,10 @@ namespace spz {
 				reason = _lastFailReason = "Smudge active — refuse (normal color path only)";
 				return false;
 			}
+			if (!sd.isPositive) {
+				reason = _lastFailReason = "Erase tool active — refuse (value proposals arm paint, not erase)";
+				return false;
+			}
 
 			RenderUdims target = ResolveColorPaintTarget(out string targetReason);
 			if (target == null) {
