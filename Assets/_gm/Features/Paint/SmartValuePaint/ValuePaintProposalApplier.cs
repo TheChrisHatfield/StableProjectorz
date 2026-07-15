@@ -90,13 +90,18 @@ namespace spz {
 			}
 
 			sd.SetBrushSize(Mathf.Clamp01(proposal.BrushWidthHint01));
-			opacityUi.SetOpacity01(Mathf.Clamp01(proposal.OpacityHint01));
+			// Apply blend into effective opacity so Accept does not silently drop BlendStrength01 (Spec R2).
+			float blend = float.IsFinite(proposal.BlendStrength01) ? Mathf.Clamp01(proposal.BlendStrength01) : 1f;
+			float opacity = float.IsFinite(proposal.OpacityHint01) ? Mathf.Clamp01(proposal.OpacityHint01) : 0.55f;
+			float effectiveOpacity = Mathf.Clamp01(opacity * blend);
+			opacityUi.SetOpacity01(effectiveOpacity);
 
 			_armedProposal = proposal;
 			_armed = true;
 			reason = "Armed on target=" + DescribeTarget(target) + " desiredBin=" + proposal.DesiredBin
 			         + " color=" + tint + " size01=" + proposal.BrushWidthHint01.ToString("F2")
-			         + " opacity01=" + proposal.OpacityHint01.ToString("F2");
+			         + " opacity01=" + effectiveOpacity.ToString("F2")
+			         + " (blend=" + blend.ToString("F2") + ")";
 			return true;
 		}
 

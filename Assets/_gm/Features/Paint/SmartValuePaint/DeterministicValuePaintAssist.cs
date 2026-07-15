@@ -15,10 +15,15 @@ namespace spz {
 		public const float ShadowMin = 0.20f;
 
 		public static float Luminance01(Color c) {
-			return Mathf.Clamp01(0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b);
+			float lum = 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
+			if (!float.IsFinite(lum))
+				return 0.5f;
+			return Mathf.Clamp01(lum);
 		}
 
 		public static ValuePaintBand BandFromLuminance(float luminance01) {
+			if (!float.IsFinite(luminance01))
+				return ValuePaintBand.Midtone;
 			float l = Mathf.Clamp01(luminance01);
 			if (l >= HighlightMin) return ValuePaintBand.Highlight;
 			if (l >= LightMin) return ValuePaintBand.Light;
@@ -28,7 +33,7 @@ namespace spz {
 		}
 
 		public ValuePaintProposal ProposeFromLuminance(float luminance01, ValuePaintStrokeState strokeState = default) {
-			float lum = Mathf.Clamp01(luminance01);
+			float lum = float.IsFinite(luminance01) ? Mathf.Clamp01(luminance01) : 0.5f;
 			ValuePaintBand current = BandFromLuminance(lum);
 			ValuePaintBand desired = DesireOneStepTowardMid(current);
 			ValuePaintStrokeRole role = RoleForTransition(current, desired);
@@ -37,6 +42,10 @@ namespace spz {
 			float edgeSoft = DefaultEdgeSoftness(role);
 			float width = strokeState.HasBrushHints ? strokeState.BrushWidth01 : DefaultWidth(role);
 			float opacity = strokeState.HasBrushHints ? strokeState.Opacity01 : DefaultOpacity(role, current);
+			if (!float.IsFinite(blend)) blend = 0.55f;
+			if (!float.IsFinite(edgeSoft)) edgeSoft = 0.5f;
+			if (!float.IsFinite(width)) width = 0.5f;
+			if (!float.IsFinite(opacity)) opacity = 0.55f;
 
 			return new ValuePaintProposal {
 				CurrentBin = current,
