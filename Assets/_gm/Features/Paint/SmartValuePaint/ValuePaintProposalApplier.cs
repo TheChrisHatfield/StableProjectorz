@@ -129,10 +129,16 @@ namespace spz {
 			}
 			var stack = PaintLayerStack_MGR.instance;
 			var active = stack?.ActiveLayer;
-			if (active != null && active.Content != null && !ReferenceEquals(target, active.Content)) {
-				// NoColor path or unexpected buffer — refuse color proposal write diversion
-				reason = "Paint target is not ActiveLayer.Content (mode/buffer mismatch)";
-				return null;
+			if (active != null) {
+				if (active.Content == null) {
+					reason = "ActiveLayer exists but Content is null — refuse fallback buffer (Spec R3 layer path)";
+					return null;
+				}
+				if (!ReferenceEquals(target, active.Content)) {
+					// NoColor path or unexpected buffer — refuse color proposal write diversion
+					reason = "Paint target is not ActiveLayer.Content (mode/buffer mismatch)";
+					return null;
+				}
 			}
 			return target;
 		}

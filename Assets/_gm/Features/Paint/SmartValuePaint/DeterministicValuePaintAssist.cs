@@ -77,7 +77,8 @@ namespace spz {
 
 		static ValuePaintStrokeRole RoleForTransition(ValuePaintBand current, ValuePaintBand desired) {
 			if (current == desired) return ValuePaintStrokeRole.ReinforcePlane;
-			if (current == ValuePaintBand.AccentDark || desired == ValuePaintBand.AccentDark)
+			// AccentDark role only when the desired bin is AccentDark (true accent stroke), not when leaving it toward mid.
+			if (desired == ValuePaintBand.AccentDark)
 				return ValuePaintStrokeRole.AccentDark;
 			int dist = Mathf.Abs((int)current - (int)desired);
 			if (dist >= 2) return ValuePaintStrokeRole.BridgePlanes;
