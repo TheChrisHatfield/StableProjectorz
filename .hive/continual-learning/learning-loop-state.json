@@ -1,0 +1,63 @@
+{
+  "schema_version": "learning-loop-state.v1",
+  "feature": "smart-value-paint",
+  "hook_id": "learning.close",
+  "updated_at": "2026-07-15T05:10:00+00:00",
+  "gates": {
+    "tasks_1_4": "closed",
+    "t5_t8_draft": "backlog_unconfirmed",
+    "learning_loop_rosetta_tagged": "closed",
+    "planning_rosetta_learning_hooks": "closed",
+    "source4s_paint_transformer": "correlated",
+    "source4s_adaptive_routing": "correlated_oos_runtime"
+  },
+  "prior_loops": [
+    {
+      "log": "docs/proposals/learning-loop-mine-apply-learning-loop-cartridge-20260715.md",
+      "type": "mine_apply",
+      "date": "2026-07-15",
+      "cycles": 20,
+      "beacon": "context-library/sources/imported/learning-loop-rosetta.md",
+      "scoreboard": {
+        "confirmed": 8,
+        "promoted": 5,
+        "backlog": 4,
+        "fix": 3,
+        "conflict": 0
+      }
+    },
+    {
+      "log": "docs/proposals/learning-loop-mine-apply-source4s-20260715.md",
+      "type": "mine_apply",
+      "date": "2026-07-15",
+      "cycles": 20,
+      "beacon": "context-library/sources/source4s/PAINT_Transformer.pdf + ADAPTIVE_ROUTING.pdf",
+      "scoreboard": {
+        "confirmed": 8,
+        "promoted": 4,
+        "backlog": 3,
+        "fix": 4,
+        "conflict": 1,
+        "meta_only": 1
+      }
+    }
+  ],
+  "locked_laws": [
+    "tasks_1_4_sink_path",
+    "deterministic_stub_behind_IValuePaintAssist",
+    "accept_via_ribbon_Apply_into_ColorBrushTex",
+    "decimacon_sdxl_training_oos_v1",
+    "t5_t8_require_user_confirm_before_tasks_md",
+    "paint_transformer_literature_only",
+    "adaptive_routing_analogy_not_runtime"
+  ],
+  "recommended_next": {
+    "type": "implementation_gap",
+    "when": "user_confirms_T5_or_supplies_MLP",
+    "cycles": 30,
+    "beacon": "Assets/_gm/Features/Paint/SmartValuePaint/ contracts vs MLP assist",
+    "idle_ok": true
+  },
+  "need_score_last": 9,
+  "notes": "source4s PDFs forced into cartridge source-context. MoS router must not reopen Decimacon."
+}

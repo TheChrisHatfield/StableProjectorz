@@ -4,7 +4,7 @@
 
 **Hook:** `planning.rosetta`, `compiler.pipeline`, `context.document_sourcing`  
 **Status:** tertiary distillate (does **not** override Spec Kit)  
-**Source:** `cartridge/source-context.md` ← `context-library/sources/imported/SMART_VALUE_PAINT_DEV_1.md` (132 chunks indexed; re-emitted)
+**Sources (indexed):** SMART_VALUE_PAINT_DEV_1 · learning-loop-rosetta · `source4s/PAINT_Transformer.pdf` · `source4s/ADAPTIVE_ROUTING.pdf` (emit 2026-07-15; 4 docs / 241+ chunks)
 
 <!-- ROSETTA-NAV -->
 
@@ -26,7 +26,8 @@
 | SDXL as curated target/dataset generator | **Not started** (explicitly out of scope v1) |
 | Separate Tonal MLP vs Stroke MLP vs Critic | **Not started** |
 | Decimacon orchestration | Out of scope v1 (spec) |
-| Paint Transformer as stroke-set baseline | Research note only |
+| Paint Transformer as stroke-set baseline | Literature PDF ingested — **not** a runtime dep |
+| Learned expert router (MoS / ASA) | Analogy only — must **not** reopen Decimacon v1 |
 
 ## [HOOK:context.document_sourcing] Architecture split (from cartridge)
 
@@ -75,9 +76,34 @@ Do **not** invent a parallel painter.
 3. Manufacture `(state → stroke/value decision)` pairs — **not** full-image generation by the MLP.  
 4. Stage training: value-structure first, then stroke-parameter policy.
 
-## [CTX:paint_transformer] Research cursor
+## [CTX:paint_transformer] Literature — Paint Transformer (source4s)
 
-Paint Transformer landed as stroke-set + synthetic self-training baseline; later work emphasizes planning “where next” and process reconstruction. Treat as **literature baseline**, not a Unity dependency.
+**Paper:** *Paint Transformer: Feed Forward Neural Painting with Stroke Prediction* (Baidu / NJU / Rutgers)  
+**Path:** `context-library/sources/source4s/PAINT_Transformer.pdf`
+
+| Claim | Loop outcome for SVP |
+|-------|----------------------|
+| Stroke generation as **set prediction** (feed-forward), not RL step-by-step | CONFIRM vs research thread; do **not** replace `IValuePaintAssist` DTO with Transformer set params for T5 |
+| Self-training / no off-the-shelf stroke dataset | BACKLOG → informs T8 dataset recipe only |
+| Parallel stroke-set inference | BACKLOG — after tonal MLP; optional Stroke-MLP / critic path |
+
+**Lock:** measured paint-stack sink > paper architecture > naming.
+
+## [CTX:adaptive_routing] Literature — Adaptive Routing / MoS (source4s)
+
+**Paper:** *Mixture-of-Schedulers: An Adaptive Scheduling Agent as a Learned Router for Expert Policies*  
+**Path:** `context-library/sources/source4s/ADAPTIVE_ROUTING.pdf`
+
+| Claim | Loop outcome for SVP |
+|-------|----------------------|
+| Learned **router** picks expert policy at runtime | META-ONLY analogy to Tonal vs Stroke experts |
+| Offline pattern model + fast expert switch | Must **not** promote Decimacon / MoS runtime (locked OOS v1) |
+
+**Conflict rule:** if narrative wants a runtime router before MLP weights exist → CONFLICT → drop; precedence favors measured `TryAccept` sink.
+
+## [CTX:paint_transformer_legacy] Research cursor (SMART_VALUE thread)
+
+Paint Transformer ideas also appear in SMART_VALUE_PAINT_DEV_1; later work emphasizes planning “where next.” Treat PDF + thread as **literature baseline**, not a Unity package.
 
 ## Recommended follow-on Spec Kit tasks (draft — not active until you confirm)
 

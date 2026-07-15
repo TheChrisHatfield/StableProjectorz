@@ -1,0 +1,85 @@
+{
+  "schema_version": "source-correlation.v1",
+  "feature": "smart-value-paint",
+  "hook_id": "context.document_sourcing",
+  "updated_at": "2026-07-15",
+  "canonical_sources": [
+    {
+      "id": "SMART_VALUE_PAINT_DEV_1",
+      "path": "context-library/sources/imported/SMART_VALUE_PAINT_DEV_1.md",
+      "role": "research_thread",
+      "hooks": ["compiler.pipeline", "context.document_sourcing", "spec.flow"],
+      "promote_insights": "docs/specs/smart-value-paint/cartridge-insights.md"
+    },
+    {
+      "id": "learning-loop-rosetta",
+      "path": "context-library/sources/imported/learning-loop-rosetta.md",
+      "role": "operational_rosetta",
+      "hooks": ["learning.loop", "planning.rosetta", "integration.cl_spec"],
+      "promote_insights": "cartridge/micro/learning-loop.md"
+    },
+    {
+      "id": "planning-rosetta",
+      "path": "docs/planning-rosetta-stone.md",
+      "role": "legend",
+      "hooks": ["planning.rosetta"],
+      "promote_insights": null
+    },
+    {
+      "id": "PAINT_Transformer",
+      "path": "context-library/sources/source4s/PAINT_Transformer.pdf",
+      "role": "literature_baseline",
+      "hooks": ["context.document_sourcing", "compiler.pipeline", "spec.flow"],
+      "promote_insights": "docs/specs/smart-value-paint/cartridge-insights.md",
+      "note": "Stroke-set prediction + self-training; not a Unity dependency"
+    },
+    {
+      "id": "ADAPTIVE_ROUTING",
+      "path": "context-library/sources/source4s/ADAPTIVE_ROUTING.pdf",
+      "role": "literature_analogy",
+      "hooks": ["context.document_sourcing", "compiler.pipeline"],
+      "promote_insights": "docs/specs/smart-value-paint/cartridge-insights.md",
+      "note": "Learned router over expert policies — analogy only; Decimacon OOS v1"
+    }
+  ],
+  "code_contracts": [
+    {
+      "id": "value-paint-assist",
+      "path": "Assets/_gm/Features/Paint/SmartValuePaint/",
+      "role": "implementation_sink",
+      "hooks": ["spec.flow", "change.impact"]
+    }
+  ],
+  "gaps": [
+    {
+      "id": "mlp-weights",
+      "status": "backlog",
+      "note": "IValuePaintAssist MLP implementation awaiting user asset; see cartridge-insights T5"
+    },
+    {
+      "id": "stroke-feature-extractor",
+      "status": "backlog",
+      "note": "T6 draft — not in tasks.md until user confirms"
+    },
+    {
+      "id": "edge-softness-ribbon",
+      "status": "backlog",
+      "note": "T7 — EdgeSoftness01 → BrushRibbon_UI_Hardness"
+    },
+    {
+      "id": "paint-transformer-parity",
+      "status": "backlog",
+      "note": "Literature only — stroke-set Transformer not required for T5; use as CAP/read if critic/stroke-set later"
+    },
+    {
+      "id": "expert-router-runtime",
+      "status": "out_of_scope_v1",
+      "note": "Adaptive Routing / MoS analogy must not reopen Decimacon runtime (locked law)"
+    },
+    {
+      "id": "adaptive-learning-loop-skill",
+      "status": "absent",
+      "note": "Methodology lives in learning-loop-rosetta.md; optional .cursor/skills/adaptive-learning-loop not required"
+    }
+  ]
+}
