@@ -38,6 +38,24 @@ namespace spz {
 		void Awake() {
 			if (instance != null) { DestroyImmediate(this); return; }
 			instance = this;
+			SpzUiThemeOps.ThemeChanged += ApplyThemeToAllAddonUi;
+		}
+
+		void OnDestroy() {
+			SpzUiThemeOps.ThemeChanged -= ApplyThemeToAllAddonUi;
+			if (instance == this)
+				instance = null;
+		}
+
+		void ApplyThemeToAllAddonUi() {
+			foreach (var elements in _addonUIElements.Values) {
+				if (elements == null)
+					continue;
+				foreach (var element in elements) {
+					if (element != null)
+						SpzUiThemeOps.ApplyToAddonUiRoot(element);
+				}
+			}
 		}
 		
 		/// <summary>
@@ -126,6 +144,7 @@ namespace spz {
 						if (Addon_MGR.instance != null) {
 							Addon_MGR.instance.RegisterAddonUI(addonId, go);
 						}
+						SpzUiThemeOps.ApplyToAddonUiRoot(go);
 						UnityEngine.Debug.Log($"[AddonUI_MGR] Reusing existing panel for {addonId} under {parentForThisAddon.name}");
 						return go.GetInstanceID().ToString();
 					}
@@ -137,6 +156,8 @@ namespace spz {
 			GameObject panelObj;
 			if (_panelPrefab != null) {
 				panelObj = Instantiate(_panelPrefab, parentForThisAddon);
+				// Prefab instances keep the prefab asset name; theme apply and reuse both key off AddonPanel_*.
+				panelObj.name = $"AddonPanel_{addonId}_{title}";
 			} else {
 				// Create basic panel if no prefab
 				panelObj = new GameObject($"AddonPanel_{addonId}_{title}");
@@ -180,6 +201,7 @@ namespace spz {
 			if (Addon_MGR.instance != null) {
 				Addon_MGR.instance.RegisterAddonUI(addonId, panelObj);
 			}
+			SpzUiThemeOps.ApplyToAddonUiRoot(panelObj);
 			
 			// Return panel ID (use GameObject instance ID)
 			return panelObj.GetInstanceID().ToString();
@@ -246,6 +268,7 @@ namespace spz {
 			if (_addonUIElements.ContainsKey(addonId)) {
 				_addonUIElements[addonId].Add(buttonObj);
 			}
+			SpzUiThemeOps.ApplyToAddonUiRoot(buttonObj);
 			
 			return buttonObj.GetInstanceID().ToString();
 		}
@@ -519,6 +542,7 @@ namespace spz {
 			if (_addonUIElements.ContainsKey(addonId)) {
 				_addonUIElements[addonId].Add(sliderObj);
 			}
+			SpzUiThemeOps.ApplyToAddonUiRoot(sliderObj);
 			
 			return elementId;
 		}
@@ -611,6 +635,7 @@ namespace spz {
 			if (_addonUIElements.ContainsKey(addonId)) {
 				_addonUIElements[addonId].Add(inputObj);
 			}
+			SpzUiThemeOps.ApplyToAddonUiRoot(inputObj);
 			
 			return elementId;
 		}
@@ -752,6 +777,7 @@ namespace spz {
 			if (_addonUIElements.ContainsKey(addonId)) {
 				_addonUIElements[addonId].Add(dropdownObj);
 			}
+			SpzUiThemeOps.ApplyToAddonUiRoot(dropdownObj);
 			
 			return elementId;
 		}
@@ -830,6 +856,8 @@ namespace spz {
 		/// Destroys all UI elements for an add-on
 		/// </summary>
 		public void DestroyAddonUI(string addonId) {
+			if (string.IsNullOrEmpty(addonId)) return;
+			DestroyOrphanFallbackPanelsForAddon(addonId);
 			if (!_addonUIElements.ContainsKey(addonId)) return;
 			
 			foreach (var element in _addonUIElements[addonId]) {
@@ -858,6 +886,18 @@ namespace spz {
 			}
 			foreach (var key in keysToRemove) {
 				_buttonCallbacks.Remove(key);
+			}
+		}
+
+		/// <summary>Panels parented to the floating fallback root (when the command ribbon was unavailable at create time) are not always in <see cref="CommandRibbon_UI"/> maps; remove strays when unloading.</summary>
+		void DestroyOrphanFallbackPanelsForAddon(string addonId) {
+			if (_addonPanelsParent == null) return;
+			string prefix = "AddonPanel_" + addonId + "_";
+			for (int i = _addonPanelsParent.childCount - 1; i >= 0; i--) {
+				var c = _addonPanelsParent.GetChild(i);
+				if (c == null) continue;
+				if (c.name.StartsWith(prefix, StringComparison.Ordinal))
+					Destroy(c.gameObject);
 			}
 		}
 	}
