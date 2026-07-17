@@ -28,17 +28,56 @@ namespace spz {
 		private Dictionary<string, Action> _buttonCallbacks = new Dictionary<string, Action>();
 		
 		const string StableProjectorzGoAddonId = "StableProjectorzGO";
+		const string NomadThemeAddonId = "NomadThemeSPZ";
+		const string NomadThemeId = "nomad-inspired";
+		const string NomadThemeLabel = "Nomad inspired";
+
+		/// <summary>Pro-Studio Monolith palette from the supplied Nomad UI replication design.</summary>
+		static JObject BuildNomadThemeTokens() {
+			return new JObject {
+				["panel_bg"] = "#1E1F23F2",
+				["control_bg"] = "#292A2EFF",
+				["field_bg"] = "#121317FF",
+				["accent"] = "#F2CA50FF",
+				["text_primary"] = "#E3E2E7FF",
+				["text_muted"] = "#D0C5AFFF",
+				["handle"] = "#C8C5CBFF",
+				["success"] = "#7BC96FFF",
+				["danger"] = "#FFB4ABFF",
+				["border"] = "#99907C66",
+				["tab_active"] = "#343539FF",
+				["selection"] = "#F2CA5033",
+			};
+		}
 		
 		// Registry of UI element values by element ID
 		private Dictionary<string, object> _uiElementValues = new Dictionary<string, object>();
 		
 		// Registry of UI element references by element ID
 		private Dictionary<string, Component> _uiElementComponents = new Dictionary<string, Component>();
+
+		/// <summary>
+		/// Panels created before <see cref="CommandRibbon_UI"/> existed. Parked off-screen (never mid-viewport)
+		/// until the ribbon can host them as proper tabs.
+		/// </summary>
+		sealed class ParkedPanel {
+			public string addonId;
+			public string title;
+			public GameObject panel;
+		}
+		readonly List<ParkedPanel> _parkedForRibbon = new List<ParkedPanel>();
+		bool _ribbonMigrateRunning;
 		
 		void Awake() {
 			if (instance != null) { DestroyImmediate(this); return; }
 			instance = this;
 			SpzUiThemeOps.ThemeChanged += ApplyThemeToAllAddonUi;
+		}
+
+		void Start() {
+			// Legacy mid-screen AddonPanelsRoot (center anchors) must never stay visible.
+			QuarantineLegacyMidScreenFallbackRoot();
+			EnsureRibbonMigrateCoroutine();
 		}
 
 		void OnDestroy() {
@@ -82,52 +121,17 @@ namespace spz {
 				else
 					UnityEngine.Debug.LogWarning($"[AddonUI_MGR] GetOrCreatePanelForAddon returned null for: {addonId}. Not using canvas fallback (would stack over Art). Fix ribbon/tab wiring.");
 			} else {
-				UnityEngine.Debug.LogWarning("[AddonUI_MGR] CommandRibbon_UI not found (even incl. inactive). Using fallback parent.");
+				UnityEngine.Debug.LogWarning("[AddonUI_MGR] CommandRibbon_UI not found yet. Parking panel off-screen until ribbon is ready (will not overlay the viewport).");
 			}
-			// Only use floating fallback when there is no command ribbon; otherwise a null shell would wrongly overlay built-in tabs (e.g. Art).
+			// Temporary parking only — never the old center-anchored AddonPanelsRoot mid-viewport strip.
 			if (parentForThisAddon == null && !ribbonResolved) {
-				if (_addonPanelsParent == null) {
-					var rightPanel = GameObject.Find("UI_Global_Right_Panel");
-					if (rightPanel != null) {
-						var canvas = rightPanel.GetComponentInChildren<Canvas>();
-						if (canvas != null) _addonPanelsParent = canvas.transform as RectTransform;
-					}
-					if (_addonPanelsParent == null) {
-						var existing = GameObject.Find("AddonPanelsRoot");
-						if (existing != null) { var rt = existing.transform as RectTransform; if (rt != null) _addonPanelsParent = rt; }
-					}
-					if (_addonPanelsParent == null) {
-						var canvas = UnityEngine.Object.FindObjectOfType<Canvas>();
-						if (canvas != null) {
-							var root = new GameObject("AddonPanelsRoot");
-							root.transform.SetParent(canvas.transform, false);
-							var rt = root.AddComponent<RectTransform>();
-							rt.anchorMin = new Vector2(0.5f, 0f); rt.anchorMax = new Vector2(0.5f, 1f);
-							rt.pivot = new Vector2(0.5f, 0.5f); rt.sizeDelta = new Vector2(320f, 0f); rt.anchoredPosition = new Vector2(160f, 0f);
-							_addonPanelsParent = rt;
-						}
-					}
-					if (_addonPanelsParent == null) {
-						var canvasObj = new GameObject("AddonPanels_Canvas");
-						canvasObj.layer = 5;
-						var c = canvasObj.AddComponent<Canvas>();
-						c.renderMode = RenderMode.ScreenSpaceOverlay; c.sortingOrder = 1000;
-						canvasObj.AddComponent<UnityEngine.UI.CanvasScaler>();
-						canvasObj.AddComponent<UnityEngine.UI.GraphicRaycaster>();
-						var content = new GameObject("Content");
-						content.transform.SetParent(canvasObj.transform, false);
-						var rt = content.AddComponent<RectTransform>();
-						rt.anchorMin = new Vector2(0.5f, 0f); rt.anchorMax = new Vector2(0.5f, 1f);
-						rt.sizeDelta = new Vector2(320f, 0f); rt.anchoredPosition = new Vector2(160f, 0f);
-						_addonPanelsParent = rt;
-					}
-				}
-				parentForThisAddon = _addonPanelsParent;
+				parentForThisAddon = EnsureHiddenAddonPanelsParking();
 			}
 			if (parentForThisAddon == null) {
-				UnityEngine.Debug.LogError("[AddonUI_MGR] No parent found for add-on panels (ribbon and fallbacks failed). Returning null.");
+				UnityEngine.Debug.LogError("[AddonUI_MGR] No parent found for add-on panels (ribbon and parking failed). Returning null.");
 				return null;
 			}
+			bool parkedPendingRibbon = !ribbonResolved;
 			// Reuse an existing content child under the ribbon shell so Python and Unity fallback don't stack duplicates.
 			if (ribbonResolved) {
 				for (int ch = 0; ch < parentForThisAddon.childCount; ch++) {
@@ -205,9 +209,173 @@ namespace spz {
 				Addon_MGR.instance.RegisterAddonUI(addonId, panelObj);
 			}
 			SpzUiThemeOps.ApplyToAddonUiRoot(panelObj);
+
+			if (parkedPendingRibbon) {
+				_parkedForRibbon.Add(new ParkedPanel {
+					addonId = addonId,
+					title = title,
+					panel = panelObj,
+				});
+				EnsureRibbonMigrateCoroutine();
+			}
 			
 			// Return panel ID (use GameObject instance ID)
 			return panelObj.GetInstanceID().ToString();
+		}
+
+		/// <summary>
+		/// Hidden off-screen parking for panels created before the command ribbon exists.
+		/// Must never use center anchors (legacy AddonPanelsRoot put Camera Tools mid-viewport).
+		/// </summary>
+		RectTransform EnsureHiddenAddonPanelsParking() {
+			if (_addonPanelsParent != null
+			    && _addonPanelsParent
+			    && string.Equals(_addonPanelsParent.name, "AddonPanelsParking", StringComparison.Ordinal)) {
+				_addonPanelsParent.gameObject.SetActive(false);
+				return _addonPanelsParent;
+			}
+			var existing = GameObject.Find("AddonPanelsParking");
+			if (existing != null) {
+				var rt = existing.transform as RectTransform;
+				if (rt != null) {
+					existing.SetActive(false);
+					_addonPanelsParent = rt;
+					return rt;
+				}
+			}
+			Transform canvasParent = null;
+			var rightPanel = GameObject.Find("UI_Global_Right_Panel");
+			if (rightPanel != null) {
+				var canvas = rightPanel.GetComponentInChildren<Canvas>();
+				if (canvas != null) canvasParent = canvas.transform;
+			}
+			if (canvasParent == null) {
+				var canvas = UnityEngine.Object.FindObjectOfType<Canvas>();
+				if (canvas != null) canvasParent = canvas.transform;
+			}
+			if (canvasParent == null) {
+				var canvasObj = new GameObject("AddonPanelsParking_Canvas");
+				canvasObj.layer = 5;
+				var c = canvasObj.AddComponent<Canvas>();
+				c.renderMode = RenderMode.ScreenSpaceOverlay;
+				c.sortingOrder = -100; // behind app chrome while parking
+				canvasObj.AddComponent<CanvasScaler>();
+				canvasObj.AddComponent<GraphicRaycaster>();
+				canvasParent = canvasObj.transform;
+			}
+			var root = new GameObject("AddonPanelsParking");
+			root.transform.SetParent(canvasParent, false);
+			var parking = root.AddComponent<RectTransform>();
+			// Park far off-screen; keep inactive so children cannot raycast or paint the viewport.
+			parking.anchorMin = new Vector2(0f, 0f);
+			parking.anchorMax = new Vector2(0f, 0f);
+			parking.pivot = new Vector2(0f, 0f);
+			parking.sizeDelta = new Vector2(320f, 800f);
+			parking.anchoredPosition = new Vector2(-4000f, -4000f);
+			root.SetActive(false);
+			_addonPanelsParent = parking;
+			return parking;
+		}
+
+		void QuarantineLegacyMidScreenFallbackRoot() {
+			var legacy = GameObject.Find("AddonPanelsRoot");
+			if (legacy == null) return;
+			UnityEngine.Debug.LogWarning("[AddonUI_MGR] Quarantining legacy mid-screen AddonPanelsRoot (Camera Tools overlay).");
+			var parking = EnsureHiddenAddonPanelsParking();
+			for (int i = legacy.transform.childCount - 1; i >= 0; i--) {
+				var child = legacy.transform.GetChild(i);
+				if (child == null) continue;
+				if (!TryParseAddonPanelName(child.name, out string addonId, out string title)) {
+					child.SetParent(parking, false);
+					continue;
+				}
+				child.SetParent(parking, false);
+				bool already = false;
+				for (int p = 0; p < _parkedForRibbon.Count; p++) {
+					if (_parkedForRibbon[p].panel == child.gameObject) { already = true; break; }
+				}
+				if (!already) {
+					_parkedForRibbon.Add(new ParkedPanel {
+						addonId = addonId,
+						title = title,
+						panel = child.gameObject,
+					});
+				}
+			}
+			legacy.SetActive(false);
+			Destroy(legacy);
+		}
+
+		static bool TryParseAddonPanelName(string goName, out string addonId, out string title) {
+			addonId = null;
+			title = null;
+			const string prefix = "AddonPanel_";
+			if (string.IsNullOrEmpty(goName) || !goName.StartsWith(prefix, StringComparison.Ordinal))
+				return false;
+			string rest = goName.Substring(prefix.Length);
+			int sep = rest.IndexOf('_');
+			if (sep <= 0 || sep >= rest.Length - 1)
+				return false;
+			addonId = rest.Substring(0, sep);
+			title = rest.Substring(sep + 1);
+			return !string.IsNullOrEmpty(addonId);
+		}
+
+		void EnsureRibbonMigrateCoroutine() {
+			if (_ribbonMigrateRunning || !isActiveAndEnabled)
+				return;
+			_ribbonMigrateRunning = true;
+			StartCoroutine(MigrateParkedPanelsToRibbon_crtn());
+		}
+
+		IEnumerator MigrateParkedPanelsToRibbon_crtn() {
+			const float maxWait = 30f;
+			float elapsed = 0f;
+			try {
+				while (elapsed < maxWait) {
+					QuarantineLegacyMidScreenFallbackRoot();
+					TryMigrateParkedPanelsNow();
+					if (_parkedForRibbon.Count == 0)
+						yield break;
+					elapsed += 0.25f;
+					yield return new WaitForSeconds(0.25f);
+				}
+				if (_parkedForRibbon.Count > 0)
+					UnityEngine.Debug.LogWarning($"[AddonUI_MGR] {_parkedForRibbon.Count} add-on panel(s) still parked after {maxWait}s (ribbon never ready).");
+			}
+			finally {
+				_ribbonMigrateRunning = false;
+				if (_parkedForRibbon.Count > 0 && isActiveAndEnabled)
+					EnsureRibbonMigrateCoroutine();
+			}
+		}
+
+		void TryMigrateParkedPanelsNow() {
+			var ribbon = AddonRibbonIntegration.ResolveCommandRibbon();
+			if (ribbon == null) return;
+			for (int i = _parkedForRibbon.Count - 1; i >= 0; i--) {
+				ParkedPanel parked = _parkedForRibbon[i];
+				if (parked == null || parked.panel == null) {
+					_parkedForRibbon.RemoveAt(i);
+					continue;
+				}
+				RectTransform shell = ribbon.GetOrCreatePanelForAddon(parked.addonId, parked.title);
+				if (shell == null) {
+					UnityEngine.Debug.LogWarning($"[AddonUI_MGR] Ribbon shell still null for parked {parked.addonId}; will retry.");
+					continue;
+				}
+				parked.panel.transform.SetParent(shell, false);
+				var rt = parked.panel.transform as RectTransform;
+				if (rt != null) {
+					rt.anchorMin = Vector2.zero;
+					rt.anchorMax = Vector2.one;
+					rt.sizeDelta = Vector2.zero;
+					rt.anchoredPosition = Vector2.zero;
+				}
+				SpzUiThemeOps.ApplyToAddonUiRoot(parked.panel);
+				UnityEngine.Debug.Log($"[AddonUI_MGR] Migrated parked panel '{parked.panel.name}' onto ribbon shell {shell.name}");
+				_parkedForRibbon.RemoveAt(i);
+			}
 		}
 		
 		/// <summary>
@@ -230,12 +398,21 @@ namespace spz {
 				buttonObj.transform.SetParent(panelObj.transform, false);
 				
 				var rectTransform = buttonObj.AddComponent<RectTransform>();
-				rectTransform.sizeDelta = new Vector2(200, 30);
+				rectTransform.sizeDelta = new Vector2(220, 36);
+				var layoutElement = buttonObj.AddComponent<LayoutElement>();
+				layoutElement.preferredHeight = 36f;
+				layoutElement.minHeight = 32f;
+				layoutElement.preferredWidth = 220f;
+				layoutElement.flexibleWidth = 1f;
 				
 				var image = buttonObj.AddComponent<Image>();
+				image.sprite = UiRuntimeSprites.RoundedRectSliced;
+				image.type = Image.Type.Sliced;
 				image.color = new Color(0.3f, 0.3f, 0.3f, 1f);
+				image.raycastTarget = true;
 				
 				var button = buttonObj.AddComponent<Button>();
+				button.targetGraphic = image;
 				
 				// Add text label
 				var textObj = new GameObject("Text");
@@ -250,6 +427,7 @@ namespace spz {
 				text.fontSize = 14;
 				text.alignment = TextAlignmentOptions.Center;
 				text.color = Color.white;
+				text.raycastTarget = false;
 			}
 			
 			// Set up button click handler
@@ -265,6 +443,7 @@ namespace spz {
 					}
 				});
 				RegisterSpzGoNativeButtonCallbackIfNeeded(addonId, panelId, callbackName);
+				RegisterNomadThemeNativeButtonCallbackIfNeeded(addonId, callbackName);
 			}
 			
 			// Register with add-on
@@ -288,6 +467,47 @@ namespace spz {
 			} else if (string.Equals(callbackName, "do_export_to_path", StringComparison.Ordinal)) {
 				RegisterButtonCallback(addonId, callbackName, () => SpzGoRunHeadlessImportOrExportFromPanel(addonId, panelId, callbackName, isImport: false));
 			}
+		}
+
+		/// <summary>
+		/// Nomad Theme Apply/Restore must work even when Python HTTP /invoke_callback is down or the module is not loaded.
+		/// Mirrors the SPZ GO in-process button pattern so ribbon clicks are not dead.
+		/// </summary>
+		void RegisterNomadThemeNativeButtonCallbackIfNeeded(string addonId, string callbackName) {
+			if (!string.Equals(addonId, NomadThemeAddonId, StringComparison.Ordinal))
+				return;
+			if (string.Equals(callbackName, "apply_nomad_palette", StringComparison.Ordinal)) {
+				RegisterButtonCallback(addonId, callbackName, ApplyNomadThemeNative);
+			} else if (string.Equals(callbackName, "restore_stableprojectorz_palette", StringComparison.Ordinal)) {
+				RegisterButtonCallback(addonId, callbackName, RestoreSpzThemeNative);
+			}
+		}
+
+		void ApplyNomadThemeNative() {
+			var tokens = BuildNomadThemeTokens();
+			if (!SpzUiThemeOps.TryRegisterTheme(NomadThemeId, NomadThemeLabel, tokens, NomadThemeAddonId, out string error)) {
+				UnityEngine.Debug.LogWarning($"[AddonUI_MGR] Nomad register_theme failed: {error}");
+				ShowAddonButtonStatus($"Nomad theme register failed: {error}", false);
+				return;
+			}
+			if (!SpzUiThemeOps.TryApplyTheme(NomadThemeId, null, "replace", out error)) {
+				UnityEngine.Debug.LogWarning($"[AddonUI_MGR] Nomad apply_theme failed: {error}");
+				ShowAddonButtonStatus($"Nomad theme apply failed: {error}", false);
+				return;
+			}
+			UnityEngine.Debug.Log($"[AddonUI_MGR] Applied native Nomad theme '{NomadThemeId}'");
+			ShowAddonButtonStatus("Pro-Studio Nomad palette applied", true);
+		}
+
+		void RestoreSpzThemeNative() {
+			SpzUiThemeOps.ResetTheme();
+			UnityEngine.Debug.Log("[AddonUI_MGR] Restored StableProjectorz default palette (native)");
+			ShowAddonButtonStatus("StableProjectorz palette restored", true);
+		}
+
+		static void ShowAddonButtonStatus(string message, bool ok) {
+			if (Viewport_StatusText.instance != null)
+				Viewport_StatusText.instance.ShowStatusText(message, false, ok ? 3.5f : 5f, false);
 		}
 		
 		/// <summary>Order of TextInput_* rows from register(): Blender, Import path, Export path.</summary>
@@ -409,6 +629,7 @@ namespace spz {
 				yield return req.SendWebRequest();
 				if (req.result != UnityWebRequest.Result.Success) {
 					UnityEngine.Debug.LogWarning($"[AddonUI_MGR] invoke_callback failed: {req.error}");
+					ShowAddonButtonStatus($"Add-on action failed (HTTP): {addonId}.{callbackName}", false);
 					yield break;
 				}
 				bool callbackSucceeded = false;
@@ -420,8 +641,10 @@ namespace spz {
 				}
 				if (callbackSucceeded)
 					UnityEngine.Debug.Log($"[AddonUI_MGR] Callback invoked: {addonId}.{callbackName}");
-				else
+				else {
 					UnityEngine.Debug.LogWarning($"[AddonUI_MGR] Addon callback failed or not found: {addonId}.{callbackName}");
+					ShowAddonButtonStatus($"Add-on action failed: {addonId}.{callbackName}", false);
+				}
 			}
 		}
 		
@@ -860,6 +1083,15 @@ namespace spz {
 		/// </summary>
 		public void DestroyAddonUI(string addonId) {
 			if (string.IsNullOrEmpty(addonId)) return;
+			// Drop parking-lot bookkeeping first so migrate cannot reparent a dying panel.
+			for (int i = _parkedForRibbon.Count - 1; i >= 0; i--) {
+				ParkedPanel parked = _parkedForRibbon[i];
+				if (parked == null
+				    || string.Equals(parked.addonId, addonId, StringComparison.Ordinal)
+				    || parked.panel == null) {
+					_parkedForRibbon.RemoveAt(i);
+				}
+			}
 			DestroyOrphanFallbackPanelsForAddon(addonId);
 			if (!_addonUIElements.ContainsKey(addonId)) return;
 			
@@ -883,9 +1115,8 @@ namespace spz {
 			// Remove callbacks
 			var keysToRemove = new List<string>();
 			foreach (var key in _buttonCallbacks.Keys) {
-				if (key.StartsWith($"{addonId}_")) {
+				if (key.StartsWith($"{addonId}_", StringComparison.Ordinal))
 					keysToRemove.Add(key);
-				}
 			}
 			foreach (var key in keysToRemove) {
 				_buttonCallbacks.Remove(key);
@@ -894,12 +1125,23 @@ namespace spz {
 
 		/// <summary>Panels parented to the floating fallback root (when the command ribbon was unavailable at create time) are not always in <see cref="CommandRibbon_UI"/> maps; remove strays when unloading.</summary>
 		void DestroyOrphanFallbackPanelsForAddon(string addonId) {
-			if (_addonPanelsParent == null) return;
 			string prefix = "AddonPanel_" + addonId + "_";
-			for (int i = _addonPanelsParent.childCount - 1; i >= 0; i--) {
-				var c = _addonPanelsParent.GetChild(i);
+			DestroyMatchingChildren(_addonPanelsParent, prefix);
+			// Parking may differ from the current _addonPanelsParent if the ribbon later took over the field.
+			var parkingGo = GameObject.Find("AddonPanelsParking");
+			if (parkingGo != null) {
+				var parkingRt = parkingGo.transform as RectTransform;
+				if (parkingRt != null && parkingRt != _addonPanelsParent)
+					DestroyMatchingChildren(parkingRt, prefix);
+			}
+		}
+
+		static void DestroyMatchingChildren(RectTransform parent, string namePrefix) {
+			if (parent == null || string.IsNullOrEmpty(namePrefix)) return;
+			for (int i = parent.childCount - 1; i >= 0; i--) {
+				var c = parent.GetChild(i);
 				if (c == null) continue;
-				if (c.name.StartsWith(prefix, StringComparison.Ordinal))
+				if (c.name.StartsWith(namePrefix, StringComparison.Ordinal))
 					Destroy(c.gameObject);
 			}
 		}
