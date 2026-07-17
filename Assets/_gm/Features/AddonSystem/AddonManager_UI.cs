@@ -1239,6 +1239,8 @@ namespace spz {
 				_statusText.color = _lastStatusIsSuccess.HasValue
 					? (_lastStatusIsSuccess.Value ? _statusOk : _statusFail)
 					: t.textMuted;
+			else if (_statusText != null)
+				SpzUiThemeOps.ApplyTmpColor(_statusText, t.textMuted);
 			if (_filterAllToggle != null || _filterEnabledToggle != null || _filterDisabledToggle != null) {
 				ThemeFilterToggle(_filterAllToggle, t);
 				ThemeFilterToggle(_filterEnabledToggle, t);
@@ -1371,7 +1373,8 @@ namespace spz {
 			bool stillVisible = _filterState == 0
 				|| (_filterState == 1 && info.isEnabled)
 				|| (_filterState == 2 && !info.isEnabled);
-			if (!stillVisible)
+			// Click handler owns deferred rebuild after suppress clears; scheduling here races mid-click.
+			if (!stillVisible && !_suppressEnabledListRefresh)
 				ScheduleRefreshAddonsList();
 		}
 
