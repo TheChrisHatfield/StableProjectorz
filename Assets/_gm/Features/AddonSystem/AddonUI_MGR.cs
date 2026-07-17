@@ -52,7 +52,9 @@ namespace spz {
 				if (elements == null)
 					continue;
 				foreach (var element in elements) {
-					if (element != null)
+					// Only panel roots: child widgets are covered by GetComponentsInChildren,
+					// and re-applying on every registered control can retint hit-target images.
+					if (element != null && element.name.StartsWith("AddonPanel_", StringComparison.Ordinal))
 						SpzUiThemeOps.ApplyToAddonUiRoot(element);
 				}
 			}
