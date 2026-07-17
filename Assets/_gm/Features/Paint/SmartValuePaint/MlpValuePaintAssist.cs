@@ -52,9 +52,10 @@ namespace spz {
 			float width = o.Width01;
 			float opacity = o.Opacity01;
 			if (strokeState.HasBrushHints) {
-				blend = strokeState.BlendStrength01;
-				width = strokeState.BrushWidth01;
-				opacity = strokeState.Opacity01;
+				// Mirror DeterministicValuePaintAssist: non-finite overrides must not poison Clamp01(NaN).
+				if (float.IsFinite(strokeState.BlendStrength01)) blend = strokeState.BlendStrength01;
+				if (float.IsFinite(strokeState.BrushWidth01)) width = strokeState.BrushWidth01;
+				if (float.IsFinite(strokeState.Opacity01)) opacity = strokeState.Opacity01;
 			}
 			return new ValuePaintProposal {
 				CurrentBin = (ValuePaintBand)Mathf.Clamp(o.CurrentBin, 0, 4),
@@ -64,7 +65,7 @@ namespace spz {
 				BrushWidthHint01 = Mathf.Clamp01(width),
 				OpacityHint01 = Mathf.Clamp01(opacity),
 				StrokeRole = (ValuePaintStrokeRole)Mathf.Clamp(o.StrokeRole, 0, 4),
-				MeanLuminance01 = Mathf.Clamp01(feat[0]),
+				MeanLuminance01 = Mathf.Clamp01(float.IsFinite(feat[0]) ? feat[0] : 0.5f),
 				Source = SourceTag,
 			};
 		}
