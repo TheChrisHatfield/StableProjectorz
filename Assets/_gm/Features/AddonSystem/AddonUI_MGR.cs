@@ -134,31 +134,35 @@ namespace spz {
 				UnityEngine.Debug.LogError("[AddonUI_MGR] No parent found for add-on panels (ribbon and parking failed). Returning null.");
 				return null;
 			}
-			// Reuse an existing content child under the ribbon shell so Python and Unity fallback don't stack duplicates.
-			if (ribbonResolved) {
-				for (int ch = 0; ch < parentForThisAddon.childCount; ch++) {
-					var t = parentForThisAddon.GetChild(ch);
-					if (t == null) {
-						continue;
+			// Reuse an existing AddonPanel_* under the resolved parent (ribbon shell OR parking).
+			// Must run when ribbon is missing too, or repeated CreatePanel stacks duplicate parked panels.
+			for (int ch = 0; ch < parentForThisAddon.childCount; ch++) {
+				var t = parentForThisAddon.GetChild(ch);
+				if (t == null) {
+					continue;
+				}
+				if (t.name.StartsWith("AddonPanel_" + addonId + "_", StringComparison.Ordinal)
+				    || string.Equals(t.name, "AddonPanel_" + addonId, StringComparison.Ordinal)) {
+					var go = t.gameObject;
+					if (!_addonUIElements.ContainsKey(addonId)) {
+						_addonUIElements[addonId] = new List<GameObject>();
 					}
-					if (t.name.StartsWith("AddonPanel_" + addonId + "_", StringComparison.Ordinal)
-					    || string.Equals(t.name, "AddonPanel_" + addonId, StringComparison.Ordinal)) {
-						var go = t.gameObject;
-						if (!_addonUIElements.ContainsKey(addonId)) {
-							_addonUIElements[addonId] = new List<GameObject>();
-						}
-						if (!_addonUIElements[addonId].Contains(go)) {
-							_addonUIElements[addonId].Add(go);
-						}
-						if (Addon_MGR.instance != null) {
-							Addon_MGR.instance.RegisterAddonUI(addonId, go);
-						}
-						SpzUiThemeOps.ApplyToAddonUiRoot(go);
-						// Ribbon has the live panel — drop stale parked copies so migrate cannot duplicate.
+					if (!_addonUIElements[addonId].Contains(go)) {
+						_addonUIElements[addonId].Add(go);
+					}
+					if (Addon_MGR.instance != null) {
+						Addon_MGR.instance.RegisterAddonUI(addonId, go);
+					}
+					SpzUiThemeOps.ApplyToAddonUiRoot(go);
+					if (!parkedPendingRibbon) {
+						// Live under ribbon — drop stale parked copies so migrate cannot duplicate.
 						PurgeParkedForAddon(addonId, go);
-						UnityEngine.Debug.Log($"[AddonUI_MGR] Reusing existing panel for {addonId} under {parentForThisAddon.name}");
-						return go.GetInstanceID().ToString();
+					} else {
+						// Still parked: keep migrate bookkeeping (do not PurgeParked the keepAlive entry).
+						EnsureParkedEntry(addonId, title, go);
 					}
+					UnityEngine.Debug.Log($"[AddonUI_MGR] Reusing existing panel for {addonId} under {parentForThisAddon.name} (parked={parkedPendingRibbon})");
+					return go.GetInstanceID().ToString();
 				}
 			}
 			UnityEngine.Debug.Log($"[AddonUI_MGR] Creating panel content under: {parentForThisAddon.name}");
@@ -254,6 +258,53 @@ namespace spz {
 				UnityEngine.Object.Destroy(parked.panel);
 				_parkedForRibbon.RemoveAt(i);
 			}
+		}
+
+		/// <summary>Ensures <paramref name="panel"/> is tracked for ribbon migrate (idempotent).</summary>
+		void EnsureParkedEntry(string addonId, string title, GameObject panel) {
+			if (panel == null || string.IsNullOrEmpty(addonId)) return;
+			for (int p = 0; p < _parkedForRibbon.Count; p++) {
+				if (_parkedForRibbon[p] != null && _parkedForRibbon[p].panel == panel)
+					return;
+			}
+			_parkedForRibbon.Add(new ParkedPanel {
+				addonId = addonId,
+				title = title,
+				panel = panel,
+			});
+			_ribbonMigrateRounds = 0;
+			EnsureRibbonMigrateCoroutine();
+		}
+
+		/// <summary>
+		/// Reparents salvaged AddonPanel_* content into off-screen parking after a failed ribbon shell recreate.
+		/// Keeps GameObject instance IDs alive for AddonUI_MGR / Python.
+		/// </summary>
+		public void ReparkSalvagedAddonContent(string addonId, string title, List<Transform> content) {
+			if (content == null || content.Count == 0) return;
+			var parking = EnsureHiddenAddonPanelsParking();
+			if (parking == null) {
+				UnityEngine.Debug.LogError("[AddonUI_MGR] ReparkSalvagedAddonContent: parking unavailable; leaving salvaged roots unparented.");
+				return;
+			}
+			for (int i = 0; i < content.Count; i++) {
+				Transform child = content[i];
+				if (child == null) continue;
+				child.SetParent(parking, false);
+				var rt = child as RectTransform;
+				if (rt != null) {
+					rt.anchorMin = Vector2.zero;
+					rt.anchorMax = Vector2.one;
+					rt.sizeDelta = Vector2.zero;
+					rt.anchoredPosition = Vector2.zero;
+				}
+				string id = addonId;
+				string panelTitle = title;
+				if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(panelTitle))
+					TryParseAddonPanelName(child.name, out id, out panelTitle);
+				EnsureParkedEntry(id ?? addonId, panelTitle ?? title ?? child.name, child.gameObject);
+			}
+			UnityEngine.Debug.Log($"[AddonUI_MGR] Reparked {content.Count} salvaged panel(s) for {addonId} after failed ribbon recreate.");
 		}
 
 		/// <summary>
