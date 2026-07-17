@@ -119,19 +119,18 @@ namespace spz {
 				if (parentForThisAddon != null)
 					UnityEngine.Debug.Log($"[AddonUI_MGR] Got ribbon panel parent for: {title}");
 				else
-					UnityEngine.Debug.LogWarning($"[AddonUI_MGR] GetOrCreatePanelForAddon returned null for: {addonId}. Not using canvas fallback (would stack over Art). Fix ribbon/tab wiring.");
+					UnityEngine.Debug.LogWarning($"[AddonUI_MGR] GetOrCreatePanelForAddon returned null for: {addonId}. Parking until ribbon shell is ready.");
 			} else {
 				UnityEngine.Debug.LogWarning("[AddonUI_MGR] CommandRibbon_UI not found yet. Parking panel off-screen until ribbon is ready (will not overlay the viewport).");
 			}
-			// Temporary parking only — never the old center-anchored AddonPanelsRoot mid-viewport strip.
-			if (parentForThisAddon == null && !ribbonResolved) {
+			// Temporary parking — ribbon missing OR ribbon present but shell not creatable yet.
+			bool parkedPendingRibbon = parentForThisAddon == null;
+			if (parkedPendingRibbon)
 				parentForThisAddon = EnsureHiddenAddonPanelsParking();
-			}
 			if (parentForThisAddon == null) {
 				UnityEngine.Debug.LogError("[AddonUI_MGR] No parent found for add-on panels (ribbon and parking failed). Returning null.");
 				return null;
 			}
-			bool parkedPendingRibbon = !ribbonResolved;
 			// Reuse an existing content child under the ribbon shell so Python and Unity fallback don't stack duplicates.
 			if (ribbonResolved) {
 				for (int ch = 0; ch < parentForThisAddon.childCount; ch++) {
