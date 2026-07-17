@@ -1013,7 +1013,8 @@ namespace spz {
 		/// <summary>Status line helper for restart path (Editor messaging / in-progress feedback).</summary>
 		public void ShowRestartStatus(string message, bool isSuccess) {
 			ShowStatus(message, isSuccess);
-			if (_restartWithAddons_button != null && Application.isEditor)
+			// Player builds also need the button back after a failed restart attempt.
+			if (_restartWithAddons_button != null)
 				_restartWithAddons_button.interactable = true;
 		}
 
