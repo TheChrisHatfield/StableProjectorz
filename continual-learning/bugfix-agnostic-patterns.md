@@ -72,3 +72,18 @@ Domain examples (Unity ColorBlock, `AddonPanel_*` names) are **illustrations onl
   Cause: reset flags at function entry before validation.  
   Fix: mutate arm/success state only on the success commit path.  
   **→ Pattern:** Failed attempts must not wipe prior committed state.
+
+- Symptom: button chrome looks muddy or darker on hover than the base tint.  
+  Cause: ColorBlock state colors written as absolute RGB while Image.color is already tinted (multiply).  
+  Fix: keep tint on Image; use near-white ColorBlock multipliers.  
+  **→ Pattern:** ColorBlock multiplies Graphic.color — never double-encode the tint.
+
+- Symptom: assist Accept replaces the user’s custom brush stamp.  
+  Cause: policy API forced built-in indices without the same custom-alpha guard as the hardness button.  
+  Fix: skip built-in force when a custom alpha is selected; report skipped.  
+  **→ Pattern:** Don’t let policy APIs overwrite content-bearing user selections.
+
+- Symptom: UI shows a healthy stub path with no hint that the preferred model failed.  
+  Cause: factory discarded load errors on fallback.  
+  Fix: include the failure reason in the reported implementation name/status.  
+  **→ Pattern:** Fallbacks must surface why the preferred path failed.
