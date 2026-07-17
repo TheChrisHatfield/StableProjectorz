@@ -127,7 +127,7 @@ namespace spz {
 			var tokens = _active;
 
 			var rootImage = root.GetComponent<Image>();
-			if (rootImage != null && root.name.StartsWith("AddonPanel_", StringComparison.Ordinal))
+			if (rootImage != null && root.name.IndexOf("AddonPanel_", StringComparison.Ordinal) >= 0)
 				rootImage.color = tokens.panelBg;
 
 			foreach (var button in root.GetComponentsInChildren<Button>(true)) {
