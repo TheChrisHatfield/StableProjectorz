@@ -1112,15 +1112,42 @@ namespace spz {
 			
 			_addonUIElements.Remove(addonId);
 			
-			// Remove callbacks
+			// Remove callbacks owned by this add-on only (not longer ids that share a prefix).
 			var keysToRemove = new List<string>();
 			foreach (var key in _buttonCallbacks.Keys) {
-				if (key.StartsWith($"{addonId}_", StringComparison.Ordinal))
+				if (IsCallbackOwnedByAddon(key, addonId))
 					keysToRemove.Add(key);
 			}
 			foreach (var key in keysToRemove) {
 				_buttonCallbacks.Remove(key);
 			}
+		}
+
+		/// <summary>
+		/// Callback ids are <c>{addonId}_{callbackName}</c>. A naive StartsWith(addonId+"_")
+		/// also matches longer ids (e.g. addon <c>X</c> vs <c>X_Extra</c>).
+		/// </summary>
+		bool IsCallbackOwnedByAddon(string callbackId, string addonId) {
+			if (string.IsNullOrEmpty(callbackId) || string.IsNullOrEmpty(addonId))
+				return false;
+			if (!callbackId.StartsWith(addonId + "_", StringComparison.Ordinal))
+				return false;
+			foreach (var otherId in _addonUIElements.Keys) {
+				if (string.IsNullOrEmpty(otherId) || otherId.Length <= addonId.Length)
+					continue;
+				if (callbackId.StartsWith(otherId + "_", StringComparison.Ordinal))
+					return false;
+			}
+			if (Addon_MGR.instance != null) {
+				foreach (var kvp in Addon_MGR.instance.GetAddons()) {
+					string otherId = kvp.Key;
+					if (string.IsNullOrEmpty(otherId) || otherId.Length <= addonId.Length)
+						continue;
+					if (callbackId.StartsWith(otherId + "_", StringComparison.Ordinal))
+						return false;
+				}
+			}
+			return true;
 		}
 
 		/// <summary>Panels parented to the floating fallback root (when the command ribbon was unavailable at create time) are not always in <see cref="CommandRibbon_UI"/> maps; remove strays when unloading.</summary>
