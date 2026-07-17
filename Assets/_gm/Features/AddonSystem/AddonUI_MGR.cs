@@ -136,34 +136,44 @@ namespace spz {
 			}
 			// Reuse an existing AddonPanel_* under the resolved parent (ribbon shell OR parking).
 			// Must run when ribbon is missing too, or repeated CreatePanel stacks duplicate parked panels.
+			string expectedPanelName = $"AddonPanel_{addonId}_{title}";
 			for (int ch = 0; ch < parentForThisAddon.childCount; ch++) {
 				var t = parentForThisAddon.GetChild(ch);
 				if (t == null) {
 					continue;
 				}
-				if (t.name.StartsWith("AddonPanel_" + addonId + "_", StringComparison.Ordinal)
-				    || string.Equals(t.name, "AddonPanel_" + addonId, StringComparison.Ordinal)) {
-					var go = t.gameObject;
-					if (!_addonUIElements.ContainsKey(addonId)) {
-						_addonUIElements[addonId] = new List<GameObject>();
-					}
-					if (!_addonUIElements[addonId].Contains(go)) {
-						_addonUIElements[addonId].Add(go);
-					}
-					if (Addon_MGR.instance != null) {
-						Addon_MGR.instance.RegisterAddonUI(addonId, go);
-					}
-					SpzUiThemeOps.ApplyToAddonUiRoot(go);
-					if (!parkedPendingRibbon) {
-						// Live under ribbon — drop stale parked copies so migrate cannot duplicate.
-						PurgeParkedForAddon(addonId, go);
-					} else {
-						// Still parked: keep migrate bookkeeping (do not PurgeParked the keepAlive entry).
-						EnsureParkedEntry(addonId, title, go);
-					}
-					UnityEngine.Debug.Log($"[AddonUI_MGR] Reusing existing panel for {addonId} under {parentForThisAddon.name} (parked={parkedPendingRibbon})");
-					return go.GetInstanceID().ToString();
+				if (!IsExactAddonPanelChild(t.name, addonId, title, expectedPanelName))
+					continue;
+				var go = t.gameObject;
+				if (!_addonUIElements.ContainsKey(addonId)) {
+					_addonUIElements[addonId] = new List<GameObject>();
 				}
+				if (!_addonUIElements[addonId].Contains(go)) {
+					_addonUIElements[addonId].Add(go);
+				}
+				if (Addon_MGR.instance != null) {
+					Addon_MGR.instance.RegisterAddonUI(addonId, go);
+				}
+				// Reload / second create_panel: clear widgets so add_button does not stack duplicates.
+				ClearAddonPanelChildren(go.transform);
+				var reuseTitle = go.GetComponentInChildren<TextMeshProUGUI>(true);
+				if (reuseTitle != null)
+					reuseTitle.text = title;
+				else {
+					var titleObj = new GameObject("Title");
+					titleObj.transform.SetParent(go.transform, false);
+					reuseTitle = titleObj.AddComponent<TextMeshProUGUI>();
+					reuseTitle.text = title;
+					reuseTitle.fontSize = 18;
+				}
+				SpzUiThemeOps.ApplyToAddonUiRoot(go);
+				if (!parkedPendingRibbon) {
+					PurgeParkedForAddon(addonId, go);
+				} else {
+					EnsureParkedEntry(addonId, title, go);
+				}
+				UnityEngine.Debug.Log($"[AddonUI_MGR] Reusing existing panel for {addonId} under {parentForThisAddon.name} (parked={parkedPendingRibbon})");
+				return go.GetInstanceID().ToString();
 			}
 			UnityEngine.Debug.Log($"[AddonUI_MGR] Creating panel content under: {parentForThisAddon.name}");
 
@@ -1299,25 +1309,61 @@ namespace spz {
 			return true;
 		}
 
+		/// <summary>
+		/// True when <paramref name="goName"/> is this addon's panel for <paramref name="title"/>
+		/// (exact name or longest-prefix parse). Does not treat <c>Foo</c> as matching <c>Foo_Bar</c>.
+		/// </summary>
+		bool IsExactAddonPanelChild(string goName, string addonId, string title, string expectedPanelName) {
+			if (string.IsNullOrEmpty(goName) || string.IsNullOrEmpty(addonId)) return false;
+			if (string.Equals(goName, expectedPanelName, StringComparison.Ordinal)
+			    || string.Equals(goName, "AddonPanel_" + addonId, StringComparison.Ordinal))
+				return true;
+			if (!TryParseAddonPanelName(goName, out string parsedId, out string parsedTitle))
+				return false;
+			return string.Equals(parsedId, addonId, StringComparison.Ordinal)
+			       && string.Equals(parsedTitle, title, StringComparison.Ordinal);
+		}
+
+		/// <summary>True if <paramref name="goName"/> is any panel belonging to <paramref name="addonId"/> (longest-prefix safe).</summary>
+		public bool IsAddonPanelOwnedBy(string goName, string addonId) {
+			if (string.IsNullOrEmpty(goName) || string.IsNullOrEmpty(addonId)) return false;
+			if (string.Equals(goName, "AddonPanel_" + addonId, StringComparison.Ordinal))
+				return true;
+			return TryParseAddonPanelName(goName, out string parsedId, out _)
+			       && string.Equals(parsedId, addonId, StringComparison.Ordinal);
+		}
+
+		static void ClearAddonPanelChildren(Transform panelRoot) {
+			if (panelRoot == null) return;
+			for (int i = panelRoot.childCount - 1; i >= 0; i--) {
+				var c = panelRoot.GetChild(i);
+				if (c != null)
+					UnityEngine.Object.Destroy(c.gameObject);
+			}
+		}
+
 		/// <summary>Panels parented to the floating fallback root (when the command ribbon was unavailable at create time) are not always in <see cref="CommandRibbon_UI"/> maps; remove strays when unloading.</summary>
 		void DestroyOrphanFallbackPanelsForAddon(string addonId) {
-			string prefix = "AddonPanel_" + addonId + "_";
-			DestroyMatchingChildren(_addonPanelsParent, prefix);
+			DestroyAddonPanelChildrenForId(_addonPanelsParent, addonId);
 			// Parking may differ from the current _addonPanelsParent if the ribbon later took over the field.
 			var parkingGo = GameObject.Find("AddonPanelsParking");
 			if (parkingGo != null) {
 				var parkingRt = parkingGo.transform as RectTransform;
 				if (parkingRt != null && parkingRt != _addonPanelsParent)
-					DestroyMatchingChildren(parkingRt, prefix);
+					DestroyAddonPanelChildrenForId(parkingRt, addonId);
 			}
 		}
 
-		static void DestroyMatchingChildren(RectTransform parent, string namePrefix) {
-			if (parent == null || string.IsNullOrEmpty(namePrefix)) return;
+		void DestroyAddonPanelChildrenForId(RectTransform parent, string addonId) {
+			if (parent == null || string.IsNullOrEmpty(addonId)) return;
 			for (int i = parent.childCount - 1; i >= 0; i--) {
 				var c = parent.GetChild(i);
 				if (c == null) continue;
-				if (c.name.StartsWith(namePrefix, StringComparison.Ordinal))
+				bool match = string.Equals(c.name, "AddonPanel_" + addonId, StringComparison.Ordinal);
+				if (!match && TryParseAddonPanelName(c.name, out string parsedId, out _)
+				    && string.Equals(parsedId, addonId, StringComparison.Ordinal))
+					match = true;
+				if (match)
 					Destroy(c.gameObject);
 			}
 		}

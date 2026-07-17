@@ -1094,11 +1094,13 @@ namespace spz {
 	                    Transform child = existing.GetChild(ci);
 	                    if (child == null) continue;
 	                    string cn = child.name ?? "";
-	                    if (cn.StartsWith("AddonPanel_" + addonId + "_", StringComparison.Ordinal)
-	                        || string.Equals(cn, "AddonPanel_" + addonId, StringComparison.Ordinal)) {
-	                        child.SetParent(null, false);
-	                        salvagedContent.Add(child);
-	                    }
+	                    bool match = AddonUI_MGR.instance != null
+		                    ? AddonUI_MGR.instance.IsAddonPanelOwnedBy(cn, addonId)
+		                    : (cn.StartsWith("AddonPanel_" + addonId + "_", StringComparison.Ordinal)
+		                       || string.Equals(cn, "AddonPanel_" + addonId, StringComparison.Ordinal));
+	                    if (!match) continue;
+	                    child.SetParent(null, false);
+	                    salvagedContent.Add(child);
 	                }
 	                Destroy(existing.gameObject);
 	            }
