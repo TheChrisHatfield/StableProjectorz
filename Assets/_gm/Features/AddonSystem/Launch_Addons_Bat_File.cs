@@ -128,16 +128,18 @@ namespace spz {
 #else
 			s_restartInProgress = true;
 
-			// Teardown sockets/Python before spawning the bat so ports/files are free for the next instance.
-			Addon_MGR.ShutdownAddonApiBeforeQuit();
-
+			// Launch first. Shutting down the API before a failed spawn permanently arms
+			// s_addonApiQuitShutdownDone and kills enable/load for the rest of the session.
 			if (!LaunchAddonsBat(showStatusIfNotFound: true)) {
 				s_restartInProgress = false;
 				if (AddonManager_UI.instance != null)
 					AddonManager_UI.instance.ShowRestartStatus(
-						$"{DefaultBatName} not found — cannot restart with addons.", false);
+						$"Could not launch {DefaultBatName} — addons API left running.", false);
 				return;
 			}
+
+			// Free sockets/Python for the next instance after the bat is already spawned.
+			Addon_MGR.ShutdownAddonApiBeforeQuit();
 
 			if (AddonManager_UI.instance != null) {
 				AddonManager_UI.instance.ShowRestartStatus("Restarting with addons…", true);
