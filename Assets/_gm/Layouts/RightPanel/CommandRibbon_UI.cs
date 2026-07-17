@@ -547,13 +547,9 @@ namespace spz {
 	        if (!enabled) {
 	            if (bar != null) bar.gameObject.SetActive(false);
 	            if (active != null) {
-	                foreach (var image in active.GetComponentsInChildren<Image>(true)) {
-	                    if (image == null) continue;
-	                    if (bar != null && image.transform == bar) continue;
-	                    string n = image.gameObject.name ?? "";
-	                    if (n == "MonolithActiveBar" || n == "MonolithLineIcon") continue;
-	                    image.enabled = true;
-	                }
+	                var pillRestore = FindActivePillImage(active);
+	                if (pillRestore != null)
+	                    pillRestore.enabled = true;
 	            }
 	            var oldIcon = cell.Find("MonolithLineIcon");
 	            if (oldIcon != null) oldIcon.gameObject.SetActive(false);
@@ -584,12 +580,10 @@ namespace spz {
 	            barImg.color = t.accent;
 	            // Stay under go active; visibility follows the tab's active highlight.
 	            bar.gameObject.SetActive(true);
-	            foreach (var image in active.GetComponentsInChildren<Image>(true)) {
-	                if (image == null || image == barImg) continue;
-	                string n = image.gameObject.name ?? "";
-	                if (n == "MonolithLineIcon") continue;
-	                image.enabled = false;
-	            }
+	            // Disable only the authored active pill — not every Image under go active.
+	            var pill = FindActivePillImage(active);
+	            if (pill != null && pill != barImg)
+	                pill.enabled = false;
 	        }
 
 	        // Runtime tabs have predictable geometry, so they can safely receive compact line glyphs.
