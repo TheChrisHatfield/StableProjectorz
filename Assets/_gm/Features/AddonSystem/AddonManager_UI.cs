@@ -305,7 +305,7 @@ namespace spz {
 	bool AddonManagerPanelSetupIsComplete() {
 		if (_panel == null || _addonsListParent == null) return false;
 		if (!_addonsListParent.transform.IsChildOf(_panel.transform)) return false;
-		return _panel.transform.Find("StichAddonManager_v7") != null
+		return _panel.transform.Find("StichAddonManager_v8") != null
 			&& _panel.transform.Find("FilterBar/FilterPills") != null;
 	}
 
@@ -541,7 +541,7 @@ namespace spz {
 		verticalLayout.childForceExpandHeight = false;
 		verticalLayout.childForceExpandWidth = true;
 
-		var versionMarker = new GameObject("StichAddonManager_v7");
+		var versionMarker = new GameObject("StichAddonManager_v8");
 		versionMarker.transform.SetParent(panelObj.transform, false);
 		var markerLE = versionMarker.AddComponent<LayoutElement>();
 		markerLE.ignoreLayout = true;
@@ -737,8 +737,21 @@ namespace spz {
 		_addonsListParent = contentRect;
 		
 		_filterAllToggle.SetIsOnWithoutNotify(true);
-		
-		_statusText = null;
+
+		var statusObj = new GameObject("StatusText");
+		statusObj.transform.SetParent(panelObj.transform, false);
+		var statusLE = statusObj.AddComponent<LayoutElement>();
+		statusLE.preferredHeight = 22f;
+		statusLE.minHeight = 20f;
+		statusLE.flexibleWidth = 1f;
+		_statusText = statusObj.AddComponent<TextMeshProUGUI>();
+		_statusText.text = "";
+		_statusText.fontSize = 12f;
+		_statusText.color = new Color(0.63f, 0.63f, 0.67f, 1f);
+		_statusText.alignment = TextAlignmentOptions.MidlineLeft;
+		_statusText.enableWordWrapping = false;
+		_statusText.overflowMode = TextOverflowModes.Ellipsis;
+		_statusText.raycastTarget = false;
 		
 		SetLayerRecursively(_panel.transform, UILayer);
 		FitStichPanelToViewport();
@@ -974,14 +987,14 @@ namespace spz {
 		/// Requests Python to load all enabled addons so their panels appear (e.g. in the ctrl tab). No save needed — enable then click this.
 		/// </summary>
 		void OnLoadAddonsNow() {
-			if (_statusText != null) _statusText.text = "Loading addons...";
+			ShowStatus("Loading addons...", true);
 			if (Addon_MGR.instance != null) {
 				Addon_MGR.instance.RequestLoadAllEnabledAddonsNow(() => {
-					if (_statusText != null) _statusText.text = "Ready";
+					ShowStatus("Addons load requested", true);
 					RefreshAddonsList();
 				});
 			} else {
-				if (_statusText != null) _statusText.text = "Ready";
+				ShowStatus("Add-on manager not available", false);
 			}
 		}
 
