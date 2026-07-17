@@ -151,6 +151,8 @@ namespace spz {
 							Addon_MGR.instance.RegisterAddonUI(addonId, go);
 						}
 						SpzUiThemeOps.ApplyToAddonUiRoot(go);
+						// Ribbon has the live panel — drop stale parked copies so migrate cannot duplicate.
+						PurgeParkedForAddon(addonId, go);
 						UnityEngine.Debug.Log($"[AddonUI_MGR] Reusing existing panel for {addonId} under {parentForThisAddon.name}");
 						return go.GetInstanceID().ToString();
 					}
@@ -216,10 +218,37 @@ namespace spz {
 					panel = panelObj,
 				});
 				EnsureRibbonMigrateCoroutine();
+			} else {
+				// Live under ribbon — purge any earlier parked duplicates for this addon.
+				PurgeParkedForAddon(addonId, panelObj);
 			}
 			
 			// Return panel ID (use GameObject instance ID)
 			return panelObj.GetInstanceID().ToString();
+		}
+
+		/// <summary>
+		/// Removes parking-lot entries for <paramref name="addonId"/>. Destroys parked GOs that are not
+		/// <paramref name="keepAlive"/> so a later migrate cannot stack a second panel under the ribbon.
+		/// </summary>
+		void PurgeParkedForAddon(string addonId, GameObject keepAlive) {
+			if (string.IsNullOrEmpty(addonId)) return;
+			for (int i = _parkedForRibbon.Count - 1; i >= 0; i--) {
+				ParkedPanel parked = _parkedForRibbon[i];
+				if (parked == null || parked.panel == null) {
+					_parkedForRibbon.RemoveAt(i);
+					continue;
+				}
+				if (!string.Equals(parked.addonId, addonId, StringComparison.Ordinal))
+					continue;
+				if (keepAlive != null && parked.panel == keepAlive) {
+					_parkedForRibbon.RemoveAt(i);
+					continue;
+				}
+				UnityEngine.Debug.Log($"[AddonUI_MGR] Purging parked duplicate for {addonId}: {parked.panel.name}");
+				UnityEngine.Object.Destroy(parked.panel);
+				_parkedForRibbon.RemoveAt(i);
+			}
 		}
 
 		/// <summary>
