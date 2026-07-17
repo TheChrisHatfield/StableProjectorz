@@ -61,6 +61,15 @@ namespace spz {
 			RefreshStatusLine();
 		}
 
+		void Update() {
+			// Wire verify telemetry → UI: OnColorBrushApplied sets SawApply; surface it without waiting for re-enable.
+			if (!ValuePaintProposalApplier.IsArmed || _statusTmp == null) return;
+			if (!ValuePaintProposalApplier.SawApplyOnArmedTarget) return;
+			if (_statusTmp.text != null && _statusTmp.text.IndexOf("stroke applied", System.StringComparison.Ordinal) >= 0)
+				return;
+			RefreshStatusLine();
+		}
+
 		void BuildUi() {
 			if (_summaryTmp != null) return; // already built — avoid duplicate chrome on repair/re-entry
 			// Orphan GO may already have leftover children from a failed prior build.
