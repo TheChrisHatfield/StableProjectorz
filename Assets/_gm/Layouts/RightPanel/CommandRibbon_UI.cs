@@ -510,6 +510,8 @@ namespace spz {
 	                if (cellImg != null && cell.name.StartsWith("AddonTab_", StringComparison.Ordinal))
 	                    SpzUiThemeOps.ApplyGraphicColor(cellImg, t.controlBg);
 	            }
+	            // Nomad icon inset grows minWidth after Harmonize — rebalance so the strip does not overflow.
+	            RebalanceStripTabMinWidthsIfOverflowing(strip);
 	        }
 
 	        if (_addonPanelsById != null) {
