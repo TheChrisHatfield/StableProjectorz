@@ -104,9 +104,12 @@ namespace spz {
 			int hardnessIx = Softness01ToHardnessIx(proposal.EdgeSoftness01);
 			string hardnessNote = "hardnessUi=missing";
 			if (hardnessUi != null) {
-				hardnessUi.SetBuiltInOnly(hardnessIx);
-				hardnessNote = "hardnessIx=" + hardnessIx + " (from edgeSoft=" +
-				               (float.IsFinite(proposal.EdgeSoftness01) ? Mathf.Clamp01(proposal.EdgeSoftness01) : 0.5f).ToString("F2") + ")";
+				if (hardnessUi.TrySetBuiltInOnly(hardnessIx)) {
+					hardnessNote = "hardnessIx=" + hardnessIx + " (from edgeSoft=" +
+					               (float.IsFinite(proposal.EdgeSoftness01) ? Mathf.Clamp01(proposal.EdgeSoftness01) : 0.5f).ToString("F2") + ")";
+				} else {
+					hardnessNote = "hardnessSkipped=customAlpha";
+				}
 			}
 
 			_armedProposal = proposal;
