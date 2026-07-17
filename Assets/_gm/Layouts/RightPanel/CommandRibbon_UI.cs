@@ -1119,25 +1119,19 @@ namespace spz {
 	            // Fall through to create a fresh shell, then reattach salvaged content below.
 	            Transform tabStripSalvage = ResolveEffectiveTabStripTransform();
 	            if (tabStripSalvage == null) {
-	                for (int s = 0; s < salvagedContent.Count; s++)
-	                    if (salvagedContent[s] != null)
-	                        Destroy(salvagedContent[s].gameObject);
+	                ReparkSalvagedInsteadOfDestroy(addonId, displayTitle, salvagedContent);
 	                UnityEngine.Debug.LogError("[CommandRibbon_UI] Cannot recreate addon tab: tab strip is null.");
 	                return null;
 	            }
 	            Transform panelsParentSalvage = GetRibbonTabBodiesParent(tabStripSalvage);
 	            if (panelsParentSalvage == null) {
-	                for (int s = 0; s < salvagedContent.Count; s++)
-	                    if (salvagedContent[s] != null)
-	                        Destroy(salvagedContent[s].gameObject);
+	                ReparkSalvagedInsteadOfDestroy(addonId, displayTitle, salvagedContent);
 	                UnityEngine.Debug.LogError("[CommandRibbon_UI] Cannot recreate addon tab: panelsParent is null");
 	                return null;
 	            }
 	            var recreated = CreateFreshAddonShellAndTab(addonId, displayTitle, tabId, tabStripSalvage, panelsParentSalvage);
 	            if (recreated == null) {
-	                for (int s = 0; s < salvagedContent.Count; s++)
-	                    if (salvagedContent[s] != null)
-	                        Destroy(salvagedContent[s].gameObject);
+	                ReparkSalvagedInsteadOfDestroy(addonId, displayTitle, salvagedContent);
 	                return null;
 	            }
 	            for (int s = 0; s < salvagedContent.Count; s++) {
@@ -1167,6 +1161,16 @@ namespace spz {
 	        }
 
 	        return CreateFreshAddonShellAndTab(addonId, displayTitle, tabId, tabStrip, panelsParent);
+	    }
+
+	    static void ReparkSalvagedInsteadOfDestroy(string addonId, string displayTitle, List<Transform> salvagedContent) {
+		    if (salvagedContent == null || salvagedContent.Count == 0) return;
+		    if (AddonUI_MGR.instance != null) {
+			    AddonUI_MGR.instance.ReparkSalvagedAddonContent(addonId, displayTitle, salvagedContent);
+			    return;
+		    }
+		    // Last resort: leave unparented rather than Destroy — instance IDs must stay valid.
+		    UnityEngine.Debug.LogWarning($"[CommandRibbon_UI] AddonUI_MGR missing; leaving {salvagedContent.Count} salvaged panel(s) unparented for {addonId}.");
 	    }
 
 	    RectTransform CreateFreshAddonShellAndTab(string addonId, string displayTitle, string tabId, Transform tabStrip, Transform panelsParent) {
