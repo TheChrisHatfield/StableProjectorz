@@ -67,6 +67,9 @@ namespace spz {
 		}
 		readonly List<ParkedPanel> _parkedForRibbon = new List<ParkedPanel>();
 		bool _ribbonMigrateRunning;
+		/// <summary>Completed 30s migrate passes while panels remain parked; capped to avoid infinite retry.</summary>
+		int _ribbonMigrateRounds;
+		const int kRibbonMigrateMaxRounds = 6;
 		
 		void Awake() {
 			if (instance != null) { DestroyImmediate(this); return; }
@@ -217,6 +220,8 @@ namespace spz {
 					title = title,
 					panel = panelObj,
 				});
+				// New parked work resets the give-up budget so a later ribbon can still migrate.
+				_ribbonMigrateRounds = 0;
 				EnsureRibbonMigrateCoroutine();
 			} else {
 				// Live under ribbon — purge any earlier parked duplicates for this addon.
@@ -328,6 +333,7 @@ namespace spz {
 						title = title,
 						panel = child.gameObject,
 					});
+					_ribbonMigrateRounds = 0;
 				}
 			}
 			legacy.SetActive(false);
@@ -383,6 +389,8 @@ namespace spz {
 		void EnsureRibbonMigrateCoroutine() {
 			if (_ribbonMigrateRunning || !isActiveAndEnabled)
 				return;
+			if (_ribbonMigrateRounds >= kRibbonMigrateMaxRounds)
+				return;
 			_ribbonMigrateRunning = true;
 			StartCoroutine(MigrateParkedPanelsToRibbon_crtn());
 		}
@@ -400,13 +408,31 @@ namespace spz {
 					yield return new WaitForSeconds(0.25f);
 				}
 				if (_parkedForRibbon.Count > 0)
-					UnityEngine.Debug.LogWarning($"[AddonUI_MGR] {_parkedForRibbon.Count} add-on panel(s) still parked after {maxWait}s (ribbon never ready).");
+					UnityEngine.Debug.LogWarning($"[AddonUI_MGR] {_parkedForRibbon.Count} add-on panel(s) still parked after {maxWait}s (ribbon shell not ready).");
 			}
 			finally {
 				_ribbonMigrateRunning = false;
-				if (_parkedForRibbon.Count > 0 && isActiveAndEnabled)
-					EnsureRibbonMigrateCoroutine();
+				if (_parkedForRibbon.Count == 0) {
+					_ribbonMigrateRounds = 0;
+				} else {
+					_ribbonMigrateRounds++;
+					if (_ribbonMigrateRounds < kRibbonMigrateMaxRounds && isActiveAndEnabled) {
+						// Back off between passes so we do not spin forever at 0.25s.
+						float backoff = Mathf.Min(8f, 0.5f * _ribbonMigrateRounds);
+						StartCoroutine(RestartRibbonMigrateAfterBackoff_crtn(backoff));
+					} else if (_parkedForRibbon.Count > 0) {
+						UnityEngine.Debug.LogWarning(
+							$"[AddonUI_MGR] Giving up ribbon migrate after {kRibbonMigrateMaxRounds} passes; {_parkedForRibbon.Count} panel(s) remain parked.");
+					}
+				}
 			}
+		}
+
+		IEnumerator RestartRibbonMigrateAfterBackoff_crtn(float delaySeconds) {
+			if (delaySeconds > 0f)
+				yield return new WaitForSeconds(delaySeconds);
+			if (_parkedForRibbon.Count > 0 && isActiveAndEnabled && !_ribbonMigrateRunning)
+				EnsureRibbonMigrateCoroutine();
 		}
 
 		void TryMigrateParkedPanelsNow() {
