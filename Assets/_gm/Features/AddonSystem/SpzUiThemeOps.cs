@@ -177,9 +177,8 @@ namespace spz {
 				error = $"Registered theme not found: {themeId}";
 				return false;
 			}
-			// Unregistering the active preset without reset leaves tokens applied under an orphan id.
-			if (string.Equals(_activeThemeId, themeId, StringComparison.Ordinal))
-				ResetTheme();
+			// Active id may become an orphan until reset_theme; callers that own the preset
+			// (e.g. NomadThemeSPZ unload) must ResetTheme before unregister when desired.
 			return true;
 		}
 
