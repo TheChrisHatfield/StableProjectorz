@@ -45,7 +45,7 @@ namespace spz {
 		public static event Action ThemeChanged;
 
 		public static string ActiveThemeId => _activeThemeId;
-		public static ThemeTokens Active => _active;
+		public static ThemeTokens Active => _active.Clone();
 
 		public static JObject GetThemeResult() {
 			return new JObject {
