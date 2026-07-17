@@ -27,25 +27,34 @@ namespace spz {
 			if (toolOptionsSection == null) return null;
 			for (int i = 0; i < toolOptionsSection.childCount; i++) {
 				var ch = toolOptionsSection.GetChild(i);
-				if (ch != null && ch.name == RootName) {
-					var existing = ch.GetComponent<PaintTab_ValueAssistPanel_UI>();
-					if (existing != null) return existing;
-				}
+				if (ch == null || ch.name != RootName) continue;
+				var existing = ch.GetComponent<PaintTab_ValueAssistPanel_UI>();
+				if (existing != null) return existing;
+				// Exact name but missing component (partial create) — repair in place; do not duplicate.
+				var repaired = ch.gameObject.AddComponent<PaintTab_ValueAssistPanel_UI>();
+				EnsureLayoutShell(ch as RectTransform);
+				repaired.BuildUi();
+				return repaired;
 			}
 			var go = new GameObject(RootName);
 			go.transform.SetParent(toolOptionsSection, false);
 			go.transform.SetAsLastSibling();
 			var rect = go.AddComponent<RectTransform>();
-			rect.anchorMin = new Vector2(0, 1);
-			rect.anchorMax = new Vector2(1, 1);
-			rect.pivot = new Vector2(0.5f, 1);
-			var le = go.AddComponent<LayoutElement>();
-			le.flexibleWidth = 1f;
-			le.minHeight = 96f;
-			le.preferredHeight = 108f;
+			EnsureLayoutShell(rect);
 			var panel = go.AddComponent<PaintTab_ValueAssistPanel_UI>();
 			panel.BuildUi();
 			return panel;
+		}
+
+		static void EnsureLayoutShell(RectTransform rect) {
+			if (rect == null) return;
+			rect.anchorMin = new Vector2(0, 1);
+			rect.anchorMax = new Vector2(1, 1);
+			rect.pivot = new Vector2(0.5f, 1);
+			var le = rect.GetComponent<LayoutElement>() ?? rect.gameObject.AddComponent<LayoutElement>();
+			le.flexibleWidth = 1f;
+			le.minHeight = 96f;
+			le.preferredHeight = 108f;
 		}
 
 		void OnEnable() {
