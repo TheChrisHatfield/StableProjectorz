@@ -897,6 +897,8 @@ namespace spz {
 				enabled = true;
 
 			CreatePanelIfNeeded();
+			TryAddRememberPreferenceRowIfMissing();
+			SyncRememberEnabledToggleFromPrefs();
 			
 			if (_panel == null) {
 				Debug.LogError("[AddonManager_UI] Failed to open panel: _panel is null and could not be created.");
