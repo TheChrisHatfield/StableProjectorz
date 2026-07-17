@@ -68,6 +68,10 @@ namespace spz {
 				error = "dst7";
 				return false;
 			}
+			if (tex.width < 1 || tex.height < 1) {
+				error = "texture empty";
+				return false;
+			}
 			int x = Mathf.Clamp(region.x, 0, tex.width - 1);
 			int y = Mathf.Clamp(region.y, 0, tex.height - 1);
 			int w = Mathf.Clamp(region.width, 1, tex.width - x);
