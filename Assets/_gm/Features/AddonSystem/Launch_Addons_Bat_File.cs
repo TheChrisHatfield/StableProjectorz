@@ -19,6 +19,8 @@ namespace spz {
 		const string DefaultBatName = "Run_with_Addons.bat";
 		const string EnvVarName = "SPZ_ADDONS_RUN_PATH";
 
+		static bool s_restartInProgress;
+
 		/// <summary>Finds Run_with_Addons.bat (exe dir, parent dirs, or env). Returns "" if not found.</summary>
 		public static string GetAddonsBatFilePath(bool logIfNotFound = false) {
 #if !UNITY_STANDALONE_WIN && !UNITY_EDITOR_WIN
@@ -78,7 +80,9 @@ namespace spz {
 			}
 			try {
 				string workDir = Path.GetDirectoryName(path);
-				uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(path, isJustFile: true, workDir);
+				// attachToConsole:false — FreeConsole/AttachConsole on the Unity process during restart can stall or crash.
+				uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
+					path, isJustFile: true, workDir, keepWindow: false, hidden: false, attachToConsole: false);
 				if (pid != 0) {
 					Debug.Log($"[Launch_Addons] Launched {DefaultBatName} PID {pid}");
 					return true;
@@ -92,13 +96,58 @@ namespace spz {
 #endif
 		}
 
-		/// <summary>Launch Run_with_Addons.bat then exit so the bat starts the game with addons. Force-exit so the current instance actually closes (Application.Quit alone can leave it running).</summary>
+		/// <summary>
+		/// Launch Run_with_Addons.bat then quit so the bat starts the game with addons.
+		/// Does not hard-kill immediately (that raced the exit-confirm popup and caused stalls/crashes).
+		/// Uses <see cref="ExitTheProgram_MGR.AllowQuitWithoutConfirmAndArmWatchdog"/> so quit is not blocked,
+		/// then the existing force-exit watchdog covers hung shutdown.
+		/// </summary>
 		public static void RestartWithAddons() {
-			if (!LaunchAddonsBat(showStatusIfNotFound: true)) return;
+			if (s_restartInProgress) {
+				Debug.LogWarning("[Launch_Addons] Restart with addons already in progress — ignoring duplicate click.");
+				return;
+			}
+
+#if UNITY_EDITOR
+			// Never Application.Quit / Environment.Exit the Editor — that stalls Play Mode and can corrupt the session.
+			s_restartInProgress = true;
+			bool launched = LaunchAddonsBat(showStatusIfNotFound: true);
+			if (AddonManager_UI.instance != null) {
+				if (launched)
+					AddonManager_UI.instance.ShowRestartStatus(
+						$"Launched {DefaultBatName}. Stop Play Mode and run the player via that bat (Editor was not quit).",
+						true);
+				else
+					AddonManager_UI.instance.ShowRestartStatus($"{DefaultBatName} not found — cannot restart with addons.", false);
+			} else if (Viewport_StatusText.instance != null && launched) {
+				Viewport_StatusText.instance.ShowStatusText(
+					$"Launched {DefaultBatName}. Stop Play Mode; use the bat for the player build.", false, 6f, false);
+			}
+			s_restartInProgress = false;
+			return;
+#else
+			s_restartInProgress = true;
+
+			// Teardown sockets/Python before spawning the bat so ports/files are free for the next instance.
+			Addon_MGR.ShutdownAddonApiBeforeQuit();
+
+			if (!LaunchAddonsBat(showStatusIfNotFound: true)) {
+				s_restartInProgress = false;
+				if (AddonManager_UI.instance != null)
+					AddonManager_UI.instance.ShowRestartStatus(
+						$"{DefaultBatName} not found — cannot restart with addons.", false);
+				return;
+			}
+
+			if (AddonManager_UI.instance != null) {
+				AddonManager_UI.instance.ShowRestartStatus("Restarting with addons…", true);
+				AddonManager_UI.instance.ClosePanel();
+			}
+
+			// Bypass "Close the program?" — previous code called Quit (blocked by popup) then Environment.Exit (hard crash).
+			ExitTheProgram_MGR.AllowQuitWithoutConfirmAndArmWatchdog();
 			Application.Quit();
-#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-			// Force process exit; Application.Quit() may not actually close the app
-			System.Environment.Exit(0);
+			// Do not Environment.Exit here. Watchdog force-exits only if Unity shutdown stalls (~4s).
 #endif
 		}
 
