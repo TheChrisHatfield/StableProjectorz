@@ -82,6 +82,11 @@ namespace spz {
 				reason = _lastFailReason = "BrushRibbon_UI_Opacity missing — refuse before mutating brush color/size";
 				return false;
 			}
+			// Size lives on SD ribbon's BrushRibbon_UI_Size; null slider → SetBrushSize NREs after color already applied.
+			if (BrushRibbon_UI_Size.instance == null) {
+				reason = _lastFailReason = "BrushRibbon_UI_Size missing — refuse before mutating brush color";
+				return false;
+			}
 			// Resolve hardness before any ribbon mutate (validate-then-commit). Missing UI is noted, not refused.
 			var hardnessUi = Object.FindObjectOfType<BrushRibbon_UI_Hardness>(true);
 

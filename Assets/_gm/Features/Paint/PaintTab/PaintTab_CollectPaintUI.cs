@@ -449,7 +449,10 @@ namespace spz {
 		{
 			if (_layout == null) _layout = GetComponent<PaintTab_KritaLayout_UI>();
 			if (_layout == null) return;
-			if (_layout.BrushPresetsSection == null)
+			// Any missing section must recreate scaffolding — BrushPresets-only gate left Tool Options
+			// (and Value Assist) unmounted when other refs were assigned (PAINT_TAB_SCAFFOLDING_AUDIT).
+			if (_layout.ToolchestRow == null || _layout.LayersSection == null || _layout.BrushPresetsSection == null
+			    || _layout.ToolOptionsSection == null || _layout.ColorPaletteSection == null)
 				_layout.SetCreateSectionsIfMissing(true);
 			bool did = false;
 			bool toolchestDid = false;
