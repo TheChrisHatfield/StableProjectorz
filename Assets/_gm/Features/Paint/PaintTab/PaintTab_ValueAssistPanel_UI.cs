@@ -135,13 +135,14 @@ namespace spz {
 			}
 			bool ok = ValuePaintProposalApplier.TryAccept(_proposal, out string reason);
 			if (ok) {
+				// Keep this message — RefreshStatusLine would shorten it and look like a wipe.
 				_statusTmp.text = "Armed — paint strokes use ribbon color/size/opacity/hardness.";
 				ShowFeedback("Value Assist: accepted");
 			} else {
 				_statusTmp.text = "Accept refused — " + reason;
 				ShowFeedback("Value Assist: " + reason);
+				RefreshStatusLine(keepMessage: true);
 			}
-			RefreshStatusLine(keepMessage: true);
 		}
 
 		void OnDismiss() {
