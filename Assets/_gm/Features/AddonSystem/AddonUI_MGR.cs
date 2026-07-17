@@ -334,13 +334,44 @@ namespace spz {
 			Destroy(legacy);
 		}
 
-		static bool TryParseAddonPanelName(string goName, out string addonId, out string title) {
+		/// <summary>
+		/// Parses <c>AddonPanel_{addonId}_{title}</c>. Uses longest known addon-id prefix so ids that
+		/// contain underscores (e.g. <c>My_Cool_Addon</c>) are not truncated at the first underscore.
+		/// </summary>
+		bool TryParseAddonPanelName(string goName, out string addonId, out string title) {
 			addonId = null;
 			title = null;
 			const string prefix = "AddonPanel_";
 			if (string.IsNullOrEmpty(goName) || !goName.StartsWith(prefix, StringComparison.Ordinal))
 				return false;
 			string rest = goName.Substring(prefix.Length);
+			string bestId = null;
+			void Consider(string id) {
+				if (string.IsNullOrEmpty(id) || rest.Length <= id.Length) return;
+				if (!rest.StartsWith(id, StringComparison.Ordinal)) return;
+				if (rest[id.Length] != '_') return;
+				if (bestId == null || id.Length > bestId.Length)
+					bestId = id;
+			}
+			if (Addon_MGR.instance != null) {
+				var registered = Addon_MGR.instance.GetAddons();
+				if (registered != null) {
+					foreach (var id in registered.Keys)
+						Consider(id);
+				}
+			}
+			foreach (var id in _addonUIElements.Keys)
+				Consider(id);
+			for (int p = 0; p < _parkedForRibbon.Count; p++) {
+				if (_parkedForRibbon[p] != null)
+					Consider(_parkedForRibbon[p].addonId);
+			}
+			if (bestId != null) {
+				addonId = bestId;
+				title = rest.Substring(bestId.Length + 1);
+				return !string.IsNullOrEmpty(addonId) && !string.IsNullOrEmpty(title);
+			}
+			// Fallback for unknown addons: first underscore (legacy ids without underscores).
 			int sep = rest.IndexOf('_');
 			if (sep <= 0 || sep >= rest.Length - 1)
 				return false;
