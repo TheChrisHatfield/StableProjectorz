@@ -1170,6 +1170,28 @@ class UIAPI:
             params["command"] = command
         r = self._client._send_request("spz.ui.attach_viewport_fullview_toggle", params)
         return r.get("success", False)
+
+    def get_theme(self):
+        """Return the active runtime UI theme id and complete effective color tokens."""
+        return self._client._send_request("spz.ui.get_theme", {})
+
+    def apply_theme(self, theme_id, tokens):
+        """
+        Apply a validated runtime UI color palette.
+
+        ``tokens`` may contain: ``panel_bg``, ``control_bg``, ``field_bg``,
+        ``accent``, ``text_primary``, ``text_muted``, and ``handle``.
+        Colors use ``#RRGGBB`` or ``#RRGGBBAA``. The returned dict includes
+        ``success`` and either the effective palette or an ``error``.
+        """
+        return self._client._send_request("spz.ui.apply_theme", {
+            "theme_id": str(theme_id),
+            "tokens": dict(tokens or {}),
+        })
+
+    def reset_theme(self):
+        """Restore the built-in StableProjectorz runtime UI color tokens."""
+        return self._client._send_request("spz.ui.reset_theme", {})
     
     def get_panel(self, panel_id):
         """Get a panel by ID"""

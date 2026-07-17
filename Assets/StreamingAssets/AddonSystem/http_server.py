@@ -301,6 +301,11 @@ class UISetValueBody(BaseModel):
     value: Any = None
 
 
+class UIApplyThemeBody(BaseModel):
+    theme_id: str
+    tokens: Dict[str, str]
+
+
 class PaintFloat01Body(BaseModel):
     """Brush scalar in 0..1 (size, spacing, roundness, opacity). Use ``value`` or the alias key matching Unity params."""
     value: float
@@ -1346,6 +1351,27 @@ async def ui_set_value(body: UISetValueBody):
         "element_id": body.element_id,
         "value": body.value,
     })
+
+
+@app.get("/api/v1/ui/theme", tags=["ui"])
+async def ui_get_theme():
+    """Return the active runtime UI theme and effective color tokens."""
+    return await call_unity_async("spz.ui.get_theme", {})
+
+
+@app.post("/api/v1/ui/theme", tags=["ui"])
+async def ui_apply_theme(body: UIApplyThemeBody):
+    """Validate and apply a runtime UI color palette."""
+    return await call_unity_async("spz.ui.apply_theme", {
+        "theme_id": body.theme_id,
+        "tokens": body.tokens,
+    })
+
+
+@app.post("/api/v1/ui/theme/reset", tags=["ui"])
+async def ui_reset_theme():
+    """Restore the built-in StableProjectorz runtime UI color tokens."""
+    return await call_unity_async("spz.ui.reset_theme", {})
 
 # ============================================
 # Addon loading (Unity calls this when user enables an addon or at startup)

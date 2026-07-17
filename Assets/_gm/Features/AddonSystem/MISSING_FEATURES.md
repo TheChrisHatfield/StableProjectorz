@@ -114,7 +114,7 @@
 **Still Missing (Optional):**
 - Toggles/checkboxes (could be added)
 - Value change callbacks to Python (currently logged only)
-- Custom UI styling/themes
+- App-wide theme bindings and preset add-ons (the token/API foundation currently styles add-on-owned UI)
 
 ### 14. ControlNet Operations ✅ COMPLETED
 **Status:** Full operations implemented  
@@ -197,5 +197,5 @@
 **Future Enhancements:**
 - Toggles/checkboxes
 - Value change callbacks to Python
-- Custom UI styling/themes
+- App-wide theme bindings and preset add-ons
 - Horizontal layout groups
