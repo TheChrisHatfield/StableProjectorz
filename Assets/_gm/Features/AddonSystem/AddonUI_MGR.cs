@@ -133,7 +133,8 @@ namespace spz {
 					if (t == null) {
 						continue;
 					}
-					if (t.name.Contains("AddonPanel_" + addonId, StringComparison.Ordinal)) {
+					if (t.name.StartsWith("AddonPanel_" + addonId + "_", StringComparison.Ordinal)
+					    || string.Equals(t.name, "AddonPanel_" + addonId, StringComparison.Ordinal)) {
 						var go = t.gameObject;
 						if (!_addonUIElements.ContainsKey(addonId)) {
 							_addonUIElements[addonId] = new List<GameObject>();
