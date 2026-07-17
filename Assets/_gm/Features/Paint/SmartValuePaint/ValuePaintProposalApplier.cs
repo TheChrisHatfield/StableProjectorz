@@ -37,7 +37,7 @@ namespace spz {
 		/// </summary>
 		public static bool TryAccept(ValuePaintProposal proposal, out string reason) {
 			_lastFailReason = "";
-			_sawApplyOnArmedTarget = false;
+			// Do not clear armed / saw-apply until validation passes (failed Accept must not wipe prior arm).
 
 			var workflow = WorkflowRibbon_UI.instance;
 			if (workflow == null) {
@@ -96,13 +96,32 @@ namespace spz {
 			float effectiveOpacity = Mathf.Clamp01(opacity * blend);
 			opacityUi.SetOpacity01(effectiveOpacity);
 
+			// T7 — EdgeSoftness01 → built-in hardness (0 soft / 1 med / 2 hard). High softness = soft tip.
+			int hardnessIx = Softness01ToHardnessIx(proposal.EdgeSoftness01);
+			var hardnessUi = Object.FindObjectOfType<BrushRibbon_UI_Hardness>(true);
+			string hardnessNote = "hardnessUi=missing";
+			if (hardnessUi != null) {
+				hardnessUi.SetBuiltInOnly(hardnessIx);
+				hardnessNote = "hardnessIx=" + hardnessIx + " (from edgeSoft=" +
+				               (float.IsFinite(proposal.EdgeSoftness01) ? Mathf.Clamp01(proposal.EdgeSoftness01) : 0.5f).ToString("F2") + ")";
+			}
+
 			_armedProposal = proposal;
 			_armed = true;
+			_sawApplyOnArmedTarget = false;
 			reason = "Armed on target=" + DescribeTarget(target) + " desiredBin=" + proposal.DesiredBin
 			         + " color=" + tint + " size01=" + proposal.BrushWidthHint01.ToString("F2")
 			         + " opacity01=" + effectiveOpacity.ToString("F2")
-			         + " (blend=" + blend.ToString("F2") + ")";
+			         + " (blend=" + blend.ToString("F2") + ") " + hardnessNote;
 			return true;
+		}
+
+		/// <summary>Map Spec R2 EdgeSoftness01 → built-in round tip index (0=soft, 1=medium, 2=hard).</summary>
+		public static int Softness01ToHardnessIx(float edgeSoftness01) {
+			float s = float.IsFinite(edgeSoftness01) ? Mathf.Clamp01(edgeSoftness01) : 0.5f;
+			if (s >= 0.66f) return 0;
+			if (s >= 0.33f) return 1;
+			return 2;
 		}
 
 		public static void ClearArmed() {
