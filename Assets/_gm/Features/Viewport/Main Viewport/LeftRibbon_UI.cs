@@ -25,6 +25,11 @@ namespace spz {
 	    [Space(10)]
 	    [SerializeField] SlideOut_Widget_UI _depth_slideOut_panel;
 	    [SerializeField] GameObject _depthSlideOut_antiClick_surf;
+	    Color _themeAccent = Color.white;
+	    bool _lastNomadChrome;
+	    bool _lastDepthModeOn;
+	    bool _lastFinalBlurInsideOn;
+	    bool _lastWireframePressed;
 
 	    public bool isShowWireframe_onSelected => _toggleWireframe.isPressed;
 	    public float depthContrast => _depthContrast_slider.value;
@@ -48,6 +53,7 @@ namespace spz {
 
 	    void Update(){
 	        UdpateDepthSliderText();
+	        SyncNomadChromeSelectionIfChanged();
 
 	        // COMMENTED OUT, KEPT FOR PRECAUTION. Allow user to do it from anywhere, without hovering the viewport:
 	        //    if(MainViewport_UI.instance.isCursorHoveringMe() == false){ return; }
@@ -94,6 +100,7 @@ namespace spz {
 	        instance = this;
 
 	        EarlyUpdate_callbacks_MGR.instance.onEarlyUpdate3 += EarlyUpdate;
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
 	    }
 
 	    void Start(){
@@ -101,14 +108,155 @@ namespace spz {
 	        _depthBlur_StepSize_slider.onValueChanged.AddListener( OnDepthStepSlider );
 	        Settings_MGR._Act_verticalRibbonsSwapped += OnSettings_ToolRibbonSwapped;
 	        OnSettings_ToolRibbonSwapped( Settings_MGR.instance.get_viewport_isSwapVerticalRibbons() );
+	        ApplyThemeTokens();
 	    }
 
 
 	    void OnDestroy(){
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 	        if (EarlyUpdate_callbacks_MGR.instance != null){
 	            EarlyUpdate_callbacks_MGR.instance.onEarlyUpdate3 -= EarlyUpdate;
 	        }
 	        Settings_MGR._Act_verticalRibbonsSwapped -= OnSettings_ToolRibbonSwapped;
+	        if (instance == this)
+	            instance = null;
+	    }
+
+	    /// <summary>Themes known prefab-owned left-ribbon controls only (no hierarchy scan).</summary>
+	    void ApplyThemeTokens() {
+	        var t = SpzUiThemeOps.Active;
+	        _themeAccent = t.accent;
+	        ThemeToggle(_toggleDepthMode_button, t);
+	        ThemeToggle(_depthFinalBlur_Inside_toggle, t);
+	        ThemeTmp(_depthContrast_text, t.textPrimary);
+	        ThemeTmp(_depthBrightness_text, t.textPrimary);
+	        ThemeTmp(_depthBlur_stepSize_text, t.textPrimary);
+	        ThemeTmp(_depthBlurFinal_stepSize_text, t.textPrimary);
+	        ThemeTmp(_depthSmartBlur_text, t.textPrimary);
+	        ThemeWireframe(t);
+	        ThemeCircleSlider(_depthContrast_slider, t);
+	        ThemeCircleSlider(_depthBrightness_slider, t);
+	        ThemeCircleSlider(_depthBlur_StepSize_slider, t);
+	        ThemeCircleSlider(_depthSharpBlur_slider, t);
+	        ThemeCircleSlider(_depthBlurFinal_StepSize_slider, t);
+	        if (_depth_slideOut_panel != null) {
+	            var panelImg = _depth_slideOut_panel.GetComponent<Image>();
+	            if (panelImg != null)
+	                SpzUiThemeOps.ApplyGraphicColor(panelImg, t.panelBg);
+	        }
+	        SnapshotNomadChromeSelection();
+	    }
+
+	    /// <summary>
+	    /// Selection can change without ThemeChanged; only resync chrome when Nomad is active or when leaving it.
+	    /// Avoids SetAsLastSibling / full retheme every frame.
+	    /// </summary>
+	    void SyncNomadChromeSelectionIfChanged() {
+	        bool nomad = string.Equals(SpzUiThemeOps.ActiveThemeId, "nomad-inspired", System.StringComparison.Ordinal);
+	        if (!nomad) {
+	            if (_lastNomadChrome) {
+	                // Full retheme restores fill colors + hides bars. Hiding bars alone left gold
+	                // selectable fills if ThemeChanged aborted before SnapshotNomadChromeSelection.
+	                ApplyThemeTokens();
+	            }
+	            return;
+	        }
+
+	        bool depthOn = _toggleDepthMode_button != null && _toggleDepthMode_button.isOn;
+	        bool blurOn = _depthFinalBlur_Inside_toggle != null && _depthFinalBlur_Inside_toggle.isOn;
+	        bool wireOn = _toggleWireframe != null && _toggleWireframe.isPressed;
+	        bool selectionChanged = !_lastNomadChrome
+	            || depthOn != _lastDepthModeOn
+	            || blurOn != _lastFinalBlurInsideOn
+	            || wireOn != _lastWireframePressed;
+	        if (!selectionChanged)
+	            return;
+
+	        var t = SpzUiThemeOps.Active;
+	        _themeAccent = t.accent;
+	        if (depthOn != _lastDepthModeOn || !_lastNomadChrome)
+	            ThemeToggle(_toggleDepthMode_button, t);
+	        if (blurOn != _lastFinalBlurInsideOn || !_lastNomadChrome)
+	            ThemeToggle(_depthFinalBlur_Inside_toggle, t);
+	        if (wireOn != _lastWireframePressed || !_lastNomadChrome)
+	            ThemeWireframe(t);
+	        SnapshotNomadChromeSelection();
+	    }
+
+	    void SnapshotNomadChromeSelection() {
+	        _lastNomadChrome = string.Equals(SpzUiThemeOps.ActiveThemeId, "nomad-inspired", System.StringComparison.Ordinal);
+	        _lastDepthModeOn = _toggleDepthMode_button != null && _toggleDepthMode_button.isOn;
+	        _lastFinalBlurInsideOn = _depthFinalBlur_Inside_toggle != null && _depthFinalBlur_Inside_toggle.isOn;
+	        _lastWireframePressed = _toggleWireframe != null && _toggleWireframe.isPressed;
+	    }
+
+	    void ThemeWireframe(SpzUiThemeOps.ThemeTokens t) {
+	        if (_toggleWireframe == null) return;
+	        Color wireNormal = _toggleWireframe.isPressed
+	            ? Color.Lerp(t.tabActive, t.accent, 0.55f)
+	            : t.controlBg;
+	        var btn = _toggleWireframe.GetComponent<Button>();
+	        if (btn != null)
+	            SpzUiThemeOps.ApplySelectableToken(btn, wireNormal, t.accent);
+	        else {
+	            var img = _toggleWireframe.GetComponent<Image>();
+	            if (img != null)
+	                SpzUiThemeOps.ApplyGraphicColor(img, wireNormal);
+	        }
+	        ApplyNomadActiveBar(_toggleWireframe.transform, _toggleWireframe.isPressed, t.accent);
+	    }
+
+	    static void ThemeToggle(Toggle toggle, SpzUiThemeOps.ThemeTokens t) {
+	        if (toggle == null) return;
+	        // Selected state leans on accent so Nomad gold (vs SPZ blue) is visible on left ribbon.
+	        Color normal = toggle.isOn ? Color.Lerp(t.tabActive, t.accent, 0.55f) : t.controlBg;
+	        SpzUiThemeOps.ApplySelectableToken(toggle, normal, t.accent);
+	        ApplyNomadActiveBar(toggle.transform, toggle.isOn, t.accent);
+	    }
+
+	    static void ApplyNomadActiveBar(Transform owner, bool selected, Color accent) {
+	        if (owner == null) return;
+	        Transform bar = owner.Find("MonolithActiveBar");
+	        bool show = selected
+	            && string.Equals(SpzUiThemeOps.ActiveThemeId, "nomad-inspired", System.StringComparison.Ordinal);
+	        if (!show) {
+	            if (bar != null) bar.gameObject.SetActive(false);
+	            return;
+	        }
+	        bool created = false;
+	        if (bar == null) {
+	            var go = new GameObject("MonolithActiveBar", typeof(RectTransform));
+	            go.transform.SetParent(owner, false);
+	            bar = go.transform;
+	            var image = go.AddComponent<Image>();
+	            image.raycastTarget = false;
+	            created = true;
+	        }
+	        var rt = bar as RectTransform;
+	        rt.anchorMin = new Vector2(0f, 0.2f);
+	        rt.anchorMax = new Vector2(0f, 0.8f);
+	        rt.pivot = new Vector2(0f, 0.5f);
+	        rt.offsetMin = new Vector2(0f, 0f);
+	        rt.offsetMax = new Vector2(2f, 0f);
+	        var img = bar.GetComponent<Image>();
+	        img.sprite = null;
+	        img.type = Image.Type.Simple;
+	        img.color = accent;
+	        bar.gameObject.SetActive(true);
+	        // Only reorder on create — SetAsLastSibling every frame fights sibling layout/clicks.
+	        if (created)
+	            bar.SetAsLastSibling();
+	    }
+
+	    static void ThemeTmp(TextMeshProUGUI tmp, Color color) {
+	        if (tmp != null)
+	            SpzUiThemeOps.ApplyTmpColor(tmp, color);
+	    }
+
+	    static void ThemeCircleSlider(CircleSlider_Snapping_UI slider, SpzUiThemeOps.ThemeTokens t) {
+	        if (slider == null) return;
+	        // Ownership-root apply: fill + value text only (never retint dial scaffolding Images).
+	        slider.ApplyThemeTokens(t.accent, t.textPrimary);
 	    }
 
 
