@@ -82,6 +82,8 @@ namespace spz {
 				reason = _lastFailReason = "BrushRibbon_UI_Opacity missing — refuse before mutating brush color/size";
 				return false;
 			}
+			// Resolve hardness before any ribbon mutate (validate-then-commit). Missing UI is noted, not refused.
+			var hardnessUi = Object.FindObjectOfType<BrushRibbon_UI_Hardness>(true);
 
 			Color tint = GrayForBand(proposal.DesiredBin);
 			if (!sd.SetBrushColorFromApi(tint.r, tint.g, tint.b, tint.a)) {
@@ -100,7 +102,6 @@ namespace spz {
 
 			// T7 — EdgeSoftness01 → built-in hardness (0 soft / 1 med / 2 hard). High softness = soft tip.
 			int hardnessIx = Softness01ToHardnessIx(proposal.EdgeSoftness01);
-			var hardnessUi = Object.FindObjectOfType<BrushRibbon_UI_Hardness>(true);
 			string hardnessNote = "hardnessUi=missing";
 			if (hardnessUi != null) {
 				hardnessUi.SetBuiltInOnly(hardnessIx);
