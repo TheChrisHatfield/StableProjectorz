@@ -74,11 +74,14 @@ namespace spz {
 	/// <summary>Prefer MLP weights; fall back to deterministic stub.</summary>
 	public static class ValuePaintAssistFactory {
 		public static IValuePaintAssist Create(out string which) {
-			if (MlpValuePaintAssist.TryCreate(out var mlp, out _)) {
+			if (MlpValuePaintAssist.TryCreate(out var mlp, out string mlpErr)) {
 				which = "MlpValuePaintAssist";
 				return mlp;
 			}
-			which = "DeterministicValuePaintAssist";
+			// Surface load failure in which — silent "_" hid why UI fell back to stub (false healthy).
+			which = string.IsNullOrEmpty(mlpErr)
+				? "DeterministicValuePaintAssist"
+				: "DeterministicValuePaintAssist (mlp unavailable: " + mlpErr + ")";
 			return new DeterministicValuePaintAssist();
 		}
 
