@@ -674,6 +674,9 @@ namespace spz {
 				ResubscribeBrushSettingsHandlersIfToolOptionsExist();
 				ResubscribeSmudgeBrushOptsHandlersIfUiExists(_layout.ToolOptionsSection);
 			}
+			// Value Assist proposal review (Spec R3) — sibling under Tool Options, not inside the grid row.
+			if (_layout.ToolOptionsSection != null && PaintTab_ValueAssistPanel_UI.EnsureUnder(_layout.ToolOptionsSection) != null)
+				did = true;
 
 			// --- Color / Palette section ---
 			if (_layout.ColorPaletteSection != null)
