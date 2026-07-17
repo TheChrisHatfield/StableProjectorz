@@ -67,13 +67,24 @@ namespace spz {
 
 		/// <summary>Launch Run_with_Addons.bat (same pattern as LaunchWebUI). Returns true if launched.</summary>
 		public static bool LaunchAddonsBat(bool showStatusIfNotFound = false) {
+			return LaunchAddonsBat(showStatusIfNotFound, out _);
+		}
+
+		/// <summary>
+		/// Launch Run_with_Addons.bat. <paramref name="failureKind"/> is <c>not_found</c>, <c>spawn_failed</c>,
+		/// <c>unsupported</c>, or null on success.
+		/// </summary>
+		public static bool LaunchAddonsBat(bool showStatusIfNotFound, out string failureKind) {
+			failureKind = null;
 #if !UNITY_STANDALONE_WIN && !UNITY_EDITOR_WIN
+			failureKind = "unsupported";
 			if (showStatusIfNotFound && Viewport_StatusText.instance != null)
 				Viewport_StatusText.instance.ShowStatusText("Run with addons is only supported on Windows.", false, 3f, false);
 			return false;
 #else
 			string path = GetAddonsBatFilePath(logIfNotFound: true);
 			if (string.IsNullOrEmpty(path)) {
+				failureKind = "not_found";
 				if (showStatusIfNotFound && Viewport_StatusText.instance != null)
 					Viewport_StatusText.instance.ShowStatusText($"{DefaultBatName} not found. Use it to start the game for addon support.", false, 5f, false);
 				return false;
@@ -87,9 +98,11 @@ namespace spz {
 					Debug.Log($"[Launch_Addons] Launched {DefaultBatName} PID {pid}");
 					return true;
 				}
+				failureKind = "spawn_failed";
 				Debug.LogError("[Launch_Addons] Failed to launch process.");
 				return false;
 			} catch (Exception e) {
+				failureKind = "spawn_failed";
 				Debug.LogError($"[Launch_Addons] Error launching: {e.Message}");
 				return false;
 			}
@@ -111,14 +124,14 @@ namespace spz {
 #if UNITY_EDITOR
 			// Never Application.Quit / Environment.Exit the Editor — that stalls Play Mode and can corrupt the session.
 			s_restartInProgress = true;
-			bool launched = LaunchAddonsBat(showStatusIfNotFound: true);
+			bool launched = LaunchAddonsBat(showStatusIfNotFound: true, out string editorFailKind);
 			if (AddonManager_UI.instance != null) {
 				if (launched)
 					AddonManager_UI.instance.ShowRestartStatus(
 						$"Launched {DefaultBatName}. Stop Play Mode and run the player via that bat (Editor was not quit).",
 						true);
 				else
-					AddonManager_UI.instance.ShowRestartStatus($"{DefaultBatName} not found — cannot restart with addons.", false);
+					AddonManager_UI.instance.ShowRestartStatus(FormatRestartLaunchFailure(editorFailKind), false);
 			} else if (Viewport_StatusText.instance != null && launched) {
 				Viewport_StatusText.instance.ShowStatusText(
 					$"Launched {DefaultBatName}. Stop Play Mode; use the bat for the player build.", false, 6f, false);
@@ -130,11 +143,11 @@ namespace spz {
 
 			// Launch first. Shutting down the API before a failed spawn permanently arms
 			// s_addonApiQuitShutdownDone and kills enable/load for the rest of the session.
-			if (!LaunchAddonsBat(showStatusIfNotFound: true)) {
+			if (!LaunchAddonsBat(showStatusIfNotFound: true, out string failKind)) {
 				s_restartInProgress = false;
 				if (AddonManager_UI.instance != null)
 					AddonManager_UI.instance.ShowRestartStatus(
-						$"Could not launch {DefaultBatName} — addons API left running.", false);
+						FormatRestartLaunchFailure(failKind) + " — addons API left running.", false);
 				return;
 			}
 
@@ -151,6 +164,19 @@ namespace spz {
 			Application.Quit();
 			// Do not Environment.Exit here. Watchdog force-exits only if Unity shutdown stalls (~4s).
 #endif
+		}
+
+		static string FormatRestartLaunchFailure(string failureKind) {
+			switch (failureKind) {
+				case "not_found":
+					return $"{DefaultBatName} not found — cannot restart with addons";
+				case "unsupported":
+					return "Restart with addons is only supported on Windows";
+				case "spawn_failed":
+					return $"{DefaultBatName} was found but failed to start";
+				default:
+					return $"Could not launch {DefaultBatName}";
+			}
 		}
 
 		void Awake() {
