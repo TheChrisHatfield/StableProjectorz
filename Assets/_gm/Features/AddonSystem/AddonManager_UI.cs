@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using TMPro;
@@ -197,15 +198,19 @@ namespace spz {
 		/// <summary> Same value as <see cref="CreatePanelIfNeeded"/> overlay canvas. File browser must sort above this while open. </summary>
 		const int AddonManagerCanvasSortOrder = 32767;
 
-		static readonly Color RefBgModalDim = new Color(0f, 0f, 0f, 0.78f);
-		static readonly Color RefGreen = new Color(34f / 255f, 197f / 255f, 94f / 255f, 1f);
-		static readonly Color RefRedText = new Color(239f / 255f, 68f / 255f, 68f / 255f, 1f);
+		static readonly Color RefBgModalDim = new Color(0f, 0f, 0f, 0.9f);
+		Color _statusOk = new Color(34f / 255f, 197f / 255f, 94f / 255f, 1f);
+		Color _statusFail = new Color(239f / 255f, 68f / 255f, 68f / 255f, 1f);
+		Color _statusMuted = new Color(0.63f, 0.63f, 0.67f, 1f);
+		bool? _lastStatusIsSuccess;
 		
 		[SerializeField] GameObject _panel;
 		[SerializeField] Button _openPanel_button;
 		[SerializeField] Button _closePanel_button;
 		[SerializeField] Button _installFromFile_button;
 		[SerializeField] Button _refresh_button;
+		Button _loadAddonsNow_button;
+		Button _restartWithAddons_button;
 		[SerializeField] RectTransform _addonsListParent; // Where to place add-on list items (runtime panel sets this when null)
 		[SerializeField] GameObject _addonItemPrefab; // optional; otherwise rows are built like main-branch
 		[SerializeField] TextMeshProUGUI _statusText;
@@ -222,6 +227,9 @@ namespace spz {
 		private GameObject _blocker; // full-screen click blocker, shown/hidden with panel
 		Image _blockerDimImage; // dimmer on blocker root
 		CanvasGroup _panelModalGroup;
+		/// <summary>True while a row dial is applying enable/disable — skip event-driven full rebuild (destroys control mid-click).</summary>
+		bool _suppressEnabledListRefresh;
+		Coroutine _deferredListRefresh;
 		
 		void Awake() {
 			if (instance != null) { DestroyImmediate(this); return; }
@@ -229,6 +237,7 @@ namespace spz {
 			// Subscribe here so StaticEvents.Invoke works as soon as the singleton exists (before Start runs).
 			StaticEvents.SubscribeOrReplace("AddonManager:OpenPanel", OpenPanel);
 			SceneManager.sceneLoaded += OnSceneLoadedMaybeOpenPending;
+			SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
 		}
 
 		/// <summary>User may request open before the add-on tool scene finishes loading; open when that scene load completes.</summary>
@@ -296,7 +305,8 @@ namespace spz {
 	bool AddonManagerPanelSetupIsComplete() {
 		if (_panel == null || _addonsListParent == null) return false;
 		if (!_addonsListParent.transform.IsChildOf(_panel.transform)) return false;
-		return _panel.transform.Find("FilterBar") != null;
+		return _panel.transform.Find("StichAddonManager_v7") != null
+			&& _panel.transform.Find("FilterBar/FilterPills") != null;
 	}
 
 		void OnRememberEnabledAddonsToggleChanged(bool remember) {
@@ -316,8 +326,8 @@ namespace spz {
 				}
 				return;
 			}
-			Transform scroll = _panel.transform.Find("ScrollView");
-			int idx = scroll != null ? scroll.GetSiblingIndex() : _panel.transform.childCount;
+			Transform status = _panel.transform.Find("StatusText");
+			int idx = status != null ? status.GetSiblingIndex() : _panel.transform.childCount;
 			var row = BuildRememberEnabledPreferenceRow(8f);
 			row.transform.SetParent(_panel.transform, false);
 			row.transform.SetSiblingIndex(idx);
@@ -334,8 +344,8 @@ namespace spz {
 			var row = new GameObject("RememberEnabledRow");
 			row.layer = _panel != null ? _panel.gameObject.layer : 5;
 			var rowLE = row.AddComponent<LayoutElement>();
-			rowLE.preferredHeight = 40f;
-			rowLE.minHeight = 32f;
+			rowLE.preferredHeight = 30f;
+			rowLE.minHeight = 26f;
 			var rowH = row.AddComponent<HorizontalLayoutGroup>();
 			rowH.spacing = grid;
 			rowH.childAlignment = TextAnchor.MiddleLeft;
@@ -350,19 +360,19 @@ namespace spz {
 			labelLE.preferredWidth = 420f;
 			labelLE.flexibleWidth = 1f;
 			var labelT = labelObj.AddComponent<TextMeshProUGUI>();
-			labelT.text = "Save enabled add-ons: restore them the next time you start StableProjectorz.";
-			labelT.fontSize = 14;
-			labelT.color = new Color(0.9f, 0.9f, 0.9f, 1f);
+			labelT.text = "Restore enabled add-ons next time";
+			labelT.fontSize = 12;
+			labelT.color = new Color(0.65f, 0.65f, 0.68f, 1f);
 			labelT.alignment = TextAlignmentOptions.MidlineLeft;
 			labelT.raycastTarget = false;
 			var toggleContainer = new GameObject("ToggleWrap");
 			toggleContainer.transform.SetParent(row.transform, false);
 			var tLE = toggleContainer.AddComponent<LayoutElement>();
-			tLE.preferredWidth = 52f;
-			tLE.minWidth = 48f;
+			tLE.preferredWidth = 44f;
+			tLE.minWidth = 40f;
 			tLE.flexibleWidth = 0f;
-			tLE.preferredHeight = 24f;
-			tLE.minHeight = 20f;
+			tLE.preferredHeight = 20f;
+			tLE.minHeight = 18f;
 			var bg = new GameObject("Background");
 			bg.transform.SetParent(toggleContainer.transform, false);
 			var bgR = bg.AddComponent<RectTransform>();
@@ -370,6 +380,8 @@ namespace spz {
 			bgR.anchorMax = Vector2.one;
 			bgR.sizeDelta = Vector2.zero;
 			var bgI = bg.AddComponent<UnityEngine.UI.Image>();
+			bgI.sprite = UiRuntimeSprites.RoundedRectSliced;
+			bgI.type = Image.Type.Sliced;
 			bgI.color = new Color(0.3f, 0.3f, 0.3f, 1f);
 			bgI.raycastTarget = true;
 			var ck = new GameObject("Checkmark");
@@ -379,6 +391,8 @@ namespace spz {
 			ckR.anchorMax = Vector2.one;
 			ckR.sizeDelta = Vector2.zero;
 			var ckI = ck.AddComponent<UnityEngine.UI.Image>();
+			ckI.sprite = UiRuntimeSprites.RoundedRectSliced;
+			ckI.type = Image.Type.Sliced;
 			ckI.color = new Color(0.2f, 0.8f, 0.2f, 1f);
 			ckI.raycastTarget = false;
 			var tgl = toggleContainer.AddComponent<Toggle>();
@@ -442,8 +456,6 @@ namespace spz {
 		if (_panel != null && _addonsListParent == null)
 			TryResolveAddonsListParentFromPanel();
 		if (AddonManagerPanelSetupIsComplete()) {
-			TryAddRememberPreferenceRowIfMissing();
-			SyncRememberEnabledToggleFromPrefs();
 			return;
 		}
 		if (_panel != null)
@@ -485,23 +497,29 @@ namespace spz {
 		blockerCanvasGroup.interactable = true;
 		// So MainViewport_UI_EventListener stops treating the 3D view as "hovered" (wheel zoom / UV zoom stay off while this UI is up).
 		blockerObj.AddComponent<MainViewport_RaycastBlocker>();
+		// Dimmer-only close: a Button on the parent would also fire for clicks on panel children (ExecuteHierarchy bubbles).
+		var dimmerClose = blockerObj.AddComponent<AddonManagerDimmerClose>();
+		dimmerClose.Bind(ClosePanel);
 		blockerObj.SetActive(false);
 		_blockerDimImage = blockerImage;
 		
-		// Panel as child of blocker — main-branch template (centered stretch region, simple controls).
+		// Centered 16:9 shell based on the Stich add-on-manager reference.
 		GameObject panelObj = new GameObject("AddonManager_Panel");
 		panelObj.layer = UILayer;
 		panelObj.transform.SetParent(blockerObj.transform, false);
 		_panel = panelObj;
 		
 		var rectTransform = panelObj.AddComponent<RectTransform>();
-		rectTransform.anchorMin = new Vector2(0.2f, 0.2f);
-		rectTransform.anchorMax = new Vector2(0.8f, 0.8f);
-		rectTransform.sizeDelta = Vector2.zero;
+		rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+		rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+		rectTransform.pivot = new Vector2(0.5f, 0.5f);
+		rectTransform.sizeDelta = new Vector2(1200f, 675f);
 		rectTransform.anchoredPosition = Vector2.zero;
 		
 		var image = panelObj.AddComponent<UnityEngine.UI.Image>();
-		image.color = new Color(0.1f, 0.1f, 0.1f, 0.95f);
+		image.sprite = UiRuntimeSprites.RoundedRectSliced;
+		image.type = Image.Type.Sliced;
+		image.color = new Color(21f / 255f, 21f / 255f, 21f / 255f, 0.985f);
 		image.raycastTarget = true;
 		
 		var canvasGroup = panelObj.AddComponent<CanvasGroup>();
@@ -511,91 +529,64 @@ namespace spz {
 		_panelModalGroup = canvasGroup;
 		
 		const float Grid = 8f;
-		const float PanelPadding = Grid * 3;
-		const float SectionSpacing = Grid * 2;
-		const float RowSpacing = Grid;
+		const float PanelPadding = Grid * 4;
+		const float SectionSpacing = Grid;
+		const float RowSpacing = Grid * 2;
 		
 		var verticalLayout = panelObj.AddComponent<UnityEngine.UI.VerticalLayoutGroup>();
 		verticalLayout.spacing = SectionSpacing;
 		verticalLayout.padding = new RectOffset((int)PanelPadding, (int)PanelPadding, (int)PanelPadding, (int)PanelPadding);
-		verticalLayout.childControlHeight = false;
+		verticalLayout.childControlHeight = true;
 		verticalLayout.childControlWidth = true;
 		verticalLayout.childForceExpandHeight = false;
 		verticalLayout.childForceExpandWidth = true;
+
+		var versionMarker = new GameObject("StichAddonManager_v7");
+		versionMarker.transform.SetParent(panelObj.transform, false);
+		var markerLE = versionMarker.AddComponent<LayoutElement>();
+		markerLE.ignoreLayout = true;
 		
 		GameObject headerObj = new GameObject("Header");
 		headerObj.transform.SetParent(panelObj.transform, false);
 		var headerLayoutElement = headerObj.AddComponent<LayoutElement>();
-		headerLayoutElement.preferredHeight = 48f;
-		headerLayoutElement.minHeight = 40f;
+		headerLayoutElement.preferredHeight = 52f;
+		headerLayoutElement.minHeight = 48f;
 		var headerLayout = headerObj.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
 		headerLayout.childControlWidth = true;
 		headerLayout.childControlHeight = true;
 		headerLayout.childForceExpandWidth = false;
 		headerLayout.childForceExpandHeight = true;
-		headerLayout.spacing = Grid * 2;
+		headerLayout.childAlignment = TextAnchor.MiddleCenter;
+		headerLayout.spacing = 10f;
 		headerLayout.padding = new RectOffset(0, 0, 0, 0);
 		
 		GameObject titleObj = new GameObject("Title");
 		titleObj.transform.SetParent(headerObj.transform, false);
 		var titleLE = titleObj.AddComponent<LayoutElement>();
-		titleLE.minWidth = 180f;
+		titleLE.minWidth = 230f;
 		titleLE.flexibleWidth = 1f;
 		var titleText = titleObj.AddComponent<TextMeshProUGUI>();
 		titleText.text = "Add-on Manager";
-		titleText.fontSize = 22;
+		titleText.fontSize = 24;
 		titleText.color = Color.white;
 		titleText.fontStyle = FontStyles.Bold;
-		titleText.alignment = TextAlignmentOptions.Left;
+		titleText.alignment = TextAlignmentOptions.MidlineLeft;
 		titleText.enableWordWrapping = false;
 		titleText.overflowMode = TMPro.TextOverflowModes.Overflow;
 		titleText.raycastTarget = false;
-		
-		GameObject closeBtnObj = new GameObject("CloseButton");
-		closeBtnObj.transform.SetParent(headerObj.transform, false);
-		var closeBtnLE = closeBtnObj.AddComponent<LayoutElement>();
-		closeBtnLE.preferredWidth = 88f;
-		closeBtnLE.minWidth = 72f;
-		closeBtnLE.flexibleWidth = 0f;
-		closeBtnLE.preferredHeight = 32f;
-		var closeBtnImage = closeBtnObj.AddComponent<UnityEngine.UI.Image>();
-		closeBtnImage.color = new Color(0.3f, 0.3f, 0.3f, 1f);
-		closeBtnImage.raycastTarget = true;
-		var closeBtn = closeBtnObj.AddComponent<UnityEngine.UI.Button>();
-		closeBtn.targetGraphic = closeBtnImage;
-		closeBtn.onClick.AddListener(ClosePanel);
-		var closeBtnTextObj = new GameObject("Text");
-		closeBtnTextObj.transform.SetParent(closeBtnObj.transform, false);
-		var closeBtnTextRect = closeBtnTextObj.AddComponent<RectTransform>();
-		closeBtnTextRect.anchorMin = Vector2.zero;
-		closeBtnTextRect.anchorMax = Vector2.one;
-		closeBtnTextRect.sizeDelta = Vector2.zero;
-		var closeBtnText = closeBtnTextObj.AddComponent<TextMeshProUGUI>();
-		closeBtnText.text = "Close";
-		closeBtnText.fontSize = 14;
-		closeBtnText.alignment = TextAlignmentOptions.Center;
-		closeBtnText.color = new Color(0.11f, 0.11f, 0.11f, 1f);
-		closeBtnText.raycastTarget = false;
-		_closePanel_button = closeBtn;
-		
-		GameObject buttonBarObj = new GameObject("ButtonBar");
-		buttonBarObj.transform.SetParent(panelObj.transform, false);
-		var buttonBarLE = buttonBarObj.AddComponent<LayoutElement>();
-		buttonBarLE.preferredHeight = 40f;
-		buttonBarLE.minHeight = 36f;
-		var buttonBarLayout = buttonBarObj.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
-		buttonBarLayout.spacing = Grid * 2;
-		buttonBarLayout.childControlWidth = false;
-		buttonBarLayout.childControlHeight = true;
-		buttonBarLayout.childForceExpandWidth = false;
-		buttonBarLayout.childForceExpandHeight = true;
-		buttonBarLayout.padding = new RectOffset(0, 0, 0, 0);
 		
 		void AddBarButton(Transform parent, string goName, string label, Color bg, Color fg, UnityEngine.Events.UnityAction onClick, Vector2 size, out Button outBtn) {
 			var go = new GameObject(goName);
 			go.transform.SetParent(parent, false);
 			go.AddComponent<RectTransform>().sizeDelta = size;
+			var le = go.AddComponent<LayoutElement>();
+			le.preferredWidth = size.x;
+			le.minWidth = size.x;
+			le.flexibleWidth = 0f;
+			le.preferredHeight = size.y;
 			var img = go.AddComponent<UnityEngine.UI.Image>();
+			img.sprite = UiRuntimeSprites.RoundedRectSliced;
+			img.type = Image.Type.Sliced;
 			img.color = bg;
 			img.raycastTarget = true;
 			var btn = go.AddComponent<UnityEngine.UI.Button>();
@@ -606,57 +597,96 @@ namespace spz {
 			var tr = to.AddComponent<RectTransform>();
 			tr.anchorMin = Vector2.zero;
 			tr.anchorMax = Vector2.one;
-			tr.sizeDelta = Vector2.zero;
+			tr.offsetMin = new Vector2(25f, 0f);
+			tr.offsetMax = new Vector2(-5f, 0f);
 			var tx = to.AddComponent<TextMeshProUGUI>();
 			tx.text = label;
-			tx.fontSize = label.Length > 14 ? 13 : 14;
+			tx.fontSize = 12;
+			tx.fontStyle = FontStyles.Normal;
 			tx.alignment = TextAlignmentOptions.Center;
 			tx.color = fg;
 			tx.raycastTarget = false;
+			var iconGo = new GameObject("LineIcon");
+			iconGo.transform.SetParent(go.transform, false);
+			var iconRt = iconGo.AddComponent<RectTransform>();
+			iconRt.anchorMin = new Vector2(0f, 0.5f);
+			iconRt.anchorMax = new Vector2(0f, 0.5f);
+			iconRt.pivot = new Vector2(0f, 0.5f);
+			iconRt.anchoredPosition = new Vector2(8f, 0f);
+			iconRt.sizeDelta = new Vector2(14f, 14f);
+			var iconImg = iconGo.AddComponent<Image>();
+			iconImg.sprite = UiRuntimeSprites.GetLineIcon(ResolveHeaderIcon(goName));
+			iconImg.color = fg;
+			iconImg.preserveAspect = true;
+			iconImg.raycastTarget = false;
 			outBtn = btn;
 		}
 		
-		AddBarButton(buttonBarObj.transform, "InstallButton", "Install from File", new Color(0.3f, 0.3f, 0.3f, 1f),
-			new Color(0.11f, 0.11f, 0.11f, 1f), OnInstallFromFile, new Vector2(150, 30), out var installBtn);
+		AddBarButton(headerObj.transform, "InstallButton", "Install from File", new Color(61f / 255f, 61f / 255f, 61f / 255f, 1f),
+			Color.white, OnInstallFromFile, new Vector2(122, 34), out var installBtn);
 		_installFromFile_button = installBtn;
-		AddBarButton(buttonBarObj.transform, "RefreshButton", "Refresh", new Color(0.3f, 0.3f, 0.3f, 1f),
-			new Color(0.11f, 0.11f, 0.11f, 1f), RefreshAddonsList, new Vector2(100, 30), out var refreshBtn);
+		AddBarButton(headerObj.transform, "RefreshButton", "Refresh", new Color(61f / 255f, 61f / 255f, 61f / 255f, 1f),
+			Color.white, RefreshAddonsList, new Vector2(82, 34), out var refreshBtn);
 		_refresh_button = refreshBtn;
-		AddBarButton(buttonBarObj.transform, "LoadAddonsNowButton", "Load addons now", new Color(0.25f, 0.45f, 0.25f, 1f),
-			new Color(0.95f, 0.95f, 0.95f, 1f), OnLoadAddonsNow, new Vector2(130, 30), out _);
-		AddBarButton(buttonBarObj.transform, "RunWithAddonsButton", "Restart with addons", new Color(0.2f, 0.5f, 0.6f, 1f),
-			new Color(0.95f, 0.95f, 0.95f, 1f), OnRestartWithAddons, new Vector2(150, 30), out _);
+		AddBarButton(headerObj.transform, "LoadAddonsNowButton", "Load addons now", new Color(46f / 255f, 204f / 255f, 113f / 255f, 1f),
+			Color.white, OnLoadAddonsNow, new Vector2(126, 34), out _loadAddonsNow_button);
+		AddBarButton(headerObj.transform, "RunWithAddonsButton", "Restart with addons", new Color(52f / 255f, 152f / 255f, 219f / 255f, 1f),
+			Color.white, OnRestartWithAddons, new Vector2(142, 34), out _restartWithAddons_button);
+		_closePanel_button = null;
 		
 		GameObject filterBarObj = new GameObject("FilterBar");
 		filterBarObj.transform.SetParent(panelObj.transform, false);
 		var filterBarLE = filterBarObj.AddComponent<LayoutElement>();
-		filterBarLE.preferredHeight = 36f;
-		filterBarLE.minHeight = 32f;
-		var filterBarLayout = filterBarObj.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
-		filterBarLayout.spacing = Grid * 2;
+		filterBarLE.preferredHeight = 66f;
+		filterBarLE.minHeight = 66f;
+		var filterBarLayout = filterBarObj.AddComponent<UnityEngine.UI.VerticalLayoutGroup>();
+		filterBarLayout.spacing = 4f;
 		filterBarLayout.childControlWidth = false;
 		filterBarLayout.childControlHeight = true;
+		filterBarLayout.childForceExpandWidth = false;
+		filterBarLayout.childForceExpandHeight = false;
+		filterBarLayout.childAlignment = TextAnchor.UpperLeft;
 		filterBarLayout.padding = new RectOffset(0, 0, 0, 0);
 		
 		var filterLabelObj = new GameObject("FilterLabel");
 		filterLabelObj.transform.SetParent(filterBarObj.transform, false);
 		var filterLabelLE = filterLabelObj.AddComponent<LayoutElement>();
-		filterLabelLE.preferredWidth = 48f;
-		filterLabelLE.minWidth = 40f;
+		filterLabelLE.preferredWidth = 200f;
+		filterLabelLE.preferredHeight = 20f;
+		filterLabelLE.minHeight = 20f;
 		var filterLabelText = filterLabelObj.AddComponent<TextMeshProUGUI>();
-		filterLabelText.text = "Filter:";
+		filterLabelText.text = "Filter";
 		filterLabelText.fontSize = 14;
-		filterLabelText.color = Color.white;
-		filterLabelText.alignment = TextAlignmentOptions.Left;
+		filterLabelText.color = new Color(0.85f, 0.85f, 0.88f, 1f);
+		filterLabelText.alignment = TextAlignmentOptions.MidlineLeft;
 		filterLabelText.raycastTarget = false;
 		
-		var toggleGroup = filterBarObj.AddComponent<ToggleGroup>();
+		var filterPillsObj = new GameObject("FilterPills");
+		filterPillsObj.transform.SetParent(filterBarObj.transform, false);
+		var pillsRect = filterPillsObj.AddComponent<RectTransform>();
+		pillsRect.sizeDelta = new Vector2(230f, 34f);
+		var pillsLE = filterPillsObj.AddComponent<LayoutElement>();
+		pillsLE.preferredWidth = 230f;
+		pillsLE.preferredHeight = 34f;
+		pillsLE.minHeight = 34f;
+		var pillsBg = filterPillsObj.AddComponent<Image>();
+		pillsBg.sprite = UiRuntimeSprites.RoundedRectSliced;
+		pillsBg.type = Image.Type.Sliced;
+		pillsBg.color = new Color(39f / 255f, 39f / 255f, 42f / 255f, 0.55f);
+		pillsBg.raycastTarget = false;
+		var pillsLayout = filterPillsObj.AddComponent<HorizontalLayoutGroup>();
+		pillsLayout.spacing = 0f;
+		pillsLayout.padding = new RectOffset(3, 3, 3, 3);
+		pillsLayout.childControlWidth = false;
+		pillsLayout.childControlHeight = true;
+		pillsLayout.childForceExpandWidth = false;
+		pillsLayout.childForceExpandHeight = true;
+		var toggleGroup = filterPillsObj.AddComponent<ToggleGroup>();
 		toggleGroup.allowSwitchOff = false;
-		_filterAllToggle = CreateFilterToggle("All", filterBarObj.transform, toggleGroup, 0).GetComponent<Toggle>();
-		_filterEnabledToggle = CreateFilterToggle("Enabled", filterBarObj.transform, toggleGroup, 1).GetComponent<Toggle>();
-		_filterDisabledToggle = CreateFilterToggle("Disabled", filterBarObj.transform, toggleGroup, 2).GetComponent<Toggle>();
+		_filterAllToggle = CreateFilterToggle("All", filterPillsObj.transform, toggleGroup, 0).GetComponent<Toggle>();
+		_filterEnabledToggle = CreateFilterToggle("Enabled", filterPillsObj.transform, toggleGroup, 1).GetComponent<Toggle>();
+		_filterDisabledToggle = CreateFilterToggle("Disabled", filterPillsObj.transform, toggleGroup, 2).GetComponent<Toggle>();
 		
-		const float scrollAreaHeight = 280f;
 		GameObject scrollViewObj = new GameObject("ScrollView");
 		scrollViewObj.layer = UILayer;
 		scrollViewObj.transform.SetParent(panelObj.transform, false);
@@ -666,10 +696,11 @@ namespace spz {
 		scrollViewRect.sizeDelta = Vector2.zero;
 		scrollViewRect.pivot = new Vector2(0.5f, 0.5f);
 		var layoutElementScroll = scrollViewObj.AddComponent<UnityEngine.UI.LayoutElement>();
-		layoutElementScroll.preferredHeight = scrollAreaHeight;
-		layoutElementScroll.minHeight = scrollAreaHeight;
+		layoutElementScroll.preferredHeight = 360f;
+		layoutElementScroll.minHeight = 180f;
+		layoutElementScroll.flexibleHeight = 1f;
 		var scrollViewImage = scrollViewObj.AddComponent<UnityEngine.UI.Image>();
-		scrollViewImage.color = new Color(0.2f, 0.2f, 0.2f, 1f);
+		scrollViewImage.color = new Color(0f, 0f, 0f, 0.01f);
 		scrollViewImage.raycastTarget = true;
 		var scrollViewMask = scrollViewObj.AddComponent<UnityEngine.UI.Mask>();
 		scrollViewMask.showMaskGraphic = false;
@@ -694,7 +725,7 @@ namespace spz {
 		contentRect.anchoredPosition = Vector2.zero;
 		var contentLayout = contentObj.AddComponent<UnityEngine.UI.VerticalLayoutGroup>();
 		contentLayout.spacing = RowSpacing;
-		contentLayout.padding = new RectOffset((int)Grid, (int)Grid, (int)Grid, (int)Grid);
+		contentLayout.padding = new RectOffset(0, 0, (int)Grid, (int)Grid);
 		contentLayout.childControlHeight = false;
 		contentLayout.childControlWidth = true;
 		contentLayout.childForceExpandHeight = false;
@@ -705,46 +736,48 @@ namespace spz {
 		scrollView.content = contentRect;
 		_addonsListParent = contentRect;
 		
-		_filterAllToggle.isOn = true;
+		_filterAllToggle.SetIsOnWithoutNotify(true);
 		
-		GameObject statusObj = new GameObject("StatusText");
-		statusObj.transform.SetParent(panelObj.transform, false);
-		var statusLE = statusObj.AddComponent<LayoutElement>();
-		statusLE.preferredHeight = 32f;
-		statusLE.minHeight = 28f;
-		var statusLayout = statusObj.AddComponent<HorizontalLayoutGroup>();
-		statusLayout.padding = new RectOffset((int)Grid, 0, (int)Grid, 0);
-		statusLayout.childControlWidth = true;
-		statusLayout.childControlHeight = true;
-		statusLayout.childForceExpandWidth = true;
-		statusLayout.childForceExpandHeight = true;
-		GameObject statusTextObj = new GameObject("Text");
-		statusTextObj.transform.SetParent(statusObj.transform, false);
-		var statusTextRect = statusTextObj.AddComponent<RectTransform>();
-		statusTextRect.anchorMin = Vector2.zero;
-		statusTextRect.anchorMax = Vector2.one;
-		statusTextRect.sizeDelta = Vector2.zero;
-		var statusText = statusTextObj.AddComponent<TextMeshProUGUI>();
-		statusText.text = "Ready";
-		statusText.fontSize = 13;
-		statusText.color = new Color(0.4f, 1f, 0.45f);
-		statusText.alignment = TextAlignmentOptions.Left;
-		statusText.raycastTarget = false;
-		_statusText = statusText;
-		
-		TryAddRememberPreferenceRowIfMissing();
-		SyncRememberEnabledToggleFromPrefs();
+		_statusText = null;
 		
 		SetLayerRecursively(_panel.transform, UILayer);
+		FitStichPanelToViewport();
 		_panel.SetActive(false);
 		_blocker = blockerObj;
 		Debug.Log("[AddonManager_UI] Panel creation completed, set inactive initially");
+	}
+
+	static StudioLineIcon ResolveHeaderIcon(string controlName) {
+		if (string.Equals(controlName, "InstallButton", StringComparison.Ordinal))
+			return StudioLineIcon.Folder;
+		if (string.Equals(controlName, "RefreshButton", StringComparison.Ordinal))
+			return StudioLineIcon.Refresh;
+		if (string.Equals(controlName, "LoadAddonsNowButton", StringComparison.Ordinal))
+			return StudioLineIcon.Play;
+		return StudioLineIcon.Restart;
 	}
 	
 	static void SetLayerRecursively(Transform t, int layer) {
 		t.gameObject.layer = layer;
 		for (int i = 0; i < t.childCount; i++)
 			SetLayerRecursively(t.GetChild(i), layer);
+	}
+
+	void FitStichPanelToViewport() {
+		if (_panel == null) return;
+		var panelRect = _panel.GetComponent<RectTransform>();
+		var blockerRect = _blocker != null ? _blocker.GetComponent<RectTransform>() : null;
+		if (panelRect == null) return;
+		Vector2 outer = blockerRect != null && blockerRect.rect.width > 1f
+			? blockerRect.rect.size
+			: new Vector2(1920f, 1080f);
+		const float baseWidth = 1200f;
+		const float baseHeight = 675f;
+		const float margin = 32f;
+		float scale = Mathf.Min(1f,
+			Mathf.Max(0.1f, (outer.x - margin * 2f) / baseWidth),
+			Mathf.Max(0.1f, (outer.y - margin * 2f) / baseHeight));
+		panelRect.sizeDelta = new Vector2(baseWidth * scale, baseHeight * scale);
 	}
 
 		/// <summary>
@@ -759,6 +792,8 @@ namespace spz {
 			_closePanel_button = null;
 			_installFromFile_button = null;
 			_refresh_button = null;
+			_loadAddonsNow_button = null;
+			_restartWithAddons_button = null;
 			_statusText = null;
 			_filterAllToggle = null;
 			_filterEnabledToggle = null;
@@ -808,6 +843,14 @@ namespace spz {
 				_blockerDimImage = blockerGo.GetComponent<Image>();
 			if (blockerGo.GetComponent<MainViewport_RaycastBlocker>() == null)
 				blockerGo.AddComponent<MainViewport_RaycastBlocker>();
+			// Migrate older shells that used a parent Button (auto-closed on any in-panel click via hierarchy bubble).
+			var legacyCloseBtn = blockerGo.GetComponent<Button>();
+			if (legacyCloseBtn != null)
+				Destroy(legacyCloseBtn);
+			var dimmerClose = blockerGo.GetComponent<AddonManagerDimmerClose>();
+			if (dimmerClose == null)
+				dimmerClose = blockerGo.AddComponent<AddonManagerDimmerClose>();
+			dimmerClose.Bind(ClosePanel);
 		}
 
 		/// <summary>Resolves <c>AddonManager_Canvas</c> from the panel hierarchy or this scene's roots (parent lookup can fail on partial hierarchies).</summary>
@@ -895,20 +938,12 @@ namespace spz {
 			}
 			
 			try {
-				const float scrollAreaHeight = 280f;
 				Canvas.ForceUpdateCanvases();
+				FitStichPanelToViewport();
 				var panelRect = _panel.GetComponent<RectTransform>();
 				if (panelRect != null) {
 					LayoutRebuilder.ForceRebuildLayoutImmediate(panelRect);
 					Canvas.ForceUpdateCanvases();
-					var scrollViewTr = _panel.transform.Find("ScrollView");
-					if (scrollViewTr != null) {
-						var svr = scrollViewTr.GetComponent<RectTransform>();
-						if (svr != null) {
-							LayoutRebuilder.ForceRebuildLayoutImmediate(svr);
-							svr.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, scrollAreaHeight);
-						}
-					}
 				}
 			} catch (System.Exception e) {
 				Debug.LogWarning($"[AddonManager_UI] Layout pass threw (non-fatal): {e.Message}");
@@ -954,7 +989,17 @@ namespace spz {
 		/// Launches Run_with_Addons.bat (same way Run_noQuickEdit runs for WebUI) then quits so the bat starts the game with Python on PATH.
 		/// </summary>
 		void OnRestartWithAddons() {
+			if (_restartWithAddons_button != null)
+				_restartWithAddons_button.interactable = false;
+			ShowStatus("Restarting with addons…", true);
 			Launch_Addons_Bat_File.RestartWithAddons();
+		}
+
+		/// <summary>Status line helper for restart path (Editor messaging / in-progress feedback).</summary>
+		public void ShowRestartStatus(string message, bool isSuccess) {
+			ShowStatus(message, isSuccess);
+			if (_restartWithAddons_button != null && Application.isEditor)
+				_restartWithAddons_button.interactable = true;
 		}
 
 		/// <summary>
@@ -1019,9 +1064,16 @@ namespace spz {
 		GameObject CreateFilterToggle(string label, Transform parent, ToggleGroup toggleGroup, int filterValue) {
 			var toggleObj = new GameObject($"Filter_{label}");
 			toggleObj.transform.SetParent(parent, false);
-			toggleObj.AddComponent<RectTransform>().sizeDelta = new Vector2(80, 25);
+			float width = label == "All" ? 58f : 82f;
+			toggleObj.AddComponent<RectTransform>().sizeDelta = new Vector2(width, 28f);
+			var le = toggleObj.AddComponent<LayoutElement>();
+			le.preferredWidth = width;
+			le.minWidth = width;
+			le.preferredHeight = 28f;
 			var toggleBg = toggleObj.AddComponent<UnityEngine.UI.Image>();
-			toggleBg.color = new Color(0.25f, 0.25f, 0.25f, 1f);
+			toggleBg.sprite = UiRuntimeSprites.RoundedRectSliced;
+			toggleBg.type = Image.Type.Sliced;
+			toggleBg.color = new Color(0f, 0f, 0f, 0f);
 			toggleBg.raycastTarget = true;
 			var toggle = toggleObj.AddComponent<Toggle>();
 			toggle.group = toggleGroup;
@@ -1034,20 +1086,19 @@ namespace spz {
 			labelRect.sizeDelta = Vector2.zero;
 			var labelText = labelObj.AddComponent<TextMeshProUGUI>();
 			labelText.text = label;
-			labelText.fontSize = 12;
-			labelText.color = Color.white;
+			labelText.fontSize = 14;
+			labelText.fontStyle = FontStyles.Normal;
+			labelText.color = new Color(0.63f, 0.63f, 0.67f, 1f);
 			labelText.alignment = TextAlignmentOptions.Center;
 			labelText.raycastTarget = false;
 			toggle.onValueChanged.AddListener((isOn) => {
-				labelText.color = isOn ? new Color(0.4f, 1f, 0.4f) : Color.white;
-				toggleBg.color = isOn ? new Color(0.35f, 0.35f, 0.35f, 1f) : new Color(0.25f, 0.25f, 0.25f, 1f);
 				if (isOn) {
 					_filterState = filterValue;
-					RefreshAddonsList();
+					if (Addon_MGR.instance != null && _addonsListParent != null)
+						RefreshAddonsList();
 				}
+				ApplyThemeTokens();
 			});
-			labelText.color = toggle.isOn ? new Color(0.4f, 1f, 0.4f) : Color.white;
-			toggleBg.color = toggle.isOn ? new Color(0.35f, 0.35f, 0.35f, 1f) : new Color(0.25f, 0.25f, 0.25f, 1f);
 			return toggleObj;
 		}
 		
@@ -1108,10 +1159,223 @@ namespace spz {
 				else
 					ShowStatus($"Showing {filteredAddons.Count} of {addons.Count} add-on(s) ({enabledCount} enabled, {disabledCount} disabled) — Filter: {filterText}", true);
 			}
+			ApplyThemeTokens();
+		}
+
+		/// <summary>
+		/// Maps REF palette roles to semantic theme tokens on known manager widgets only.
+		/// Re-run after list rebuilds; does not touch animation or layout.
+		/// </summary>
+		void ApplyThemeTokens() {
+			var t = SpzUiThemeOps.Active;
+			_statusOk = t.success;
+			_statusFail = t.danger;
+			_statusMuted = t.textMuted;
+			if (_panel != null) {
+				var panelImg = _panel.GetComponent<Image>();
+				if (panelImg != null) {
+					// Keep the manager shell opaque so viewport help text does not bleed through.
+					Color shell = t.panelBg;
+					shell.a = Mathf.Max(shell.a, 0.96f);
+					SpzUiThemeOps.ApplyGraphicColor(panelImg, shell);
+				}
+				var title = _panel.transform.Find("Header/Title")?.GetComponent<TextMeshProUGUI>();
+				if (title != null)
+					SpzUiThemeOps.ApplyTmpColor(title, t.textPrimary);
+				var filterLabel = _panel.transform.Find("FilterBar/FilterLabel")?.GetComponent<TextMeshProUGUI>();
+				if (filterLabel != null)
+					SpzUiThemeOps.ApplyTmpColor(filterLabel, t.textPrimary);
+				var pills = _panel.transform.Find("FilterBar/FilterPills")?.GetComponent<Image>();
+				if (pills != null)
+					SpzUiThemeOps.ApplyGraphicColor(pills, new Color(t.controlBg.r, t.controlBg.g, t.controlBg.b, 0.55f));
+				var rememberLabel = _panel.transform.Find("RememberEnabledRow/Label")?.GetComponent<TextMeshProUGUI>();
+				if (rememberLabel != null)
+					SpzUiThemeOps.ApplyTmpColor(rememberLabel, t.textMuted);
+			}
+			if (_closePanel_button != null)
+				SpzUiThemeOps.ApplySelectableToken(_closePanel_button, t.controlBg, t.accent);
+			if (_installFromFile_button != null)
+				ThemeHeaderButton(_installFromFile_button, t.controlBg, t.accent, t.textPrimary);
+			if (_refresh_button != null)
+				ThemeHeaderButton(_refresh_button, t.controlBg, t.accent, t.textPrimary);
+			bool nomad = string.Equals(SpzUiThemeOps.ActiveThemeId, "nomad-inspired", System.StringComparison.Ordinal);
+			if (_loadAddonsNow_button != null)
+				ThemeHeaderButton(_loadAddonsNow_button,
+					nomad ? t.controlBg : t.success,
+					t.accent,
+					t.textPrimary);
+			if (_restartWithAddons_button != null) {
+				// Nomad primary action: metallic gold fill + dark on-primary text. Default SPZ keeps light label on accent.
+				Color restartFg = nomad
+					? new Color(0.235f, 0.184f, 0f, 1f)
+					: t.textPrimary;
+				ThemeHeaderButton(_restartWithAddons_button, t.accent, t.selection, restartFg);
+			}
+			if (_addonsListParent != null) {
+				var listImg = _addonsListParent.GetComponent<Image>();
+				if (listImg != null)
+					SpzUiThemeOps.ApplyGraphicColor(listImg, t.fieldBg);
+			}
+			foreach (var item in _addonUIItems.Values) {
+				if (item == null) continue;
+				ThemeAddonListItem(item, t);
+			}
+			if (_statusText != null && !string.IsNullOrEmpty(_statusText.text))
+				_statusText.color = _lastStatusIsSuccess.HasValue
+					? (_lastStatusIsSuccess.Value ? _statusOk : _statusFail)
+					: t.textMuted;
+			if (_filterAllToggle != null || _filterEnabledToggle != null || _filterDisabledToggle != null) {
+				ThemeFilterToggle(_filterAllToggle, t);
+				ThemeFilterToggle(_filterEnabledToggle, t);
+				ThemeFilterToggle(_filterDisabledToggle, t);
+			}
+			if (_rememberEnabledAddonToggle != null) {
+				SpzUiThemeOps.ApplySelectableToken(_rememberEnabledAddonToggle, t.controlBg, t.accent);
+				if (_rememberEnabledAddonToggle.graphic != null)
+					SpzUiThemeOps.ApplyGraphicColor(_rememberEnabledAddonToggle.graphic, t.success);
+			}
+		}
+
+		static void ThemeHeaderButton(Button button, Color normal, Color highlighted, Color foreground) {
+			if (button == null) return;
+			SpzUiThemeOps.ApplySelectableToken(button, normal, highlighted);
+			var label = button.transform.Find("Text")?.GetComponent<TextMeshProUGUI>();
+			if (label != null)
+				SpzUiThemeOps.ApplyTmpColor(label, foreground);
+			var icon = button.transform.Find("LineIcon")?.GetComponent<Image>();
+			if (icon != null)
+				SpzUiThemeOps.ApplyGraphicColor(icon, foreground);
+		}
+
+		static void ThemeFilterToggle(Toggle toggle, SpzUiThemeOps.ThemeTokens t) {
+			if (toggle == null) return;
+			Color normal = toggle.isOn
+				? t.textPrimary
+				: new Color(t.controlBg.r, t.controlBg.g, t.controlBg.b, 0f);
+			SpzUiThemeOps.ApplySelectableToken(toggle, normal, toggle.isOn ? t.textPrimary : t.tabActive);
+			var label = toggle.GetComponentInChildren<TextMeshProUGUI>(true);
+			if (label != null)
+				SpzUiThemeOps.ApplyTmpColor(label, toggle.isOn ? t.panelBg : t.textMuted);
+		}
+
+		static void ThemeAddonListItem(GameObject item, SpzUiThemeOps.ThemeTokens t) {
+			Transform remove = item.transform.Find("RemoveBtn");
+			if (remove == null) remove = item.transform.Find("RemoveButton");
+			if (remove != null) {
+				var removeBtn = remove.GetComponent<Button>();
+				if (removeBtn != null) {
+					Color dangerBg = Color.Lerp(t.panelBg, t.danger, 0.18f);
+					SpzUiThemeOps.ApplySelectableToken(removeBtn, dangerBg, Color.Lerp(dangerBg, t.danger, 0.28f));
+				}
+				var removeLabel = remove.GetComponentInChildren<TextMeshProUGUI>(true);
+				if (removeLabel != null)
+					SpzUiThemeOps.ApplyTmpColor(removeLabel, new Color(t.danger.r, t.danger.g, t.danger.b, 0.88f));
+			}
+			var toggle = item.transform.Find("StatusToggle")?.GetComponent<Toggle>();
+			if (toggle == null)
+				toggle = item.GetComponentInChildren<Toggle>(true);
+			bool enabled = toggle != null && toggle.isOn;
+			var name = item.transform.Find("Name")?.GetComponent<TextMeshProUGUI>();
+			if (name != null)
+				SpzUiThemeOps.ApplyTmpColor(name, t.textPrimary);
+			if (toggle != null) {
+				Color ringColor = enabled ? t.success : t.textMuted;
+				var ringImg = toggle.transform.Find("Ring")?.GetComponent<Image>();
+				if (ringImg != null) {
+					ringImg.color = ringColor;
+					ringImg.preserveAspect = true;
+				}
+				if (toggle.graphic != null) {
+					SpzUiThemeOps.ApplyGraphicColor(toggle.graphic, t.success);
+					if (toggle.graphic is Image fillImg)
+						fillImg.preserveAspect = true;
+					toggle.graphic.gameObject.SetActive(true);
+					toggle.graphic.canvasRenderer.SetAlpha(enabled ? 1f : 0f);
+				}
+			}
 		}
 
 		void OnAddonEnabledStateChanged(string addonId) {
+			if (_suppressEnabledListRefresh) {
+				SyncAddonRowVisual(addonId);
+				RefreshStatusCountsOnly();
+				return;
+			}
+			// Defer so EventSystem finishes with the clicked dial before we destroy list rows.
+			ScheduleRefreshAddonsList();
+		}
+
+		void ScheduleRefreshAddonsList() {
+			if (!isActiveAndEnabled || !gameObject.activeInHierarchy) {
+				RefreshAddonsList();
+				return;
+			}
+			if (_deferredListRefresh != null)
+				StopCoroutine(_deferredListRefresh);
+			_deferredListRefresh = StartCoroutine(CoRefreshAddonsListDeferred());
+		}
+
+		IEnumerator CoRefreshAddonsListDeferred() {
+			yield return null;
+			_deferredListRefresh = null;
 			RefreshAddonsList();
+		}
+
+		void RefreshStatusCountsOnly() {
+			if (Addon_MGR.instance == null) return;
+			var addons = Addon_MGR.instance.GetAddons();
+			int enabledCount = 0;
+			int disabledCount = 0;
+			int shown = 0;
+			foreach (var kvp in addons) {
+				if (kvp.Value.isEnabled) enabledCount++;
+				else disabledCount++;
+				bool shouldShow = _filterState == 0
+					|| (_filterState == 1 && kvp.Value.isEnabled)
+					|| (_filterState == 2 && !kvp.Value.isEnabled);
+				if (shouldShow) shown++;
+			}
+			string filterText = _filterState == 0 ? "All" : (_filterState == 1 ? "Enabled" : "Disabled");
+			if (addons.Count == 0)
+				ShowStatus("No add-ons installed. Add-ons should be in StreamingAssets/Addons/", false);
+			else if (shown == 0)
+				ShowStatus("No add-ons match the current filter.", false);
+			else
+				ShowStatus($"Showing {shown} of {addons.Count} add-on(s) ({enabledCount} enabled, {disabledCount} disabled) — Filter: {filterText}", true);
+		}
+
+		void SyncAddonRowVisual(string addonId) {
+			if (string.IsNullOrEmpty(addonId) || !_addonUIItems.TryGetValue(addonId, out var item) || item == null)
+				return;
+			if (Addon_MGR.instance == null || !Addon_MGR.instance.GetAddons().TryGetValue(addonId, out var info))
+				return;
+			var toggle = item.transform.Find("StatusToggle")?.GetComponent<Toggle>();
+			if (toggle == null) return;
+			toggle.SetIsOnWithoutNotify(info.isEnabled);
+			ApplyStatusDialVisual(toggle, info.isEnabled);
+			bool stillVisible = _filterState == 0
+				|| (_filterState == 1 && info.isEnabled)
+				|| (_filterState == 2 && !info.isEnabled);
+			if (!stillVisible)
+				ScheduleRefreshAddonsList();
+		}
+
+		void ApplyStatusDialVisual(Toggle toggle, bool enabled) {
+			if (toggle == null) return;
+			Color ring = enabled ? _statusOk : _statusMuted;
+			var ringImg = toggle.transform.Find("Ring")?.GetComponent<Image>();
+			if (ringImg != null) {
+				ringImg.color = ring;
+				ringImg.preserveAspect = true;
+			}
+			if (toggle.graphic != null) {
+				toggle.graphic.color = _statusOk;
+				if (toggle.graphic is Image fillImg)
+					fillImg.preserveAspect = true;
+				// Keep checkmark GO alive; Toggle would SetActive(false) and cause a one-frame pop.
+				toggle.graphic.gameObject.SetActive(true);
+				toggle.graphic.canvasRenderer.SetAlpha(enabled ? 1f : 0f);
+			}
 		}
 		
 		void CreateAddonListItem(string addonId, Addon_MGR.AddonInfo addonInfo) {
@@ -1127,128 +1391,147 @@ namespace spz {
 				_addonUIItems.Remove(addonId);
 			}
 			
-			GameObject itemObj;
-			if (_addonItemPrefab != null) {
-				itemObj = Instantiate(_addonItemPrefab, _addonsListParent);
-			} else {
-				itemObj = new GameObject($"AddonItem_{addonId}");
-				itemObj.transform.SetParent(_addonsListParent, false);
-				itemObj.layer = _addonsListParent.gameObject.layer;
-				var rectTransform = itemObj.AddComponent<RectTransform>();
-				rectTransform.sizeDelta = new Vector2(0, 40);
-				var itemLayout = itemObj.AddComponent<LayoutElement>();
-				itemLayout.preferredHeight = 40;
-				itemLayout.minHeight = 40;
-				itemLayout.minWidth = 440f;
-				var horizontalLayout = itemObj.AddComponent<HorizontalLayoutGroup>();
-				horizontalLayout.spacing = 12f;
-				horizontalLayout.padding = new RectOffset(8, 6, 8, 6);
-				horizontalLayout.childControlWidth = true;
-				horizontalLayout.childControlHeight = true;
-				horizontalLayout.childForceExpandWidth = false;
-				horizontalLayout.childForceExpandHeight = true;
-				
-				const float colNameWidth = 220f;
-				var nameObj = new GameObject("Name");
-				nameObj.transform.SetParent(itemObj.transform, false);
-				var nameLE = nameObj.AddComponent<LayoutElement>();
-				nameLE.preferredWidth = colNameWidth;
-				nameLE.minWidth = colNameWidth;
-				var nameText = nameObj.AddComponent<TextMeshProUGUI>();
-				string statusIcon = addonInfo.isEnabled ? "\u2713" : "\u25CB";
-				string nameLabel = !string.IsNullOrEmpty(addonInfo.displayName) ? addonInfo.displayName : addonId;
-				nameText.text = $"{statusIcon} {nameLabel}";
-				nameText.fontSize = 14;
-				nameText.color = addonInfo.isEnabled ? new Color(0.4f, 1f, 0.4f) : new Color(0.95f, 0.95f, 0.95f);
-				nameText.alignment = TextAlignmentOptions.Left;
-				nameText.enableWordWrapping = false;
-				nameText.overflowMode = TMPro.TextOverflowModes.Ellipsis;
-				nameText.raycastTarget = false;
-				
-				const float colToggleWidth = 120f;
-				var toggleContainerObj = new GameObject("ToggleContainer");
-				toggleContainerObj.transform.SetParent(itemObj.transform, false);
-				var toggleContainerLE = toggleContainerObj.AddComponent<LayoutElement>();
-				toggleContainerLE.preferredWidth = colToggleWidth;
-				toggleContainerLE.minWidth = colToggleWidth;
-				var toggleContainerLayout = toggleContainerObj.AddComponent<HorizontalLayoutGroup>();
-				toggleContainerLayout.spacing = 5;
-				toggleContainerLayout.childControlWidth = false;
-				toggleContainerLayout.childControlHeight = true;
-				
-				var toggleLabelObj = new GameObject("ToggleLabel");
-				toggleLabelObj.transform.SetParent(toggleContainerObj.transform, false);
-				var toggleLabelLE = toggleLabelObj.AddComponent<LayoutElement>();
-				toggleLabelLE.preferredWidth = 56f;
-				toggleLabelLE.minWidth = 56f;
-				var toggleLabelText = toggleLabelObj.AddComponent<TextMeshProUGUI>();
-				toggleLabelText.text = addonInfo.isEnabled ? "Enabled" : "Disabled";
-				toggleLabelText.fontSize = 12;
-				toggleLabelText.color = addonInfo.isEnabled ? new Color(0.4f, 1f, 0.4f) : new Color(0.7f, 0.7f, 0.7f);
-				toggleLabelText.alignment = TextAlignmentOptions.Left;
-				toggleLabelText.enableWordWrapping = false;
-				toggleLabelText.overflowMode = TMPro.TextOverflowModes.Ellipsis;
-				toggleLabelText.raycastTarget = false;
-				
-				var toggleObj = new GameObject("Toggle");
-				toggleObj.transform.SetParent(toggleContainerObj.transform, false);
-				toggleObj.AddComponent<RectTransform>().sizeDelta = new Vector2(50, 20);
-				var toggleBg = toggleObj.AddComponent<UnityEngine.UI.Image>();
-				toggleBg.color = new Color(0.3f, 0.3f, 0.3f, 1f);
-				toggleBg.raycastTarget = true;
-				var toggleCheckmarkObj = new GameObject("Checkmark");
-				toggleCheckmarkObj.transform.SetParent(toggleObj.transform, false);
-				var toggleCheckmarkRect = toggleCheckmarkObj.AddComponent<RectTransform>();
-				toggleCheckmarkRect.anchorMin = Vector2.zero;
-				toggleCheckmarkRect.anchorMax = Vector2.one;
-				toggleCheckmarkRect.sizeDelta = Vector2.zero;
-				var toggleCheckmark = toggleCheckmarkObj.AddComponent<UnityEngine.UI.Image>();
-				toggleCheckmark.color = new Color(0.2f, 0.8f, 0.2f, 1f);
-				var rowToggle = toggleObj.AddComponent<Toggle>();
-				rowToggle.targetGraphic = toggleBg;
-				rowToggle.graphic = toggleCheckmark;
-				rowToggle.isOn = addonInfo.isEnabled;
-				rowToggle.onValueChanged.AddListener((_) => {
-					if (Addon_MGR.instance == null)
-						return;
-					string id = addonId;
-					bool desired = rowToggle.isOn;
-					var map = Addon_MGR.instance.GetAddons();
-					if (map.TryGetValue(id, out var info) && info.isEnabled == desired)
-						return;
-					if (desired)
+			const float statusSize = 14f;
+			const float statusHitPad = 28f;
+			var itemObj = new GameObject($"AddonItem_{addonId}");
+			itemObj.transform.SetParent(_addonsListParent, false);
+			itemObj.layer = _addonsListParent.gameObject.layer;
+			itemObj.AddComponent<RectTransform>().sizeDelta = new Vector2(0f, 40f);
+			var itemLayout = itemObj.AddComponent<LayoutElement>();
+			itemLayout.preferredHeight = 40f;
+			itemLayout.minHeight = 38f;
+			itemLayout.minWidth = 440f;
+			var horizontalLayout = itemObj.AddComponent<HorizontalLayoutGroup>();
+			horizontalLayout.spacing = 10f;
+			horizontalLayout.padding = new RectOffset(0, 0, 4, 4);
+			horizontalLayout.childAlignment = TextAnchor.MiddleLeft;
+			horizontalLayout.childControlWidth = true;
+			// Keep height control off for the status disc so layout cannot stretch it into an oval.
+			horizontalLayout.childControlHeight = false;
+			horizontalLayout.childForceExpandWidth = false;
+			horizontalLayout.childForceExpandHeight = false;
+
+			var toggleObj = new GameObject("StatusToggle");
+			toggleObj.transform.SetParent(itemObj.transform, false);
+			var toggleRect = toggleObj.AddComponent<RectTransform>();
+			toggleRect.sizeDelta = new Vector2(statusHitPad, statusHitPad);
+			var toggleLE = toggleObj.AddComponent<LayoutElement>();
+			toggleLE.preferredWidth = statusHitPad;
+			toggleLE.minWidth = statusHitPad;
+			toggleLE.flexibleWidth = 0f;
+			toggleLE.preferredHeight = statusHitPad;
+			toggleLE.minHeight = statusHitPad;
+			toggleLE.flexibleHeight = 0f;
+			// Invisible hit pad — visual ring is a fixed square child (avoids oval stretch + tiny click target).
+			var hitPad = toggleObj.AddComponent<Image>();
+			hitPad.color = new Color(1f, 1f, 1f, 0.001f);
+			hitPad.raycastTarget = true;
+			var ringObj = new GameObject("Ring");
+			ringObj.transform.SetParent(toggleObj.transform, false);
+			var ringRect = ringObj.AddComponent<RectTransform>();
+			ringRect.anchorMin = new Vector2(0.5f, 0.5f);
+			ringRect.anchorMax = new Vector2(0.5f, 0.5f);
+			ringRect.pivot = new Vector2(0.5f, 0.5f);
+			ringRect.sizeDelta = new Vector2(statusSize, statusSize);
+			var toggleRing = ringObj.AddComponent<Image>();
+			toggleRing.sprite = UiRuntimeSprites.CircleRing;
+			toggleRing.type = Image.Type.Simple;
+			toggleRing.preserveAspect = true;
+			toggleRing.raycastTarget = false;
+			var toggleCheckmarkObj = new GameObject("Checkmark");
+			toggleCheckmarkObj.transform.SetParent(ringObj.transform, false);
+			var toggleCheckmarkRect = toggleCheckmarkObj.AddComponent<RectTransform>();
+			// Inner fill ~44% of ring diameter — matches reference radio dial.
+			toggleCheckmarkRect.anchorMin = new Vector2(0.28f, 0.28f);
+			toggleCheckmarkRect.anchorMax = new Vector2(0.72f, 0.72f);
+			toggleCheckmarkRect.offsetMin = Vector2.zero;
+			toggleCheckmarkRect.offsetMax = Vector2.zero;
+			var toggleCheckmark = toggleCheckmarkObj.AddComponent<Image>();
+			toggleCheckmark.sprite = UiRuntimeSprites.CircleFilled;
+			toggleCheckmark.type = Image.Type.Simple;
+			toggleCheckmark.preserveAspect = true;
+			toggleCheckmark.raycastTarget = false;
+			var rowToggle = toggleObj.AddComponent<Toggle>();
+			rowToggle.targetGraphic = hitPad;
+			rowToggle.graphic = toggleCheckmark;
+			rowToggle.transition = Selectable.Transition.None;
+			rowToggle.toggleTransition = Toggle.ToggleTransition.None;
+			rowToggle.SetIsOnWithoutNotify(addonInfo.isEnabled);
+			ApplyStatusDialVisual(rowToggle, addonInfo.isEnabled);
+
+			var nameObj = new GameObject("Name");
+			nameObj.transform.SetParent(itemObj.transform, false);
+			var nameLE = nameObj.AddComponent<LayoutElement>();
+			nameLE.minWidth = 180f;
+			nameLE.flexibleWidth = 1f;
+			nameLE.preferredHeight = 28f;
+			var nameText = nameObj.AddComponent<TextMeshProUGUI>();
+			nameText.text = !string.IsNullOrEmpty(addonInfo.displayName) ? addonInfo.displayName : addonId;
+			nameText.fontSize = 16f;
+			nameText.fontStyle = FontStyles.Normal;
+			nameText.color = new Color(0.88f, 0.88f, 0.9f, 1f);
+			nameText.alignment = TextAlignmentOptions.MidlineLeft;
+			nameText.enableWordWrapping = false;
+			nameText.overflowMode = TMPro.TextOverflowModes.Ellipsis;
+			nameText.raycastTarget = false;
+
+			var removeBtnObj = new GameObject("RemoveButton");
+			removeBtnObj.transform.SetParent(itemObj.transform, false);
+			var removeBtnLE = removeBtnObj.AddComponent<LayoutElement>();
+			removeBtnLE.preferredWidth = 76f;
+			removeBtnLE.minWidth = 76f;
+			removeBtnLE.flexibleWidth = 0f;
+			removeBtnLE.preferredHeight = 28f;
+			removeBtnLE.minHeight = 28f;
+			var removeBtnImage = removeBtnObj.AddComponent<Image>();
+			removeBtnImage.sprite = UiRuntimeSprites.RoundedRectSliced;
+			removeBtnImage.type = Image.Type.Sliced;
+			removeBtnImage.color = new Color(45f / 255f, 26f / 255f, 26f / 255f, 0.85f);
+			removeBtnImage.raycastTarget = true;
+			var removeBtn = removeBtnObj.AddComponent<Button>();
+			removeBtn.targetGraphic = removeBtnImage;
+			removeBtn.transition = Selectable.Transition.ColorTint;
+			var removeBtnText = new GameObject("Text");
+			removeBtnText.transform.SetParent(removeBtnObj.transform, false);
+			var removeBtnTextRect = removeBtnText.AddComponent<RectTransform>();
+			removeBtnTextRect.anchorMin = Vector2.zero;
+			removeBtnTextRect.anchorMax = Vector2.one;
+			removeBtnTextRect.sizeDelta = Vector2.zero;
+			var removeBtnTextComp = removeBtnText.AddComponent<TextMeshProUGUI>();
+			removeBtnTextComp.text = "Uninstall";
+			removeBtnTextComp.fontSize = 11f;
+			removeBtnTextComp.alignment = TextAlignmentOptions.Center;
+			removeBtnTextComp.color = new Color(0.96f, 0.44f, 0.44f, 0.9f);
+			removeBtnTextComp.raycastTarget = false;
+			removeBtn.onClick.AddListener(() => OnRemoveAddon(addonId));
+
+			rowToggle.onValueChanged.AddListener((isOn) => {
+				if (Addon_MGR.instance == null)
+					return;
+				string id = addonId;
+				var map = Addon_MGR.instance.GetAddons();
+				if (map.TryGetValue(id, out var info) && info.isEnabled == isOn) {
+					ApplyStatusDialVisual(rowToggle, isOn);
+					return;
+				}
+				// Suppress event→full rebuild while we mutate; otherwise the dial is destroyed mid-click.
+				_suppressEnabledListRefresh = true;
+				try {
+					if (isOn)
 						Addon_MGR.instance.EnableAddon(id);
 					else
 						Addon_MGR.instance.DisableAddon(id);
-					RefreshAddonsList();
-				});
-				
-				const float colButtonWidth = 90f;
-				var removeBtnObj = new GameObject("RemoveButton");
-				removeBtnObj.transform.SetParent(itemObj.transform, false);
-				var removeBtnLE = removeBtnObj.AddComponent<LayoutElement>();
-				removeBtnLE.preferredWidth = colButtonWidth;
-				removeBtnLE.minWidth = colButtonWidth;
-				removeBtnLE.preferredHeight = 30;
-				var removeBtnImage = removeBtnObj.AddComponent<UnityEngine.UI.Image>();
-				removeBtnImage.color = new Color(0.5f, 0.2f, 0.2f, 1f);
-				removeBtnImage.raycastTarget = true;
-				var removeBtn = removeBtnObj.AddComponent<Button>();
-				removeBtn.targetGraphic = removeBtnImage;
-				var removeBtnText = new GameObject("Text");
-				removeBtnText.transform.SetParent(removeBtnObj.transform, false);
-				var removeBtnTextRect = removeBtnText.AddComponent<RectTransform>();
-				removeBtnTextRect.anchorMin = Vector2.zero;
-				removeBtnTextRect.anchorMax = Vector2.one;
-				removeBtnTextRect.sizeDelta = Vector2.zero;
-				var removeBtnTextComp = removeBtnText.AddComponent<TextMeshProUGUI>();
-				removeBtnTextComp.text = "Uninstall";
-				removeBtnTextComp.fontSize = 12;
-				removeBtnTextComp.alignment = TextAlignmentOptions.Center;
-				removeBtnTextComp.color = Color.white;
-				removeBtnTextComp.raycastTarget = false;
-				removeBtn.onClick.AddListener(() => OnRemoveAddon(addonId));
-			}
+					ApplyStatusDialVisual(rowToggle, isOn);
+					RefreshStatusCountsOnly();
+				} finally {
+					_suppressEnabledListRefresh = false;
+				}
+				bool stillVisible = _filterState == 0
+					|| (_filterState == 1 && isOn)
+					|| (_filterState == 2 && !isOn);
+				if (!stillVisible)
+					ScheduleRefreshAddonsList();
+			});
 			
 			itemObj.SetActive(true);
 			_addonUIItems[addonId] = itemObj;
@@ -1293,9 +1576,10 @@ namespace spz {
 		/// Shows status message
 		/// </summary>
 		void ShowStatus(string message, bool isSuccess) {
+			_lastStatusIsSuccess = isSuccess;
 			if (_statusText != null) {
 				_statusText.text = message;
-				_statusText.color = isSuccess ? RefGreen : RefRedText;
+				_statusText.color = isSuccess ? _statusOk : _statusFail;
 			}
 			UnityEngine.Debug.Log($"[AddonManager_UI] {message}");
 		}
@@ -1305,6 +1589,11 @@ namespace spz {
 		/// </summary>
 		void OnDestroy() {
 			if (instance != this) return;
+			if (_deferredListRefresh != null) {
+				StopCoroutine(_deferredListRefresh);
+				_deferredListRefresh = null;
+			}
+			SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 			SceneManager.sceneLoaded -= OnSceneLoadedMaybeOpenPending;
 
 			if (_hidViewportStatusForModal && Viewport_StatusText.instance != null) {
@@ -1317,6 +1606,28 @@ namespace spz {
 			
 			// Clear instance reference
 			instance = null;
+		}
+	}
+
+	/// <summary>
+	/// Closes the add-on manager only when the dimmer itself is the raycast hit.
+	/// A parent <see cref="Button"/> would also fire for in-panel clicks because
+	/// <c>ExecuteEvents.ExecuteHierarchy</c> bubbles up to the first handler.
+	/// </summary>
+	public sealed class AddonManagerDimmerClose : MonoBehaviour, IPointerClickHandler {
+		Action _onDimmerClick;
+
+		public void Bind(Action onDimmerClick) {
+			_onDimmerClick = onDimmerClick;
+		}
+
+		public void OnPointerClick(PointerEventData eventData) {
+			if (_onDimmerClick == null || eventData == null)
+				return;
+			var hit = eventData.pointerCurrentRaycast.gameObject;
+			if (hit != gameObject)
+				return;
+			_onDimmerClick.Invoke();
 		}
 	}
 }
