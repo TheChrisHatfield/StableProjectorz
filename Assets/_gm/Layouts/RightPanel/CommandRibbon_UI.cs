@@ -457,6 +457,186 @@ namespace spz {
 	        }
 
 	        HarmonizeStripTabTypography();
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        ApplyThemeTokens();
+	    }
+
+	    void OnDestroy() {
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	        if (instance == this)
+	            instance = null;
+	    }
+
+	    /// <summary>
+	    /// Ownership-root theme apply for ribbon strip cells, active pills, panel shells, and dividers.
+	    /// Does not scan the global UI skeleton.
+	    /// </summary>
+	    void ApplyThemeTokens() {
+	        var t = SpzUiThemeOps.Active;
+	        ApplyPanelShellColor(_SD_ArtList_Panel, t.panelBg);
+	        ApplyPanelShellColor(_SD_ArtBgList_Panel, t.panelBg);
+	        ApplyPanelShellColor(_SD_3D_Models_Panels, t.panelBg);
+	        ApplyPanelShellColor(_SD_ControlNets_List_Panel, t.panelBg);
+	        ApplyPanelShellColor(_Paint_Panel, t.panelBg);
+
+	        Transform strip = ResolveEffectiveTabStripTransform();
+	        if (strip != null) {
+	            for (int i = 0; i < strip.childCount; i++) {
+	                Transform cell = strip.GetChild(i);
+	                if (cell == null) continue;
+	                if (cell.name.StartsWith("AddonDivider_", StringComparison.Ordinal)) {
+	                    var divImg = cell.GetComponent<Image>();
+	                    if (divImg != null) {
+	                        Color c = t.border;
+	                        c.a = Mathf.Max(c.a, 0.55f);
+	                        divImg.color = c;
+	                    }
+	                    continue;
+	                }
+	                var active = cell.Find("go active");
+	                if (active != null) {
+	                    var activeImg = FindActivePillImage(active);
+	                    if (activeImg != null) {
+	                        // Accent on the active pill is the main visible Nomad cue (gold vs cool blue default).
+	                        activeImg.color = Color.Lerp(t.tabActive, t.accent, 0.72f);
+	                    }
+	                }
+	                var label = cell.GetComponentInChildren<TextMeshProUGUI>(true);
+	                if (label != null)
+	                    SpzUiThemeOps.ApplyTmpColor(label, t.textPrimary);
+	                ApplyNomadStudioTabChrome(cell, label, t);
+	                // Soft gold edge on addon dividers when themed.
+	                var cellImg = cell.GetComponent<Image>();
+	                if (cellImg != null && cell.name.StartsWith("AddonTab_", StringComparison.Ordinal))
+	                    SpzUiThemeOps.ApplyGraphicColor(cellImg, t.controlBg);
+	            }
+	        }
+
+	        if (_addonPanelsById != null) {
+	            foreach (var kvp in _addonPanelsById) {
+	                if (kvp.Value != null)
+	                    ApplyPanelShellColor(kvp.Value, t.panelBg);
+	            }
+	        }
+	    }
+
+	    /// <summary>Prefer the authored pill graphic; never retint Monolith chrome overlays.</summary>
+	    static Image FindActivePillImage(Transform active) {
+	        if (active == null) return null;
+	        var named = active.Find("image")?.GetComponent<Image>();
+	        if (named != null) return named;
+	        var rootImg = active.GetComponent<Image>();
+	        if (rootImg != null) return rootImg;
+	        foreach (var img in active.GetComponentsInChildren<Image>(true)) {
+	            if (img == null) continue;
+	            string n = img.gameObject.name ?? "";
+	            if (n == "MonolithActiveBar" || n == "MonolithLineIcon") continue;
+	            return img;
+	        }
+	        return null;
+	    }
+
+	    static void ApplyNomadStudioTabChrome(Transform cell, TextMeshProUGUI label, SpzUiThemeOps.ThemeTokens t) {
+	        if (cell == null) return;
+	        bool enabled = string.Equals(SpzUiThemeOps.ActiveThemeId, "nomad-inspired", StringComparison.Ordinal);
+	        Transform active = cell.Find("go active");
+	        Transform bar = active != null ? active.Find("MonolithActiveBar") : null;
+
+	        if (!enabled) {
+	            if (bar != null) bar.gameObject.SetActive(false);
+	            if (active != null) {
+	                foreach (var image in active.GetComponentsInChildren<Image>(true)) {
+	                    if (image == null) continue;
+	                    if (bar != null && image.transform == bar) continue;
+	                    string n = image.gameObject.name ?? "";
+	                    if (n == "MonolithActiveBar" || n == "MonolithLineIcon") continue;
+	                    image.enabled = true;
+	                }
+	            }
+	            var oldIcon = cell.Find("MonolithLineIcon");
+	            if (oldIcon != null) oldIcon.gameObject.SetActive(false);
+	            if (label != null && cell.name.StartsWith("Tab: ", StringComparison.Ordinal)) {
+	                label.rectTransform.offsetMin = new Vector2(0f, label.rectTransform.offsetMin.y);
+	                ApplyStripTabMinWidthForLabel(cell.GetComponent<LayoutElement>(), label, kRibbonStripTabLabelHorizontalPad);
+	            }
+	            return;
+	        }
+
+	        if (active != null) {
+	            if (bar == null) {
+	                var barGo = new GameObject("MonolithActiveBar", typeof(RectTransform));
+	                barGo.transform.SetParent(active, false);
+	                bar = barGo.transform;
+	                var image = barGo.AddComponent<Image>();
+	                image.raycastTarget = false;
+	            }
+	            var barRt = bar as RectTransform;
+	            barRt.anchorMin = new Vector2(0f, 0f);
+	            barRt.anchorMax = new Vector2(1f, 0f);
+	            barRt.pivot = new Vector2(0.5f, 0f);
+	            barRt.offsetMin = new Vector2(5f, 1f);
+	            barRt.offsetMax = new Vector2(-5f, 3f);
+	            var barImg = bar.GetComponent<Image>();
+	            barImg.sprite = null;
+	            barImg.type = Image.Type.Simple;
+	            barImg.color = t.accent;
+	            // Stay under go active; visibility follows the tab's active highlight.
+	            bar.gameObject.SetActive(true);
+	            foreach (var image in active.GetComponentsInChildren<Image>(true)) {
+	                if (image == null || image == barImg) continue;
+	                string n = image.gameObject.name ?? "";
+	                if (n == "MonolithLineIcon") continue;
+	                image.enabled = false;
+	            }
+	        }
+
+	        // Runtime tabs have predictable geometry, so they can safely receive compact line glyphs.
+	        if (label == null || !cell.name.StartsWith("Tab: ", StringComparison.Ordinal))
+	            return;
+	        Transform iconTransform = cell.Find("MonolithLineIcon");
+	        if (iconTransform == null) {
+	            var iconGo = new GameObject("MonolithLineIcon", typeof(RectTransform));
+	            iconGo.transform.SetParent(cell, false);
+	            iconTransform = iconGo.transform;
+	            var iconImage = iconGo.AddComponent<Image>();
+	            iconImage.raycastTarget = false;
+	            iconImage.preserveAspect = true;
+	        }
+	        var iconRt = iconTransform as RectTransform;
+	        iconRt.anchorMin = new Vector2(0f, 0.5f);
+	        iconRt.anchorMax = new Vector2(0f, 0.5f);
+	        iconRt.pivot = new Vector2(0f, 0.5f);
+	        iconRt.anchoredPosition = new Vector2(6f, 0f);
+	        iconRt.sizeDelta = new Vector2(14f, 14f);
+	        var icon = iconTransform.GetComponent<Image>();
+	        icon.sprite = UiRuntimeSprites.GetLineIcon(ResolveStudioTabIcon(label.text));
+	        icon.color = t.textMuted;
+	        iconTransform.gameObject.SetActive(true);
+	        const float nomadIconReserve = 22f;
+	        label.rectTransform.offsetMin = new Vector2(nomadIconReserve, label.rectTransform.offsetMin.y);
+	        // Harmonize measured width before the icon inset; grow minWidth so labels do not ellipsis under Nomad.
+	        ApplyStripTabMinWidthForLabel(cell.GetComponent<LayoutElement>(), label,
+	            kRibbonStripTabLabelHorizontalPad + nomadIconReserve);
+	    }
+
+	    static StudioLineIcon ResolveStudioTabIcon(string label) {
+	        string value = label ?? "";
+	        if (value.IndexOf("paint", StringComparison.OrdinalIgnoreCase) >= 0)
+	            return StudioLineIcon.Brush;
+	        if (value.IndexOf("mesh", StringComparison.OrdinalIgnoreCase) >= 0
+	            || value.IndexOf("3d", StringComparison.OrdinalIgnoreCase) >= 0)
+	            return StudioLineIcon.Mesh;
+	        if (value.IndexOf("control", StringComparison.OrdinalIgnoreCase) >= 0
+	            || value.IndexOf("setting", StringComparison.OrdinalIgnoreCase) >= 0)
+	            return StudioLineIcon.Settings;
+	        return StudioLineIcon.Grid;
+	    }
+
+	    static void ApplyPanelShellColor(RectTransform panel, Color panelBg) {
+	        if (panel == null) return;
+	        var img = panel.GetComponent<Image>();
+	        if (img != null)
+	            SpzUiThemeOps.ApplyGraphicColor(img, panelBg);
 	    }
 
 	    IEnumerator PaintCollect_WaitForSingletons_crtn(PaintTab_CollectPaintUI collector)
@@ -1146,7 +1326,6 @@ namespace spz {
 	    /// <summary>Removes an addon's tab and panel (e.g. when addon is disabled). Call from Addon_MGR.UnloadAddon.</summary>
 	    public void RemoveAddonPanel(string addonId){
 	        if (string.IsNullOrEmpty(addonId)) return;
-	        if (!_addonPanelsById.TryGetValue(addonId, out var panelRect)) return;
 	        EnsureTabGroupResolved();
 	        string tabId = AddonRibbonIntegration.TabIdForAddon(addonId);
 	        _addonTabById.TryGetValue(addonId, out var tabGo);
@@ -1155,6 +1334,9 @@ namespace spz {
 		        tabElemOnStrip = tabGo.GetComponent<TabsGroupElem_UI>();
 	        if (tabElemOnStrip == null && _tabGroup != null && _tabGroup.HasTab(tabId))
 		        tabElemOnStrip = FindAddonTabElementForTabId(_tabGroup, tabId);
+	        bool addonTabWasSelected = tabElemOnStrip != null && tabElemOnStrip.IsVisuallySelectedAsActiveTab();
+	        bool hadRibbonShell = _addonPanelsById.TryGetValue(addonId, out var panelRect);
+
 	        StripAddonTabPanelShowHandler(addonId, tabElemOnStrip, tabGo);
 	        if(tabGo != null){
 	            var tabElem = tabGo.GetComponent<TabsGroupElem_UI>();
@@ -1168,12 +1350,16 @@ namespace spz {
 	                UnityEngine.Object.Destroy(orphan.gameObject);
 	            }
 	        }
-	        if(panelRect != null && panelRect.gameObject != null) UnityEngine.Object.Destroy(panelRect.gameObject);
-	        _addonPanelsById.Remove(addonId);
+	        if (hadRibbonShell && panelRect != null && panelRect.gameObject != null)
+		        UnityEngine.Object.Destroy(panelRect.gameObject);
+	        if (hadRibbonShell)
+		        _addonPanelsById.Remove(addonId);
 	        UnregisterAddonShortcutOrder(addonId);
 	        DestroyAddonStripDivider(addonId);
-	        UnityEngine.Debug.Log($"[CommandRibbon_UI] Removed addon tab/panel: {addonId}");
+	        UnityEngine.Debug.Log($"[CommandRibbon_UI] Removed addon tab/panel: {addonId} (hadRibbonShell={hadRibbonShell})");
 	        if (_tabGroup != null) {
+		        if (addonTabWasSelected)
+			        _tabGroup.SwitchTab("art list");
 		        Transform strip = ResolveEffectiveTabStripTransform();
 		        if (strip != null)
 			        RefreshRibbonTabStripLayout(strip);
@@ -1189,6 +1375,7 @@ namespace spz {
 		    if (stripRect != null)
 			    UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(stripRect);
 		    QueueTabStripRebuildNextFrame(tabStrip);
+		    ApplyThemeTokens();
 	    }
 
 	    /// <summary>Public hook to reflow the ribbon tab row (e.g. after external hierarchy changes). Uses <see cref="ResolveEffectiveTabStripTransform"/>.</summary>
