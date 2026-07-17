@@ -80,6 +80,19 @@ namespace spz {
 	        UpdateHardnessIcon();
 	    }
 
+	    /// <summary>True when the live stamp is a custom alpha (not built-in 0–2).</summary>
+	    public bool IsUsingCustomAlpha() {
+		    return _brushAlphasMGR != null && _brushAlphasMGR.IsCustomAlpha(_brushAlphasMGR.CurrentIndex);
+	    }
+
+	    /// <summary>Like <see cref="SetBuiltInOnly"/> but refuses to overwrite a custom alpha selection (matches hardness button).</summary>
+	    public bool TrySetBuiltInOnly(int builtInIx) {
+		    if (IsUsingCustomAlpha())
+			    return false;
+		    SetBuiltInOnly(builtInIx);
+		    return true;
+	    }
+
 
 	    void OnStartEditMode(MultiView_StartEditMode_Args args){
 	        if(Art2D_IconsUI_List.instance._mainSelectedIcon == null){  return; }
