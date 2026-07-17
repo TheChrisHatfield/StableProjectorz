@@ -62,6 +62,11 @@ namespace spz {
 		}
 
 		void BuildUi() {
+			if (_summaryTmp != null) return; // already built — avoid duplicate chrome on repair/re-entry
+			// Orphan GO may already have leftover children from a failed prior build.
+			for (int i = transform.childCount - 1; i >= 0; i--)
+				UnityEngine.Object.DestroyImmediate(transform.GetChild(i).gameObject);
+
 			var t = SpzUiThemeOps.Active;
 			var bg = gameObject.GetComponent<Image>() ?? gameObject.AddComponent<Image>();
 			bg.color = new Color(0.14f, 0.16f, 0.19f, 0.96f);
