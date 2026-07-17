@@ -89,7 +89,9 @@ namespace spz {
 				return false;
 			}
 
-			sd.SetBrushSize(Mathf.Clamp01(proposal.BrushWidthHint01));
+			// Sanitize width before ribbon mutate — Clamp01(NaN) stays NaN and can poison the size slider.
+			float width01 = float.IsFinite(proposal.BrushWidthHint01) ? Mathf.Clamp01(proposal.BrushWidthHint01) : 0.5f;
+			sd.SetBrushSize(width01);
 			// Apply blend into effective opacity so Accept does not silently drop BlendStrength01 (Spec R2).
 			float blend = float.IsFinite(proposal.BlendStrength01) ? Mathf.Clamp01(proposal.BlendStrength01) : 1f;
 			float opacity = float.IsFinite(proposal.OpacityHint01) ? Mathf.Clamp01(proposal.OpacityHint01) : 0.55f;
@@ -110,7 +112,7 @@ namespace spz {
 			_armed = true;
 			_sawApplyOnArmedTarget = false;
 			reason = "Armed on target=" + DescribeTarget(target) + " desiredBin=" + proposal.DesiredBin
-			         + " color=" + tint + " size01=" + proposal.BrushWidthHint01.ToString("F2")
+			         + " color=" + tint + " size01=" + width01.ToString("F2")
 			         + " opacity01=" + effectiveOpacity.ToString("F2")
 			         + " (blend=" + blend.ToString("F2") + ") " + hardnessNote;
 			return true;
