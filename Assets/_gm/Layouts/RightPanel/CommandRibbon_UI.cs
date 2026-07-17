@@ -1091,8 +1091,21 @@ namespace spz {
 		            UnityEngine.Debug.LogWarning($"[CommandRibbon_UI] Stale or incomplete addon ribbon state for {addonId} (panelOk={panelOk}, groupHasTab={groupHasTab}, tabOnStrip={(tabOnStrip != null)}). Recreating tab/panel.");
 	            StripAddonTabPanelShowHandler(addonId, tabOnStrip, tabGoFromDict);
 	            DestroyAddonStripDivider(addonId);
-	            if (panelOk)
+	            // Salvage AddonPanel_* content before destroying the shell — AddonUI_MGR still tracks those GOs.
+	            var salvagedContent = new List<Transform>();
+	            if (panelOk) {
+	                for (int ci = existing.childCount - 1; ci >= 0; ci--) {
+	                    Transform child = existing.GetChild(ci);
+	                    if (child == null) continue;
+	                    string cn = child.name ?? "";
+	                    if (cn.StartsWith("AddonPanel_" + addonId + "_", StringComparison.Ordinal)
+	                        || string.Equals(cn, "AddonPanel_" + addonId, StringComparison.Ordinal)) {
+	                        child.SetParent(null, false);
+	                        salvagedContent.Add(child);
+	                    }
+	                }
 	                Destroy(existing.gameObject);
+	            }
 	            _addonPanelsById.Remove(addonId);
 	            UnregisterAddonShortcutOrder(addonId);
 	            _addonTabById.Remove(addonId);
@@ -1107,6 +1120,43 @@ namespace spz {
 	                    _tabGroup.RemoveTab(strayElem);
 	                Destroy(tabGoFromDict);
 	            }
+	            // Fall through to create a fresh shell, then reattach salvaged content below.
+	            Transform tabStripSalvage = ResolveEffectiveTabStripTransform();
+	            if (tabStripSalvage == null) {
+	                for (int s = 0; s < salvagedContent.Count; s++)
+	                    if (salvagedContent[s] != null)
+	                        Destroy(salvagedContent[s].gameObject);
+	                UnityEngine.Debug.LogError("[CommandRibbon_UI] Cannot recreate addon tab: tab strip is null.");
+	                return null;
+	            }
+	            Transform panelsParentSalvage = GetRibbonTabBodiesParent(tabStripSalvage);
+	            if (panelsParentSalvage == null) {
+	                for (int s = 0; s < salvagedContent.Count; s++)
+	                    if (salvagedContent[s] != null)
+	                        Destroy(salvagedContent[s].gameObject);
+	                UnityEngine.Debug.LogError("[CommandRibbon_UI] Cannot recreate addon tab: panelsParent is null");
+	                return null;
+	            }
+	            var recreated = CreateFreshAddonShellAndTab(addonId, displayTitle, tabId, tabStripSalvage, panelsParentSalvage);
+	            if (recreated == null) {
+	                for (int s = 0; s < salvagedContent.Count; s++)
+	                    if (salvagedContent[s] != null)
+	                        Destroy(salvagedContent[s].gameObject);
+	                return null;
+	            }
+	            for (int s = 0; s < salvagedContent.Count; s++) {
+	                Transform child = salvagedContent[s];
+	                if (child == null) continue;
+	                child.SetParent(recreated, false);
+	                var rt = child as RectTransform;
+	                if (rt != null) {
+	                    rt.anchorMin = Vector2.zero;
+	                    rt.anchorMax = Vector2.one;
+	                    rt.sizeDelta = Vector2.zero;
+	                    rt.anchoredPosition = Vector2.zero;
+	                }
+	            }
+	            return recreated;
 	        }
 	        Transform tabStrip = ResolveEffectiveTabStripTransform();
 	        if (tabStrip == null) {
@@ -1120,6 +1170,10 @@ namespace spz {
 	            return null;
 	        }
 
+	        return CreateFreshAddonShellAndTab(addonId, displayTitle, tabId, tabStrip, panelsParent);
+	    }
+
+	    RectTransform CreateFreshAddonShellAndTab(string addonId, string displayTitle, string tabId, Transform tabStrip, Transform panelsParent) {
 	        UnityEngine.Debug.Log($"[CommandRibbon_UI] Creating new tab and panel for: {addonId}. TabID: {tabId}");
 	        
 	        var panelGo = new GameObject("Panel_" + addonId);
