@@ -1083,6 +1083,8 @@ namespace spz {
 		/// </summary>
 		public void DestroyAddonUI(string addonId) {
 			if (string.IsNullOrEmpty(addonId)) return;
+			// Match Python NomadThemeSPZ.unregister(): drop active/orphan preset when the owner unloads.
+			CleanupNomadThemeOwnershipIfNeeded(addonId);
 			// Drop parking-lot bookkeeping first so migrate cannot reparent a dying panel.
 			for (int i = _parkedForRibbon.Count - 1; i >= 0; i--) {
 				ParkedPanel parked = _parkedForRibbon[i];
@@ -1093,6 +1095,16 @@ namespace spz {
 				}
 			}
 			DestroyOrphanFallbackPanelsForAddon(addonId);
+
+			// Always strip this add-on's callbacks, even if panel roots were already gone.
+			var keysToRemove = new List<string>();
+			foreach (var key in _buttonCallbacks.Keys) {
+				if (IsCallbackOwnedByAddon(key, addonId))
+					keysToRemove.Add(key);
+			}
+			foreach (var key in keysToRemove)
+				_buttonCallbacks.Remove(key);
+
 			if (!_addonUIElements.ContainsKey(addonId)) return;
 			
 			foreach (var element in _addonUIElements[addonId]) {
@@ -1111,16 +1123,17 @@ namespace spz {
 			}
 			
 			_addonUIElements.Remove(addonId);
-			
-			// Remove callbacks owned by this add-on only (not longer ids that share a prefix).
-			var keysToRemove = new List<string>();
-			foreach (var key in _buttonCallbacks.Keys) {
-				if (IsCallbackOwnedByAddon(key, addonId))
-					keysToRemove.Add(key);
-			}
-			foreach (var key in keysToRemove) {
-				_buttonCallbacks.Remove(key);
-			}
+		}
+
+		/// <summary>
+		/// Native Apply can leave <c>nomad-inspired</c> registered/active after HTTP unregister never runs.
+		/// </summary>
+		void CleanupNomadThemeOwnershipIfNeeded(string addonId) {
+			if (!string.Equals(addonId, NomadThemeAddonId, StringComparison.Ordinal))
+				return;
+			if (string.Equals(SpzUiThemeOps.ActiveThemeId, NomadThemeId, StringComparison.Ordinal))
+				SpzUiThemeOps.ResetTheme();
+			SpzUiThemeOps.TryUnregisterTheme(NomadThemeId, out _);
 		}
 
 		/// <summary>
