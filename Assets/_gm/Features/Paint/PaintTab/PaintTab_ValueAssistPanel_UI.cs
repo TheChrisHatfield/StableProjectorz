@@ -240,10 +240,15 @@ namespace spz {
 			img.color = bg;
 			img.raycastTarget = true;
 			var btn = go.AddComponent<Button>();
+			btn.targetGraphic = img;
 			btn.onClick.AddListener(onClick);
+			// ColorBlock multiplies Image.color — use near-white multipliers, not absolute RGB (compositing law).
 			var colors = btn.colors;
-			colors.highlightedColor = new Color(Mathf.Min(1f, bg.r + 0.12f), Mathf.Min(1f, bg.g + 0.12f), Mathf.Min(1f, bg.b + 0.12f), 1f);
-			colors.pressedColor = new Color(Mathf.Min(1f, bg.r + 0.2f), Mathf.Min(1f, bg.g + 0.2f), Mathf.Min(1f, bg.b + 0.2f), 1f);
+			colors.normalColor = Color.white;
+			colors.highlightedColor = new Color(1.12f, 1.12f, 1.12f, 1f);
+			colors.pressedColor = new Color(0.88f, 0.88f, 0.88f, 1f);
+			colors.selectedColor = Color.white;
+			colors.disabledColor = new Color(0.55f, 0.55f, 0.55f, 0.55f);
 			btn.colors = colors;
 
 			var txtGo = new GameObject("Label");
