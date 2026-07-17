@@ -473,7 +473,8 @@ namespace spz {
 				"spz.cmd.set_mesh_visibility", "spz.cmd.set_negative_prompt", "spz.cmd.set_positive_prompt",
 				"spz.cmd.set_projection_camera_pos", "spz.cmd.set_projection_camera_rot",
 				"spz.cmd.set_sd_denoising_strength", "spz.cmd.set_sd_ignore_depth_or_normals",
-				"spz.cmd.set_sd_mask_blur", "spz.cmd.set_sd_soft_inpaint", "spz.cmd.set_sd_tileable_inpaint",
+				"spz.cmd.set_sd_inpainting_mask_invert", "spz.cmd.set_sd_mask_blur", "spz.cmd.set_sd_soft_inpaint",
+				"spz.cmd.set_sd_strict_isolation_flip", "spz.cmd.set_sd_tileable_inpaint",
 				"spz.cmd.set_skybox_color", 				"spz.cmd.set_ui_scale", "spz.cmd.set_ui_target_active",
 				"spz.cmd.set_view_camera_active", "spz.cmd.set_view_camera_projection", "spz.cmd.set_view_cameras_enabled_count",
 				"spz.cmd.set_workflow_mode", "spz.cmd.show_status_text", "spz.cmd.stop_generation",
@@ -482,11 +483,12 @@ namespace spz {
 			var ui = new JArray {
 				"spz.ui.add_button", "spz.ui.add_dropdown", "spz.ui.add_slider", "spz.ui.add_text_input",
 				"spz.ui.attach_viewport_fullview_toggle",
-				"spz.ui.create_panel", "spz.ui.get_value", "spz.ui.set_value",
+				"spz.ui.apply_theme", "spz.ui.create_panel", "spz.ui.get_theme", "spz.ui.get_value",
+				"spz.ui.reset_theme", "spz.ui.set_value",
 			};
 			return new JObject {
 				["success"] = true,
-				["addon_rpc_version"] = "1.9",
+				["addon_rpc_version"] = "1.10",
 				["spz_cmd"] = cmd,
 				["spz_ui"] = ui,
 				["context_command"] = "spz.cmd.get_addon_context",
@@ -1796,9 +1798,33 @@ namespace spz {
 							@params["value"]?.ToObject<float>() ?? float.NaN);
 						break;
 
+					case "spz.cmd.set_sd_inpainting_mask_invert":
+						try {
+							bool invOn = @params["value"]?.ToObject<bool>()
+							              ?? @params["on"]?.ToObject<bool>()
+							              ?? false;
+							result["success"] = fastPath.SetSdInpaintingMaskInvert(invOn);
+						}
+						catch {
+							result["error"] = "Invalid value/on (boolean)";
+						}
+						break;
+
 					case "spz.cmd.set_sd_soft_inpaint":
 						result["success"] = fastPath.SetSdSoftInpaint(
 							@params["value"]?.ToObject<bool>() ?? @params["on"]?.ToObject<bool>() ?? false);
+						break;
+
+					case "spz.cmd.set_sd_strict_isolation_flip":
+						try {
+							bool flipOn = @params["value"]?.ToObject<bool>()
+							               ?? @params["on"]?.ToObject<bool>()
+							               ?? false;
+							result["success"] = fastPath.SetSdStrictIsolationFlip(flipOn);
+						}
+						catch {
+							result["error"] = "Invalid value/on (boolean)";
+						}
 						break;
 
 					case "spz.cmd.set_sd_tileable_inpaint":
@@ -1952,6 +1978,23 @@ namespace spz {
 			UnityEngine.Debug.Log($"[Addon_SocketServer] Executing UI Command: {method} with params: {@params?.ToString(Formatting.None)}");
 			if (string.Equals(method, "spz.ui.attach_viewport_fullview_toggle", StringComparison.Ordinal)) {
 				return TryExecuteAttachViewportFullViewToggle(@params ?? new JObject());
+			}
+			if (string.Equals(method, "spz.ui.get_theme", StringComparison.Ordinal)) {
+				return SpzUiThemeOps.GetThemeResult();
+			}
+			if (string.Equals(method, "spz.ui.apply_theme", StringComparison.Ordinal)) {
+				var themeResult = new JObject { ["success"] = false };
+				string themeId = @params?["theme_id"]?.ToString() ?? "";
+				var tokens = @params?["tokens"] as JObject;
+				if (SpzUiThemeOps.TryApplyTheme(themeId, tokens, out string error)) {
+					return SpzUiThemeOps.GetThemeResult();
+				}
+				themeResult["error"] = error;
+				return themeResult;
+			}
+			if (string.Equals(method, "spz.ui.reset_theme", StringComparison.Ordinal)) {
+				SpzUiThemeOps.ResetTheme();
+				return SpzUiThemeOps.GetThemeResult();
 			}
 			if (AddonUI_MGR.instance == null) {
 				return new JObject { ["success"] = false, ["error"] = "AddonUI_MGR not available" };
