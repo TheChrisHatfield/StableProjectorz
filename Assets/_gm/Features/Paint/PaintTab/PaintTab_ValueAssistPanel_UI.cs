@@ -14,7 +14,7 @@ namespace spz {
 		const float FontSize = 9.5f;
 		const float DialRing = 18f;
 		const float DialHit = 22f;
-		const int UiChromeVersion = 5;
+		const int UiChromeVersion = 6;
 
 		static bool _sessionCollapsed = false;
 		static int _builtChromeVersion;
@@ -615,8 +615,9 @@ namespace spz {
 			tmp.raycastTarget = false;
 			tmp.enableWordWrapping = false;
 			tmp.text = shortLabel;
+			// Tip must live on the raycast target (Circle), not the column — EventSystem never hits col.
 			if (!string.IsNullOrEmpty(tip))
-				AttachTip(col, tip);
+				AttachTip(dialGo, tip);
 			return toggle;
 		}
 
@@ -707,8 +708,9 @@ namespace spz {
 				if (_suppressToggleSync) return;
 				onChanged?.Invoke(v01);
 			});
+			// Tip must live on the raycast target (Dial), not the column — EventSystem never hits col.
 			if (!string.IsNullOrEmpty(tip))
-				AttachTip(col, tip);
+				AttachTip(dialGo, tip);
 			return dial;
 		}
 
