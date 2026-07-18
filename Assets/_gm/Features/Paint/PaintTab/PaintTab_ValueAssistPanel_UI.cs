@@ -16,7 +16,7 @@ namespace spz {
 		const float FontSize = 9.5f;
 		const float DialRing = 18f;
 		const float DialHit = 22f;
-		const int UiChromeVersion = 8;
+		const int UiChromeVersion = 9;
 
 		// Match Brush options: start closed so the tool row stays usable.
 		static bool _sessionCollapsed = true;
@@ -35,6 +35,8 @@ namespace spz {
 		Button _proposeBtn;
 		Button _acceptBtn;
 		Button _dismissBtn;
+		Button _collapseBtn;
+		GameObject _pinnedCollapseGo;
 		Toggle _enabledToggle;
 		Toggle _neuralToggle;
 		Toggle _hardnessToggle;
@@ -230,11 +232,26 @@ namespace spz {
 
 		void OnDisable() {
 			PaintTab_ValueAssistOptions.Changed -= OnOptionsChanged;
+			// Panel SetActive(false) on collapse — hide pinned bar so it does not block Brush options.
+			if (_pinnedCollapseGo != null)
+				_pinnedCollapseGo.SetActive(false);
+		}
+
+		void OnDestroy() {
+			PaintTab_ValueAssistOptions.Changed -= OnOptionsChanged;
+			if (_pinnedCollapseGo != null) {
+				// Immediate: same-frame EnsureUnder must not Find a deferred-destroy pin.
+				UnityEngine.Object.DestroyImmediate(_pinnedCollapseGo);
+				_pinnedCollapseGo = null;
+			}
 		}
 
 		void Update() {
+			// Pending Propose snapshot owns status/swatch until Accept/Dismiss — do not let Live overwrite it.
+			// After Accept, _hasProposal is cleared so Armed / stroke-applied can update.
+			if (_hasProposal && !ValuePaintProposalApplier.IsArmed) return;
 			if (_statusTmp != null) {
-				if (ValuePaintLivePredictor.IsLiveActive && ValuePaintLivePredictor.HasLastProposal) {
+				if (!_hasProposal && ValuePaintLivePredictor.IsLiveActive && ValuePaintLivePredictor.HasLastProposal) {
 					var p = ValuePaintLivePredictor.LastProposal;
 					string liveLine = "Live " + p.CurrentBin + "→" + p.DesiredBin + " · " + ValuePaintLivePredictor.LastAssistWhich;
 					if (_statusTmp.text == null || !_statusTmp.text.StartsWith("Live ") || _statusTmp.text != liveLine)
@@ -317,6 +334,7 @@ namespace spz {
 			_proposeBtn = null;
 			_acceptBtn = null;
 			_dismissBtn = null;
+			_collapseBtn = null;
 			_enabledToggle = null;
 			_neuralToggle = null;
 			_hardnessToggle = null;
@@ -414,11 +432,105 @@ namespace spz {
 			var statusLe = _statusTmp.GetComponent<LayoutElement>() ?? _statusTmp.gameObject.AddComponent<LayoutElement>();
 			statusLe.minHeight = 15f;
 
+			// In-panel collapse (always reachable while scrolling the panel itself).
+			_collapseBtn = MakeBtn(transform, "Collapse ▲", new Color(0.22f, 0.28f, 0.36f, 1f), CollapseFromUi);
+			var collapseLe = _collapseBtn.GetComponent<LayoutElement>();
+			if (collapseLe != null) {
+				collapseLe.minWidth = 0f;
+				collapseLe.preferredWidth = -1f;
+				collapseLe.flexibleWidth = 1f;
+				collapseLe.minHeight = 26f;
+				collapseLe.preferredHeight = 28f;
+			}
+			AttachTip(_collapseBtn.gameObject, "Collapse\nClose Value Assist and return to the tool row.");
+
+			EnsurePinnedCollapseBar();
+
 			_acceptBtn.interactable = false;
 			ApplyEnabledChrome();
 			RefreshStatusLine();
 			RefreshHeaderLabel();
 			// Collapse applied by EnsureUnder after BuildUi — do not SetActive(false) mid-build.
+		}
+
+		void EnsurePinnedCollapseBar() {
+			var sr = GetComponentInParent<ScrollRect>();
+			if (sr == null || sr.viewport == null) return;
+
+			// Never reuse a viewport pin from a prior instance — Destroy() is deferred, so Find can
+			// adopt a doomed GO whose onClick still targets a destroyed MonoBehaviour (dead Collapse).
+			if (_pinnedCollapseGo == null) {
+				Transform existing = sr.viewport.Find("ValueAssistCollapseBtn");
+				if (existing != null)
+					UnityEngine.Object.DestroyImmediate(existing.gameObject);
+			}
+
+			if (_pinnedCollapseGo == null) {
+				const float collapseBarA = 0.78f;
+				const float collapseBarHoverA = 0.86f;
+				const float collapseBarPressA = 0.74f;
+				_pinnedCollapseGo = new GameObject("ValueAssistCollapseBtn");
+				_pinnedCollapseGo.transform.SetParent(sr.viewport, false);
+				var collapseRt = _pinnedCollapseGo.AddComponent<RectTransform>();
+				collapseRt.anchorMin = new Vector2(0f, 0f);
+				collapseRt.anchorMax = new Vector2(1f, 0f);
+				collapseRt.pivot = new Vector2(0.5f, 0f);
+				collapseRt.anchoredPosition = Vector2.zero;
+				collapseRt.offsetMin = new Vector2(6f, 4f);
+				collapseRt.offsetMax = new Vector2(-6f, 4f + 30f);
+				var collapseImg = _pinnedCollapseGo.AddComponent<Image>();
+				collapseImg.raycastTarget = true;
+				var btn = _pinnedCollapseGo.AddComponent<Button>();
+				btn.targetGraphic = collapseImg;
+				var colors = btn.colors;
+				colors.normalColor = new Color(0.22f, 0.28f, 0.36f, collapseBarA);
+				colors.highlightedColor = new Color(0.30f, 0.36f, 0.44f, collapseBarHoverA);
+				colors.pressedColor = new Color(0.17f, 0.22f, 0.30f, collapseBarPressA);
+				colors.selectedColor = colors.normalColor;
+				colors.disabledColor = new Color(0.22f, 0.28f, 0.36f, 0.45f);
+				btn.colors = colors;
+				collapseImg.color = colors.normalColor;
+
+				var txtGo = new GameObject("Label");
+				txtGo.transform.SetParent(_pinnedCollapseGo.transform, false);
+				var txtRt = txtGo.AddComponent<RectTransform>();
+				txtRt.anchorMin = Vector2.zero;
+				txtRt.anchorMax = Vector2.one;
+				txtRt.offsetMin = new Vector2(4, 0);
+				txtRt.offsetMax = new Vector2(-4, 0);
+				var tmp = txtGo.AddComponent<TextMeshProUGUI>();
+				tmp.font = TMP_Settings.defaultFontAsset;
+				tmp.fontSize = FontSize;
+				tmp.color = Color.white;
+				tmp.alignment = TextAlignmentOptions.Center;
+				tmp.raycastTarget = false;
+				tmp.text = "Collapse ▲";
+				AttachTip(_pinnedCollapseGo, "Collapse\nClose Value Assist and return to the tool row.");
+			}
+
+			// Always (re)bind to this panel instance — chrome rebuild / EnsureUnder must not leave a dead listener.
+			var pinBtn = _pinnedCollapseGo.GetComponent<Button>();
+			if (pinBtn != null) {
+				pinBtn.onClick.RemoveAllListeners();
+				pinBtn.onClick.AddListener(CollapseFromUi);
+			}
+			_pinnedCollapseGo.SetActive(false);
+		}
+
+		void CollapseFromUi() {
+			if (_collapsed) return;
+			_collapsed = true;
+			_sessionCollapsed = true;
+			ApplyCollapsedChrome(scrollIntoView: false);
+		}
+
+		void SyncPinnedCollapseVisibility(bool open) {
+			if (_pinnedCollapseGo == null)
+				EnsurePinnedCollapseBar();
+			if (_pinnedCollapseGo == null) return;
+			_pinnedCollapseGo.SetActive(open);
+			if (open)
+				_pinnedCollapseGo.transform.SetAsLastSibling();
 		}
 
 		static GameObject MakeDialRow(Transform parent, string name, float height) {
@@ -443,8 +555,31 @@ namespace spz {
 		void ToggleCollapsed() {
 			_collapsed = !_collapsed;
 			_sessionCollapsed = _collapsed;
+			if (!_collapsed) {
+				// Accordion: only one Tool Options expando open at a time.
+				var parent = transform.parent as RectTransform;
+				PaintTab_CollectPaintUI.CloseBrushOptionsPanel(parent);
+				SyncControlsFromStore();
+				ApplyEnabledChrome();
+				RefreshStatusLine();
+			}
 			// Scroll only on user open — not when EnsureUnder reapplies an already-open panel.
 			ApplyCollapsedChrome(scrollIntoView: !_collapsed);
+		}
+
+		/// <summary>Close from Brush options accordion without scrolling.</summary>
+		public void ForceCollapse() {
+			if (_collapsed && !gameObject.activeSelf) return;
+			_collapsed = true;
+			_sessionCollapsed = true;
+			ApplyCollapsedChrome(scrollIntoView: false);
+		}
+
+		public static void CollapseUnder(RectTransform toolOptionsSection) {
+			if (toolOptionsSection == null) return;
+			var t = toolOptionsSection.Find(RootName);
+			var panel = t != null ? t.GetComponent<PaintTab_ValueAssistPanel_UI>() : null;
+			panel?.ForceCollapse();
 		}
 
 		void ApplyCollapsedChrome(bool scrollIntoView = false) {
@@ -457,6 +592,7 @@ namespace spz {
 			if (gameObject.activeSelf != open)
 				gameObject.SetActive(open);
 			RefreshHeaderLabel();
+			SyncPinnedCollapseVisibility(open);
 			var parent = transform.parent as RectTransform;
 			if (parent != null)
 				LayoutRebuilder.ForceRebuildLayoutImmediate(parent);
@@ -519,6 +655,7 @@ namespace spz {
 				SetStatus("Value Assist is off.");
 				return;
 			}
+			ValuePaintProposalApplier.ClearLiveSoftArmSuppress();
 			EnsureAssist();
 			Color sample = CurrentBrushColor();
 			_proposal = _assist.ProposeFromColor(sample, default);
@@ -544,6 +681,11 @@ namespace spz {
 			}
 			bool ok = ValuePaintProposalApplier.TryAccept(_proposal, out string reason);
 			if (ok) {
+				// Snapshot consumed — Accept locks the brush; pending Propose UI must release so Armed status works.
+				_hasProposal = false;
+				if (_acceptBtn != null) _acceptBtn.interactable = false;
+				if (_swatchImg != null)
+					_swatchImg.color = ValuePaintProposalApplier.GrayForBand(_proposal.DesiredBin);
 				SetStatus(PaintTab_ValueAssistOptions.ApplyHardness
 					? "Armed — color/size/opacity/hardness."
 					: "Armed — color/size/opacity (hardness unchanged).");
@@ -558,6 +700,8 @@ namespace spz {
 		void OnDismiss() {
 			ClearPendingProposal(null);
 			ValuePaintProposalApplier.ClearArmed();
+			// Stop Live from immediately re-arming under the tip; clear when Live dial turns on again.
+			ValuePaintProposalApplier.SuppressLiveSoftArm();
 			if (_summaryTmp != null)
 				_summaryTmp.text = "Hover dials for tips. Live predicts under tip · Propose/Accept locks a snapshot.";
 			SetStatus("Dismissed.");
@@ -581,21 +725,28 @@ namespace spz {
 			}
 			if (keepMessage && !string.IsNullOrEmpty(_statusTmp.text) && _statusTmp.text.StartsWith("Accept refused"))
 				return;
+			// Armed (after Accept) wins over a leftover Propose snapshot.
+			if (ValuePaintProposalApplier.IsArmed) {
+				var a = ValuePaintProposalApplier.ArmedProposal;
+				_statusTmp.text = "Armed " + a.DesiredBin + " / " + a.StrokeRole
+				                  + (ValuePaintProposalApplier.SawApplyOnArmedTarget ? " · stroke applied" : "");
+				return;
+			}
+			// Pending Propose snapshot — do not overwrite with Live while reviewing.
+			if (_hasProposal) {
+				if (!keepMessage)
+					_statusTmp.text = "Proposed (" + (_assistWhich ?? "?") + ") — Accept to arm brush.";
+				return;
+			}
 			// Live predict owns the status line while active — do not let options Changed
-			// (Blend/Size/Opacity drag) overwrite it with Armed every frame.
+			// (Blend/Size/Opacity drag) overwrite it with Idle every frame.
 			if (ValuePaintLivePredictor.IsLiveActive && ValuePaintLivePredictor.HasLastProposal) {
 				var p = ValuePaintLivePredictor.LastProposal;
 				_statusTmp.text = "Live " + p.CurrentBin + "→" + p.DesiredBin + " · " + ValuePaintLivePredictor.LastAssistWhich;
 				return;
 			}
-			if (ValuePaintProposalApplier.IsArmed) {
-				var a = ValuePaintProposalApplier.ArmedProposal;
-				_statusTmp.text = "Armed " + a.DesiredBin + " / " + a.StrokeRole
-				                  + (ValuePaintProposalApplier.SawApplyOnArmedTarget ? " · stroke applied" : "");
-			} else if (!_hasProposal) {
-				if (!keepMessage || string.IsNullOrEmpty(_statusTmp.text) || _statusTmp.text == "Dismissed.")
-					_statusTmp.text = "Idle";
-			}
+			if (!keepMessage || string.IsNullOrEmpty(_statusTmp.text) || _statusTmp.text == "Dismissed.")
+				_statusTmp.text = "Idle";
 		}
 
 		static Color CurrentBrushColor() {
