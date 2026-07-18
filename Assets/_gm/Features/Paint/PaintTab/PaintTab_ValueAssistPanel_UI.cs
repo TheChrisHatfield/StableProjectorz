@@ -87,6 +87,8 @@ namespace spz {
 			}
 
 			panel.BindExpando(headerBtn, headerLbl);
+			// Keep instance flag aligned with session before ApplyCollapsedChrome (default field is false).
+			panel.SyncCollapsedFromSession();
 			bool needsRebuild = panel.NeedsChromeRebuild();
 			// Only activate for a real rebuild — activating every CollectNow flashed the panel and
 			// jumped Tool Options scroll while collapsed (EnsureLayoutShell forced preferredHeight=-1).
@@ -104,6 +106,10 @@ namespace spz {
 			}
 			panel.ApplyCollapsedChrome();
 			return panel;
+		}
+
+		void SyncCollapsedFromSession() {
+			_collapsed = _sessionCollapsed;
 		}
 
 		bool NeedsChromeRebuild() {
@@ -126,8 +132,8 @@ namespace spz {
 				root.transform.SetParent(toolRow, false);
 				root.AddComponent<RectTransform>();
 				var rootLe = root.AddComponent<LayoutElement>();
-				rootLe.minWidth = 80;
-				rootLe.preferredWidth = 88;
+				rootLe.minWidth = 96;
+				rootLe.preferredWidth = 104;
 				rootLe.flexibleWidth = 0;
 				rootLe.minHeight = 28;
 				rootLe.preferredHeight = 28;
@@ -144,6 +150,7 @@ namespace spz {
 				headerImg.color = new Color(0.25f, 0.32f, 0.4f, 1f);
 				headerImg.raycastTarget = true;
 				headerBtn = headerGo.AddComponent<Button>();
+				headerBtn.targetGraphic = headerImg;
 				var headerColors = headerBtn.colors;
 				headerColors.highlightedColor = new Color(0.32f, 0.4f, 0.48f, 1f);
 				headerColors.pressedColor = new Color(0.2f, 0.26f, 0.34f, 1f);
