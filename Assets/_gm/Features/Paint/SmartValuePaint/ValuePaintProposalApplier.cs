@@ -13,12 +13,14 @@ namespace spz {
 		static bool _armed;
 		static ValuePaintProposal _armedProposal;
 		static bool _sawApplyOnArmedTarget;
+		static bool _armedViaLive;
 		static string _lastFailReason = "";
 		static int _lastLiveHardnessIx = int.MinValue;
 
 		public static bool IsArmed => _armed;
 		public static ValuePaintProposal ArmedProposal => _armedProposal;
 		public static bool SawApplyOnArmedTarget => _sawApplyOnArmedTarget;
+		public static bool ArmedViaLive => _armedViaLive;
 		public static string LastFailReason => _lastFailReason;
 
 		public static Color GrayForBand(ValuePaintBand band) {
@@ -145,6 +147,7 @@ namespace spz {
 
 			_armedProposal = proposal;
 			_armed = true;
+			_armedViaLive = false;
 			_sawApplyOnArmedTarget = false;
 			reason = "Armed on target=" + DescribeTarget(target) + " desiredBin=" + proposal.DesiredBin
 			         + " color=" + tint + " size01=" + width01.ToString("F2")
