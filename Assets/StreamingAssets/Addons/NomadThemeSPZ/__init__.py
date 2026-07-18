@@ -86,7 +86,7 @@ def _best_effort_cleanup(api: Any) -> None:
 
 
 def apply_nomad_palette() -> None:
-    """Re-register and apply the preset, making the action retry-safe."""
+    """Apply registered palette colors only (retry-safe re-register + apply_theme)."""
     api = _get_api()
     _register_preset(api)
     try:
@@ -94,7 +94,7 @@ def apply_nomad_palette() -> None:
     except Exception:
         _best_effort_cleanup(api)
         raise
-    print(f"[{ADDON_ID}] Applied '{THEME_ID}'")
+    print(f"[{ADDON_ID}] Applied '{THEME_ID}' colors")
 
 
 def restore_stableprojectorz_palette() -> None:
@@ -105,26 +105,29 @@ def restore_stableprojectorz_palette() -> None:
 
 
 def register() -> None:
-    """Register, apply, and expose explicit apply/restore controls."""
+    """Register the preset and expose apply/restore controls (does not auto-apply colors)."""
     global _panel
 
     api = _get_api()
     try:
-        apply_nomad_palette()
+        # Register only — Apply Nomad Palette button changes colors explicitly.
+        _register_preset(api)
         _panel = api.ui.create_panel(ADDON_ID, ADDON_TITLE)
     except Exception:
         _panel = None
         _best_effort_cleanup(api)
         raise
     if _panel is None:
-        # The Add-on Manager enable/disable switch remains a complete control path.
-        print(f"[{ADDON_ID}] Palette applied; optional control panel was unavailable")
-        return
+        # Soft-success left dial ON + empty eager ribbon tab and orphaned theme registration.
+        _best_effort_cleanup(api)
+        raise RuntimeError(
+            f"[{ADDON_ID}] create_panel failed — refusing successful load so Unity tears down the ribbon shell"
+        )
 
     _panel.add_button("Apply Nomad Palette", "apply_nomad_palette")
     _panel.add_button("Restore SPZ Palette", "restore_stableprojectorz_palette")
     print(
-        f"[{ADDON_ID}] Registered. P2 themes add-on panels plus core chrome "
+        f"[{ADDON_ID}] Registered. Use Apply Nomad Palette to change colors only "
         "(command ribbon, Paint, manager, Settings, status, viewport ribbons)."
     )
 
@@ -159,6 +162,7 @@ def addon_metadata() -> Dict[str, str]:
         "rpc": "1.12",
         "coverage": (
             "addon_panels,command_ribbon,paint_tab,addon_manager,"
-            "settings,viewport_statusline,viewport_ribbons"
+            "settings,viewport_statusline,viewport_ribbons,"
+            "sd_input_panel,export_save_menu,scene_resolution,connection_panels"
         ),
     }
