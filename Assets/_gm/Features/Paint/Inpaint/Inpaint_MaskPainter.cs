@@ -719,11 +719,23 @@ namespace spz {
 			    _blitApplyEntireColorLayer_mat.SetColor("_CurrBrushColor", brushCol);
 			    _blitApplyEntireColorLayer_mat.SetFloat("_Sign", sign);
 			    _blitApplyEntireColorLayer_mat.SetFloat("_MaxPossibleBrushStrength01", maxStrength);
-			    _blitApplyEntireColorLayer_mat.SetInteger("_isColorlessMask", isColorless ? 1 : 0);
-			    if (isColorless) _blitApplyEntireColorLayer_mat.SetTexture("_ColorlessCheckerTex", _colorlessMaskChecker_tex);
+			    // Content is always color RGB — never set colorless here (that zeroes RGB in the shader).
+			    // No-Color underlay uses NoColorMask separately in CompositeVisibleLayersIntoTemp.
+			    _blitApplyEntireColorLayer_mat.SetInteger("_isColorlessMask", 0);
 			    _blitApplyEntireColorLayer_mat.SetFloat("_TotalOpacity01", opacity);
 			    TextureTools_SPZ.Blit(layer.Content.texArray, _smudgeUnderActiveTemp.texArray, _blitApplyEntireColorLayer_mat);
 			    blitCount++;
+			    if (isColorless) {
+				    layer.EnsureNoColorMaskMatchesContent();
+				    if (layer.NoColorMask != null) {
+					    _blitApplyEntireColorLayer_mat.SetTexture("_SrcTex", layer.NoColorMask.texArray);
+					    RenderUdims.SetNumUdims(_smudgeUnderActiveTemp, _blitApplyEntireColorLayer_mat);
+					    _blitApplyEntireColorLayer_mat.SetInteger("_isColorlessMask", 1);
+					    _blitApplyEntireColorLayer_mat.SetTexture("_ColorlessCheckerTex", _colorlessMaskChecker_tex);
+					    _blitApplyEntireColorLayer_mat.SetFloat("_TotalOpacity01", opacity);
+					    TextureTools_SPZ.Blit(layer.NoColorMask.texArray, _smudgeUnderActiveTemp.texArray, _blitApplyEntireColorLayer_mat);
+				    }
+			    }
 		    }
 
 		    if (blitCount == 0)
@@ -1323,6 +1335,16 @@ namespace spz {
 		                         + (PaintLayerStack_MGR.instance != null) + " ActiveLayer="
 		                         + (PaintLayerStack_MGR.instance?.ActiveLayerRenderUdims != null)
 		                         + " ColorBuf=" + (_ObjectUV_brushedColorRGBA != null));
+		        return;
+	        }
+	        // Smudge already refuses a hidden active layer; color paint must too — otherwise strokes
+	        // write into a buffer the composite never shows (color select looks broken).
+	        var activeLayer = PaintLayerStack_MGR.instance?.ActiveLayer;
+	        if (activeLayer != null && !activeLayer.Visible) {
+		        if (isFirstFrameOfStroke && Viewport_StatusText.instance != null)
+			        Viewport_StatusText.instance.ShowStatusText(
+				        "Active layer is hidden — unhide it (eye) to paint with the selected color.",
+				        false, 3f, false);
 		        return;
 	        }
 	        if (ModelsHandler_3D.instance == null || Objects_Renderer_MGR.instance == null
