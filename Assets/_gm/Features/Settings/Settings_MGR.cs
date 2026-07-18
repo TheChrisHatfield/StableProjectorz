@@ -139,6 +139,8 @@ namespace spz {
 	    public void set_sd_strictMaskIsolation(bool on) {
 	        _sd_strictMaskIsolation = on;
 	        PlayerPrefs.SetInt("SD_StrictMaskIsolation", _sd_strictMaskIsolation ? 1 : 0); PlayerPrefs.Save();
+	        var t = EventsBinder.FindComponent<Toggle>("Settings:set_sd_strictMaskIsolation");
+	        if (t != null) t.SetIsOnWithoutNotify(on);
 	    }
 	    void tryLoad_sd_strictMaskIsolation()
 	        => set_sd_strictMaskIsolation(PlayerPrefs.GetInt("SD_StrictMaskIsolation", 0) == 1);
