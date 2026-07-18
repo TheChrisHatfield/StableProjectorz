@@ -476,14 +476,17 @@ namespace spz {
 				int hardnessIx = Softness01ToHardnessIx(proposal.EdgeSoftness01);
 				if (hardnessIx != _lastLiveHardnessIx) {
 					var hardnessUi = Object.FindObjectOfType<BrushRibbon_UI_Hardness>(true);
-					if (hardnessUi != null) {
-						// User changed hardness manually since our last write (H key / Ctrl+1-3) —
-						// their pick wins for the rest of this session; keep it as the restore target too.
-						if (_lastLiveHardnessIx != int.MinValue
-						    && !hardnessUi.IsUsingCustomAlpha()
-						    && hardnessUi.hardnessIx != _lastLiveHardnessIx) {
+					if (hardnessUi != null && !hardnessUi.IsUsingCustomAlpha()) {
+						// User changed hardness since capture / last assist write — their pick wins.
+						bool changedSinceAssistWrite = _lastLiveHardnessIx != int.MinValue
+							&& hardnessUi.hardnessIx != _lastLiveHardnessIx;
+						bool changedBeforeFirstAssistWrite = _lastLiveHardnessIx == int.MinValue
+							&& _snapshotHardnessWasBuiltIn
+							&& hardnessUi.hardnessIx != _snapshotHardnessIx;
+						if (changedSinceAssistWrite || changedBeforeFirstAssistWrite) {
 							_liveHardnessUserOverride = true;
 							_snapshotHardnessIx = hardnessUi.hardnessIx;
+							_snapshotHardnessWasBuiltIn = true;
 						} else if (hardnessUi.TrySetBuiltInOnly(hardnessIx)) {
 							_lastLiveHardnessIx = hardnessIx;
 						}

@@ -261,8 +261,14 @@ namespace spz {
 					string liveLine = "Live " + p.CurrentBin + "→" + p.DesiredBin + " · " + ValuePaintLivePredictor.LastAssistWhich;
 					if (_statusTmp.text == null || !_statusTmp.text.StartsWith("Live ") || _statusTmp.text != liveLine)
 						_statusTmp.text = liveLine;
-					if (_swatchImg != null)
-						_swatchImg.color = ValuePaintProposalApplier.ColorAtDesiredValue(CurrentBrushColor(), p.DesiredBin);
+					if (_swatchImg != null) {
+						// Ribbon is already soft-armed — do not ColorAtDesiredValue(CurrentBrushColor())
+						// or the swatch double-shifts (same class of bug as Propose-from-Live-brush).
+						Color swatchBase = CurrentBrushColor();
+						if (ValuePaintProposalApplier.TryGetUserChromaBase(out Color chroma))
+							swatchBase = chroma;
+						_swatchImg.color = ValuePaintProposalApplier.ColorAtDesiredValue(swatchBase, p.DesiredBin);
+					}
 				} else if ((!ValuePaintLivePredictor.IsLiveActive || acceptArm)
 				           && _statusTmp.text != null && _statusTmp.text.StartsWith("Live ")) {
 					// Live turned off (or Accept arm took over) — do not leave a stale Live line.
