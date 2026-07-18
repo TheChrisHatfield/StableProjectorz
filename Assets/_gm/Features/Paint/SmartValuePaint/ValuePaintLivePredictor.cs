@@ -66,11 +66,12 @@ namespace spz {
 			_lastDesired = (ValuePaintBand)(-1);
 		}
 
-		/// <summary>True when desired band changed or enough time passed — caller may refresh UI lightly.</summary>
+		/// <summary>True when desired band changed and debounce elapsed — caller may refresh cursor tint.</summary>
 		public static bool ShouldAnnounceBandChange(ValuePaintBand desired) {
 			if (desired == _lastDesired) return false;
-			_lastDesired = desired;
+			// Do not consume the new band while debouncing — otherwise a skipped announce never retries.
 			if (Time.unscaledTime - _lastLiveArmTime < 0.35f) return false;
+			_lastDesired = desired;
 			_lastLiveArmTime = Time.unscaledTime;
 			return true;
 		}
