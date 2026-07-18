@@ -495,7 +495,8 @@ namespace spz {
 	        return GetLaunchPathWithGpuSetting(webuiFilePath, out workingDir);
 	    }
 
-	    public void LaunchWebui_Manually(bool printStatusText_ifNotFound = false, bool suppressBrowserOpenForThisLaunch = false) {
+	    /// <returns>True if a WebUI process was started (PID != 0).</returns>
+	    public bool LaunchWebui_Manually(bool printStatusText_ifNotFound = false, bool suppressBrowserOpenForThisLaunch = false) {
 	        _suppressBrowserOpenForCurrentLaunch = suppressBrowserOpenForThisLaunch;
 	        ShowSdLoadingNotification();
 	        string filePath = GetWebuiFilePath(printStatusText_ifNotFound);
@@ -505,7 +506,7 @@ namespace spz {
 	                "Stable Diffusion bat not found next to the EXE (stable-diffusion-webui-forge). Set SPZ_WEBUI_RUN_PATH.",
 	                false);
 	            _suppressBrowserOpenForCurrentLaunch = false;
-	            return;
+	            return false;
 	        }
 
 	        UnityEngine.Debug.Log($"[LaunchWebUI] Bat found, launching: {filePath}");
@@ -535,15 +536,17 @@ namespace spz {
 	                SetLastLaunchedWebUiPid(pid);
 	                UnityEngine.Debug.Log($"[LaunchWebUI] Process launched successfully with PID: {pid}");
 	                NotifyWebUiLaunchStarted();
-	            } else {
-	                UnityEngine.Debug.LogError("[LaunchWebUI] Failed to launch process (PID 0).");
-	                ClearSdLoadingNotification("Stable Diffusion failed to launch (process PID 0).", false);
-	                _suppressBrowserOpenForCurrentLaunch = false;
+	                return true;
 	            }
+	            UnityEngine.Debug.LogError("[LaunchWebUI] Failed to launch process (PID 0).");
+	            ClearSdLoadingNotification("Stable Diffusion failed to launch (process PID 0).", false);
+	            _suppressBrowserOpenForCurrentLaunch = false;
+	            return false;
 	        } catch (Exception e) {
 	            UnityEngine.Debug.LogError($"[LaunchWebUI] Error launching process: {e.Message}");
 	            ClearSdLoadingNotification("Stable Diffusion launch error: " + e.Message, false);
 	            _suppressBrowserOpenForCurrentLaunch = false;
+	            return false;
 	        }
 	    }
 

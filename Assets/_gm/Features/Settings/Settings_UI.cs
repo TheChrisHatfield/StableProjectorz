@@ -647,8 +647,9 @@ namespace spz {
 	            StaticEvents.Invoke<int>("Settings:set_sdGpuDeviceId", deviceId);
 	        }
 	        if (LaunchWebUIBatFile.instance != null) {
-	            LaunchWebUIBatFile.instance.LaunchWebui_Manually(printStatusText_ifNotFound: true);
-	            if (Viewport_StatusText.instance != null)
+	            bool started = LaunchWebUIBatFile.instance.LaunchWebui_Manually(printStatusText_ifNotFound: true);
+	            // Only claim success when a process actually started — LaunchWebUI owns fail/sticky text otherwise.
+	            if (started && Viewport_StatusText.instance != null)
 	                Viewport_StatusText.instance.ShowStatusText("WebUI launching with selected GPU. Previous WebUI closed automatically.", false, 4f, false);
 	        } else if (Viewport_StatusText.instance != null)
 	            Viewport_StatusText.instance.ShowStatusText("GPU preference saved. Launch WebUI from the menu to apply.", false, 3f, false);
