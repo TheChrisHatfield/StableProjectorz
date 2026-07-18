@@ -42,13 +42,18 @@ namespace spz {
 	    } 
 
 
-	    void ChangeBrushColor(Color wantedColor, bool ensureInpaint=false, bool invokeCallback=true){
+	    void ChangeBrushColor(Color wantedColor, bool ensureInpaint=false, bool invokeCallback=true, bool fromAssist=false){
 	        if (ensureInpaint){
 	            // For convenience. If user wants to choose RGB color, they most likely want to inpaint. So show it:
 	            _rib.Set_CurrentMode( WorkflowRibbon_CurrMode.Inpaint_Color, playAttentionAnim:true );
 	        }
 	        _brushColor = wantedColor;
 	        //NOTICE: don't change the icon color, it will be changed during Update()
+
+	        // User-authored picks (picker / swatch / eyedropper / load) must win over Value Assist live:
+	        // re-base the live chroma + restore snapshot so live value steps follow THIS color from now on.
+	        // Assist's own quiet writes must not, or live would chase its own output.
+	        if (!fromAssist){ ValuePaintProposalApplier.NotifyUserBrushColorChanged(wantedColor); }
 
 	        if(invokeCallback){  _onBrushColorUpdated?.Invoke(wantedColor); }
 	    }
@@ -60,10 +65,11 @@ namespace spz {
 	        ChangeBrushColor(c, ensureInpaint:true, invokeCallback:true);
 	    }
 
-	    /// <summary>Quiet color set for Value Assist live predict — no mode switch / attention anim spam.</summary>
+	    /// <summary>Quiet color set for Value Assist live predict — no mode switch / attention anim spam.
+	    /// Marked as assist-authored so it does not re-base the live chroma (would chase its own output).</summary>
 	    public void SetBrushColorQuiet(Color c) {
 		    c.a = 1f;
-		    ChangeBrushColor(c, ensureInpaint: false, invokeCallback: true);
+		    ChangeBrushColor(c, ensureInpaint: false, invokeCallback: true, fromAssist: true);
 	    }
     
 

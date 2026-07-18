@@ -985,11 +985,16 @@ namespace spz {
 			    return;
 		    if (!ValuePaintLivePredictor.TryPredictFromSurface(c, out _))
 			    return;
+		    // Tint the cursor with the ACTUAL armed brush color (post live soft-arm), not a remap of the
+		    // surface sample — otherwise the ring shows a color the stroke will never lay down.
 		    if (ValuePaintLivePredictor.HasLastProposal
 		        && ValuePaintLivePredictor.ShouldAnnounceBandChange(ValuePaintLivePredictor.LastProposal.DesiredBin)
-		        && Cursor_UI.instance != null)
-			    Cursor_UI.instance.SetCursorColor(ValuePaintProposalApplier.ColorAtDesiredValue(
-				    c, ValuePaintLivePredictor.LastProposal.DesiredBin));
+		        && Cursor_UI.instance != null) {
+			    var sdRibbon = SD_WorkflowOptionsRibbon_UI.instance;
+			    Cursor_UI.instance.SetCursorColor(sdRibbon != null
+				    ? sdRibbon.brushColor
+				    : ValuePaintProposalApplier.ColorAtDesiredValue(c, ValuePaintLivePredictor.LastProposal.DesiredBin));
+		    }
 	    }
 
 	    /// <summary>While smudge is active, tint the viewport brush ring from the mesh accumulation color under the cursor (throttled GPU readback).</summary>
