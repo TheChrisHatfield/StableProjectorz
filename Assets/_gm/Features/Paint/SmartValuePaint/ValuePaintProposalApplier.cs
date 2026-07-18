@@ -14,6 +14,7 @@ namespace spz {
 		static ValuePaintProposal _armedProposal;
 		static bool _sawApplyOnArmedTarget;
 		static bool _armedViaLive;
+		static bool _suppressLiveSoftArm;
 		static string _lastFailReason = "";
 		static int _lastLiveHardnessIx = int.MinValue;
 
@@ -22,6 +23,10 @@ namespace spz {
 		public static bool SawApplyOnArmedTarget => _sawApplyOnArmedTarget;
 		public static bool ArmedViaLive => _armedViaLive;
 		public static string LastFailReason => _lastFailReason;
+
+		/// <summary>Block live soft-arm until Live is toggled on again (Dismiss / Accept lock).</summary>
+		public static void SuppressLiveSoftArm() => _suppressLiveSoftArm = true;
+		public static void ClearLiveSoftArmSuppress() => _suppressLiveSoftArm = false;
 
 		public static Color GrayForBand(ValuePaintBand band) {
 			float lum;
@@ -190,6 +195,15 @@ namespace spz {
 				reason = _lastFailReason = "Value Assist live predict off";
 				return false;
 			}
+			if (_suppressLiveSoftArm) {
+				reason = _lastFailReason = "live soft-arm suppressed";
+				return false;
+			}
+			// Do not overwrite a user Accept arm — Live must wait until ClearArmed / Live toggle.
+			if (_armed && !_armedViaLive) {
+				reason = _lastFailReason = "accept arm active";
+				return false;
+			}
 
 			var workflow = WorkflowRibbon_UI.instance;
 			if (workflow == null || !workflow.isMode_using_img2img()
@@ -261,8 +275,13 @@ namespace spz {
 			if (!_armed || destin == null)
 				return;
 			var expected = ResolveColorPaintTarget(out _);
-			if (expected != null && ReferenceEquals(expected, destin))
+			if (expected != null && ReferenceEquals(expected, destin)) {
 				_sawApplyOnArmedTarget = true;
+				// Accept lock is for the first stroke. After paint lands, demote so Live can
+				// resume without requiring Dismiss (Dismiss still clears color arm entirely).
+				if (!_armedViaLive)
+					_armedViaLive = true;
+			}
 		}
 
 		static RenderUdims ResolveColorPaintTarget(out string reason) {
