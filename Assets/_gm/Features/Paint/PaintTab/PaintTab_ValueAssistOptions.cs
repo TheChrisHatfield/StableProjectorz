@@ -11,9 +11,10 @@ namespace spz {
 		static bool _enabled = true;
 		static bool _useNeural = true;
 		static bool _applyHardness = true;
-		static bool _livePredict = true;
+		// Live soft-arm mutates brush color/size under the tip — opt-in so stable brush picks stay stable.
+		static bool _livePredict = false;
 		static float _blend01 = 1f;
-		static float _sizeInfluence01 = 1f;
+		static float _sizeInfluence01 = 0f;
 		static float _opacityInfluence01 = 1f;
 
 		/// <summary>Fired after any stored value changes.</summary>
@@ -58,6 +59,8 @@ namespace spz {
 		public static void SetLivePredict(bool v) {
 			if (v == _livePredict) return;
 			_livePredict = v;
+			if (_livePredict)
+				ValuePaintProposalApplier.ClearLiveSoftArmSuppress();
 			if (!_livePredict) {
 				ValuePaintLivePredictor.InvalidateAssist();
 				// Soft live-arm is not Accept — drop it when Live turns off; keep user Accept arms.

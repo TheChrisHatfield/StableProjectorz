@@ -1457,6 +1457,39 @@ namespace spz {
 			SetToolOptionsRowBehindBrushPanelBlocked(row, expando, open);
 		}
 
+		/// <summary>Accordion helper — close Value Assist (+ pinned collapse bar) when Brush options opens.</summary>
+		public static void CloseValueAssistPanel(RectTransform toolSectionParent)
+		{
+			PaintTab_ValueAssistPanel_UI.CollapseUnder(toolSectionParent);
+		}
+
+		/// <summary>Accordion helper — close Brush options (+ pinned collapse bar) when Value Assist opens.</summary>
+		public static void CloseBrushOptionsPanel(RectTransform toolSectionParent)
+		{
+			if (toolSectionParent == null) return;
+			Transform panel = toolSectionParent.Find("BrushOptsPanel");
+			bool wasOpen = panel != null && panel.gameObject.activeSelf;
+			if (panel != null && wasOpen) {
+				panel.gameObject.SetActive(false);
+				var le = panel.GetComponent<LayoutElement>();
+				if (le != null) le.preferredHeight = 0f;
+			}
+			var sr = toolSectionParent.GetComponentInParent<ScrollRect>();
+			if (sr != null && sr.viewport != null) {
+				Transform collapse = sr.viewport.Find("BrushOptsCollapseBtn");
+				if (collapse != null)
+					collapse.gameObject.SetActive(false);
+			}
+			if (TryGetToolOptionsRowAndExpando(toolSectionParent, out _, out var expando) && expando != null) {
+				var headerTxt = expando.GetComponentInChildren<TextMeshProUGUI>(true);
+				if (headerTxt != null)
+					headerTxt.text = "Brush options ▼";
+			}
+			SyncToolOptionsRowModalBlockForSection(toolSectionParent);
+			if (wasOpen)
+				LayoutRebuilder.ForceRebuildLayoutImmediate(toolSectionParent);
+		}
+
 		/// <summary>Keep depth/tools row blocked iff an expando panel is open (e.g. after tab re-enable).</summary>
 		static void SyncBrushPanelModalBlockStateForToolSection(RectTransform section)
 		{
@@ -2213,6 +2246,8 @@ namespace spz {
 			headerBtn.onClick.AddListener(() =>
 			{
 				bool open = !panelGo.activeSelf;
+				if (open)
+					CloseValueAssistPanel(toolSectionParent);
 				panelGo.SetActive(open);
 				if (pinCollapseToToolViewport)
 					collapseBtnGo.SetActive(open);

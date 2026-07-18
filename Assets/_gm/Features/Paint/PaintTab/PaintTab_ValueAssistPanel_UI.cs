@@ -569,7 +569,12 @@ namespace spz {
 
 		/// <summary>Close from Brush options accordion without scrolling.</summary>
 		public void ForceCollapse() {
-			if (_collapsed && !gameObject.activeSelf) return;
+			// Always hide pin even when already collapsed — accordion open of Brush must not leave
+			// a leftover ValueAssistCollapseBtn covering the viewport bottom.
+			if (_collapsed && !gameObject.activeSelf) {
+				SyncPinnedCollapseVisibility(false);
+				return;
+			}
 			_collapsed = true;
 			_sessionCollapsed = true;
 			ApplyCollapsedChrome(scrollIntoView: false);
