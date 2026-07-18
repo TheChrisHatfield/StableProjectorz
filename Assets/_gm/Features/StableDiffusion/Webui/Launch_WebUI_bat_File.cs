@@ -517,10 +517,10 @@ namespace spz {
 	            workingDir = Path.GetTempPath();
 
 	        try {
-	            // Auto-start: keep a visible CMD so users can see Forge boot (docs + UX). Manual Settings
-	            // launch still respects ShowExternalProcessWindows.
-	            bool showExternalWindows = _forceHiddenForAutoLaunch
-	                || UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1;
+	            // Auto-start sets _forceHiddenForAutoLaunch when the Settings toggle is off.
+	            // Match Addon_MGR: force-hide wins; otherwise respect ShowExternalProcessWindows.
+	            bool showExternalWindows = !_forceHiddenForAutoLaunch
+	                && UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1;
 	            uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
 	                launchPath,
 	                isJustFile: true,
@@ -564,8 +564,9 @@ namespace spz {
 	            if (i > 0)
 	                UnityEngine.Debug.Log($"[LaunchWebUI] Retry {i + 1}/{AutoLaunchRetryDelays.Length} (after {AutoLaunchRetryDelays[i]}s).");
 	            try {
-	                // Auto-launch: show the Forge CMD window so boot progress is visible.
-	                _forceHiddenForAutoLaunch = true;
+	                // Hide on auto-launch unless Settings → Show external process windows is ON.
+	                _forceHiddenForAutoLaunch =
+	                    UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 0;
 	                bool suppressBrowser = UnityEngine.PlayerPrefs.GetInt("WebUI_OpenBrowserOnStartup", 0) == 0;
 	                LaunchWebui_Manually(showStatus, suppressBrowserOpenForThisLaunch: suppressBrowser);
 	            } catch (Exception e) {
