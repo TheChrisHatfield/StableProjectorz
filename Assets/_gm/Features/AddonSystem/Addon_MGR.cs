@@ -608,12 +608,14 @@ namespace spz {
 					}
 				}
 				
-				// Remove addons that are no longer on disk (uninstalled)
+				// Remove addons that are no longer on disk (uninstalled) — tear down ribbon/Python first
+				// so Refresh/Discover cannot leave orphan tabs after a folder vanishes.
 				var toRemove = new List<string>();
 				foreach (var key in _registeredAddons.Keys) {
 					if (!foundIds.Contains(key)) toRemove.Add(key);
 				}
 				foreach (var key in toRemove) {
+					UnloadAddon(key);
 					_registeredAddons.Remove(key);
 				}
 
