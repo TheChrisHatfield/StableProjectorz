@@ -151,6 +151,8 @@ namespace spz {
 		/// <summary>One in-flight load/unload HTTP op per addon — rapid toggle must not race register/unregister.</summary>
 		readonly Dictionary<string, Coroutine> _addonLifecycleOpById = new Dictionary<string, Coroutine>();
 		readonly Dictionary<string, int> _addonLifecycleEpochById = new Dictionary<string, int>();
+		/// <summary>Deferred ribbon tab create when CommandRibbon_UI is not ready at Enable / prefs restore.</summary>
+		readonly Dictionary<string, Coroutine> _ribbonShellEnsureById = new Dictionary<string, Coroutine>();
 
 		static bool s_addonApiQuitShutdownDone;
 		static bool s_appliedRememberedEnabledOnFirstDiscover;
@@ -777,6 +779,8 @@ namespace spz {
 		IEnumerator RequestLoadEnabledAddonsAfterDelay() {
 			UnityEngine.Debug.Log("[Addon_MGR] Auto-loading enabled addons in 2.5s (spin loading)...");
 			yield return new WaitForSeconds(2.5f);
+			// Prefs-restored enables never called EnableAddon — create ribbon shells before Python load.
+			EnsureRibbonShellsForAllEnabledAddons();
 			int count = 0;
 			foreach (var kvp in _registeredAddons) {
 				if (kvp.Value != null && kvp.Value.isEnabled) {
@@ -1170,27 +1174,69 @@ namespace spz {
 
 		/// <summary>
 		/// Creates/repairs the command-ribbon tab+shell for an enabled add-on so manager dials stay linked to the strip.
+		/// If the ribbon is not ready yet, retries until it is (or the add-on is disabled).
 		/// </summary>
 		void EnsureRibbonShellForEnabledAddon(string addonId) {
 			if (string.IsNullOrEmpty(addonId)) return;
 			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal))
 				return;
 			if (!IsAddonEnabled(addonId)) return;
-			var ribbon = AddonRibbonIntegration.ResolveCommandRibbon();
-			if (ribbon == null) {
-				UnityEngine.Debug.LogWarning(
-					$"[Addon_MGR] Enabled '{addonId}' but CommandRibbon_UI not found yet — tab will appear when Python create_panel runs or ribbon becomes ready.");
+			if (TryCreateRibbonShellNow(addonId))
 				return;
+			StartEnsureRibbonShellWhenReady(addonId);
+		}
+
+		void EnsureRibbonShellsForAllEnabledAddons() {
+			if (_registeredAddons == null) return;
+			foreach (var kvp in _registeredAddons) {
+				if (kvp.Value == null || !kvp.Value.isEnabled) continue;
+				EnsureRibbonShellForEnabledAddon(kvp.Key);
 			}
+		}
+
+		bool TryCreateRibbonShellNow(string addonId) {
+			var ribbon = AddonRibbonIntegration.ResolveCommandRibbon();
+			if (ribbon == null)
+				return false;
 			string title = addonId;
 			if (_registeredAddons.TryGetValue(addonId, out var info) && info != null
 			    && !string.IsNullOrWhiteSpace(info.displayName))
 				title = info.displayName.Trim();
 			var shell = ribbon.GetOrCreatePanelForAddon(addonId, title);
 			if (shell == null)
-				UnityEngine.Debug.LogWarning($"[Addon_MGR] GetOrCreatePanelForAddon returned null for enabled '{addonId}'.");
-			else
-				UnityEngine.Debug.Log($"[Addon_MGR] Ribbon tab ready for enabled add-on: {addonId} ({title})");
+				return false;
+			UnityEngine.Debug.Log($"[Addon_MGR] Ribbon tab ready for enabled add-on: {addonId} ({title})");
+			return true;
+		}
+
+		void StartEnsureRibbonShellWhenReady(string addonId) {
+			if (string.IsNullOrEmpty(addonId)) return;
+			if (_ribbonShellEnsureById.TryGetValue(addonId, out var existing) && existing != null)
+				StopCoroutine(existing);
+			_ribbonShellEnsureById[addonId] = StartCoroutine(CoEnsureRibbonShellWhenReady(addonId));
+		}
+
+		IEnumerator CoEnsureRibbonShellWhenReady(string addonId) {
+			UnityEngine.Debug.LogWarning(
+				$"[Addon_MGR] Enabled '{addonId}' but CommandRibbon_UI not ready — retrying ribbon tab create.");
+			const int maxFrames = 600;
+			for (int f = 0; f < maxFrames; f++) {
+				if (this == null)
+					yield break;
+				if (!IsAddonEnabled(addonId)
+				    || string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal)) {
+					_ribbonShellEnsureById.Remove(addonId);
+					yield break;
+				}
+				if (TryCreateRibbonShellNow(addonId)) {
+					_ribbonShellEnsureById.Remove(addonId);
+					yield break;
+				}
+				yield return null;
+			}
+			_ribbonShellEnsureById.Remove(addonId);
+			UnityEngine.Debug.LogWarning(
+				$"[Addon_MGR] Timed out waiting for CommandRibbon_UI to create tab for enabled '{addonId}'.");
 		}
 		
 		/// <summary>
