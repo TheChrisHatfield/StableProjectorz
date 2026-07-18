@@ -104,13 +104,19 @@ namespace spz {
 		}
 
 		void Update() {
-			if (ValuePaintLivePredictor.IsLiveActive && ValuePaintLivePredictor.HasLastProposal && _statusTmp != null) {
-				var p = ValuePaintLivePredictor.LastProposal;
-				string liveLine = "Live " + p.CurrentBin + "→" + p.DesiredBin + " · " + ValuePaintLivePredictor.LastAssistWhich;
-				if (_statusTmp.text == null || !_statusTmp.text.StartsWith("Live ") || _statusTmp.text != liveLine)
-					_statusTmp.text = liveLine;
-				if (_swatchImg != null)
-					_swatchImg.color = ValuePaintProposalApplier.GrayForBand(p.DesiredBin);
+			if (_statusTmp != null) {
+				if (ValuePaintLivePredictor.IsLiveActive && ValuePaintLivePredictor.HasLastProposal) {
+					var p = ValuePaintLivePredictor.LastProposal;
+					string liveLine = "Live " + p.CurrentBin + "→" + p.DesiredBin + " · " + ValuePaintLivePredictor.LastAssistWhich;
+					if (_statusTmp.text == null || !_statusTmp.text.StartsWith("Live ") || _statusTmp.text != liveLine)
+						_statusTmp.text = liveLine;
+					if (_swatchImg != null)
+						_swatchImg.color = ValuePaintProposalApplier.GrayForBand(p.DesiredBin);
+				} else if (!ValuePaintLivePredictor.IsLiveActive
+				           && _statusTmp.text != null && _statusTmp.text.StartsWith("Live ")) {
+					// Live turned off — do not leave a stale Live line (Invalidate alone does not refresh UI).
+					RefreshStatusLine();
+				}
 			}
 			if (!ValuePaintProposalApplier.IsArmed || _statusTmp == null) return;
 			if (!ValuePaintProposalApplier.SawApplyOnArmedTarget) return;
@@ -151,8 +157,8 @@ namespace spz {
 					_summaryTmp.text = "Value Assist off — expand header, turn On dial.";
 				keepNeuralStatus = false;
 			} else if (!PaintTab_ValueAssistOptions.LivePredict) {
-				if (!ValuePaintLivePredictor.HasLastProposal && _statusTmp != null
-				    && _statusTmp.text != null && _statusTmp.text.StartsWith("Live "))
+				// InvalidateAssist already cleared HasLastProposal; always drop stale Live UI text.
+				if (_statusTmp != null && _statusTmp.text != null && _statusTmp.text.StartsWith("Live "))
 					_statusTmp.text = "Idle";
 			}
 			if (!keepNeuralStatus)
