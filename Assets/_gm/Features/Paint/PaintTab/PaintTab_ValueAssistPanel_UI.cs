@@ -446,6 +446,13 @@ namespace spz {
 			}
 			if (keepMessage && !string.IsNullOrEmpty(_statusTmp.text) && _statusTmp.text.StartsWith("Accept refused"))
 				return;
+			// Live predict owns the status line while active — do not let options Changed
+			// (Blend/Size/Opacity drag) overwrite it with Armed every frame.
+			if (ValuePaintLivePredictor.IsLiveActive && ValuePaintLivePredictor.HasLastProposal) {
+				var p = ValuePaintLivePredictor.LastProposal;
+				_statusTmp.text = "Live " + p.CurrentBin + "→" + p.DesiredBin + " · " + ValuePaintLivePredictor.LastAssistWhich;
+				return;
+			}
 			if (ValuePaintProposalApplier.IsArmed) {
 				var a = ValuePaintProposalApplier.ArmedProposal;
 				_statusTmp.text = "Armed " + a.DesiredBin + " / " + a.StrokeRole
