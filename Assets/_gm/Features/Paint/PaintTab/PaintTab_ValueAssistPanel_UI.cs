@@ -27,6 +27,7 @@ namespace spz {
 		Toggle _enabledToggle;
 		Toggle _neuralToggle;
 		Toggle _hardnessToggle;
+		Toggle _liveToggle;
 		Slider _blendSlider;
 		Slider _sizeInfSlider;
 		Slider _opacityInfSlider;
@@ -76,8 +77,8 @@ namespace spz {
 			rect.pivot = new Vector2(0.5f, 1);
 			var le = rect.GetComponent<LayoutElement>() ?? rect.gameObject.AddComponent<LayoutElement>();
 			le.flexibleWidth = 1f;
-			le.minHeight = 280f;
-			le.preferredHeight = 300f;
+			le.minHeight = 310f;
+			le.preferredHeight = 330f;
 		}
 
 		void OnEnable() {
@@ -94,10 +95,19 @@ namespace spz {
 		}
 
 		void Update() {
+			if (ValuePaintLivePredictor.IsLiveActive && ValuePaintLivePredictor.HasLastProposal && _statusTmp != null) {
+				var p = ValuePaintLivePredictor.LastProposal;
+				string liveLine = "Live " + p.CurrentBin + "→" + p.DesiredBin + " · " + ValuePaintLivePredictor.LastAssistWhich;
+				if (_statusTmp.text == null || !_statusTmp.text.StartsWith("Live ") || _statusTmp.text != liveLine)
+					_statusTmp.text = liveLine;
+				if (_swatchImg != null)
+					_swatchImg.color = ValuePaintProposalApplier.GrayForBand(p.DesiredBin);
+			}
 			if (!ValuePaintProposalApplier.IsArmed || _statusTmp == null) return;
 			if (!ValuePaintProposalApplier.SawApplyOnArmedTarget) return;
 			if (_statusTmp.text != null && _statusTmp.text.IndexOf("stroke applied", System.StringComparison.Ordinal) >= 0)
 				return;
+			if (_statusTmp.text != null && _statusTmp.text.StartsWith("Live ")) return;
 			RefreshStatusLine();
 		}
 
@@ -123,6 +133,7 @@ namespace spz {
 				ClearPendingProposal("Neural mode changed — Propose again.");
 				keepNeuralStatus = true;
 			}
+			ValuePaintLivePredictor.InvalidateAssist();
 
 			_haveSyncedNeuralPref = true;
 			SyncControlsFromStore();
@@ -147,8 +158,8 @@ namespace spz {
 		}
 
 		void BuildUi() {
-			// Settings chrome is the upgrade gate — pre-settings panels had _summaryTmp and never rebuilt.
-			if (_enabledToggle != null) return;
+			// Settings chrome is the upgrade gate — rebuild when live-predict toggle missing.
+			if (_enabledToggle != null && _liveToggle != null) return;
 			for (int i = transform.childCount - 1; i >= 0; i--)
 				UnityEngine.Object.DestroyImmediate(transform.GetChild(i).gameObject);
 			_summaryTmp = null;
@@ -157,8 +168,10 @@ namespace spz {
 			_proposeBtn = null;
 			_acceptBtn = null;
 			_dismissBtn = null;
+			_enabledToggle = null;
 			_neuralToggle = null;
 			_hardnessToggle = null;
+			_liveToggle = null;
 			_blendSlider = null;
 			_sizeInfSlider = null;
 			_opacityInfSlider = null;
@@ -204,7 +217,13 @@ namespace spz {
 			_neuralToggle = MakeCheckboxRow(_controlsRoot.transform, "NeuralRow", "Use neural (MLP)",
 				PaintTab_ValueAssistOptions.UseNeural, isOn => {
 					PaintTab_ValueAssistOptions.SetUseNeural(isOn);
+					ValuePaintLivePredictor.InvalidateAssist();
 					ShowFeedback(isOn ? "Value Assist: neural MLP" : "Value Assist: deterministic stub");
+				});
+			_liveToggle = MakeCheckboxRow(_controlsRoot.transform, "LiveRow", "Live predict under cursor",
+				PaintTab_ValueAssistOptions.LivePredict, isOn => {
+					PaintTab_ValueAssistOptions.SetLivePredict(isOn);
+					ShowFeedback(isOn ? "Value Assist: live predict on" : "Value Assist: live predict off");
 				});
 			_hardnessToggle = MakeCheckboxRow(_controlsRoot.transform, "HardnessRow", "Apply hardness from edge soft",
 				PaintTab_ValueAssistOptions.ApplyHardness, isOn => {
@@ -218,7 +237,9 @@ namespace spz {
 			_opacityInfSlider = MakeSliderRow(_controlsRoot.transform, "OpacityInfRow", "Opacity influence",
 				PaintTab_ValueAssistOptions.OpacityInfluence01, v => PaintTab_ValueAssistOptions.SetOpacityInfluence01(v), out _opacityInfLbl);
 
-			_summaryTmp = MakeLabel(transform, "Value Assist — Propose from brush color, Accept to arm ribbon.", 9f, t.textMuted);
+			_summaryTmp = MakeLabel(transform,
+				"Live: hover/paint predicts value under cursor. Propose/Accept still arms a snapshot.",
+				9f, t.textMuted);
 			var summaryLe = _summaryTmp.GetComponent<LayoutElement>() ?? _summaryTmp.gameObject.AddComponent<LayoutElement>();
 			summaryLe.minHeight = 36f;
 			summaryLe.preferredHeight = 40f;
@@ -257,6 +278,8 @@ namespace spz {
 				_enabledToggle.SetIsOnWithoutNotify(PaintTab_ValueAssistOptions.Enabled);
 			if (_neuralToggle != null)
 				_neuralToggle.SetIsOnWithoutNotify(PaintTab_ValueAssistOptions.UseNeural);
+			if (_liveToggle != null)
+				_liveToggle.SetIsOnWithoutNotify(PaintTab_ValueAssistOptions.LivePredict);
 			if (_hardnessToggle != null)
 				_hardnessToggle.SetIsOnWithoutNotify(PaintTab_ValueAssistOptions.ApplyHardness);
 			if (_blendSlider != null)
@@ -272,6 +295,7 @@ namespace spz {
 			_suppressToggleSync = false;
 			TintToggleBox(_enabledToggle, PaintTab_ValueAssistOptions.Enabled);
 			TintToggleBox(_neuralToggle, PaintTab_ValueAssistOptions.UseNeural);
+			TintToggleBox(_liveToggle, PaintTab_ValueAssistOptions.LivePredict);
 			TintToggleBox(_hardnessToggle, PaintTab_ValueAssistOptions.ApplyHardness);
 		}
 
@@ -284,8 +308,8 @@ namespace spz {
 			if (_acceptBtn != null) _acceptBtn.interactable = on && _hasProposal;
 			var shell = GetComponent<LayoutElement>();
 			if (shell != null) {
-				shell.minHeight = on ? 280f : 72f;
-				shell.preferredHeight = on ? 300f : 80f;
+				shell.minHeight = on ? 310f : 72f;
+				shell.preferredHeight = on ? 330f : 80f;
 			}
 		}
 

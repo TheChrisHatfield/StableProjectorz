@@ -11,6 +11,7 @@ namespace spz {
 		static bool _enabled = true;
 		static bool _useNeural = true;
 		static bool _applyHardness = true;
+		static bool _livePredict = true;
 		static float _blend01 = 1f;
 		static float _sizeInfluence01 = 1f;
 		static float _opacityInfluence01 = 1f;
@@ -22,6 +23,8 @@ namespace spz {
 		/// <summary>When true, prefer MLP weights; when false, force deterministic stub.</summary>
 		public static bool UseNeural => _useNeural;
 		public static bool ApplyHardness => _applyHardness;
+		/// <summary>When true, sample under-cursor surface and soft-arm ribbon while hovering/painting.</summary>
+		public static bool LivePredict => _livePredict;
 		/// <summary>Multiplies proposal <see cref="ValuePaintProposal.BlendStrength01"/> on Accept (0 = no blend pull).</summary>
 		public static float Blend01 => _blend01;
 		/// <summary>0 = keep live brush size; 1 = use proposal width hint.</summary>
@@ -42,12 +45,21 @@ namespace spz {
 		public static void SetUseNeural(bool v) {
 			if (v == _useNeural) return;
 			_useNeural = v;
+			ValuePaintLivePredictor.InvalidateAssist();
 			RaiseChanged();
 		}
 
 		public static void SetApplyHardness(bool v) {
 			if (v == _applyHardness) return;
 			_applyHardness = v;
+			RaiseChanged();
+		}
+
+		public static void SetLivePredict(bool v) {
+			if (v == _livePredict) return;
+			_livePredict = v;
+			if (!_livePredict)
+				ValuePaintLivePredictor.InvalidateAssist();
 			RaiseChanged();
 		}
 

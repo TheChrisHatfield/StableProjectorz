@@ -138,6 +138,13 @@ namespace spz {
 		    return true;
 	    }
 
+	    /// <summary>Value Assist live predict — tint without forcing mode / attention anim.</summary>
+	    public bool SetBrushColorQuietFromApi(float r, float g, float b, float a) {
+		    if (_brushColor == null) return false;
+		    _brushColor.SetBrushColorQuiet(new Color(r, g, b, a));
+		    return true;
+	    }
+
 	    static void ApplyCircleSlider(CircleSlider_Snapping_UI s, float v) {
 		    if (s == null) return;
 		    float c = Mathf.Clamp(v, s.min, s.max);

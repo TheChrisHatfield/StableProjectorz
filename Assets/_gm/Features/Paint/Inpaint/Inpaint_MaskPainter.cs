@@ -79,6 +79,11 @@ namespace spz {
 	    /// <summary>Format passed to <see cref="AsyncGPUReadback.Request"/> for the in-flight smudge cursor sample (decode must match).</summary>
 	    GraphicsFormat _smudgeCursorPendingReadbackFormat;
 
+	    bool _valueAssistLiveReadInFlight;
+	    Vector2 _valueAssistLiveLastVp01 = new Vector2(-1f, -1f);
+	    float _valueAssistLiveLastTime;
+	    GraphicsFormat _valueAssistLivePendingFormat;
+
 	    [Tooltip("Auto: contextual Thompson + layer opacity steers underlay policy. With a paint layer stack present, smudge writes are fenced to ActiveLayer.Content; GeneratedMesh applies only when no layer stack is active.")]
 	    [SerializeField] SmudgeWriteTargetPreference _smudgeWriteTargetPreference = SmudgeWriteTargetPreference.Auto;
 
@@ -911,6 +916,67 @@ namespace spz {
 	    protected override void OnUpdateChildren()
 	    {
 		    UpdateSmudgeHoverCursorSample();
+		    UpdateValueAssistLiveCursorSample();
+	    }
+
+	    /// <summary>Value Assist live predict: throttled GPU texel under cursor → MLP → quiet ribbon arm.</summary>
+	    void UpdateValueAssistLiveCursorSample()
+	    {
+		    if (!ValuePaintLivePredictor.IsLiveActive) return;
+		    if (_valueAssistLiveReadInFlight) return;
+		    var sd = SD_WorkflowOptionsRibbon_UI.instance;
+		    if (sd == null || sd.isSmudge || !sd.isPositive) return;
+		    var workflow = WorkflowRibbon_UI.instance;
+		    if (workflow == null || workflow.currentMode() != WorkflowRibbon_CurrMode.Inpaint_Color) return;
+		    if (!isAllowedToShow_BrushCursorNow()) return;
+		    var mv = MainViewport_UI.instance;
+		    if (mv == null || !mv.isCursorHoveringMe()) return;
+
+		    Vector2 vp = getViewportCursorPos01();
+		    float thr = _smudgeCursorViewportMoveThresh;
+		    if ((vp - _valueAssistLiveLastVp01).sqrMagnitude < thr * thr
+		        && Time.unscaledTime - _valueAssistLiveLastTime < _smudgeCursorReadMinInterval)
+			    return;
+
+		    RenderUdims sampleSrc = GetPaintTarget();
+		    if (sampleSrc == null || sampleSrc.texArray == null || sampleSrc.udims_sectors == null || sampleSrc.udims_sectors.Count == 0) {
+			    var orm = Objects_Renderer_MGR.instance;
+			    sampleSrc = orm != null ? orm.accumulationTextures_ref() : null;
+		    }
+		    if (sampleSrc == null || sampleSrc.texArray == null || sampleSrc.udims_sectors == null || sampleSrc.udims_sectors.Count == 0)
+			    return;
+
+		    if (!TryViewportToAccumTexel(vp, sampleSrc, out int slice, out int px, out int py))
+			    return;
+
+		    _valueAssistLiveReadInFlight = true;
+		    _valueAssistLiveLastVp01 = vp;
+		    _valueAssistLiveLastTime = Time.unscaledTime;
+		    _valueAssistLivePendingFormat = sampleSrc.texArray.graphicsFormat;
+
+		    AsyncGPUReadback.Request(sampleSrc.texArray, 0, px, 1, py, 1, slice, 1, _valueAssistLivePendingFormat,
+			    OnValueAssistLiveReadbackComplete);
+	    }
+
+	    void OnValueAssistLiveReadbackComplete(AsyncGPUReadbackRequest req)
+	    {
+		    if (this == null) return;
+		    _valueAssistLiveReadInFlight = false;
+		    if (req.hasError) return;
+		    if (!ValuePaintLivePredictor.IsLiveActive) return;
+		    if (!TryDecodeSmudgeCursorReadback(req, _valueAssistLivePendingFormat, out Color c))
+			    return;
+		    // Transparent / empty paint texel — fall back to luminance of brush so predict still moves.
+		    if (c.a < 0.04f) {
+			    var sd = SD_WorkflowOptionsRibbon_UI.instance;
+			    if (sd != null) c = sd.brushColor;
+		    }
+		    if (!ValuePaintLivePredictor.TryPredictFromSurface(c, out _))
+			    return;
+		    if (ValuePaintLivePredictor.HasLastProposal
+		        && ValuePaintLivePredictor.ShouldAnnounceBandChange(ValuePaintLivePredictor.LastProposal.DesiredBin)
+		        && Cursor_UI.instance != null)
+			    Cursor_UI.instance.SetCursorColor(ValuePaintProposalApplier.GrayForBand(ValuePaintLivePredictor.LastProposal.DesiredBin));
 	    }
 
 	    /// <summary>While smudge is active, tint the viewport brush ring from the mesh accumulation color under the cursor (throttled GPU readback).</summary>

@@ -59,6 +59,12 @@ namespace spz {
 	        c.a = 1f;
 	        ChangeBrushColor(c, ensureInpaint:true, invokeCallback:true);
 	    }
+
+	    /// <summary>Quiet color set for Value Assist live predict — no mode switch / attention anim spam.</summary>
+	    public void SetBrushColorQuiet(Color c) {
+		    c.a = 1f;
+		    ChangeBrushColor(c, ensureInpaint: false, invokeCallback: true);
+	    }
     
 
 	    // check if it's not possible to interpret RMB 

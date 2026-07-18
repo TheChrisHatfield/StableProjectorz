@@ -106,6 +106,7 @@ Load [`docs/planning-rosetta-stone.md`](../../planning-rosetta-stone.md) (`plann
 - [x] Propose from brush color + stroke hints; Accept → `ValuePaintProposalApplier.TryAccept`
 - [x] Wired from `PaintTab_CollectPaintUI.CollectNow` via `EnsureUnder`
 - [x] Settings store + on/off + blend/size/opacity influence + neural/hardness toggles (`PaintTab_ValueAssistOptions`)
+- [x] Live under-cursor predict (`ValuePaintLivePredictor` + `Inpaint_MaskPainter` GPU sample → quiet ribbon arm)
 
 ## Active task
 
