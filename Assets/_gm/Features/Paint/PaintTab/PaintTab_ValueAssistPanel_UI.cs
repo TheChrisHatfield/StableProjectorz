@@ -422,7 +422,9 @@ namespace spz {
 			cb.pressedColor = new Color(0.9f, 0.9f, 0.9f, 1f);
 			cb.selectedColor = Color.white;
 			toggle.colors = cb;
-			toggle.isOn = initialOn;
+			// Set before listener — assigning isOn after AddListener re-enters SetEnabled/ShowFeedback during BuildUi.
+			toggle.SetIsOnWithoutNotify(initialOn);
+			img.color = initialOn ? onCol : offCol;
 			toggle.onValueChanged.AddListener(isOn => {
 				if (_suppressToggleSync) return;
 				img.color = isOn ? onCol : offCol;
