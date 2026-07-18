@@ -26,6 +26,7 @@ namespace spz {
 		string _assistWhich = "";
 		ValuePaintProposal _proposal;
 		bool _hasProposal;
+		Color _proposalBaseColor = new Color(0.5f, 0.5f, 0.5f, 1f);
 
 		TextMeshProUGUI _summaryTmp;
 		TextMeshProUGUI _statusTmp;
@@ -668,6 +669,7 @@ namespace spz {
 			EnsureAssist();
 			Color sample = CurrentBrushColor();
 			_proposal = _assist.ProposeFromColor(sample, default);
+			_proposalBaseColor = sample;
 			_hasProposal = true;
 			_proposalFromNeural = PaintTab_ValueAssistOptions.UseNeural;
 			_haveSyncedNeuralPref = true;
@@ -688,13 +690,13 @@ namespace spz {
 				SetStatus("Propose first.");
 				return;
 			}
-			bool ok = ValuePaintProposalApplier.TryAccept(_proposal, out string reason);
+			bool ok = ValuePaintProposalApplier.TryAccept(_proposal, _proposalBaseColor, out string reason);
 			if (ok) {
 				// Snapshot consumed — Accept locks the brush; pending Propose UI must release so Armed status works.
 				_hasProposal = false;
 				if (_acceptBtn != null) _acceptBtn.interactable = false;
 				if (_swatchImg != null)
-					_swatchImg.color = ValuePaintProposalApplier.ColorAtDesiredValue(CurrentBrushColor(), _proposal.DesiredBin);
+					_swatchImg.color = ValuePaintProposalApplier.ColorAtDesiredValue(_proposalBaseColor, _proposal.DesiredBin);
 				SetStatus(PaintTab_ValueAssistOptions.ApplyHardness
 					? "Armed — color/size/opacity/hardness."
 					: "Armed — color/size/opacity (hardness unchanged).");
