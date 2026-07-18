@@ -261,7 +261,7 @@ namespace spz {
 					if (_statusTmp.text == null || !_statusTmp.text.StartsWith("Live ") || _statusTmp.text != liveLine)
 						_statusTmp.text = liveLine;
 					if (_swatchImg != null)
-						_swatchImg.color = ValuePaintProposalApplier.GrayForBand(p.DesiredBin);
+						_swatchImg.color = ValuePaintProposalApplier.ColorAtDesiredValue(CurrentBrushColor(), p.DesiredBin);
 				} else if ((!ValuePaintLivePredictor.IsLiveActive || acceptArm)
 				           && _statusTmp.text != null && _statusTmp.text.StartsWith("Live ")) {
 					// Live turned off (or Accept arm took over) — do not leave a stale Live line.
@@ -430,7 +430,7 @@ namespace spz {
 			AttachTip(_proposeBtn.gameObject, "Propose\nSuggest a value setup from the current brush color.");
 			AttachTip(_acceptBtn.gameObject, "Accept\nArm the brush with that suggestion, then paint normally.");
 			AttachTip(_dismissBtn.gameObject, "Dismiss\nClear the suggestion and disarm.");
-			AttachTip(_swatchImg.gameObject, "Swatch\nPredicted target gray (desired value).");
+			AttachTip(_swatchImg.gameObject, "Swatch\nPredicted target value of your brush color (not gray).");
 
 			_statusTmp = MakeLabel(transform, "Idle", 8.5f, t.textMuted);
 			var statusLe = _statusTmp.GetComponent<LayoutElement>() ?? _statusTmp.gameObject.AddComponent<LayoutElement>();
@@ -673,7 +673,7 @@ namespace spz {
 			_haveSyncedNeuralPref = true;
 			if (_acceptBtn != null) _acceptBtn.interactable = true;
 			if (_swatchImg != null)
-				_swatchImg.color = ValuePaintProposalApplier.GrayForBand(_proposal.DesiredBin);
+				_swatchImg.color = ValuePaintProposalApplier.ColorAtDesiredValue(sample, _proposal.DesiredBin);
 			if (_summaryTmp != null) _summaryTmp.text = FormatProposal(_proposal);
 			SetStatus("Proposed (" + _assistWhich + ") — Accept to arm brush.");
 			ShowFeedback("Value Assist: proposal ready");
@@ -694,7 +694,7 @@ namespace spz {
 				_hasProposal = false;
 				if (_acceptBtn != null) _acceptBtn.interactable = false;
 				if (_swatchImg != null)
-					_swatchImg.color = ValuePaintProposalApplier.GrayForBand(_proposal.DesiredBin);
+					_swatchImg.color = ValuePaintProposalApplier.ColorAtDesiredValue(CurrentBrushColor(), _proposal.DesiredBin);
 				SetStatus(PaintTab_ValueAssistOptions.ApplyHardness
 					? "Armed — color/size/opacity/hardness."
 					: "Armed — color/size/opacity (hardness unchanged).");
