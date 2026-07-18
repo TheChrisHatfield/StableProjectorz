@@ -30,7 +30,7 @@ namespace spz {
 	    [SerializeField] string PORT_PlayerPrefs_KEY = "StableDiffusionPort";
 	    [Space(10)]
 	    [SerializeField] string _default_ip = "127.0.0.1";
-	    [SerializeField] string _default_port = "7860";
+	    [SerializeField] string _default_port = "8188";
 	    enum ConnectionPanel_Kind{
 	        StableDiffusion, /*for 2D generation*/
 	        Trellis,/*for 3d generation*/
@@ -174,7 +174,7 @@ namespace spz {
 	        // So, I suspect these values are incorrect until the panel, opens. Let's manually set them here, just in case:
 	        // Feb 2024
 	        if (string.IsNullOrEmpty(_ip_text.text)){ _ip_text.text = "127.0.0.1"; }
-	        if(_port_text.recentVal==0){ _port_text.SetValue( _panelKind==ConnectionPanel_Kind.StableDiffusion?"7860":"7960"); }
+	        if(_port_text.recentVal==0){ _port_text.SetValue( _panelKind==ConnectionPanel_Kind.StableDiffusion?"8188":"7960"); }
 	        PlayerPrefs_LoadConnDetails();
 
 	        // Add listeners for changes in the IP and port input fields:
@@ -194,7 +194,17 @@ namespace spz {
 	            _ip_text.text =  PlayerPrefs.GetString(IP_PlayerPrefs_KEY);
 	        }
 	        if (PlayerPrefs.HasKey(PORT_PlayerPrefs_KEY)){
-	            _port_text.SetValueWithoutNotify( PlayerPrefs.GetString(PORT_PlayerPrefs_KEY) );
+	            string savedPort = PlayerPrefs.GetString(PORT_PlayerPrefs_KEY);
+	            // Forge was moved off :7860 (left for Comfy). Old prefs still pinging 7860 look like "Forge never loads".
+	            if (_panelKind == ConnectionPanel_Kind.StableDiffusion
+	                && string.Equals(savedPort, "7860", StringComparison.Ordinal)) {
+	                UnityEngine.Debug.Log(
+	                    "[ConnectionPanel] Migrating Stable Diffusion port prefs 7860 → 8188 (Forge/Comfy port swap).");
+	                savedPort = _default_port;
+	                PlayerPrefs.SetString(PORT_PlayerPrefs_KEY, savedPort);
+	                PlayerPrefs.Save();
+	            }
+	            _port_text.SetValueWithoutNotify(savedPort);
 	        }
 	    }
 
@@ -232,6 +242,35 @@ namespace spz {
 	    void Awake(){
 	        _resetToDefault_button.onClick.AddListener( OnResetToDefault_button );
 	        _openPanel_button.onClick.AddListener( OnOpenPanel_Button );
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        ApplyThemeTokens();
+	    }
+
+	    void OnDestroy() {
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	    }
+
+	    /// <summary>Colors SD SERV / 3D SERV chrome and the IP panel; leaves connection status icon to connectivity logic.</summary>
+	    void ApplyThemeTokens() {
+	        var t = SpzUiThemeOps.Active;
+	        if (_openPanel_button != null && _openPanel_button.targetGraphic != null)
+	            SpzUiThemeOps.ApplySelectableToken(_openPanel_button, t.controlBg, t.accent);
+	        if (_dim_text != null)
+	            SpzUiThemeOps.ApplyTmpColor(_dim_text, t.textPrimary);
+	        if (_panel != null) {
+	            var panelImg = _panel.GetComponent<Image>();
+	            if (panelImg != null)
+	                SpzUiThemeOps.ApplyGraphicColor(panelImg, t.panelBg);
+	        }
+	        if (_ip_text != null) {
+	            var bg = _ip_text.GetComponent<Image>();
+	            if (bg != null)
+	                SpzUiThemeOps.ApplyGraphicColor(bg, t.fieldBg);
+	            if (_ip_text.textComponent != null)
+	                SpzUiThemeOps.ApplyTmpColor(_ip_text.textComponent, t.textPrimary);
+	        }
+	        if (_resetToDefault_button != null && _resetToDefault_button.targetGraphic != null)
+	            SpzUiThemeOps.ApplySelectableToken(_resetToDefault_button, t.controlBg, t.accent);
 	    }
 
 	    void Start(){
