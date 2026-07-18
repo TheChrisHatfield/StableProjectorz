@@ -6,17 +6,19 @@ using UnityEngine.UI;
 namespace spz {
 
 	/// <summary>
-	/// Paint-tab Value Assist UI: compact collapsible header + circle dials for toggles and knobs.
+	/// Paint-tab Value Assist UI — same Tool Options pattern as Brush options:
+	/// compact row button ("Value Assist ▼") + full-width panel under the section when open.
 	/// </summary>
 	public sealed class PaintTab_ValueAssistPanel_UI : MonoBehaviour {
 
 		const string RootName = "ValueAssistPanel";
+		const string ExpandoName = "ValueAssistExpando";
 		const float FontSize = 9.5f;
 		const float DialRing = 18f;
 		const float DialHit = 22f;
-		const int UiChromeVersion = 7;
+		const int UiChromeVersion = 8;
 
-		// Start collapsed so Tool Options (Symmetry / Brush options) stay reachable; expand on demand.
+		// Match Brush options: start closed so the tool row stays usable.
 		static bool _sessionCollapsed = true;
 		static int _builtChromeVersion;
 
@@ -42,68 +44,145 @@ namespace spz {
 		ValueDial _opacityDial;
 		GameObject _bodyRoot;
 		GameObject _knobRow;
+		LayoutElement _panelLe;
 		bool _suppressToggleSync;
 		bool _proposalFromNeural;
 		bool _haveSyncedNeuralPref;
 		bool _collapsed;
+		bool _headerWired;
 
 		public static PaintTab_ValueAssistPanel_UI EnsureUnder(RectTransform toolOptionsSection) {
 			if (toolOptionsSection == null) return null;
-			// Repair older ToolOptionsRow that claimed flexibleHeight and fought scroll sizing.
+
+			Transform toolRow = null;
 			for (int i = 0; i < toolOptionsSection.childCount; i++) {
 				var ch = toolOptionsSection.GetChild(i);
-				if (ch == null || ch.name != "ToolOptionsRow") continue;
-				var rowLe = ch.GetComponent<LayoutElement>();
-				if (rowLe != null && rowLe.flexibleHeight > 0f)
-					rowLe.flexibleHeight = 0f;
-				break;
+				if (ch == null) continue;
+				if (ch.name == "ToolOptionsRow") {
+					toolRow = ch;
+					var rowLe = ch.GetComponent<LayoutElement>();
+					if (rowLe != null && rowLe.flexibleHeight > 0f)
+						rowLe.flexibleHeight = 0f;
+				}
 			}
+			if (toolRow == null) return null;
+
+			EnsureExpandoButton(toolRow, out Button headerBtn, out TextMeshProUGUI headerLbl);
+
+			PaintTab_ValueAssistPanel_UI panel = null;
 			for (int i = 0; i < toolOptionsSection.childCount; i++) {
 				var ch = toolOptionsSection.GetChild(i);
 				if (ch == null || ch.name != RootName) continue;
-				var existing = ch.GetComponent<PaintTab_ValueAssistPanel_UI>();
-				if (existing != null) {
-					existing.BuildUi();
-					existing.SyncControlsFromStore();
-					existing.ApplyEnabledChrome();
-					existing.ApplyCollapsedChrome();
-					existing.RefreshStatusLine();
-					return existing;
-				}
-				var repaired = ch.gameObject.AddComponent<PaintTab_ValueAssistPanel_UI>();
-				EnsureLayoutShell(ch as RectTransform);
-				repaired.BuildUi();
-				return repaired;
+				panel = ch.GetComponent<PaintTab_ValueAssistPanel_UI>();
+				if (panel == null)
+					panel = ch.gameObject.AddComponent<PaintTab_ValueAssistPanel_UI>();
+				break;
 			}
-			var go = new GameObject(RootName);
-			go.transform.SetParent(toolOptionsSection, false);
-			go.transform.SetAsLastSibling();
-			var rect = go.AddComponent<RectTransform>();
-			EnsureLayoutShell(rect);
-			var panel = go.AddComponent<PaintTab_ValueAssistPanel_UI>();
+			if (panel == null) {
+				var go = new GameObject(RootName);
+				go.transform.SetParent(toolOptionsSection, false);
+				go.transform.SetAsLastSibling();
+				go.AddComponent<RectTransform>();
+				panel = go.AddComponent<PaintTab_ValueAssistPanel_UI>();
+			}
+
+			panel.BindExpando(headerBtn, headerLbl);
+			// Build while active so layout/components initialize; collapse after.
+			if (!panel.gameObject.activeSelf)
+				panel.gameObject.SetActive(true);
 			panel.BuildUi();
+			panel.SyncControlsFromStore();
+			panel.ApplyEnabledChrome();
+			panel.ApplyCollapsedChrome();
+			panel.RefreshStatusLine();
 			return panel;
+		}
+
+		static void EnsureExpandoButton(Transform toolRow, out Button headerBtn, out TextMeshProUGUI headerLbl) {
+			headerBtn = null;
+			headerLbl = null;
+			Transform expando = null;
+			for (int i = 0; i < toolRow.childCount; i++) {
+				var ch = toolRow.GetChild(i);
+				if (ch != null && ch.name == ExpandoName) {
+					expando = ch;
+					break;
+				}
+			}
+			if (expando == null) {
+				var root = new GameObject(ExpandoName);
+				root.transform.SetParent(toolRow, false);
+				root.AddComponent<RectTransform>();
+				var rootLe = root.AddComponent<LayoutElement>();
+				rootLe.minWidth = 80;
+				rootLe.preferredWidth = 88;
+				rootLe.flexibleWidth = 0;
+				rootLe.minHeight = 28;
+				rootLe.preferredHeight = 28;
+				rootLe.flexibleHeight = 0;
+
+				var headerGo = new GameObject("ValueAssistHeaderBtn");
+				headerGo.transform.SetParent(root.transform, false);
+				var headerRt = headerGo.AddComponent<RectTransform>();
+				headerRt.anchorMin = Vector2.zero;
+				headerRt.anchorMax = Vector2.one;
+				headerRt.offsetMin = Vector2.zero;
+				headerRt.offsetMax = Vector2.zero;
+				var headerImg = headerGo.AddComponent<Image>();
+				headerImg.color = new Color(0.25f, 0.32f, 0.4f, 1f);
+				headerImg.raycastTarget = true;
+				headerBtn = headerGo.AddComponent<Button>();
+				var headerColors = headerBtn.colors;
+				headerColors.highlightedColor = new Color(0.32f, 0.4f, 0.48f, 1f);
+				headerColors.pressedColor = new Color(0.2f, 0.26f, 0.34f, 1f);
+				headerBtn.colors = headerColors;
+
+				var headerTxtGo = new GameObject("Label");
+				headerTxtGo.transform.SetParent(headerGo.transform, false);
+				var headerTxtRt = headerTxtGo.AddComponent<RectTransform>();
+				headerTxtRt.anchorMin = Vector2.zero;
+				headerTxtRt.anchorMax = Vector2.one;
+				headerTxtRt.offsetMin = new Vector2(6, 0);
+				headerTxtRt.offsetMax = new Vector2(-6, 0);
+				headerLbl = headerTxtGo.AddComponent<TextMeshProUGUI>();
+				headerLbl.font = TMP_Settings.defaultFontAsset;
+				headerLbl.fontSize = 10f;
+				headerLbl.color = new Color(0.92f, 0.93f, 0.95f, 1f);
+				headerLbl.alignment = TextAlignmentOptions.Left;
+				headerLbl.raycastTarget = false;
+				headerLbl.text = "Value Assist ▼";
+				AttachTip(headerGo, "Value Assist\nExpand for neural / live value brush settings.");
+				return;
+			}
+
+			headerBtn = expando.GetComponentInChildren<Button>(true);
+			headerLbl = expando.GetComponentInChildren<TextMeshProUGUI>(true);
+		}
+
+		void BindExpando(Button headerBtn, TextMeshProUGUI headerLbl) {
+			_headerBtn = headerBtn;
+			_headerLbl = headerLbl;
+			if (_headerBtn != null && !_headerWired) {
+				_headerBtn.onClick.AddListener(ToggleCollapsed);
+				_headerWired = true;
+			}
 		}
 
 		static void EnsureLayoutShell(RectTransform rect) {
 			if (rect == null) return;
-			// Top-stretch width; height must come from ContentSizeFitter (not a fixed LayoutElement).
 			rect.anchorMin = new Vector2(0, 1);
 			rect.anchorMax = new Vector2(1, 1);
 			rect.pivot = new Vector2(0.5f, 1);
 			var le = rect.GetComponent<LayoutElement>() ?? rect.gameObject.AddComponent<LayoutElement>();
 			le.flexibleWidth = 1f;
 			le.flexibleHeight = 0f;
-			le.minHeight = 28f;
-			// -1 = ignore. A fixed preferredHeight (e.g. 30) made the scroll parent reserve a tiny slot
-			// while the panel still drew full size → overlay on Symmetry / Brush options and broken scroll.
+			le.minHeight = 0f;
 			le.preferredHeight = -1f;
 			var csf = rect.GetComponent<ContentSizeFitter>() ?? rect.gameObject.AddComponent<ContentSizeFitter>();
 			csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
 			csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 		}
 
-		/// <summary>Rebuild this panel and the Tool Options ScrollContent so height/scroll stay in sync.</summary>
 		void RebuildLayoutChain() {
 			var rt = transform as RectTransform;
 			if (rt != null)
@@ -119,11 +198,11 @@ namespace spz {
 		void OnEnable() {
 			PaintTab_ValueAssistOptions.Changed -= OnOptionsChanged;
 			PaintTab_ValueAssistOptions.Changed += OnOptionsChanged;
-			BuildUi();
-			SyncControlsFromStore();
-			ApplyEnabledChrome();
-			ApplyCollapsedChrome();
-			RefreshStatusLine();
+			if (_blendDial != null) {
+				SyncControlsFromStore();
+				ApplyEnabledChrome();
+				RefreshStatusLine();
+			}
 		}
 
 		void OnDisable() {
@@ -203,14 +282,15 @@ namespace spz {
 		}
 
 		void BuildUi() {
-			if (_headerBtn != null && _blendDial != null && _builtChromeVersion >= UiChromeVersion) return;
+			if (_blendDial != null && _bodyRoot != null && _builtChromeVersion >= UiChromeVersion) {
+				EnsureLayoutShell(transform as RectTransform);
+				return;
+			}
 			for (int i = transform.childCount - 1; i >= 0; i--)
 				UnityEngine.Object.DestroyImmediate(transform.GetChild(i).gameObject);
 			_summaryTmp = null;
 			_statusTmp = null;
-			_headerLbl = null;
 			_swatchImg = null;
-			_headerBtn = null;
 			_proposeBtn = null;
 			_acceptBtn = null;
 			_dismissBtn = null;
@@ -230,41 +310,25 @@ namespace spz {
 			var bg = gameObject.GetComponent<Image>() ?? gameObject.AddComponent<Image>();
 			bg.sprite = UiRuntimeSprites.RoundedRectSliced;
 			bg.type = Image.Type.Sliced;
-			bg.color = new Color(0.14f, 0.16f, 0.19f, 0.96f);
+			// Match BrushOptsPanel chrome
+			bg.color = new Color(0.16f, 0.18f, 0.22f, 0.98f);
 			bg.raycastTarget = true;
 
 			var vlg = gameObject.GetComponent<VerticalLayoutGroup>() ?? gameObject.AddComponent<VerticalLayoutGroup>();
-			vlg.padding = new RectOffset(4, 4, 3, 3);
-			vlg.spacing = 3;
+			vlg.padding = new RectOffset(6, 6, 6, 6);
+			vlg.spacing = 4;
 			vlg.childAlignment = TextAnchor.UpperLeft;
 			vlg.childControlHeight = true;
 			vlg.childControlWidth = true;
 			vlg.childForceExpandHeight = false;
 			vlg.childForceExpandWidth = true;
 			EnsureLayoutShell(transform as RectTransform);
+			_panelLe = gameObject.GetComponent<LayoutElement>();
 
-			_headerBtn = MakeHeaderRow(transform, out _headerLbl);
-			_headerBtn.onClick.AddListener(ToggleCollapsed);
-			AttachTip(_headerBtn.gameObject,
-				"Value Assist\nClick to expand or collapse settings.");
-			RefreshHeaderLabel();
+			// Body is the panel itself (header lives in ToolOptionsRow like Brush options).
+			_bodyRoot = gameObject;
 
-			_bodyRoot = new GameObject("Body");
-			_bodyRoot.transform.SetParent(transform, false);
-			_bodyRoot.AddComponent<RectTransform>();
-			var bodyLe = _bodyRoot.AddComponent<LayoutElement>();
-			bodyLe.flexibleWidth = 1f;
-			var bodyV = _bodyRoot.AddComponent<VerticalLayoutGroup>();
-			bodyV.spacing = 4;
-			bodyV.padding = new RectOffset(2, 2, 2, 2);
-			bodyV.childAlignment = TextAnchor.UpperLeft;
-			bodyV.childControlHeight = true;
-			bodyV.childControlWidth = true;
-			bodyV.childForceExpandHeight = false;
-			bodyV.childForceExpandWidth = true;
-
-			// Row 1 — feature toggles as small circle dials (row must fit DialHit + label)
-			var toggleRow = MakeDialRow(_bodyRoot.transform, "ToggleDials", DialHit + 14f);
+			var toggleRow = MakeDialRow(transform, "ToggleDials", DialHit + 14f);
 			_enabledToggle = MakeBoolDial(toggleRow.transform, "On", PaintTab_ValueAssistOptions.Enabled, isOn => {
 				PaintTab_ValueAssistOptions.SetEnabled(isOn);
 				ShowFeedback(isOn ? "Value Assist: on" : "Value Assist: off");
@@ -282,8 +346,7 @@ namespace spz {
 				PaintTab_ValueAssistOptions.SetApplyHardness(isOn);
 			}, "Hard\nApply predicted tip hardness (soft / med / hard).");
 
-			// Row 2 — Blend / Size / Opacity as drag dials
-			_knobRow = MakeDialRow(_bodyRoot.transform, "ValueDials", DialHit + 16f).gameObject;
+			_knobRow = MakeDialRow(transform, "ValueDials", DialHit + 16f).gameObject;
 			_blendDial = MakeValueDial(_knobRow.transform, "Blend", PaintTab_ValueAssistOptions.Blend01,
 				v => PaintTab_ValueAssistOptions.SetBlend01(v),
 				"Blend\nHow strongly to pull brush color toward the predicted gray.\n0% = keep yours · 100% = full prediction.");
@@ -294,7 +357,7 @@ namespace spz {
 				v => PaintTab_ValueAssistOptions.SetOpacityInfluence01(v),
 				"Opacity\nHow much predicted opacity applies on Accept.\n0% = keep yours · 100% = use prediction.");
 
-			_summaryTmp = MakeLabel(_bodyRoot.transform,
+			_summaryTmp = MakeLabel(transform,
 				"Hover dials for tips. Live predicts under tip · Propose/Accept locks a snapshot.",
 				8.5f, t.textMuted);
 			var summaryLe = _summaryTmp.GetComponent<LayoutElement>() ?? _summaryTmp.gameObject.AddComponent<LayoutElement>();
@@ -302,7 +365,7 @@ namespace spz {
 			summaryLe.preferredHeight = 22f;
 
 			var row = new GameObject("Actions");
-			row.transform.SetParent(_bodyRoot.transform, false);
+			row.transform.SetParent(transform, false);
 			row.AddComponent<RectTransform>();
 			var rowLe = row.AddComponent<LayoutElement>();
 			rowLe.minHeight = 24f;
@@ -324,15 +387,15 @@ namespace spz {
 			AttachTip(_dismissBtn.gameObject, "Dismiss\nClear the suggestion and disarm.");
 			AttachTip(_swatchImg.gameObject, "Swatch\nPredicted target gray (desired value).");
 
-			_statusTmp = MakeLabel(_bodyRoot.transform, "Idle", 8.5f, t.textMuted);
+			_statusTmp = MakeLabel(transform, "Idle", 8.5f, t.textMuted);
 			var statusLe = _statusTmp.GetComponent<LayoutElement>() ?? _statusTmp.gameObject.AddComponent<LayoutElement>();
 			statusLe.minHeight = 15f;
 
 			_acceptBtn.interactable = false;
 			ApplyEnabledChrome();
-			ApplyCollapsedChrome();
 			RefreshStatusLine();
-			RebuildLayoutChain();
+			RefreshHeaderLabel();
+			// Collapse applied by EnsureUnder after BuildUi — do not SetActive(false) mid-build.
 		}
 
 		static GameObject MakeDialRow(Transform parent, string name, float height) {
@@ -361,18 +424,26 @@ namespace spz {
 		}
 
 		void ApplyCollapsedChrome() {
-			if (_bodyRoot != null)
-				_bodyRoot.SetActive(!_collapsed);
+			bool open = !_collapsed;
+			if (_panelLe == null)
+				_panelLe = GetComponent<LayoutElement>();
+			if (_panelLe != null)
+				_panelLe.preferredHeight = open ? -1f : 0f;
+			// Same as BrushOptsPanel: hide whole panel when closed (header stays in the tool row).
+			if (gameObject.activeSelf != open)
+				gameObject.SetActive(open);
 			RefreshHeaderLabel();
-			RebuildLayoutChain();
+			var parent = transform.parent as RectTransform;
+			if (parent != null)
+				LayoutRebuilder.ForceRebuildLayoutImmediate(parent);
+			else
+				RebuildLayoutChain();
 		}
 
 		void RefreshHeaderLabel() {
 			if (_headerLbl == null) return;
-			string arrow = _collapsed ? "▼ expand" : "▲ collapse";
-			string state = PaintTab_ValueAssistOptions.Enabled ? "on" : "off";
-			string live = PaintTab_ValueAssistOptions.LivePredict ? "live" : "manual";
-			_headerLbl.text = "Value Assist  ·  " + state + " / " + live + "   " + arrow;
+			// Match Brush options ▼ / ▴ wording.
+			_headerLbl.text = _collapsed ? "Value Assist ▼" : "Value Assist ▴";
 		}
 
 		void SyncControlsFromStore() {
@@ -512,60 +583,6 @@ namespace spz {
 				Viewport_StatusText.instance.ShowStatusText(msg, false, 1.4f, false);
 			else
 				Debug.Log("[Paint Tab] " + msg);
-		}
-
-		static Button MakeHeaderRow(Transform parent, out TextMeshProUGUI labelOut) {
-			var go = new GameObject("ValueAssistHeader");
-			go.transform.SetParent(parent, false);
-			go.AddComponent<RectTransform>();
-			var le = go.AddComponent<LayoutElement>();
-			le.minHeight = 26f;
-			le.preferredHeight = 26f;
-			le.flexibleWidth = 1f;
-			var img = go.AddComponent<Image>();
-			img.sprite = UiRuntimeSprites.RoundedRectSliced;
-			img.type = Image.Type.Sliced;
-			img.color = new Color(0.22f, 0.28f, 0.36f, 0.95f);
-			img.raycastTarget = true;
-			var btn = go.AddComponent<Button>();
-			btn.targetGraphic = img;
-			var colors = btn.colors;
-			colors.normalColor = Color.white;
-			colors.highlightedColor = new Color(1.1f, 1.1f, 1.1f, 1f);
-			colors.pressedColor = new Color(0.88f, 0.88f, 0.88f, 1f);
-			colors.selectedColor = Color.white;
-			btn.colors = colors;
-
-			var iconGo = new GameObject("Icon");
-			iconGo.transform.SetParent(go.transform, false);
-			var iconRt = iconGo.AddComponent<RectTransform>();
-			iconRt.anchorMin = new Vector2(0f, 0.5f);
-			iconRt.anchorMax = new Vector2(0f, 0.5f);
-			iconRt.pivot = new Vector2(0f, 0.5f);
-			iconRt.anchoredPosition = new Vector2(6f, 0f);
-			iconRt.sizeDelta = new Vector2(12f, 12f);
-			var iconImg = iconGo.AddComponent<Image>();
-			iconImg.sprite = UiRuntimeSprites.GetLineIcon(StudioLineIcon.Brush);
-			iconImg.color = new Color(0.85f, 0.88f, 0.92f, 1f);
-			iconImg.raycastTarget = false;
-			iconImg.preserveAspect = true;
-
-			var txtGo = new GameObject("Label");
-			txtGo.transform.SetParent(go.transform, false);
-			var tr = txtGo.AddComponent<RectTransform>();
-			tr.anchorMin = Vector2.zero;
-			tr.anchorMax = Vector2.one;
-			tr.offsetMin = new Vector2(22f, 0f);
-			tr.offsetMax = new Vector2(-6f, 0f);
-			var tmp = txtGo.AddComponent<TextMeshProUGUI>();
-			tmp.font = TMP_Settings.defaultFontAsset;
-			tmp.fontSize = FontSize;
-			tmp.color = new Color(0.92f, 0.93f, 0.95f, 1f);
-			tmp.alignment = TextAlignmentOptions.MidlineLeft;
-			tmp.raycastTarget = false;
-			tmp.text = "Value Assist  ·  ▼ expand";
-			labelOut = tmp;
-			return btn;
 		}
 
 		static void AttachTip(GameObject go, string tip) {
