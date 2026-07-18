@@ -395,6 +395,12 @@ namespace spz {
 					if (_parkedForRibbon[p].panel == child.gameObject) { already = true; break; }
 				}
 				if (!already) {
+					if (!Addon_MGR.IsAddonEnabledStatic(addonId)) {
+						UnityEngine.Debug.Log(
+							$"[AddonUI_MGR] Discarding legacy panel for disabled add-on '{addonId}' (no park/migrate).");
+						Destroy(child.gameObject);
+						continue;
+					}
 					_parkedForRibbon.Add(new ParkedPanel {
 						addonId = addonId,
 						title = title,
@@ -508,6 +514,14 @@ namespace spz {
 			for (int i = _parkedForRibbon.Count - 1; i >= 0; i--) {
 				ParkedPanel parked = _parkedForRibbon[i];
 				if (parked == null || parked.panel == null) {
+					_parkedForRibbon.RemoveAt(i);
+					continue;
+				}
+				// Disabled add-ons must not get a ribbon tab via park migration (CreatePanel is gated; migrate was not).
+				if (!Addon_MGR.IsAddonEnabledStatic(parked.addonId)) {
+					UnityEngine.Debug.Log(
+						$"[AddonUI_MGR] Discarding parked panel for disabled add-on '{parked.addonId}'.");
+					Destroy(parked.panel);
 					_parkedForRibbon.RemoveAt(i);
 					continue;
 				}
