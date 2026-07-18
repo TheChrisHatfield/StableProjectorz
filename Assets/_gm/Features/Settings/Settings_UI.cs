@@ -45,6 +45,8 @@ namespace spz {
 	    [SerializeField] Toggle _showExternalProcessWindows_toggle; // Optional: if null, runtime row is created.
 	    [SerializeField] Toggle _webUiOpenBrowserOnStartup_toggle; // Optional: if null, runtime row is created.
 	    [SerializeField] Toggle _sdStrictMaskIsolation_toggle; // Optional: if null, runtime row is created.
+	    [SerializeField] Toggle _sdStrictIsolationFlipMask_toggle; // Optional: if null, runtime row is created (next to strict isolation).
+	    [SerializeField] Toggle _sdInpaintingMaskInvert_toggle; // Optional: WebUI inpainting_mask_invert=1 (inpaint outside brush mask).
 	    [SerializeField] Toggle _useVSync_toggle; // Optional: assign in scene; otherwise created at runtime.
 	    [Tooltip("button_inactive from button_active_inactive_horiz; wired on Settings_UI.prefab for runtime toggles.")]
 	    [SerializeField] Sprite _settingsToggleFrameSprite;
@@ -80,13 +82,25 @@ namespace spz {
 
 	    void OnAddonManagerButtonClicked() => AddonManager_UI.OpenFromMenu();
 
+	    void Awake(){
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	    }
+
+	    void OnDestroy(){
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	    }
+
 	    void Start(){
 	        EnsureUseVSyncRowExists();
 	        EnsureExternalProcessWindowsRowExists();
 	        EnsureWebUiBrowserStartupRowExists();
 	        EnsureSDStrictMaskIsolationRowExists();
+	        EnsureSDStrictIsolationFlipMaskRowExists();
+	        EnsureSDInpaintingMaskInvertRowExists();
 	        EnsureSDGpuRowExists();
 	        EnsurePaintUndoSettingsRowsExist();
+	        FixSettingsScrollReadability();
+	        ApplyThemeTokens();
 	        // Buttons (guard null so binding is safe when reference not assigned in scene)
 	        if (_openHelpSettingsPanel_button != null)
 	            EventsBinder.Bind_Clickable_to_event("Settings:OpenHelpSettingsPanel", _openHelpSettingsPanel_button);
@@ -114,6 +128,10 @@ namespace spz {
 	            EventsBinder.Bind_Clickable_to_event("Settings:set_webUiOpenBrowserOnStartup", _webUiOpenBrowserOnStartup_toggle);
 	        if (_sdStrictMaskIsolation_toggle != null)
 	            EventsBinder.Bind_Clickable_to_event("Settings:set_sd_strictMaskIsolation", _sdStrictMaskIsolation_toggle);
+	        if (_sdStrictIsolationFlipMask_toggle != null)
+	            EventsBinder.Bind_Clickable_to_event("Settings:set_sd_strictIsolationFlipMask", _sdStrictIsolationFlipMask_toggle);
+	        if (_sdInpaintingMaskInvert_toggle != null)
+	            EventsBinder.Bind_Clickable_to_event("Settings:set_sd_inpaintingMaskInvert", _sdInpaintingMaskInvert_toggle);
 	        if (_useVSync_toggle != null)
 	            EventsBinder.Bind_Clickable_to_event("Settings:set_useVSync", _useVSync_toggle);
 	        // Custom Sliders
@@ -171,7 +189,7 @@ namespace spz {
 	        var toggle = CreateRuntimeSpzStyledToggle(row.transform, "Toggle_UseVSync", new Vector2(112f, 28f),
 		        UnityEngine.PlayerPrefs.GetInt("UseVSync", 1) == 1, greenWhenOn: false);
 	        _useVSync_toggle = toggle;
-	        EventsBinder.Bind_Clickable_to_event("Settings:set_useVSync", _useVSync_toggle);
+	        // Bound in Start() (avoid duplicate onValueChanged if Ensure runs first).
 	    }
 
 	    /// <summary>Creates "Show external process windows" row (WebUI + addon Python server console visibility) unless scene already provides it.</summary>
@@ -211,7 +229,7 @@ namespace spz {
 	        var toggle = CreateRuntimeSpzStyledToggle(row.transform, "Toggle_ShowExternalProcessWindows", new Vector2(112f, 28f),
 		        current, greenWhenOn: false);
 	        _showExternalProcessWindows_toggle = toggle;
-	        EventsBinder.Bind_Clickable_to_event("Settings:set_showExternalProcessWindows", _showExternalProcessWindows_toggle);
+	        // Bound in Start().
 	    }
 
 	    /// <summary>Creates "Open WebUI in browser on startup" row unless scene already provides it.</summary>
@@ -251,7 +269,7 @@ namespace spz {
 	        var toggle = CreateRuntimeSpzStyledToggle(row.transform, "Toggle_WebUiOpenBrowserOnStartup", new Vector2(112f, 28f),
 		        current, greenWhenOn: false);
 	        _webUiOpenBrowserOnStartup_toggle = toggle;
-	        EventsBinder.Bind_Clickable_to_event("Settings:set_webUiOpenBrowserOnStartup", _webUiOpenBrowserOnStartup_toggle);
+	        // Bound in Start().
 	    }
 
 	    /// <summary>Creates optional strict mask isolation row (off by default, OG-aligned). When ON, img2img/redo keeps unmasked pixels from init image.</summary>
@@ -291,7 +309,95 @@ namespace spz {
 	        var toggle = CreateRuntimeSpzStyledToggle(row.transform, "Toggle_SD_StrictMaskIsolation", new Vector2(112f, 28f),
 		        current, greenWhenOn: false);
 	        _sdStrictMaskIsolation_toggle = toggle;
-	        EventsBinder.Bind_Clickable_to_event("Settings:set_sd_strictMaskIsolation", _sdStrictMaskIsolation_toggle);
+	        // Bound once in Start() with other toggles (avoid duplicate onValueChanged listeners).
+	    }
+
+	    /// <summary>Runtime row: invert which pixels strict post-SD isolation clamps to init (Paint tab mirrors the same pref).</summary>
+	    void EnsureSDStrictIsolationFlipMaskRowExists() {
+	        if (_sdStrictIsolationFlipMask_toggle != null) return;
+	        if (_settingsPanel_go == null) return;
+	        var scrollRect = _settingsPanel_go.GetComponentInChildren<UnityEngine.UI.ScrollRect>(true);
+	        RectTransform content = scrollRect != null ? scrollRect.content : null;
+	        if (content == null) content = _settingsPanel_go.transform as RectTransform;
+	        if (content == null) return;
+
+	        var row = new GameObject("Row_SD_StrictIsolationFlipMask");
+	        row.transform.SetParent(content, false);
+	        var anchor = content.Find("Row_SD_StrictMaskIsolation");
+	        if (anchor != null)
+	            row.transform.SetSiblingIndex(anchor.GetSiblingIndex() + 1);
+	        var rowRect = row.AddComponent<RectTransform>();
+	        rowRect.sizeDelta = new Vector2(0, 28f);
+	        var rowLayout = row.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+	        rowLayout.spacing = 8f;
+	        rowLayout.padding = new RectOffset(4, 4, 2, 2);
+	        rowLayout.childAlignment = TextAnchor.MiddleLeft;
+	        rowLayout.childControlWidth = true;
+	        rowLayout.childControlHeight = true;
+	        rowLayout.childForceExpandWidth = false;
+	        rowLayout.childForceExpandHeight = false;
+
+	        var labelGo = new GameObject("Label");
+	        labelGo.transform.SetParent(row.transform, false);
+	        var labelLE = labelGo.AddComponent<UnityEngine.UI.LayoutElement>();
+	        labelLE.preferredWidth = 360f;
+	        labelLE.preferredHeight = 24f;
+	        var labelText = labelGo.AddComponent<TMPro.TextMeshProUGUI>();
+	        labelText.text = "Invert strict isolation mask (keep init inside brush; post-SD only):";
+	        labelText.fontSize = 14;
+	        labelText.color = new Color(0.9f, 0.9f, 0.9f, 1f);
+	        labelText.raycastTarget = false;
+
+	        bool current = PaintTab_StrictIsolationBrushOptions.FlipInvertIsolationMask;
+	        var toggle = CreateRuntimeSpzStyledToggle(row.transform, "Toggle_SD_StrictIsolationFlipMask", new Vector2(112f, 28f),
+		        current, greenWhenOn: false);
+	        _sdStrictIsolationFlipMask_toggle = toggle;
+	        // Bound once in Start() with other toggles (avoid duplicate onValueChanged listeners).
+	    }
+
+	    /// <summary>WebUI API: <c>inpainting_mask_invert=1</c> so SD changes unmasked viewport pixels; brush / No Color mask region preserved in inpaint semantics.</summary>
+	    void EnsureSDInpaintingMaskInvertRowExists() {
+	        if (_sdInpaintingMaskInvert_toggle != null) return;
+	        if (_settingsPanel_go == null) return;
+	        var scrollRect = _settingsPanel_go.GetComponentInChildren<UnityEngine.UI.ScrollRect>(true);
+	        RectTransform content = scrollRect != null ? scrollRect.content : null;
+	        if (content == null) content = _settingsPanel_go.transform as RectTransform;
+	        if (content == null) return;
+
+	        var row = new GameObject("Row_SD_InpaintingMaskInvert");
+	        row.transform.SetParent(content, false);
+	        var anchorFlip = content.Find("Row_SD_StrictIsolationFlipMask");
+	        var anchorStrict = content.Find("Row_SD_StrictMaskIsolation");
+	        var anchor = anchorFlip != null ? anchorFlip : anchorStrict;
+	        if (anchor != null)
+	            row.transform.SetSiblingIndex(anchor.GetSiblingIndex() + 1);
+	        var rowRect = row.AddComponent<RectTransform>();
+	        rowRect.sizeDelta = new Vector2(0, 28f);
+	        var rowLayout = row.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+	        rowLayout.spacing = 8f;
+	        rowLayout.padding = new RectOffset(4, 4, 2, 2);
+	        rowLayout.childAlignment = TextAnchor.MiddleLeft;
+	        rowLayout.childControlWidth = true;
+	        rowLayout.childControlHeight = true;
+	        rowLayout.childForceExpandWidth = false;
+	        rowLayout.childForceExpandHeight = false;
+
+	        var labelGo = new GameObject("Label");
+	        labelGo.transform.SetParent(row.transform, false);
+	        var labelLE = labelGo.AddComponent<UnityEngine.UI.LayoutElement>();
+	        labelLE.preferredWidth = 360f;
+	        labelLE.preferredHeight = 24f;
+	        var labelText = labelGo.AddComponent<TMPro.TextMeshProUGUI>();
+	        labelText.text = "Inpaint outside brush mask (SD changes unmasked only; WebUI invert):";
+	        labelText.fontSize = 14;
+	        labelText.color = new Color(0.9f, 0.9f, 0.9f, 1f);
+	        labelText.raycastTarget = false;
+
+	        bool current = UnityEngine.PlayerPrefs.GetInt("SD_InpaintingMaskInvert", 0) == 1;
+	        var toggle = CreateRuntimeSpzStyledToggle(row.transform, "Toggle_SD_InpaintingMaskInvert", new Vector2(112f, 28f),
+		        current, greenWhenOn: false);
+	        _sdInpaintingMaskInvert_toggle = toggle;
+	        // Bound in Start().
 	    }
 
 	    /// <summary>Creates "SD GPU" row in Settings panel at runtime so it acts as remote control for which GPU Stable Diffusion uses when launched.</summary>
@@ -606,14 +712,177 @@ namespace spz {
 	        return toggle;
 	    }
 
+	    /// <summary>
+	    /// Runtime option rows were ~28px with long labels and parent spacing 0 → text overlapped.
+	    /// Enforce readable row height, label wrap, and vertical gaps; kill negative TMP lineSpacing.
+	    /// </summary>
+	    void FixSettingsScrollReadability() {
+	        if (_settingsPanel_go == null) return;
+	        var scrollRect = _settingsPanel_go.GetComponentInChildren<ScrollRect>(true);
+	        RectTransform content = scrollRect != null ? scrollRect.content : null;
+	        if (content == null) return;
+
+	        var vlg = content.GetComponent<VerticalLayoutGroup>();
+	        if (vlg != null) {
+	            vlg.spacing = Mathf.Max(vlg.spacing, 12f);
+	            vlg.childControlHeight = true;
+	            vlg.childForceExpandHeight = false;
+	            var pad = vlg.padding;
+	            pad.top = Mathf.Max(pad.top, 8);
+	            pad.bottom = Mathf.Max(pad.bottom, 12);
+	            vlg.padding = pad;
+	        }
+
+	        for (int i = 0; i < content.childCount; i++) {
+	            Transform child = content.GetChild(i);
+	            if (child == null || !child.name.StartsWith("Row_", StringComparison.Ordinal))
+	                continue;
+	            StyleRuntimeSettingsOptionRow(child);
+	        }
+
+	        foreach (var tmp in content.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (tmp == null) continue;
+	            if (tmp.lineSpacing < 0f)
+	                tmp.lineSpacing = 0f;
+	        }
+
+	        LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+	        Canvas.ForceUpdateCanvases();
+	    }
+
+	    static void StyleRuntimeSettingsOptionRow(Transform row) {
+	        if (row == null) return;
+	        var rowLe = row.GetComponent<LayoutElement>();
+	        if (rowLe == null)
+	            rowLe = row.gameObject.AddComponent<LayoutElement>();
+	        rowLe.minHeight = 44f;
+	        rowLe.preferredHeight = 48f;
+	        rowLe.flexibleHeight = 0f;
+
+	        var hlg = row.GetComponent<HorizontalLayoutGroup>();
+	        if (hlg != null) {
+	            hlg.padding = new RectOffset(4, 8, 8, 8);
+	            hlg.spacing = Mathf.Max(hlg.spacing, 10f);
+	            hlg.childAlignment = TextAnchor.MiddleLeft;
+	            hlg.childControlHeight = true;
+	            hlg.childForceExpandHeight = false;
+	        }
+
+	        var labelTmp = row.Find("Label")?.GetComponent<TextMeshProUGUI>();
+	        if (labelTmp == null) return;
+	        labelTmp.enableWordWrapping = true;
+	        labelTmp.overflowMode = TextOverflowModes.Ellipsis;
+	        labelTmp.lineSpacing = 0f;
+	        labelTmp.fontSize = 13f;
+	        labelTmp.alignment = TextAlignmentOptions.MidlineLeft;
+	        var labelLe = labelTmp.GetComponent<LayoutElement>();
+	        if (labelLe != null) {
+	            labelLe.minHeight = 36f;
+	            labelLe.preferredHeight = 40f;
+	            labelLe.flexibleWidth = 1f;
+	            if (labelLe.preferredWidth < 280f)
+	                labelLe.preferredWidth = 320f;
+	        }
+	    }
+
+	    /// <summary>
+	    /// Themes panel shell, fields, controls, and ON-state success on known Settings_UI widgets.
+	    /// Wireframe/noise/product colors stay in Settings_MGR and are not touched.
+	    /// </summary>
+	    void ApplyThemeTokens() {
+	        if (_settingsPanel_go == null) return;
+	        var t = SpzUiThemeOps.Active;
+	        var panelImg = _settingsPanel_go.GetComponent<Image>();
+	        if (panelImg != null) {
+	            // Opaque enough that welcome/help text does not ghost through the settings list.
+	            Color shell = t.panelBg;
+	            shell.a = Mathf.Max(shell.a, 0.96f);
+	            SpzUiThemeOps.ApplyGraphicColor(panelImg, shell);
+	        }
+	        foreach (var input in _settingsPanel_go.GetComponentsInChildren<TMP_InputField>(true)) {
+	            if (input == null || IsUnderProductColorSurface(input.transform)) continue;
+	            var bg = input.GetComponent<Image>();
+	            if (bg != null)
+	                SpzUiThemeOps.ApplyGraphicColor(bg, t.fieldBg);
+	            if (input.textComponent != null)
+	                SpzUiThemeOps.ApplyTmpColor(input.textComponent, t.textPrimary);
+	            if (input.placeholder is TMP_Text ph)
+	                SpzUiThemeOps.ApplyTmpColor(ph, t.textMuted);
+	        }
+	        foreach (var btn in _settingsPanel_go.GetComponentsInChildren<Button>(true)) {
+	            if (btn == null || btn.targetGraphic == null) continue;
+	            // Skip product color swatch buttons (wireframe/noise) — those are prefs, not chrome.
+	            if (ReferenceEquals(btn, _wireframeColor_button) || ReferenceEquals(btn, _noiseColor_button))
+	                continue;
+	            if (IsUnderProductColorSurface(btn.transform))
+	                continue;
+	            SpzUiThemeOps.ApplySelectableToken(btn, t.controlBg, t.accent);
+	        }
+	        foreach (var toggle in _settingsPanel_go.GetComponentsInChildren<Toggle>(true)) {
+	            if (toggle == null || IsUnderProductColorSurface(toggle.transform)) continue;
+	            ApplyThemeToggleColors(toggle, t);
+	        }
+	        foreach (var tmp in _settingsPanel_go.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (tmp == null || IsUnderProductColorSurface(tmp.transform)) continue;
+	            if (tmp.gameObject.name == "Placeholder" || tmp.gameObject.name == "Checkmark")
+	                continue;
+	            SpzUiThemeOps.ApplyTmpColor(tmp, t.textPrimary);
+	            if (tmp.lineSpacing < 0f)
+	                tmp.lineSpacing = 0f;
+	        }
+	        foreach (var slider in _settingsPanel_go.GetComponentsInChildren<Slider>(true)) {
+	            if (slider == null || IsUnderProductColorSurface(slider.transform)) continue;
+	            var bg = slider.GetComponent<Image>();
+	            if (bg != null)
+	                SpzUiThemeOps.ApplyGraphicColor(bg, t.fieldBg);
+	            if (slider.fillRect != null) {
+	                var fill = slider.fillRect.GetComponent<Image>();
+	                if (fill != null)
+	                    SpzUiThemeOps.ApplyGraphicColor(fill, t.accent);
+	            }
+	            if (slider.handleRect != null) {
+	                var handle = slider.handleRect.GetComponent<Image>();
+	                if (handle != null)
+	                    SpzUiThemeOps.ApplyGraphicColor(handle, t.handle);
+	            }
+	        }
+	    }
+
+	    /// <summary>
+	    /// Color picker / final-color preview surfaces hold product RGB — not chrome tokens.
+	    /// </summary>
+	    bool IsUnderProductColorSurface(Transform t) {
+	        if (t == null) return false;
+	        if (_settings_colorPicker != null && t.IsChildOf(_settings_colorPicker.transform))
+	            return true;
+	        return false;
+	    }
+
+	    static void ApplyThemeToggleColors(Toggle tgl, SpzUiThemeOps.ThemeTokens t) {
+	        tgl.transition = Selectable.Transition.ColorTint;
+	        // Image.color = chrome token; ColorBlock stays white-based so Unity does not multiply twice.
+	        if (tgl.targetGraphic != null)
+	            tgl.targetGraphic.color = t.controlBg;
+	        var colors = tgl.colors;
+	        colors.normalColor = Color.white;
+	        colors.highlightedColor = Color.Lerp(Color.white, t.accent, 0.25f);
+	        colors.pressedColor = Color.Lerp(Color.white, t.accent, 0.55f);
+	        colors.selectedColor = Color.Lerp(Color.white, t.success, 0.35f);
+	        colors.disabledColor = new Color(1f, 1f, 1f, 0.45f);
+	        tgl.colors = colors;
+	        if (tgl.graphic != null)
+	            SpzUiThemeOps.ApplyGraphicColor(tgl.graphic, t.success);
+	    }
+
 	    /// <summary>Same ColorBlock as built-in Settings_UI.prefab toggles (tints sliced frame).</summary>
 	    static void ApplySettingsPrefabMatchToggleColors(Selectable sel) {
+	        var t = SpzUiThemeOps.Active;
 	        sel.transition = Selectable.Transition.ColorTint;
 	        sel.colors = new ColorBlock {
 	            normalColor = Color.white,
-	            highlightedColor = new Color(0.9607843f, 0.9607843f, 0.9607843f, 1f),
-	            pressedColor = new Color(0.78431374f, 0.78431374f, 0.78431374f, 1f),
-	            selectedColor = new Color(0.9607843f, 0.9607843f, 0.9607843f, 1f),
+	            highlightedColor = Color.Lerp(Color.white, t.accent, 0.15f),
+	            pressedColor = Color.Lerp(Color.white, t.accent, 0.35f),
+	            selectedColor = Color.Lerp(Color.white, t.success, 0.35f),
 	            disabledColor = new Color(0.78431374f, 0.78431374f, 0.78431374f, 0.5019608f),
 	            colorMultiplier = 1f,
 	            fadeDuration = 0.1f
@@ -622,26 +891,20 @@ namespace spz {
 
 	    /// <summary>Green selected tint on sliced frame; normal white so sprite skin shows through.</summary>
 	    static void ApplyPaintUndoSlicedToggleColors(Toggle t) {
-	        t.transition = Selectable.Transition.ColorTint;
-	        t.colors = new ColorBlock {
-	            normalColor = Color.white,
-	            highlightedColor = new Color(0.88f, 0.96f, 0.9f, 1f),
-	            pressedColor = new Color(0.75f, 0.9f, 0.8f, 1f),
-	            selectedColor = new Color(0.4f, 1f, 0.52f, 1f),
-	            disabledColor = new Color(1f, 1f, 1f, 0.45f),
-	            colorMultiplier = 1f,
-	            fadeDuration = 0.08f
-	        };
+	        ApplyThemeToggleColors(t, SpzUiThemeOps.Active);
 	    }
 
 	    /// <summary>Apply hover/pressed/selected colors so the control looks selectable and shows active state.</summary>
 	    static void ApplySelectableColors(Selectable sel, Color? whenOnTint = null) {
+	        var t = SpzUiThemeOps.Active;
 	        sel.transition = Selectable.Transition.ColorTint;
+	        if (sel.targetGraphic != null)
+	            sel.targetGraphic.color = t.controlBg;
 	        var block = new ColorBlock {
-	            normalColor = new Color(0.25f, 0.25f, 0.25f, 1f),
-	            highlightedColor = new Color(0.45f, 0.45f, 0.45f, 1f),
-	            pressedColor = new Color(0.5f, 0.5f, 0.5f, 1f),
-	            selectedColor = whenOnTint ?? new Color(0.35f, 0.5f, 0.35f, 1f),
+	            normalColor = Color.white,
+	            highlightedColor = Color.Lerp(Color.white, t.accent, 0.25f),
+	            pressedColor = Color.Lerp(Color.white, t.accent, 0.55f),
+	            selectedColor = whenOnTint ?? t.success,
 	            disabledColor = new Color(0.2f, 0.2f, 0.2f, 0.5f),
 	            colorMultiplier = 1f,
 	            fadeDuration = 0.12f
@@ -651,16 +914,7 @@ namespace spz {
 
 	    /// <summary>Toggle ON = bright green box (selected); OFF = dark gray. Improves visibility vs generic gray toggles.</summary>
 	    static void ApplyPaintUndoEnableToggleColors(Toggle t) {
-	        t.transition = Selectable.Transition.ColorTint;
-	        t.colors = new ColorBlock {
-	            normalColor = new Color(0.22f, 0.22f, 0.24f, 1f),
-	            highlightedColor = new Color(0.32f, 0.38f, 0.34f, 1f),
-	            pressedColor = new Color(0.45f, 0.55f, 0.48f, 1f),
-	            selectedColor = new Color(0.12f, 0.82f, 0.28f, 1f),
-	            disabledColor = new Color(0.2f, 0.2f, 0.2f, 0.45f),
-	            colorMultiplier = 1f,
-	            fadeDuration = 0.08f
-	        };
+	        ApplyThemeToggleColors(t, SpzUiThemeOps.Active);
 	    }
 
 	    static void StretchRectToParent(RectTransform r) {
