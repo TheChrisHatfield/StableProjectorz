@@ -82,8 +82,18 @@ namespace spz {
 
 		/// <summary>
 		/// Arm proposal onto active color paint tools. Returns false with reason if mode/target/ribbon not ready.
+		/// <paramref name="baseColor"/> is the Propose-time brush color; when omitted, uses the live brush
+		/// (which may already have been soft-armed by Live — prefer passing the snapshot).
 		/// </summary>
 		public static bool TryAccept(ValuePaintProposal proposal, out string reason) {
+			return TryAccept(proposal, default, useBrushAsBase: true, out reason);
+		}
+
+		public static bool TryAccept(ValuePaintProposal proposal, Color proposeBaseColor, out string reason) {
+			return TryAccept(proposal, proposeBaseColor, useBrushAsBase: false, out reason);
+		}
+
+		static bool TryAccept(ValuePaintProposal proposal, Color proposeBaseColor, bool useBrushAsBase, out string reason) {
 			_lastFailReason = "";
 			// Do not clear armed / saw-apply until validation passes (failed Accept must not wipe prior arm).
 
@@ -143,7 +153,8 @@ namespace spz {
 			// Resolve hardness before any ribbon mutate (validate-then-commit). Missing UI is noted, not refused.
 			var hardnessUi = Object.FindObjectOfType<BrushRibbon_UI_Hardness>(true);
 
-			Color tint = ColorAtDesiredValue(sd.brushColor, proposal.DesiredBin);
+			Color baseCol = useBrushAsBase ? sd.brushColor : proposeBaseColor;
+			Color tint = ColorAtDesiredValue(baseCol, proposal.DesiredBin);
 			if (!sd.SetBrushColorFromApi(tint.r, tint.g, tint.b, tint.a)) {
 				reason = _lastFailReason = "SetBrushColorFromApi failed";
 				return false;
