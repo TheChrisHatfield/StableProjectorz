@@ -35,6 +35,8 @@ namespace spz {
 		TextMeshProUGUI _opacityInfLbl;
 		GameObject _controlsRoot;
 		bool _suppressToggleSync;
+		bool _proposalFromNeural;
+		bool _haveSyncedNeuralPref;
 
 		public static PaintTab_ValueAssistPanel_UI EnsureUnder(RectTransform toolOptionsSection) {
 			if (toolOptionsSection == null) return null;
@@ -77,6 +79,7 @@ namespace spz {
 		void OnEnable() {
 			PaintTab_ValueAssistOptions.Changed -= OnOptionsChanged;
 			PaintTab_ValueAssistOptions.Changed += OnOptionsChanged;
+			BuildUi(); // upgrade path if panel existed before settings chrome
 			SyncControlsFromStore();
 			ApplyEnabledChrome();
 			RefreshStatusLine();
@@ -95,19 +98,48 @@ namespace spz {
 		}
 
 		void OnOptionsChanged() {
-			_assist = null;
-			_assistWhich = "";
+			bool preferNeural = PaintTab_ValueAssistOptions.UseNeural;
+
+			// Drop cached assist when it no longer matches the neural toggle.
+			if (_assist != null) {
+				bool taggedNeuralOff = _assistWhich != null
+					&& _assistWhich.IndexOf("neural off", System.StringComparison.Ordinal) >= 0;
+				bool taggedMlp = _assistWhich != null
+					&& _assistWhich.IndexOf("MlpValuePaintAssist", System.StringComparison.Ordinal) >= 0;
+				bool mismatch = preferNeural ? taggedNeuralOff : (taggedMlp || !taggedNeuralOff);
+				if (mismatch) {
+					_assist = null;
+					_assistWhich = "";
+				}
+			}
+
+			// Pending proposal was produced under a different neural preference — refuse stale Accept.
+			bool keepNeuralStatus = false;
+			if (_hasProposal && _haveSyncedNeuralPref && preferNeural != _proposalFromNeural) {
+				ClearPendingProposal("Neural mode changed — Propose again.");
+				keepNeuralStatus = true;
+			}
+
+			_haveSyncedNeuralPref = true;
 			SyncControlsFromStore();
 			ApplyEnabledChrome();
 			if (!PaintTab_ValueAssistOptions.Enabled) {
-				_hasProposal = false;
-				_proposal = default;
-				if (_acceptBtn != null) _acceptBtn.interactable = false;
-				if (_swatchImg != null) _swatchImg.color = new Color(0.35f, 0.35f, 0.38f, 1f);
+				ClearPendingProposal(null);
 				if (_summaryTmp != null)
 					_summaryTmp.text = "Value Assist off — enable to propose neural / value brush settings.";
+				keepNeuralStatus = false;
 			}
-			RefreshStatusLine();
+			if (!keepNeuralStatus)
+				RefreshStatusLine();
+		}
+
+		void ClearPendingProposal(string statusMsg) {
+			_hasProposal = false;
+			_proposal = default;
+			if (_acceptBtn != null) _acceptBtn.interactable = false;
+			if (_swatchImg != null) _swatchImg.color = new Color(0.35f, 0.35f, 0.38f, 1f);
+			if (statusMsg != null && _statusTmp != null)
+				_statusTmp.text = statusMsg;
 		}
 
 		void BuildUi() {
@@ -262,6 +294,8 @@ namespace spz {
 			Color sample = CurrentBrushColor();
 			_proposal = _assist.ProposeFromColor(sample, default);
 			_hasProposal = true;
+			_proposalFromNeural = PaintTab_ValueAssistOptions.UseNeural;
+			_haveSyncedNeuralPref = true;
 			_acceptBtn.interactable = true;
 			if (_swatchImg != null)
 				_swatchImg.color = ValuePaintProposalApplier.GrayForBand(_proposal.DesiredBin);
@@ -291,11 +325,8 @@ namespace spz {
 		}
 
 		void OnDismiss() {
-			_hasProposal = false;
-			_proposal = default;
-			if (_acceptBtn != null) _acceptBtn.interactable = false;
+			ClearPendingProposal(null);
 			ValuePaintProposalApplier.ClearArmed();
-			if (_swatchImg != null) _swatchImg.color = new Color(0.35f, 0.35f, 0.38f, 1f);
 			if (_summaryTmp != null)
 				_summaryTmp.text = PaintTab_ValueAssistOptions.Enabled
 					? "Value Assist — Propose from brush color, Accept to arm ribbon."
