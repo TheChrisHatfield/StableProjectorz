@@ -96,6 +96,8 @@ namespace spz {
 	        _requireDisconnectBeforeReady = Connection_MGR.is_sd_connected;
 	        _openBrowserWhenReadyRequested = !_suppressBrowserOpenForCurrentLaunch
 	            && UnityEngine.PlayerPrefs.GetInt("WebUI_OpenBrowserOnStartup", 0) == 1;
+	        // Consume per-launch suppress so a later Restart WebUI / manual launch can open the browser.
+	        _suppressBrowserOpenForCurrentLaunch = false;
 	        if (_waitForWebUiReady_crtn != null) {
 	            StopCoroutine(_waitForWebUiReady_crtn);
 	            _waitForWebUiReady_crtn = null;
