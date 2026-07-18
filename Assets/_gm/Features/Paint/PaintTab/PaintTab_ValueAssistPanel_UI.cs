@@ -294,7 +294,7 @@ namespace spz {
 		}
 
 		void BuildUi() {
-			if (_blendDial != null && _bodyRoot != null && _builtChromeVersion >= UiChromeVersion) {
+			if (!NeedsChromeRebuild()) {
 				EnsureLayoutShell(transform as RectTransform);
 				return;
 			}
@@ -450,6 +450,15 @@ namespace spz {
 				LayoutRebuilder.ForceRebuildLayoutImmediate(parent);
 			else
 				RebuildLayoutChain();
+			if (open) {
+				// Match Brush options: after expand, refresh canvas and scroll so the panel is visible.
+				Canvas.ForceUpdateCanvases();
+				if (parent != null)
+					LayoutRebuilder.ForceRebuildLayoutImmediate(parent);
+				var sr = GetComponentInParent<ScrollRect>();
+				if (sr != null)
+					sr.verticalNormalizedPosition = 0f;
+			}
 		}
 
 		void RefreshHeaderLabel() {
