@@ -484,11 +484,12 @@ namespace spz {
 				"spz.ui.add_button", "spz.ui.add_dropdown", "spz.ui.add_slider", "spz.ui.add_text_input",
 				"spz.ui.attach_viewport_fullview_toggle",
 				"spz.ui.apply_theme", "spz.ui.create_panel", "spz.ui.get_theme", "spz.ui.get_value",
-				"spz.ui.reset_theme", "spz.ui.set_value",
+				"spz.ui.list_themes", "spz.ui.register_theme", "spz.ui.reset_theme",
+				"spz.ui.set_value", "spz.ui.unregister_theme",
 			};
 			return new JObject {
 				["success"] = true,
-				["addon_rpc_version"] = "1.10",
+				["addon_rpc_version"] = "1.12",
 				["spz_cmd"] = cmd,
 				["spz_ui"] = ui,
 				["context_command"] = "spz.cmd.get_addon_context",
@@ -1982,11 +1983,40 @@ namespace spz {
 			if (string.Equals(method, "spz.ui.get_theme", StringComparison.Ordinal)) {
 				return SpzUiThemeOps.GetThemeResult();
 			}
+			if (string.Equals(method, "spz.ui.list_themes", StringComparison.Ordinal)) {
+				return SpzUiThemeOps.ListThemesResult();
+			}
+			if (string.Equals(method, "spz.ui.register_theme", StringComparison.Ordinal)) {
+				var themeResult = new JObject { ["success"] = false };
+				string themeId = @params?["theme_id"]?.ToString() ?? "";
+				string label = @params?["label"]?.ToString();
+				string owner = @params?["owner"]?.ToString();
+				var tokens = @params?["tokens"] as JObject;
+				if (SpzUiThemeOps.TryRegisterTheme(themeId, label, tokens, owner, out string error)) {
+					themeResult["success"] = true;
+					themeResult["theme_id"] = themeId.Trim();
+					return themeResult;
+				}
+				themeResult["error"] = error;
+				return themeResult;
+			}
+			if (string.Equals(method, "spz.ui.unregister_theme", StringComparison.Ordinal)) {
+				var themeResult = new JObject { ["success"] = false };
+				string themeId = @params?["theme_id"]?.ToString() ?? "";
+				if (SpzUiThemeOps.TryUnregisterTheme(themeId, out string error)) {
+					themeResult["success"] = true;
+					themeResult["theme_id"] = themeId.Trim();
+					return themeResult;
+				}
+				themeResult["error"] = error;
+				return themeResult;
+			}
 			if (string.Equals(method, "spz.ui.apply_theme", StringComparison.Ordinal)) {
 				var themeResult = new JObject { ["success"] = false };
 				string themeId = @params?["theme_id"]?.ToString() ?? "";
 				var tokens = @params?["tokens"] as JObject;
-				if (SpzUiThemeOps.TryApplyTheme(themeId, tokens, out string error)) {
+				string mode = @params?["mode"]?.ToString() ?? "replace";
+				if (SpzUiThemeOps.TryApplyTheme(themeId, tokens, mode, out string error)) {
 					return SpzUiThemeOps.GetThemeResult();
 				}
 				themeResult["error"] = error;
@@ -2009,6 +2039,12 @@ namespace spz {
 						string addonId = @params["addon_id"]?.ToString() ?? "";
 						string title = @params["title"]?.ToString() ?? "Add-on Panel";
 						UnityEngine.Debug.Log($"[Addon_SocketServer] create_panel from Python: addonId={addonId}, title={title}");
+						if (!Addon_MGR.IsAddonEnabledStatic(addonId)) {
+							result["error"] = $"Add-on '{addonId}' is disabled; enable it in Add-on Manager before create_panel";
+							UnityEngine.Debug.LogWarning(
+								$"[Addon_SocketServer] create_panel blocked — add-on '{addonId}' is not enabled.");
+							break;
+						}
 						string panelId = uiMgr.CreatePanel(addonId, title);
 						if (panelId != null) {
 							result["success"] = true;

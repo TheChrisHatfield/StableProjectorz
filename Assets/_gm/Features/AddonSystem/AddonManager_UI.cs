@@ -211,11 +211,15 @@ namespace spz {
 		[SerializeField] Button _refresh_button;
 		Button _loadAddonsNow_button;
 		Button _restartWithAddons_button;
+		Button _saveAddonSettings_button;
 		[SerializeField] RectTransform _addonsListParent; // Where to place add-on list items (runtime panel sets this when null)
 		[SerializeField] GameObject _addonItemPrefab; // optional; otherwise rows are built like main-branch
 		[SerializeField] TextMeshProUGUI _statusText;
 		
 		private Dictionary<string, GameObject> _addonUIItems = new Dictionary<string, GameObject>();
+		/// <summary>Dial selection mirror (live enable/disable applies immediately; Save settings persists for next launch).</summary>
+		readonly Dictionary<string, bool> _draftEnabledById = new Dictionary<string, bool>(StringComparer.Ordinal);
+		bool _draftDirty;
 		bool _hidViewportStatusForModal;
 		
 		// Filter state: 0 = All, 1 = Enabled, 2 = Disabled
@@ -313,6 +317,25 @@ namespace spz {
 			Addon_MGR.SetRememberEnabledAddonsPreference(remember);
 		}
 
+		void TryEnsureSaveSettingsButton() {
+			if (_panel == null) return;
+			Transform header = _panel.transform.Find("Header");
+			if (header == null) return;
+			Transform existing = header.Find("SaveAddonSettingsButton");
+			if (existing != null) {
+				_saveAddonSettings_button = existing.GetComponent<Button>();
+				if (_saveAddonSettings_button != null) {
+					_saveAddonSettings_button.onClick.RemoveListener(OnSaveAddonSettings);
+					_saveAddonSettings_button.onClick.AddListener(OnSaveAddonSettings);
+				}
+				return;
+			}
+			// Older runtime chrome without Save settings — rebuild the manager shell once.
+			Debug.Log("[AddonManager_UI] Rebuilding Add-on Manager panel to add Save settings.");
+			DestroyAddonManagerPanelHierarchy();
+			CreatePanelIfNeeded();
+		}
+
 		void TryAddRememberPreferenceRowIfMissing() {
 			if (_panel == null) {
 				return;
@@ -360,7 +383,7 @@ namespace spz {
 			labelLE.preferredWidth = 420f;
 			labelLE.flexibleWidth = 1f;
 			var labelT = labelObj.AddComponent<TextMeshProUGUI>();
-			labelT.text = "Restore enabled add-ons next time";
+			labelT.text = "Restore saved selection next launch (after Save settings)";
 			labelT.fontSize = 12;
 			labelT.color = new Color(0.65f, 0.65f, 0.68f, 1f);
 			labelT.alignment = TextAlignmentOptions.MidlineLeft;
@@ -630,6 +653,8 @@ namespace spz {
 		_refresh_button = refreshBtn;
 		AddBarButton(headerObj.transform, "LoadAddonsNowButton", "Load addons now", new Color(46f / 255f, 204f / 255f, 113f / 255f, 1f),
 			Color.white, OnLoadAddonsNow, new Vector2(126, 34), out _loadAddonsNow_button);
+		AddBarButton(headerObj.transform, "SaveAddonSettingsButton", "Save settings", new Color(242f / 255f, 202f / 255f, 80f / 255f, 1f),
+			new Color(0.12f, 0.12f, 0.14f, 1f), OnSaveAddonSettings, new Vector2(118, 34), out _saveAddonSettings_button);
 		AddBarButton(headerObj.transform, "RunWithAddonsButton", "Restart with addons", new Color(52f / 255f, 152f / 255f, 219f / 255f, 1f),
 			Color.white, OnRestartWithAddons, new Vector2(142, 34), out _restartWithAddons_button);
 		_closePanel_button = null;
@@ -767,6 +792,8 @@ namespace spz {
 			return StudioLineIcon.Refresh;
 		if (string.Equals(controlName, "LoadAddonsNowButton", StringComparison.Ordinal))
 			return StudioLineIcon.Play;
+		if (string.Equals(controlName, "SaveAddonSettingsButton", StringComparison.Ordinal))
+			return StudioLineIcon.Settings;
 		return StudioLineIcon.Restart;
 	}
 	
@@ -806,6 +833,7 @@ namespace spz {
 			_installFromFile_button = null;
 			_refresh_button = null;
 			_loadAddonsNow_button = null;
+			_saveAddonSettings_button = null;
 			_restartWithAddons_button = null;
 			_statusText = null;
 			_filterAllToggle = null;
@@ -898,7 +926,10 @@ namespace spz {
 
 			CreatePanelIfNeeded();
 			TryAddRememberPreferenceRowIfMissing();
+			TryEnsureSaveSettingsButton();
 			SyncRememberEnabledToggleFromPrefs();
+			if (!_draftDirty)
+				SeedDraftFromLiveAddons();
 			
 			if (_panel == null) {
 				Debug.LogError("[AddonManager_UI] Failed to open panel: _panel is null and could not be created.");
@@ -986,7 +1017,7 @@ namespace spz {
 		}
 		
 		/// <summary>
-		/// Requests Python to load all enabled addons so their panels appear (e.g. in the ctrl tab). No save needed — enable then click this.
+		/// Requests Python to load all currently enabled add-ons.
 		/// </summary>
 		void OnLoadAddonsNow() {
 			ShowStatus("Loading addons...", true);
@@ -997,6 +1028,62 @@ namespace spz {
 				});
 			} else {
 				ShowStatus("Add-on manager not available", false);
+			}
+		}
+
+		/// <summary>
+		/// Applies dial draft to live enable/disable (ribbon tabs), then persists the selection.
+		/// </summary>
+		void OnSaveAddonSettings() {
+			if (Addon_MGR.instance == null) {
+				ShowStatus("Add-on manager not available", false);
+				return;
+			}
+			var addons = Addon_MGR.instance.GetAddons();
+			int changed = 0;
+			_suppressEnabledListRefresh = true;
+			try {
+				foreach (var kvp in addons) {
+					if (kvp.Value == null) continue;
+					bool want = GetDraftEnabled(kvp.Key, kvp.Value.isEnabled);
+					if (want == kvp.Value.isEnabled) continue;
+					changed++;
+					if (want)
+						Addon_MGR.instance.EnableAddon(kvp.Key);
+					else
+						Addon_MGR.instance.DisableAddon(kvp.Key);
+				}
+				Addon_MGR.instance.PersistEnabledAddonSelectionNow();
+				SeedDraftFromLiveAddons();
+			} finally {
+				_suppressEnabledListRefresh = false;
+			}
+			RefreshAddonsList();
+			if (changed == 0)
+				ShowStatus("Settings saved. Ribbon already matches dials — selection persisted for next launch.", true);
+			else
+				ShowStatus($"Settings saved — {changed} add-on(s) applied to ribbon and persisted.", true);
+		}
+
+		bool GetDraftEnabled(string addonId, bool fallbackActual) {
+			if (!string.IsNullOrEmpty(addonId) && _draftEnabledById.TryGetValue(addonId, out bool draft))
+				return draft;
+			return fallbackActual;
+		}
+
+		void SetDraftEnabled(string addonId, bool enabled) {
+			if (string.IsNullOrEmpty(addonId)) return;
+			_draftEnabledById[addonId] = enabled;
+			_draftDirty = true;
+		}
+
+		void SeedDraftFromLiveAddons() {
+			_draftEnabledById.Clear();
+			_draftDirty = false;
+			if (Addon_MGR.instance == null) return;
+			foreach (var kvp in Addon_MGR.instance.GetAddons()) {
+				if (kvp.Value == null) continue;
+				_draftEnabledById[kvp.Key] = kvp.Value.isEnabled;
 			}
 		}
 
@@ -1139,6 +1226,9 @@ namespace spz {
 				Debug.LogError("[AddonManager_UI] Addon_MGR.instance is null!");
 				return;
 			}
+
+			if (!_draftDirty)
+				SeedDraftFromLiveAddons();
 			
 			var addons = Addon_MGR.instance.GetAddons();
 			var filteredAddons = new List<KeyValuePair<string, Addon_MGR.AddonInfo>>();
@@ -1146,11 +1236,12 @@ namespace spz {
 			int disabledCount = 0;
 			
 			foreach (var kvp in addons) {
-				if (kvp.Value.isEnabled) enabledCount++;
+				bool draftOn = GetDraftEnabled(kvp.Key, kvp.Value != null && kvp.Value.isEnabled);
+				if (draftOn) enabledCount++;
 				else disabledCount++;
 				bool shouldShow = _filterState == 0
-					|| (_filterState == 1 && kvp.Value.isEnabled)
-					|| (_filterState == 2 && !kvp.Value.isEnabled);
+					|| (_filterState == 1 && draftOn)
+					|| (_filterState == 2 && !draftOn);
 				if (shouldShow)
 					filteredAddons.Add(kvp);
 			}
@@ -1220,6 +1311,12 @@ namespace spz {
 					nomad ? t.controlBg : t.success,
 					t.accent,
 					t.textPrimary);
+			if (_saveAddonSettings_button != null) {
+				Color saveFg = nomad
+					? new Color(0.235f, 0.184f, 0f, 1f)
+					: new Color(0.12f, 0.12f, 0.14f, 1f);
+				ThemeHeaderButton(_saveAddonSettings_button, t.accent, t.selection, saveFg);
+			}
 			if (_restartWithAddons_button != null) {
 				// Nomad primary action: metallic gold fill + dark on-primary text. Default SPZ keeps light label on accent.
 				Color restartFg = nomad
@@ -1276,7 +1373,7 @@ namespace spz {
 				SpzUiThemeOps.ApplyTmpColor(label, toggle.isOn ? t.panelBg : t.textMuted);
 		}
 
-		static void ThemeAddonListItem(GameObject item, SpzUiThemeOps.ThemeTokens t) {
+		void ThemeAddonListItem(GameObject item, SpzUiThemeOps.ThemeTokens t) {
 			Transform remove = item.transform.Find("RemoveBtn");
 			if (remove == null) remove = item.transform.Find("RemoveButton");
 			if (remove != null) {
@@ -1292,7 +1389,13 @@ namespace spz {
 			var toggle = item.transform.Find("StatusToggle")?.GetComponent<Toggle>();
 			if (toggle == null)
 				toggle = item.GetComponentInChildren<Toggle>(true);
+			string itemAddonId = null;
+			if (item.name != null && item.name.StartsWith("AddonItem_", StringComparison.Ordinal))
+				itemAddonId = item.name.Substring("AddonItem_".Length);
 			bool enabled = toggle != null && toggle.isOn;
+			if (!string.IsNullOrEmpty(itemAddonId) && Addon_MGR.instance != null
+			    && Addon_MGR.instance.GetAddons().TryGetValue(itemAddonId, out var liveInfo) && liveInfo != null)
+				enabled = GetDraftEnabled(itemAddonId, liveInfo.isEnabled);
 			var name = item.transform.Find("Name")?.GetComponent<TextMeshProUGUI>();
 			if (name != null)
 				SpzUiThemeOps.ApplyTmpColor(name, t.textPrimary);
@@ -1303,17 +1406,25 @@ namespace spz {
 					ringImg.color = ringColor;
 					ringImg.preserveAspect = true;
 				}
-				if (toggle.graphic != null) {
-					SpzUiThemeOps.ApplyGraphicColor(toggle.graphic, t.success);
-					if (toggle.graphic is Image fillImg)
-						fillImg.preserveAspect = true;
-					toggle.graphic.gameObject.SetActive(true);
-					toggle.graphic.canvasRenderer.SetAlpha(enabled ? 1f : 0f);
+				Image fill = toggle.graphic as Image;
+				if (fill == null)
+					fill = toggle.transform.Find("Ring/Checkmark")?.GetComponent<Image>();
+				if (fill != null) {
+					SpzUiThemeOps.ApplyGraphicColor(fill, t.success);
+					fill.preserveAspect = true;
+					fill.gameObject.SetActive(true);
+					fill.canvasRenderer.SetAlpha(enabled ? 1f : 0f);
 				}
 			}
 		}
 
 		void OnAddonEnabledStateChanged(string addonId) {
+			// Always mirror live enable into draft — async load-fail must not leave dial ON while isEnabled is false.
+			if (!string.IsNullOrEmpty(addonId)
+			    && Addon_MGR.instance != null
+			    && Addon_MGR.instance.GetAddons().TryGetValue(addonId, out var live)
+			    && live != null)
+				_draftEnabledById[addonId] = live.isEnabled;
 			if (_suppressEnabledListRefresh) {
 				SyncAddonRowVisual(addonId);
 				RefreshStatusCountsOnly();
@@ -1346,11 +1457,12 @@ namespace spz {
 			int disabledCount = 0;
 			int shown = 0;
 			foreach (var kvp in addons) {
-				if (kvp.Value.isEnabled) enabledCount++;
+				bool draftOn = GetDraftEnabled(kvp.Key, kvp.Value != null && kvp.Value.isEnabled);
+				if (draftOn) enabledCount++;
 				else disabledCount++;
 				bool shouldShow = _filterState == 0
-					|| (_filterState == 1 && kvp.Value.isEnabled)
-					|| (_filterState == 2 && !kvp.Value.isEnabled);
+					|| (_filterState == 1 && draftOn)
+					|| (_filterState == 2 && !draftOn);
 				if (shouldShow) shown++;
 			}
 			string filterText = _filterState == 0 ? "All" : (_filterState == 1 ? "Enabled" : "Disabled");
@@ -1359,7 +1471,7 @@ namespace spz {
 			else if (shown == 0)
 				ShowStatus("No add-ons match the current filter.", false);
 			else
-				ShowStatus($"Showing {shown} of {addons.Count} add-on(s) ({enabledCount} enabled, {disabledCount} disabled) — Filter: {filterText}", true);
+				ShowStatus($"Showing {shown} of {addons.Count} add-on(s) ({enabledCount} on, {disabledCount} off) — Filter: {filterText}. Save settings to keep next launch.", true);
 		}
 
 		void SyncAddonRowVisual(string addonId) {
@@ -1369,12 +1481,14 @@ namespace spz {
 				return;
 			var toggle = item.transform.Find("StatusToggle")?.GetComponent<Toggle>();
 			if (toggle == null) return;
-			toggle.SetIsOnWithoutNotify(info.isEnabled);
-			ApplyStatusDialVisual(toggle, info.isEnabled);
+			// Live enable flag changed (save apply / load failure) — sync this id's draft entry.
+			_draftEnabledById[addonId] = info.isEnabled;
+			bool showOn = info.isEnabled;
+			toggle.SetIsOnWithoutNotify(showOn);
+			ApplyStatusDialVisual(toggle, showOn);
 			bool stillVisible = _filterState == 0
-				|| (_filterState == 1 && info.isEnabled)
-				|| (_filterState == 2 && !info.isEnabled);
-			// Click handler owns deferred rebuild after suppress clears; scheduling here races mid-click.
+				|| (_filterState == 1 && showOn)
+				|| (_filterState == 2 && !showOn);
 			if (!stillVisible && !_suppressEnabledListRefresh)
 				ScheduleRefreshAddonsList();
 		}
@@ -1387,13 +1501,15 @@ namespace spz {
 				ringImg.color = ring;
 				ringImg.preserveAspect = true;
 			}
-			if (toggle.graphic != null) {
-				toggle.graphic.color = _statusOk;
-				if (toggle.graphic is Image fillImg)
-					fillImg.preserveAspect = true;
-				// Keep checkmark GO alive; Toggle would SetActive(false) and cause a one-frame pop.
-				toggle.graphic.gameObject.SetActive(true);
-				toggle.graphic.canvasRenderer.SetAlpha(enabled ? 1f : 0f);
+			// Prefer manual Checkmark — Toggle.graphic is left null so Unity does not hide it mid-click.
+			Image fillImg = toggle.graphic as Image;
+			if (fillImg == null)
+				fillImg = toggle.transform.Find("Ring/Checkmark")?.GetComponent<Image>();
+			if (fillImg != null) {
+				fillImg.color = _statusOk;
+				fillImg.preserveAspect = true;
+				fillImg.gameObject.SetActive(true);
+				fillImg.canvasRenderer.SetAlpha(enabled ? 1f : 0f);
 			}
 		}
 		
@@ -1441,9 +1557,9 @@ namespace spz {
 			toggleLE.preferredHeight = statusHitPad;
 			toggleLE.minHeight = statusHitPad;
 			toggleLE.flexibleHeight = 0f;
-			// Invisible hit pad — visual ring is a fixed square child (avoids oval stretch + tiny click target).
+			// Invisible hit pad — full row-height target; Color.clear still raycasts when raycastTarget is true.
 			var hitPad = toggleObj.AddComponent<Image>();
-			hitPad.color = new Color(1f, 1f, 1f, 0.001f);
+			hitPad.color = Color.clear;
 			hitPad.raycastTarget = true;
 			var ringObj = new GameObject("Ring");
 			ringObj.transform.SetParent(toggleObj.transform, false);
@@ -1472,11 +1588,13 @@ namespace spz {
 			toggleCheckmark.raycastTarget = false;
 			var rowToggle = toggleObj.AddComponent<Toggle>();
 			rowToggle.targetGraphic = hitPad;
-			rowToggle.graphic = toggleCheckmark;
+			// Do NOT assign graphic — Unity Toggle would SetActive(false) on Checkmark when off and fight our alpha dial.
+			rowToggle.graphic = null;
 			rowToggle.transition = Selectable.Transition.None;
 			rowToggle.toggleTransition = Toggle.ToggleTransition.None;
-			rowToggle.SetIsOnWithoutNotify(addonInfo.isEnabled);
-			ApplyStatusDialVisual(rowToggle, addonInfo.isEnabled);
+			bool draftOn = GetDraftEnabled(addonId, addonInfo.isEnabled);
+			rowToggle.SetIsOnWithoutNotify(draftOn);
+			ApplyStatusDialVisual(rowToggle, draftOn);
 
 			var nameObj = new GameObject("Name");
 			nameObj.transform.SetParent(itemObj.transform, false);
@@ -1529,19 +1647,29 @@ namespace spz {
 					return;
 				string id = addonId;
 				var map = Addon_MGR.instance.GetAddons();
-				if (map.TryGetValue(id, out var info) && info.isEnabled == isOn) {
+				if (map.TryGetValue(id, out var info) && info != null && info.isEnabled == isOn) {
+					SetDraftEnabled(id, isOn);
 					ApplyStatusDialVisual(rowToggle, isOn);
 					return;
 				}
-				// Suppress event→full rebuild while we mutate; otherwise the dial is destroyed mid-click.
+				// Apply immediately so the command-ribbon tab appears/disappears with the dial.
 				_suppressEnabledListRefresh = true;
 				try {
+					SetDraftEnabled(id, isOn);
 					if (isOn)
 						Addon_MGR.instance.EnableAddon(id);
 					else
 						Addon_MGR.instance.DisableAddon(id);
 					ApplyStatusDialVisual(rowToggle, isOn);
 					RefreshStatusCountsOnly();
+					bool ribbonOnly = string.Equals(id, Addon_MGR.RibbonOnlyFullscreenAddonId, StringComparison.Ordinal);
+					ShowStatus(isOn
+						? (ribbonOnly
+							? $"Enabled '{id}' — viewport dock on. Click Save settings to keep next launch."
+							: $"Enabled '{id}' — ribbon tab on. Click Save settings to keep next launch.")
+						: (ribbonOnly
+							? $"Disabled '{id}' — viewport dock off. Click Save settings to keep next launch."
+							: $"Disabled '{id}' — ribbon tab off. Click Save settings to keep next launch."), true);
 				} finally {
 					_suppressEnabledListRefresh = false;
 				}
