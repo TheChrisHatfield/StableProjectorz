@@ -1139,6 +1139,34 @@ namespace spz {
 		}
 		
 		/// <summary>
+		/// Keeps command-ribbon tab presence aligned with live enable state (repair path for dial/connectivity).
+		/// Enabled → ensure tab+shell; disabled → remove tab+shell.
+		/// </summary>
+		public void SyncRibbonTabWithEnabledState(string addonId) {
+			if (string.IsNullOrEmpty(addonId) || !_registeredAddons.ContainsKey(addonId))
+				return;
+			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal)) {
+				var ribbonOnly = AddonRibbonIntegration.ResolveCommandRibbon();
+				if (ribbonOnly != null)
+					ribbonOnly.RemoveAddonPanel(addonId);
+				if (IsAddonEnabled(addonId))
+					StartCoroutine(CoEnsureRibbonOnlyFullscreenViewportDock());
+				else
+					RibbonViewportFullViewOnScreen_Toggle_UI.TeardownAllDocksForAddonDisabled();
+				return;
+			}
+			if (IsAddonEnabled(addonId)) {
+				EnsureRibbonShellForEnabledAddon(addonId);
+				return;
+			}
+			if (AddonUI_MGR.instance != null)
+				AddonUI_MGR.instance.DestroyAddonUI(addonId);
+			var ribbon = AddonRibbonIntegration.ResolveCommandRibbon();
+			if (ribbon != null)
+				ribbon.RemoveAddonPanel(addonId);
+		}
+
+		/// <summary>
 		/// Enables an add-on, creates its command-ribbon tab immediately, and requests Python to load it.
 		/// </summary>
 		public void EnableAddon(string addonId) {

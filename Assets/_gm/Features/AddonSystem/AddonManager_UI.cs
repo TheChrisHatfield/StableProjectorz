@@ -1650,6 +1650,8 @@ namespace spz {
 				if (map.TryGetValue(id, out var info) && info != null && info.isEnabled == isOn) {
 					SetDraftEnabled(id, isOn);
 					ApplyStatusDialVisual(rowToggle, isOn);
+					// Connectivity repair: dial already matches live flag, but ribbon tab may be missing/orphan.
+					Addon_MGR.instance.SyncRibbonTabWithEnabledState(id);
 					return;
 				}
 				// Apply immediately so the command-ribbon tab appears/disappears with the dial.
