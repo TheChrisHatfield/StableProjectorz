@@ -58,8 +58,11 @@ namespace spz {
 		public static void SetLivePredict(bool v) {
 			if (v == _livePredict) return;
 			_livePredict = v;
-			if (!_livePredict)
+			if (!_livePredict) {
 				ValuePaintLivePredictor.InvalidateAssist();
+				// Soft live-arm is not Accept — drop it when Live turns off; keep user Accept arms.
+				ValuePaintProposalApplier.ClearArmedIfLiveSoftArm();
+			}
 			RaiseChanged();
 		}
 
