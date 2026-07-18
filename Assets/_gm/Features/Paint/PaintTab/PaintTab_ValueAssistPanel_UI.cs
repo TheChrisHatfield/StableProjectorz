@@ -14,7 +14,7 @@ namespace spz {
 		const float FontSize = 9.5f;
 		const float DialRing = 18f;
 		const float DialHit = 22f;
-		const int UiChromeVersion = 4;
+		const int UiChromeVersion = 5;
 
 		static bool _sessionCollapsed = false;
 		static int _builtChromeVersion;
@@ -807,13 +807,14 @@ namespace spz {
 		}
 
 		/// <summary>Compact drag dial: horizontal drag adjusts 0–1; radial fill shows value.</summary>
-		public sealed class ValueDial : MonoBehaviour, IBeginDragHandler, IDragHandler, IPointerClickHandler {
+		public sealed class ValueDial : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerClickHandler {
 			Image _fill;
 			TextMeshProUGUI _pct;
 			System.Action<float> _onChanged;
 			float _value;
 			float _dragStartX;
 			float _dragStartVal;
+			bool _dragMoved;
 
 			public float Value => _value;
 
@@ -835,12 +836,14 @@ namespace spz {
 			}
 
 			public void OnBeginDrag(PointerEventData eventData) {
+				_dragMoved = false;
 				_dragStartX = eventData.position.x;
 				_dragStartVal = _value;
 			}
 
 			public void OnDrag(PointerEventData eventData) {
 				float dx = eventData.position.x - _dragStartX;
+				if (Mathf.Abs(dx) > 2f) _dragMoved = true;
 				float next = Mathf.Clamp01(_dragStartVal + dx / 120f);
 				if (Mathf.Approximately(next, _value)) return;
 				_value = next;
@@ -848,8 +851,19 @@ namespace spz {
 				_onChanged?.Invoke(_value);
 			}
 
+			public void OnEndDrag(PointerEventData eventData) {
+				// Keep _dragMoved until click is processed this frame; clear next frame.
+				StartCoroutine(ClearDragMovedNextFrame());
+			}
+
+			System.Collections.IEnumerator ClearDragMovedNextFrame() {
+				yield return null;
+				_dragMoved = false;
+			}
+
 			public void OnPointerClick(PointerEventData eventData) {
-				if (eventData.dragging) return;
+				// After a drag, Unity often still fires click with dragging=false — do not cycle value.
+				if (_dragMoved || eventData.dragging) return;
 				// Click cycles 0 / 50 / 100 for quick set.
 				if (_value < 0.25f) _value = 0.5f;
 				else if (_value < 0.75f) _value = 1f;
