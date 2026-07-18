@@ -48,6 +48,10 @@ namespace spz {
 					// Re-entry / code upgrade: BuildUi is idempotent when settings chrome exists;
 					// older panels built before settings must rebuild (guard was _summaryTmp only).
 					existing.BuildUi();
+					// CollectNow can hit EnsureUnder without OnEnable — keep chrome matched to store.
+					existing.SyncControlsFromStore();
+					existing.ApplyEnabledChrome();
+					existing.RefreshStatusLine();
 					return existing;
 				}
 				var repaired = ch.gameObject.AddComponent<PaintTab_ValueAssistPanel_UI>();
