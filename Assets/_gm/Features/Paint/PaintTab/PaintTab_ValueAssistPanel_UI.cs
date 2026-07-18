@@ -272,7 +272,7 @@ namespace spz {
 				ClearPendingProposal(null);
 				ValuePaintLivePredictor.InvalidateAssist();
 				if (_summaryTmp != null)
-					_summaryTmp.text = "Value Assist off — expand header, turn On dial.";
+					_summaryTmp.text = "Value Assist off — open Value Assist ▼, turn On dial.";
 				keepNeuralStatus = false;
 			} else if (!PaintTab_ValueAssistOptions.LivePredict) {
 				// InvalidateAssist already cleared HasLastProposal; always drop stale Live UI text.
@@ -432,10 +432,11 @@ namespace spz {
 		void ToggleCollapsed() {
 			_collapsed = !_collapsed;
 			_sessionCollapsed = _collapsed;
-			ApplyCollapsedChrome();
+			// Scroll only on user open — not when EnsureUnder reapplies an already-open panel.
+			ApplyCollapsedChrome(scrollIntoView: !_collapsed);
 		}
 
-		void ApplyCollapsedChrome() {
+		void ApplyCollapsedChrome(bool scrollIntoView = false) {
 			bool open = !_collapsed;
 			if (_panelLe == null)
 				_panelLe = GetComponent<LayoutElement>();
@@ -450,7 +451,7 @@ namespace spz {
 				LayoutRebuilder.ForceRebuildLayoutImmediate(parent);
 			else
 				RebuildLayoutChain();
-			if (open) {
+			if (open && scrollIntoView) {
 				// Match Brush options: after expand, refresh canvas and scroll so the panel is visible.
 				Canvas.ForceUpdateCanvases();
 				if (parent != null)
