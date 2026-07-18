@@ -18,6 +18,7 @@ Before implementing, load the hook map — do not jump straight into requirement
    - Delta micro: [`smart-value-paint.md`](../../delta/20_micro/smart-value-paint.md)
    - Plan: [`plan.md`](./plan.md)
    - Tasks: [`tasks.md`](./tasks.md)
+   - Train: [`mlp-train-spec.md`](./mlp-train-spec.md) (T9)
 
 ## What
 
@@ -50,6 +51,10 @@ Behavioral acceptance criteria stay in this Spec Kit trio. Operational commands/
 
 v1 design MUST treat an MLP (or equivalent small predictor) as the **baseline** for parameter prediction / value-bin classification. Temporal sequence models MAY be noted as future work; they are not required for v1 acceptance.
 
+### R6 — Brush behavior contract (binding)
+
+Runtime brush behavior (color-preserving value remap, Live semantics, Propose/Accept/Dismiss state machine, status priority, panel accordion, defaults) is specified in [`brush-behavior-spec.md`](./brush-behavior-spec.md). Code changes to the Value Assist brush MUST be audited against that document first; behavior changes MUST update it in the same change.
+
 ## Out of scope
 
 - Full-image generative painting as the primary interaction
@@ -58,6 +63,7 @@ v1 design MUST treat an MLP (or equivalent small predictor) as the **baseline** 
 
 ## Open questions
 
-- Exact input feature vector schema (hand-crafted stats vs small CNN embedding)
-- Where proposals appear in Paint tab UI vs non-UI API-first slice
-- How SDXL/Forge outputs feed value maps without blocking offline authoring
+- How SDXL/Forge outputs feed value maps without blocking offline authoring (Comfy offline path exists for T8)
+
+**Resolved 2026-07-17:** v1 MLP input = hand-crafted 7 floats — [`mlp-train-spec.md`](./mlp-train-spec.md).  
+**Resolved 2026-07-17:** Proposals appear in Paint tab Tool Options (`PaintTab_ValueAssistPanel_UI`); Editor menus remain the non-UI check path. MLP runtime = baked JSON weights in Resources (CPU).
