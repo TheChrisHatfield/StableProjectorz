@@ -667,7 +667,11 @@ namespace spz {
 			}
 			ValuePaintProposalApplier.ClearLiveSoftArmSuppress();
 			EnsureAssist();
+			// While Live soft-arms the ribbon, CurrentBrushColor() is already value-remapped.
+			// Propose/Accept must start from the artist's locked chroma or Accept double-shifts.
 			Color sample = CurrentBrushColor();
+			if (ValuePaintProposalApplier.TryGetUserChromaBase(out Color chromaBase))
+				sample = chromaBase;
 			_proposal = _assist.ProposeFromColor(sample, default);
 			_proposalBaseColor = sample;
 			_hasProposal = true;
