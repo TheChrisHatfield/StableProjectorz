@@ -1,17 +1,23 @@
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace spz {
 
 	/// <summary>
-	/// Paint-tab review UI for smart-value-paint (Spec R3): enable/settings + Propose → Accept/Dismiss.
-	/// Accept arms the existing ribbon via <see cref="ValuePaintProposalApplier.TryAccept"/>; strokes stay on the normal paint path.
+	/// Paint-tab Value Assist UI: compact collapsible header + circle dials for toggles and knobs.
 	/// </summary>
 	public sealed class PaintTab_ValueAssistPanel_UI : MonoBehaviour {
 
 		const string RootName = "ValueAssistPanel";
-		const float FontSize = 10f;
+		const float FontSize = 9.5f;
+		const float DialRing = 18f;
+		const float DialHit = 22f;
+		const int UiChromeVersion = 4;
+
+		static bool _sessionCollapsed = false;
+		static int _builtChromeVersion;
 
 		IValuePaintAssist _assist;
 		string _assistWhich = "";
@@ -20,7 +26,9 @@ namespace spz {
 
 		TextMeshProUGUI _summaryTmp;
 		TextMeshProUGUI _statusTmp;
+		TextMeshProUGUI _headerLbl;
 		Image _swatchImg;
+		Button _headerBtn;
 		Button _proposeBtn;
 		Button _acceptBtn;
 		Button _dismissBtn;
@@ -28,16 +36,15 @@ namespace spz {
 		Toggle _neuralToggle;
 		Toggle _hardnessToggle;
 		Toggle _liveToggle;
-		Slider _blendSlider;
-		Slider _sizeInfSlider;
-		Slider _opacityInfSlider;
-		TextMeshProUGUI _blendLbl;
-		TextMeshProUGUI _sizeInfLbl;
-		TextMeshProUGUI _opacityInfLbl;
-		GameObject _controlsRoot;
+		ValueDial _blendDial;
+		ValueDial _sizeDial;
+		ValueDial _opacityDial;
+		GameObject _bodyRoot;
+		GameObject _knobRow;
 		bool _suppressToggleSync;
 		bool _proposalFromNeural;
 		bool _haveSyncedNeuralPref;
+		bool _collapsed;
 
 		public static PaintTab_ValueAssistPanel_UI EnsureUnder(RectTransform toolOptionsSection) {
 			if (toolOptionsSection == null) return null;
@@ -46,12 +53,10 @@ namespace spz {
 				if (ch == null || ch.name != RootName) continue;
 				var existing = ch.GetComponent<PaintTab_ValueAssistPanel_UI>();
 				if (existing != null) {
-					// Re-entry / code upgrade: BuildUi is idempotent when settings chrome exists;
-					// older panels built before settings must rebuild (guard was _summaryTmp only).
 					existing.BuildUi();
-					// CollectNow can hit EnsureUnder without OnEnable — keep chrome matched to store.
 					existing.SyncControlsFromStore();
 					existing.ApplyEnabledChrome();
+					existing.ApplyCollapsedChrome();
 					existing.RefreshStatusLine();
 					return existing;
 				}
@@ -77,16 +82,20 @@ namespace spz {
 			rect.pivot = new Vector2(0.5f, 1);
 			var le = rect.GetComponent<LayoutElement>() ?? rect.gameObject.AddComponent<LayoutElement>();
 			le.flexibleWidth = 1f;
-			le.minHeight = 310f;
-			le.preferredHeight = 330f;
+			le.minHeight = 30f;
+			le.preferredHeight = 30f;
+			var csf = rect.GetComponent<ContentSizeFitter>() ?? rect.gameObject.AddComponent<ContentSizeFitter>();
+			csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+			csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 		}
 
 		void OnEnable() {
 			PaintTab_ValueAssistOptions.Changed -= OnOptionsChanged;
 			PaintTab_ValueAssistOptions.Changed += OnOptionsChanged;
-			BuildUi(); // upgrade path if panel existed before settings chrome
+			BuildUi();
 			SyncControlsFromStore();
 			ApplyEnabledChrome();
+			ApplyCollapsedChrome();
 			RefreshStatusLine();
 		}
 
@@ -113,8 +122,6 @@ namespace spz {
 
 		void OnOptionsChanged() {
 			bool preferNeural = PaintTab_ValueAssistOptions.UseNeural;
-
-			// Drop cached assist when it no longer matches the neural toggle.
 			if (_assist != null) {
 				bool taggedNeuralOff = _assistWhich != null
 					&& _assistWhich.IndexOf("neural off", System.StringComparison.Ordinal) >= 0;
@@ -127,7 +134,6 @@ namespace spz {
 				}
 			}
 
-			// Pending proposal was produced under a different neural preference — refuse stale Accept.
 			bool keepNeuralStatus = false;
 			if (_hasProposal && _haveSyncedNeuralPref && preferNeural != _proposalFromNeural) {
 				ClearPendingProposal("Neural mode changed — Propose again.");
@@ -142,16 +148,16 @@ namespace spz {
 				ClearPendingProposal(null);
 				ValuePaintLivePredictor.InvalidateAssist();
 				if (_summaryTmp != null)
-					_summaryTmp.text = "Value Assist off — enable to propose neural / value brush settings.";
+					_summaryTmp.text = "Value Assist off — expand header, turn On dial.";
 				keepNeuralStatus = false;
 			} else if (!PaintTab_ValueAssistOptions.LivePredict) {
-				// Live off: drop live proposal UI state only (SetLivePredict already invalidates).
 				if (!ValuePaintLivePredictor.HasLastProposal && _statusTmp != null
 				    && _statusTmp.text != null && _statusTmp.text.StartsWith("Live "))
 					_statusTmp.text = "Idle";
 			}
 			if (!keepNeuralStatus)
 				RefreshStatusLine();
+			RefreshHeaderLabel();
 		}
 
 		void ClearPendingProposal(string statusMsg) {
@@ -164,13 +170,14 @@ namespace spz {
 		}
 
 		void BuildUi() {
-			// Settings chrome is the upgrade gate — rebuild when live-predict toggle missing.
-			if (_enabledToggle != null && _liveToggle != null) return;
+			if (_headerBtn != null && _blendDial != null && _builtChromeVersion >= UiChromeVersion) return;
 			for (int i = transform.childCount - 1; i >= 0; i--)
 				UnityEngine.Object.DestroyImmediate(transform.GetChild(i).gameObject);
 			_summaryTmp = null;
 			_statusTmp = null;
+			_headerLbl = null;
 			_swatchImg = null;
+			_headerBtn = null;
 			_proposeBtn = null;
 			_acceptBtn = null;
 			_dismissBtn = null;
@@ -178,86 +185,97 @@ namespace spz {
 			_neuralToggle = null;
 			_hardnessToggle = null;
 			_liveToggle = null;
-			_blendSlider = null;
-			_sizeInfSlider = null;
-			_opacityInfSlider = null;
-			_blendLbl = null;
-			_sizeInfLbl = null;
-			_opacityInfLbl = null;
-			_controlsRoot = null;
+			_blendDial = null;
+			_sizeDial = null;
+			_opacityDial = null;
+			_bodyRoot = null;
+			_knobRow = null;
+			_collapsed = _sessionCollapsed;
+			_builtChromeVersion = UiChromeVersion;
 
 			var t = SpzUiThemeOps.Active;
 			var bg = gameObject.GetComponent<Image>() ?? gameObject.AddComponent<Image>();
+			bg.sprite = UiRuntimeSprites.RoundedRectSliced;
+			bg.type = Image.Type.Sliced;
 			bg.color = new Color(0.14f, 0.16f, 0.19f, 0.96f);
 			bg.raycastTarget = true;
 
 			var vlg = gameObject.GetComponent<VerticalLayoutGroup>() ?? gameObject.AddComponent<VerticalLayoutGroup>();
-			vlg.padding = new RectOffset(6, 6, 4, 4);
-			vlg.spacing = 4;
+			vlg.padding = new RectOffset(4, 4, 3, 3);
+			vlg.spacing = 3;
 			vlg.childAlignment = TextAnchor.UpperLeft;
 			vlg.childControlHeight = true;
 			vlg.childControlWidth = true;
 			vlg.childForceExpandHeight = false;
 			vlg.childForceExpandWidth = true;
+			EnsureLayoutShell(transform as RectTransform);
 
-			_enabledToggle = MakeCheckboxRow(transform, "EnabledRow", "Value Assist (neural brush)",
-				PaintTab_ValueAssistOptions.Enabled, isOn => {
-					PaintTab_ValueAssistOptions.SetEnabled(isOn);
-					ShowFeedback(isOn ? "Value Assist: on" : "Value Assist: off");
-				});
+			_headerBtn = MakeHeaderRow(transform, out _headerLbl);
+			_headerBtn.onClick.AddListener(ToggleCollapsed);
+			AttachTip(_headerBtn.gameObject,
+				"Value Assist\nClick to expand or collapse settings.");
+			RefreshHeaderLabel();
 
-			_controlsRoot = new GameObject("Controls");
-			_controlsRoot.transform.SetParent(transform, false);
-			_controlsRoot.AddComponent<RectTransform>();
-			var controlsLe = _controlsRoot.AddComponent<LayoutElement>();
-			controlsLe.flexibleWidth = 1f;
-			controlsLe.minHeight = 160f;
-			var controlsV = _controlsRoot.AddComponent<VerticalLayoutGroup>();
-			controlsV.spacing = 4;
-			controlsV.childAlignment = TextAnchor.UpperLeft;
-			controlsV.childControlHeight = true;
-			controlsV.childControlWidth = true;
-			controlsV.childForceExpandHeight = false;
-			controlsV.childForceExpandWidth = true;
+			_bodyRoot = new GameObject("Body");
+			_bodyRoot.transform.SetParent(transform, false);
+			_bodyRoot.AddComponent<RectTransform>();
+			var bodyLe = _bodyRoot.AddComponent<LayoutElement>();
+			bodyLe.flexibleWidth = 1f;
+			var bodyV = _bodyRoot.AddComponent<VerticalLayoutGroup>();
+			bodyV.spacing = 4;
+			bodyV.padding = new RectOffset(2, 2, 2, 2);
+			bodyV.childAlignment = TextAnchor.UpperLeft;
+			bodyV.childControlHeight = true;
+			bodyV.childControlWidth = true;
+			bodyV.childForceExpandHeight = false;
+			bodyV.childForceExpandWidth = true;
 
-			_neuralToggle = MakeCheckboxRow(_controlsRoot.transform, "NeuralRow", "Use neural (MLP)",
-				PaintTab_ValueAssistOptions.UseNeural, isOn => {
-					PaintTab_ValueAssistOptions.SetUseNeural(isOn);
-					ValuePaintLivePredictor.InvalidateAssist();
-					ShowFeedback(isOn ? "Value Assist: neural MLP" : "Value Assist: deterministic stub");
-				});
-			_liveToggle = MakeCheckboxRow(_controlsRoot.transform, "LiveRow", "Live predict under cursor",
-				PaintTab_ValueAssistOptions.LivePredict, isOn => {
-					PaintTab_ValueAssistOptions.SetLivePredict(isOn);
-					ShowFeedback(isOn ? "Value Assist: live predict on" : "Value Assist: live predict off");
-				});
-			_hardnessToggle = MakeCheckboxRow(_controlsRoot.transform, "HardnessRow", "Apply hardness from edge soft",
-				PaintTab_ValueAssistOptions.ApplyHardness, isOn => {
-					PaintTab_ValueAssistOptions.SetApplyHardness(isOn);
-				});
+			// Row 1 — feature toggles as small circle dials (row must fit DialHit + label)
+			var toggleRow = MakeDialRow(_bodyRoot.transform, "ToggleDials", DialHit + 14f);
+			_enabledToggle = MakeBoolDial(toggleRow.transform, "On", PaintTab_ValueAssistOptions.Enabled, isOn => {
+				PaintTab_ValueAssistOptions.SetEnabled(isOn);
+				ShowFeedback(isOn ? "Value Assist: on" : "Value Assist: off");
+			}, "On\nTurn Value Assist on or off.");
+			_neuralToggle = MakeBoolDial(toggleRow.transform, "Neural", PaintTab_ValueAssistOptions.UseNeural, isOn => {
+				PaintTab_ValueAssistOptions.SetUseNeural(isOn);
+				ValuePaintLivePredictor.InvalidateAssist();
+				ShowFeedback(isOn ? "Value Assist: neural MLP" : "Value Assist: deterministic stub");
+			}, "Neural\nUse the trained neural net (MLP).\nOff = simple fallback.");
+			_liveToggle = MakeBoolDial(toggleRow.transform, "Live", PaintTab_ValueAssistOptions.LivePredict, isOn => {
+				PaintTab_ValueAssistOptions.SetLivePredict(isOn);
+				ShowFeedback(isOn ? "Value Assist: live on" : "Value Assist: live off");
+			}, "Live\nWhile you hover or paint, update brush value from under the tip.");
+			_hardnessToggle = MakeBoolDial(toggleRow.transform, "Hard", PaintTab_ValueAssistOptions.ApplyHardness, isOn => {
+				PaintTab_ValueAssistOptions.SetApplyHardness(isOn);
+			}, "Hard\nApply predicted tip hardness (soft / med / hard).");
 
-			_blendSlider = MakeSliderRow(_controlsRoot.transform, "BlendRow", "Blend strength",
-				PaintTab_ValueAssistOptions.Blend01, v => PaintTab_ValueAssistOptions.SetBlend01(v), out _blendLbl);
-			_sizeInfSlider = MakeSliderRow(_controlsRoot.transform, "SizeInfRow", "Size influence",
-				PaintTab_ValueAssistOptions.SizeInfluence01, v => PaintTab_ValueAssistOptions.SetSizeInfluence01(v), out _sizeInfLbl);
-			_opacityInfSlider = MakeSliderRow(_controlsRoot.transform, "OpacityInfRow", "Opacity influence",
-				PaintTab_ValueAssistOptions.OpacityInfluence01, v => PaintTab_ValueAssistOptions.SetOpacityInfluence01(v), out _opacityInfLbl);
+			// Row 2 — Blend / Size / Opacity as drag dials
+			_knobRow = MakeDialRow(_bodyRoot.transform, "ValueDials", DialHit + 16f).gameObject;
+			_blendDial = MakeValueDial(_knobRow.transform, "Blend", PaintTab_ValueAssistOptions.Blend01,
+				v => PaintTab_ValueAssistOptions.SetBlend01(v),
+				"Blend\nHow strongly to pull brush color toward the predicted gray.\n0% = keep yours · 100% = full prediction.");
+			_sizeDial = MakeValueDial(_knobRow.transform, "Size", PaintTab_ValueAssistOptions.SizeInfluence01,
+				v => PaintTab_ValueAssistOptions.SetSizeInfluence01(v),
+				"Size\nHow much predicted brush size overrides yours.\n0% = keep yours · 100% = use prediction.");
+			_opacityDial = MakeValueDial(_knobRow.transform, "Opacity", PaintTab_ValueAssistOptions.OpacityInfluence01,
+				v => PaintTab_ValueAssistOptions.SetOpacityInfluence01(v),
+				"Opacity\nHow much predicted opacity applies on Accept.\n0% = keep yours · 100% = use prediction.");
 
-			_summaryTmp = MakeLabel(transform,
-				"Live: hover/paint predicts value under cursor. Propose/Accept still arms a snapshot.",
-				9f, t.textMuted);
+			_summaryTmp = MakeLabel(_bodyRoot.transform,
+				"Hover dials for tips. Live predicts under tip · Propose/Accept locks a snapshot.",
+				8.5f, t.textMuted);
 			var summaryLe = _summaryTmp.GetComponent<LayoutElement>() ?? _summaryTmp.gameObject.AddComponent<LayoutElement>();
-			summaryLe.minHeight = 36f;
-			summaryLe.preferredHeight = 40f;
+			summaryLe.minHeight = 20f;
+			summaryLe.preferredHeight = 22f;
 
 			var row = new GameObject("Actions");
-			row.transform.SetParent(transform, false);
+			row.transform.SetParent(_bodyRoot.transform, false);
 			row.AddComponent<RectTransform>();
 			var rowLe = row.AddComponent<LayoutElement>();
-			rowLe.minHeight = 28f;
-			rowLe.preferredHeight = 28f;
+			rowLe.minHeight = 24f;
+			rowLe.preferredHeight = 24f;
 			var hlg = row.AddComponent<HorizontalLayoutGroup>();
-			hlg.spacing = 4;
+			hlg.spacing = 3;
 			hlg.childAlignment = TextAnchor.MiddleLeft;
 			hlg.childForceExpandWidth = false;
 			hlg.childForceExpandHeight = true;
@@ -268,14 +286,59 @@ namespace spz {
 			_proposeBtn = MakeBtn(row.transform, "Propose", new Color(0.22f, 0.42f, 0.52f, 1f), OnPropose);
 			_acceptBtn = MakeBtn(row.transform, "Accept", new Color(0.22f, 0.48f, 0.32f, 1f), OnAccept);
 			_dismissBtn = MakeBtn(row.transform, "Dismiss", new Color(0.42f, 0.28f, 0.28f, 1f), OnDismiss);
+			AttachTip(_proposeBtn.gameObject, "Propose\nSuggest a value setup from the current brush color.");
+			AttachTip(_acceptBtn.gameObject, "Accept\nArm the brush with that suggestion, then paint normally.");
+			AttachTip(_dismissBtn.gameObject, "Dismiss\nClear the suggestion and disarm.");
+			AttachTip(_swatchImg.gameObject, "Swatch\nPredicted target gray (desired value).");
 
-			_statusTmp = MakeLabel(transform, "Idle", 9f, t.textMuted);
+			_statusTmp = MakeLabel(_bodyRoot.transform, "Idle", 8.5f, t.textMuted);
 			var statusLe = _statusTmp.GetComponent<LayoutElement>() ?? _statusTmp.gameObject.AddComponent<LayoutElement>();
-			statusLe.minHeight = 18f;
+			statusLe.minHeight = 15f;
 
 			_acceptBtn.interactable = false;
 			ApplyEnabledChrome();
+			ApplyCollapsedChrome();
 			RefreshStatusLine();
+		}
+
+		static GameObject MakeDialRow(Transform parent, string name, float height) {
+			var row = new GameObject(name);
+			row.transform.SetParent(parent, false);
+			row.AddComponent<RectTransform>();
+			var le = row.AddComponent<LayoutElement>();
+			le.minHeight = height;
+			le.preferredHeight = height;
+			le.flexibleWidth = 1f;
+			var h = row.AddComponent<HorizontalLayoutGroup>();
+			h.spacing = 6;
+			h.padding = new RectOffset(2, 2, 0, 0);
+			h.childAlignment = TextAnchor.MiddleLeft;
+			h.childControlWidth = false;
+			h.childControlHeight = true;
+			h.childForceExpandWidth = false;
+			h.childForceExpandHeight = false;
+			return row;
+		}
+
+		void ToggleCollapsed() {
+			_collapsed = !_collapsed;
+			_sessionCollapsed = _collapsed;
+			ApplyCollapsedChrome();
+		}
+
+		void ApplyCollapsedChrome() {
+			if (_bodyRoot != null)
+				_bodyRoot.SetActive(!_collapsed);
+			RefreshHeaderLabel();
+			LayoutRebuilder.ForceRebuildLayoutImmediate(transform as RectTransform);
+		}
+
+		void RefreshHeaderLabel() {
+			if (_headerLbl == null) return;
+			string arrow = _collapsed ? "▼ expand" : "▲ collapse";
+			string state = PaintTab_ValueAssistOptions.Enabled ? "on" : "off";
+			string live = PaintTab_ValueAssistOptions.LivePredict ? "live" : "manual";
+			_headerLbl.text = "Value Assist  ·  " + state + " / " + live + "   " + arrow;
 		}
 
 		void SyncControlsFromStore() {
@@ -288,35 +351,26 @@ namespace spz {
 				_liveToggle.SetIsOnWithoutNotify(PaintTab_ValueAssistOptions.LivePredict);
 			if (_hardnessToggle != null)
 				_hardnessToggle.SetIsOnWithoutNotify(PaintTab_ValueAssistOptions.ApplyHardness);
-			if (_blendSlider != null)
-				_blendSlider.SetValueWithoutNotify(PaintTab_ValueAssistOptions.Blend01);
-			if (_sizeInfSlider != null)
-				_sizeInfSlider.SetValueWithoutNotify(PaintTab_ValueAssistOptions.SizeInfluence01);
-			if (_opacityInfSlider != null)
-				_opacityInfSlider.SetValueWithoutNotify(PaintTab_ValueAssistOptions.OpacityInfluence01);
-			// SetValueWithoutNotify skips onValueChanged — refresh % labels explicitly.
-			SetSliderLabel(_blendLbl, "Blend strength", PaintTab_ValueAssistOptions.Blend01);
-			SetSliderLabel(_sizeInfLbl, "Size influence", PaintTab_ValueAssistOptions.SizeInfluence01);
-			SetSliderLabel(_opacityInfLbl, "Opacity influence", PaintTab_ValueAssistOptions.OpacityInfluence01);
+			_blendDial?.SetValueWithoutNotify(PaintTab_ValueAssistOptions.Blend01);
+			_sizeDial?.SetValueWithoutNotify(PaintTab_ValueAssistOptions.SizeInfluence01);
+			_opacityDial?.SetValueWithoutNotify(PaintTab_ValueAssistOptions.OpacityInfluence01);
 			_suppressToggleSync = false;
-			TintToggleBox(_enabledToggle, PaintTab_ValueAssistOptions.Enabled);
-			TintToggleBox(_neuralToggle, PaintTab_ValueAssistOptions.UseNeural);
-			TintToggleBox(_liveToggle, PaintTab_ValueAssistOptions.LivePredict);
-			TintToggleBox(_hardnessToggle, PaintTab_ValueAssistOptions.ApplyHardness);
+			TintBoolDial(_enabledToggle, PaintTab_ValueAssistOptions.Enabled);
+			TintBoolDial(_neuralToggle, PaintTab_ValueAssistOptions.UseNeural);
+			TintBoolDial(_liveToggle, PaintTab_ValueAssistOptions.LivePredict);
+			TintBoolDial(_hardnessToggle, PaintTab_ValueAssistOptions.ApplyHardness);
+			RefreshHeaderLabel();
 		}
 
 		void ApplyEnabledChrome() {
 			bool on = PaintTab_ValueAssistOptions.Enabled;
-			if (_controlsRoot != null)
-				_controlsRoot.SetActive(on);
+			if (_knobRow != null) _knobRow.SetActive(on);
 			if (_proposeBtn != null) _proposeBtn.interactable = on;
 			if (_dismissBtn != null) _dismissBtn.interactable = on;
 			if (_acceptBtn != null) _acceptBtn.interactable = on && _hasProposal;
-			var shell = GetComponent<LayoutElement>();
-			if (shell != null) {
-				shell.minHeight = on ? 310f : 72f;
-				shell.preferredHeight = on ? 330f : 80f;
-			}
+			if (_neuralToggle != null) _neuralToggle.interactable = on;
+			if (_liveToggle != null) _liveToggle.interactable = on;
+			if (_hardnessToggle != null) _hardnessToggle.interactable = on;
 		}
 
 		void OnPropose() {
@@ -334,7 +388,7 @@ namespace spz {
 			if (_swatchImg != null)
 				_swatchImg.color = ValuePaintProposalApplier.GrayForBand(_proposal.DesiredBin);
 			if (_summaryTmp != null) _summaryTmp.text = FormatProposal(_proposal);
-			SetStatus("Proposed (" + _assistWhich + ") — review, then Accept to arm brush.");
+			SetStatus("Proposed (" + _assistWhich + ") — Accept to arm brush.");
 			ShowFeedback("Value Assist: proposal ready");
 		}
 
@@ -349,10 +403,9 @@ namespace spz {
 			}
 			bool ok = ValuePaintProposalApplier.TryAccept(_proposal, out string reason);
 			if (ok) {
-				string armed = PaintTab_ValueAssistOptions.ApplyHardness
-					? "Armed — paint strokes use ribbon color/size/opacity/hardness."
-					: "Armed — paint strokes use ribbon color/size/opacity (hardness unchanged).";
-				SetStatus(armed);
+				SetStatus(PaintTab_ValueAssistOptions.ApplyHardness
+					? "Armed — color/size/opacity/hardness."
+					: "Armed — color/size/opacity (hardness unchanged).");
 				ShowFeedback("Value Assist: accepted");
 			} else {
 				SetStatus("Accept refused — " + reason);
@@ -365,9 +418,7 @@ namespace spz {
 			ClearPendingProposal(null);
 			ValuePaintProposalApplier.ClearArmed();
 			if (_summaryTmp != null)
-				_summaryTmp.text = PaintTab_ValueAssistOptions.Enabled
-					? "Value Assist — Propose from brush color, Accept to arm ribbon."
-					: "Value Assist off — enable to propose neural / value brush settings.";
+				_summaryTmp.text = "Hover dials for tips. Live predicts under tip · Propose/Accept locks a snapshot.";
 			SetStatus("Dismissed.");
 			ShowFeedback("Value Assist: cleared");
 		}
@@ -422,163 +473,264 @@ namespace spz {
 				Debug.Log("[Paint Tab] " + msg);
 		}
 
-		static void TintToggleBox(Toggle toggle, bool on) {
-			if (toggle == null || toggle.targetGraphic == null) return;
-			toggle.targetGraphic.color = on
-				? new Color(0.22f, 0.45f, 0.55f, 1f)
-				: new Color(0.34f, 0.36f, 0.4f, 1f);
+		static Button MakeHeaderRow(Transform parent, out TextMeshProUGUI labelOut) {
+			var go = new GameObject("ValueAssistHeader");
+			go.transform.SetParent(parent, false);
+			go.AddComponent<RectTransform>();
+			var le = go.AddComponent<LayoutElement>();
+			le.minHeight = 26f;
+			le.preferredHeight = 26f;
+			le.flexibleWidth = 1f;
+			var img = go.AddComponent<Image>();
+			img.sprite = UiRuntimeSprites.RoundedRectSliced;
+			img.type = Image.Type.Sliced;
+			img.color = new Color(0.22f, 0.28f, 0.36f, 0.95f);
+			img.raycastTarget = true;
+			var btn = go.AddComponent<Button>();
+			btn.targetGraphic = img;
+			var colors = btn.colors;
+			colors.normalColor = Color.white;
+			colors.highlightedColor = new Color(1.1f, 1.1f, 1.1f, 1f);
+			colors.pressedColor = new Color(0.88f, 0.88f, 0.88f, 1f);
+			colors.selectedColor = Color.white;
+			btn.colors = colors;
+
+			var iconGo = new GameObject("Icon");
+			iconGo.transform.SetParent(go.transform, false);
+			var iconRt = iconGo.AddComponent<RectTransform>();
+			iconRt.anchorMin = new Vector2(0f, 0.5f);
+			iconRt.anchorMax = new Vector2(0f, 0.5f);
+			iconRt.pivot = new Vector2(0f, 0.5f);
+			iconRt.anchoredPosition = new Vector2(6f, 0f);
+			iconRt.sizeDelta = new Vector2(12f, 12f);
+			var iconImg = iconGo.AddComponent<Image>();
+			iconImg.sprite = UiRuntimeSprites.GetLineIcon(StudioLineIcon.Brush);
+			iconImg.color = new Color(0.85f, 0.88f, 0.92f, 1f);
+			iconImg.raycastTarget = false;
+			iconImg.preserveAspect = true;
+
+			var txtGo = new GameObject("Label");
+			txtGo.transform.SetParent(go.transform, false);
+			var tr = txtGo.AddComponent<RectTransform>();
+			tr.anchorMin = Vector2.zero;
+			tr.anchorMax = Vector2.one;
+			tr.offsetMin = new Vector2(22f, 0f);
+			tr.offsetMax = new Vector2(-6f, 0f);
+			var tmp = txtGo.AddComponent<TextMeshProUGUI>();
+			tmp.font = TMP_Settings.defaultFontAsset;
+			tmp.fontSize = FontSize;
+			tmp.color = new Color(0.92f, 0.93f, 0.95f, 1f);
+			tmp.alignment = TextAlignmentOptions.MidlineLeft;
+			tmp.raycastTarget = false;
+			tmp.text = "Value Assist  ·  ▼ expand";
+			labelOut = tmp;
+			return btn;
 		}
 
-		Toggle MakeCheckboxRow(Transform parent, string rowName, string labelText, bool initialOn,
-			UnityEngine.Events.UnityAction<bool> onChanged) {
-			Color offCol = new Color(0.34f, 0.36f, 0.4f, 1f);
-			Color onCol = new Color(0.22f, 0.45f, 0.55f, 1f);
-			var row = new GameObject(rowName);
-			row.transform.SetParent(parent, false);
-			row.AddComponent<RectTransform>();
-			var rowLe = row.AddComponent<LayoutElement>();
-			rowLe.minHeight = 26f;
-			rowLe.preferredHeight = 26f;
-			rowLe.flexibleWidth = 1f;
-			var h = row.AddComponent<HorizontalLayoutGroup>();
-			h.spacing = 8;
-			h.childAlignment = TextAnchor.MiddleLeft;
-			h.childControlWidth = false;
-			h.childControlHeight = true;
-			h.childForceExpandWidth = false;
+		static void AttachTip(GameObject go, string tip) {
+			if (go == null || string.IsNullOrEmpty(tip)) return;
+			var tipUi = go.GetComponent<CanShowTooltip_UI>() ?? go.AddComponent<CanShowTooltip_UI>();
+			tipUi.set_overrideMessage(tip);
+		}
 
-			var boxGo = new GameObject("Box");
-			boxGo.transform.SetParent(row.transform, false);
-			var boxLe = boxGo.AddComponent<LayoutElement>();
-			boxLe.minWidth = 28f;
-			boxLe.preferredWidth = 28f;
-			var img = boxGo.AddComponent<Image>();
-			img.color = initialOn ? onCol : offCol;
-			var toggle = boxGo.AddComponent<Toggle>();
-			toggle.targetGraphic = img;
+		Toggle MakeBoolDial(Transform parent, string shortLabel, bool initialOn,
+			UnityEngine.Events.UnityAction<bool> onChanged, string tip = null) {
+			Color offRing = new Color(0.5f, 0.52f, 0.56f, 1f);
+			Color onRing = new Color(0.45f, 0.72f, 0.82f, 1f);
+			Color onFill = new Color(0.35f, 0.65f, 0.78f, 1f);
+
+			var col = new GameObject("Dial_" + shortLabel);
+			col.transform.SetParent(parent, false);
+			col.AddComponent<RectTransform>();
+			var colLe = col.AddComponent<LayoutElement>();
+			colLe.minWidth = 40f;
+			colLe.preferredWidth = 44f;
+			colLe.minHeight = DialHit + 12f;
+			var v = col.AddComponent<VerticalLayoutGroup>();
+			v.spacing = 1;
+			v.childAlignment = TextAnchor.UpperCenter;
+			v.childControlWidth = true;
+			v.childControlHeight = true;
+			v.childForceExpandWidth = false;
+			v.childForceExpandHeight = false;
+
+			var dialGo = new GameObject("Circle");
+			dialGo.transform.SetParent(col.transform, false);
+			var dialLe = dialGo.AddComponent<LayoutElement>();
+			dialLe.minWidth = DialHit;
+			dialLe.preferredWidth = DialHit;
+			dialLe.minHeight = DialHit;
+			dialLe.preferredHeight = DialHit;
+			var hitPad = dialGo.AddComponent<Image>();
+			hitPad.color = Color.clear;
+			hitPad.raycastTarget = true;
+
+			var ringGo = new GameObject("Ring");
+			ringGo.transform.SetParent(dialGo.transform, false);
+			var ringRt = ringGo.AddComponent<RectTransform>();
+			ringRt.anchorMin = ringRt.anchorMax = ringRt.pivot = new Vector2(0.5f, 0.5f);
+			ringRt.sizeDelta = new Vector2(DialRing, DialRing);
+			var ringImg = ringGo.AddComponent<Image>();
+			ringImg.sprite = UiRuntimeSprites.CircleRing;
+			ringImg.preserveAspect = true;
+			ringImg.raycastTarget = false;
+			ringImg.color = initialOn ? onRing : offRing;
+
+			var fillGo = new GameObject("Fill");
+			fillGo.transform.SetParent(ringGo.transform, false);
+			var fillRt = fillGo.AddComponent<RectTransform>();
+			fillRt.anchorMin = new Vector2(0.28f, 0.28f);
+			fillRt.anchorMax = new Vector2(0.72f, 0.72f);
+			fillRt.offsetMin = fillRt.offsetMax = Vector2.zero;
+			var fillImg = fillGo.AddComponent<Image>();
+			fillImg.sprite = UiRuntimeSprites.CircleFilled;
+			fillImg.preserveAspect = true;
+			fillImg.raycastTarget = false;
+			fillImg.color = onFill;
+			SetFillAlpha(fillImg, initialOn);
+
+			var toggle = dialGo.AddComponent<Toggle>();
+			toggle.targetGraphic = hitPad;
 			toggle.graphic = null;
-			var cb = toggle.colors;
-			cb.normalColor = Color.white;
-			cb.highlightedColor = new Color(1.08f, 1.08f, 1.08f, 1f);
-			cb.pressedColor = new Color(0.9f, 0.9f, 0.9f, 1f);
-			cb.selectedColor = Color.white;
-			toggle.colors = cb;
-			// Set before listener — assigning isOn after AddListener re-enters SetEnabled/ShowFeedback during BuildUi.
+			toggle.transition = Selectable.Transition.None;
+			toggle.toggleTransition = Toggle.ToggleTransition.None;
 			toggle.SetIsOnWithoutNotify(initialOn);
-			img.color = initialOn ? onCol : offCol;
 			toggle.onValueChanged.AddListener(isOn => {
 				if (_suppressToggleSync) return;
-				img.color = isOn ? onCol : offCol;
+				ringImg.color = isOn ? onRing : offRing;
+				SetFillAlpha(fillImg, isOn);
 				onChanged?.Invoke(isOn);
 			});
 
 			var lblGo = new GameObject("Lbl");
-			lblGo.transform.SetParent(row.transform, false);
+			lblGo.transform.SetParent(col.transform, false);
 			var lblLe = lblGo.AddComponent<LayoutElement>();
-			lblLe.flexibleWidth = 1f;
-			lblLe.minHeight = 22f;
+			lblLe.minHeight = 11f;
+			lblLe.preferredHeight = 11f;
 			var tmp = lblGo.AddComponent<TextMeshProUGUI>();
 			tmp.font = TMP_Settings.defaultFontAsset;
-			tmp.fontSize = 9f;
-			tmp.color = new Color(0.88f, 0.89f, 0.92f, 1f);
-			tmp.alignment = TextAlignmentOptions.Left;
+			tmp.fontSize = 8f;
+			tmp.color = new Color(0.85f, 0.87f, 0.9f, 1f);
+			tmp.alignment = TextAlignmentOptions.Center;
 			tmp.raycastTarget = false;
-			tmp.text = labelText;
+			tmp.enableWordWrapping = false;
+			tmp.text = shortLabel;
+			if (!string.IsNullOrEmpty(tip))
+				AttachTip(col, tip);
 			return toggle;
 		}
 
-		static void SetSliderLabel(TextMeshProUGUI lbl, string labelText, float v01) {
-			if (lbl == null) return;
-			lbl.text = labelText + "  " + Mathf.RoundToInt(Mathf.Clamp01(v01) * 100) + "%";
-		}
-
-		Slider MakeSliderRow(Transform parent, string rowName, string labelText, float initial,
-			UnityEngine.Events.UnityAction<float> onChanged, out TextMeshProUGUI labelOut) {
-			var row = new GameObject(rowName);
-			row.transform.SetParent(parent, false);
-			row.AddComponent<RectTransform>();
-			var rowLe = row.AddComponent<LayoutElement>();
-			rowLe.minHeight = 44f;
-			rowLe.preferredHeight = 44f;
-			rowLe.flexibleWidth = 1f;
-			var v = row.AddComponent<VerticalLayoutGroup>();
-			v.spacing = 2;
+		ValueDial MakeValueDial(Transform parent, string shortLabel, float initial,
+			System.Action<float> onChanged, string tip = null) {
+			var col = new GameObject("VDial_" + shortLabel);
+			col.transform.SetParent(parent, false);
+			col.AddComponent<RectTransform>();
+			var colLe = col.AddComponent<LayoutElement>();
+			colLe.minWidth = 48f;
+			colLe.preferredWidth = 52f;
+			colLe.minHeight = 40f;
+			var v = col.AddComponent<VerticalLayoutGroup>();
+			v.spacing = 1;
+			v.childAlignment = TextAnchor.UpperCenter;
 			v.childControlWidth = true;
 			v.childControlHeight = true;
-			v.childForceExpandWidth = true;
+			v.childForceExpandWidth = false;
 			v.childForceExpandHeight = false;
 
-			var lblGo = new GameObject("Lbl");
-			lblGo.transform.SetParent(row.transform, false);
-			var lblLe = lblGo.AddComponent<LayoutElement>();
-			lblLe.minHeight = 16f;
-			lblLe.preferredHeight = 16f;
-			var lbl = lblGo.AddComponent<TextMeshProUGUI>();
-			lbl.font = TMP_Settings.defaultFontAsset;
-			lbl.fontSize = 9f;
-			lbl.color = new Color(0.88f, 0.89f, 0.92f, 1f);
-			lbl.alignment = TextAlignmentOptions.Left;
-			lbl.raycastTarget = false;
-			SetSliderLabel(lbl, labelText, initial);
-			labelOut = lbl;
+			var dialGo = new GameObject("Dial");
+			dialGo.transform.SetParent(col.transform, false);
+			var dialLe = dialGo.AddComponent<LayoutElement>();
+			dialLe.minWidth = DialHit;
+			dialLe.preferredWidth = DialHit;
+			dialLe.minHeight = DialHit;
+			dialLe.preferredHeight = DialHit;
+			var hit = dialGo.AddComponent<Image>();
+			hit.color = Color.clear;
+			hit.raycastTarget = true;
 
 			var trackGo = new GameObject("Track");
-			trackGo.transform.SetParent(row.transform, false);
-			var trackLe = trackGo.AddComponent<LayoutElement>();
-			trackLe.minHeight = 18f;
-			trackLe.preferredHeight = 18f;
-			trackLe.flexibleWidth = 1f;
+			trackGo.transform.SetParent(dialGo.transform, false);
+			var trackRt = trackGo.AddComponent<RectTransform>();
+			trackRt.anchorMin = trackRt.anchorMax = trackRt.pivot = new Vector2(0.5f, 0.5f);
+			trackRt.sizeDelta = new Vector2(DialRing, DialRing);
 			var trackImg = trackGo.AddComponent<Image>();
-			trackImg.color = new Color(0.22f, 0.24f, 0.28f, 1f);
+			trackImg.sprite = UiRuntimeSprites.CircleRing;
+			trackImg.preserveAspect = true;
+			trackImg.raycastTarget = false;
+			trackImg.color = new Color(0.4f, 0.42f, 0.46f, 1f);
 
-			var fillArea = new GameObject("Fill Area");
-			fillArea.transform.SetParent(trackGo.transform, false);
-			var fillAreaRt = fillArea.AddComponent<RectTransform>();
-			fillAreaRt.anchorMin = new Vector2(0, 0.25f);
-			fillAreaRt.anchorMax = new Vector2(1, 0.75f);
-			fillAreaRt.offsetMin = new Vector2(4, 0);
-			fillAreaRt.offsetMax = new Vector2(-4, 0);
 			var fillGo = new GameObject("Fill");
-			fillGo.transform.SetParent(fillArea.transform, false);
+			fillGo.transform.SetParent(dialGo.transform, false);
 			var fillRt = fillGo.AddComponent<RectTransform>();
-			fillRt.anchorMin = Vector2.zero;
-			fillRt.anchorMax = Vector2.one;
-			fillRt.offsetMin = Vector2.zero;
-			fillRt.offsetMax = Vector2.zero;
+			fillRt.anchorMin = fillRt.anchorMax = fillRt.pivot = new Vector2(0.5f, 0.5f);
+			fillRt.sizeDelta = new Vector2(DialRing, DialRing);
 			var fillImg = fillGo.AddComponent<Image>();
-			fillImg.color = new Color(0.28f, 0.5f, 0.58f, 1f);
+			fillImg.sprite = UiRuntimeSprites.CircleFilled;
+			fillImg.type = Image.Type.Filled;
+			fillImg.fillMethod = Image.FillMethod.Radial360;
+			fillImg.fillOrigin = (int)Image.Origin360.Top;
+			fillImg.fillClockwise = true;
+			fillImg.preserveAspect = true;
+			fillImg.raycastTarget = false;
+			fillImg.color = new Color(0.35f, 0.62f, 0.72f, 0.95f);
+			fillImg.fillAmount = Mathf.Clamp01(initial);
 
-			var handleArea = new GameObject("Handle Slide Area");
-			handleArea.transform.SetParent(trackGo.transform, false);
-			var handleAreaRt = handleArea.AddComponent<RectTransform>();
-			handleAreaRt.anchorMin = Vector2.zero;
-			handleAreaRt.anchorMax = Vector2.one;
-			handleAreaRt.offsetMin = new Vector2(6, 0);
-			handleAreaRt.offsetMax = new Vector2(-6, 0);
-			var handleGo = new GameObject("Handle");
-			handleGo.transform.SetParent(handleArea.transform, false);
-			var handleLe = handleGo.AddComponent<LayoutElement>();
-			handleLe.ignoreLayout = true;
-			var handleRt = handleGo.AddComponent<RectTransform>();
-			handleRt.sizeDelta = new Vector2(12, 16);
-			var handleImg = handleGo.AddComponent<Image>();
-			handleImg.color = new Color(0.85f, 0.88f, 0.92f, 1f);
+			var pctGo = new GameObject("Pct");
+			pctGo.transform.SetParent(dialGo.transform, false);
+			var pctRt = pctGo.AddComponent<RectTransform>();
+			pctRt.anchorMin = Vector2.zero;
+			pctRt.anchorMax = Vector2.one;
+			pctRt.offsetMin = pctRt.offsetMax = Vector2.zero;
+			var pctTmp = pctGo.AddComponent<TextMeshProUGUI>();
+			pctTmp.font = TMP_Settings.defaultFontAsset;
+			pctTmp.fontSize = 7.5f;
+			pctTmp.color = new Color(0.95f, 0.96f, 0.98f, 1f);
+			pctTmp.alignment = TextAlignmentOptions.Center;
+			pctTmp.raycastTarget = false;
+			pctTmp.text = Mathf.RoundToInt(Mathf.Clamp01(initial) * 100).ToString();
 
-			var slider = trackGo.AddComponent<Slider>();
-			slider.fillRect = fillRt;
-			slider.handleRect = handleRt;
-			slider.targetGraphic = handleImg;
-			slider.direction = Slider.Direction.LeftToRight;
-			slider.minValue = 0f;
-			slider.maxValue = 1f;
-			slider.wholeNumbers = false;
-			slider.value = initial;
-			slider.onValueChanged.AddListener(v01 => {
+			var nameGo = new GameObject("Name");
+			nameGo.transform.SetParent(col.transform, false);
+			var nameLe = nameGo.AddComponent<LayoutElement>();
+			nameLe.minHeight = 11f;
+			nameLe.preferredHeight = 11f;
+			var nameTmp = nameGo.AddComponent<TextMeshProUGUI>();
+			nameTmp.font = TMP_Settings.defaultFontAsset;
+			nameTmp.fontSize = 8f;
+			nameTmp.color = new Color(0.85f, 0.87f, 0.9f, 1f);
+			nameTmp.alignment = TextAlignmentOptions.Center;
+			nameTmp.raycastTarget = false;
+			nameTmp.text = shortLabel;
+
+			var dial = dialGo.AddComponent<ValueDial>();
+			dial.Bind(fillImg, pctTmp, initial, v01 => {
 				if (_suppressToggleSync) return;
-				SetSliderLabel(lbl, labelText, v01);
 				onChanged?.Invoke(v01);
 			});
-			return slider;
+			if (!string.IsNullOrEmpty(tip))
+				AttachTip(col, tip);
+			return dial;
+		}
+
+		static void SetFillAlpha(Image fill, bool on) {
+			if (fill == null) return;
+			var c = fill.color;
+			c.a = on ? 1f : 0f;
+			fill.color = c;
+		}
+
+		static void TintBoolDial(Toggle toggle, bool on) {
+			if (toggle == null) return;
+			var ringT = toggle.transform.Find("Ring");
+			if (ringT == null) return;
+			var ringImg = ringT.GetComponent<Image>();
+			if (ringImg != null)
+				ringImg.color = on
+					? new Color(0.45f, 0.72f, 0.82f, 1f)
+					: new Color(0.5f, 0.52f, 0.56f, 1f);
+			var fillT = ringT.Find("Fill");
+			if (fillT != null)
+				SetFillAlpha(fillT.GetComponent<Image>(), on);
 		}
 
 		static TextMeshProUGUI MakeLabel(Transform parent, string text, float size, Color color) {
@@ -602,12 +754,14 @@ namespace spz {
 			go.transform.SetParent(parent, false);
 			go.AddComponent<RectTransform>();
 			var le = go.AddComponent<LayoutElement>();
-			le.minWidth = 22f;
-			le.preferredWidth = 22f;
-			le.minHeight = 22f;
+			le.minWidth = 18f;
+			le.preferredWidth = 18f;
+			le.minHeight = 18f;
 			var img = go.AddComponent<Image>();
+			img.sprite = UiRuntimeSprites.CircleFilled;
+			img.preserveAspect = true;
 			img.color = new Color(0.35f, 0.35f, 0.38f, 1f);
-			img.raycastTarget = false;
+			img.raycastTarget = true; // needed for hover tooltip
 			return img;
 		}
 
@@ -616,10 +770,12 @@ namespace spz {
 			go.transform.SetParent(parent, false);
 			go.AddComponent<RectTransform>();
 			var le = go.AddComponent<LayoutElement>();
-			le.minWidth = 64f;
-			le.preferredWidth = 72f;
-			le.minHeight = 26f;
+			le.minWidth = 52f;
+			le.preferredWidth = 56f;
+			le.minHeight = 22f;
 			var img = go.AddComponent<Image>();
+			img.sprite = UiRuntimeSprites.RoundedRectSliced;
+			img.type = Image.Type.Sliced;
 			img.color = bg;
 			img.raycastTarget = true;
 			var btn = go.AddComponent<Button>();
@@ -649,6 +805,58 @@ namespace spz {
 			tmp.text = label;
 			return btn;
 		}
-	}
 
+		/// <summary>Compact drag dial: horizontal drag adjusts 0–1; radial fill shows value.</summary>
+		public sealed class ValueDial : MonoBehaviour, IBeginDragHandler, IDragHandler, IPointerClickHandler {
+			Image _fill;
+			TextMeshProUGUI _pct;
+			System.Action<float> _onChanged;
+			float _value;
+			float _dragStartX;
+			float _dragStartVal;
+
+			public float Value => _value;
+
+			public void Bind(Image fill, TextMeshProUGUI pct, float initial, System.Action<float> onChanged) {
+				_fill = fill;
+				_pct = pct;
+				_onChanged = onChanged;
+				SetValueWithoutNotify(initial);
+			}
+
+			public void SetValueWithoutNotify(float v01) {
+				_value = Mathf.Clamp01(v01);
+				ApplyVisual();
+			}
+
+			void ApplyVisual() {
+				if (_fill != null) _fill.fillAmount = _value;
+				if (_pct != null) _pct.text = Mathf.RoundToInt(_value * 100).ToString();
+			}
+
+			public void OnBeginDrag(PointerEventData eventData) {
+				_dragStartX = eventData.position.x;
+				_dragStartVal = _value;
+			}
+
+			public void OnDrag(PointerEventData eventData) {
+				float dx = eventData.position.x - _dragStartX;
+				float next = Mathf.Clamp01(_dragStartVal + dx / 120f);
+				if (Mathf.Approximately(next, _value)) return;
+				_value = next;
+				ApplyVisual();
+				_onChanged?.Invoke(_value);
+			}
+
+			public void OnPointerClick(PointerEventData eventData) {
+				if (eventData.dragging) return;
+				// Click cycles 0 / 50 / 100 for quick set.
+				if (_value < 0.25f) _value = 0.5f;
+				else if (_value < 0.75f) _value = 1f;
+				else _value = 0f;
+				ApplyVisual();
+				_onChanged?.Invoke(_value);
+			}
+		}
+	}
 }
