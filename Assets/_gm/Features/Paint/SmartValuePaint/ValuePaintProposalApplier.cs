@@ -63,8 +63,16 @@ namespace spz {
 				Mathf.Clamp01(g * scale),
 				Mathf.Clamp01(b * scale),
 				1f);
-			// If clamp crushed luminance above target (rare), scale back down.
 			float after = DeterministicValuePaintAssist.Luminance01(c);
+			// Clamp01 on a brightened saturated color often undershoots target luminance —
+			// lift toward white so Highlight/Light steps remain reachable.
+			if (after + 0.015f < targetLum) {
+				float denom = Mathf.Max(1e-4f, 1f - after);
+				float t = Mathf.Clamp01((targetLum - after) / denom);
+				c = Color.Lerp(c, Color.white, t);
+				after = DeterministicValuePaintAssist.Luminance01(c);
+			}
+			// If still above target (rare), scale back down.
 			if (after > 1e-4f && after > targetLum + 0.015f) {
 				float s2 = targetLum / after;
 				c = new Color(Mathf.Clamp01(c.r * s2), Mathf.Clamp01(c.g * s2), Mathf.Clamp01(c.b * s2), 1f);
