@@ -38,6 +38,10 @@ namespace spz {
 		/// <summary>Subscribed to <see cref="WorkflowRibbon_UI._Act_OnModeChanged"/>.</summary>
 		static System.Action<WorkflowRibbon_CurrMode> _smudgeOptsVisibilityOnWorkflowModeHandler;
 
+		/// <summary>Delegates for strict-isolation flip UI; cleared in <see cref="UnregisterStrictIsolationBrushOptsHandlers"/>.</summary>
+		static System.Action _strictIsolationSyncFromStoreHandler;
+		static System.Action<WorkflowRibbon_CurrMode> _strictIsolationVisibilityOnWorkflowModeHandler;
+
 		bool _collected;
 		bool _toolchestCollected;
 
@@ -182,6 +186,8 @@ namespace spz {
 		void OnEnable()
 		{
 			_paintTabTmpStyleSource = this;
+			SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+			SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
 			if (_layout == null) _layout = GetComponent<PaintTab_KritaLayout_UI>();
 			if (_layout != null)
 			{
@@ -194,12 +200,156 @@ namespace spz {
 		/// <summary>Paint tab inactive: drop brush-size listeners and smudge store/visibility subscriptions (rebound on next CollectNow when UI exists).</summary>
 		void OnDisable()
 		{
+			SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 			if (_layout != null && TryGetToolOptionsRowAndExpando(_layout.ToolOptionsSection, out var row, out var expando))
 				SetToolOptionsRowBehindBrushPanelBlocked(row, expando, false);
 			UnregisterBrushSettingsHandlers();
 			UnregisterSmudgeBrushOptsHandlers();
+			UnregisterStrictIsolationBrushOptsHandlers();
 			if (_paintTabTmpStyleSource == this)
 				_paintTabTmpStyleSource = null;
+		}
+
+		/// <summary>
+		/// Re-applies semantic tokens to Paint ownership roots after CollectNow / theme changes.
+		/// Tool-on uses accent; add/success and delete/danger map to role tokens.
+		/// </summary>
+		void ApplyThemeTokens()
+		{
+			if (_layout == null) _layout = GetComponent<PaintTab_KritaLayout_UI>();
+			if (_layout == null) return;
+			var t = SpzUiThemeOps.Active;
+			_layout.ApplyThemeTokens();
+			ThemeOwnedSection(_layout.ToolOptionsSection, t);
+			ThemeOwnedSection(_layout.BrushPresetsSection, t);
+			ThemeOwnedSection(_layout.ColorPaletteSection, t);
+			ThemeOwnedSection(_layout.LayersSection, t);
+			PaintTab_LayersPanel_UI layers = null;
+			if (_layout.LayersSection != null)
+				layers = _layout.LayersSection.GetComponentInChildren<PaintTab_LayersPanel_UI>(true);
+			if (layers == null)
+				layers = GetComponentInChildren<PaintTab_LayersPanel_UI>(true);
+			if (layers != null)
+				layers.ApplyThemeTokens();
+		}
+
+		static void ThemeOwnedSection(RectTransform section, SpzUiThemeOps.ThemeTokens t)
+		{
+			if (section == null) return;
+			foreach (var slider in section.GetComponentsInChildren<Slider>(true))
+			{
+				if (slider == null) continue;
+				var bg = slider.GetComponent<Image>();
+				if (bg != null)
+					SpzUiThemeOps.ApplyGraphicColor(bg, t.fieldBg);
+				if (slider.fillRect != null)
+				{
+					var fill = slider.fillRect.GetComponent<Image>();
+					if (fill != null)
+						SpzUiThemeOps.ApplyGraphicColor(fill, t.accent);
+				}
+				if (slider.handleRect != null)
+				{
+					var handle = slider.handleRect.GetComponent<Image>();
+					if (handle != null)
+						SpzUiThemeOps.ApplyGraphicColor(handle, t.handle);
+				}
+			}
+			foreach (var btn in section.GetComponentsInChildren<Button>(true))
+			{
+				if (btn == null || btn.targetGraphic == null) continue;
+				// Content-bearing widgets: Image/RawImage IS the payload (brush alpha, palette swatch, transparent hit).
+				if (IsContentBearingPaintButton(btn))
+					continue;
+				string n = btn.gameObject.name ?? "";
+				Color normal = t.controlBg;
+				if (IsPaintActionName(n, "Add", "Bucket", "+"))
+					normal = t.success;
+				else if (IsPaintActionName(n, "Delete", "Clear", "Remove", "−", "-"))
+					normal = t.danger;
+				// Tool-on accent must come from explicit tool-state refresh — never color heuristics.
+				SpzUiThemeOps.ApplySelectableToken(btn, normal, t.accent);
+			}
+			foreach (var tmp in section.GetComponentsInChildren<TextMeshProUGUI>(true))
+			{
+				if (tmp == null) continue;
+				// Do not retint labels that sit on content thumbnails/swatches.
+				if (tmp.GetComponentInParent<RawImage>() != null)
+					continue;
+				if (IsUnderNamedAncestor(tmp.transform, "Swatch", "Brush_"))
+					continue;
+				if (tmp.gameObject.name == "Header" || tmp.gameObject.name == "Placeholder")
+					SpzUiThemeOps.ApplyTmpColor(tmp, t.textMuted);
+				else
+					SpzUiThemeOps.ApplyTmpColor(tmp, t.textPrimary);
+			}
+		}
+
+		/// <summary>
+		/// Brush thumbnails, palette swatches, and transparent hit targets must keep Image.color as content.
+		/// </summary>
+		static bool IsContentBearingPaintButton(Button btn)
+		{
+			if (btn == null) return true;
+			string n = btn.gameObject.name ?? "";
+			if (n.StartsWith("Brush_", System.StringComparison.OrdinalIgnoreCase))
+				return true;
+			if (string.Equals(n, "HitArea", System.StringComparison.OrdinalIgnoreCase))
+				return true;
+			if (n.StartsWith("Swatch", System.StringComparison.OrdinalIgnoreCase))
+				return true;
+			if (btn.GetComponentInChildren<RawImage>(true) != null)
+				return true;
+			// Transparent hit-only graphics (alpha ≈ 0) are scaffolding, not chrome tokens.
+			var g = btn.targetGraphic;
+			if (g != null && g.color.a < 0.05f)
+				return true;
+			return false;
+		}
+
+		static bool IsUnderNamedAncestor(Transform t, params string[] prefixes)
+		{
+			if (t == null || prefixes == null) return false;
+			for (Transform p = t; p != null; p = p.parent)
+			{
+				string n = p.name ?? "";
+				for (int i = 0; i < prefixes.Length; i++)
+				{
+					string pref = prefixes[i];
+					if (string.IsNullOrEmpty(pref)) continue;
+					if (n.StartsWith(pref, System.StringComparison.OrdinalIgnoreCase))
+						return true;
+				}
+			}
+			return false;
+		}
+
+		static bool IsPaintActionName(string name, params string[] tokens)
+		{
+			if (string.IsNullOrEmpty(name) || tokens == null) return false;
+			for (int i = 0; i < tokens.Length; i++)
+			{
+				string tok = tokens[i];
+				if (string.IsNullOrEmpty(tok)) continue;
+				// Boundary-exact: whole name, or token as a distinct camel/underscore/space segment.
+				if (string.Equals(name, tok, System.StringComparison.OrdinalIgnoreCase))
+					return true;
+				if (name.StartsWith(tok, System.StringComparison.OrdinalIgnoreCase)
+				    && name.Length > tok.Length
+				    && !char.IsLetterOrDigit(name[tok.Length]))
+					return true;
+				for (int c = 0; c + tok.Length <= name.Length; c++)
+				{
+					if (string.Compare(name, c, tok, 0, tok.Length, System.StringComparison.OrdinalIgnoreCase) != 0)
+						continue;
+					bool leftOk = c == 0 || !char.IsLetterOrDigit(name[c - 1]);
+					bool rightOk = c + tok.Length >= name.Length || !char.IsLetterOrDigit(name[c + tok.Length]);
+					// Prefer PascalCase boundary: "AddLayer" matches "Add"; "Padding" must not match "Add".
+					if (leftOk && (rightOk || (c + tok.Length < name.Length && char.IsUpper(name[c + tok.Length]))))
+						return true;
+				}
+			}
+			return false;
 		}
 
 		static void RegisterBrushSettingsHandler(System.Action handler)
@@ -255,6 +405,100 @@ namespace spz {
 		{
 			if (smudgeOptsRoot == null) return;
 			smudgeOptsRoot.SetActive(ComputeSmudgeBrushOptsShouldBeVisible());
+		}
+
+		/// <summary>Strict isolation post-process only runs for <see cref="InpaintingFill.Original"/> (see <see cref="GenData_ResultTextures.TryConstrainImg2ImgResult_toScreenMask"/>). Hide the flip option elsewhere so it is not misleading.</summary>
+		static bool ComputeStrictIsolationBrushOptsShouldBeVisible()
+		{
+			var wf = WorkflowRibbon_UI.instance;
+			if (wf == null) return false;
+			switch (wf.currentMode())
+			{
+				case WorkflowRibbon_CurrMode.Inpaint_Color:
+				case WorkflowRibbon_CurrMode.Inpaint_NoColor:
+				case WorkflowRibbon_CurrMode.TotalObject:
+					return true;
+				default:
+					return false;
+			}
+		}
+
+		static void SyncStrictIsolationBrushOptsVisibilityForRoot(GameObject strictIsoRoot)
+		{
+			if (strictIsoRoot == null) return;
+			strictIsoRoot.SetActive(ComputeStrictIsolationBrushOptsShouldBeVisible());
+		}
+
+		static void UnregisterStrictIsolationBrushOptsHandlers()
+		{
+			if (_strictIsolationSyncFromStoreHandler != null)
+			{
+				PaintTab_StrictIsolationBrushOptions.Changed -= _strictIsolationSyncFromStoreHandler;
+				_strictIsolationSyncFromStoreHandler = null;
+			}
+			if (_strictIsolationVisibilityOnWorkflowModeHandler != null)
+			{
+				WorkflowRibbon_UI._Act_OnModeChanged -= _strictIsolationVisibilityOnWorkflowModeHandler;
+				_strictIsolationVisibilityOnWorkflowModeHandler = null;
+			}
+		}
+
+		static bool TryFindStrictIsolationBrushOptsUi(RectTransform toolOptionsSection, out Toggle flipToggle, out GameObject strictIsoRoot)
+		{
+			flipToggle = null;
+			strictIsoRoot = null;
+			if (toolOptionsSection == null) return false;
+			Transform panel = null;
+			for (int i = 0; i < toolOptionsSection.childCount; i++)
+			{
+				var ch = toolOptionsSection.GetChild(i);
+				if (ch != null && ch.name == "BrushOptsPanel")
+				{
+					panel = ch;
+					break;
+				}
+			}
+			if (panel == null) return false;
+			var block = panel.Find("StrictIsolationBrushOptsBlock");
+			if (block == null) return false;
+			var row = block.Find("StrictIsolationFlipRow");
+			if (row != null)
+				flipToggle = row.GetComponentInChildren<Toggle>(true);
+			strictIsoRoot = block.gameObject;
+			return flipToggle != null && strictIsoRoot != null;
+		}
+
+		static void RegisterStrictIsolationBrushOptsHandlersForUi(Toggle flipToggle, GameObject strictIsoRoot)
+		{
+			if (flipToggle == null || strictIsoRoot == null) return;
+			UnregisterStrictIsolationBrushOptsHandlers();
+
+			Color offCol = new Color(0.34f, 0.36f, 0.4f, 1f);
+			Color onCol = new Color(0.22f, 0.45f, 0.55f, 1f);
+
+			void SyncFlipToggleFromStore()
+			{
+				if (flipToggle == null) return;
+				bool on = PaintTab_StrictIsolationBrushOptions.FlipInvertIsolationMask;
+				flipToggle.SetIsOnWithoutNotify(on);
+				if (flipToggle.targetGraphic is Image img)
+					img.color = on ? onCol : offCol;
+			}
+
+			void SyncVisibility() => SyncStrictIsolationBrushOptsVisibilityForRoot(strictIsoRoot);
+
+			_strictIsolationSyncFromStoreHandler = SyncFlipToggleFromStore;
+			PaintTab_StrictIsolationBrushOptions.Changed += _strictIsolationSyncFromStoreHandler;
+			_strictIsolationVisibilityOnWorkflowModeHandler = (_) => SyncVisibility();
+			WorkflowRibbon_UI._Act_OnModeChanged += _strictIsolationVisibilityOnWorkflowModeHandler;
+			SyncFlipToggleFromStore();
+			SyncVisibility();
+		}
+
+		static void ResubscribeStrictIsolationBrushOptsHandlersIfUiExists(RectTransform toolOptionsSection)
+		{
+			if (!TryFindStrictIsolationBrushOptsUi(toolOptionsSection, out var tgl, out var root)) return;
+			RegisterStrictIsolationBrushOptsHandlersForUi(tgl, root);
 		}
 
 		/// <summary>Removes smudge listeners from <see cref="PaintTab_SmudgeBrushOptions.Changed"/>, direction toggles, and workflow mode.</summary>
@@ -491,7 +735,13 @@ namespace spz {
 					var mgrGo = new GameObject("PaintLayerStack_MGR_Runtime");
 					mgrGo.AddComponent<PaintLayerStack_MGR>();
 				}
-				var layersPanel = FindObjectOfType<PaintTab_LayersPanel_UI>(true);
+				var layersPanel = layersScrollContent != null
+					? layersScrollContent.GetComponentInChildren<PaintTab_LayersPanel_UI>(true)
+					: null;
+				if (layersPanel == null && layersSectionRoot != null)
+					layersPanel = layersSectionRoot.GetComponentInChildren<PaintTab_LayersPanel_UI>(true);
+				if (layersPanel == null)
+					layersPanel = GetComponentInChildren<PaintTab_LayersPanel_UI>(true);
 				if (layersPanel == null && layersScrollContent != null)
 					layersPanel = CreateLayersPanelRuntime(layersScrollContent, layersSectionRoot);
 				// Always wire panel to stack and Add Layer button so all buttons work (found or created panel)
@@ -676,6 +926,7 @@ namespace spz {
 				// Runtime row already present (e.g. tab re-opened): re-wire brush radios + smudge store/visibility after OnDisable cleared subscriptions.
 				ResubscribeBrushSettingsHandlersIfToolOptionsExist();
 				ResubscribeSmudgeBrushOptsHandlersIfUiExists(_layout.ToolOptionsSection);
+				ResubscribeStrictIsolationBrushOptsHandlersIfUiExists(_layout.ToolOptionsSection);
 			}
 			// Value Assist proposal review (Spec R3) — sibling under Tool Options, not inside the grid row.
 			if (_layout.ToolOptionsSection != null && PaintTab_ValueAssistPanel_UI.EnsureUnder(_layout.ToolOptionsSection) != null)
@@ -712,6 +963,7 @@ namespace spz {
 				LayoutRebuilder.ForceRebuildLayoutImmediate(root);
 			if (_layout.ToolchestRow != null)
 				LayoutRebuilder.ForceRebuildLayoutImmediate(_layout.ToolchestRow);
+			ApplyThemeTokens();
 		}
 
 		// ---- Runtime creation of missing UI components ----
@@ -1118,7 +1370,9 @@ namespace spz {
 			rowRect.sizeDelta = new Vector2(0, 0);
 			var rowLE = rowGo.AddComponent<LayoutElement>();
 			rowLE.flexibleWidth = 1;
-			rowLE.flexibleHeight = 1;
+			// Do not flexibleHeight-steal inside Tool Options ScrollContent — that fights ContentSizeFitter scroll.
+			rowLE.flexibleHeight = 0;
+			rowLE.minHeight = 28f;
 			var glg = rowGo.AddComponent<GridLayoutGroup>();
 			glg.cellSize = new Vector2(80, 28);
 			glg.spacing = new Vector2(4, 4);
@@ -1741,6 +1995,36 @@ namespace spz {
 
 			// Smudge rows: sync sliders when PaintTab_SmudgeBrushOptions changes (API); show/hide block for inpaint + smudge tool. Handlers cleared on tab OnDisable.
 			RegisterSmudgeBrushOptsHandlersForUi(smudgeStrSlider, smudgeAngSlider, smudgeMixSlider, smudgeRadSlider, smudgeMeshUnderToggle, smudgeOptsRoot);
+
+			var strictIsoRoot = new GameObject("StrictIsolationBrushOptsBlock");
+			strictIsoRoot.transform.SetParent(panelGo.transform, false);
+			strictIsoRoot.AddComponent<RectTransform>();
+			var strictIsoLe = strictIsoRoot.AddComponent<LayoutElement>();
+			strictIsoLe.flexibleWidth = 1;
+			strictIsoLe.minHeight = 8;
+			var strictIsoVlg = strictIsoRoot.AddComponent<VerticalLayoutGroup>();
+			strictIsoVlg.spacing = 6;
+			strictIsoVlg.padding = new RectOffset(0, 0, 2, 4);
+			strictIsoVlg.childAlignment = TextAnchor.UpperLeft;
+			strictIsoVlg.childControlWidth = true;
+			strictIsoVlg.childControlHeight = true;
+			strictIsoVlg.childForceExpandWidth = true;
+			strictIsoVlg.childForceExpandHeight = false;
+
+			MakeBrushOptsSectionLabel(strictIsoRoot.transform, "Strict mask isolation (post-SD)");
+			var strictFlipToggle = MakeBrushOptsCheckboxRow(strictIsoRoot.transform, "StrictIsolationFlipRow",
+				"Invert mask (keep init inside brush; SD outside)",
+				PaintTab_StrictIsolationBrushOptions.FlipInvertIsolationMask,
+				isOn =>
+				{
+					PaintTab_StrictIsolationBrushOptions.SetFlipInvertIsolationMask(isOn);
+					Viewport_StatusText.instance?.ShowStatusText(
+						isOn
+							? "Strict isolation: inverted (init preserved in brush)"
+							: "Strict isolation: default (init preserved outside brush)",
+						false, 1.1f, false);
+				});
+			RegisterStrictIsolationBrushOptsHandlersForUi(strictFlipToggle, strictIsoRoot);
 
 			MakeBrushOptsSectionLabel(panelGo.transform, "Mirror plane (mesh symmetry)");
 			var planeRow = new GameObject("SymmetryPlaneRow");
