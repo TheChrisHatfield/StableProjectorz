@@ -20,6 +20,20 @@ namespace spz {
 		static string _lastFailReason = "";
 		static int _lastLiveHardnessIx = int.MinValue;
 
+		// User brush state captured at the start of a Live soft-arm session, restored when the
+		// session ends (Live off / Dismiss / Assist off). Accept commits instead (snapshot dropped).
+		static bool _haveUserBrushSnapshot;
+		static Color _snapshotColor = Color.gray;
+		static float _snapshotSize01 = float.NaN;
+		static float _snapshotOpacity01 = -1f;
+		static int _snapshotHardnessIx = -1;
+		static bool _snapshotHardnessWasBuiltIn;
+		// Last size/opacity WE wrote — detects manual dial edits between live ticks (adopt as new anchor).
+		static float _lastLiveAppliedSize01 = float.NaN;
+		static float _lastLiveAppliedOpacity01 = -1f;
+		// User manually changed hardness mid-session — stop driving hardness until the next session.
+		static bool _liveHardnessUserOverride;
+
 		public static bool IsArmed => _armed;
 		public static ValuePaintProposal ArmedProposal => _armedProposal;
 		public static bool SawApplyOnArmedTarget => _sawApplyOnArmedTarget;
@@ -28,12 +42,74 @@ namespace spz {
 
 		/// <summary>Block live soft-arm until Live is toggled on again (Dismiss / Accept lock).</summary>
 		public static void SuppressLiveSoftArm() {
+			RestoreUserBrushSnapshot_IfHeld();
 			_suppressLiveSoftArm = true;
 			_haveLiveChromaBase = false;
 		}
 		public static void ClearLiveSoftArmSuppress() {
 			_suppressLiveSoftArm = false;
 			_haveLiveChromaBase = false;
+		}
+
+		/// <summary>
+		/// Call when the user explicitly picks a brush color (picker / swatch / eyedropper / load).
+		/// Re-bases the Live chroma so live value steps follow the NEW selection instead of the color
+		/// locked at session start, and updates the restore snapshot so ending Live returns this pick.
+		/// </summary>
+		public static void NotifyUserBrushColorChanged(Color c) {
+			c.a = 1f;
+			if (_haveLiveChromaBase)
+				_liveChromaBase = c;
+			if (_haveUserBrushSnapshot)
+				_snapshotColor = c;
+		}
+
+		/// <summary>Snapshot user brush state before the first Live mutation of this session.</summary>
+		static void CaptureUserBrushSnapshot_IfNeeded(SD_WorkflowOptionsRibbon_UI sd) {
+			if (_haveUserBrushSnapshot) return;
+			_lastLiveAppliedSize01 = float.NaN;
+			_lastLiveAppliedOpacity01 = -1f;
+			_liveHardnessUserOverride = false;
+			_snapshotColor = sd.brushColor;
+			_snapshotColor.a = 1f;
+			float size = BrushRibbon_UI_Size.GetBrushSize01();
+			_snapshotSize01 = float.IsFinite(size) && BrushRibbon_UI_Size.instance != null ? size : float.NaN;
+			var opacityUi = Object.FindObjectOfType<BrushRibbon_UI_Opacity>(true);
+			_snapshotOpacity01 = opacityUi != null && float.IsFinite(opacityUi.Opacity01) ? Mathf.Clamp01(opacityUi.Opacity01) : -1f;
+			var hardnessUi = Object.FindObjectOfType<BrushRibbon_UI_Hardness>(true);
+			if (hardnessUi != null && !hardnessUi.IsUsingCustomAlpha()) {
+				_snapshotHardnessWasBuiltIn = true;
+				_snapshotHardnessIx = hardnessUi.hardnessIx;
+			} else {
+				// Custom alpha: live never overwrites it (TrySetBuiltInOnly refuses) — nothing to restore.
+				_snapshotHardnessWasBuiltIn = false;
+				_snapshotHardnessIx = -1;
+			}
+			_haveUserBrushSnapshot = true;
+		}
+
+		/// <summary>Restore user brush state captured at Live session start (Live off / Dismiss / Assist off).</summary>
+		static void RestoreUserBrushSnapshot_IfHeld() {
+			if (!_haveUserBrushSnapshot) return;
+			_haveUserBrushSnapshot = false;
+			_lastLiveAppliedSize01 = float.NaN;
+			_lastLiveAppliedOpacity01 = -1f;
+			_liveHardnessUserOverride = false;
+			var sd = SD_WorkflowOptionsRibbon_UI.instance;
+			if (sd == null) return;
+			sd.SetBrushColorQuietFromApi(_snapshotColor.r, _snapshotColor.g, _snapshotColor.b, 1f);
+			if (float.IsFinite(_snapshotSize01) && BrushRibbon_UI_Size.instance != null)
+				sd.SetBrushSize(_snapshotSize01);
+			if (_snapshotOpacity01 >= 0f) {
+				var opacityUi = Object.FindObjectOfType<BrushRibbon_UI_Opacity>(true);
+				if (opacityUi != null)
+					opacityUi.SetOpacity01(_snapshotOpacity01, quiet: true);
+			}
+			if (_snapshotHardnessWasBuiltIn && _snapshotHardnessIx >= 0) {
+				var hardnessUi = Object.FindObjectOfType<BrushRibbon_UI_Hardness>(true);
+				if (hardnessUi != null)
+					hardnessUi.TrySetBuiltInOnly(_snapshotHardnessIx);
+			}
 		}
 
 		public static Color GrayForBand(ValuePaintBand band) {
@@ -53,39 +129,58 @@ namespace spz {
 		}
 
 		/// <summary>
-		/// Shift <paramref name="baseColor"/> to the desired value band while keeping hue/chroma ratios.
-		/// Value Assist predicts tonal steps of the artist's color — not a gray replacement.
+		/// Floor on saturation kept when a bright band forces desaturation: a red brush stepping to
+		/// Highlight becomes a light red, never near-white. 1 = never desaturate, 0 = old white-lift.
+		/// </summary>
+		public const float MinChromaKeep01 = 0.45f;
+
+		/// <summary>
+		/// Shift <paramref name="baseColor"/> to the desired value band while preserving hue and chroma.
+		/// Value Assist predicts tonal steps of the artist's color — not a gray/white replacement.
+		/// Pure value (HSV V) moves first; only if a saturated hue cannot physically reach a bright band
+		/// (pure red tops out at luminance ~0.21) does it desaturate, and never below
+		/// <see cref="MinChromaKeep01"/> of the original saturation — hitting exact band luminance is
+		/// less important than the stroke staying recognizably the artist's color.
 		/// </summary>
 		public static Color ColorAtDesiredValue(Color baseColor, ValuePaintBand desired) {
 			float targetLum = LuminanceForBand(desired);
-			float r = float.IsFinite(baseColor.r) ? baseColor.r : 0.5f;
-			float g = float.IsFinite(baseColor.g) ? baseColor.g : 0.5f;
-			float b = float.IsFinite(baseColor.b) ? baseColor.b : 0.5f;
-			float cur = DeterministicValuePaintAssist.Luminance01(new Color(r, g, b, 1f));
-			if (cur < 1e-4f)
+			float r = float.IsFinite(baseColor.r) ? Mathf.Clamp01(baseColor.r) : 0.5f;
+			float g = float.IsFinite(baseColor.g) ? Mathf.Clamp01(baseColor.g) : 0.5f;
+			float b = float.IsFinite(baseColor.b) ? Mathf.Clamp01(baseColor.b) : 0.5f;
+			Color.RGBToHSV(new Color(r, g, b, 1f), out float hue, out float sat, out float _);
+
+			float lumAtFullValue = DeterministicValuePaintAssist.Luminance01(Color.HSVToRGB(hue, sat, 1f));
+			if (lumAtFullValue < 1e-4f)
 				return new Color(targetLum, targetLum, targetLum, 1f);
 
-			float scale = targetLum / cur;
-			Color c = new Color(
-				Mathf.Clamp01(r * scale),
-				Mathf.Clamp01(g * scale),
-				Mathf.Clamp01(b * scale),
-				1f);
-			float after = DeterministicValuePaintAssist.Luminance01(c);
-			// Clamp01 on a brightened saturated color often undershoots target luminance —
-			// lift toward white so Highlight/Light steps remain reachable.
-			if (after + 0.015f < targetLum) {
-				float denom = Mathf.Max(1e-4f, 1f - after);
-				float t = Mathf.Clamp01((targetLum - after) / denom);
-				c = Color.Lerp(c, Color.white, t);
-				after = DeterministicValuePaintAssist.Luminance01(c);
+			// Reachable by value alone → hue and saturation stay exactly the artist's pick.
+			float vNeeded = targetLum / lumAtFullValue;
+			if (vNeeded <= 1f) {
+				Color c = Color.HSVToRGB(hue, sat, vNeeded);
+				c.a = 1f;
+				return c;
 			}
-			// If still above target (rare), scale back down.
-			if (after > 1e-4f && after > targetLum + 0.015f) {
-				float s2 = targetLum / after;
-				c = new Color(Mathf.Clamp01(c.r * s2), Mathf.Clamp01(c.g * s2), Mathf.Clamp01(c.b * s2), 1f);
+
+			// Bright band beyond this hue's value range: desaturate at full value, minimally,
+			// bounded by MinChromaKeep01. Luminance at V=1 rises monotonically as saturation falls.
+			float satFloor = sat * MinChromaKeep01;
+			float lumAtFloor = DeterministicValuePaintAssist.Luminance01(Color.HSVToRGB(hue, satFloor, 1f));
+			float chosenSat;
+			if (lumAtFloor <= targetLum) {
+				// Even max allowed desaturation stays below target — chroma identity wins over band accuracy.
+				chosenSat = satFloor;
+			} else {
+				float lo = satFloor, hi = sat; // lum(lo) > targetLum > lum(hi)
+				for (int i = 0; i < 14; i++) {
+					float mid = 0.5f * (lo + hi);
+					float lumMid = DeterministicValuePaintAssist.Luminance01(Color.HSVToRGB(hue, mid, 1f));
+					if (lumMid > targetLum) lo = mid; else hi = mid;
+				}
+				chosenSat = 0.5f * (lo + hi);
 			}
-			return c;
+			Color outC = Color.HSVToRGB(hue, chosenSat, 1f);
+			outC.a = 1f;
+			return outC;
 		}
 
 		/// <summary>
@@ -213,6 +308,10 @@ namespace spz {
 			_armed = true;
 			_armedViaLive = false;
 			_sawApplyOnArmedTarget = false;
+			// Accept is an explicit commit — the accepted brush state must survive session end.
+			_haveUserBrushSnapshot = false;
+			_lastLiveAppliedSize01 = float.NaN;
+			_lastLiveAppliedOpacity01 = -1f;
 			reason = "Armed on target=" + DescribeTarget(target) + " desiredBin=" + proposal.DesiredBin
 			         + " color=" + tint + " size01=" + width01.ToString("F2")
 			         + " opacity01=" + effectiveOpacity.ToString("F2")
@@ -229,6 +328,9 @@ namespace spz {
 		}
 
 		public static void ClearArmed() {
+			// End of assist session — hand the brush back exactly as the user had set it.
+			// (Accept drops the snapshot on success, so an accepted state is never rolled back.)
+			RestoreUserBrushSnapshot_IfHeld();
 			_armed = false;
 			_sawApplyOnArmedTarget = false;
 			_armedViaLive = false;
@@ -239,10 +341,14 @@ namespace spz {
 
 		/// <summary>
 		/// Drop soft live-arm only. Does not clear a user Accept arm (Propose → Accept).
+		/// Always releases an orphan Live brush snapshot (capture-then-fail / never-armed session)
+		/// so the next Live turn-on does not restore a stale prior brush.
 		/// </summary>
 		public static void ClearArmedIfLiveSoftArm() {
 			if (_armedViaLive)
 				ClearArmed();
+			else
+				RestoreUserBrushSnapshot_IfHeld();
 		}
 
 		/// <summary>
@@ -277,27 +383,50 @@ namespace spz {
 				reason = _lastFailReason = "tool refused";
 				return false;
 			}
+			// While the color picker is open the user is actively choosing — live rewrites would
+			// stomp the pick under their cursor. Pause; resume after the picker closes.
+			if (MouseWorkbench_Zone.instance != null && MouseWorkbench_Zone.instance.isShowing) {
+				reason = _lastFailReason = "color picker open";
+				return false;
+			}
 
 			if (ResolveColorPaintTarget(out string targetReason) == null) {
 				reason = _lastFailReason = targetReason;
 				return false;
 			}
 
+			// Capture only after all refuse gates — a pre-mutate capture left orphan snapshots
+			// when SetBrushColorQuietFromApi failed or Live was toggled off before first arm.
+			bool justCaptured = !_haveUserBrushSnapshot;
+			CaptureUserBrushSnapshot_IfNeeded(sd);
+
 			Color live = sd.brushColor;
 			// Lock chroma to the brush color at the start of this Live session. Remapping from an
 			// already-lifted/shifted brush each tick washes hue (Highlight→white lift→Shadow scale).
+			// User color picks re-base this via NotifyUserBrushColorChanged.
 			if (!_haveLiveChromaBase) {
 				_liveChromaBase = live;
 				_haveLiveChromaBase = true;
 			}
 			Color tint = ColorAtDesiredValue(_liveChromaBase, proposal.DesiredBin);
-			// Soft blend toward predicted value step using Blend01 (0 = leave color alone).
+			// Blend01 mixes USER color vs value-mapped tint (0 = leave color alone, 1 = full remap).
+			// Must anchor on _liveChromaBase: lerping from the live brush (assist's own last write)
+			// converges to full tint after a few ticks and the Blend dial loses all effect.
 			float blendOpt = PaintTab_ValueAssistOptions.Blend01;
 			if (!float.IsFinite(blendOpt)) blendOpt = 1f;
 			blendOpt = Mathf.Clamp01(blendOpt);
-			Color applied = Color.Lerp(live, tint, blendOpt);
+			Color applied = Color.Lerp(_liveChromaBase, tint, blendOpt);
 			applied.a = 1f;
 			if (!sd.SetBrushColorQuietFromApi(applied.r, applied.g, applied.b, applied.a)) {
+				// Only discard a snapshot we created THIS call (brush not mutated yet). A mid-session
+				// failure must not drop the restore target for an already-running Live soft-arm.
+				if (justCaptured) {
+					_haveUserBrushSnapshot = false;
+					_haveLiveChromaBase = false;
+					_lastLiveAppliedSize01 = float.NaN;
+					_lastLiveAppliedOpacity01 = -1f;
+					_liveHardnessUserOverride = false;
+				}
 				reason = _lastFailReason = "SetBrushColorQuietFromApi failed";
 				return false;
 			}
@@ -307,17 +436,38 @@ namespace spz {
 				float proposedWidth = float.IsFinite(proposal.BrushWidthHint01) ? Mathf.Clamp01(proposal.BrushWidthHint01) : 0.5f;
 				float liveWidth = BrushRibbon_UI_Size.GetBrushSize01();
 				if (!float.IsFinite(liveWidth)) liveWidth = proposedWidth;
-				float width01 = Mathf.Lerp(liveWidth, proposedWidth, Mathf.Clamp01(sizeInf));
-				if (float.IsFinite(width01) && Mathf.Abs(width01 - liveWidth) > 0.015f)
+				// User moved the size dial since our last write? Adopt it as the new session anchor
+				// (and restore target) instead of pulling it back toward the proposal every tick.
+				if (float.IsFinite(_lastLiveAppliedSize01) && Mathf.Abs(liveWidth - _lastLiveAppliedSize01) > 0.01f)
+					_snapshotSize01 = liveWidth;
+				// Anchor on the USER size, not the assist's own last write — self-lerp converges to
+				// the full proposal after a few ticks and the influence dial loses all effect.
+				float anchor = float.IsFinite(_snapshotSize01) ? _snapshotSize01 : liveWidth;
+				float width01 = Mathf.Lerp(anchor, proposedWidth, Mathf.Clamp01(sizeInf));
+				if (float.IsFinite(width01) && Mathf.Abs(width01 - liveWidth) > 0.015f) {
 					sd.SetBrushSize(width01);
+					_lastLiveAppliedSize01 = width01;
+				} else {
+					_lastLiveAppliedSize01 = liveWidth;
+				}
 			}
 
-			if (PaintTab_ValueAssistOptions.ApplyHardness) {
+			if (PaintTab_ValueAssistOptions.ApplyHardness && !_liveHardnessUserOverride) {
 				int hardnessIx = Softness01ToHardnessIx(proposal.EdgeSoftness01);
 				if (hardnessIx != _lastLiveHardnessIx) {
 					var hardnessUi = Object.FindObjectOfType<BrushRibbon_UI_Hardness>(true);
-					if (hardnessUi != null && hardnessUi.TrySetBuiltInOnly(hardnessIx))
-						_lastLiveHardnessIx = hardnessIx;
+					if (hardnessUi != null) {
+						// User changed hardness manually since our last write (H key / Ctrl+1-3) —
+						// their pick wins for the rest of this session; keep it as the restore target too.
+						if (_lastLiveHardnessIx != int.MinValue
+						    && !hardnessUi.IsUsingCustomAlpha()
+						    && hardnessUi.hardnessIx != _lastLiveHardnessIx) {
+							_liveHardnessUserOverride = true;
+							_snapshotHardnessIx = hardnessUi.hardnessIx;
+						} else if (hardnessUi.TrySetBuiltInOnly(hardnessIx)) {
+							_lastLiveHardnessIx = hardnessIx;
+						}
+					}
 				}
 			}
 
@@ -330,9 +480,17 @@ namespace spz {
 						? Mathf.Clamp01(proposal.OpacityHint01) : 0.6f;
 					float liveOpacity = opacityUi.Opacity01;
 					if (!float.IsFinite(liveOpacity)) liveOpacity = proposedOpacity;
-					float effective = Mathf.Lerp(liveOpacity, proposedOpacity, Mathf.Clamp01(opInf));
-					if (float.IsFinite(effective) && Mathf.Abs(effective - liveOpacity) > 0.02f)
-						opacityUi.SetOpacity01(effective);
+					// Same anchor rule as size: user opacity is the base; adopt manual changes.
+					if (_lastLiveAppliedOpacity01 >= 0f && Mathf.Abs(liveOpacity - _lastLiveAppliedOpacity01) > 0.01f)
+						_snapshotOpacity01 = liveOpacity;
+					float anchor = _snapshotOpacity01 >= 0f ? _snapshotOpacity01 : liveOpacity;
+					float effective = Mathf.Lerp(anchor, proposedOpacity, Mathf.Clamp01(opInf));
+					if (float.IsFinite(effective) && Mathf.Abs(effective - liveOpacity) > 0.02f) {
+						opacityUi.SetOpacity01(effective, quiet: true); // no per-tick "Brush Opacity NN" status spam
+						_lastLiveAppliedOpacity01 = Mathf.Clamp01(effective);
+					} else {
+						_lastLiveAppliedOpacity01 = Mathf.Clamp01(liveOpacity);
+					}
 				}
 			}
 
