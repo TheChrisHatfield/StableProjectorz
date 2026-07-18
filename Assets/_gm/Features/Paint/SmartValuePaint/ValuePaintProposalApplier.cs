@@ -64,6 +64,26 @@ namespace spz {
 				_snapshotColor = c;
 		}
 
+		/// <summary>
+		/// User chroma for Propose/Accept while Live is soft-arming the ribbon.
+		/// Prefer this over reading <c>sd.brushColor</c>, which is already value-remapped and would
+		/// make Propose→Accept double-shift hue/value away from the artist's pick.
+		/// </summary>
+		public static bool TryGetUserChromaBase(out Color chroma) {
+			if (_haveLiveChromaBase) {
+				chroma = _liveChromaBase;
+				chroma.a = 1f;
+				return true;
+			}
+			if (_haveUserBrushSnapshot) {
+				chroma = _snapshotColor;
+				chroma.a = 1f;
+				return true;
+			}
+			chroma = default;
+			return false;
+		}
+
 		/// <summary>Snapshot user brush state before the first Live mutation of this session.</summary>
 		static void CaptureUserBrushSnapshot_IfNeeded(SD_WorkflowOptionsRibbon_UI sd) {
 			if (_haveUserBrushSnapshot) return;
