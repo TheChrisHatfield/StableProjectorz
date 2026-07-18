@@ -35,13 +35,15 @@ namespace spz {
 		public ValuePaintProposal ProposeFromLuminance(float luminance01, ValuePaintStrokeState strokeState = default) {
 			float lum = float.IsFinite(luminance01) ? Mathf.Clamp01(luminance01) : 0.5f;
 			ValuePaintBand current = BandFromLuminance(lum);
-			ValuePaintBand desired = DesireOneStepTowardMid(current);
+			// Step to an adjacent band with a real luminance delta (not "always toward mid",
+			// which left Midtone→Midtone and made every stroke the same wash).
+			ValuePaintBand desired = DesireAdjacentValueStep(current);
 			ValuePaintStrokeRole role = RoleForTransition(current, desired);
 
 			float blend = strokeState.HasBrushHints ? strokeState.BlendStrength01 : DefaultBlend(current, desired);
 			float edgeSoft = DefaultEdgeSoftness(role);
 			float width = strokeState.HasBrushHints ? strokeState.BrushWidth01 : DefaultWidth(role);
-			float opacity = strokeState.HasBrushHints ? strokeState.Opacity01 : DefaultOpacity(role, current);
+			float opacity = strokeState.HasBrushHints ? strokeState.Opacity01 : DefaultOpacity(role, desired);
 			if (!float.IsFinite(blend)) blend = 0.55f;
 			if (!float.IsFinite(edgeSoft)) edgeSoft = 0.5f;
 			if (!float.IsFinite(width)) width = 0.5f;
@@ -74,13 +76,18 @@ namespace spz {
 			return ProposeFromLuminance(sum / patch.Length, strokeState);
 		}
 
-		static ValuePaintBand DesireOneStepTowardMid(ValuePaintBand current) {
+		/// <summary>
+		/// One clear value-plane step for Propose/Accept. Midtone no longer maps to itself
+		/// (that made Value Assist paint a single flat wash).
+		/// </summary>
+		static ValuePaintBand DesireAdjacentValueStep(ValuePaintBand current) {
 			switch (current) {
 				case ValuePaintBand.Highlight: return ValuePaintBand.Light;
+				case ValuePaintBand.Light: return ValuePaintBand.Highlight;
+				case ValuePaintBand.Midtone: return ValuePaintBand.Light;
+				case ValuePaintBand.Shadow: return ValuePaintBand.AccentDark;
 				case ValuePaintBand.AccentDark: return ValuePaintBand.Shadow;
-				case ValuePaintBand.Light: return ValuePaintBand.Midtone;
-				case ValuePaintBand.Shadow: return ValuePaintBand.Midtone;
-				default: return ValuePaintBand.Midtone;
+				default: return ValuePaintBand.Light;
 			}
 		}
 
@@ -97,7 +104,7 @@ namespace spz {
 		}
 
 		static float DefaultBlend(ValuePaintBand current, ValuePaintBand desired) {
-			return current == desired ? 0.55f : 0.7f;
+			return current == desired ? 0.55f : 0.85f;
 		}
 
 		static float DefaultEdgeSoftness(ValuePaintStrokeRole role) {
@@ -119,11 +126,18 @@ namespace spz {
 			}
 		}
 
-		static float DefaultOpacity(ValuePaintStrokeRole role, ValuePaintBand current) {
-			if (role == ValuePaintStrokeRole.BlockIn) return 0.65f;
-			if (role == ValuePaintStrokeRole.AccentDark) return 0.8f;
-			if (current == ValuePaintBand.Highlight) return 0.45f;
-			return 0.55f;
+		/// <summary>Opacity varies by target band so value steps are not one flat wash.</summary>
+		static float DefaultOpacity(ValuePaintStrokeRole role, ValuePaintBand desired) {
+			if (role == ValuePaintStrokeRole.AccentDark) return 0.88f;
+			if (role == ValuePaintStrokeRole.BlockIn) return 0.72f;
+			switch (desired) {
+				case ValuePaintBand.Highlight: return 0.38f;
+				case ValuePaintBand.Light: return 0.52f;
+				case ValuePaintBand.Midtone: return 0.65f;
+				case ValuePaintBand.Shadow: return 0.78f;
+				case ValuePaintBand.AccentDark: return 0.88f;
+				default: return 0.6f;
+			}
 		}
 	}
 

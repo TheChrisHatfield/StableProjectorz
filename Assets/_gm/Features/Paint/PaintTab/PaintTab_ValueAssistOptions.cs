@@ -14,7 +14,8 @@ namespace spz {
 		// Live soft-arm mutates brush color/size under the tip — opt-in so stable brush picks stay stable.
 		static bool _livePredict = false;
 		static float _blend01 = 1f;
-		static float _sizeInfluence01 = 0f;
+		// Non-zero so Live/Accept can visibly change tip size with value planes (0 made strokes look identical).
+		static float _sizeInfluence01 = 0.35f;
 		static float _opacityInfluence01 = 1f;
 
 		/// <summary>Fired after any stored value changes.</summary>
