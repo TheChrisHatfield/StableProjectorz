@@ -112,6 +112,12 @@ namespace spz {
 				UnityEngine.Debug.Log("[AddonUI_MGR] Skipping command-ribbon tab/panel for RibbonOnlyFullscreen (viewport Gen Art strip only; enable in Add-on Manager).");
 				return null;
 			}
+			// Hard gate: disabled add-ons must not create ribbon tabs (blocks stale Python register / prefs restore).
+			if (!Addon_MGR.IsAddonEnabledStatic(addonId)) {
+				UnityEngine.Debug.LogWarning(
+					$"[AddonUI_MGR] Refusing CreatePanel for disabled add-on '{addonId}'. Enable it in Add-on Manager.");
+				return null;
+			}
 			RectTransform parentForThisAddon = null;
 			var commandRibbon = AddonRibbonIntegration.ResolveCommandRibbon();
 			if (CommandRibbon_UI.instance == null && commandRibbon != null)
