@@ -225,7 +225,10 @@ class LavadSmartScheduler:
                     max(
                         0.0,
                         float(telemetry.core_count)
-                        - sum(telemetry.cpu_utilizations[: telemetry.core_count]),
+                        - sum(
+                            self._sanitize_util(u)
+                            for u in telemetry.cpu_utilizations[: telemetry.core_count]
+                        ),
                     )
                 ),
                 "queued_tasks": float(telemetry.queued_tasks),
@@ -309,16 +312,27 @@ class LavadSmartScheduler:
     def _signals_stable(self, t: TelemetrySnapshot) -> bool:
         if t.core_count <= 0:
             return False
+        import math
+
         utils = [u for u in t.cpu_utilizations[: t.core_count] if u is not None]
         if not utils:
             return False
-        if any(u < -0.05 or u > 1.05 for u in utils):
+        # NaN comparisons are always False — must reject non-finite explicitly.
+        if any(not math.isfinite(u) or u < -0.05 or u > 1.05 for u in utils):
             return False
         spread = max(utils) - min(utils)
         # Extreme spread with empty queue is untrustworthy.
         if spread > 0.9 and t.queued_tasks == 0:
             return False
         return True
+
+    @staticmethod
+    def _sanitize_util(u: float, fallback: float = 0.1) -> float:
+        import math
+
+        if u is None or not math.isfinite(u):
+            return fallback
+        return max(0.0, min(1.0, float(u)))
 
     def _compute_budget_units(self, t: TelemetrySnapshot, tasks: list[TaskContext]) -> float:
         """Scale Decimacon budget from cores, queue depth, and mean slice_ns (spec R5)."""
@@ -376,11 +390,8 @@ class LavadSmartScheduler:
 
     def _build_task_contexts(self, t: TelemetrySnapshot) -> list[TaskContext]:
         contexts: list[TaskContext] = []
-        mean_util = (
-            sum(t.cpu_utilizations[: t.core_count]) / max(1, min(len(t.cpu_utilizations), t.core_count))
-            if t.cpu_utilizations
-            else 0.5
-        )
+        sane = [self._sanitize_util(u) for u in t.cpu_utilizations[: t.core_count]] if t.cpu_utilizations else []
+        mean_util = sum(sane) / len(sane) if sane else 0.5
         queue_pressure = min(1.0, t.queued_tasks / max(1.0, float(t.core_count) * 4.0))
         for i, lat_cri in enumerate(t.task_lat_cri):
             # Keep declared lat_cri dominant so catalyst bands stay reachable;
@@ -404,6 +415,7 @@ class LavadSmartScheduler:
     def _build_cpu_contexts(self, t: TelemetrySnapshot) -> list[CpuContext]:
         contexts: list[CpuContext] = []
         for i, util in enumerate(t.cpu_utilizations[: t.core_count]):
+            util = self._sanitize_util(util)
             # Relatively lower cpuperf on E-cores; scale with live util.
             base_perf = 1.0 if i < t.p_core_count else 0.65
             contexts.append(

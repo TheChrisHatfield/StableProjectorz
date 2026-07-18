@@ -1,49 +1,44 @@
-# LAVAD / LAVD portion — bugs & gaps (2026-07-17)
+# LAVAD / LAVD portion — bugs & gaps (2026-07-17, round 2)
 
 **Surface:** `tools/mlp-decimacon-soil/src/hive_code_dev_1/lavd/`  
-**Law:** scheduler ≠ paint reasoner (Pass B; not Unity runtime)  
-**Beacon:** `cartridge/micro/lavd-cpu-scheduler.md` · EXTRALAVD source4s
+**Law:** scheduler ≠ paint reasoner (Pass B; not Unity runtime)
 
 ---
 
-## Bugs fixed this pass
+## Round 1 fixes (still hold)
 
 | # | Defect | Fix |
 |---|--------|-----|
-| 1 | `update_bandit` before first `dispatch` used default `latency_budget=0` → every measured outcome failed (`latency < 0` impossible) and **poisoned Beta** | Skip with `no_dispatch_budget` |
-| 2 | Invalid `selected_arm` raised `ValueError` instead of gated skip | `unknown_arm` `BanditUpdateResult` |
-| 3 | HT hosts: physical P/E + logical `core_count` → **8 domains vs 16 cpu_contexts** | Normalize so `p+e == core_count` in probe + `dispatch` |
+| 1 | Pre-dispatch `update_bandit` with budget 0 poisoned Beta | `no_dispatch_budget` |
+| 2 | Invalid arm raised | `unknown_arm` skip |
+| 3 | HT physical P/E vs logical cores | Normalize `p+e == core_count` |
 
-Smoke (soil `PYTHONPATH`): pre-dispatch skip · invalid arm skip · domains==cpu_ctx==16 · post-dispatch success.
+## Round 2 fixes
 
-**Note:** system `pip` may still resolve `E:\…\HIVE_CODE_DEV_1\src` first — run soil with `PYTHONPATH=tools/mlp-decimacon-soil/src` or `pip install -e` the soil.
+| # | Defect | Fix |
+|---|--------|-----|
+| 4 | NaN util still `signals_stable=True` (NaN comparisons are False) and poisoned `CpuContext` / free_cores | Reject non-finite; sanitize utils to [0,1] |
+| 5 | Empty `BanditState.arms` → silent fake `LATENCY_CRITICAL` / sample −1 | `ValueError` |
+| 6 | Non-finite accuracy/latency in evidence / success | Finite guards in `bandit_success` / `compute_evidence_quality` / Beta params |
+
+Smoke (`PYTHONPATH=tools/mlp-decimacon-soil/src`): prior skips · NaN unstable + finite ctx · empty arms raises · post-dispatch update OK.
 
 ---
 
-## Gaps (not bugs — product / wiring)
+## Gaps (product / wiring — not fixed)
 
 | Gap | Status |
 |-----|--------|
-| No dedicated `tests/` under soil for lavd | Missing regression suite |
-| EXTRALAVD narrative **3 arms** vs soil **4** `BanditArm` | Documented map; not auto-synced |
-| Bandit → `ValuePaintProposal` | **CONFLICT → drop** (locked) |
-| Spec-AC LAVD into SVP tasks | BACKLOG until Pass B opened |
-| Idle pen-up exploration phase | BACKLOG catalyst |
-| Real OS hybrid P/E topology (Windows) | Heuristic split only |
-| `__init__.py` does not export catalyst / prior / probe / intent | Import via submodule |
-| Unity paint path does not call LAVAD | Intentional (Pass B soil only) |
+| No lavd unit test package under soil | Missing |
+| EXTRALAVD 3-arm story vs 4 `BanditArm` | Map only |
+| Bandit → paint DTO | Locked drop |
+| Spec-AC into SVP | Backlog |
+| Idle exploration / real OS hybrid topology | Backlog |
+| Pip may load `E:\…\HIVE_CODE_DEV_1` over soil | Use soil PYTHONPATH / editable install |
+| Unity does not call LAVAD | Intentional Pass B |
+| `prior_builder` never seeds betas | Soft gap |
+| `ingest_feedback_via_sigma` without `measured` returns zeros | By design (no fabricate) |
 
----
+## Verdict
 
-## Architecture wire (soil only)
-
-```
-HostTelemetryProbe / TelemetrySnapshot
-  → LavadSmartScheduler.dispatch
-  → SchedulerSignalPacket (+ Σ encode)
-  → build_input_bundle → Decimacon forward
-  → PerformanceFeedback (measured)
-  → update_bandit → Beta posterior
-```
-
-Catalyst hints bias Thompson arm; router consumes `scheduler_intent` + sparsity — separate from paint DTO.
+**Code bugs on lavd hot path addressed for rounds 1–2.** Remaining items are gaps / backlog, not silent correctness faults.
