@@ -259,8 +259,9 @@ def register():
     api = spz.get_api()
     _panel = api.ui.create_panel(ADDON_ID, "SPZ GO")
     if not _panel:
-        print(ADDON_ID + ": failed to create panel")
-        return
+        raise RuntimeError(
+            ADDON_ID + ": create_panel failed — refusing successful load so Unity tears down the ribbon shell"
+        )
 
     b_default = find_blender_executable() or ""
     i_default = default_import_mesh_path() or ""

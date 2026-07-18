@@ -185,7 +185,9 @@ def register():
         
         print("Mesh Tools add-on registered successfully")
     else:
-        print("Failed to create UI panel for Mesh Tools add-on")
+        raise RuntimeError(
+            "MeshTools: create_panel failed — refusing successful load so Unity tears down the ribbon shell"
+        )
 
 
 if __name__ == "__main__":
