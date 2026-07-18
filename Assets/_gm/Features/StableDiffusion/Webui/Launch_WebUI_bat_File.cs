@@ -81,6 +81,8 @@ namespace spz {
 	        _lastLaunchedWebUiPid = pid;
 	    }
 
+	    const string SdLoadingStickyMsg = "Stable Diffusion is loading...";
+
 	    /// <summary>Show "loading" status and then "ready" when Connection_MGR reports SD connected.</summary>
 	    public static void NotifyWebUiLaunchStarted() {
 	        if (instance == null) return;
@@ -88,9 +90,7 @@ namespace spz {
 	    }
 
 	    void BeginWebUiReadyWait() {
-	        if (Viewport_StatusText.instance != null) {
-	            Viewport_StatusText.instance.ShowStatusText("Stable Diffusion is loading...", false, 8f, true);
-	        }
+	        ShowSdLoadingNotification();
 	        // If SD was already connected when restart started, do not declare "ready" until
 	        // we observe an actual disconnect->reconnect cycle for this launch.
 	        _requireDisconnectBeforeReady = Connection_MGR.is_sd_connected;
@@ -102,6 +102,19 @@ namespace spz {
 	        }
 	        _isWaitingForWebUiReady = false;
 	        _waitForWebUiReady_crtn = StartCoroutine(WaitForWebUiReadyCoroutine());
+	    }
+
+	    void ShowSdLoadingNotification() {
+	        if (Viewport_StatusText.instance == null) return;
+	        // Keep visible beyond the short status fade — Forge often takes 30–120s.
+	        Viewport_StatusText.instance.ShowStatusText(SdLoadingStickyMsg, false, 120f, true);
+	        Viewport_StatusText.instance.ShowStickyMsg(SdLoadingStickyMsg, new Color(1f, 0.85f, 0.35f, 1f));
+	    }
+
+	    void ClearSdLoadingNotification(string readyOrFailMsg, bool ok) {
+	        if (Viewport_StatusText.instance == null) return;
+	        Viewport_StatusText.instance.StopStickyMsg(SdLoadingStickyMsg);
+	        Viewport_StatusText.instance.ShowStatusText(readyOrFailMsg, false, ok ? 4f : 8f, false);
 	    }
 
 	    IEnumerator WaitForWebUiReadyCoroutine() {
@@ -126,8 +139,7 @@ namespace spz {
 	            } else if (sawDisconnected && elapsed >= warmupSec) {
 	                connectedStreak++;
 	                if (connectedStreak >= readyDebounceTicks) {
-	                    if (Viewport_StatusText.instance != null)
-	                        Viewport_StatusText.instance.ShowStatusText("Stable Diffusion is ready.", false, 3f, false);
+	                    ClearSdLoadingNotification("Stable Diffusion is ready.", true);
 	                    TryOpenBrowserWhenReady();
 	                    _isWaitingForWebUiReady = false;
 	                    _waitForWebUiReady_crtn = null;
@@ -138,8 +150,7 @@ namespace spz {
 	                if (elapsed - connectedSince >= connectedFallbackSec) {
 	                    connectedStreak++;
 	                    if (connectedStreak >= readyDebounceTicks) {
-	                        if (Viewport_StatusText.instance != null)
-	                            Viewport_StatusText.instance.ShowStatusText("Stable Diffusion is ready.", false, 3f, false);
+	                        ClearSdLoadingNotification("Stable Diffusion is ready.", true);
 	                        TryOpenBrowserWhenReady();
 	                        _isWaitingForWebUiReady = false;
 	                        _waitForWebUiReady_crtn = null;
@@ -149,15 +160,16 @@ namespace spz {
 	            } else {
 	                connectedStreak = 0;
 	            }
+	            // Re-assert loading status every ~20s so it is not lost under other viewport messages.
+	            if (Mathf.FloorToInt(elapsed) % 20 == 0 && Mathf.Approximately(elapsed % 20f, 0f) && elapsed > 0.5f)
+	                ShowSdLoadingNotification();
 	            yield return new WaitForSecondsRealtime(0.5f);
 	            elapsed += 0.5f;
 	        }
-	        if (Viewport_StatusText.instance != null) {
-	            string msg = _requireDisconnectBeforeReady
-	                ? "Stable Diffusion restart not confirmed yet... (waiting for reconnect)"
-	                : "Stable Diffusion still loading... (check connection/logs)";
-	            Viewport_StatusText.instance.ShowStatusText(msg, false, 4f, false);
-	        }
+	        string msg = _requireDisconnectBeforeReady
+	            ? "Stable Diffusion restart not confirmed yet... (waiting for reconnect on :" + WebUiHttpPort + ")"
+	            : "Stable Diffusion still loading... (ping http://127.0.0.1:" + WebUiHttpPort + " / check connection port)";
+	        ClearSdLoadingNotification(msg, false);
 	        _isWaitingForWebUiReady = false;
 	        _waitForWebUiReady_crtn = null;
 	    }
@@ -483,9 +495,13 @@ namespace spz {
 
 	    public void LaunchWebui_Manually(bool printStatusText_ifNotFound = false, bool suppressBrowserOpenForThisLaunch = false) {
 	        _suppressBrowserOpenForCurrentLaunch = suppressBrowserOpenForThisLaunch;
+	        ShowSdLoadingNotification();
 	        string filePath = GetWebuiFilePath(printStatusText_ifNotFound);
 	        if (string.IsNullOrEmpty(filePath)) {
 	            UnityEngine.Debug.Log("[LaunchWebUI] No bat file path; skipping launch (see above for search path).");
+	            ClearSdLoadingNotification(
+	                "Stable Diffusion bat not found next to the EXE (stable-diffusion-webui-forge). Set SPZ_WEBUI_RUN_PATH.",
+	                false);
 	            _suppressBrowserOpenForCurrentLaunch = false;
 	            return;
 	        }
@@ -501,8 +517,10 @@ namespace spz {
 	            workingDir = Path.GetTempPath();
 
 	        try {
-	            bool showExternalWindows = !_forceHiddenForAutoLaunch
-	                && UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1;
+	            // Auto-start: keep a visible CMD so users can see Forge boot (docs + UX). Manual Settings
+	            // launch still respects ShowExternalProcessWindows.
+	            bool showExternalWindows = _forceHiddenForAutoLaunch
+	                || UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1;
 	            uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
 	                launchPath,
 	                isJustFile: true,
@@ -517,10 +535,12 @@ namespace spz {
 	                NotifyWebUiLaunchStarted();
 	            } else {
 	                UnityEngine.Debug.LogError("[LaunchWebUI] Failed to launch process (PID 0).");
+	                ClearSdLoadingNotification("Stable Diffusion failed to launch (process PID 0).", false);
 	                _suppressBrowserOpenForCurrentLaunch = false;
 	            }
 	        } catch (Exception e) {
 	            UnityEngine.Debug.LogError($"[LaunchWebUI] Error launching process: {e.Message}");
+	            ClearSdLoadingNotification("Stable Diffusion launch error: " + e.Message, false);
 	            _suppressBrowserOpenForCurrentLaunch = false;
 	        }
 	    }
@@ -544,12 +564,13 @@ namespace spz {
 	            if (i > 0)
 	                UnityEngine.Debug.Log($"[LaunchWebUI] Retry {i + 1}/{AutoLaunchRetryDelays.Length} (after {AutoLaunchRetryDelays[i]}s).");
 	            try {
-	                _forceHiddenForAutoLaunch = true; // startup launch should always hide the external window
-	                // Match Settings: only suppress Application.OpenURL when the user has left "open browser" off.
+	                // Auto-launch: show the Forge CMD window so boot progress is visible.
+	                _forceHiddenForAutoLaunch = true;
 	                bool suppressBrowser = UnityEngine.PlayerPrefs.GetInt("WebUI_OpenBrowserOnStartup", 0) == 0;
 	                LaunchWebui_Manually(showStatus, suppressBrowserOpenForThisLaunch: suppressBrowser);
 	            } catch (Exception e) {
 	                UnityEngine.Debug.LogError($"[LaunchWebUI] Auto-launch attempt failed: {e.Message}");
+	                ClearSdLoadingNotification("Stable Diffusion auto-launch failed: " + e.Message, false);
 	            } finally {
 	                _forceHiddenForAutoLaunch = false;
 	            }

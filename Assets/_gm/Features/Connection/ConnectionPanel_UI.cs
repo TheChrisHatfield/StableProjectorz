@@ -195,11 +195,12 @@ namespace spz {
 	        }
 	        if (PlayerPrefs.HasKey(PORT_PlayerPrefs_KEY)){
 	            string savedPort = PlayerPrefs.GetString(PORT_PlayerPrefs_KEY);
-	            // Forge was moved off :7860 (left for Comfy). Old prefs still pinging 7860 look like "Forge never loads".
+	            // Forge was moved off :7860 (left for Comfy). Old/wrong prefs look like "Forge never loads".
 	            if (_panelKind == ConnectionPanel_Kind.StableDiffusion
-	                && string.Equals(savedPort, "7860", StringComparison.Ordinal)) {
+	                && (string.Equals(savedPort, "7860", StringComparison.Ordinal)
+	                    || string.Equals(savedPort, "7878", StringComparison.Ordinal))) {
 	                UnityEngine.Debug.Log(
-	                    "[ConnectionPanel] Migrating Stable Diffusion port prefs 7860 → 8188 (Forge/Comfy port swap).");
+	                    $"[ConnectionPanel] Migrating Stable Diffusion port prefs {savedPort} → {_default_port} (Forge listens on {_default_port}).");
 	                savedPort = _default_port;
 	                PlayerPrefs.SetString(PORT_PlayerPrefs_KEY, savedPort);
 	                PlayerPrefs.Save();
