@@ -226,6 +226,7 @@ namespace spz {
 
 			_armedProposal = proposal;
 			_armed = true;
+			_sawApplyOnArmedTarget = false; // re-arm must not inherit SawApply from a prior live/Accept cycle
 			reason = "live " + proposal.DesiredBin;
 			return true;
 		}
