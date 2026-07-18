@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import random
 from dataclasses import dataclass
 
@@ -34,13 +35,17 @@ def thompson_select(
     arm_bias: int | None = None,
 ) -> tuple[BanditArm, float]:
     """Sample each arm's Beta posterior and return the highest (Thompson sampling)."""
+    if not state.arms:
+        raise ValueError("thompson_select requires at least one bandit arm")
     rng = rng or random.Random()
-    best_arm = BanditArm.LATENCY_CRITICAL
+    best_arm = state.arms[0].arm
     best_sample = -1.0
     total_pulls = max(state.total_pulls, 1)
 
     for arm_state in state.arms:
-        sample = rng.betavariate(max(arm_state.alpha, 1e-6), max(arm_state.beta, 1e-6))
+        alpha = arm_state.alpha if math.isfinite(arm_state.alpha) and arm_state.alpha > 0 else 1e-6
+        beta = arm_state.beta if math.isfinite(arm_state.beta) and arm_state.beta > 0 else 1e-6
+        sample = rng.betavariate(max(alpha, 1e-6), max(beta, 1e-6))
         if state.rareness_correction > 0:
             overuse = arm_state.pulls / total_pulls
             sample *= 1.0 - state.rareness_correction * overuse
@@ -57,14 +62,22 @@ def thompson_select(
 
 def compute_evidence_quality(feedback: PerformanceFeedback, latency_budget: float) -> float:
     """Composite SLO + accuracy weight (approved formula C, Task 10)."""
-    if latency_budget <= 0:
+    if latency_budget <= 0 or not math.isfinite(latency_budget):
         return 0.2
-    latency_term = 1.0 - feedback.actual_latency / latency_budget
-    raw = 0.5 * feedback.actual_accuracy + 0.5 * latency_term
+    acc = feedback.actual_accuracy if math.isfinite(feedback.actual_accuracy) else 0.0
+    lat = feedback.actual_latency if math.isfinite(feedback.actual_latency) else latency_budget
+    latency_term = 1.0 - lat / latency_budget
+    raw = 0.5 * acc + 0.5 * latency_term
+    if not math.isfinite(raw):
+        return 0.2
     return max(0.2, min(1.0, raw))
 
 
 def bandit_success(feedback: PerformanceFeedback, latency_budget: float) -> bool:
+    if latency_budget <= 0 or not math.isfinite(latency_budget):
+        return False
+    if not math.isfinite(feedback.actual_accuracy) or not math.isfinite(feedback.actual_latency):
+        return False
     return feedback.actual_accuracy > 0.95 and feedback.actual_latency < latency_budget
 
 
