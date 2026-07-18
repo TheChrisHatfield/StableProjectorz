@@ -1411,14 +1411,18 @@ namespace spz {
 			}
 		}
 
-		/// <summary>While Brush options panel is open, depth/tools in the same row cannot steal drags/clicks; expando header stays active.</summary>
+		/// <summary>While Brush options panel is open, depth/tools in the same row cannot steal drags/clicks; expando headers stay active.</summary>
 		static void SetToolOptionsRowBehindBrushPanelBlocked(Transform toolOptionsRow, Transform brushExpandoRoot, bool blockRowTools)
 		{
 			if (toolOptionsRow == null) return;
 			for (int i = 0; i < toolOptionsRow.childCount; i++)
 			{
 				var ch = toolOptionsRow.GetChild(i);
+				if (ch == null) continue;
+				// Keep Brush options + Value Assist headers clickable so either expando can still be toggled.
 				if (brushExpandoRoot != null && ch == brushExpandoRoot)
+					continue;
+				if (ch.name == "ValueAssistExpando")
 					continue;
 				SetSelectablesInteractableOnSubtree(ch, !blockRowTools);
 			}
