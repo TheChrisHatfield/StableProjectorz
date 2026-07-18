@@ -167,8 +167,17 @@ namespace spz {
 		public static void ClearArmed() {
 			_armed = false;
 			_sawApplyOnArmedTarget = false;
+			_armedViaLive = false;
 			_armedProposal = default;
 			_lastLiveHardnessIx = int.MinValue;
+		}
+
+		/// <summary>
+		/// Drop soft live-arm only. Does not clear a user Accept arm (Propose → Accept).
+		/// </summary>
+		public static void ClearArmedIfLiveSoftArm() {
+			if (_armedViaLive)
+				ClearArmed();
 		}
 
 		/// <summary>
@@ -235,6 +244,7 @@ namespace spz {
 			bool sameDesiredArmed = _armed && _armedProposal.DesiredBin == proposal.DesiredBin;
 			_armedProposal = proposal;
 			_armed = true;
+			_armedViaLive = true;
 			// Same-band live ticks must not wipe SawApply — only a new desired bin starts a fresh cycle.
 			if (!sameDesiredArmed)
 				_sawApplyOnArmedTarget = false;
