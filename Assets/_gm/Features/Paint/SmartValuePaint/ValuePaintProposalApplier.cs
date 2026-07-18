@@ -15,6 +15,8 @@ namespace spz {
 		static bool _sawApplyOnArmedTarget;
 		static bool _armedViaLive;
 		static bool _suppressLiveSoftArm;
+		static Color _liveChromaBase;
+		static bool _haveLiveChromaBase;
 		static string _lastFailReason = "";
 		static int _lastLiveHardnessIx = int.MinValue;
 
@@ -25,8 +27,14 @@ namespace spz {
 		public static string LastFailReason => _lastFailReason;
 
 		/// <summary>Block live soft-arm until Live is toggled on again (Dismiss / Accept lock).</summary>
-		public static void SuppressLiveSoftArm() => _suppressLiveSoftArm = true;
-		public static void ClearLiveSoftArmSuppress() => _suppressLiveSoftArm = false;
+		public static void SuppressLiveSoftArm() {
+			_suppressLiveSoftArm = true;
+			_haveLiveChromaBase = false;
+		}
+		public static void ClearLiveSoftArmSuppress() {
+			_suppressLiveSoftArm = false;
+			_haveLiveChromaBase = false;
+		}
 
 		public static Color GrayForBand(ValuePaintBand band) {
 			float lum = LuminanceForBand(band);
@@ -226,6 +234,7 @@ namespace spz {
 			_armedViaLive = false;
 			_armedProposal = default;
 			_lastLiveHardnessIx = int.MinValue;
+			_haveLiveChromaBase = false;
 		}
 
 		/// <summary>
@@ -275,7 +284,13 @@ namespace spz {
 			}
 
 			Color live = sd.brushColor;
-			Color tint = ColorAtDesiredValue(live, proposal.DesiredBin);
+			// Lock chroma to the brush color at the start of this Live session. Remapping from an
+			// already-lifted/shifted brush each tick washes hue (Highlight→white lift→Shadow scale).
+			if (!_haveLiveChromaBase) {
+				_liveChromaBase = live;
+				_haveLiveChromaBase = true;
+			}
+			Color tint = ColorAtDesiredValue(_liveChromaBase, proposal.DesiredBin);
 			// Soft blend toward predicted value step using Blend01 (0 = leave color alone).
 			float blendOpt = PaintTab_ValueAssistOptions.Blend01;
 			if (!float.IsFinite(blendOpt)) blendOpt = 1f;
