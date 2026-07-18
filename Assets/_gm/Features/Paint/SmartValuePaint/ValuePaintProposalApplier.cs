@@ -29,15 +29,47 @@ namespace spz {
 		public static void ClearLiveSoftArmSuppress() => _suppressLiveSoftArm = false;
 
 		public static Color GrayForBand(ValuePaintBand band) {
-			float lum;
-			switch (band) {
-				case ValuePaintBand.Highlight: lum = 0.92f; break;
-				case ValuePaintBand.Light: lum = 0.75f; break;
-				case ValuePaintBand.Shadow: lum = 0.30f; break;
-				case ValuePaintBand.AccentDark: lum = 0.10f; break;
-				default: lum = 0.50f; break;
-			}
+			float lum = LuminanceForBand(band);
 			return new Color(lum, lum, lum, 1f);
+		}
+
+		/// <summary>Representative Rec.709 luminance for a value band (Spec R1).</summary>
+		public static float LuminanceForBand(ValuePaintBand band) {
+			switch (band) {
+				case ValuePaintBand.Highlight: return 0.92f;
+				case ValuePaintBand.Light: return 0.75f;
+				case ValuePaintBand.Shadow: return 0.30f;
+				case ValuePaintBand.AccentDark: return 0.10f;
+				default: return 0.50f;
+			}
+		}
+
+		/// <summary>
+		/// Shift <paramref name="baseColor"/> to the desired value band while keeping hue/chroma ratios.
+		/// Value Assist predicts tonal steps of the artist's color — not a gray replacement.
+		/// </summary>
+		public static Color ColorAtDesiredValue(Color baseColor, ValuePaintBand desired) {
+			float targetLum = LuminanceForBand(desired);
+			float r = float.IsFinite(baseColor.r) ? baseColor.r : 0.5f;
+			float g = float.IsFinite(baseColor.g) ? baseColor.g : 0.5f;
+			float b = float.IsFinite(baseColor.b) ? baseColor.b : 0.5f;
+			float cur = DeterministicValuePaintAssist.Luminance01(new Color(r, g, b, 1f));
+			if (cur < 1e-4f)
+				return new Color(targetLum, targetLum, targetLum, 1f);
+
+			float scale = targetLum / cur;
+			Color c = new Color(
+				Mathf.Clamp01(r * scale),
+				Mathf.Clamp01(g * scale),
+				Mathf.Clamp01(b * scale),
+				1f);
+			// If clamp crushed luminance above target (rare), scale back down.
+			float after = DeterministicValuePaintAssist.Luminance01(c);
+			if (after > 1e-4f && after > targetLum + 0.015f) {
+				float s2 = targetLum / after;
+				c = new Color(Mathf.Clamp01(c.r * s2), Mathf.Clamp01(c.g * s2), Mathf.Clamp01(c.b * s2), 1f);
+			}
+			return c;
 		}
 
 		/// <summary>
@@ -103,7 +135,7 @@ namespace spz {
 			// Resolve hardness before any ribbon mutate (validate-then-commit). Missing UI is noted, not refused.
 			var hardnessUi = Object.FindObjectOfType<BrushRibbon_UI_Hardness>(true);
 
-			Color tint = GrayForBand(proposal.DesiredBin);
+			Color tint = ColorAtDesiredValue(sd.brushColor, proposal.DesiredBin);
 			if (!sd.SetBrushColorFromApi(tint.r, tint.g, tint.b, tint.a)) {
 				reason = _lastFailReason = "SetBrushColorFromApi failed";
 				return false;
@@ -223,12 +255,12 @@ namespace spz {
 				return false;
 			}
 
-			Color tint = GrayForBand(proposal.DesiredBin);
-			// Soft blend toward predicted gray using Blend01 (0 = leave color alone).
+			Color live = sd.brushColor;
+			Color tint = ColorAtDesiredValue(live, proposal.DesiredBin);
+			// Soft blend toward predicted value step using Blend01 (0 = leave color alone).
 			float blendOpt = PaintTab_ValueAssistOptions.Blend01;
 			if (!float.IsFinite(blendOpt)) blendOpt = 1f;
 			blendOpt = Mathf.Clamp01(blendOpt);
-			Color live = sd.brushColor;
 			Color applied = Color.Lerp(live, tint, blendOpt);
 			applied.a = 1f;
 			if (!sd.SetBrushColorQuietFromApi(applied.r, applied.g, applied.b, applied.a)) {

@@ -988,7 +988,11 @@ namespace spz {
 		    if (ValuePaintLivePredictor.HasLastProposal
 		        && ValuePaintLivePredictor.ShouldAnnounceBandChange(ValuePaintLivePredictor.LastProposal.DesiredBin)
 		        && Cursor_UI.instance != null)
-			    Cursor_UI.instance.SetCursorColor(ValuePaintProposalApplier.GrayForBand(ValuePaintLivePredictor.LastProposal.DesiredBin));
+			    Cursor_UI.instance.SetCursorColor(ValuePaintProposalApplier.ColorAtDesiredValue(
+				    SD_WorkflowOptionsRibbon_UI.instance != null
+					    ? SD_WorkflowOptionsRibbon_UI.instance.brushColor
+					    : c,
+				    ValuePaintLivePredictor.LastProposal.DesiredBin));
 	    }
 
 	    /// <summary>While smudge is active, tint the viewport brush ring from the mesh accumulation color under the cursor (throttled GPU readback).</summary>
