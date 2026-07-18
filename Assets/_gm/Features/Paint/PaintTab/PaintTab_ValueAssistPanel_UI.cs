@@ -132,17 +132,23 @@ namespace spz {
 			if (_hasProposal && _haveSyncedNeuralPref && preferNeural != _proposalFromNeural) {
 				ClearPendingProposal("Neural mode changed — Propose again.");
 				keepNeuralStatus = true;
+				ValuePaintLivePredictor.InvalidateAssist();
 			}
-			ValuePaintLivePredictor.InvalidateAssist();
 
 			_haveSyncedNeuralPref = true;
 			SyncControlsFromStore();
 			ApplyEnabledChrome();
 			if (!PaintTab_ValueAssistOptions.Enabled) {
 				ClearPendingProposal(null);
+				ValuePaintLivePredictor.InvalidateAssist();
 				if (_summaryTmp != null)
 					_summaryTmp.text = "Value Assist off — enable to propose neural / value brush settings.";
 				keepNeuralStatus = false;
+			} else if (!PaintTab_ValueAssistOptions.LivePredict) {
+				// Live off: drop live proposal UI state only (SetLivePredict already invalidates).
+				if (!ValuePaintLivePredictor.HasLastProposal && _statusTmp != null
+				    && _statusTmp.text != null && _statusTmp.text.StartsWith("Live "))
+					_statusTmp.text = "Idle";
 			}
 			if (!keepNeuralStatus)
 				RefreshStatusLine();
