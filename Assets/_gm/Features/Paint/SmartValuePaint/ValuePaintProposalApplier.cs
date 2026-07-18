@@ -14,6 +14,7 @@ namespace spz {
 		static ValuePaintProposal _armedProposal;
 		static bool _sawApplyOnArmedTarget;
 		static string _lastFailReason = "";
+		static int _lastLiveHardnessIx = int.MinValue;
 
 		public static bool IsArmed => _armed;
 		public static ValuePaintProposal ArmedProposal => _armedProposal;
@@ -164,6 +165,7 @@ namespace spz {
 			_armed = false;
 			_sawApplyOnArmedTarget = false;
 			_armedProposal = default;
+			_lastLiveHardnessIx = int.MinValue;
 		}
 
 		/// <summary>
@@ -219,9 +221,12 @@ namespace spz {
 			}
 
 			if (PaintTab_ValueAssistOptions.ApplyHardness) {
-				var hardnessUi = Object.FindObjectOfType<BrushRibbon_UI_Hardness>(true);
-				if (hardnessUi != null)
-					hardnessUi.TrySetBuiltInOnly(Softness01ToHardnessIx(proposal.EdgeSoftness01));
+				int hardnessIx = Softness01ToHardnessIx(proposal.EdgeSoftness01);
+				if (hardnessIx != _lastLiveHardnessIx) {
+					var hardnessUi = Object.FindObjectOfType<BrushRibbon_UI_Hardness>(true);
+					if (hardnessUi != null && hardnessUi.TrySetBuiltInOnly(hardnessIx))
+						_lastLiveHardnessIx = hardnessIx;
+				}
 			}
 
 			_armedProposal = proposal;
