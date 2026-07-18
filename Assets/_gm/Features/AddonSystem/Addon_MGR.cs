@@ -148,6 +148,9 @@ namespace spz {
 #endif
 		private Dictionary<string, AddonInfo> _registeredAddons = new Dictionary<string, AddonInfo>();
 		private bool _isServerRunning = false;
+		/// <summary>One in-flight load/unload HTTP op per addon — rapid toggle must not race register/unregister.</summary>
+		readonly Dictionary<string, Coroutine> _addonLifecycleOpById = new Dictionary<string, Coroutine>();
+		readonly Dictionary<string, int> _addonLifecycleEpochById = new Dictionary<string, int>();
 
 		static bool s_addonApiQuitShutdownDone;
 		static bool s_appliedRememberedEnabledOnFirstDiscover;
@@ -158,12 +161,12 @@ namespace spz {
 			s_appliedRememberedEnabledOnFirstDiscover = false;
 		}
 
-		const string PrefsKeyRememberEnabledAddons = "spz.addons.rememberEnabled";
-		const string PrefsKeyEnabledAddonIdsJson = "spz.addons.enabledIdsJson";
+		const string PrefsKeyRememberEnabledAddons = "spz.addons.rememberEnabled.v2";
+		const string PrefsKeyEnabledAddonIdsJson = "spz.addons.enabledIdsJson.v2";
 
-		/// <summary>When true (default), enabled add-on ids are saved and restored on the next app launch.</summary>
+		/// <summary>When true, enabled add-on ids are saved and restored on the next app launch. Default off — add-ons stay disabled until the user enables and saves.</summary>
 		public static bool GetRememberEnabledAddonsPreference() {
-			return PlayerPrefs.GetInt(PrefsKeyRememberEnabledAddons, 1) == 1;
+			return PlayerPrefs.GetInt(PrefsKeyRememberEnabledAddons, 0) == 1;
 		}
 
 		/// <summary>Persists the “remember add-ons” option. When set to true, also saves the current enabled set.</summary>
@@ -178,6 +181,14 @@ namespace spz {
 		/// <summary>Writes the list of currently enabled add-on folder ids to disk when the remember option is on.</summary>
 		public void MaybePersistEnabledAddonSelection() {
 			if (!GetRememberEnabledAddonsPreference() || _registeredAddons == null) {
+				return;
+			}
+			PersistEnabledAddonSelectionNow();
+		}
+
+		/// <summary>Always writes the current enabled set (Add-on Manager Save settings).</summary>
+		public void PersistEnabledAddonSelectionNow() {
+			if (_registeredAddons == null) {
 				return;
 			}
 			var arr = new JArray();
@@ -224,10 +235,16 @@ namespace spz {
 				}
 				kvp.Value.isEnabled = set.Contains(kvp.Key);
 			}
+			int on = 0;
+			foreach (var kvp in instance._registeredAddons) {
+				if (kvp.Value != null && kvp.Value.isEnabled) on++;
+			}
 			UnityEngine.Debug.Log(
 				"[Addon_MGR] Restored enabled add-on selection from saved preferences ("
 				+ set.Count
-				+ " add-on id(s))."
+				+ " id(s) in prefs, "
+				+ on
+				+ " matched and enabled)."
 			);
 		}
 
@@ -600,7 +617,20 @@ namespace spz {
 					_registeredAddons.Remove(key);
 				}
 
+				// First discover only: restore prefs OR force default-off. Later Refresh/install rediscover
+				// must preserve in-session enables (otherwise dials/ribbon desync and tabs orphan).
+				bool firstDiscoverPass = !s_appliedRememberedEnabledOnFirstDiscover;
 				ApplyRememberedEnabledStateFromPlayerPrefsOnFirstDiscover();
+				if (firstDiscoverPass && !GetRememberEnabledAddonsPreference()) {
+					int forced = 0;
+					foreach (var kvp in _registeredAddons) {
+						if (kvp.Value == null || !kvp.Value.isEnabled) continue;
+						kvp.Value.isEnabled = false;
+						forced++;
+					}
+					if (forced > 0)
+						UnityEngine.Debug.Log($"[Addon_MGR] Restore-off: forced {forced} add-on(s) disabled at first discover.");
+				}
 				
 				UnityEngine.Debug.Log($"[Addon_MGR] Total addons discovered: {_registeredAddons.Count}");
 			} catch (System.Exception e) {
@@ -747,13 +777,15 @@ namespace spz {
 			yield return new WaitForSeconds(2.5f);
 			int count = 0;
 			foreach (var kvp in _registeredAddons) {
-				if (kvp.Value.isEnabled) {
+				if (kvp.Value != null && kvp.Value.isEnabled) {
 					count++;
 					UnityEngine.Debug.Log($"[Addon_MGR] Auto-load addon {count}: {kvp.Key}");
 					yield return RequestLoadAddon(kvp.Key);
 				}
 			}
-			if (count > 0)
+			if (count == 0)
+				UnityEngine.Debug.Log("[Addon_MGR] Auto-load: no enabled add-ons — ribbon stays clear (enable + Save settings to load).");
+			else
 				UnityEngine.Debug.Log($"[Addon_MGR] Auto-load finished. Requested {count} addon(s).");
 		}
 
@@ -826,11 +858,21 @@ namespace spz {
 		}
 
 		IEnumerator RequestLoadAddon(string addonId) {
+			yield return RequestLoadAddon(addonId, -1);
+		}
+
+		IEnumerator RequestLoadAddon(string addonId, int epoch) {
 			if (IsAddonApiShuttingDown())
 				yield break;
 			yield return WaitForAddonServerReady();
 			if (IsAddonApiShuttingDown())
 				yield break;
+			if (epoch >= 0 && !IsLifecycleEpochCurrent(addonId, epoch))
+				yield break;
+			if (!IsAddonEnabled(addonId)) {
+				UnityEngine.Debug.Log($"[Addon_MGR] Skipping stale load request for disabled add-on: {addonId}");
+				yield break;
+			}
 			UnityEngine.Debug.Log($"[Addon_MGR] Sending load request to Python for: {addonId}");
 			string url = $"http://127.0.0.1:{_httpServerPort}/load_addon";
 			string body = "{\"addon_id\":\"" + JsonEscape(addonId) + "\"}";
@@ -840,6 +882,12 @@ namespace spz {
 				req.SetRequestHeader("Content-Type", "application/json");
 				req.timeout = 8; // avoid indefinite stalls on addon load wiring
 				yield return req.SendWebRequest();
+				if (epoch >= 0 && !IsLifecycleEpochCurrent(addonId, epoch))
+					yield break;
+				if (!IsAddonEnabled(addonId)) {
+					UnityEngine.Debug.Log($"[Addon_MGR] Add-on disabled during load; skipping apply for: {addonId}");
+					yield break;
+				}
 				if (req.result != UnityWebRequest.Result.Success) {
 					UnityEngine.Debug.LogError($"[Addon_MGR] load_addon failed for {addonId}: {req.error}. Ensure Python server is running on port {_httpServerPort}");
 					MarkAddonLoadFailed(addonId);
@@ -855,6 +903,9 @@ namespace spz {
 				string responseBody = req.downloadHandler?.text ?? "";
 				if (loadSucceeded) {
 					UnityEngine.Debug.Log($"[Addon_MGR] Successfully loaded addon: {addonId}. Response: {responseBody}");
+					// Stale load (user disabled mid-flight): ask Python to unload so UI stays removed.
+					if (!IsAddonEnabled(addonId))
+						StartAddonLifecycleOp(addonId, false);
 				} else {
 					UnityEngine.Debug.LogError($"[Addon_MGR] Python reported addon load failure for {addonId}. Raw response: {responseBody}. Check Python console for register()/socket errors.");
 					MarkAddonLoadFailed(addonId);
@@ -862,23 +913,122 @@ namespace spz {
 			}
 		}
 
-		/// <summary>When Python reports load failure, keep addon disabled so UI state matches (no stale "enabled" for broken addons).</summary>
-		void MarkAddonLoadFailed(string addonId) {
-			if (_registeredAddons.TryGetValue(addonId, out var addon)) {
-				addon.isEnabled = false;
-				OnAddonEnabledStateChanged?.Invoke(addonId);
-				MaybePersistEnabledAddonSelection();
+		IEnumerator RequestUnloadAddon(string addonId) {
+			yield return RequestUnloadAddon(addonId, -1);
+		}
+
+		IEnumerator RequestUnloadAddon(string addonId, int epoch) {
+			if (!_enableHttpServer || !_isServerRunning) {
+				UnityEngine.Debug.LogWarning(
+					$"[Addon_MGR] Cannot notify Python to unload {addonId}; add-on HTTP server is unavailable.");
+				yield break;
 			}
+			if (epoch >= 0 && !IsLifecycleEpochCurrent(addonId, epoch))
+				yield break;
+			// Re-enabled while a prior unload was queued — do not unregister in Python.
+			if (IsAddonEnabled(addonId)) {
+				UnityEngine.Debug.Log($"[Addon_MGR] Skipping unload for re-enabled add-on: {addonId}");
+				yield break;
+			}
+
+			string url = $"http://127.0.0.1:{_httpServerPort}/unload_addon";
+			string body = "{\"addon_id\":\"" + JsonEscape(addonId) + "\"}";
+			for (int attempt = 1; attempt <= 3; attempt++) {
+				if (epoch >= 0 && !IsLifecycleEpochCurrent(addonId, epoch))
+					yield break;
+				if (IsAddonEnabled(addonId)) {
+					UnityEngine.Debug.Log($"[Addon_MGR] Skipping unload mid-flight; add-on re-enabled: {addonId}");
+					yield break;
+				}
+				using (var req = new UnityWebRequest(url, "POST")) {
+					req.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(body));
+					req.downloadHandler = new DownloadHandlerBuffer();
+					req.SetRequestHeader("Content-Type", "application/json");
+					req.timeout = 8;
+					yield return req.SendWebRequest();
+
+					bool unloadSucceeded = false;
+					if (req.result == UnityWebRequest.Result.Success) {
+						try {
+							var json = JObject.Parse(req.downloadHandler?.text ?? "{}");
+							unloadSucceeded = json["success"]?.Value<bool>() ?? false;
+						} catch { }
+					}
+					if (unloadSucceeded) {
+						UnityEngine.Debug.Log($"[Addon_MGR] Python unloaded add-on: {addonId}");
+						// Stale unload (user re-enabled mid-flight) or enabled again: reload so the ribbon returns.
+						if (IsAddonEnabled(addonId))
+							StartAddonLifecycleOp(addonId, true);
+						yield break;
+					}
+					if (attempt == 3) {
+						UnityEngine.Debug.LogWarning(
+							$"[Addon_MGR] unload_addon failed for {addonId} after {attempt} attempts: " +
+							$"{req.error ?? req.downloadHandler?.text}");
+						yield break;
+					}
+				}
+				yield return new WaitForSeconds(0.5f);
+			}
+		}
+
+		bool IsLifecycleEpochCurrent(string addonId, int epoch) {
+			return _addonLifecycleEpochById.TryGetValue(addonId, out int cur) && cur == epoch;
+		}
+
+		int BumpLifecycleEpoch(string addonId) {
+			int next = (_addonLifecycleEpochById.TryGetValue(addonId, out int cur) ? cur : 0) + 1;
+			_addonLifecycleEpochById[addonId] = next;
+			return next;
+		}
+
+		void StartAddonLifecycleOp(string addonId, bool load) {
+			if (string.IsNullOrEmpty(addonId) || !_enableHttpServer)
+				return;
+			int epoch = BumpLifecycleEpoch(addonId);
+			// Do not StopCoroutine in-flight HTTP — stale ops finish then re-sync via epoch checks.
+			Coroutine op = StartCoroutine(load
+				? RequestLoadAddon(addonId, epoch)
+				: RequestUnloadAddon(addonId, epoch));
+			_addonLifecycleOpById[addonId] = op;
+		}
+
+		/// <summary>
+		/// When Python reports load failure (or HTTP timeout), disable for this session and tear down ribbon UI.
+		/// Does not rewrite remember prefs — Save settings owns persistence (transient stalls must not forget the add-on).
+		/// </summary>
+		void MarkAddonLoadFailed(string addonId) {
+			if (!_registeredAddons.TryGetValue(addonId, out var addon) || addon == null)
+				return;
+			addon.isEnabled = false;
+			// Eager EnableAddon may have created a ribbon shell before Python failed — tear it down.
+			if (AddonUI_MGR.instance != null)
+				AddonUI_MGR.instance.DestroyAddonUI(addonId);
+			var ribbon = AddonRibbonIntegration.ResolveCommandRibbon();
+			if (ribbon != null)
+				ribbon.RemoveAddonPanel(addonId);
+			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal))
+				RibbonViewportFullViewOnScreen_Toggle_UI.TeardownAllDocksForAddonDisabled();
+			// Align Python if register() finished after a client timeout / false success.
+			if (_enableHttpServer)
+				StartAddonLifecycleOp(addonId, false);
+			OnAddonEnabledStateChanged?.Invoke(addonId);
 		}
 
 		/// <summary>StreamingAssets add-on id for on-screen full view ribbon dock (matches folder name and Python <c>ADDON_ID</c>).</summary>
 		public const string RibbonOnlyFullscreenAddonId = "RibbonOnlyFullscreen";
 
-		bool IsAddonEnabled(string addonId) {
+		/// <summary>True when the add-on is enabled in the manager (ribbon/Python load allowed).</summary>
+		public bool IsAddonEnabled(string addonId) {
 			if (string.IsNullOrEmpty(addonId) || _registeredAddons == null) {
 				return false;
 			}
 			return _registeredAddons.TryGetValue(addonId, out var info) && info != null && info.isEnabled;
+		}
+
+		/// <summary>Static convenience for UI/socket gates when <see cref="instance"/> may be null.</summary>
+		public static bool IsAddonEnabledStatic(string addonId) {
+			return instance != null && instance.IsAddonEnabled(addonId);
 		}
 
 		/// <summary>
@@ -927,6 +1077,8 @@ namespace spz {
 			
 			var addon = _registeredAddons[addonId];
 			addon.isEnabled = false;
+			if (_enableHttpServer)
+				StartAddonLifecycleOp(addonId, false);
 
 			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal)) {
 				RibbonViewportFullViewOnScreen_Toggle_UI.TeardownAllDocksForAddonDisabled();
@@ -940,12 +1092,17 @@ namespace spz {
 			var ribbon = AddonRibbonIntegration.ResolveCommandRibbon();
 			if (ribbon != null)
 				ribbon.RemoveAddonPanel(addonId);
-			
+
+			if (addon.uiElements != null) {
+				foreach (var go in addon.uiElements) {
+					if (go != null)
+						UnityEngine.Object.Destroy(go);
+				}
+			}
 			addon.uiElements.Clear();
 			
 			UnityEngine.Debug.Log($"[Addon_MGR] Unloaded add-on: {addonId}");
 			OnAddonEnabledStateChanged?.Invoke(addonId);
-			MaybePersistEnabledAddonSelection();
 		}
 		
 		static string JsonEscape(string s) {
@@ -976,7 +1133,7 @@ namespace spz {
 		}
 		
 		/// <summary>
-		/// Enables an add-on and requests Python server to load it (so panel appears).
+		/// Enables an add-on, creates its command-ribbon tab immediately, and requests Python to load it.
 		/// </summary>
 		public void EnableAddon(string addonId) {
 			if (!_registeredAddons.ContainsKey(addonId)) {
@@ -986,8 +1143,12 @@ namespace spz {
 			
 			_registeredAddons[addonId].isEnabled = true;
 			UnityEngine.Debug.Log($"[Addon_MGR] Enabled add-on: {addonId}");
+
+			// Ribbon tab appears as soon as the manager turns the dial on (do not wait for Python).
+			EnsureRibbonShellForEnabledAddon(addonId);
+
 			if (_enableHttpServer) {
-				StartCoroutine(RequestLoadAddon(addonId));
+				StartAddonLifecycleOp(addonId, true);
 			}
 			else {
 				UnityEngine.Debug.LogWarning(
@@ -1002,7 +1163,32 @@ namespace spz {
 				StartCoroutine(CoEnsureRibbonOnlyFullscreenViewportDock());
 			}
 			OnAddonEnabledStateChanged?.Invoke(addonId);
-			MaybePersistEnabledAddonSelection();
+			// Persistence is owned by Add-on Manager "Save settings" (not every dial click).
+		}
+
+		/// <summary>
+		/// Creates/repairs the command-ribbon tab+shell for an enabled add-on so manager dials stay linked to the strip.
+		/// </summary>
+		void EnsureRibbonShellForEnabledAddon(string addonId) {
+			if (string.IsNullOrEmpty(addonId)) return;
+			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal))
+				return;
+			if (!IsAddonEnabled(addonId)) return;
+			var ribbon = AddonRibbonIntegration.ResolveCommandRibbon();
+			if (ribbon == null) {
+				UnityEngine.Debug.LogWarning(
+					$"[Addon_MGR] Enabled '{addonId}' but CommandRibbon_UI not found yet — tab will appear when Python create_panel runs or ribbon becomes ready.");
+				return;
+			}
+			string title = addonId;
+			if (_registeredAddons.TryGetValue(addonId, out var info) && info != null
+			    && !string.IsNullOrWhiteSpace(info.displayName))
+				title = info.displayName.Trim();
+			var shell = ribbon.GetOrCreatePanelForAddon(addonId, title);
+			if (shell == null)
+				UnityEngine.Debug.LogWarning($"[Addon_MGR] GetOrCreatePanelForAddon returned null for enabled '{addonId}'.");
+			else
+				UnityEngine.Debug.Log($"[Addon_MGR] Ribbon tab ready for enabled add-on: {addonId} ({title})");
 		}
 		
 		/// <summary>
