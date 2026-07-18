@@ -30,6 +30,9 @@ namespace spz {
 		Slider _blendSlider;
 		Slider _sizeInfSlider;
 		Slider _opacityInfSlider;
+		TextMeshProUGUI _blendLbl;
+		TextMeshProUGUI _sizeInfLbl;
+		TextMeshProUGUI _opacityInfLbl;
 		GameObject _controlsRoot;
 		bool _suppressToggleSync;
 
@@ -39,7 +42,12 @@ namespace spz {
 				var ch = toolOptionsSection.GetChild(i);
 				if (ch == null || ch.name != RootName) continue;
 				var existing = ch.GetComponent<PaintTab_ValueAssistPanel_UI>();
-				if (existing != null) return existing;
+				if (existing != null) {
+					// Re-entry / code upgrade: BuildUi is idempotent when settings chrome exists;
+					// older panels built before settings must rebuild (guard was _summaryTmp only).
+					existing.BuildUi();
+					return existing;
+				}
 				var repaired = ch.gameObject.AddComponent<PaintTab_ValueAssistPanel_UI>();
 				EnsureLayoutShell(ch as RectTransform);
 				repaired.BuildUi();
@@ -103,9 +111,25 @@ namespace spz {
 		}
 
 		void BuildUi() {
-			if (_summaryTmp != null) return;
+			// Settings chrome is the upgrade gate — pre-settings panels had _summaryTmp and never rebuilt.
+			if (_enabledToggle != null) return;
 			for (int i = transform.childCount - 1; i >= 0; i--)
 				UnityEngine.Object.DestroyImmediate(transform.GetChild(i).gameObject);
+			_summaryTmp = null;
+			_statusTmp = null;
+			_swatchImg = null;
+			_proposeBtn = null;
+			_acceptBtn = null;
+			_dismissBtn = null;
+			_neuralToggle = null;
+			_hardnessToggle = null;
+			_blendSlider = null;
+			_sizeInfSlider = null;
+			_opacityInfSlider = null;
+			_blendLbl = null;
+			_sizeInfLbl = null;
+			_opacityInfLbl = null;
+			_controlsRoot = null;
 
 			var t = SpzUiThemeOps.Active;
 			var bg = gameObject.GetComponent<Image>() ?? gameObject.AddComponent<Image>();
@@ -152,11 +176,11 @@ namespace spz {
 				});
 
 			_blendSlider = MakeSliderRow(_controlsRoot.transform, "BlendRow", "Blend strength",
-				PaintTab_ValueAssistOptions.Blend01, v => PaintTab_ValueAssistOptions.SetBlend01(v));
+				PaintTab_ValueAssistOptions.Blend01, v => PaintTab_ValueAssistOptions.SetBlend01(v), out _blendLbl);
 			_sizeInfSlider = MakeSliderRow(_controlsRoot.transform, "SizeInfRow", "Size influence",
-				PaintTab_ValueAssistOptions.SizeInfluence01, v => PaintTab_ValueAssistOptions.SetSizeInfluence01(v));
+				PaintTab_ValueAssistOptions.SizeInfluence01, v => PaintTab_ValueAssistOptions.SetSizeInfluence01(v), out _sizeInfLbl);
 			_opacityInfSlider = MakeSliderRow(_controlsRoot.transform, "OpacityInfRow", "Opacity influence",
-				PaintTab_ValueAssistOptions.OpacityInfluence01, v => PaintTab_ValueAssistOptions.SetOpacityInfluence01(v));
+				PaintTab_ValueAssistOptions.OpacityInfluence01, v => PaintTab_ValueAssistOptions.SetOpacityInfluence01(v), out _opacityInfLbl);
 
 			_summaryTmp = MakeLabel(transform, "Value Assist — Propose from brush color, Accept to arm ribbon.", 9f, t.textMuted);
 			var summaryLe = _summaryTmp.GetComponent<LayoutElement>() ?? _summaryTmp.gameObject.AddComponent<LayoutElement>();
@@ -205,6 +229,10 @@ namespace spz {
 				_sizeInfSlider.SetValueWithoutNotify(PaintTab_ValueAssistOptions.SizeInfluence01);
 			if (_opacityInfSlider != null)
 				_opacityInfSlider.SetValueWithoutNotify(PaintTab_ValueAssistOptions.OpacityInfluence01);
+			// SetValueWithoutNotify skips onValueChanged — refresh % labels explicitly.
+			SetSliderLabel(_blendLbl, "Blend strength", PaintTab_ValueAssistOptions.Blend01);
+			SetSliderLabel(_sizeInfLbl, "Size influence", PaintTab_ValueAssistOptions.SizeInfluence01);
+			SetSliderLabel(_opacityInfLbl, "Opacity influence", PaintTab_ValueAssistOptions.OpacityInfluence01);
 			_suppressToggleSync = false;
 			TintToggleBox(_enabledToggle, PaintTab_ValueAssistOptions.Enabled);
 			TintToggleBox(_neuralToggle, PaintTab_ValueAssistOptions.UseNeural);
@@ -385,8 +413,13 @@ namespace spz {
 			return toggle;
 		}
 
+		static void SetSliderLabel(TextMeshProUGUI lbl, string labelText, float v01) {
+			if (lbl == null) return;
+			lbl.text = labelText + "  " + Mathf.RoundToInt(Mathf.Clamp01(v01) * 100) + "%";
+		}
+
 		Slider MakeSliderRow(Transform parent, string rowName, string labelText, float initial,
-			UnityEngine.Events.UnityAction<float> onChanged) {
+			UnityEngine.Events.UnityAction<float> onChanged, out TextMeshProUGUI labelOut) {
 			var row = new GameObject(rowName);
 			row.transform.SetParent(parent, false);
 			row.AddComponent<RectTransform>();
@@ -412,7 +445,8 @@ namespace spz {
 			lbl.color = new Color(0.88f, 0.89f, 0.92f, 1f);
 			lbl.alignment = TextAlignmentOptions.Left;
 			lbl.raycastTarget = false;
-			lbl.text = labelText + "  " + Mathf.RoundToInt(initial * 100) + "%";
+			SetSliderLabel(lbl, labelText, initial);
+			labelOut = lbl;
 
 			var trackGo = new GameObject("Track");
 			trackGo.transform.SetParent(row.transform, false);
@@ -465,10 +499,10 @@ namespace spz {
 			slider.maxValue = 1f;
 			slider.wholeNumbers = false;
 			slider.value = initial;
-			slider.onValueChanged.AddListener(v => {
+			slider.onValueChanged.AddListener(v01 => {
 				if (_suppressToggleSync) return;
-				lbl.text = labelText + "  " + Mathf.RoundToInt(Mathf.Clamp01(v) * 100) + "%";
-				onChanged?.Invoke(v);
+				SetSliderLabel(lbl, labelText, v01);
+				onChanged?.Invoke(v01);
 			});
 			return slider;
 		}
