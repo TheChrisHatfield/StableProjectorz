@@ -9,6 +9,9 @@ namespace spz {
 	{
 	    public static Tootlips_UI_MGR instance { get; private set; } = null;
 
+	    /// <summary>Compact tip type — was 17pt and overpowered small Tool Options / dial UI.</summary>
+	    const float TooltipFontSize = 11f;
+
 	    [SerializeField] CanvasScaler _canvScaler_ofParent;
 	    [SerializeField] RectTransform _tooltip_rectTransf;
 	    [SerializeField] CanvasGroup _tooltip_canvGroup;
@@ -38,8 +41,24 @@ namespace spz {
 	        _tooltip_canvGroup.alpha = 0;//will be shown during update. (gives time to resize, etc)
 	        _time_requested_showTooltip = Time.time;
 
+	        ApplyTooltipTypeSize();
 	        _tooltipInvisible_text.text = forThis.tooltipText;
 	        _tooltipVisible_text.text = forThis.tooltipText;
+	    }
+
+	    void ApplyTooltipTypeSize() {
+	        if (_tooltipInvisible_text != null) {
+	            _tooltipInvisible_text.enableAutoSizing = false;
+	            _tooltipInvisible_text.fontSize = TooltipFontSize;
+	            _tooltipInvisible_text.fontSizeMin = TooltipFontSize;
+	            _tooltipInvisible_text.fontSizeMax = TooltipFontSize;
+	        }
+	        if (_tooltipVisible_text != null) {
+	            _tooltipVisible_text.enableAutoSizing = false;
+	            _tooltipVisible_text.fontSize = TooltipFontSize;
+	            _tooltipVisible_text.fontSizeMin = TooltipFontSize;
+	            _tooltipVisible_text.fontSizeMax = TooltipFontSize;
+	        }
 	    }
     
 
@@ -103,6 +122,7 @@ namespace spz {
 	    void Awake(){
 	        if(instance != null){ DestroyImmediate(this.gameObject); return; }
 	        instance = this;
+	        ApplyTooltipTypeSize();
 	        _tooltip_canvGroup.gameObject.SetActive(false);
 	        _tooltip_canvGroup.alpha = 0;
 	    }
