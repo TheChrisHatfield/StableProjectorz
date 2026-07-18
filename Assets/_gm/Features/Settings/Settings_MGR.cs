@@ -143,6 +143,29 @@ namespace spz {
 	    void tryLoad_sd_strictMaskIsolation()
 	        => set_sd_strictMaskIsolation(PlayerPrefs.GetInt("SD_StrictMaskIsolation", 0) == 1);
 
+	    /// <summary>Same pref as <see cref="PaintTab_StrictIsolationBrushOptions"/>; inverts which screen-mask pixels post-SD strict isolation restores from init.</summary>
+	    public bool get_sd_strictIsolationFlipMask() => PaintTab_StrictIsolationBrushOptions.FlipInvertIsolationMask;
+
+	    void set_sd_strictIsolationFlipMask(bool on) {
+	        PaintTab_StrictIsolationBrushOptions.SetFlipInvertIsolationMask(on);
+	    }
+
+	    /// <summary>When true, img2img requests set WebUI <c>inpainting_mask_invert=1</c>: diffusion targets <b>outside</b> the brush mask (unmasked), preserving masked / No Color strokes in API semantics. Default OFF.</summary>
+	    bool _sd_inpaintingMaskInvert = false;
+	    public bool get_sd_inpaintingMaskInvert() => _sd_inpaintingMaskInvert;
+
+	    /// <summary>For <see cref="FastPath_API"/> / add-ons; same as toggling Settings.</summary>
+	    public void set_sd_inpaintingMaskInvert_from_api(bool on) => set_sd_inpaintingMaskInvert(on);
+
+	    void set_sd_inpaintingMaskInvert(bool on) {
+	        _sd_inpaintingMaskInvert = on;
+	        PlayerPrefs.SetInt("SD_InpaintingMaskInvert", _sd_inpaintingMaskInvert ? 1 : 0); PlayerPrefs.Save();
+	        var t = EventsBinder.FindComponent<Toggle>("Settings:set_sd_inpaintingMaskInvert");
+	        if (t != null) t.SetIsOnWithoutNotify(on);
+	    }
+	    void tryLoad_sd_inpaintingMaskInvert()
+	        => set_sd_inpaintingMaskInvert(PlayerPrefs.GetInt("SD_InpaintingMaskInvert", 0) == 1);
+
 	    // Stable Diffusion GPU: -1 = default (auto), 0/1/2... = use that CUDA device (sets CUDA_VISIBLE_DEVICES when launching WebUI).
 	    public const int SD_GPU_ID_MAX = 31; // reasonable upper bound for GPU index (UI + launch clamp)
 	    int _sdGpuDeviceId = -1;
@@ -489,6 +512,10 @@ namespace spz {
 	    void OnButton_OpenSettingsPanel() {
 	        var panel = EventsBinder.FindComponent<RectTransform>("Settings:SettingsPanel");
 	        if (panel != null) panel.gameObject.SetActive(true);
+	        var settingsUi = panel != null ? panel.GetComponentInParent<Settings_UI>(true) : null;
+	        if (settingsUi == null)
+	            settingsUi = FindObjectOfType<Settings_UI>(true);
+	        settingsUi?.FixSettingsScrollReadability();
 	        var autoScroll = EventsBinder.FindComponent<ScrollRect_AutoScroll>("Settings:AutoScroll");
 	        if (autoScroll != null) autoScroll.ScrollToEnd(0.35f, false);
 	    }
@@ -496,6 +523,10 @@ namespace spz {
 	    void OnButton_OpenHelpSettingsPanel() {
 	        var panel = EventsBinder.FindComponent<RectTransform>("Settings:SettingsPanel");
 	        if (panel != null) panel.gameObject.SetActive(true);
+	        var settingsUi = panel != null ? panel.GetComponentInParent<Settings_UI>(true) : null;
+	        if (settingsUi == null)
+	            settingsUi = FindObjectOfType<Settings_UI>(true);
+	        settingsUi?.FixSettingsScrollReadability();
 	        var autoScroll = EventsBinder.FindComponent<ScrollRect_AutoScroll>("Settings:AutoScroll");
 	        if (autoScroll != null) autoScroll.ScrollToEnd(0.35f, false);
 	    }
@@ -520,6 +551,8 @@ namespace spz {
 	            set_isAlwaysFocusCameraPivot(true);
 	            set_avoid_NSFW_generations(false);
 	            set_sd_strictMaskIsolation(false);
+	            PaintTab_StrictIsolationBrushOptions.SetFlipInvertIsolationMask(false);
+	            set_sd_inpaintingMaskInvert(false);
 	            set_viewport_in_center(true);
 	            set_viewport_isSwapVerticalRibbons(false);
 	            set_uvWarpSpeed01(_default_uvWarpSpeed01);
@@ -631,6 +664,8 @@ namespace spz {
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_showExternalProcessWindows", set_showExternalProcessWindows);
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_webUiOpenBrowserOnStartup", set_webUiOpenBrowserOnStartup);
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_sd_strictMaskIsolation", set_sd_strictMaskIsolation);
+	        StaticEvents.SubscribeUnique<bool>("Settings:set_sd_strictIsolationFlipMask", set_sd_strictIsolationFlipMask);
+	        StaticEvents.SubscribeUnique<bool>("Settings:set_sd_inpaintingMaskInvert", set_sd_inpaintingMaskInvert);
 	        StaticEvents.SubscribeUnique<bool>("Settings:set_paintUndo_enabled", set_paintUndo_enabled);
 	        StaticEvents.SubscribeUnique<int>("Settings:set_paintUndo_maxDepth", set_paintUndo_maxDepth);
 	        tryLoad_useVSync();
@@ -646,6 +681,7 @@ namespace spz {
 	        tryLoad_isAlwaysFocusCameraPivot();
 	        tryLoad_avoid_NSFW_generations();
 	        tryLoad_sd_strictMaskIsolation();
+	        tryLoad_sd_inpaintingMaskInvert();
 	        tryLoad_viewport_in_center();
 	        tryLoad_viewport_isSwapVerticalRibbons();
 	        tryLoad_uvWarpSpeed01();
@@ -711,6 +747,8 @@ namespace spz {
 	        StaticEvents.Unsubscribe<bool>("Settings:set_showExternalProcessWindows", set_showExternalProcessWindows);
 	        StaticEvents.Unsubscribe<bool>("Settings:set_webUiOpenBrowserOnStartup", set_webUiOpenBrowserOnStartup);
 	        StaticEvents.Unsubscribe<bool>("Settings:set_sd_strictMaskIsolation", set_sd_strictMaskIsolation);
+	        StaticEvents.Unsubscribe<bool>("Settings:set_sd_strictIsolationFlipMask", set_sd_strictIsolationFlipMask);
+	        StaticEvents.Unsubscribe<bool>("Settings:set_sd_inpaintingMaskInvert", set_sd_inpaintingMaskInvert);
 	        StaticEvents.Unsubscribe<bool>("Settings:set_paintUndo_enabled", set_paintUndo_enabled);
 	        StaticEvents.Unsubscribe<int>("Settings:set_paintUndo_maxDepth", set_paintUndo_maxDepth);
 	    }

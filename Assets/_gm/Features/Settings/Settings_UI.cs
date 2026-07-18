@@ -716,7 +716,7 @@ namespace spz {
 	    /// Runtime option rows were ~28px with long labels and parent spacing 0 → text overlapped.
 	    /// Enforce readable row height, label wrap, and vertical gaps; kill negative TMP lineSpacing.
 	    /// </summary>
-	    void FixSettingsScrollReadability() {
+	    public void FixSettingsScrollReadability() {
 	        if (_settingsPanel_go == null) return;
 	        var scrollRect = _settingsPanel_go.GetComponentInChildren<ScrollRect>(true);
 	        RectTransform content = scrollRect != null ? scrollRect.content : null;
