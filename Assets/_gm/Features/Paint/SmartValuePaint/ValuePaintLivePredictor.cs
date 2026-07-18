@@ -27,6 +27,8 @@ namespace spz {
 			HasLastProposal = false;
 			LastProposal = default;
 			_lastDesired = (ValuePaintBand)(-1);
+			// Allow the next band announce immediately after invalidate (neural/live toggle).
+			_lastLiveArmTime = -999f;
 		}
 
 		public static bool TryPredictFromSurface(Color surfaceSample, out string reason) {
