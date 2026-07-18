@@ -179,6 +179,10 @@ namespace spz {
 		}
 
 		void BindExpando(Button headerBtn, TextMeshProUGUI headerLbl) {
+			if (_headerWired && _headerBtn != null && _headerBtn != headerBtn) {
+				_headerBtn.onClick.RemoveListener(ToggleCollapsed);
+				_headerWired = false;
+			}
 			_headerBtn = headerBtn;
 			_headerLbl = headerLbl;
 			if (_headerBtn != null && !_headerWired) {
