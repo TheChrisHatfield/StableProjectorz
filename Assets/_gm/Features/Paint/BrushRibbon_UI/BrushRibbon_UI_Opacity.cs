@@ -20,6 +20,10 @@ namespace spz {
 	    /// <summary> Set strength 0–1 from code (same path as slider: workflow rules e.g. Inpaint_NoColor → 100%). </summary>
 	    public void SetOpacity01(float opacity01) => SetBrushOpacity(Mathf.Clamp01(opacity01));
 
+	    /// <summary> Same as <see cref="SetOpacity01(float)"/> but optionally without the viewport status text
+	    /// (Value Assist live ticks / restore would otherwise spam "Brush Opacity NN" every update). </summary>
+	    public void SetOpacity01(float opacity01, bool quiet) => SetBrushOpacity(Mathf.Clamp01(opacity01), quiet);
+
 	    //we might temporariyl override opacity (due to Colorless-mask, etc). This is what it used to be.
 	    float _nonOverridenOpacity;
 
@@ -29,7 +33,7 @@ namespace spz {
 	                                            new Color(0.2f, 0.2f, 0.2f, 1)  : new Color(0.8f, 0.8f, 0.8f, 1);
 
 
-	    void SetBrushOpacity(float brushOpacity){
+	    void SetBrushOpacity(float brushOpacity, bool quiet=false){
 
 	        float printMsgDur = 1;
 
@@ -37,13 +41,15 @@ namespace spz {
 	            brushOpacity = 1.0f;//important, to avoid bugs. User can instead control denoising strength + blur.
 
 	            //maybe skip showing our message, because thiers is more rare and important:
-	            if (WorkflowRibbon_NoColor_UI.didShowHint_thisFrame()==false){
+	            if (!quiet && WorkflowRibbon_NoColor_UI.didShowHint_thisFrame()==false){
 	                string msg = "Brush Opacity kept as 100 (colorless-mask)";
 	                Viewport_StatusText.instance.ShowStatusText(msg, false, printMsgDur, false);
 	            }
 	        }else { 
-	            string msg = "Brush Opacity " + Mathf.RoundToInt(brushOpacity * 100);
-	            Viewport_StatusText.instance.ShowStatusText(msg, false, printMsgDur, false);
+	            if (!quiet){
+	                string msg = "Brush Opacity " + Mathf.RoundToInt(brushOpacity * 100);
+	                Viewport_StatusText.instance.ShowStatusText(msg, false, printMsgDur, false);
+	            }
 	            _nonOverridenOpacity = brushOpacity;
 	        }
 	        _maskBrushOpacity = brushOpacity;
