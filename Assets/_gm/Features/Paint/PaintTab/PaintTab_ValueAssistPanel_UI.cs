@@ -394,7 +394,7 @@ namespace spz {
 			_knobRow = MakeDialRow(transform, "ValueDials", DialHit + 16f).gameObject;
 			_blendDial = MakeValueDial(_knobRow.transform, "Blend", PaintTab_ValueAssistOptions.Blend01,
 				v => PaintTab_ValueAssistOptions.SetBlend01(v),
-				"Blend\nHow strongly to pull brush color toward the predicted gray.\n0% = keep yours · 100% = full prediction.");
+				"Blend\nHow strongly to pull brush color toward the predicted value step.\n0% = keep yours · 100% = full prediction.");
 			_sizeDial = MakeValueDial(_knobRow.transform, "Size", PaintTab_ValueAssistOptions.SizeInfluence01,
 				v => PaintTab_ValueAssistOptions.SetSizeInfluence01(v),
 				"Size\nHow much predicted brush size overrides yours.\n0% = keep yours · 100% = use prediction.");
