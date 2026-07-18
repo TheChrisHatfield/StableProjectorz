@@ -838,14 +838,15 @@ namespace spz {
 			}
 
 			public void OnBeginDrag(PointerEventData eventData) {
-				_dragMoved = false;
+				// Any drag gesture (even sub-threshold movement after BeginDrag) must suppress the
+				// following PointerClick — otherwise a tiny drag still snaps to 0/50/100.
+				_dragMoved = true;
 				_dragStartX = eventData.position.x;
 				_dragStartVal = _value;
 			}
 
 			public void OnDrag(PointerEventData eventData) {
 				float dx = eventData.position.x - _dragStartX;
-				if (Mathf.Abs(dx) > 2f) _dragMoved = true;
 				float next = Mathf.Clamp01(_dragStartVal + dx / 120f);
 				if (Mathf.Approximately(next, _value)) return;
 				_value = next;
