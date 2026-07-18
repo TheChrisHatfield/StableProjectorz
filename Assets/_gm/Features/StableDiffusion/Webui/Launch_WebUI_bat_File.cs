@@ -31,7 +31,8 @@ namespace spz {
 	    static readonly float[] AutoLaunchRetryDelays = new float[] { 0.5f, 1.5f, 3f, 6f, 12f };
 
 	    static uint _lastLaunchedWebUiPid;
-	    const int WebUiHttpPort = 7860;
+	    // :8188 — leave :7860 for Comfy Desktop / dataset harness (port swap).
+	    const int WebUiHttpPort = 8188;
 	    Coroutine _waitForWebUiReady_crtn;
 	    bool _isWaitingForWebUiReady;
 	    bool _openBrowserWhenReadyRequested;
@@ -164,7 +165,7 @@ namespace spz {
 	    void TryOpenBrowserWhenReady() {
 	        if (!_openBrowserWhenReadyRequested) return;
 	        _openBrowserWhenReadyRequested = false;
-	        const string webUiUrl = "http://127.0.0.1:7860";
+	        const string webUiUrl = "http://127.0.0.1:8188";
 	        try {
 	            Application.OpenURL(webUiUrl);
 	            UnityEngine.Debug.Log($"[LaunchWebUI] Opened browser for WebUI: {webUiUrl}");
@@ -298,17 +299,24 @@ namespace spz {
                 string forgeDir = Path.Combine(currentDir, WebuiFolderName);
                 bool exists = false;
                 try { exists = Directory.Exists(forgeDir); } catch { }
-                UnityEngine.Debug.Log($"[LaunchWebUI] Search [{depth}] {forgeDir} → {(exists ? "EXISTS" : "not found")}");
                 if (exists) {
-                    foreach (string name in WebuiLaunchFileNames) {
-                        try {
-                            string full = Path.GetFullPath(Path.Combine(forgeDir, name));
-                            checkedPaths.Add(full);
-                            if (File.Exists(full)) {
-                                UnityEngine.Debug.Log($"[LaunchWebUI] FOUND: {full}");
-                                return full;
-                            }
-                        } catch { }
+                    string found = TryPickLaunchFileInForgeDir(forgeDir, checkedPaths);
+                    if (!string.IsNullOrEmpty(found)) {
+                        UnityEngine.Debug.Log($"[LaunchWebUI] Search [{depth}] {forgeDir} → FOUND: {found}");
+                        return found;
+                    }
+                    UnityEngine.Debug.LogWarning(
+                        $"[LaunchWebUI] Search [{depth}] {forgeDir} → EMPTY (folder exists but no run_noQuickEdit.bat / run.bat / .lnk). Skipping stub.");
+                } else {
+                    UnityEngine.Debug.Log($"[LaunchWebUI] Search [{depth}] {forgeDir} → not found");
+                }
+                // Built player often lives under Build_IL2CPP/; empty repo-root forge stub must not hide that install.
+                string buildIl2CppForge = Path.Combine(currentDir, "Build_IL2CPP", WebuiFolderName);
+                if (Directory.Exists(buildIl2CppForge)) {
+                    string foundBuild = TryPickLaunchFileInForgeDir(buildIl2CppForge, checkedPaths);
+                    if (!string.IsNullOrEmpty(foundBuild)) {
+                        UnityEngine.Debug.Log($"[LaunchWebUI] Search [{depth}] Build_IL2CPP fallback → FOUND: {foundBuild}");
+                        return foundBuild;
                     }
                 }
                 try {
@@ -319,10 +327,24 @@ namespace spz {
             }
         }
 
-        string msg = $"[LaunchWebUI] Bat NOT FOUND. Roots: [{string.Join(", ", roots)}]. Up to {MaxParentDepth} levels each. Set {EnvVarWebuiPath} to full bat path.";
+        string msg = $"[LaunchWebUI] Bat NOT FOUND. Roots: [{string.Join(", ", roots)}]. Up to {MaxParentDepth} levels each (also checks Build_IL2CPP/{WebuiFolderName}). Set {EnvVarWebuiPath} to full bat path. Note: repo-root {WebuiFolderName} may be an empty stub.";
         UnityEngine.Debug.LogWarning(msg);
         if (printStatusText_ifNotFound && Viewport_StatusText.instance != null)
             Viewport_StatusText.instance.ShowStatusText(msg, false, 10, false);
+        return "";
+    }
+
+    static string TryPickLaunchFileInForgeDir(string forgeDir, System.Collections.Generic.List<string> checkedPaths) {
+        if (string.IsNullOrEmpty(forgeDir)) return "";
+        foreach (string name in WebuiLaunchFileNames) {
+            try {
+                string full = Path.GetFullPath(Path.Combine(forgeDir, name));
+                if (checkedPaths != null)
+                    checkedPaths.Add(full);
+                if (File.Exists(full))
+                    return full;
+            } catch { }
+        }
         return "";
     }
 
@@ -386,7 +408,10 @@ namespace spz {
 	        // 1) CUDA_VISIBLE_DEVICES (hard mask)
 	        // 2) --gpu-device-id (Forge CLI hint)
 	        // This avoids ambiguous fallback to GPU 0 across different Forge launch paths.
-	        string argsBase = gpuId >= 0 ? ("--api --gpu-device-id " + gpuId) : "--api";
+	        // Always pin Gradio/API to WebUiHttpPort so Forge does not steal Comfy's :7860.
+	        string argsBase = gpuId >= 0
+	            ? ("--api --port " + WebUiHttpPort + " --gpu-device-id " + gpuId)
+	            : ("--api --port " + WebUiHttpPort);
 	        string args = string.IsNullOrWhiteSpace(launchExtraArgs) ? argsBase : (argsBase + " " + launchExtraArgs);
 	        bool hasLaunchPy = File.Exists(launchPy);
 	        bool hasVenvPython = File.Exists(pythonExe);
@@ -503,6 +528,8 @@ namespace spz {
 	    /// <summary>When the exe runs, auto-launch WebUI. Aggressive retries at 0.5s, 1.5s, 3s, 6s, 12s until bat is found and launched.</summary>
 	    void Start() {
 #if UNITY_EDITOR
+	        UnityEngine.Debug.LogWarning(
+	            "[LaunchWebUI] Auto-launch skipped in Unity Editor (by design). Use a built player, or Settings → Start WebUI / Top menu Launch SD.");
 	        return;
 #endif
 	        UnityEngine.Debug.Log("[LaunchWebUI] Auto-launch aggressive: retries at 0.5s, 1.5s, 3s, 6s, 12s (Unity OpenURL only if Settings: open WebUI in browser is on).");
