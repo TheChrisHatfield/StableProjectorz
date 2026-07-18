@@ -291,7 +291,7 @@ namespace spz {
 
 		void OnPropose() {
 			if (!PaintTab_ValueAssistOptions.Enabled) {
-				_statusTmp.text = "Value Assist is off.";
+				SetStatus("Value Assist is off.");
 				return;
 			}
 			EnsureAssist();
@@ -300,29 +300,32 @@ namespace spz {
 			_hasProposal = true;
 			_proposalFromNeural = PaintTab_ValueAssistOptions.UseNeural;
 			_haveSyncedNeuralPref = true;
-			_acceptBtn.interactable = true;
+			if (_acceptBtn != null) _acceptBtn.interactable = true;
 			if (_swatchImg != null)
 				_swatchImg.color = ValuePaintProposalApplier.GrayForBand(_proposal.DesiredBin);
-			_summaryTmp.text = FormatProposal(_proposal);
-			_statusTmp.text = "Proposed (" + _assistWhich + ") — review, then Accept to arm brush.";
+			if (_summaryTmp != null) _summaryTmp.text = FormatProposal(_proposal);
+			SetStatus("Proposed (" + _assistWhich + ") — review, then Accept to arm brush.");
 			ShowFeedback("Value Assist: proposal ready");
 		}
 
 		void OnAccept() {
 			if (!PaintTab_ValueAssistOptions.Enabled) {
-				_statusTmp.text = "Value Assist is off.";
+				SetStatus("Value Assist is off.");
 				return;
 			}
 			if (!_hasProposal) {
-				_statusTmp.text = "Propose first.";
+				SetStatus("Propose first.");
 				return;
 			}
 			bool ok = ValuePaintProposalApplier.TryAccept(_proposal, out string reason);
 			if (ok) {
-				_statusTmp.text = "Armed — paint strokes use ribbon color/size/opacity/hardness.";
+				string armed = PaintTab_ValueAssistOptions.ApplyHardness
+					? "Armed — paint strokes use ribbon color/size/opacity/hardness."
+					: "Armed — paint strokes use ribbon color/size/opacity (hardness unchanged).";
+				SetStatus(armed);
 				ShowFeedback("Value Assist: accepted");
 			} else {
-				_statusTmp.text = "Accept refused — " + reason;
+				SetStatus("Accept refused — " + reason);
 				ShowFeedback("Value Assist: " + reason);
 				RefreshStatusLine(keepMessage: true);
 			}
@@ -335,8 +338,12 @@ namespace spz {
 				_summaryTmp.text = PaintTab_ValueAssistOptions.Enabled
 					? "Value Assist — Propose from brush color, Accept to arm ribbon."
 					: "Value Assist off — enable to propose neural / value brush settings.";
-			_statusTmp.text = "Dismissed.";
+			SetStatus("Dismissed.");
 			ShowFeedback("Value Assist: cleared");
+		}
+
+		void SetStatus(string msg) {
+			if (_statusTmp != null) _statusTmp.text = msg;
 		}
 
 		void EnsureAssist() {
