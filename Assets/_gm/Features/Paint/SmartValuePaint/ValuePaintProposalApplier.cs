@@ -321,6 +321,21 @@ namespace spz {
 				}
 			}
 
+			// Live previously skipped opacity — value steps looked like one flat wash.
+			float opInf = PaintTab_ValueAssistOptions.OpacityInfluence01;
+			if (float.IsFinite(opInf) && opInf > 0.02f) {
+				var opacityUi = Object.FindObjectOfType<BrushRibbon_UI_Opacity>(true);
+				if (opacityUi != null) {
+					float proposedOpacity = float.IsFinite(proposal.OpacityHint01)
+						? Mathf.Clamp01(proposal.OpacityHint01) : 0.6f;
+					float liveOpacity = opacityUi.Opacity01;
+					if (!float.IsFinite(liveOpacity)) liveOpacity = proposedOpacity;
+					float effective = Mathf.Lerp(liveOpacity, proposedOpacity, Mathf.Clamp01(opInf));
+					if (float.IsFinite(effective) && Mathf.Abs(effective - liveOpacity) > 0.02f)
+						opacityUi.SetOpacity01(effective);
+				}
+			}
+
 			bool sameDesiredArmed = _armed && _armedProposal.DesiredBin == proposal.DesiredBin;
 			_armedProposal = proposal;
 			_armed = true;

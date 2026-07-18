@@ -47,6 +47,19 @@ namespace spz {
 				return false;
 			}
 			var proposal = _assist.ProposeFromColor(surfaceSample, default);
+			// Live must arm the value plane under the tip. Assist models often collapse Desired→Midtone,
+			// which made every stroke the same wash; force DesiredBin from surface luminance.
+			float lum = DeterministicValuePaintAssist.Luminance01(surfaceSample);
+			ValuePaintBand plane = DeterministicValuePaintAssist.BandFromLuminance(lum);
+			proposal.CurrentBin = plane;
+			proposal.DesiredBin = plane;
+			proposal.MeanLuminance01 = lum;
+			proposal.StrokeRole = ValuePaintStrokeRole.ReinforcePlane;
+			// Band-scaled opacity so dark planes lay denser than highlights.
+			if (!float.IsFinite(proposal.OpacityHint01) || proposal.OpacityHint01 < 0.05f)
+				proposal.OpacityHint01 = OpacityForPlane(plane);
+			else
+				proposal.OpacityHint01 = Mathf.Lerp(proposal.OpacityHint01, OpacityForPlane(plane), 0.65f);
 			if (!ValuePaintProposalApplier.TryLiveArm(proposal, out reason)) {
 				// Do not leave a "live" UI proposal that was never armed (false success).
 				return false;
@@ -54,6 +67,17 @@ namespace spz {
 			LastProposal = proposal;
 			HasLastProposal = true;
 			return true;
+		}
+
+		static float OpacityForPlane(ValuePaintBand plane) {
+			switch (plane) {
+				case ValuePaintBand.Highlight: return 0.38f;
+				case ValuePaintBand.Light: return 0.52f;
+				case ValuePaintBand.Midtone: return 0.65f;
+				case ValuePaintBand.Shadow: return 0.78f;
+				case ValuePaintBand.AccentDark: return 0.88f;
+				default: return 0.6f;
+			}
 		}
 
 		static bool IsFiniteColor(Color c) {
