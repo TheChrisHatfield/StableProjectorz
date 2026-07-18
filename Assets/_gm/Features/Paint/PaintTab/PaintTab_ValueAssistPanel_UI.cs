@@ -250,17 +250,21 @@ namespace spz {
 			// Pending Propose snapshot owns status/swatch until Accept/Dismiss — do not let Live overwrite it.
 			// After Accept, _hasProposal is cleared so Armed / stroke-applied can update.
 			if (_hasProposal && !ValuePaintProposalApplier.IsArmed) return;
+			// While a user Accept arm holds, TryLiveArm is refused — HasLastProposal is stale then;
+			// painting a stale Live line here would overwrite the Armed status every frame.
+			bool acceptArm = ValuePaintProposalApplier.IsArmed && !ValuePaintProposalApplier.ArmedViaLive;
 			if (_statusTmp != null) {
-				if (!_hasProposal && ValuePaintLivePredictor.IsLiveActive && ValuePaintLivePredictor.HasLastProposal) {
+				if (!_hasProposal && !acceptArm
+				    && ValuePaintLivePredictor.IsLiveActive && ValuePaintLivePredictor.HasLastProposal) {
 					var p = ValuePaintLivePredictor.LastProposal;
 					string liveLine = "Live " + p.CurrentBin + "→" + p.DesiredBin + " · " + ValuePaintLivePredictor.LastAssistWhich;
 					if (_statusTmp.text == null || !_statusTmp.text.StartsWith("Live ") || _statusTmp.text != liveLine)
 						_statusTmp.text = liveLine;
 					if (_swatchImg != null)
 						_swatchImg.color = ValuePaintProposalApplier.GrayForBand(p.DesiredBin);
-				} else if (!ValuePaintLivePredictor.IsLiveActive
+				} else if ((!ValuePaintLivePredictor.IsLiveActive || acceptArm)
 				           && _statusTmp.text != null && _statusTmp.text.StartsWith("Live ")) {
-					// Live turned off — do not leave a stale Live line (Invalidate alone does not refresh UI).
+					// Live turned off (or Accept arm took over) — do not leave a stale Live line.
 					RefreshStatusLine();
 				}
 			}
@@ -707,6 +711,9 @@ namespace spz {
 			ValuePaintProposalApplier.ClearArmed();
 			// Stop Live from immediately re-arming under the tip; clear when Live dial turns on again.
 			ValuePaintProposalApplier.SuppressLiveSoftArm();
+			// Drop the predictor's last proposal too — a stale HasLastProposal would let Update
+			// repaint "Live A→B" (and the swatch) right over "Dismissed." on the next frame.
+			ValuePaintLivePredictor.InvalidateAssist();
 			if (_summaryTmp != null)
 				_summaryTmp.text = "Hover dials for tips. Live predicts under tip · Propose/Accept locks a snapshot.";
 			SetStatus("Dismissed.");
@@ -730,8 +737,10 @@ namespace spz {
 			}
 			if (keepMessage && !string.IsNullOrEmpty(_statusTmp.text) && _statusTmp.text.StartsWith("Accept refused"))
 				return;
-			// Armed (after Accept) wins over a leftover Propose snapshot.
-			if (ValuePaintProposalApplier.IsArmed) {
+			// User Accept arm (armed, not via live) wins over everything else.
+			bool armed = ValuePaintProposalApplier.IsArmed;
+			bool armedViaLive = ValuePaintProposalApplier.ArmedViaLive;
+			if (armed && !armedViaLive) {
 				var a = ValuePaintProposalApplier.ArmedProposal;
 				_statusTmp.text = "Armed " + a.DesiredBin + " / " + a.StrokeRole
 				                  + (ValuePaintProposalApplier.SawApplyOnArmedTarget ? " · stroke applied" : "");
@@ -743,11 +752,17 @@ namespace spz {
 					_statusTmp.text = "Proposed (" + (_assistWhich ?? "?") + ") — Accept to arm brush.";
 				return;
 			}
-			// Live predict owns the status line while active — do not let options Changed
-			// (Blend/Size/Opacity drag) overwrite it with Idle every frame.
+			// Live predict owns the status line while active — a live soft-arm always sets IsArmed,
+			// so Live must be checked before the armed-via-live fallback or this branch is unreachable.
 			if (ValuePaintLivePredictor.IsLiveActive && ValuePaintLivePredictor.HasLastProposal) {
 				var p = ValuePaintLivePredictor.LastProposal;
 				_statusTmp.text = "Live " + p.CurrentBin + "→" + p.DesiredBin + " · " + ValuePaintLivePredictor.LastAssistWhich;
+				return;
+			}
+			if (armed) {
+				var a = ValuePaintProposalApplier.ArmedProposal;
+				_statusTmp.text = "Armed " + a.DesiredBin + " / " + a.StrokeRole
+				                  + (ValuePaintProposalApplier.SawApplyOnArmedTarget ? " · stroke applied" : "");
 				return;
 			}
 			if (!keepMessage || string.IsNullOrEmpty(_statusTmp.text) || _statusTmp.text == "Dismissed.")
