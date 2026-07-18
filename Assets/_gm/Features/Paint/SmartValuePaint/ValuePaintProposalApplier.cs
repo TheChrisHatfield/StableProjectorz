@@ -167,6 +167,70 @@ namespace spz {
 		}
 
 		/// <summary>
+		/// Soft-arm from live under-cursor prediction: quiet color update (no mode spam),
+		/// optional size when influence &amp; delta warrant it. Skips opacity UI (status spam).
+		/// </summary>
+		public static bool TryLiveArm(ValuePaintProposal proposal, out string reason) {
+			_lastFailReason = "";
+			if (!PaintTab_ValueAssistOptions.Enabled || !PaintTab_ValueAssistOptions.LivePredict) {
+				reason = _lastFailReason = "Value Assist live predict off";
+				return false;
+			}
+
+			var workflow = WorkflowRibbon_UI.instance;
+			if (workflow == null || !workflow.isMode_using_img2img()
+			    || workflow.currentMode() != WorkflowRibbon_CurrMode.Inpaint_Color) {
+				reason = _lastFailReason = "not Inpaint_Color";
+				return false;
+			}
+
+			var sd = SD_WorkflowOptionsRibbon_UI.instance;
+			if (sd == null || sd.isSmudge || !sd.isPositive) {
+				reason = _lastFailReason = "tool refused";
+				return false;
+			}
+
+			if (ResolveColorPaintTarget(out string targetReason) == null) {
+				reason = _lastFailReason = targetReason;
+				return false;
+			}
+
+			Color tint = GrayForBand(proposal.DesiredBin);
+			// Soft blend toward predicted gray using Blend01 (0 = leave color alone).
+			float blendOpt = PaintTab_ValueAssistOptions.Blend01;
+			if (!float.IsFinite(blendOpt)) blendOpt = 1f;
+			blendOpt = Mathf.Clamp01(blendOpt);
+			Color live = sd.brushColor;
+			Color applied = Color.Lerp(live, tint, blendOpt);
+			applied.a = 1f;
+			if (!sd.SetBrushColorQuietFromApi(applied.r, applied.g, applied.b, applied.a)) {
+				reason = _lastFailReason = "SetBrushColorQuietFromApi failed";
+				return false;
+			}
+
+			float sizeInf = PaintTab_ValueAssistOptions.SizeInfluence01;
+			if (float.IsFinite(sizeInf) && sizeInf > 0.02f && BrushRibbon_UI_Size.instance != null) {
+				float proposedWidth = float.IsFinite(proposal.BrushWidthHint01) ? Mathf.Clamp01(proposal.BrushWidthHint01) : 0.5f;
+				float liveWidth = BrushRibbon_UI_Size.GetBrushSize01();
+				if (!float.IsFinite(liveWidth)) liveWidth = proposedWidth;
+				float width01 = Mathf.Lerp(liveWidth, proposedWidth, Mathf.Clamp01(sizeInf));
+				if (float.IsFinite(width01) && Mathf.Abs(width01 - liveWidth) > 0.015f)
+					sd.SetBrushSize(width01);
+			}
+
+			if (PaintTab_ValueAssistOptions.ApplyHardness) {
+				var hardnessUi = Object.FindObjectOfType<BrushRibbon_UI_Hardness>(true);
+				if (hardnessUi != null)
+					hardnessUi.TrySetBuiltInOnly(Softness01ToHardnessIx(proposal.EdgeSoftness01));
+			}
+
+			_armedProposal = proposal;
+			_armed = true;
+			reason = "live " + proposal.DesiredBin;
+			return true;
+		}
+
+		/// <summary>
 		/// Called from <see cref="Inpaint_MaskPainter"/> after a successful color UV apply.
 		/// Verifies destin matches the resolved color Content path when a proposal is armed.
 		/// Does not alter stroke math.
