@@ -516,8 +516,8 @@ namespace spz {
 	        if (settingsUi == null)
 	            settingsUi = FindObjectOfType<Settings_UI>(true);
 	        settingsUi?.FixSettingsScrollReadability();
-	        var autoScroll = EventsBinder.FindComponent<ScrollRect_AutoScroll>("Settings:AutoScroll");
-	        if (autoScroll != null) autoScroll.ScrollToEnd(0.35f, false);
+	        // Do not ScrollToEnd(…, false): that jumps to the bottom then animates to the top (flash).
+	        SnapSettingsScrollToTop();
 	    }
 
 	    void OnButton_OpenHelpSettingsPanel() {
@@ -527,8 +527,17 @@ namespace spz {
 	        if (settingsUi == null)
 	            settingsUi = FindObjectOfType<Settings_UI>(true);
 	        settingsUi?.FixSettingsScrollReadability();
+	        SnapSettingsScrollToTop();
+	    }
+
+	    static void SnapSettingsScrollToTop() {
 	        var autoScroll = EventsBinder.FindComponent<ScrollRect_AutoScroll>("Settings:AutoScroll");
-	        if (autoScroll != null) autoScroll.ScrollToEnd(0.35f, false);
+	        if (autoScroll == null) return;
+	        var scroll = autoScroll.GetComponentInChildren<ScrollRect>(true);
+	        if (scroll == null)
+	            scroll = autoScroll.GetComponent<ScrollRect>();
+	        if (scroll != null)
+	            scroll.verticalNormalizedPosition = 1f;
 	    }
 
 	    void OnButton_OpenAddonManager() {
