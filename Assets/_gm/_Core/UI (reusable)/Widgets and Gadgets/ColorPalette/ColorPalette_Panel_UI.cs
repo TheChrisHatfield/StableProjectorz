@@ -104,10 +104,11 @@ namespace spz {
         
 
 	    public void Show( Color startingColor, Action<Color> onColorUpdated ){
-	        if(_isShowing){ return; }
+	        // Always rebind callback + starting color — if the picker is already open (palette double-click /
+	        // another swatch / brush button), an early return left the previous callback wired and edits
+	        // the wrong color slot.
 	        gameObject.SetActive(true);
 	        _OnColorChanged = onColorUpdated;
-
 	        Set_CurrentColor(startingColor);
 	    }
 
