@@ -229,9 +229,12 @@ namespace spz {
 				}
 			}
 
+			bool sameDesiredArmed = _armed && _armedProposal.DesiredBin == proposal.DesiredBin;
 			_armedProposal = proposal;
 			_armed = true;
-			_sawApplyOnArmedTarget = false; // re-arm must not inherit SawApply from a prior live/Accept cycle
+			// Same-band live ticks must not wipe SawApply — only a new desired bin starts a fresh cycle.
+			if (!sameDesiredArmed)
+				_sawApplyOnArmedTarget = false;
 			reason = "live " + proposal.DesiredBin;
 			return true;
 		}
