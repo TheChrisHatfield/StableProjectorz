@@ -938,11 +938,12 @@ namespace spz {
 		        && Time.unscaledTime - _valueAssistLiveLastTime < _smudgeCursorReadMinInterval)
 			    return;
 
-		    RenderUdims sampleSrc = GetPaintTarget();
-		    if (sampleSrc == null || sampleSrc.texArray == null || sampleSrc.udims_sectors == null || sampleSrc.udims_sectors.Count == 0) {
-			    var orm = Objects_Renderer_MGR.instance;
-			    sampleSrc = orm != null ? orm.accumulationTextures_ref() : null;
-		    }
+		    RenderUdims sampleSrc = null;
+		    // Prefer visible mesh/scene under tip (accum); Content alone is often empty α on first stroke.
+		    var orm = Objects_Renderer_MGR.instance;
+		    if (orm != null) sampleSrc = orm.accumulationTextures_ref();
+		    if (sampleSrc == null || sampleSrc.texArray == null || sampleSrc.udims_sectors == null || sampleSrc.udims_sectors.Count == 0)
+			    sampleSrc = GetPaintTarget();
 		    if (sampleSrc == null || sampleSrc.texArray == null || sampleSrc.udims_sectors == null || sampleSrc.udims_sectors.Count == 0)
 			    return;
 
@@ -966,11 +967,10 @@ namespace spz {
 		    if (!ValuePaintLivePredictor.IsLiveActive) return;
 		    if (!TryDecodeSmudgeCursorReadback(req, _valueAssistLivePendingFormat, out Color c))
 			    return;
-		    // Transparent / empty paint texel — fall back to luminance of brush so predict still moves.
-		    if (c.a < 0.04f) {
-			    var sd = SD_WorkflowOptionsRibbon_UI.instance;
-			    if (sd != null) c = sd.brushColor;
-		    }
+		    // Empty paint texel: do NOT fall back to brush color (feeds the model its own output → feedback loop).
+		    // Skip this sample; next ticks may hit filled Content or accum (when Content source unavailable).
+		    if (c.a < 0.04f)
+			    return;
 		    if (!ValuePaintLivePredictor.TryPredictFromSurface(c, out _))
 			    return;
 		    if (ValuePaintLivePredictor.HasLastProposal
