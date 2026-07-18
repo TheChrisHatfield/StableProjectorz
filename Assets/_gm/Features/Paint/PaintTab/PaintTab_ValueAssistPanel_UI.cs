@@ -460,6 +460,9 @@ namespace spz {
 				if (sr != null)
 					sr.verticalNormalizedPosition = 0f;
 			}
+			// Block depth/tools while this panel (or Brush options) is open — same modal row pattern.
+			if (parent != null)
+				PaintTab_CollectPaintUI.SyncToolOptionsRowModalBlockForSection(parent);
 		}
 
 		void RefreshHeaderLabel() {

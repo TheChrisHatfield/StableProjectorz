@@ -1446,13 +1446,21 @@ namespace spz {
 			return false;
 		}
 
-		/// <summary>Keep depth/tools row blocked iff <c>BrushOptsPanel</c> is open (e.g. after tab re-enable).</summary>
-		static void SyncBrushPanelModalBlockStateForToolSection(RectTransform section)
+		/// <summary>Keep depth/tools row blocked while Brush options and/or Value Assist panel is open.</summary>
+		public static void SyncToolOptionsRowModalBlockForSection(RectTransform section)
 		{
 			if (!TryGetToolOptionsRowAndExpando(section, out var row, out var expando)) return;
-			Transform panel = section.Find("BrushOptsPanel");
-			bool open = panel != null && panel.gameObject.activeSelf;
+			Transform brushPanel = section.Find("BrushOptsPanel");
+			Transform vaPanel = section.Find("ValueAssistPanel");
+			bool open = (brushPanel != null && brushPanel.gameObject.activeSelf)
+			            || (vaPanel != null && vaPanel.gameObject.activeSelf);
 			SetToolOptionsRowBehindBrushPanelBlocked(row, expando, open);
+		}
+
+		/// <summary>Keep depth/tools row blocked iff an expando panel is open (e.g. after tab re-enable).</summary>
+		static void SyncBrushPanelModalBlockStateForToolSection(RectTransform section)
+		{
+			SyncToolOptionsRowModalBlockForSection(section);
 		}
 
 		static void MakeToolButton(Transform parent, string label, string shortcut, Color bgColor, UnityEngine.Events.UnityAction onClick)
@@ -2210,7 +2218,7 @@ namespace spz {
 					collapseBtnGo.SetActive(open);
 				panelLe.preferredHeight = open ? -1f : 0f;
 				headerTxt.text = open ? "Brush options ▴" : "Brush options ▼";
-				SetToolOptionsRowBehindBrushPanelBlocked(toolRowParent, root.transform, open);
+				SyncToolOptionsRowModalBlockForSection(toolSectionParent);
 				if (open) SyncBrushToolRadiosFromSize();
 				if (open) SyncSmudgeBrushOptsVisibilityForRoot(smudgeOptsRoot);
 				if (open)
@@ -2244,7 +2252,7 @@ namespace spz {
 					collapseBtnGo.SetActive(false);
 				panelLe.preferredHeight = 0f;
 				headerTxt.text = "Brush options ▼";
-				SetToolOptionsRowBehindBrushPanelBlocked(toolRowParent, root.transform, false);
+				SyncToolOptionsRowModalBlockForSection(toolSectionParent);
 				LayoutRebuilder.ForceRebuildLayoutImmediate(toolSectionParent);
 			});
 
