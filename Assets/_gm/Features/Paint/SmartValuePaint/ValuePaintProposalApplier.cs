@@ -39,6 +39,11 @@ namespace spz {
 			_lastFailReason = "";
 			// Do not clear armed / saw-apply until validation passes (failed Accept must not wipe prior arm).
 
+			if (!PaintTab_ValueAssistOptions.Enabled) {
+				reason = _lastFailReason = "Value Assist is off (Paint tab → Tool Options)";
+				return false;
+			}
+
 			var workflow = WorkflowRibbon_UI.instance;
 			if (workflow == null) {
 				reason = _lastFailReason = "WorkflowRibbon_UI missing";
@@ -97,23 +102,43 @@ namespace spz {
 			}
 
 			// Sanitize width before ribbon mutate — Clamp01(NaN) stays NaN and can poison the size slider.
-			float width01 = float.IsFinite(proposal.BrushWidthHint01) ? Mathf.Clamp01(proposal.BrushWidthHint01) : 0.5f;
+			float proposedWidth = float.IsFinite(proposal.BrushWidthHint01) ? Mathf.Clamp01(proposal.BrushWidthHint01) : 0.5f;
+			float liveWidth = BrushRibbon_UI_Size.GetBrushSize01();
+			if (!float.IsFinite(liveWidth)) liveWidth = proposedWidth;
+			float sizeInf = PaintTab_ValueAssistOptions.SizeInfluence01;
+			if (!float.IsFinite(sizeInf)) sizeInf = 1f;
+			sizeInf = Mathf.Clamp01(sizeInf);
+			float width01 = Mathf.Lerp(liveWidth, proposedWidth, sizeInf);
+			if (!float.IsFinite(width01)) width01 = proposedWidth;
 			sd.SetBrushSize(width01);
 			// Apply blend into effective opacity so Accept does not silently drop BlendStrength01 (Spec R2).
 			float blend = float.IsFinite(proposal.BlendStrength01) ? Mathf.Clamp01(proposal.BlendStrength01) : 1f;
+			float blendOpt = PaintTab_ValueAssistOptions.Blend01;
+			if (!float.IsFinite(blendOpt)) blendOpt = 1f;
+			blend = Mathf.Clamp01(blend * Mathf.Clamp01(blendOpt));
 			float opacity = float.IsFinite(proposal.OpacityHint01) ? Mathf.Clamp01(proposal.OpacityHint01) : 0.55f;
-			float effectiveOpacity = Mathf.Clamp01(opacity * blend);
+			float proposedOpacity = Mathf.Clamp01(opacity * blend);
+			float liveOpacity = opacityUi.Opacity01;
+			if (!float.IsFinite(liveOpacity)) liveOpacity = proposedOpacity;
+			float opInf = PaintTab_ValueAssistOptions.OpacityInfluence01;
+			if (!float.IsFinite(opInf)) opInf = 1f;
+			opInf = Mathf.Clamp01(opInf);
+			float effectiveOpacity = Mathf.Lerp(liveOpacity, proposedOpacity, opInf);
+			if (!float.IsFinite(effectiveOpacity)) effectiveOpacity = proposedOpacity;
 			opacityUi.SetOpacity01(effectiveOpacity);
 
 			// T7 — EdgeSoftness01 → built-in hardness (0 soft / 1 med / 2 hard). High softness = soft tip.
-			int hardnessIx = Softness01ToHardnessIx(proposal.EdgeSoftness01);
-			string hardnessNote = "hardnessUi=missing";
-			if (hardnessUi != null) {
-				if (hardnessUi.TrySetBuiltInOnly(hardnessIx)) {
-					hardnessNote = "hardnessIx=" + hardnessIx + " (from edgeSoft=" +
-					               (float.IsFinite(proposal.EdgeSoftness01) ? Mathf.Clamp01(proposal.EdgeSoftness01) : 0.5f).ToString("F2") + ")";
-				} else {
-					hardnessNote = "hardnessSkipped=customAlpha";
+			string hardnessNote = "hardnessSkipped=off";
+			if (PaintTab_ValueAssistOptions.ApplyHardness) {
+				int hardnessIx = Softness01ToHardnessIx(proposal.EdgeSoftness01);
+				hardnessNote = "hardnessUi=missing";
+				if (hardnessUi != null) {
+					if (hardnessUi.TrySetBuiltInOnly(hardnessIx)) {
+						hardnessNote = "hardnessIx=" + hardnessIx + " (from edgeSoft=" +
+						               (float.IsFinite(proposal.EdgeSoftness01) ? Mathf.Clamp01(proposal.EdgeSoftness01) : 0.5f).ToString("F2") + ")";
+					} else {
+						hardnessNote = "hardnessSkipped=customAlpha";
+					}
 				}
 			}
 

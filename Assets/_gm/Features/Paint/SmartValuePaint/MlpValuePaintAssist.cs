@@ -74,11 +74,18 @@ namespace spz {
 	/// <summary>Prefer MLP weights; fall back to deterministic stub.</summary>
 	public static class ValuePaintAssistFactory {
 		public static IValuePaintAssist Create(out string which) {
+			return Create(preferNeural: PaintTab_ValueAssistOptions.UseNeural, out which);
+		}
+
+		public static IValuePaintAssist Create(bool preferNeural, out string which) {
+			if (!preferNeural) {
+				which = "DeterministicValuePaintAssist (neural off)";
+				return new DeterministicValuePaintAssist();
+			}
 			if (MlpValuePaintAssist.TryCreate(out var mlp, out string mlpErr)) {
 				which = "MlpValuePaintAssist";
 				return mlp;
 			}
-			// Surface load failure in which — silent "_" hid why UI fell back to stub (false healthy).
 			which = string.IsNullOrEmpty(mlpErr)
 				? "DeterministicValuePaintAssist"
 				: "DeterministicValuePaintAssist (mlp unavailable: " + mlpErr + ")";

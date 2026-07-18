@@ -5,7 +5,7 @@ using UnityEngine.UI;
 namespace spz {
 
 	/// <summary>
-	/// Paint-tab review UI for smart-value-paint (Spec R3): Propose → review → Accept/Dismiss.
+	/// Paint-tab review UI for smart-value-paint (Spec R3): enable/settings + Propose → Accept/Dismiss.
 	/// Accept arms the existing ribbon via <see cref="ValuePaintProposalApplier.TryAccept"/>; strokes stay on the normal paint path.
 	/// </summary>
 	public sealed class PaintTab_ValueAssistPanel_UI : MonoBehaviour {
@@ -21,7 +21,17 @@ namespace spz {
 		TextMeshProUGUI _summaryTmp;
 		TextMeshProUGUI _statusTmp;
 		Image _swatchImg;
+		Button _proposeBtn;
 		Button _acceptBtn;
+		Button _dismissBtn;
+		Toggle _enabledToggle;
+		Toggle _neuralToggle;
+		Toggle _hardnessToggle;
+		Slider _blendSlider;
+		Slider _sizeInfSlider;
+		Slider _opacityInfSlider;
+		GameObject _controlsRoot;
+		bool _suppressToggleSync;
 
 		public static PaintTab_ValueAssistPanel_UI EnsureUnder(RectTransform toolOptionsSection) {
 			if (toolOptionsSection == null) return null;
@@ -30,7 +40,6 @@ namespace spz {
 				if (ch == null || ch.name != RootName) continue;
 				var existing = ch.GetComponent<PaintTab_ValueAssistPanel_UI>();
 				if (existing != null) return existing;
-				// Exact name but missing component (partial create) — repair in place; do not duplicate.
 				var repaired = ch.gameObject.AddComponent<PaintTab_ValueAssistPanel_UI>();
 				EnsureLayoutShell(ch as RectTransform);
 				repaired.BuildUi();
@@ -53,16 +62,23 @@ namespace spz {
 			rect.pivot = new Vector2(0.5f, 1);
 			var le = rect.GetComponent<LayoutElement>() ?? rect.gameObject.AddComponent<LayoutElement>();
 			le.flexibleWidth = 1f;
-			le.minHeight = 96f;
-			le.preferredHeight = 108f;
+			le.minHeight = 280f;
+			le.preferredHeight = 300f;
 		}
 
 		void OnEnable() {
+			PaintTab_ValueAssistOptions.Changed -= OnOptionsChanged;
+			PaintTab_ValueAssistOptions.Changed += OnOptionsChanged;
+			SyncControlsFromStore();
+			ApplyEnabledChrome();
 			RefreshStatusLine();
 		}
 
+		void OnDisable() {
+			PaintTab_ValueAssistOptions.Changed -= OnOptionsChanged;
+		}
+
 		void Update() {
-			// Wire verify telemetry → UI: OnColorBrushApplied sets SawApply; surface it without waiting for re-enable.
 			if (!ValuePaintProposalApplier.IsArmed || _statusTmp == null) return;
 			if (!ValuePaintProposalApplier.SawApplyOnArmedTarget) return;
 			if (_statusTmp.text != null && _statusTmp.text.IndexOf("stroke applied", System.StringComparison.Ordinal) >= 0)
@@ -70,9 +86,24 @@ namespace spz {
 			RefreshStatusLine();
 		}
 
+		void OnOptionsChanged() {
+			_assist = null;
+			_assistWhich = "";
+			SyncControlsFromStore();
+			ApplyEnabledChrome();
+			if (!PaintTab_ValueAssistOptions.Enabled) {
+				_hasProposal = false;
+				_proposal = default;
+				if (_acceptBtn != null) _acceptBtn.interactable = false;
+				if (_swatchImg != null) _swatchImg.color = new Color(0.35f, 0.35f, 0.38f, 1f);
+				if (_summaryTmp != null)
+					_summaryTmp.text = "Value Assist off — enable to propose neural / value brush settings.";
+			}
+			RefreshStatusLine();
+		}
+
 		void BuildUi() {
-			if (_summaryTmp != null) return; // already built — avoid duplicate chrome on repair/re-entry
-			// Orphan GO may already have leftover children from a failed prior build.
+			if (_summaryTmp != null) return;
 			for (int i = transform.childCount - 1; i >= 0; i--)
 				UnityEngine.Object.DestroyImmediate(transform.GetChild(i).gameObject);
 
@@ -89,6 +120,43 @@ namespace spz {
 			vlg.childControlWidth = true;
 			vlg.childForceExpandHeight = false;
 			vlg.childForceExpandWidth = true;
+
+			_enabledToggle = MakeCheckboxRow(transform, "EnabledRow", "Value Assist (neural brush)",
+				PaintTab_ValueAssistOptions.Enabled, isOn => {
+					PaintTab_ValueAssistOptions.SetEnabled(isOn);
+					ShowFeedback(isOn ? "Value Assist: on" : "Value Assist: off");
+				});
+
+			_controlsRoot = new GameObject("Controls");
+			_controlsRoot.transform.SetParent(transform, false);
+			_controlsRoot.AddComponent<RectTransform>();
+			var controlsLe = _controlsRoot.AddComponent<LayoutElement>();
+			controlsLe.flexibleWidth = 1f;
+			controlsLe.minHeight = 160f;
+			var controlsV = _controlsRoot.AddComponent<VerticalLayoutGroup>();
+			controlsV.spacing = 4;
+			controlsV.childAlignment = TextAnchor.UpperLeft;
+			controlsV.childControlHeight = true;
+			controlsV.childControlWidth = true;
+			controlsV.childForceExpandHeight = false;
+			controlsV.childForceExpandWidth = true;
+
+			_neuralToggle = MakeCheckboxRow(_controlsRoot.transform, "NeuralRow", "Use neural (MLP)",
+				PaintTab_ValueAssistOptions.UseNeural, isOn => {
+					PaintTab_ValueAssistOptions.SetUseNeural(isOn);
+					ShowFeedback(isOn ? "Value Assist: neural MLP" : "Value Assist: deterministic stub");
+				});
+			_hardnessToggle = MakeCheckboxRow(_controlsRoot.transform, "HardnessRow", "Apply hardness from edge soft",
+				PaintTab_ValueAssistOptions.ApplyHardness, isOn => {
+					PaintTab_ValueAssistOptions.SetApplyHardness(isOn);
+				});
+
+			_blendSlider = MakeSliderRow(_controlsRoot.transform, "BlendRow", "Blend strength",
+				PaintTab_ValueAssistOptions.Blend01, v => PaintTab_ValueAssistOptions.SetBlend01(v));
+			_sizeInfSlider = MakeSliderRow(_controlsRoot.transform, "SizeInfRow", "Size influence",
+				PaintTab_ValueAssistOptions.SizeInfluence01, v => PaintTab_ValueAssistOptions.SetSizeInfluence01(v));
+			_opacityInfSlider = MakeSliderRow(_controlsRoot.transform, "OpacityInfRow", "Opacity influence",
+				PaintTab_ValueAssistOptions.OpacityInfluence01, v => PaintTab_ValueAssistOptions.SetOpacityInfluence01(v));
 
 			_summaryTmp = MakeLabel(transform, "Value Assist — Propose from brush color, Accept to arm ribbon.", 9f, t.textMuted);
 			var summaryLe = _summaryTmp.GetComponent<LayoutElement>() ?? _summaryTmp.gameObject.AddComponent<LayoutElement>();
@@ -110,22 +178,59 @@ namespace spz {
 			hlg.childControlHeight = true;
 
 			_swatchImg = MakeSwatch(row.transform);
-			MakeBtn(row.transform, "Propose", new Color(0.22f, 0.42f, 0.52f, 1f), OnPropose);
+			_proposeBtn = MakeBtn(row.transform, "Propose", new Color(0.22f, 0.42f, 0.52f, 1f), OnPropose);
 			_acceptBtn = MakeBtn(row.transform, "Accept", new Color(0.22f, 0.48f, 0.32f, 1f), OnAccept);
-			MakeBtn(row.transform, "Dismiss", new Color(0.42f, 0.28f, 0.28f, 1f), OnDismiss);
+			_dismissBtn = MakeBtn(row.transform, "Dismiss", new Color(0.42f, 0.28f, 0.28f, 1f), OnDismiss);
 
 			_statusTmp = MakeLabel(transform, "Idle", 9f, t.textMuted);
 			var statusLe = _statusTmp.GetComponent<LayoutElement>() ?? _statusTmp.gameObject.AddComponent<LayoutElement>();
 			statusLe.minHeight = 18f;
 
 			_acceptBtn.interactable = false;
+			ApplyEnabledChrome();
 			RefreshStatusLine();
 		}
 
+		void SyncControlsFromStore() {
+			_suppressToggleSync = true;
+			if (_enabledToggle != null)
+				_enabledToggle.SetIsOnWithoutNotify(PaintTab_ValueAssistOptions.Enabled);
+			if (_neuralToggle != null)
+				_neuralToggle.SetIsOnWithoutNotify(PaintTab_ValueAssistOptions.UseNeural);
+			if (_hardnessToggle != null)
+				_hardnessToggle.SetIsOnWithoutNotify(PaintTab_ValueAssistOptions.ApplyHardness);
+			if (_blendSlider != null)
+				_blendSlider.SetValueWithoutNotify(PaintTab_ValueAssistOptions.Blend01);
+			if (_sizeInfSlider != null)
+				_sizeInfSlider.SetValueWithoutNotify(PaintTab_ValueAssistOptions.SizeInfluence01);
+			if (_opacityInfSlider != null)
+				_opacityInfSlider.SetValueWithoutNotify(PaintTab_ValueAssistOptions.OpacityInfluence01);
+			_suppressToggleSync = false;
+			TintToggleBox(_enabledToggle, PaintTab_ValueAssistOptions.Enabled);
+			TintToggleBox(_neuralToggle, PaintTab_ValueAssistOptions.UseNeural);
+			TintToggleBox(_hardnessToggle, PaintTab_ValueAssistOptions.ApplyHardness);
+		}
+
+		void ApplyEnabledChrome() {
+			bool on = PaintTab_ValueAssistOptions.Enabled;
+			if (_controlsRoot != null)
+				_controlsRoot.SetActive(on);
+			if (_proposeBtn != null) _proposeBtn.interactable = on;
+			if (_dismissBtn != null) _dismissBtn.interactable = on;
+			if (_acceptBtn != null) _acceptBtn.interactable = on && _hasProposal;
+			var shell = GetComponent<LayoutElement>();
+			if (shell != null) {
+				shell.minHeight = on ? 280f : 72f;
+				shell.preferredHeight = on ? 300f : 80f;
+			}
+		}
+
 		void OnPropose() {
+			if (!PaintTab_ValueAssistOptions.Enabled) {
+				_statusTmp.text = "Value Assist is off.";
+				return;
+			}
 			EnsureAssist();
-			// Do not pass current brush hints — HasBrushHints would clobber MLP/stub width/opacity/blend
-			// with the live ribbon (false assist: Accept would only recolor). Spec R2 stroke state is optional.
 			Color sample = CurrentBrushColor();
 			_proposal = _assist.ProposeFromColor(sample, default);
 			_hasProposal = true;
@@ -138,13 +243,16 @@ namespace spz {
 		}
 
 		void OnAccept() {
+			if (!PaintTab_ValueAssistOptions.Enabled) {
+				_statusTmp.text = "Value Assist is off.";
+				return;
+			}
 			if (!_hasProposal) {
 				_statusTmp.text = "Propose first.";
 				return;
 			}
 			bool ok = ValuePaintProposalApplier.TryAccept(_proposal, out string reason);
 			if (ok) {
-				// Keep this message — RefreshStatusLine would shorten it and look like a wipe.
 				_statusTmp.text = "Armed — paint strokes use ribbon color/size/opacity/hardness.";
 				ShowFeedback("Value Assist: accepted");
 			} else {
@@ -161,7 +269,9 @@ namespace spz {
 			ValuePaintProposalApplier.ClearArmed();
 			if (_swatchImg != null) _swatchImg.color = new Color(0.35f, 0.35f, 0.38f, 1f);
 			if (_summaryTmp != null)
-				_summaryTmp.text = "Value Assist — Propose from brush color, Accept to arm ribbon.";
+				_summaryTmp.text = PaintTab_ValueAssistOptions.Enabled
+					? "Value Assist — Propose from brush color, Accept to arm ribbon."
+					: "Value Assist off — enable to propose neural / value brush settings.";
 			_statusTmp.text = "Dismissed.";
 			ShowFeedback("Value Assist: cleared");
 		}
@@ -173,6 +283,10 @@ namespace spz {
 
 		void RefreshStatusLine(bool keepMessage = false) {
 			if (_statusTmp == null) return;
+			if (!PaintTab_ValueAssistOptions.Enabled) {
+				_statusTmp.text = "Off";
+				return;
+			}
 			if (keepMessage && !string.IsNullOrEmpty(_statusTmp.text) && _statusTmp.text.StartsWith("Accept refused"))
 				return;
 			if (ValuePaintProposalApplier.IsArmed) {
@@ -206,6 +320,157 @@ namespace spz {
 				Viewport_StatusText.instance.ShowStatusText(msg, false, 1.4f, false);
 			else
 				Debug.Log("[Paint Tab] " + msg);
+		}
+
+		static void TintToggleBox(Toggle toggle, bool on) {
+			if (toggle == null || toggle.targetGraphic == null) return;
+			toggle.targetGraphic.color = on
+				? new Color(0.22f, 0.45f, 0.55f, 1f)
+				: new Color(0.34f, 0.36f, 0.4f, 1f);
+		}
+
+		Toggle MakeCheckboxRow(Transform parent, string rowName, string labelText, bool initialOn,
+			UnityEngine.Events.UnityAction<bool> onChanged) {
+			Color offCol = new Color(0.34f, 0.36f, 0.4f, 1f);
+			Color onCol = new Color(0.22f, 0.45f, 0.55f, 1f);
+			var row = new GameObject(rowName);
+			row.transform.SetParent(parent, false);
+			row.AddComponent<RectTransform>();
+			var rowLe = row.AddComponent<LayoutElement>();
+			rowLe.minHeight = 26f;
+			rowLe.preferredHeight = 26f;
+			rowLe.flexibleWidth = 1f;
+			var h = row.AddComponent<HorizontalLayoutGroup>();
+			h.spacing = 8;
+			h.childAlignment = TextAnchor.MiddleLeft;
+			h.childControlWidth = false;
+			h.childControlHeight = true;
+			h.childForceExpandWidth = false;
+
+			var boxGo = new GameObject("Box");
+			boxGo.transform.SetParent(row.transform, false);
+			var boxLe = boxGo.AddComponent<LayoutElement>();
+			boxLe.minWidth = 28f;
+			boxLe.preferredWidth = 28f;
+			var img = boxGo.AddComponent<Image>();
+			img.color = initialOn ? onCol : offCol;
+			var toggle = boxGo.AddComponent<Toggle>();
+			toggle.targetGraphic = img;
+			toggle.graphic = null;
+			var cb = toggle.colors;
+			cb.normalColor = Color.white;
+			cb.highlightedColor = new Color(1.08f, 1.08f, 1.08f, 1f);
+			cb.pressedColor = new Color(0.9f, 0.9f, 0.9f, 1f);
+			cb.selectedColor = Color.white;
+			toggle.colors = cb;
+			toggle.isOn = initialOn;
+			toggle.onValueChanged.AddListener(isOn => {
+				if (_suppressToggleSync) return;
+				img.color = isOn ? onCol : offCol;
+				onChanged?.Invoke(isOn);
+			});
+
+			var lblGo = new GameObject("Lbl");
+			lblGo.transform.SetParent(row.transform, false);
+			var lblLe = lblGo.AddComponent<LayoutElement>();
+			lblLe.flexibleWidth = 1f;
+			lblLe.minHeight = 22f;
+			var tmp = lblGo.AddComponent<TextMeshProUGUI>();
+			tmp.font = TMP_Settings.defaultFontAsset;
+			tmp.fontSize = 9f;
+			tmp.color = new Color(0.88f, 0.89f, 0.92f, 1f);
+			tmp.alignment = TextAlignmentOptions.Left;
+			tmp.raycastTarget = false;
+			tmp.text = labelText;
+			return toggle;
+		}
+
+		Slider MakeSliderRow(Transform parent, string rowName, string labelText, float initial,
+			UnityEngine.Events.UnityAction<float> onChanged) {
+			var row = new GameObject(rowName);
+			row.transform.SetParent(parent, false);
+			row.AddComponent<RectTransform>();
+			var rowLe = row.AddComponent<LayoutElement>();
+			rowLe.minHeight = 44f;
+			rowLe.preferredHeight = 44f;
+			rowLe.flexibleWidth = 1f;
+			var v = row.AddComponent<VerticalLayoutGroup>();
+			v.spacing = 2;
+			v.childControlWidth = true;
+			v.childControlHeight = true;
+			v.childForceExpandWidth = true;
+			v.childForceExpandHeight = false;
+
+			var lblGo = new GameObject("Lbl");
+			lblGo.transform.SetParent(row.transform, false);
+			var lblLe = lblGo.AddComponent<LayoutElement>();
+			lblLe.minHeight = 16f;
+			lblLe.preferredHeight = 16f;
+			var lbl = lblGo.AddComponent<TextMeshProUGUI>();
+			lbl.font = TMP_Settings.defaultFontAsset;
+			lbl.fontSize = 9f;
+			lbl.color = new Color(0.88f, 0.89f, 0.92f, 1f);
+			lbl.alignment = TextAlignmentOptions.Left;
+			lbl.raycastTarget = false;
+			lbl.text = labelText + "  " + Mathf.RoundToInt(initial * 100) + "%";
+
+			var trackGo = new GameObject("Track");
+			trackGo.transform.SetParent(row.transform, false);
+			var trackLe = trackGo.AddComponent<LayoutElement>();
+			trackLe.minHeight = 18f;
+			trackLe.preferredHeight = 18f;
+			trackLe.flexibleWidth = 1f;
+			var trackImg = trackGo.AddComponent<Image>();
+			trackImg.color = new Color(0.22f, 0.24f, 0.28f, 1f);
+
+			var fillArea = new GameObject("Fill Area");
+			fillArea.transform.SetParent(trackGo.transform, false);
+			var fillAreaRt = fillArea.AddComponent<RectTransform>();
+			fillAreaRt.anchorMin = new Vector2(0, 0.25f);
+			fillAreaRt.anchorMax = new Vector2(1, 0.75f);
+			fillAreaRt.offsetMin = new Vector2(4, 0);
+			fillAreaRt.offsetMax = new Vector2(-4, 0);
+			var fillGo = new GameObject("Fill");
+			fillGo.transform.SetParent(fillArea.transform, false);
+			var fillRt = fillGo.AddComponent<RectTransform>();
+			fillRt.anchorMin = Vector2.zero;
+			fillRt.anchorMax = Vector2.one;
+			fillRt.offsetMin = Vector2.zero;
+			fillRt.offsetMax = Vector2.zero;
+			var fillImg = fillGo.AddComponent<Image>();
+			fillImg.color = new Color(0.28f, 0.5f, 0.58f, 1f);
+
+			var handleArea = new GameObject("Handle Slide Area");
+			handleArea.transform.SetParent(trackGo.transform, false);
+			var handleAreaRt = handleArea.AddComponent<RectTransform>();
+			handleAreaRt.anchorMin = Vector2.zero;
+			handleAreaRt.anchorMax = Vector2.one;
+			handleAreaRt.offsetMin = new Vector2(6, 0);
+			handleAreaRt.offsetMax = new Vector2(-6, 0);
+			var handleGo = new GameObject("Handle");
+			handleGo.transform.SetParent(handleArea.transform, false);
+			var handleLe = handleGo.AddComponent<LayoutElement>();
+			handleLe.ignoreLayout = true;
+			var handleRt = handleGo.AddComponent<RectTransform>();
+			handleRt.sizeDelta = new Vector2(12, 16);
+			var handleImg = handleGo.AddComponent<Image>();
+			handleImg.color = new Color(0.85f, 0.88f, 0.92f, 1f);
+
+			var slider = trackGo.AddComponent<Slider>();
+			slider.fillRect = fillRt;
+			slider.handleRect = handleRt;
+			slider.targetGraphic = handleImg;
+			slider.direction = Slider.Direction.LeftToRight;
+			slider.minValue = 0f;
+			slider.maxValue = 1f;
+			slider.wholeNumbers = false;
+			slider.value = initial;
+			slider.onValueChanged.AddListener(v => {
+				if (_suppressToggleSync) return;
+				lbl.text = labelText + "  " + Mathf.RoundToInt(Mathf.Clamp01(v) * 100) + "%";
+				onChanged?.Invoke(v);
+			});
+			return slider;
 		}
 
 		static TextMeshProUGUI MakeLabel(Transform parent, string text, float size, Color color) {
@@ -252,7 +517,6 @@ namespace spz {
 			var btn = go.AddComponent<Button>();
 			btn.targetGraphic = img;
 			btn.onClick.AddListener(onClick);
-			// ColorBlock multiplies Image.color — use near-white multipliers, not absolute RGB (compositing law).
 			var colors = btn.colors;
 			colors.normalColor = Color.white;
 			colors.highlightedColor = new Color(1.12f, 1.12f, 1.12f, 1f);
