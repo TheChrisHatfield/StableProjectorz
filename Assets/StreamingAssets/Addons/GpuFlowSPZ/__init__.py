@@ -207,8 +207,9 @@ def register() -> None:
     start_ceiling = float(settings.get("fixed_ceiling", 0.85))
     _panel = api.ui.create_panel(ADDON_ID, ADDON_TITLE)
     if not _panel:
-        print(f"[{ADDON_ID}] Failed to create panel")
-        return
+        raise RuntimeError(
+            f"[{ADDON_ID}] create_panel failed — refusing successful load so Unity tears down the ribbon shell"
+        )
 
     # Dropdown widgets can be unreliable in add-on panels on some builds; use explicit mode buttons.
     _el["mode_state"] = _panel.add_text_input("Pacing mode (use buttons below)", _mode_label(_current_mode))

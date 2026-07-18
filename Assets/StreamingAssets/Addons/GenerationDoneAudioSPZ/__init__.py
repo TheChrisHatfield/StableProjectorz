@@ -363,8 +363,9 @@ def register() -> None:
     _enabled = bool(settings.get("enabled", True))
     _panel = api.ui.create_panel(ADDON_ID, ADDON_TITLE)
     if not _panel:
-        print(f"[{ADDON_ID}] Failed to create panel")
-        return
+        raise RuntimeError(
+            f"[{ADDON_ID}] create_panel failed — refusing successful load so Unity tears down the ribbon shell"
+        )
 
     poll_default = f"{float(settings.get('poll_seconds', 0.6)):.2f}"
     sound_default = str(settings.get("sound_path", "") or "")
