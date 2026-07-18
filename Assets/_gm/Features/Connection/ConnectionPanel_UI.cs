@@ -251,13 +251,15 @@ namespace spz {
 	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 	    }
 
-	    /// <summary>Colors SD SERV / 3D SERV chrome and the IP panel; leaves connection status icon to connectivity logic.</summary>
+	    /// <summary>
+	    /// Colors SD SERV / 3D SERV chrome and the IP panel.
+	    /// Leaves <see cref="_dim_text"/> and <see cref="_connectionIcon"/> to connectivity logic (green/red/orange).
+	    /// </summary>
 	    void ApplyThemeTokens() {
 	        var t = SpzUiThemeOps.Active;
 	        if (_openPanel_button != null && _openPanel_button.targetGraphic != null)
 	            SpzUiThemeOps.ApplySelectableToken(_openPanel_button, t.controlBg, t.accent);
-	        if (_dim_text != null)
-	            SpzUiThemeOps.ApplyTmpColor(_dim_text, t.textPrimary);
+	        // Do not theme _dim_text — CheckConnection owns its color as live connection status.
 	        if (_panel != null) {
 	            var panelImg = _panel.GetComponent<Image>();
 	            if (panelImg != null)
