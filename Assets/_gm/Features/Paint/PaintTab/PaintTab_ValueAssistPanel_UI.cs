@@ -87,15 +87,27 @@ namespace spz {
 			}
 
 			panel.BindExpando(headerBtn, headerLbl);
-			// Build while active so layout/components initialize; collapse after.
-			if (!panel.gameObject.activeSelf)
-				panel.gameObject.SetActive(true);
-			panel.BuildUi();
-			panel.SyncControlsFromStore();
-			panel.ApplyEnabledChrome();
+			bool needsRebuild = panel.NeedsChromeRebuild();
+			// Only activate for a real rebuild — activating every CollectNow flashed the panel and
+			// jumped Tool Options scroll while collapsed (EnsureLayoutShell forced preferredHeight=-1).
+			if (needsRebuild) {
+				if (!panel.gameObject.activeSelf)
+					panel.gameObject.SetActive(true);
+				panel.BuildUi();
+			}
+			if (panel.gameObject.activeSelf) {
+				panel.SyncControlsFromStore();
+				panel.ApplyEnabledChrome();
+				panel.RefreshStatusLine();
+			} else {
+				panel.RefreshHeaderLabel();
+			}
 			panel.ApplyCollapsedChrome();
-			panel.RefreshStatusLine();
 			return panel;
+		}
+
+		bool NeedsChromeRebuild() {
+			return _blendDial == null || _bodyRoot == null || _builtChromeVersion < UiChromeVersion;
 		}
 
 		static void EnsureExpandoButton(Transform toolRow, out Button headerBtn, out TextMeshProUGUI headerLbl) {
@@ -177,7 +189,7 @@ namespace spz {
 			le.flexibleWidth = 1f;
 			le.flexibleHeight = 0f;
 			le.minHeight = 0f;
-			le.preferredHeight = -1f;
+			// preferredHeight is owned by ApplyCollapsedChrome (open=-1, closed=0) — do not force -1 here.
 			var csf = rect.GetComponent<ContentSizeFitter>() ?? rect.gameObject.AddComponent<ContentSizeFitter>();
 			csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
 			csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
