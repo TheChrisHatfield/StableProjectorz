@@ -14,9 +14,10 @@ namespace spz {
 		const float FontSize = 9.5f;
 		const float DialRing = 18f;
 		const float DialHit = 22f;
-		const int UiChromeVersion = 6;
+		const int UiChromeVersion = 7;
 
-		static bool _sessionCollapsed = false;
+		// Start collapsed so Tool Options (Symmetry / Brush options) stay reachable; expand on demand.
+		static bool _sessionCollapsed = true;
 		static int _builtChromeVersion;
 
 		IValuePaintAssist _assist;
@@ -48,6 +49,15 @@ namespace spz {
 
 		public static PaintTab_ValueAssistPanel_UI EnsureUnder(RectTransform toolOptionsSection) {
 			if (toolOptionsSection == null) return null;
+			// Repair older ToolOptionsRow that claimed flexibleHeight and fought scroll sizing.
+			for (int i = 0; i < toolOptionsSection.childCount; i++) {
+				var ch = toolOptionsSection.GetChild(i);
+				if (ch == null || ch.name != "ToolOptionsRow") continue;
+				var rowLe = ch.GetComponent<LayoutElement>();
+				if (rowLe != null && rowLe.flexibleHeight > 0f)
+					rowLe.flexibleHeight = 0f;
+				break;
+			}
 			for (int i = 0; i < toolOptionsSection.childCount; i++) {
 				var ch = toolOptionsSection.GetChild(i);
 				if (ch == null || ch.name != RootName) continue;
@@ -77,16 +87,33 @@ namespace spz {
 
 		static void EnsureLayoutShell(RectTransform rect) {
 			if (rect == null) return;
+			// Top-stretch width; height must come from ContentSizeFitter (not a fixed LayoutElement).
 			rect.anchorMin = new Vector2(0, 1);
 			rect.anchorMax = new Vector2(1, 1);
 			rect.pivot = new Vector2(0.5f, 1);
 			var le = rect.GetComponent<LayoutElement>() ?? rect.gameObject.AddComponent<LayoutElement>();
 			le.flexibleWidth = 1f;
-			le.minHeight = 30f;
-			le.preferredHeight = 30f;
+			le.flexibleHeight = 0f;
+			le.minHeight = 28f;
+			// -1 = ignore. A fixed preferredHeight (e.g. 30) made the scroll parent reserve a tiny slot
+			// while the panel still drew full size → overlay on Symmetry / Brush options and broken scroll.
+			le.preferredHeight = -1f;
 			var csf = rect.GetComponent<ContentSizeFitter>() ?? rect.gameObject.AddComponent<ContentSizeFitter>();
 			csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
 			csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+		}
+
+		/// <summary>Rebuild this panel and the Tool Options ScrollContent so height/scroll stay in sync.</summary>
+		void RebuildLayoutChain() {
+			var rt = transform as RectTransform;
+			if (rt != null)
+				LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
+			var parent = transform.parent as RectTransform;
+			if (parent != null)
+				LayoutRebuilder.ForceRebuildLayoutImmediate(parent);
+			var scroll = GetComponentInParent<ScrollRect>();
+			if (scroll != null && scroll.content != null && scroll.content != parent)
+				LayoutRebuilder.ForceRebuildLayoutImmediate(scroll.content);
 		}
 
 		void OnEnable() {
@@ -305,6 +332,7 @@ namespace spz {
 			ApplyEnabledChrome();
 			ApplyCollapsedChrome();
 			RefreshStatusLine();
+			RebuildLayoutChain();
 		}
 
 		static GameObject MakeDialRow(Transform parent, string name, float height) {
@@ -336,7 +364,7 @@ namespace spz {
 			if (_bodyRoot != null)
 				_bodyRoot.SetActive(!_collapsed);
 			RefreshHeaderLabel();
-			LayoutRebuilder.ForceRebuildLayoutImmediate(transform as RectTransform);
+			RebuildLayoutChain();
 		}
 
 		void RefreshHeaderLabel() {
