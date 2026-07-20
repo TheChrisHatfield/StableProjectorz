@@ -384,10 +384,23 @@ namespace spz {
 			if (GetComponent<Launch_Addons_Bat_File>() == null)
 				gameObject.AddComponent<Launch_Addons_Bat_File>();
 			Application.quitting += HandleApplicationQuitting;
+			GenerateButtons_UI._Act_OnGenerate_finished += OnGenerateFinished_MaybeRestoreFullscreenDock;
 		}
 		
 		void Start() {
 			StartCoroutine(InitializeAddonSystem());
+		}
+
+		/// <summary>
+		/// Gen Art layout / cancel strip can leave the FULL/SRN dock missing while the add-on stays enabled.
+		/// Re-attach after generation so the button does not stay gone until a manual re-enable.
+		/// </summary>
+		void OnGenerateFinished_MaybeRestoreFullscreenDock(bool canceled) {
+			if (!IsAddonEnabled(RibbonOnlyFullscreenAddonId))
+				return;
+			if (RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyVisibleBuiltDock())
+				return;
+			StartCoroutine(CoEnsureRibbonOnlyFullscreenViewportDock());
 		}
 		
 		IEnumerator InitializeAddonSystem() {
@@ -1006,6 +1019,15 @@ namespace spz {
 		void MarkAddonLoadFailed(string addonId) {
 			if (!_registeredAddons.TryGetValue(addonId, out var addon) || addon == null)
 				return;
+			// RibbonOnlyFullscreen dock is Unity-driven (Gen Art strip). Python register() is optional;
+			// HTTP timeouts during Gen Art must not flip the dial off or destroy the FULL/SRN button.
+			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal)) {
+				UnityEngine.Debug.LogWarning(
+					$"[Addon_MGR] Python load failed for {addonId}, but keeping add-on enabled — viewport dock does not require Python. Response/timeout is non-fatal.");
+				if (!RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyVisibleBuiltDock())
+					StartCoroutine(CoEnsureRibbonOnlyFullscreenViewportDock());
+				return;
+			}
 			addon.isEnabled = false;
 			// Eager EnableAddon may have created a ribbon shell before Python failed — tear it down.
 			if (AddonUI_MGR.instance != null)
@@ -1013,8 +1035,6 @@ namespace spz {
 			var ribbon = AddonRibbonIntegration.ResolveCommandRibbon();
 			if (ribbon != null)
 				ribbon.RemoveAddonPanel(addonId);
-			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal))
-				RibbonViewportFullViewOnScreen_Toggle_UI.TeardownAllDocksForAddonDisabled();
 			// Align Python if register() finished after a client timeout / false success.
 			if (_enableHttpServer)
 				StartAddonLifecycleOp(addonId, false);
@@ -1310,6 +1330,7 @@ namespace spz {
 		}
 		
 		void OnDestroy() {
+			GenerateButtons_UI._Act_OnGenerate_finished -= OnGenerateFinished_MaybeRestoreFullscreenDock;
 			Application.quitting -= HandleApplicationQuitting;
 			ShutdownAddonApiBeforeQuit();
 			if (instance == this)
