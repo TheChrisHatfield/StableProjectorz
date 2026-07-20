@@ -31,14 +31,25 @@ namespace spz {
 	    static readonly float[] AutoLaunchRetryDelays = new float[] { 0.5f, 1.5f, 3f, 6f, 12f };
 
 	    static uint _lastLaunchedWebUiPid;
-	    // :8188 — leave :7860 for Comfy Desktop / dataset harness (port swap).
-	    const int WebUiHttpPort = 8188;
+	    // Classic Forge/WebUI Gradio+API port (matches ConnectionPanel default).
+	    const int WebUiHttpPort = 7860;
 	    Coroutine _waitForWebUiReady_crtn;
 	    bool _isWaitingForWebUiReady;
 	    bool _openBrowserWhenReadyRequested;
 	    bool _forceHiddenForAutoLaunch;
+	    /// <summary>When true, force a visible Forge console for this launch (visible-fallback retry only).</summary>
+	    bool _forceShowWindowForAutoLaunch;
+	    /// <summary>One-shot: if a hidden auto-start dies before SD connects, retry once with a visible console.</summary>
+	    bool _autoLaunchDidVisibleFallback;
 	    bool _suppressBrowserOpenForCurrentLaunch;
 	    bool _requireDisconnectBeforeReady;
+
+	    /// <summary>Settings default is hide (0). Prefer Settings_MGR when live so the toggle and launch stay in sync.</summary>
+	    static bool PrefsWantShowExternalProcessWindows() {
+	        if (Settings_MGR.instance != null)
+	            return Settings_MGR.instance.get_showExternalProcessWindows();
+	        return UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1;
+	    }
 
 	    /// <summary>Attempts to close the previously launched WebUI process (and its tree on Windows). Call before launching a new instance so the old window closes automatically.</summary>
 	    public static void TryCloseLastLaunchedWebUi() {
@@ -179,7 +190,7 @@ namespace spz {
 	    void TryOpenBrowserWhenReady() {
 	        if (!_openBrowserWhenReadyRequested) return;
 	        _openBrowserWhenReadyRequested = false;
-	        const string webUiUrl = "http://127.0.0.1:8188";
+	        const string webUiUrl = "http://127.0.0.1:7860";
 	        try {
 	            Application.OpenURL(webUiUrl);
 	            UnityEngine.Debug.Log($"[LaunchWebUI] Opened browser for WebUI: {webUiUrl}");
@@ -364,7 +375,8 @@ namespace spz {
 
 
 	    /// <summary>Returns path to launch (or a wrapper that sets COMMANDLINE_ARGS and runs launch.py so GPU id is applied). Forge reads args from COMMANDLINE_ARGS, not from bat arguments. Public so RestartTheWebui can apply GPU when user restarts from UI.</summary>
-	    public static string GetLaunchPathWithGpuSetting(string webuiFilePath, out string workingDir) {
+	    /// <param name="preferNoConsole">When true, use start /B for .lnk fallbacks so no extra console box appears. Forge itself always uses python.exe; window hide is CREATE_NO_WINDOW.</param>
+	    public static string GetLaunchPathWithGpuSetting(string webuiFilePath, out string workingDir, bool preferNoConsole = true) {
 	        string SplitLaunchPathAndExtraArgs(string raw, out string extraArgs) {
 	            extraArgs = "";
 	            if (string.IsNullOrWhiteSpace(raw))
@@ -418,11 +430,14 @@ namespace spz {
 	            pythonExe = Path.Combine(workingDir, "venv", "Scripts", "python.exe");
 	        if (!File.Exists(pythonExe))
 	            pythonExe = Path.Combine(workingDir, "system", "python", "python.exe");
+	        // Always launch Forge with python.exe. Visibility is controlled by CREATE_NO_WINDOW / SW_HIDE on the
+	        // wrapper — pythonw.exe was a common silent-fail (PID then no :7860 listener) when Settings hide windows.
+	        string pythonLaunch = pythonExe;
 	        // When user picked an SD GPU in Settings, pass both:
 	        // 1) CUDA_VISIBLE_DEVICES (hard mask)
 	        // 2) --gpu-device-id (Forge CLI hint)
 	        // This avoids ambiguous fallback to GPU 0 across different Forge launch paths.
-	        // Always pin Gradio/API to WebUiHttpPort so Forge does not steal Comfy's :7860.
+	        // Pin Gradio/API to WebUiHttpPort so launch matches ConnectionPanel ping target.
 	        string argsBase = gpuId >= 0
 	            ? ("--api --port " + WebUiHttpPort + " --gpu-device-id " + gpuId)
 	            : ("--api --port " + WebUiHttpPort);
@@ -438,14 +453,14 @@ namespace spz {
 	                string envLine = File.Exists(envBat) ? "call \"" + envBat.Replace("\"", "\"\"") + "\"\r\n" : "";
 	                // webui-user.bat forces "--api --gpu-device-id 0"; bypassing run.bat/webui-user.bat avoids always locking to physical GPU 0 when Settings = default (-1).
 	                string cudaLine = gpuId >= 0 ? ("set CUDA_DEVICE_ORDER=PCI_BUS_ID\r\nset CUDA_VISIBLE_DEVICES=" + gpuId + "\r\n") : "";
-	                string pythonCmd = hasVenvPython ? ("\"" + pythonExe.Replace("\"", "\"\"") + "\"") : "python";
+	                string pythonCmd = hasVenvPython ? ("\"" + pythonLaunch.Replace("\"", "\"\"") + "\"") : "python";
 	                string content = "@echo off\r\n" + SpzWebuiNoBrowserEnv_bat
 	                    + "set COMMANDLINE_ARGS=" + args + "\r\nset REDUCE_DISPLAY_GPU_LOAD=1\r\n" + envLine + cudaLine + "cd /d \"" + launchDir.Replace("\"", "\"\"") + "\"\r\n" + pythonCmd + " \"" + launchPy.Replace("\"", "\"\"") + "\"\r\n";
 	                File.WriteAllText(wrapperPath, content);
 	                if (gpuId >= 0)
-	                    UnityEngine.Debug.Log($"[LaunchWebUI] Direct launch.py with SD GPU={gpuId}, CUDA_VISIBLE_DEVICES={gpuId}, COMMANDLINE_ARGS='{args}', python={(hasVenvPython ? "venv" : "PATH")}. Wrapper: {wrapperPath}");
+	                    UnityEngine.Debug.Log($"[LaunchWebUI] Direct launch.py with SD GPU={gpuId}, CUDA_VISIBLE_DEVICES={gpuId}, COMMANDLINE_ARGS='{args}', python={(hasVenvPython ? Path.GetFileName(pythonLaunch) : "PATH")}. Wrapper: {wrapperPath}");
 	                else
-	                    UnityEngine.Debug.Log($"[LaunchWebUI] Direct launch.py (default GPU; webui-user.bat bypassed), python={(hasVenvPython ? "venv" : "PATH")}. Wrapper: {wrapperPath}");
+	                    UnityEngine.Debug.Log($"[LaunchWebUI] Direct launch.py (default GPU; webui-user.bat bypassed), python={(hasVenvPython ? Path.GetFileName(pythonLaunch) : "PATH")}. Wrapper: {wrapperPath}");
 	                workingDir = Path.GetTempPath();
 	                return wrapperPath;
 	            } catch (Exception e) {
@@ -458,8 +473,11 @@ namespace spz {
 	                // Raw bat would start Grado with the default in-browser tab; only wrap to inject GRADIO_INBROWSER=0.
 	                string wrapperPathPass = Path.Combine(Path.GetTempPath(), "spz_webui_nobrowser_call.bat");
 	                string extPass = Path.GetExtension(webuiFilePath).ToLowerInvariant();
+	                // start title must be ""; /B runs without a new window when hiding.
 	                string callLinePass = (extPass == ".lnk")
-	                    ? "start \"\" \"" + webuiFilePath.Replace("\"", "\"\"") + "\""
+	                    ? (preferNoConsole
+	                        ? "start \"\" /B \"" + webuiFilePath.Replace("\"", "\"\"") + "\""
+	                        : "start \"\" \"" + webuiFilePath.Replace("\"", "\"\"") + "\"")
 	                    : "call \"" + webuiFilePath.Replace("\"", "\"\"") + "\"";
 	                string contentPass = "@echo off\r\n" + SpzWebuiNoBrowserEnv_bat + "cd /d \"" + workingDir.Replace("\"", "\"\"") + "\"\r\n" + callLinePass + "\r\n";
 	                File.WriteAllText(wrapperPathPass, contentPass);
@@ -476,7 +494,9 @@ namespace spz {
 	            string wrapperPath2 = Path.Combine(Path.GetTempPath(), "spz_webui_gpu_wrapper.bat");
 	            string ext = Path.GetExtension(webuiFilePath).ToLowerInvariant();
 	            string callLine = (ext == ".lnk")
-	                ? "start \"\" \"" + webuiFilePath.Replace("\"", "\"\"") + "\""
+	                ? (preferNoConsole
+	                    ? "start \"\" /B \"" + webuiFilePath.Replace("\"", "\"\"") + "\""
+	                    : "start \"\" \"" + webuiFilePath.Replace("\"", "\"\"") + "\"")
 	                : "call \"" + webuiFilePath.Replace("\"", "\"\"") + "\"";
 	            if (ext == ".lnk")
 	                UnityEngine.Debug.Log($"[LaunchWebUI] Using GPU {gpuId} (CUDA_VISIBLE_DEVICES; launch.py/venv not found for direct launch).");
@@ -492,7 +512,10 @@ namespace spz {
 	    }
 
 	    string GetLaunchPathAndWorkingDir(string webuiFilePath, out string workingDir) {
-	        return GetLaunchPathWithGpuSetting(webuiFilePath, out workingDir);
+	        // Hide console when Settings say so (default off = hide). Force-show overrides for visible fallback only.
+	        bool preferNoConsole = !_forceShowWindowForAutoLaunch
+	            && !PrefsWantShowExternalProcessWindows();
+	        return GetLaunchPathWithGpuSetting(webuiFilePath, out workingDir, preferNoConsole);
 	    }
 
 	    /// <returns>True if a WebUI process was started (PID != 0).</returns>
@@ -520,10 +543,10 @@ namespace spz {
 	            workingDir = Path.GetTempPath();
 
 	        try {
-	            // Auto-start sets _forceHiddenForAutoLaunch when the Settings toggle is off.
-	            // Match Addon_MGR: force-hide wins; otherwise respect ShowExternalProcessWindows.
-	            bool showExternalWindows = !_forceHiddenForAutoLaunch
-	                && UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1;
+	            // Default first-run: hide (ShowExternalProcessWindows = 0). Toggle ON shows the Forge console.
+	            // Auto-start no longer forces visible; optional visible fallback only if a hidden launch dies.
+	            bool showExternalWindows = _forceShowWindowForAutoLaunch
+	                || (!_forceHiddenForAutoLaunch && PrefsWantShowExternalProcessWindows());
 	            uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
 	                launchPath,
 	                isJustFile: true,
@@ -534,7 +557,7 @@ namespace spz {
 	            );
 	            if (pid != 0) {
 	                SetLastLaunchedWebUiPid(pid);
-	                UnityEngine.Debug.Log($"[LaunchWebUI] Process launched successfully with PID: {pid}");
+	                UnityEngine.Debug.Log($"[LaunchWebUI] Process launched successfully with PID: {pid} (showWindow={showExternalWindows})");
 	                NotifyWebUiLaunchStarted();
 	                return true;
 	            }
@@ -557,7 +580,7 @@ namespace spz {
 	            "[LaunchWebUI] Auto-launch skipped in Unity Editor (by design). Use a built player, or Settings → Start WebUI / Top menu Launch SD.");
 	        return;
 #endif
-	        UnityEngine.Debug.Log("[LaunchWebUI] Auto-launch aggressive: retries at 0.5s, 1.5s, 3s, 6s, 12s (Unity OpenURL only if Settings: open WebUI in browser is on).");
+	        UnityEngine.Debug.Log("[LaunchWebUI] Auto-launch aggressive: retries at 0.5s, 1.5s, 3s, 6s, 12s (window visibility from Settings; Unity OpenURL only if open-browser is on).");
 	        StartCoroutine(AggressiveAutoLaunchLoop());
 	    }
 
@@ -565,22 +588,57 @@ namespace spz {
 	        bool showStatus = true;
 	        for (int i = 0; i < AutoLaunchRetryDelays.Length; i++) {
 	            yield return new WaitForSecondsRealtime(AutoLaunchRetryDelays[i]);
-	            if (_lastLaunchedWebUiPid != 0) yield break;
+	            if (_lastLaunchedWebUiPid != 0 && StartExternalProcess.IsProcessRunning(_lastLaunchedWebUiPid))
+	                yield break;
+	            // Wrapper cmd often exits immediately after spawning python — only treat as done if SD is up.
+	            if (_lastLaunchedWebUiPid != 0 && Connection_MGR.is_sd_connected)
+	                yield break;
 	            if (i > 0)
 	                UnityEngine.Debug.Log($"[LaunchWebUI] Retry {i + 1}/{AutoLaunchRetryDelays.Length} (after {AutoLaunchRetryDelays[i]}s).");
 	            try {
-	                // Hide on auto-launch unless Settings → Show external process windows is ON.
-	                _forceHiddenForAutoLaunch =
-	                    UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 0;
+	                // Honor Settings (default = hide). Visible console only if user enabled the toggle,
+	                // or as a one-shot fallback below when a hidden start dies before connect.
+	                _forceHiddenForAutoLaunch = false;
+	                _forceShowWindowForAutoLaunch = false;
 	                bool suppressBrowser = UnityEngine.PlayerPrefs.GetInt("WebUI_OpenBrowserOnStartup", 0) == 0;
 	                LaunchWebui_Manually(showStatus, suppressBrowserOpenForThisLaunch: suppressBrowser);
 	            } catch (Exception e) {
 	                UnityEngine.Debug.LogError($"[LaunchWebUI] Auto-launch attempt failed: {e.Message}");
 	                ClearSdLoadingNotification("Stable Diffusion auto-launch failed: " + e.Message, false);
+	                _lastLaunchedWebUiPid = 0;
 	            } finally {
 	                _forceHiddenForAutoLaunch = false;
+	                _forceShowWindowForAutoLaunch = false;
 	            }
-	            if (_lastLaunchedWebUiPid != 0) yield break;
+	            if (_lastLaunchedWebUiPid != 0) {
+	                // Give a short-lived wrapper a moment; if it already exited and SD is not up, allow retry.
+	                yield return new WaitForSecondsRealtime(2f);
+	                if (Connection_MGR.is_sd_connected)
+	                    yield break;
+	                if (StartExternalProcess.IsProcessRunning(_lastLaunchedWebUiPid))
+	                    yield break;
+	                UnityEngine.Debug.LogWarning(
+	                    $"[LaunchWebUI] Auto-launch PID {_lastLaunchedWebUiPid} exited before SD connected — will retry.");
+	                _lastLaunchedWebUiPid = 0;
+	                // Hidden start failed: one visible fallback so the user can see Forge errors (toggle still defaults hide).
+	                if (!_autoLaunchDidVisibleFallback && !PrefsWantShowExternalProcessWindows()) {
+	                    _autoLaunchDidVisibleFallback = true;
+	                    UnityEngine.Debug.LogWarning("[LaunchWebUI] Hidden auto-start died; retrying once with visible Forge console.");
+	                    try {
+	                        _forceShowWindowForAutoLaunch = true;
+	                        bool suppressBrowser = UnityEngine.PlayerPrefs.GetInt("WebUI_OpenBrowserOnStartup", 0) == 0;
+	                        LaunchWebui_Manually(showStatus, suppressBrowserOpenForThisLaunch: suppressBrowser);
+	                    } finally {
+	                        _forceShowWindowForAutoLaunch = false;
+	                    }
+	                    if (_lastLaunchedWebUiPid != 0) {
+	                        yield return new WaitForSecondsRealtime(2f);
+	                        if (Connection_MGR.is_sd_connected || StartExternalProcess.IsProcessRunning(_lastLaunchedWebUiPid))
+	                            yield break;
+	                        _lastLaunchedWebUiPid = 0;
+	                    }
+	                }
+	            }
 	        }
 	    }
 
