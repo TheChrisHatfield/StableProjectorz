@@ -118,13 +118,27 @@ namespace spz {
 	        //reset index if old index no logner leads to the same option.
 	        if(newOptions.Count > 0){
 	            bool changed =  (prevIx>=dropdown.options.Count) ||  (prevChoice != dropdown.options[prevIx].text);
-	            if(changed){ dropdown.value = 0; }
+	            if(changed){
+	                // Hash suffix in Forge names (e.g. "name [abcd1234]") can change across refresh;
+	                // recover by basename so we do not silently fall back to None / wrong family.
+	                int recovered = FindIndex_matchingBaseName(dropdown.options, prevChoice);
+	                dropdown.value = recovered >= 0 ? recovered : 0;
+	            }
 	            else{ dropdown.SetValueWithoutNotify(prevIx); }
 
 	            pickDepth_ifWasNone &=  (prevChoice == "" || prevChoice.ToLower()=="none");
 	            if(pickDepth_ifWasNone){//if we didn't have a value, ensure the dropdown defaults to 'Depth', rather than to 'None'.
-	                int ix = Array.FindIndex(choices, c=>c.ToLower().Contains("depth"));
-	                dropdown.value = ix>=0? ix : dropdown.value;
+	                // Prefer XL depth when the active checkpoint looks like SDXL — first "*depth*" is often SD1.5 and causes Forge "cannot be multiplied" / SPZ "incorrect ControlNet" hint.
+	                // Map through option text: dropdown may have inserted lowercase "none" at index 0 while `choices` did not.
+	                int choiceIx = FindPreferredDepthModelIndex(choices);
+	                if (choiceIx >= 0 && choiceIx < choices.Length) {
+	                    string pickName = choices[choiceIx];
+	                    int optIx = dropdown.options.FindIndex(o => o.text == pickName);
+	                    if (optIx < 0)
+	                        optIx = FindIndex_matchingBaseName(dropdown.options, pickName);
+	                    if (optIx >= 0)
+	                        dropdown.value = optIx;
+	                }
 	            }
 	        }
 
@@ -132,6 +146,50 @@ namespace spz {
 	        dropdown.RefreshShownValue();
 	    }
 
+
+	    /// <summary>Pick a depth ControlNet that matches the active SD checkpoint family (SDXL vs SD1.5).</summary>
+	    static int FindPreferredDepthModelIndex(string[] choices){
+	        if (choices == null || choices.Length == 0) return -1;
+
+	        bool wantXl = false;
+	        try {
+	            string sd = SD_InputPanel_UI.instance != null ? SD_InputPanel_UI.instance.models?.selectedModel_name : null;
+	            wantXl = !string.IsNullOrEmpty(sd) && sd.IndexOf("xl", StringComparison.OrdinalIgnoreCase) >= 0;
+	        } catch { /* dropdown refresh can run before input panel is ready */ }
+
+	        int anyDepth = -1, bestXl = -1, bestNonXl = -1;
+	        for (int i = 0; i < choices.Length; i++){
+	            string c = choices[i] ?? "";
+	            if (c.IndexOf("depth", StringComparison.OrdinalIgnoreCase) < 0) continue;
+	            if (anyDepth < 0) anyDepth = i;
+	            bool isXl = c.IndexOf("xl", StringComparison.OrdinalIgnoreCase) >= 0;
+	            if (isXl){ if (bestXl < 0) bestXl = i; }
+	            else if (bestNonXl < 0) bestNonXl = i;
+	        }
+
+	        if (wantXl && bestXl >= 0) return bestXl;
+	        if (!wantXl && bestNonXl >= 0) return bestNonXl;
+	        return anyDepth;
+	    }
+
+
+	    static string ControlNetModelBaseName(string name){
+	        if (string.IsNullOrEmpty(name)) return "";
+	        int bracket = name.LastIndexOf('[');
+	        if (bracket > 0) name = name.Substring(0, bracket).TrimEnd();
+	        return name.Trim();
+	    }
+
+
+	    static int FindIndex_matchingBaseName(List<TMP_Dropdown.OptionData> options, string wanted){
+	        if (options == null || string.IsNullOrEmpty(wanted)) return -1;
+	        int exact = options.FindIndex(opt => opt.text == wanted);
+	        if (exact >= 0) return exact;
+	        string baseWanted = ControlNetModelBaseName(wanted);
+	        if (string.IsNullOrEmpty(baseWanted)) return -1;
+	        return options.FindIndex(opt =>
+	            string.Equals(ControlNetModelBaseName(opt.text), baseWanted, StringComparison.OrdinalIgnoreCase));
+	    }
 
 
 	    void dropdown_LoadSavedVal_maybe(TMP_Dropdown dropdown, ref string prefferedVal_via_Load_){
@@ -141,7 +199,7 @@ namespace spz {
 	        if (!wantLoaded){ return; }
 
 	        string wantedVal = prefferedVal_via_Load_;
-	        int ix = dropdown.options.FindIndex(opt => opt.text==wantedVal);
+	        int ix = FindIndex_matchingBaseName(dropdown.options, wantedVal);
 	        if(ix>=0){
 	            dropdown.value = ix;
 	            prefferedVal_via_Load_ = "";//found, no longer need to search for it.
