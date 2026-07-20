@@ -122,8 +122,14 @@ namespace spz {
 	        EventsBinder.Bind_Clickable_to_event("Settings:set_layout_askServerOften", _layout_askServerOften_toggle);
 	        EventsBinder.Bind_Clickable_to_event("Settings:set_useCtrlScroll_for_WorkflowMode_swaps", _useCtrlScroll_WorkflowMode_swaps_toggle);
 	        EventsBinder.Bind_Clickable_to_event("Settings:set_ignoreCtrl_if_clickSelectingMeshes", _ignoreCtrl_if_clickSelectMeshes_toggle);
-	        if (_showExternalProcessWindows_toggle != null)
+	        if (_showExternalProcessWindows_toggle != null) {
 	            EventsBinder.Bind_Clickable_to_event("Settings:set_showExternalProcessWindows", _showExternalProcessWindows_toggle);
+	            // Keep toggle face in sync with Settings_MGR / first-run default (hide = off).
+	            bool show = Settings_MGR.instance != null
+	                ? Settings_MGR.instance.get_showExternalProcessWindows()
+	                : UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1;
+	            _showExternalProcessWindows_toggle.SetIsOnWithoutNotify(show);
+	        }
 	        if (_webUiOpenBrowserOnStartup_toggle != null)
 	            EventsBinder.Bind_Clickable_to_event("Settings:set_webUiOpenBrowserOnStartup", _webUiOpenBrowserOnStartup_toggle);
 	        if (_sdStrictMaskIsolation_toggle != null)

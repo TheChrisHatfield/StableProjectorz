@@ -88,8 +88,10 @@ namespace spz {
 	        LaunchWebUIBatFile.TryCloseLastLaunchedWebUi();
 	        full_path = OnWillLaunchWebui_AdjustArgs(full_path);
 	        string workingDir;
-	        string launchPath = LaunchWebUIBatFile.GetLaunchPathWithGpuSetting(full_path, out workingDir);
-	        bool showExternalWindows = UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1;
+	        bool showExternalWindows = Settings_MGR.instance != null
+	            ? Settings_MGR.instance.get_showExternalProcessWindows()
+	            : UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1;
+	        string launchPath = LaunchWebUIBatFile.GetLaunchPathWithGpuSetting(full_path, out workingDir, preferNoConsole: !showExternalWindows);
 	        uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
 	            launchPath,
 	            isJustFile:true,
