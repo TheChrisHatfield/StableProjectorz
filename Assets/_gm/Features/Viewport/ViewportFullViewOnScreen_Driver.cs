@@ -49,6 +49,10 @@ namespace spz {
 			// Do not clear _capturedSave when only the right column is open (!left && right) — that is still
 			// part of the same fullscreen session; clearing would break TryExit() back to the pre-fullscreen layout.
 			if (left) {
+				// Leaving FULL SRN by showing the left column (not via TryExit) must still restore SD W/H.
+				// Otherwise monitor-sized gen resolution sticks after the session ends.
+				if (_capturedGenResolution)
+					RestoreSdInputResolutionIfCaptured();
 				_capturedSave = false;
 			}
 			if (IsActive == want) {
@@ -287,11 +291,22 @@ namespace spz {
 		}
 
 		/// <summary>
+		/// True after <see cref="TryEnter"/> captured the user's SD W/H so FULL SRN / OPEN RIGHT may temporarily rewrite them.
+		/// Without this, collapsing the left column (paint / open-right) must not silently replace classic 512/1024 presets — that path does not exist in OG and makes Gen Art look "off".
+		/// </summary>
+		public static bool HasCapturedGenResolutionForFullViewSession => _capturedGenResolution;
+
+		/// <summary>
 		/// Single adaptive resolver to prevent FULL SRN vs OPEN RIGHT ping-pong:
 		/// center-only (!left && !right) => monitor resolution,
 		/// open-right (!left && right) => viewport slot size.
+		/// Only runs inside an explicit FULL SRN session that captured the prior SD size (see <see cref="TryEnter"/>).
 		/// </summary>
 		public static void ApplyAdaptiveResolutionToSdInputsForCurrentSideState() {
+			// OG never rewrote SD W/H from layout. Fork FULL SRN may, but only after capturing the user's presets.
+			if (!_capturedGenResolution) {
+				return;
+			}
 			var sk = Global_Skeleton_UI.instance;
 			if (sk == null || !sk.TryGetSidePanelVisibility(out bool left, out bool right)) {
 				return;
