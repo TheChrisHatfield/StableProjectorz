@@ -1754,7 +1754,10 @@ namespace spz {
 			    bool isColorless = WorkflowRibbon_UI.instance != null && WorkflowRibbon_UI.instance.currentMode() == WorkflowRibbon_CurrMode.Inpaint_NoColor;
 			    var composite = CompositeVisibleLayersIntoTemp(stack, isColorless);
 			    if (composite != null) return composite;
-			    if (stack.ActiveLayer?.Content != null) return stack.ActiveLayer.Content;
+			    // Match ApplyColorLayer_To_UV_Textures: never hand SD / screen-mask a hidden active Content.
+			    var al = stack.ActiveLayer;
+			    if (al != null && al.Visible && al.Content != null)
+				    return al.Content;
 			    if (stack.Layers.Count > 0 && stack.Layers[0].Visible && stack.Layers[0].Content != null)
 				    return stack.Layers[0].Content;
 		    }
