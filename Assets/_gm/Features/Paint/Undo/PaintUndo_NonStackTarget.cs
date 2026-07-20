@@ -9,5 +9,7 @@ namespace spz {
 		MeshAccumulation = 3,
 		/// <summary>Main art icon’s UV color texture array when accumulation does not match brush resolution.</summary>
 		ArtIconUvColor = 4,
+		/// <summary>Active layer <see cref="PaintLayer.NoColorMask"/> (Inpaint No Color mode). May be stored with <c>LayerCount &gt; 0</c> so restore hits the mask, not <see cref="PaintLayer.Content"/>.</summary>
+		InpaintNoColorMask = 5,
 	}
 }

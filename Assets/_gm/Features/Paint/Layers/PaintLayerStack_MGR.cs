@@ -278,6 +278,16 @@ namespace spz {
 			return -1;
 		}
 
+		/// <summary>Index of the layer whose <see cref="PaintLayer.NoColorMask"/> reference-equals <paramref name="mask"/>, or -1.</summary>
+		public int IndexOfNoColorMask(RenderUdims mask) {
+			if (mask == null) return -1;
+			for (int i = 0; i < _layers.Count; i++) {
+				var L = _layers[i];
+				if (L != null && L.NoColorMask == mask) return i;
+			}
+			return -1;
+		}
+
 		/// <summary>Set visibility of a layer (Photoshop-style: hidden layers are not shown in viewport). Fires OnLayersChanged. </summary>
 		public void SetLayerVisible(int index, bool visible)
 		{
@@ -937,6 +947,7 @@ namespace spz {
 				resolutionHeight = _resolution.y,
 				udimsCount = _udimsCount,
 				nextLayerNumber = _nextLayerNumber,
+				nextCollapseNumber = _nextCollapseNumber,
 				layers = new List<PaintLayer_SL>()
 			};
 			for (int i = 0; i < _layers.Count; i++)
@@ -948,7 +959,8 @@ namespace spz {
 					visible = layer.Visible,
 					opacity = layer.Opacity,
 					blendMode = (int)layer.BlendMode,
-					content = null
+					content = null,
+					noColorMask = null
 				};
 				if (layer.Content != null)
 				{
@@ -959,6 +971,17 @@ namespace spz {
 					catch (Exception ex)
 					{
 						Debug.LogWarning("[PaintLayerStack] Save layer " + i + " content failed: " + ex.Message);
+					}
+				}
+				if (layer.NoColorMask != null)
+				{
+					try
+					{
+						layerSL.noColorMask = layer.NoColorMask.Save(spz.filepath_dataDir, "PaintLayerNoColor_", i.ToString());
+					}
+					catch (Exception ex)
+					{
+						Debug.LogWarning("[PaintLayerStack] Save layer " + i + " noColorMask failed: " + ex.Message);
 					}
 				}
 				sl.layers.Add(layerSL);
@@ -1007,6 +1030,25 @@ namespace spz {
 							{
 								Debug.LogWarning("[PaintLayerStack] Load layer " + i + " content failed: " + ex.Message);
 								ru.Dispose();
+							}
+						}
+						if (layerSL.noColorMask != null && layerSL.noColorMask.textures != null && layerSL.noColorMask.textures.Count > 0
+						    && layer.Content == null)
+							Debug.LogWarning("[PaintLayerStack] Load layer " + i + ": saved noColorMask skipped because layer content failed or is missing.");
+						if (layerSL.noColorMask != null && layerSL.noColorMask.textures != null && layerSL.noColorMask.textures.Count > 0
+						    && layer.Content != null)
+						{
+							var ruNc = new RenderUdims();
+							try
+							{
+								ruNc.Load(spz.filepath_dataDir, layerSL.noColorMask, format, filter);
+								layer.SetNoColorMaskFromLoad(ruNc);
+								anyLayerHadSavedPaintContent = true;
+							}
+							catch (Exception ex)
+							{
+								Debug.LogWarning("[PaintLayerStack] Load layer " + i + " noColorMask failed: " + ex.Message);
+								ruNc.Dispose();
 							}
 						}
 					}

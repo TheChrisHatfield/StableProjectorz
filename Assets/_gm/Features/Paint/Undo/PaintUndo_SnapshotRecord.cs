@@ -31,7 +31,8 @@ namespace spz {
 			int w = first.width;
 			int h = first.height;
 			var fmt = first.graphicsFormat;
-			if (layerCount > 0)
+			// Keep InpaintNoColorMask with LayerCount > 0 so restore targets NoColorMask, not Content.
+			if (layerCount > 0 && nonStackTargetKind != (int)PaintUndoNonStackTarget.InpaintNoColorMask)
 				nonStackTargetKind = 0;
 			using (var ms = new MemoryStream())
 			using (var bw = new BinaryWriter(ms)) {
@@ -125,7 +126,23 @@ namespace spz {
 				return false;
 			if (ActiveLayerIndex < 0 || ActiveLayerIndex >= stack.Layers.Count)
 				return false;
-			var c = stack.Layers[ActiveLayerIndex]?.Content;
+			var layer = stack.Layers[ActiveLayerIndex];
+			if (layer == null)
+				return false;
+
+			// No Color strokes paint into NoColorMask; undo must restore that buffer, not Content RGB.
+			if (NonStackTargetKind == (int)PaintUndoNonStackTarget.InpaintNoColorMask) {
+				layer.EnsureNoColorMaskMatchesContent();
+				var nc = layer.NoColorMask;
+				if (nc == null)
+					return false;
+				if (nc.width != Width || nc.height != Height || nc.UdimsCount != Slices)
+					return false;
+				target = nc;
+				return true;
+			}
+
+			var c = layer.Content;
 			if (c == null)
 				return false;
 			if (c.width != Width || c.height != Height || c.UdimsCount != Slices)
