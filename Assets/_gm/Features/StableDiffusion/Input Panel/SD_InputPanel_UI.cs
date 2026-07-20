@@ -178,6 +178,13 @@ namespace spz {
 	    void Awake(){
 	        if(instance != null){ DestroyImmediate(this); return; }
 	        instance = this;
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	    }
+
+	    void OnDestroy() {
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	        if (instance == this)
+	            instance = null;
 	    }
 
 	    void Start(){
@@ -187,6 +194,65 @@ namespace spz {
 	        _resolutionPreset_1536.onClick.AddListener( ()=>OnResolutionPresetButton(1536) );
 	        _resolutionPreset_2048.onClick.AddListener( ()=>OnResolutionPresetButton(2048) );
 	        TrySyncResolutionFromCurrentViewportMode();
+	        ApplyThemeTokens();
+	    }
+
+	    /// <summary>
+	    /// Retints the SD input column ownership root (dropdowns, dials, fields, presets) — colors only.
+	    /// </summary>
+	    void ApplyThemeTokens() {
+	        Transform root = _movableRectTransform != null ? _movableRectTransform : transform;
+	        if (root == null) return;
+	        var t = SpzUiThemeOps.Active;
+	        var rootImg = root.GetComponent<Image>();
+	        if (rootImg != null)
+	            SpzUiThemeOps.ApplyGraphicColor(rootImg, t.panelBg);
+
+	        foreach (var btn in root.GetComponentsInChildren<Button>(true)) {
+	            if (btn == null || btn.targetGraphic == null) continue;
+	            // Dropdown row hit targets stay transparent.
+	            if (btn.gameObject.name.StartsWith("Dropdown_", System.StringComparison.Ordinal))
+	                continue;
+	            bool isField = btn.GetComponent<TMP_Dropdown>() != null
+	                || string.Equals(btn.gameObject.name, "Dropdown", System.StringComparison.Ordinal);
+	            SpzUiThemeOps.ApplySelectableToken(btn, isField ? t.fieldBg : t.controlBg, t.accent);
+	        }
+	        foreach (var dd in root.GetComponentsInChildren<TMP_Dropdown>(true)) {
+	            if (dd == null || dd.targetGraphic == null) continue;
+	            SpzUiThemeOps.ApplySelectableToken(dd, t.fieldBg, t.accent);
+	            if (dd.captionText != null)
+	                SpzUiThemeOps.ApplyTmpColor(dd.captionText, t.textPrimary);
+	        }
+	        foreach (var input in root.GetComponentsInChildren<TMP_InputField>(true)) {
+	            if (input == null) continue;
+	            var bg = input.GetComponent<Image>();
+	            if (bg != null)
+	                SpzUiThemeOps.ApplyGraphicColor(bg, t.fieldBg);
+	            if (input.textComponent != null)
+	                SpzUiThemeOps.ApplyTmpColor(input.textComponent, t.textPrimary);
+	            if (input.placeholder is TMP_Text ph)
+	                SpzUiThemeOps.ApplyTmpColor(ph, t.textMuted);
+	        }
+	        foreach (var tmp in root.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (tmp == null) continue;
+	            if (tmp.gameObject.name == "Placeholder") continue;
+	            // Skip labels already handled as dropdown captions / input text.
+	            SpzUiThemeOps.ApplyTmpColor(tmp, t.textPrimary);
+	        }
+	        if (_sampleSteps_slider != null)
+	            _sampleSteps_slider.ApplyThemeTokens(t.accent, t.textPrimary);
+	        if (_CFG_scale_slider != null)
+	            _CFG_scale_slider.ApplyThemeTokens(t.accent, t.textPrimary);
+	        ThemeResolutionPreset(_resolutionPreset_512, t);
+	        ThemeResolutionPreset(_resolutionPreset_768, t);
+	        ThemeResolutionPreset(_resolutionPreset_1024, t);
+	        ThemeResolutionPreset(_resolutionPreset_1536, t);
+	        ThemeResolutionPreset(_resolutionPreset_2048, t);
+	    }
+
+	    static void ThemeResolutionPreset(Button btn, SpzUiThemeOps.ThemeTokens t) {
+	        if (btn == null || btn.targetGraphic == null) return;
+	        SpzUiThemeOps.ApplySelectableToken(btn, t.controlBg, t.accent);
 	    }
 
 	    void OnEnable() {
@@ -194,14 +260,12 @@ namespace spz {
 	    }
 
 	    void TrySyncResolutionFromCurrentViewportMode() {
-	        var sk = Global_Skeleton_UI.instance;
-	        if (sk == null || !sk.TryGetSidePanelVisibility(out bool left, out bool right)) {
+	        // Only recover FULL SRN adaptive W/H if TryEnter already captured the user's presets.
+	        // Do not rewrite 512/1024 just because the left column is collapsed (paint / open-right) — that diverged from OG and made Gen Art look wrong.
+	        if (!ViewportFullViewOnScreen_Driver.HasCapturedGenResolutionForFullViewSession) {
 	            return;
 	        }
-	        // If panel initializes late, recover missed one-shot fullscreen/right-dock resolution sync.
-	        if (!left) {
-	            ScheduleAdaptiveResolutionFromViewportModeNextFrame();
-	        }
+	        ScheduleAdaptiveResolutionFromViewportModeNextFrame();
 	    }
 	}
 }//end namespace

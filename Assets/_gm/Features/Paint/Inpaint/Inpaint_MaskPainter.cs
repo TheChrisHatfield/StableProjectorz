@@ -555,12 +555,19 @@ namespace spz {
 		    // Single-layer + layer gate: no multi-layer “under” texture pass (router handles underlay policy). Multi-layer + gate: composite layers below / scene; do not skip that path when layerGate is on.
 		    bool skipTryBuildForSingleLayerStackOnly = hasLayerStack && layerGate && stack.Layers != null && stack.Layers.Count <= 1;
 		    bool includeUvMeshUser = PaintTab_SmudgeBrushOptions.IncludeUvMeshInLayerSmudge;
-		    bool includeUvMeshEffective = includeUvMeshUser || SmudgePreferArtArmNeedsMeshUnderActiveLayerContent(stack, layerPaintTarget);
+		    // PreferMesh used to skip the multi-layer under pass without enabling mesh/Art underlay —
+		    // smudge stayed layer-only and ignored Art-tab UV. Keep underlay on for that route, and
+		    // when the user wants adaptive Art↔layer sampling (default IncludeUvMesh = true).
+		    bool preferMeshUnderlayPolicy = skipMultiLayerUnder;
+		    var artWrap = EnsureArtIconUvColorWrapper();
+		    bool artOk = artWrap != null && SmudgeSameUdimsShape(layerPaintTarget, artWrap);
+		    bool includeUvMeshEffective = includeUvMeshUser
+		                                 || preferMeshUnderlayPolicy
+		                                 || SmudgePreferArtArmNeedsMeshUnderActiveLayerContent(stack, layerPaintTarget);
 		    RenderUdims preUnder = null;
 		    if (!skipMultiLayerUnder && !skipTryBuildForSingleLayerStackOnly && layerGate && stack != null && stack.Layers != null && stack.Layers.Count > 1)
 			    preUnder = TryBuildSmudgeUnderTextureForSmudge(layerPaintTarget, stack, includeUvMeshEffective);
 
-		    var artWrap = EnsureArtIconUvColorWrapper();
 		    var plan = SmudgeStrokeRouter.Build(layerPaintTarget, stack, meshAcc, artWrap, preUnder,
 			    _smudgeWriteTargetPreference, includeUvMeshEffective);
 		    smudgeDest = plan.Dest;
@@ -892,7 +899,11 @@ namespace spz {
 	        if (MainViewport_UI.instance?.showing != MainViewport_UI.Showing.UsualView) return;
 	        var target = GetPaintTarget();
 	        if (target == null) return;
+	        PaintUndo_MGR.EnsureExists();
+	        PaintUndo_MGR.instance?.SchedulePreStrokeCapture(target);
 	        OnBucketFill_orDelete_button( Color.clear, target.texArray,  visibilTex:null );
+	        ClearSmudgePreferArtIconUntilLayerPaint();
+	        _inpaintLayerColorCommitSerial++;
 	    }
 
 	    protected override bool isAllowedToShow_BrushCursorNow()
