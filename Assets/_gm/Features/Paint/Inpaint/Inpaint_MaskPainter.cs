@@ -887,21 +887,37 @@ namespace spz {
 	        if (target == null) return;
 	        var sd = SD_WorkflowOptionsRibbon_UI.instance;
 	        if (sd == null) return;
-	        Color col = sd.brushColor;
 	        PaintUndo_MGR.EnsureExists();
-	        PaintUndo_MGR.instance?.SchedulePreStrokeCapture(target);
-	        OnBucketFill_orDelete_button( col, target.texArray,  visibilTex:null );
-	        isPaintMaskEmpty = false;
-	        ClearSmudgePreferArtIconUntilLayerPaint();
-	        _inpaintLayerColorCommitSerial++;
+	        StartCoroutine(BucketFillOrDeleteWithUndo_Coroutine(sd.brushColor, markMaskNonEmpty: true));
 	    }
 	    protected override void OnDelete_button(){//different to ResetPaintMask(), might be only for some isolated mesh.
 	        if (MainViewport_UI.instance?.showing != MainViewport_UI.Showing.UsualView) return;
 	        var target = GetPaintTarget();
 	        if (target == null) return;
 	        PaintUndo_MGR.EnsureExists();
+	        StartCoroutine(BucketFillOrDeleteWithUndo_Coroutine(Color.clear, markMaskNonEmpty: false));
+	    }
+
+	    /// <summary>
+	    /// Wait for any in-flight undo capture before fill/clear. Schedule alone is not enough when
+	    /// <c>_captureCrt</c> is busy — the job only queues and mutation would race ahead, so Ctrl+Z
+	    /// would snapshot the already-cleared buffer (no-op undo). Same wait pattern as projection fill.
+	    /// </summary>
+	    IEnumerator BucketFillOrDeleteWithUndo_Coroutine(Color col, bool markMaskNonEmpty) {
+	        var target = GetPaintTarget();
+	        if (target == null)
+		        yield break;
+
 	        PaintUndo_MGR.instance?.SchedulePreStrokeCapture(target);
-	        OnBucketFill_orDelete_button( Color.clear, target.texArray,  visibilTex:null );
+	        while (PaintUndo_MGR.instance != null && PaintUndo_MGR.instance.IsBusy)
+		        yield return null;
+
+	        if (!ReferenceEquals(GetPaintTarget(), target))
+		        yield break;
+
+	        OnBucketFill_orDelete_button(col, target.texArray, visibilTex: null);
+	        if (markMaskNonEmpty)
+		        isPaintMaskEmpty = false;
 	        ClearSmudgePreferArtIconUntilLayerPaint();
 	        _inpaintLayerColorCommitSerial++;
 	    }
