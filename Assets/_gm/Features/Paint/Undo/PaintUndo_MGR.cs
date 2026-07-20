@@ -212,9 +212,16 @@ namespace spz {
 				if (ix >= 0)
 					aix = ix;
 				else {
-					lc = 0;
-					nstk = (int)nonStackKind;
-					aix = nonStackKind == PaintUndoNonStackTarget.ProjectionGenMask ? Mathf.Max(0, projectionMaskPovIndex) : 0;
+					int nix = stack.IndexOfNoColorMask(paintTarget);
+					if (nix >= 0) {
+						// Layer No Color buffer: keep stack binding + tag so restore hits NoColorMask, not Content.
+						aix = nix;
+						nstk = (int)PaintUndoNonStackTarget.InpaintNoColorMask;
+					} else {
+						lc = 0;
+						nstk = (int)nonStackKind;
+						aix = nonStackKind == PaintUndoNonStackTarget.ProjectionGenMask ? Mathf.Max(0, projectionMaskPovIndex) : 0;
+					}
 				}
 			} else {
 				lc = 0;
@@ -492,13 +499,19 @@ namespace spz {
 			if (cur != null && cur.Count > 0 && !HasNullSlice(cur)) {
 				int lc = stack?.Layers != null ? stack.Layers.Count : 0;
 				int aix = stack != null ? stack.IndexOfContent(target) : -1;
+				int redoNstk = 0;
+				if (aix < 0 && stack != null) {
+					aix = stack.IndexOfNoColorMask(target);
+					if (aix >= 0)
+						redoNstk = (int)PaintUndoNonStackTarget.InpaintNoColorMask;
+				}
 				if (aix < 0) {
 					lc = 0;
 					aix = snap.NonStackTargetKind == (int)PaintUndoNonStackTarget.ProjectionGenMask
 						? snap.ActiveLayerIndex
 						: 0;
+					redoNstk = snap.NonStackTargetKind;
 				}
-				int redoNstk = lc <= 0 ? snap.NonStackTargetKind : 0;
 				if (PaintUndo_SnapshotRecord.TryBuildUncompressedBlob(cur, aix, lc, redoNstk, out currentRecord, out var curRaw)) {
 					foreach (var t in cur)
 						if (t != null) Destroy(t);
@@ -564,6 +577,12 @@ namespace spz {
 				case PaintUndoNonStackTarget.InpaintColor: {
 					var inp = Inpaint_MaskPainter.instance;
 					target = inp != null ? inp._ObjectUV_brushedColorRGBA : null;
+					break;
+				}
+				case PaintUndoNonStackTarget.InpaintNoColorMask: {
+					// Fallback when snapshot lost layer binding: restore into whatever No Color currently paints.
+					var inp = Inpaint_MaskPainter.instance;
+					target = inp != null ? inp.GetPaintTarget_Undo() : null;
 					break;
 				}
 				case PaintUndoNonStackTarget.BackgroundGenMask:
