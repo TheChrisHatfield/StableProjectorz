@@ -23,19 +23,51 @@ namespace spz {
 
 	    void OnMaskInvert_button(){
 	        if(MainViewport_UI.instance.showing != MainViewport_UI.Showing.UsualView){ return; }
+	        // Match SD ribbon: invert applies to projection-gen UV masks only (Paint tab also fires this event).
+	        if (WorkflowRibbon_UI.instance == null
+	            || WorkflowRibbon_UI.instance.currentMode() != WorkflowRibbon_CurrMode.ProjectionsMasking) {
+	            return;
+	        }
 	        GenData2D genData = getGenData_currentIcon();
 	        if(genData==null){ return; }
 	        if(genData._masking_utils == null){ return; }
 	        if (_applyBrushStroke_toUvMask == null) _applyBrushStroke_toUvMask = FindObjectOfType<ApplyBrushStroke_ToUvMask>(true);
 	        if (_applyBrushStroke_toUvMask == null){ return; }
 
-	        for(int i=0;  i<genData._masking_utils._ObjectUV_brushedMaskR8.Count;  ++i){
-	            RenderUdims br  = genData._masking_utils._ObjectUV_brushedMaskR8[i];
-	            RenderUdims vis = genData._masking_utils._ObjectUV_visibilityR8G8[i];
-	            if(br==null){ continue; }   
+	        PaintUndo_MGR.EnsureExists();
+	        StartCoroutine(InvertMasksWithUndo_Coroutine(genData));
+	    }
+
+	    /// <summary>Capture each POV mask before invert (same wait pattern as bucket fill) so Ctrl+Z restores pre-invert masks.</summary>
+	    IEnumerator InvertMasksWithUndo_Coroutine(GenData2D targetGenData) {
+	        var mu = targetGenData._masking_utils;
+	        if (mu == null)
+		        yield break;
+
+	        for (int i = 0; i < mu._ObjectUV_brushedMaskR8.Count; ++i) {
+	            if (!BucketFillTargetStillCurrent(targetGenData))
+		            yield break;
+
+	            RenderUdims br = mu._ObjectUV_brushedMaskR8[i];
+	            RenderUdims vis = mu._ObjectUV_visibilityR8G8[i];
+	            if (br == null || vis == null)
+		            continue;
+	            if (br.texArray == null || vis.texArray == null)
+		            continue;
+
+	            PaintUndo_MGR.instance?.SchedulePreStrokeCapture(br, PaintUndoNonStackTarget.ProjectionGenMask, i);
+	            while (PaintUndo_MGR.instance != null && PaintUndo_MGR.instance.IsBusy) {
+		            if (!BucketFillTargetStillCurrent(targetGenData))
+			            yield break;
+		            yield return null;
+	            }
+
+	            if (!BucketFillTargetStillCurrent(targetGenData))
+		            yield break;
+
 	            _applyBrushStroke_toUvMask.InvertMask(br, vis);
 	        }
-	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	        Objects_Renderer_MGR.instance?.ReRenderAll_soon();
 	    }
 
 
