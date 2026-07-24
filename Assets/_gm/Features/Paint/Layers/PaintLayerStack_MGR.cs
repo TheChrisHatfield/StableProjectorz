@@ -576,6 +576,12 @@ namespace spz {
 					bool ok = completedComposite && collapseSched.CollapseScheduledObservationSuccess(worstHitchMs);
 					collapseSched.RegisterCollapsePathObservation(_collapsePathObsBucket, _collapsePathObsArm, ok);
 				}
+				// Early yield-break after AddLayer left an empty/partial Collapse N layer in the Paint tab list.
+				if (!completedComposite && newLayer != null) {
+					int orphanIx = _layers.IndexOf(newLayer);
+					if (orphanIx >= 0)
+						RemoveLayer(orphanIx);
+				}
 				NotifyCollapseEnd(completedComposite);
 				CleanupAfterScheduledCollapse();
 			}
