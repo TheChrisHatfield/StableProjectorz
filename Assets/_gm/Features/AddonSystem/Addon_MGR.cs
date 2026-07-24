@@ -773,13 +773,27 @@ namespace spz {
 				string httpArg = _enableHttpServer ? $"--http-port {_httpServerPort}" : "--no-http";
 				// Tell Python whether we bound 5555: if not (Editor has it), Python must NOT kill anything on 5557 or it may kill the Editor.
 				string socketBound = (Addon_SocketServer.instance != null && Addon_SocketServer.instance.IsListening) ? "1" : "0";
-				string batContent = "@echo off\r\ncd /d \"" + workDir + "\"\r\nset SPZ_SOCKET_BOUND=" + socketBound + "\r\n\"" + pythonExe.Replace("\"", "\"\"") + "\" \"" + serverScriptPath.Replace("\"", "\"\"") + "\" --port " + _serverPort + " --addons-dir \"" + addonsPath.Replace("\"", "\"\"") + "\" " + httpArg + " >> \"%TEMP%\\spz_addon_server.log\" 2>&1\r\n";
+				string pyCmd = "\"" + pythonExe.Replace("\"", "\"\"") + "\" \"" + serverScriptPath.Replace("\"", "\"\"")
+					+ "\" --port " + _serverPort + " --addons-dir \"" + addonsPath.Replace("\"", "\"\"") + "\" " + httpArg;
+				string addonServerLogPath = Path.Combine(Path.GetTempPath(), "spz_addon_server.log");
+				string batContent;
+				if (showExternalWindows) {
+					// Do not redirect — a visible CMD with >> log looks empty and hides FastAPI ImportError.
+					batContent = "@echo off\r\ncd /d \"" + workDir + "\"\r\nset SPZ_SOCKET_BOUND=" + socketBound + "\r\n" + pyCmd + "\r\n";
+				} else {
+					try {
+						File.WriteAllText(addonServerLogPath,
+							"=== SPZ addon server spawn " + DateTime.Now.ToString("o") + " ===\r\n");
+					} catch { /* best-effort */ }
+					batContent = "@echo off\r\ncd /d \"" + workDir + "\"\r\nset SPZ_SOCKET_BOUND=" + socketBound + "\r\n"
+						+ pyCmd + " >> \"" + addonServerLogPath + "\" 2>&1\r\n";
+				}
 				File.WriteAllText(batPath, batContent);
 				// Stale FastAPI-fail markers must not poison a fresh start.
 				TryClearAddonHttpFailMarker();
 				UnityEngine.Debug.Log(showExternalWindows
 					? "[Addon_MGR] Starting addon server with visible console (Settings)."
-					: "[Addon_MGR] Starting addon server in background (hidden console; Settings default). Log: %TEMP%\\spz_addon_server.log");
+					: "[Addon_MGR] Starting addon server in background (hidden console; Settings default). Log: " + addonServerLogPath);
 				// keepWindow false: /K would leave CMD open after python exits and block ClearStale restart.
 				uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
 					batPath,
@@ -791,8 +805,10 @@ namespace spz {
 				);
 				if (pid != 0) {
 					_pythonServerPid = pid;
+					// Launcher PID only — HTTP :5557 /ready is verified later. Do not treat spawn as FastAPI-ready.
 					_isServerRunning = true;
-					UnityEngine.Debug.Log($"[Addon_MGR] Python server started on port {_serverPort} (PID {pid})");
+					UnityEngine.Debug.Log(
+						$"[Addon_MGR] Python server launcher started (PID {pid}); waiting for HTTP :{_httpServerPort} /ready (not verified yet).");
 				} else {
 					UnityEngine.Debug.LogError("[Addon_MGR] Failed to start Python server (CreateProcess returned 0).");
 				}
@@ -947,6 +963,7 @@ namespace spz {
 					UnityEngine.Debug.LogError(
 						$"[Addon_MGR] Python HTTP :{_httpServerPort} failed to start:\n{httpFailReason}\n" +
 						"Also check %TEMP%\\spz_addon_server.log");
+					TryLogAddonServerLogTail();
 					NotifySharedAddonReadyWaiters(false);
 					yield break;
 				}
@@ -993,6 +1010,7 @@ namespace spz {
 				yield return new WaitForSeconds(interval);
 			}
 			UnityEngine.Debug.LogWarning("[Addon_MGR] Addon server /ready did not become true within timeout. Check: (1) Is Python running? (2) Does Player.log show [Addon_SocketServer] Started listening on 127.0.0.1:5555? (3) %TEMP%\\spz_addon_server.log / FastAPI deps.");
+			TryLogAddonServerLogTail();
 			NotifySharedAddonReadyWaiters(false);
 		}
 
@@ -1020,6 +1038,27 @@ namespace spz {
 				return !string.IsNullOrWhiteSpace(reason);
 			} catch {
 				return false;
+			}
+		}
+
+		/// <summary>Surfaces hidden-console Python output when /ready fails (IL2CPP redirects stdout to this file).</summary>
+		void TryLogAddonServerLogTail(int maxChars = 1200) {
+			try {
+				string path = Path.Combine(Path.GetTempPath(), "spz_addon_server.log");
+				if (!File.Exists(path)) {
+					UnityEngine.Debug.LogWarning("[Addon_MGR] No %TEMP%\\spz_addon_server.log yet (visible console mode, or spawn never wrote).");
+					return;
+				}
+				string text = File.ReadAllText(path);
+				if (string.IsNullOrWhiteSpace(text)) {
+					UnityEngine.Debug.LogWarning("[Addon_MGR] spz_addon_server.log is empty.");
+					return;
+				}
+				if (text.Length > maxChars)
+					text = "…\n" + text.Substring(text.Length - maxChars);
+				UnityEngine.Debug.LogWarning("[Addon_MGR] Tail of spz_addon_server.log:\n" + text.TrimEnd());
+			} catch (Exception e) {
+				UnityEngine.Debug.LogWarning($"[Addon_MGR] Could not read spz_addon_server.log: {e.Message}");
 			}
 		}
 
