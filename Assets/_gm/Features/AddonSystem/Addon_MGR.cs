@@ -1338,7 +1338,8 @@ namespace spz {
 						Addon_SocketServer.TryAttachViewportFullViewToggleFromCore(null);
 						attachKicked = true;
 					}
-					// Every ~1s without a visible dock, force the Gen Art strip path (workflow host may be inactive).
+					// Every ~1s without a visible dock, force a single dock on the Gen Art strip
+					// (migrates off inactive workflow hosts — never dual-mount).
 					if (!inFlight && f - lastForceGenStripFrame >= 60) {
 						lastForceGenStripFrame = f;
 						RibbonViewportFullViewOnScreen_Toggle_UI.TryEnsureOnGenerateButtonsStrip(
