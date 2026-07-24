@@ -1844,11 +1844,9 @@ namespace spz {
 				    var singleComposite = CompositeVisibleLayersIntoTemp(stack, _isColorlessIgnored: false);
 				    if (singleComposite != null) return singleComposite;
 			    }
-			    var activeContent = stack.ActiveLayer.Content;
-			    if (_ObjectUV_brushedColorRGBA == null)
-				    return activeContent;
-			    if (activeContent.width == _ObjectUV_brushedColorRGBA.width && activeContent.height == _ObjectUV_brushedColorRGBA.height && activeContent.UdimsCount == _ObjectUV_brushedColorRGBA.UdimsCount)
-				    return activeContent;
+			    // Prefer active Content over scene even when sizes differ — falling back to scene dropped
+			    // layer paint (and NoColor after a failed composite) from the SD screen mask.
+			    return stack.ActiveLayer.Content;
 		    }
 		    return _ObjectUV_brushedColorRGBA;
 	    }
