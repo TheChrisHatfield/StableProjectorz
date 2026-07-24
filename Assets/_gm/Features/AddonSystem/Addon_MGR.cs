@@ -980,7 +980,9 @@ namespace spz {
 		}
 
 		IEnumerator RequestLoadAddon(string addonId) {
-			yield return RequestLoadAddon(addonId, -1);
+			// Always take a lifecycle epoch so a user re-enable mid-wait cannot be MarkAddonLoadFailed by this stale op.
+			int epoch = BumpLifecycleEpoch(addonId);
+			yield return RequestLoadAddon(addonId, epoch);
 		}
 
 		IEnumerator RequestLoadAddon(string addonId, int epoch) {
@@ -999,7 +1001,8 @@ namespace spz {
 			if (!serverReady) {
 				UnityEngine.Debug.LogError(
 					$"[Addon_MGR] Cannot load '{addonId}': Python addon server never became ready (empty ribbon tabs without create_panel).");
-				MarkAddonLoadFailed(addonId);
+				if (epoch < 0 || IsLifecycleEpochCurrent(addonId, epoch))
+					MarkAddonLoadFailed(addonId);
 				yield break;
 			}
 			UnityEngine.Debug.Log($"[Addon_MGR] Sending load request to Python for: {addonId}");
@@ -1019,7 +1022,8 @@ namespace spz {
 				}
 				if (req.result != UnityWebRequest.Result.Success) {
 					UnityEngine.Debug.LogError($"[Addon_MGR] load_addon failed for {addonId}: {req.error}. Ensure Python server is running on port {_httpServerPort}");
-					MarkAddonLoadFailed(addonId);
+					if (epoch < 0 || IsLifecycleEpochCurrent(addonId, epoch))
+						MarkAddonLoadFailed(addonId);
 					yield break;
 				}
 				bool loadSucceeded = false;
@@ -1037,7 +1041,8 @@ namespace spz {
 						StartAddonLifecycleOp(addonId, false);
 				} else {
 					UnityEngine.Debug.LogError($"[Addon_MGR] Python reported addon load failure for {addonId}. Raw response: {responseBody}. Check Python console for register()/socket errors.");
-					MarkAddonLoadFailed(addonId);
+					if (epoch < 0 || IsLifecycleEpochCurrent(addonId, epoch))
+						MarkAddonLoadFailed(addonId);
 				}
 			}
 		}
