@@ -42,6 +42,8 @@ namespace spz {
 		RenderUdims _eagerHeadTarget;
 
 		Coroutine _captureCrt;
+		/// <summary>In-flight Ctrl+Z/Y restore; must be stopped on layer structure change like <see cref="_captureCrt"/>.</summary>
+		Coroutine _restoreCrt;
 		Texture2D _uploadStaging;
 
 		RestoreSession _restoreSession;
@@ -164,6 +166,11 @@ namespace spz {
 			if (_captureCrt != null) {
 				StopCoroutine(_captureCrt);
 				_captureCrt = null;
+			}
+			// Same for restore: UndoOrRedoCoroutine must not keep uploading into a disposed layer after delete.
+			if (_restoreCrt != null) {
+				StopCoroutine(_restoreCrt);
+				_restoreCrt = null;
 			}
 			if (_logVerbose) Debug.Log("[PaintUndo] Cleared undo/redo (layer stack structure changed).");
 		}
@@ -414,7 +421,7 @@ namespace spz {
 		/// <summary>Sets <see cref="_isRestoring"/> then schedules <see cref="UndoOrRedoCoroutine"/> — use for every restore start (TryUndo/TryRedo and <see cref="ProcessDeferredUndoRedo"/>) so scratch is not re-entered before the enumerator runs.</summary>
 		void StartDeferredRestoreCoroutine(PaintUndo_SnapshotRecord snap, bool pushCurrentToRedo) {
 			_isRestoring = true;
-			StartCoroutine(UndoOrRedoCoroutine(snap, pushCurrentToRedo));
+			_restoreCrt = StartCoroutine(UndoOrRedoCoroutine(snap, pushCurrentToRedo));
 		}
 
 		void EnsureRestoreScratchMatches(RenderUdims target) {
@@ -476,97 +483,101 @@ namespace spz {
 
 		IEnumerator UndoOrRedoCoroutine(PaintUndo_SnapshotRecord snap, bool pushCurrentToRedo) {
 			// _isRestoring is set by <see cref="StartDeferredRestoreCoroutine"/> before this enumerator is scheduled.
-			var stack = PaintLayerStack_MGR.instance;
-			RenderUdims target = null;
-			if (snap.TryGetRestoreTarget(stack, out target)) {
-				// Restore into the layer Content this stroke was captured from (index + count match current stack).
-			} else if (snap.LayerCount <= 0) {
-				if (!TryResolveNonStackRestoreTarget(snap, out target))
+			try {
+				var stack = PaintLayerStack_MGR.instance;
+				RenderUdims target = null;
+				if (snap.TryGetRestoreTarget(stack, out target)) {
+					// Restore into the layer Content this stroke was captured from (index + count match current stack).
+				} else if (snap.LayerCount <= 0) {
+					if (!TryResolveNonStackRestoreTarget(snap, out target))
+						target = null;
+				} else {
 					target = null;
-			} else {
-				target = null;
-			}
-			if (target == null) {
-				Debug.LogWarning("[PaintUndo] Cannot resolve restore target (stack/layer mismatch); skipping restore.");
-				if (pushCurrentToRedo) _storage.PushUndo(snap);
-				else _storage.PushRedo(snap);
-				_isRestoring = false;
-				ProcessDeferredUndoRedo();
-				TryStartCaptureProcessorIfNeeded();
-				yield break;
-			}
-			EnsureRestoreScratchMatches(target);
-			Graphics.CopyTexture(target.texArray, _scratchRestore.texArray);
-			bool got = false;
-			List<Texture2D> cur = null;
-			TextureTools_SPZ.RenderTexture_to_Texture2DList_Async(_scratchRestore, list => { cur = list; got = true; });
-			while (!got) yield return null;
-			PaintUndo_SnapshotRecord currentRecord = null;
-			if (cur != null && cur.Count > 0 && !HasNullSlice(cur)) {
-				int lc = stack?.Layers != null ? stack.Layers.Count : 0;
-				int aix = stack != null ? stack.IndexOfContent(target) : -1;
-				int redoNstk = 0;
-				if (aix < 0 && stack != null) {
-					aix = stack.IndexOfNoColorMask(target);
-					if (aix >= 0)
-						redoNstk = (int)PaintUndoNonStackTarget.InpaintNoColorMask;
 				}
-				if (aix < 0) {
-					lc = 0;
-					aix = snap.NonStackTargetKind == (int)PaintUndoNonStackTarget.ProjectionGenMask
-						? snap.ActiveLayerIndex
-						: 0;
-					redoNstk = snap.NonStackTargetKind;
+				if (target == null) {
+					Debug.LogWarning("[PaintUndo] Cannot resolve restore target (stack/layer mismatch); skipping restore.");
+					if (pushCurrentToRedo) _storage.PushUndo(snap);
+					else _storage.PushRedo(snap);
+					_isRestoring = false;
+					ProcessDeferredUndoRedo();
+					TryStartCaptureProcessorIfNeeded();
+					yield break;
 				}
-				if (PaintUndo_SnapshotRecord.TryBuildUncompressedBlob(cur, aix, lc, redoNstk, out currentRecord, out var curRaw)) {
+				EnsureRestoreScratchMatches(target);
+				Graphics.CopyTexture(target.texArray, _scratchRestore.texArray);
+				bool got = false;
+				List<Texture2D> cur = null;
+				TextureTools_SPZ.RenderTexture_to_Texture2DList_Async(_scratchRestore, list => { cur = list; got = true; });
+				while (!got) yield return null;
+				PaintUndo_SnapshotRecord currentRecord = null;
+				if (cur != null && cur.Count > 0 && !HasNullSlice(cur)) {
+					int lc = stack?.Layers != null ? stack.Layers.Count : 0;
+					int aix = stack != null ? stack.IndexOfContent(target) : -1;
+					int redoNstk = 0;
+					if (aix < 0 && stack != null) {
+						aix = stack.IndexOfNoColorMask(target);
+						if (aix >= 0)
+							redoNstk = (int)PaintUndoNonStackTarget.InpaintNoColorMask;
+					}
+					if (aix < 0) {
+						lc = 0;
+						aix = snap.NonStackTargetKind == (int)PaintUndoNonStackTarget.ProjectionGenMask
+							? snap.ActiveLayerIndex
+							: 0;
+						redoNstk = snap.NonStackTargetKind;
+					}
+					if (PaintUndo_SnapshotRecord.TryBuildUncompressedBlob(cur, aix, lc, redoNstk, out currentRecord, out var curRaw)) {
+						foreach (var t in cur)
+							if (t != null) Destroy(t);
+						cur = null;
+						var deflateRedo = Task.Run(() => {
+							try { return PaintUndo_Compress.Deflate(curRaw); }
+							catch (Exception e) {
+								Debug.LogError("[PaintUndo] Redo/undo snapshot Deflate failed: " + e.Message);
+								return null;
+							}
+						});
+						while (!deflateRedo.IsCompleted) yield return null;
+						currentRecord.CompressedBytes = deflateRedo.Result;
+						if (currentRecord.CompressedBytes == null) currentRecord = null;
+					}
+				}
+				if (cur != null)
 					foreach (var t in cur)
 						if (t != null) Destroy(t);
-					cur = null;
-					var deflateRedo = Task.Run(() => {
-						try { return PaintUndo_Compress.Deflate(curRaw); }
-						catch (Exception e) {
-							Debug.LogError("[PaintUndo] Redo/undo snapshot Deflate failed: " + e.Message);
-							return null;
-						}
-					});
-					while (!deflateRedo.IsCompleted) yield return null;
-					currentRecord.CompressedBytes = deflateRedo.Result;
-					if (currentRecord.CompressedBytes == null) currentRecord = null;
+				if (currentRecord != null) {
+					if (pushCurrentToRedo) _storage.PushRedo(currentRecord);
+					else _storage.PushUndo(currentRecord);
 				}
-			}
-			if (cur != null)
-				foreach (var t in cur)
-					if (t != null) Destroy(t);
-			if (currentRecord != null) {
-				if (pushCurrentToRedo) _storage.PushRedo(currentRecord);
-				else _storage.PushUndo(currentRecord);
-			}
-			if (!snap.TryUnpackSlices(out var sliceData, out var err)) {
-				Debug.LogWarning("[PaintUndo] Unpack failed: " + err);
-				if (pushCurrentToRedo) _storage.PushUndo(snap);
-				else _storage.PushRedo(snap);
+				if (!snap.TryUnpackSlices(out var sliceData, out var err)) {
+					Debug.LogWarning("[PaintUndo] Unpack failed: " + err);
+					if (pushCurrentToRedo) _storage.PushUndo(snap);
+					else _storage.PushRedo(snap);
+					_isRestoring = false;
+					ProcessDeferredUndoRedo();
+					TryStartCaptureProcessorIfNeeded();
+					yield break;
+				}
+				_scheduler.BeginRestoreSession(target.width, target.height, sliceData.Count);
+				if (_logVerbose)
+					Debug.Log($"[PaintUndo] Restore session: {target.width}x{target.height} × {sliceData.Count} UDIMs, complexity01={_scheduler.LastSessionComplexity01:F2}, totalPx={_scheduler.LastSessionTotalPixels}, policy={_scheduler.restoreBudgetPolicy}");
+				_restoreSession = new RestoreSession {
+					Target = target,
+					SliceData = sliceData,
+					Order = PaintUndo_Scheduler.LinearSliceUploadOrder(sliceData.Count),
+					OrderCursor = 0
+				};
+				while (_restoreSession != null && _restoreSession.OrderCursor < _restoreSession.Order.Length)
+					yield return null;
+				_restoreSession = null;
+				FinishRestore(target);
 				_isRestoring = false;
+				if (_logVerbose) Debug.Log("[PaintUndo] Restore complete.");
 				ProcessDeferredUndoRedo();
 				TryStartCaptureProcessorIfNeeded();
-				yield break;
+			} finally {
+				_restoreCrt = null;
 			}
-			_scheduler.BeginRestoreSession(target.width, target.height, sliceData.Count);
-			if (_logVerbose)
-				Debug.Log($"[PaintUndo] Restore session: {target.width}x{target.height} × {sliceData.Count} UDIMs, complexity01={_scheduler.LastSessionComplexity01:F2}, totalPx={_scheduler.LastSessionTotalPixels}, policy={_scheduler.restoreBudgetPolicy}");
-			_restoreSession = new RestoreSession {
-				Target = target,
-				SliceData = sliceData,
-				Order = PaintUndo_Scheduler.LinearSliceUploadOrder(sliceData.Count),
-				OrderCursor = 0
-			};
-			while (_restoreSession != null && _restoreSession.OrderCursor < _restoreSession.Order.Length)
-				yield return null;
-			_restoreSession = null;
-			FinishRestore(target);
-			_isRestoring = false;
-			if (_logVerbose) Debug.Log("[PaintUndo] Restore complete.");
-			ProcessDeferredUndoRedo();
-			TryStartCaptureProcessorIfNeeded();
 		}
 
 		static bool HasNullSlice(List<Texture2D> list) {
