@@ -101,7 +101,14 @@ namespace spz {
 			}
 			bool rowMissing = c._builtRowRt == null || c._builtRowRt.gameObject == null || !c._builtRowRt.gameObject.activeInHierarchy;
 			bool spacerMissing = c._spacerRowRt == null || c._spacerRowRt.gameObject == null || !c._spacerRowRt.gameObject.activeInHierarchy;
-			if (createdNow || specChanged || !c._built || rowMissing || (c._built && spacerMissing)) {
+			if (createdNow || specChanged) {
+				c.NotifyAttachRequested();
+			} else if (!c._built) {
+				// Addon_MGR polls attach every frame while waiting for Gen Art. Do not TearDownBuiltDock
+				// while CoBuildWhenGenArtReady is already running — that aborted the wait forever.
+				if (c._buildRoutine == null)
+					c.NudgeOrRebuildWithoutTear();
+			} else if (rowMissing || spacerMissing) {
 				c.NotifyAttachRequested();
 			}
 			return true;
@@ -117,6 +124,16 @@ namespace spz {
 				if (c._built && c._builtRowRt != null && c._builtRowRt && c._builtRowRt.gameObject.activeInHierarchy) {
 					return true;
 				}
+			}
+			return false;
+		}
+
+		/// <summary>True when a dock build coroutine is still waiting on Gen Art / layout (do not re-tear).</summary>
+		public static bool IsAnyDockBuildInFlight() {
+			for (int i = 0; i < RegisteredInstances.Count; i++) {
+				var c = RegisteredInstances[i];
+				if (c != null && c._buildRoutine != null)
+					return true;
 			}
 			return false;
 		}
