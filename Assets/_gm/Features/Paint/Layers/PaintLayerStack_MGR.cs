@@ -228,12 +228,24 @@ namespace spz {
 			return true;
 		}
 
-		/// <summary>Remove the layer at index. Disposes the layer and adjusts active index. You can delete any layer including the last one; Add Layer adds more.</summary>
+		/// <summary>Remove the layer at index. Disposes the layer and adjusts active index.
+		/// Deleting the last layer recreates a blank Layer 1 so paint always has an active Content/NoColorMask
+		/// (an empty stack made strokes write the scene buffer while the viewport preferred Art UV and hid them).</summary>
 		public void RemoveLayer(int index)
 		{
 			if (index < 0 || index >= _layers.Count) return;
 			_layers[index].Dispose();
 			_layers.RemoveAt(index);
+			if (_layers.Count == 0)
+			{
+				// AddLayer fires OnLayersChanged / OnActiveLayerChanged / OnLayerAdded; also notify structure
+				// so undo snapshots tied to the disposed layer are cleared.
+				EnsureAtLeastOneLayer();
+				OnLayerStackStructureChanged?.Invoke();
+				if (Objects_Renderer_MGR.instance != null)
+					Objects_Renderer_MGR.instance.ReRenderAll_soon();
+				return;
+			}
 			if (_activeIndex >= _layers.Count)
 				_activeIndex = Mathf.Max(0, _layers.Count - 1);
 			else if (index < _activeIndex)
@@ -603,9 +615,16 @@ namespace spz {
 		/// <summary>Remove all layers and add a single empty layer (e.g. after collapsing into scene buffer). Used by Inpaint_MaskPainter.CollapseLayersIntoScene.</summary>
 		public void ReplaceLayersWithOneEmpty()
 		{
+			// Dispose directly — do not call RemoveLayer in a loop (that recreates a blank layer when
+			// count hits 0, and a trailing AddLayer would leave two layers).
 			for (int i = _layers.Count - 1; i >= 0; i--)
-				RemoveLayer(i);
-			AddLayer("Layer 1");
+			{
+				_layers[i].Dispose();
+				_layers.RemoveAt(i);
+			}
+			_activeIndex = 0;
+			EnsureAtLeastOneLayer();
+			OnLayerStackStructureChanged?.Invoke();
 			UnityEngine.Debug.Log("[PaintLayerStack] ReplaceLayersWithOneEmpty: one empty layer.");
 		}
 

@@ -230,7 +230,16 @@ namespace spz {
 	        }
 
 	        if (source == null)
-		        source = TryResolveArtThenSceneThenMeshUvSource(ontoHere, ontoHere);
+	        {
+		        // Prefer the scene paint buffer over Art-tab UV. GetPaintTarget() writes here when there is no
+		        // visible layer Content; Art gens are already in ontoHere via cycle_through_generations.
+		        // Preferring Art here hid Color/NoColor strokes after layer deletes + generations.
+		        // Do not require SameShape — EntireColorLayer scales; a stuck img2img 5k boost must not null-out paint.
+		        if (_ObjectUV_brushedColorRGBA?.texArray != null)
+			        source = _ObjectUV_brushedColorRGBA;
+		        else
+			        source = TryResolveArtThenSceneThenMeshUvSource(ontoHere, ontoHere);
+	        }
 
 	        if (source == null)
 	        {
@@ -250,22 +259,28 @@ namespace spz {
 	        var activeLayerForOverlay = stack?.ActiveLayer;
 	        bool singleLayerActiveContent = !multiLayer && activeLayerForOverlay != null
 	                                         && ReferenceEquals(source, activeLayerForOverlay.Content);
+	        bool sourceIsScenePaintBuf = ReferenceEquals(source, _ObjectUV_brushedColorRGBA);
 	        bool isNoColorMode = isColorless;
+	        // OG single-buffer NoColor: scene buffer holds the mask — one checker blit (skip RGB pass).
+	        bool sceneNoColorPreview = !forStableDiffusionCapture && sourceIsScenePaintBuf && isNoColorMode && !isSmudgeTool;
 
 	        // Pass 1: Content as color
-	        bool applyBrushToContent = _isPainting && !multiLayer && !isSmudgeTool && !isNoColorMode;
-	        _blitApplyEntireColorLayer_mat.SetTexture("_SrcTex", source.texArray);
-	        RenderUdims.SetNumUdims(ontoHere, _blitApplyEntireColorLayer_mat);
-	        TextureTools_SPZ.SetKeyword_Material(_blitApplyEntireColorLayer_mat, "APPLY_LATEST_BRUSH_TOO", applyBrushToContent);
-	        _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", _latestBrushStroke_ref);
-	        _blitApplyEntireColorLayer_mat.SetColor("_CurrBrushColor", brushCol);
-	        _blitApplyEntireColorLayer_mat.SetFloat("_Sign", sign);
-	        _blitApplyEntireColorLayer_mat.SetFloat("_MaxPossibleBrushStrength01", maxStrength);
-	        // Always 0 here: layer Content is color RGB. Colorless overlay is the second pass below (single-layer)
-	        // or already baked per-layer in the composite temp (multi-layer).
-	        _blitApplyEntireColorLayer_mat.SetInteger("_isColorlessMask", 0);
-	        _blitApplyEntireColorLayer_mat.SetFloat("_TotalOpacity01", 1f);
-	        TextureTools_SPZ.Blit(source.texArray, ontoHere.texArray, _blitApplyEntireColorLayer_mat);
+	        if (!sceneNoColorPreview)
+	        {
+		        bool applyBrushToContent = _isPainting && !multiLayer && !isSmudgeTool && !isNoColorMode;
+		        _blitApplyEntireColorLayer_mat.SetTexture("_SrcTex", source.texArray);
+		        RenderUdims.SetNumUdims(ontoHere, _blitApplyEntireColorLayer_mat);
+		        TextureTools_SPZ.SetKeyword_Material(_blitApplyEntireColorLayer_mat, "APPLY_LATEST_BRUSH_TOO", applyBrushToContent);
+		        _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", _latestBrushStroke_ref);
+		        _blitApplyEntireColorLayer_mat.SetColor("_CurrBrushColor", brushCol);
+		        _blitApplyEntireColorLayer_mat.SetFloat("_Sign", sign);
+		        _blitApplyEntireColorLayer_mat.SetFloat("_MaxPossibleBrushStrength01", maxStrength);
+		        // Always 0 here: layer Content is color RGB. Colorless overlay is the second pass below (single-layer)
+		        // or already baked per-layer in the composite temp (multi-layer).
+		        _blitApplyEntireColorLayer_mat.SetInteger("_isColorlessMask", 0);
+		        _blitApplyEntireColorLayer_mat.SetFloat("_TotalOpacity01", 1f);
+		        TextureTools_SPZ.Blit(source.texArray, ontoHere.texArray, _blitApplyEntireColorLayer_mat);
+	        }
 
 	        // Pass 2: per-layer NoColorMask as checker (single-layer preview path only).
 	        // During SD capture, mask is sent separately via GetDisposable_ScreenMask; do not tint init-image RGB.
@@ -284,6 +299,21 @@ namespace spz {
 		        _blitApplyEntireColorLayer_mat.SetTexture("_ColorlessCheckerTex", _colorlessMaskChecker_tex);
 		        _blitApplyEntireColorLayer_mat.SetFloat("_TotalOpacity01", 1f);
 		        TextureTools_SPZ.Blit(ncm.texArray, ontoHere.texArray, _blitApplyEntireColorLayer_mat);
+	        }
+	        else if (sceneNoColorPreview)
+	        {
+		        // No active layer NoColorMask: strokes landed in the scene buffer — show as checker + live stroke.
+		        _blitApplyEntireColorLayer_mat.SetTexture("_SrcTex", source.texArray);
+		        RenderUdims.SetNumUdims(ontoHere, _blitApplyEntireColorLayer_mat);
+		        TextureTools_SPZ.SetKeyword_Material(_blitApplyEntireColorLayer_mat, "APPLY_LATEST_BRUSH_TOO", _isPainting);
+		        _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", _latestBrushStroke_ref);
+		        _blitApplyEntireColorLayer_mat.SetColor("_CurrBrushColor", brushCol);
+		        _blitApplyEntireColorLayer_mat.SetFloat("_Sign", sign);
+		        _blitApplyEntireColorLayer_mat.SetFloat("_MaxPossibleBrushStrength01", maxStrength);
+		        _blitApplyEntireColorLayer_mat.SetInteger("_isColorlessMask", 1);
+		        _blitApplyEntireColorLayer_mat.SetTexture("_ColorlessCheckerTex", _colorlessMaskChecker_tex);
+		        _blitApplyEntireColorLayer_mat.SetFloat("_TotalOpacity01", 1f);
+		        TextureTools_SPZ.Blit(source.texArray, ontoHere.texArray, _blitApplyEntireColorLayer_mat);
 	        }
 	    }
 
@@ -487,9 +517,28 @@ namespace spz {
 		    var art = Art2D_IconsUI_List.instance;
 		    var icon = art?._mainSelectedIcon;
 		    var gen = icon?._genData;
-		    if (gen == null) return null;
+		    if (gen == null)
+		    {
+			    // Icon deleted / none selected: drop stale wrapper so we never sample a released texArray.
+			    if (_artIconUvColorWrapper != null)
+			    {
+				    _artIconUvColorWrapper.Dispose();
+				    _artIconUvColorWrapper = null;
+				    _artIconUvColorWrapperGenGuid = default;
+			    }
+			    return null;
+		    }
 		    var tr = gen.GetTexture_ref0();
-		    if (tr?.texArray == null) return null;
+		    if (tr?.texArray == null)
+		    {
+			    if (_artIconUvColorWrapper != null)
+			    {
+				    _artIconUvColorWrapper.Dispose();
+				    _artIconUvColorWrapper = null;
+				    _artIconUvColorWrapperGenGuid = default;
+			    }
+			    return null;
+		    }
 		    var udims = ModelsHandler_3D.instance?._allKnownUdims;
 		    if (udims == null || udims.Count == 0 || udims.Count != tr.texArray.volumeDepth)
 			    return null;
