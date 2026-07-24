@@ -39,10 +39,11 @@ namespace spz {
 	    bool _suppressBrowserOpenForCurrentLaunch;
 	    bool _requireDisconnectBeforeReady;
 
-	    /// <summary>Settings default is hide (0). Prefer Settings_MGR when live so the toggle and launch stay in sync.</summary>
+	    /// <summary>
+	    /// Settings default is hide (0). Read PlayerPrefs directly so a live <see cref="Settings_MGR"/>
+	    /// before its Awake tryLoad cannot report the field default (false) while prefs are already 1.
+	    /// </summary>
 	    public static bool PrefsWantShowExternalProcessWindows() {
-	        if (Settings_MGR.instance != null)
-	            return Settings_MGR.instance.get_showExternalProcessWindows();
 	        return UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1;
 	    }
 
