@@ -355,46 +355,107 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Ensures <c>AddonPanel_*</c> children are active under an add-on shell; if Python has not populated UI yet, show a visible placeholder.
+	    /// Ensures <c>AddonPanel_*</c> children are active under an add-on shell; if Python has not populated UI yet, show a visible placeholder
+	    /// and (for known add-ons) seed a native fallback panel so the tab is not blank when HTTP :5557 is down.
 	    /// </summary>
 	    void ActivateAddonShellContentOrPlaceholder(Transform shell) {
 		    if (shell == null) return;
-		    bool hasAddonContent = false;
-		    for (int i = 0; i < shell.childCount; i++) {
-			    Transform ch = shell.GetChild(i);
-			    if (ch == null) continue;
-			    string cn = ch.name ?? "";
-			    if (cn.StartsWith("AddonPanel_", StringComparison.Ordinal)) {
-				    ch.gameObject.SetActive(true);
-				    // Title-only panel still counts as "content started"; widgets may arrive mid-frame.
-				    hasAddonContent = ch.childCount > 0;
-			    }
-		    }
+		    string addonId = null;
+		    if (shell.name != null && shell.name.StartsWith("Panel_", StringComparison.Ordinal) && shell.name.Length > 6)
+			    addonId = shell.name.Substring("Panel_".Length);
+
+		    // Always try native seed for known add-ons (title-only shells must not skip this).
+		    if (!string.IsNullOrEmpty(addonId) && AddonUI_MGR.instance != null)
+			    AddonUI_MGR.instance.EnsureNativeFallbackUiWhenPythonMissing(addonId);
+
+		    bool hasAddonContent = ShellHasAddonPanelWidgets(shell);
+
 		    const string placeholderName = "AddonShell_WaitingPlaceholder";
 		    Transform existingPh = shell.Find(placeholderName);
 		    if (hasAddonContent) {
 			    if (existingPh != null)
 				    Destroy(existingPh.gameObject);
 		    } else if (existingPh == null) {
-			    var phGo = new GameObject(placeholderName);
-			    phGo.transform.SetParent(shell, false);
-			    var le = phGo.AddComponent<LayoutElement>();
-			    le.minHeight = 48f;
-			    le.preferredHeight = 72f;
-			    le.flexibleWidth = 1f;
-			    var tmp = phGo.AddComponent<TextMeshProUGUI>();
-			    tmp.text = "Add-on UI loading…\nIf this stays empty, open Add-on Manager → Load addons now (Python must be running).";
-			    tmp.fontSize = 14;
-			    tmp.color = new Color(0.92f, 0.92f, 0.92f, 1f);
-			    tmp.alignment = TextAlignmentOptions.TopLeft;
-			    tmp.enableWordWrapping = true;
-			    tmp.raycastTarget = false;
+			    CreateVisibleAddonShellPlaceholder(shell, placeholderName, addonId);
 		    } else {
 			    existingPh.gameObject.SetActive(true);
 		    }
 		    var rt = shell as RectTransform;
 		    if (rt != null)
 			    LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
+
+		    if (!hasAddonContent && Viewport_StatusText.instance != null) {
+			    Viewport_StatusText.instance.ShowStatusText(
+				    "Add-on UI empty — Python HTTP :5557 not ready. Enable FastAPI (pip install fastapi uvicorn) or rebuild with latest fixes.",
+				    false, 5f, false);
+		    }
+	    }
+
+	    /// <summary>True when shell has an AddonPanel with at least one real control (not Title-only).</summary>
+	    static bool ShellHasAddonPanelWidgets(Transform shell) {
+		    if (shell == null) return false;
+		    for (int i = 0; i < shell.childCount; i++) {
+			    Transform ch = shell.GetChild(i);
+			    if (ch == null) continue;
+			    string cn = ch.name ?? "";
+			    if (!cn.StartsWith("AddonPanel_", StringComparison.Ordinal)) continue;
+			    ch.gameObject.SetActive(true);
+			    for (int j = 0; j < ch.childCount; j++) {
+				    Transform w = ch.GetChild(j);
+				    if (w == null) continue;
+				    string wn = w.name ?? "";
+				    if (string.Equals(wn, "Title", StringComparison.Ordinal)) continue;
+				    if (wn.StartsWith("Button_", StringComparison.Ordinal)
+				        || wn.StartsWith("TextInput_", StringComparison.Ordinal)
+				        || wn.StartsWith("Slider_", StringComparison.Ordinal)
+				        || wn.StartsWith("Dropdown_", StringComparison.Ordinal))
+					    return true;
+			    }
+		    }
+		    return false;
+	    }
+
+	    void CreateVisibleAddonShellPlaceholder(Transform shell, string placeholderName, string addonId) {
+		    var phGo = new GameObject(placeholderName);
+		    phGo.transform.SetParent(shell, false);
+		    var phRt = phGo.AddComponent<RectTransform>();
+		    phRt.anchorMin = new Vector2(0f, 1f);
+		    phRt.anchorMax = new Vector2(1f, 1f);
+		    phRt.pivot = new Vector2(0.5f, 1f);
+		    phRt.sizeDelta = new Vector2(0f, 96f);
+		    phRt.anchoredPosition = Vector2.zero;
+		    var le = phGo.AddComponent<LayoutElement>();
+		    le.minHeight = 72f;
+		    le.preferredHeight = 96f;
+		    le.flexibleWidth = 1f;
+		    // Banner so the empty state is visible even if TMP has no font asset in the player.
+		    var bg = phGo.AddComponent<Image>();
+		    bg.color = new Color(0.12f, 0.35f, 0.55f, 0.95f);
+		    bg.raycastTarget = false;
+
+		    var textGo = new GameObject("Label");
+		    textGo.transform.SetParent(phGo.transform, false);
+		    var textRt = textGo.AddComponent<RectTransform>();
+		    textRt.anchorMin = Vector2.zero;
+		    textRt.anchorMax = Vector2.one;
+		    textRt.offsetMin = new Vector2(10f, 8f);
+		    textRt.offsetMax = new Vector2(-10f, -8f);
+		    var tmp = textGo.AddComponent<TextMeshProUGUI>();
+		    string idBit = string.IsNullOrEmpty(addonId) ? "this add-on" : addonId;
+		    tmp.text = $"Waiting for {idBit} UI…\nPython create_panel has not run (HTTP :5557). Use Add-on Manager → Load addons now after FastAPI is up.";
+		    tmp.fontSize = 14;
+		    tmp.color = Color.white;
+		    tmp.alignment = TextAlignmentOptions.TopLeft;
+		    tmp.enableWordWrapping = true;
+		    tmp.raycastTarget = false;
+		    // Copy font from a strip tab so IL2CPP players render text (bare TMP has no default font).
+		    TextMeshProUGUI fontSrc = GetRibbonStripTypographyReferenceTMP(ResolveEffectiveTabStripTransform(), null);
+		    if (fontSrc == null && _tabGroup != null)
+			    fontSrc = _tabGroup.GetComponentInChildren<TextMeshProUGUI>(true);
+		    if (fontSrc != null && fontSrc.font != null) {
+			    tmp.font = fontSrc.font;
+			    tmp.fontSharedMaterial = fontSrc.fontSharedMaterial;
+		    }
 	    }
 
 	    void OnArtList_Toggle(TabsGroupElem_UI tab){

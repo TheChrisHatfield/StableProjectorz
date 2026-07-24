@@ -171,6 +171,7 @@ namespace spz {
 					reuseTitle = titleObj.AddComponent<TextMeshProUGUI>();
 					reuseTitle.text = title;
 					reuseTitle.fontSize = 18;
+					ApplyRuntimeTmpFont(reuseTitle);
 				}
 				SpzUiThemeOps.ApplyToAddonUiRoot(go);
 				if (!parkedPendingRibbon) {
@@ -219,6 +220,7 @@ namespace spz {
 				titleText = titleObj.AddComponent<TextMeshProUGUI>();
 				titleText.text = title;
 				titleText.fontSize = 18;
+				ApplyRuntimeTmpFont(titleText);
 			} else {
 				titleText.text = title;
 			}
@@ -556,6 +558,87 @@ namespace spz {
 		}
 		
 		/// <summary>
+		/// When Python HTTP never runs create_panel, seed a minimal in-process panel for known add-ons so the ribbon tab is not blank.
+		/// </summary>
+		public void EnsureNativeFallbackUiWhenPythonMissing(string addonId) {
+			if (string.IsNullOrEmpty(addonId) || !Addon_MGR.IsAddonEnabledStatic(addonId))
+				return;
+			if (string.Equals(addonId, StableProjectorzGoAddonId, StringComparison.Ordinal)) {
+				EnsureNativeSpzGoPanel();
+				return;
+			}
+			if (string.Equals(addonId, NomadThemeAddonId, StringComparison.Ordinal)) {
+				EnsureNativeNomadThemePanel();
+			}
+		}
+
+		void EnsureNativeSpzGoPanel() {
+			if (HasLiveAddonPanelWithWidgets(StableProjectorzGoAddonId))
+				return;
+			string panelId = CreatePanel(StableProjectorzGoAddonId, "SPZ GO");
+			if (string.IsNullOrEmpty(panelId)) {
+				UnityEngine.Debug.LogWarning("[AddonUI_MGR] Native SPZ GO fallback: CreatePanel failed.");
+				return;
+			}
+			UnityEngine.Debug.Log("[AddonUI_MGR] Seeding native SPZ GO panel (Python create_panel missing / HTTP :5557 down).");
+			AddTextInput(StableProjectorzGoAddonId, panelId, "Blender.exe path (auto + editable)", "");
+			AddTextInput(StableProjectorzGoAddonId, panelId, "Import: mesh file from Blender → SPZ", "");
+			AddTextInput(StableProjectorzGoAddonId, panelId, "Export: mesh file from SPZ → disk", "");
+			AddButton(StableProjectorzGoAddonId, panelId, "Import", "do_import_from_path");
+			AddButton(StableProjectorzGoAddonId, panelId, "Export", "do_export_to_path");
+		}
+
+		void EnsureNativeNomadThemePanel() {
+			if (HasLiveAddonPanelWithWidgets(NomadThemeAddonId))
+				return;
+			string panelId = CreatePanel(NomadThemeAddonId, "Nomad Theme");
+			if (string.IsNullOrEmpty(panelId)) {
+				UnityEngine.Debug.LogWarning("[AddonUI_MGR] Native Nomad fallback: CreatePanel failed.");
+				return;
+			}
+			UnityEngine.Debug.Log("[AddonUI_MGR] Seeding native Nomad Theme panel (Python create_panel missing / HTTP :5557 down).");
+			AddButton(NomadThemeAddonId, panelId, "Apply Pro-Studio Nomad palette", "apply_nomad_palette");
+			AddButton(NomadThemeAddonId, panelId, "Restore StableProjectorz palette", "restore_stableprojectorz_palette");
+		}
+
+		bool HasLiveAddonPanelWithWidgets(string addonId) {
+			if (!_addonUIElements.TryGetValue(addonId, out var list) || list == null)
+				return false;
+			for (int i = 0; i < list.Count; i++) {
+				var go = list[i];
+				if (go == null) continue;
+				if (!go.name.StartsWith("AddonPanel_", StringComparison.Ordinal)) continue;
+				// Title only = not enough; need at least one control child beyond Title.
+				int controls = 0;
+				for (int c = 0; c < go.transform.childCount; c++) {
+					var ch = go.transform.GetChild(c);
+					if (ch == null) continue;
+					if (string.Equals(ch.name, "Title", StringComparison.Ordinal)) continue;
+					if (ch.name.StartsWith("Button_", StringComparison.Ordinal)
+					    || ch.name.StartsWith("TextInput_", StringComparison.Ordinal)
+					    || ch.name.StartsWith("Slider_", StringComparison.Ordinal)
+					    || ch.name.StartsWith("Dropdown_", StringComparison.Ordinal))
+						controls++;
+				}
+				if (controls > 0) return true;
+			}
+			return false;
+		}
+
+		static void ApplyRuntimeTmpFont(TextMeshProUGUI tmp) {
+			if (tmp == null || tmp.font != null) return;
+			TextMeshProUGUI src = null;
+			if (CommandRibbon_UI.instance != null)
+				src = CommandRibbon_UI.instance.GetComponentInChildren<TextMeshProUGUI>(true);
+			if (src == null)
+				src = UnityEngine.Object.FindObjectOfType<TextMeshProUGUI>();
+			if (src != null && src.font != null) {
+				tmp.font = src.font;
+				tmp.fontSharedMaterial = src.fontSharedMaterial;
+			}
+		}
+
+		/// <summary>
 		/// Adds a button to a panel
 		/// </summary>
 		public string AddButton(string addonId, string panelId, string label, string callbackName) {
@@ -605,6 +688,7 @@ namespace spz {
 				text.alignment = TextAlignmentOptions.Center;
 				text.color = Color.white;
 				text.raycastTarget = false;
+				ApplyRuntimeTmpFont(text);
 			}
 			
 			// Set up button click handler
@@ -979,6 +1063,7 @@ namespace spz {
 			labelText.fontSize = 12;
 			labelText.color = Color.white;
 			labelText.raycastTarget = false;
+			ApplyRuntimeTmpFont(labelText);
 			
 			// Add input field
 			var fieldObj = new GameObject("InputField");
@@ -1003,6 +1088,7 @@ namespace spz {
 			text.text = defaultValue;
 			text.fontSize = 12;
 			text.color = Color.white;
+			ApplyRuntimeTmpFont(text);
 			
 			var placeholderObj = new GameObject("Placeholder");
 			placeholderObj.transform.SetParent(fieldObj.transform, false);
@@ -1017,6 +1103,7 @@ namespace spz {
 			placeholder.fontSize = 12;
 			placeholder.color = new Color(0.5f, 0.5f, 0.5f, 1f);
 			placeholder.gameObject.SetActive(string.IsNullOrEmpty(defaultValue));
+			ApplyRuntimeTmpFont(placeholder);
 			
 			var inputField = fieldObj.AddComponent<TMP_InputField>();
 			inputField.textComponent = text;
