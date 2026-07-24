@@ -290,101 +290,107 @@ namespace spz {
 		}
 
 		IEnumerator CaptureProcessorCoroutine() {
-			while (_captureQueue.Count > 0) {
-				var job = _captureQueue.Dequeue();
-				if (job.Target == null || job.Target.texArray == null) continue;
-				PaintUndo_Scheduler.EvaluateWorkload(job.Target.width, job.Target.height, job.Target.UdimsCount,
-					_scheduler.referencePixelsPerSlice, out _, out var captureComplexity01, out _);
-				int arm = _scheduler.SelectCaptureArm(captureComplexity01, job.Target.UdimsCount, out int readbackInflight, out int postRbYields);
-				RenderUdims capScratch;
-				bool usedEager = _eagerHeadCopyValid && ReferenceEquals(job.Target, _eagerHeadTarget) && _eagerHeadScratchIx >= 0
-				                 && _scratchCapture[_eagerHeadScratchIx] != null;
-				if (usedEager) {
-					capScratch = _scratchCapture[_eagerHeadScratchIx];
-					_eagerHeadCopyValid = false;
-					_eagerHeadTarget = null;
-					_captureWriteSeq = (_eagerHeadScratchIx + 1) & 1;
-					if (_logVerbose) Debug.Log("[PaintUndo] Capture: using eager GPU copy (skip duplicate CopyTexture).");
-				} else {
-					_eagerHeadCopyValid = false;
-					_eagerHeadTarget = null;
-					int writeIx = _capturePingPongScratches ? (_captureWriteSeq++ & 1) : 0;
-					EnsureCaptureScratchSlot(writeIx, job.Target);
-					capScratch = _scratchCapture[writeIx];
-					Graphics.CopyTexture(job.Target.texArray, capScratch.texArray);
-				}
-				if (_logVerbose)
-					Debug.Log($"[PaintUndo] Capture readback: complexity01={captureComplexity01:F2}, arm={arm}, maxInflight={readbackInflight} (0=all parallel), postYields={postRbYields}");
-				bool done = false;
-				List<Texture2D> slices = null;
-				if (readbackInflight <= 0 || readbackInflight >= job.Target.UdimsCount)
-					TextureTools_SPZ.RenderTexture_to_Texture2DList_Async(capScratch, list => {
-						slices = list;
-						done = true;
-					});
-				else
-					TextureTools_SPZ.RenderTexture_to_Texture2DList_Async_Staggered(capScratch, readbackInflight, list => {
-						slices = list;
-						done = true;
-					});
-				while (!done) yield return null;
-				for (int y = 0; y < postRbYields; y++)
-					yield return null;
-				float maxHitchMs = 0f;
-				int obsFrames = Mathf.Max(0, _scheduler.captureObserveFrames);
-				for (int f = 0; f < obsFrames; f++) {
-					float hitch = Mathf.Max(0f, (Time.deltaTime - (1f / 60f)) * 1000f);
-					if (hitch > maxHitchMs) maxHitchMs = hitch;
-					yield return null;
-				}
-				bool captureOk = slices != null && slices.Count > 0;
-				if (captureOk) {
-					for (int i = 0; i < slices.Count; i++)
-						if (slices[i] == null) { captureOk = false; break; }
-				}
-				bool hitchOk = maxHitchMs < _scheduler.captureSuccessMaxHitchMs;
-				_scheduler.RegisterCaptureBanditObservation(captureOk && hitchOk);
-				if (_logVerbose && arm >= 0)
-					Debug.Log($"[PaintUndo] Capture bandit obs: arm={arm}, maxHitchMs={maxHitchMs:F1}, ok={captureOk && hitchOk}");
-				if (slices == null || slices.Count == 0) {
-					if (_logVerbose) Debug.LogWarning("[PaintUndo] Capture: no slices from readback.");
-					continue;
-				}
-				bool anyNull = false;
-				for (int i = 0; i < slices.Count; i++)
-					if (slices[i] == null) { anyNull = true; break; }
-				if (anyNull) {
-					foreach (var t in slices)
-						if (t != null) Destroy(t);
-					Debug.LogWarning("[PaintUndo] Capture: readback error on slice(s).");
-					continue;
-				}
-				if (!PaintUndo_SnapshotRecord.TryBuildUncompressedBlob(slices, job.ActiveLayerIndex, job.LayerCount, job.NonStackTargetKind, out var record, out var uncompressed)) {
-					foreach (var t in slices)
-						if (t != null) Destroy(t);
-					continue;
-				}
-				foreach (var t in slices)
-					Destroy(t);
-				byte[] rawForTask = uncompressed;
-				var deflateTask = Task.Run(() => {
-					try { return PaintUndo_Compress.Deflate(rawForTask); }
-					catch (Exception e) {
-						Debug.LogError("[PaintUndo] Capture Deflate failed: " + e.Message);
-						return null;
+			try {
+				while (_captureQueue.Count > 0) {
+					var job = _captureQueue.Dequeue();
+					if (job.Target == null || job.Target.texArray == null) continue;
+					PaintUndo_Scheduler.EvaluateWorkload(job.Target.width, job.Target.height, job.Target.UdimsCount,
+						_scheduler.referencePixelsPerSlice, out _, out var captureComplexity01, out _);
+					int arm = _scheduler.SelectCaptureArm(captureComplexity01, job.Target.UdimsCount, out int readbackInflight, out int postRbYields);
+					RenderUdims capScratch;
+					bool usedEager = _eagerHeadCopyValid && ReferenceEquals(job.Target, _eagerHeadTarget) && _eagerHeadScratchIx >= 0
+					                 && _scratchCapture[_eagerHeadScratchIx] != null;
+					if (usedEager) {
+						capScratch = _scratchCapture[_eagerHeadScratchIx];
+						_eagerHeadCopyValid = false;
+						_eagerHeadTarget = null;
+						_captureWriteSeq = (_eagerHeadScratchIx + 1) & 1;
+						if (_logVerbose) Debug.Log("[PaintUndo] Capture: using eager GPU copy (skip duplicate CopyTexture).");
+					} else {
+						_eagerHeadCopyValid = false;
+						_eagerHeadTarget = null;
+						int writeIx = _capturePingPongScratches ? (_captureWriteSeq++ & 1) : 0;
+						EnsureCaptureScratchSlot(writeIx, job.Target);
+						capScratch = _scratchCapture[writeIx];
+						Graphics.CopyTexture(job.Target.texArray, capScratch.texArray);
 					}
-				});
-				while (!deflateTask.IsCompleted) yield return null;
-				record.CompressedBytes = deflateTask.Result;
-				if (record.CompressedBytes == null) continue;
-				if (job.ClearRedoAfterPush)
-					_storage.ClearRedo();
-				_storage.PushUndo(record);
-				if (_logVerbose) Debug.Log($"[PaintUndo] PushUndo depth={_storage.UndoCount} bytes={record.CompressedBytes?.Length ?? 0}");
+					if (_logVerbose)
+						Debug.Log($"[PaintUndo] Capture readback: complexity01={captureComplexity01:F2}, arm={arm}, maxInflight={readbackInflight} (0=all parallel), postYields={postRbYields}");
+					bool done = false;
+					List<Texture2D> slices = null;
+					if (readbackInflight <= 0 || readbackInflight >= job.Target.UdimsCount)
+						TextureTools_SPZ.RenderTexture_to_Texture2DList_Async(capScratch, list => {
+							slices = list;
+							done = true;
+						});
+					else
+						TextureTools_SPZ.RenderTexture_to_Texture2DList_Async_Staggered(capScratch, readbackInflight, list => {
+							slices = list;
+							done = true;
+						});
+					while (!done) yield return null;
+					for (int y = 0; y < postRbYields; y++)
+						yield return null;
+					float maxHitchMs = 0f;
+					int obsFrames = Mathf.Max(0, _scheduler.captureObserveFrames);
+					for (int f = 0; f < obsFrames; f++) {
+						float hitch = Mathf.Max(0f, (Time.deltaTime - (1f / 60f)) * 1000f);
+						if (hitch > maxHitchMs) maxHitchMs = hitch;
+						yield return null;
+					}
+					bool captureOk = slices != null && slices.Count > 0;
+					if (captureOk) {
+						for (int i = 0; i < slices.Count; i++)
+							if (slices[i] == null) { captureOk = false; break; }
+					}
+					bool hitchOk = maxHitchMs < _scheduler.captureSuccessMaxHitchMs;
+					_scheduler.RegisterCaptureBanditObservation(captureOk && hitchOk);
+					if (_logVerbose && arm >= 0)
+						Debug.Log($"[PaintUndo] Capture bandit obs: arm={arm}, maxHitchMs={maxHitchMs:F1}, ok={captureOk && hitchOk}");
+					if (slices == null || slices.Count == 0) {
+						if (_logVerbose) Debug.LogWarning("[PaintUndo] Capture: no slices from readback.");
+						continue;
+					}
+					bool anyNull = false;
+					for (int i = 0; i < slices.Count; i++)
+						if (slices[i] == null) { anyNull = true; break; }
+					if (anyNull) {
+						foreach (var t in slices)
+							if (t != null) Destroy(t);
+						Debug.LogWarning("[PaintUndo] Capture: readback error on slice(s).");
+						continue;
+					}
+					if (!PaintUndo_SnapshotRecord.TryBuildUncompressedBlob(slices, job.ActiveLayerIndex, job.LayerCount, job.NonStackTargetKind, out var record, out var uncompressed)) {
+						foreach (var t in slices)
+							if (t != null) Destroy(t);
+						continue;
+					}
+					foreach (var t in slices)
+						Destroy(t);
+					byte[] rawForTask = uncompressed;
+					var deflateTask = Task.Run(() => {
+						try { return PaintUndo_Compress.Deflate(rawForTask); }
+						catch (Exception e) {
+							Debug.LogError("[PaintUndo] Capture Deflate failed: " + e.Message);
+							return null;
+						}
+					});
+					while (!deflateTask.IsCompleted) yield return null;
+					record.CompressedBytes = deflateTask.Result;
+					if (record.CompressedBytes == null) continue;
+					if (job.ClearRedoAfterPush)
+						_storage.ClearRedo();
+					_storage.PushUndo(record);
+					if (_logVerbose) Debug.Log($"[PaintUndo] PushUndo depth={_storage.UndoCount} bytes={record.CompressedBytes?.Length ?? 0}");
+				}
+				// Clear before deferred undo/redo so TryStartCaptureProcessorIfNeeded can enqueue a new capture.
+				_captureCrt = null;
+				ProcessDeferredUndoRedo();
+				TryStartCaptureProcessorIfNeeded();
+			} finally {
+				// StopCoroutine / exception must not leave IsBusy stuck (fill/clear wait on _captureCrt).
+				_captureCrt = null;
 			}
-			_captureCrt = null;
-			ProcessDeferredUndoRedo();
-			TryStartCaptureProcessorIfNeeded();
 		}
 
 		/// <summary>After capture or restore finishes, run deferred Ctrl+Z / Ctrl+Y that arrived while <see cref="IsBusy"/>.</summary>
