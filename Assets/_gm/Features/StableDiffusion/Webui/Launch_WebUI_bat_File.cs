@@ -36,16 +36,11 @@ namespace spz {
 	    Coroutine _waitForWebUiReady_crtn;
 	    bool _isWaitingForWebUiReady;
 	    bool _openBrowserWhenReadyRequested;
-	    bool _forceHiddenForAutoLaunch;
-	    /// <summary>When true, force a visible Forge console for this launch (visible-fallback retry only).</summary>
-	    bool _forceShowWindowForAutoLaunch;
-	    /// <summary>One-shot: if a hidden auto-start dies before SD connects, retry once with a visible console.</summary>
-	    bool _autoLaunchDidVisibleFallback;
 	    bool _suppressBrowserOpenForCurrentLaunch;
 	    bool _requireDisconnectBeforeReady;
 
 	    /// <summary>Settings default is hide (0). Prefer Settings_MGR when live so the toggle and launch stay in sync.</summary>
-	    static bool PrefsWantShowExternalProcessWindows() {
+	    public static bool PrefsWantShowExternalProcessWindows() {
 	        if (Settings_MGR.instance != null)
 	            return Settings_MGR.instance.get_showExternalProcessWindows();
 	        return UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1;
@@ -512,9 +507,8 @@ namespace spz {
 	    }
 
 	    string GetLaunchPathAndWorkingDir(string webuiFilePath, out string workingDir) {
-	        // Hide console when Settings say so (default off = hide). Force-show overrides for visible fallback only.
-	        bool preferNoConsole = !_forceShowWindowForAutoLaunch
-	            && !PrefsWantShowExternalProcessWindows();
+	        // Hide console when Settings say so (default off = hide).
+	        bool preferNoConsole = !PrefsWantShowExternalProcessWindows();
 	        return GetLaunchPathWithGpuSetting(webuiFilePath, out workingDir, preferNoConsole);
 	    }
 
@@ -544,9 +538,7 @@ namespace spz {
 
 	        try {
 	            // Default first-run: hide (ShowExternalProcessWindows = 0). Toggle ON shows the Forge console.
-	            // Auto-start no longer forces visible; optional visible fallback only if a hidden launch dies.
-	            bool showExternalWindows = _forceShowWindowForAutoLaunch
-	                || (!_forceHiddenForAutoLaunch && PrefsWantShowExternalProcessWindows());
+	            bool showExternalWindows = PrefsWantShowExternalProcessWindows();
 	            uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
 	                launchPath,
 	                isJustFile: true,
@@ -586,58 +578,42 @@ namespace spz {
 
 	    IEnumerator AggressiveAutoLaunchLoop() {
 	        bool showStatus = true;
+	        bool launchedOnce = false;
 	        for (int i = 0; i < AutoLaunchRetryDelays.Length; i++) {
 	            yield return new WaitForSecondsRealtime(AutoLaunchRetryDelays[i]);
+	            if (Connection_MGR.is_sd_connected)
+	                yield break;
 	            if (_lastLaunchedWebUiPid != 0 && StartExternalProcess.IsProcessRunning(_lastLaunchedWebUiPid))
 	                yield break;
-	            // Wrapper cmd often exits immediately after spawning python — only treat as done if SD is up.
-	            if (_lastLaunchedWebUiPid != 0 && Connection_MGR.is_sd_connected)
-	                yield break;
+	            // Wrapper cmd often exits immediately after spawning python. A relaunch would call
+	            // TryCloseLastLaunchedWebUi → kill :7860 and abort a healthy Forge still loading.
+	            if (launchedOnce) {
+	                UnityEngine.Debug.Log(
+	                    "[LaunchWebUI] Prior auto-launch handed off (launcher PID gone); waiting for SD without relaunch/port-kill.");
+	                continue;
+	            }
 	            if (i > 0)
 	                UnityEngine.Debug.Log($"[LaunchWebUI] Retry {i + 1}/{AutoLaunchRetryDelays.Length} (after {AutoLaunchRetryDelays[i]}s).");
 	            try {
-	                // Honor Settings (default = hide). Visible console only if user enabled the toggle,
-	                // or as a one-shot fallback below when a hidden start dies before connect.
-	                _forceHiddenForAutoLaunch = false;
-	                _forceShowWindowForAutoLaunch = false;
+	                // Honor Settings only (default = hide). Never force a visible console on auto-start.
 	                bool suppressBrowser = UnityEngine.PlayerPrefs.GetInt("WebUI_OpenBrowserOnStartup", 0) == 0;
-	                LaunchWebui_Manually(showStatus, suppressBrowserOpenForThisLaunch: suppressBrowser);
+	                if (LaunchWebui_Manually(showStatus, suppressBrowserOpenForThisLaunch: suppressBrowser))
+	                    launchedOnce = true;
 	            } catch (Exception e) {
 	                UnityEngine.Debug.LogError($"[LaunchWebUI] Auto-launch attempt failed: {e.Message}");
 	                ClearSdLoadingNotification("Stable Diffusion auto-launch failed: " + e.Message, false);
 	                _lastLaunchedWebUiPid = 0;
-	            } finally {
-	                _forceHiddenForAutoLaunch = false;
-	                _forceShowWindowForAutoLaunch = false;
 	            }
 	            if (_lastLaunchedWebUiPid != 0) {
-	                // Give a short-lived wrapper a moment; if it already exited and SD is not up, allow retry.
 	                yield return new WaitForSecondsRealtime(2f);
 	                if (Connection_MGR.is_sd_connected)
 	                    yield break;
 	                if (StartExternalProcess.IsProcessRunning(_lastLaunchedWebUiPid))
 	                    yield break;
+	                // Hand-off: python may still be starting. Keep launchedOnce so later iterations wait only.
 	                UnityEngine.Debug.LogWarning(
-	                    $"[LaunchWebUI] Auto-launch PID {_lastLaunchedWebUiPid} exited before SD connected — will retry.");
+	                    $"[LaunchWebUI] Auto-launch PID {_lastLaunchedWebUiPid} exited before SD connected — waiting (no kill/relaunch).");
 	                _lastLaunchedWebUiPid = 0;
-	                // Hidden start failed: one visible fallback so the user can see Forge errors (toggle still defaults hide).
-	                if (!_autoLaunchDidVisibleFallback && !PrefsWantShowExternalProcessWindows()) {
-	                    _autoLaunchDidVisibleFallback = true;
-	                    UnityEngine.Debug.LogWarning("[LaunchWebUI] Hidden auto-start died; retrying once with visible Forge console.");
-	                    try {
-	                        _forceShowWindowForAutoLaunch = true;
-	                        bool suppressBrowser = UnityEngine.PlayerPrefs.GetInt("WebUI_OpenBrowserOnStartup", 0) == 0;
-	                        LaunchWebui_Manually(showStatus, suppressBrowserOpenForThisLaunch: suppressBrowser);
-	                    } finally {
-	                        _forceShowWindowForAutoLaunch = false;
-	                    }
-	                    if (_lastLaunchedWebUiPid != 0) {
-	                        yield return new WaitForSecondsRealtime(2f);
-	                        if (Connection_MGR.is_sd_connected || StartExternalProcess.IsProcessRunning(_lastLaunchedWebUiPid))
-	                            yield break;
-	                        _lastLaunchedWebUiPid = 0;
-	                    }
-	                }
 	            }
 	        }
 	    }
