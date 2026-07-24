@@ -425,9 +425,12 @@ namespace spz {
 
 				if (useScheduled)
 				{
-					if (_collapseSliceCopyCrt != null) {
-						StopCoroutine(_collapseSliceCopyCrt);
-						CleanupAfterScheduledCollapse();
+					// Do not StopCoroutine mid-collapse: finally may not run and the destination layer is left half-composited.
+					if (_collapseSliceCopyCrt != null)
+					{
+						Viewport_StatusText.instance?.ShowStatusText(
+							"Collapse already in progress — please wait.", false, 3f, false);
+						return false;
 					}
 					NotifyCollapseBegin(amortizedAcrossFrames: true, visCount, first.UdimsCount);
 					_collapsePathObsBucket = pathBucket;
