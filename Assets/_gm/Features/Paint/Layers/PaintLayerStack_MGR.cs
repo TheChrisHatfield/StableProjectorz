@@ -465,6 +465,7 @@ namespace spz {
 					newLayer.SyncDataFromContent();
 					newLayer.HasReceivedSceneInject = true;
 					pasted = true;
+					PasteCollapsedNoColorMasksInto(newLayer, _layers.IndexOf(newLayer));
 				}
 				else
 					UnityEngine.Debug.LogWarning("[PaintLayerStack] Collapse: new layer has no Content; GPU path paste skipped.");
@@ -567,6 +568,7 @@ namespace spz {
 
 				newLayer.SyncDataFromContent();
 				newLayer.HasReceivedSceneInject = true;
+				PasteCollapsedNoColorMasksInto(newLayer, excludeIdx);
 				completedComposite = true;
 			}
 			finally {
@@ -669,6 +671,7 @@ namespace spz {
 				newLayer.SyncDataFromContent();
 				newLayer.HasReceivedSceneInject = true;
 				pasted = true;
+				PasteCollapsedNoColorMasksInto_Cpu(newLayer, visibleLayers);
 			}
 			else
 				UnityEngine.Debug.LogWarning("[PaintLayerStack] Collapse: new layer has no Content; paste skipped.");
@@ -677,6 +680,107 @@ namespace spz {
 
 			NotifyCollapseEnd(pasted);
 			return pasted;
+		}
+
+		/// <summary>True if any visible layer (excluding <paramref name="excludeLayerIndex"/>) has a NoColorMask with paint data capacity.</summary>
+		public bool AnyVisibleLayerHasNoColorMask(int excludeLayerIndex = -1)
+		{
+			for (int i = 0; i < _layers.Count; i++)
+			{
+				if (i == excludeLayerIndex) continue;
+				var l = _layers[i];
+				if (l != null && l.Visible && l.Content != null
+				    && l.NoColorMask != null && l.NoColorMask.texArray != null)
+					return true;
+			}
+			return false;
+		}
+
+		/// <summary>
+		/// After Content collapse paste: merge visible layers' NoColorMask into the new layer so No-Color strokes survive Collapse.
+		/// </summary>
+		void PasteCollapsedNoColorMasksInto(PaintLayer newLayer, int excludeLayerIndex)
+		{
+			if (newLayer?.Content == null || _compositeBlendMat == null) return;
+			if (!AnyVisibleLayerHasNoColorMask(excludeLayerIndex)) return;
+			newLayer.EnsureNoColorMaskMatchesContent();
+			if (newLayer.NoColorMask == null) return;
+			CompositeNoColorMasksTo(newLayer.NoColorMask, excludeLayerIndex);
+		}
+
+		/// <summary>CPU-path counterpart when the blend shader is unavailable.</summary>
+		void PasteCollapsedNoColorMasksInto_Cpu(PaintLayer newLayer, List<PaintLayer> sourceLayers)
+		{
+			if (newLayer?.Content == null || sourceLayers == null) return;
+			bool any = false;
+			foreach (var l in sourceLayers)
+			{
+				if (l != null && l.NoColorMask != null && l.NoColorMask.texArray != null) { any = true; break; }
+			}
+			if (!any) return;
+			newLayer.EnsureNoColorMaskMatchesContent();
+			if (newLayer.NoColorMask == null) return;
+
+			int w = newLayer.Content.width;
+			int h = newLayer.Content.height;
+			int slices = newLayer.Content.UdimsCount;
+			var allNcSlices = new List<List<Texture2D>>();
+			var opacities = new List<float>();
+			foreach (var l in sourceLayers)
+			{
+				if (l?.NoColorMask == null || l.NoColorMask.texArray == null)
+				{
+					allNcSlices.Add(null);
+					opacities.Add(0f);
+					continue;
+				}
+				List<Texture2D> layerTextures = TextureTools_SPZ.TextureArray_to_Texture2DList(l.NoColorMask.texArray);
+				allNcSlices.Add(layerTextures);
+				opacities.Add(Mathf.Clamp01(l.Opacity));
+			}
+
+			var resultTextures = new List<Texture2D>();
+			for (int s = 0; s < slices; s++)
+			{
+				Color[] accum = new Color[w * h];
+				for (int p = 0; p < accum.Length; p++)
+					accum[p] = Color.clear;
+
+				for (int li = 0; li < allNcSlices.Count; li++)
+				{
+					var layerSlices = allNcSlices[li];
+					if (layerSlices == null || s >= layerSlices.Count) continue;
+					Texture2D sliceTex = layerSlices[s];
+					if (sliceTex == null) continue;
+					Color[] fg = sliceTex.GetPixels();
+					float opacity = opacities[li];
+					for (int p = 0; p < accum.Length && p < fg.Length; p++)
+					{
+						float srcA = fg[p].a * opacity;
+						float srcR = fg[p].r * opacity;
+						float srcG = fg[p].g * opacity;
+						float srcB = fg[p].b * opacity;
+						accum[p].r = srcR + accum[p].r * (1f - srcA);
+						accum[p].g = srcG + accum[p].g * (1f - srcA);
+						accum[p].b = srcB + accum[p].b * (1f - srcA);
+						accum[p].a = srcA + accum[p].a;
+					}
+				}
+
+				Texture2D result = new Texture2D(w, h, TextureFormat.RGBA32, false);
+				result.SetPixels(accum);
+				result.Apply();
+				resultTextures.Add(result);
+			}
+
+			foreach (var layerSlices in allNcSlices)
+			{
+				if (layerSlices == null) continue;
+				foreach (var t in layerSlices) if (t != null) UnityEngine.Object.DestroyImmediate(t);
+			}
+
+			TextureTools_SPZ.TextureArray_Fill_N_Slices(newLayer.NoColorMask.texArray, resultTextures, 0);
+			foreach (var t in resultTextures) if (t != null) UnityEngine.Object.DestroyImmediate(t);
 		}
 
 		/// <summary>Remove all layers and add a single empty layer (e.g. after collapsing into scene buffer). Used by Inpaint_MaskPainter.CollapseLayersIntoScene.</summary>
@@ -865,6 +969,88 @@ namespace spz {
 				tmp = a; a = b; b = tmp;
 			}
 			Graphics.CopyTexture(a.texArray, dest.texArray);
+		}
+
+		/// <summary>
+		/// Composite visible layers' <see cref="PaintLayer.NoColorMask"/> into dest (bottom→top, same opacity blend as Content).
+		/// Layers without a NoColorMask are skipped. Used so Collapse preserves No-Color strokes.
+		/// </summary>
+		public void CompositeNoColorMasksTo(RenderUdims dest, int excludeLayerIndex = -1)
+		{
+			if (dest == null) return;
+			if (_compositeBlendMat == null) { dest.ClearTheTextures(Color.clear); return; }
+
+			int ncCount = 0;
+			RenderUdims firstNc = null;
+			for (int i = 0; i < _layers.Count; i++)
+			{
+				if (i == excludeLayerIndex) continue;
+				var l = _layers[i];
+				if (l == null || !l.Visible || l.Content == null) continue;
+				if (l.NoColorMask == null || l.NoColorMask.texArray == null) continue;
+				ncCount++;
+				if (firstNc == null) firstNc = l.NoColorMask;
+			}
+			if (ncCount == 0 || firstNc == null)
+			{
+				dest.ClearTheTextures(Color.clear);
+				return;
+			}
+
+			if (_resolution.x <= 0 && firstNc.width > 0 && firstNc.height > 0 && firstNc.UdimsCount > 0)
+			{
+				_resolution = new Vector2Int(firstNc.width, firstNc.height);
+				_udimsCount = firstNc.UdimsCount;
+			}
+			RenderUdims.assertSameSize(dest, firstNc);
+			RenderUdims a = GetOrCreateCompositeTemp(ref _compositeTempA);
+			RenderUdims b = GetOrCreateCompositeTemp(ref _compositeTempB);
+			if (a == null || b == null)
+			{
+				a = GetOrCreateCompositeTempFromBase(ref _compositeTempA, firstNc);
+				b = GetOrCreateCompositeTempFromBase(ref _compositeTempB, firstNc);
+			}
+			if (a == null || b == null)
+			{
+				UnityEngine.Debug.LogWarning("[PaintLayerStack] CompositeNoColorMasksTo: could not create composite temps. Clearing dest.");
+				dest.ClearTheTextures(Color.clear);
+				return;
+			}
+
+			bool foundFirst = false;
+			RenderUdims tmp;
+			for (int i = 0; i < _layers.Count; i++)
+			{
+				if (i == excludeLayerIndex) continue;
+				var l = _layers[i];
+				if (l == null || !l.Visible || l.Content == null) continue;
+				if (l.NoColorMask == null || l.NoColorMask.texArray == null) continue;
+				if (!foundFirst)
+				{
+					a.ClearTheTextures(Color.clear);
+					_compositeBlendMat.SetTexture("_Background", a.texArray);
+					_compositeBlendMat.SetFloat("_Opacity", Mathf.Clamp01(l.Opacity));
+					SetCompositeBlendSliceRangeFull(a);
+					Graphics.Blit(l.NoColorMask.texArray, b.texArray, _compositeBlendMat);
+					tmp = a; a = b; b = tmp;
+					foundFirst = true;
+					if (ncCount == 1)
+					{
+						Graphics.CopyTexture(a.texArray, dest.texArray);
+						return;
+					}
+					continue;
+				}
+				_compositeBlendMat.SetTexture("_Background", a.texArray);
+				_compositeBlendMat.SetFloat("_Opacity", Mathf.Clamp01(l.Opacity));
+				SetCompositeBlendSliceRangeFull(a);
+				Graphics.Blit(l.NoColorMask.texArray, b.texArray, _compositeBlendMat);
+				tmp = a; a = b; b = tmp;
+			}
+			if (foundFirst)
+				Graphics.CopyTexture(a.texArray, dest.texArray);
+			else
+				dest.ClearTheTextures(Color.clear);
 		}
 
 		/// <summary>GPU composite of visible layers into <paramref name="dest"/> for UDIM slices <c>[sliceBegin, sliceEndExclusive)</c>. Skips <paramref name="excludeLayerIndex"/> (e.g. the new collapse layer). Restores full-slice shader range after the call.</summary>

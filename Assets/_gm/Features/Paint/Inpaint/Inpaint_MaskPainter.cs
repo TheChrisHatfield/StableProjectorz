@@ -872,6 +872,11 @@ namespace spz {
 		    if (_ObjectUV_brushedColorRGBA != null)
 			    stack.CopyAllSlices(_layerStackCompositeTemp, _ObjectUV_brushedColorRGBA);
 
+		    // 2b. Snapshot NoColor composite before sources are disposed (reuse temp after Content is safely copied out).
+		    bool hadNoColor = stack.AnyVisibleLayerHasNoColorMask();
+		    if (hadNoColor)
+			    stack.CompositeNoColorMasksTo(_layerStackCompositeTemp);
+
 		    // 3. Replace stack with one empty layer (injection is skipped because _isCollapsingLayers)
 		    stack.ReplaceLayersWithOneEmpty();
 
@@ -886,10 +891,23 @@ namespace spz {
 			        && singleLayer.Content.height == _layerStackCompositeTemp.height
 			        && singleLayer.Content.UdimsCount == _layerStackCompositeTemp.UdimsCount)
 			    {
-				    stack.CopyAllSlices(_layerStackCompositeTemp, singleLayer.Content);
+				    // Prefer scene buffer for Content when NoColor reused the composite temp.
+				    if (_ObjectUV_brushedColorRGBA != null
+				        && _ObjectUV_brushedColorRGBA.width == singleLayer.Content.width
+				        && _ObjectUV_brushedColorRGBA.height == singleLayer.Content.height
+				        && _ObjectUV_brushedColorRGBA.UdimsCount == singleLayer.Content.UdimsCount)
+					    stack.CopyAllSlices(_ObjectUV_brushedColorRGBA, singleLayer.Content);
+				    else if (!hadNoColor)
+					    stack.CopyAllSlices(_layerStackCompositeTemp, singleLayer.Content);
 				    singleLayer.SyncDataFromContent();
 				    singleLayer.HasReceivedSceneInject = true;
 				    singleLayer.Name = stack.ConsumeNextDefaultCollapseLayerName();
+				    if (hadNoColor)
+				    {
+					    singleLayer.EnsureNoColorMaskMatchesContent();
+					    if (singleLayer.NoColorMask != null)
+						    stack.CopyAllSlices(_layerStackCompositeTemp, singleLayer.NoColorMask);
+				    }
 			    }
 		    }
 		    _isCollapsingLayers = false;
