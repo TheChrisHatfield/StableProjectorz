@@ -125,7 +125,8 @@ namespace spz {
 		    var pins = CamerasMGR_PinsZone_UI.instance;
 		    if (pins != null && pins.IsDraggingThisCameraPin(camIx)) { return; }
 		    if (_myViewCam.myCamera == null) { return; }
-		    Vector3 sp = _myViewCam.myCamera.WorldToScreenPoint(_panAnchorWorld);
+		    // Must match OnPreCull / content projection; raw WorldToScreenPoint parks pins in the wrong tile.
+		    Vector3 sp = _myViewCam.WorldToScreenPoint_RenderMatched(_panAnchorWorld);
 		    if (sp.z < 0f) { return; }
 		    var inner = MainViewport_UI.instance.innerViewportRect;
 		    if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(inner, (Vector2)sp, null, out Vector2 local)) { return; }
