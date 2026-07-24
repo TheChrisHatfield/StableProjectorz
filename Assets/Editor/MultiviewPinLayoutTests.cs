@@ -21,4 +21,12 @@ public sealed class MultiviewPinLayoutTests {
 		Assert.That(MultiviewPinLayoutRules.PinLabelForCameraIndex(0), Is.EqualTo(1));
 		Assert.That(MultiviewPinLayoutRules.PinLabelForCameraIndex(2), Is.EqualTo(3));
 	}
+
+	[Test]
+	public void InitPinsMustNotPretendAllCamerasAreEnabledForLayout() {
+		// Guardrail for CamerasMGR_POVdefaults_UI.InitPins_To_DefaultLocations:
+		// building a pov list with every slot wasEnabled=true selects the 6-pin variant and
+		// writes leftover centers onto inactive cameras. Only camera 0 should be centered at startup.
+		Assert.That(MultiviewPinLayoutRules.ShouldSeedAllCamerasAsEnabledDuringInit(), Is.False);
+	}
 }

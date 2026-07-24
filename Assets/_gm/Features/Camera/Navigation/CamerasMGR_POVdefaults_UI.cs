@@ -164,14 +164,12 @@ namespace spz {
 	            StartCoroutine( WaitForMgr_AndInit() );
 	            return;
 	        }
-	        List<CameraPovInfo> povs = new List<CameraPovInfo>();
-	        for(int i=0; i<UserCameras_MGR.MAX_NUM_VIEW_CAMERAS; ++i){
-	            povs.Add( new CameraPovInfo(true,  Vector3.one, Quaternion.identity, 22, Vector2.one*0.5f) );
-	        }
-	        Transform pinsPlacementVariant =  Get_PinDefaultPos_Variant(povs);
-	        LerpPins(pinsPlacementVariant, povs, factor01:1);
-	        //first camera should always be in the middle:
-	        UserCameras_MGR.instance?.Set_ProjMatrixCenter_ofCamera( 0,  Vector2.one*0.5f );
+	        // Startup is single-view (only pin/camera 0 active). Do NOT run the 6-pin default
+	        // layout across every slot then force cam0 to center — that left cams 1..N with
+	        // leftover centers that appear as offset POV digits the moment multi-view enables
+	        // them (before auto-layout / Order Pins). Inactive cams keep Content_UserCamera's
+	        // default 0.5 center; MultiView_Ribbon_UI auto-layout places them when N>1.
+	        UserCameras_MGR.instance.Set_ProjMatrixCenter_ofCamera( 0, Vector2.one * 0.5f );
 	    }
 
 	    IEnumerator WaitForMgr_AndInit(){
