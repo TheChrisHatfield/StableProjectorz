@@ -1,4 +1,3 @@
-using System;
 using System.Reflection;
 using NUnit.Framework;
 using spz;
@@ -17,6 +16,14 @@ public sealed class AddonRibbonEmptyStateTests {
 		Assert.That(method, Is.Not.Null, "EnsureNativeFallbackUiWhenPythonMissing must remain public for ribbon activation.");
 		Assert.That(method.GetParameters().Length, Is.EqualTo(1));
 		Assert.That(method.GetParameters()[0].ParameterType, Is.EqualTo(typeof(string)));
+	}
+
+	[Test]
+	public void AddonMgr_NativeCapableAddonsSurvivePythonLoadFailure() {
+		Assert.That(Addon_MGR.SupportsNativeUiWithoutPython(Addon_MGR.StableProjectorzGoAddonId), Is.True);
+		Assert.That(Addon_MGR.SupportsNativeUiWithoutPython(Addon_MGR.NomadThemeAddonId), Is.True);
+		Assert.That(Addon_MGR.SupportsNativeUiWithoutPython("MeshTools"), Is.False);
+		Assert.That(Addon_MGR.SupportsNativeUiWithoutPython(Addon_MGR.RibbonOnlyFullscreenAddonId), Is.False);
 	}
 
 	[Test]
