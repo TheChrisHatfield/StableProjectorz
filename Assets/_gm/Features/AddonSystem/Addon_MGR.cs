@@ -1130,6 +1130,7 @@ namespace spz {
 		/// <summary>
 		/// When Python reports load failure (or HTTP timeout), disable for this session and tear down ribbon UI.
 		/// Does not rewrite remember prefs — Save settings owns persistence (transient stalls must not forget the add-on).
+		/// Native-capable add-ons (SPZ GO / Nomad) keep the ribbon tab and seed in-process UI instead of vanishing.
 		/// </summary>
 		void MarkAddonLoadFailed(string addonId) {
 			if (!_registeredAddons.TryGetValue(addonId, out var addon) || addon == null)
@@ -1141,6 +1142,16 @@ namespace spz {
 					$"[Addon_MGR] Python load failed for {addonId}, but keeping add-on enabled — viewport dock does not require Python. Response/timeout is non-fatal.");
 				if (!RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyVisibleBuiltDock())
 					StartCoroutine(CoEnsureRibbonOnlyFullscreenViewportDock());
+				return;
+			}
+			// SPZ GO / Nomad Theme already work in-process when HTTP :5557 is down. Do not disable or remove the tab —
+			// that erased native fallback and left users with a vanished SPZ GO after a blank wait.
+			if (SupportsNativeUiWithoutPython(addonId)) {
+				UnityEngine.Debug.LogWarning(
+					$"[Addon_MGR] Python load failed for {addonId}, but keeping enabled — seeding native ribbon UI (HTTP :{_httpServerPort} unavailable).");
+				EnsureRibbonShellForEnabledAddon(addonId);
+				if (AddonUI_MGR.instance != null)
+					AddonUI_MGR.instance.EnsureNativeFallbackUiWhenPythonMissing(addonId);
 				return;
 			}
 			addon.isEnabled = false;
@@ -1156,8 +1167,18 @@ namespace spz {
 			OnAddonEnabledStateChanged?.Invoke(addonId);
 		}
 
+		/// <summary>Add-ons that ship Unity-side ribbon UI when Python FastAPI never loads.</summary>
+		public static bool SupportsNativeUiWithoutPython(string addonId) {
+			if (string.IsNullOrEmpty(addonId))
+				return false;
+			return string.Equals(addonId, StableProjectorzGoAddonId, StringComparison.Ordinal)
+			       || string.Equals(addonId, NomadThemeAddonId, StringComparison.Ordinal);
+		}
+
 		/// <summary>StreamingAssets add-on id for on-screen full view ribbon dock (matches folder name and Python <c>ADDON_ID</c>).</summary>
 		public const string RibbonOnlyFullscreenAddonId = "RibbonOnlyFullscreen";
+		public const string StableProjectorzGoAddonId = "StableProjectorzGO";
+		public const string NomadThemeAddonId = "NomadThemeSPZ";
 
 		/// <summary>True when the add-on is enabled in the manager (ribbon/Python load allowed).</summary>
 		public bool IsAddonEnabled(string addonId) {
