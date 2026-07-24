@@ -268,17 +268,19 @@ namespace spz {
 	        if (!sceneNoColorPreview)
 	        {
 		        bool applyBrushToContent = _isPainting && !multiLayer && !isSmudgeTool && !isNoColorMode;
+		        float layerOpacity01 = activeLayerForOverlay != null ? Mathf.Clamp01(activeLayerForOverlay.Opacity) : 1f;
+		        // Multi-layer uses per-layer opacity in the composite; single-layer used to hardcode 1 and ignore Opacity.
 		        _blitApplyEntireColorLayer_mat.SetTexture("_SrcTex", source.texArray);
 		        RenderUdims.SetNumUdims(ontoHere, _blitApplyEntireColorLayer_mat);
 		        TextureTools_SPZ.SetKeyword_Material(_blitApplyEntireColorLayer_mat, "APPLY_LATEST_BRUSH_TOO", applyBrushToContent);
-		        _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", _latestBrushStroke_ref);
+		        _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", LatestBrushStrokeOrBlack());
 		        _blitApplyEntireColorLayer_mat.SetColor("_CurrBrushColor", brushCol);
 		        _blitApplyEntireColorLayer_mat.SetFloat("_Sign", sign);
 		        _blitApplyEntireColorLayer_mat.SetFloat("_MaxPossibleBrushStrength01", maxStrength);
 		        // Always 0 here: layer Content is color RGB. Colorless overlay is the second pass below (single-layer)
 		        // or already baked per-layer in the composite temp (multi-layer).
 		        _blitApplyEntireColorLayer_mat.SetInteger("_isColorlessMask", 0);
-		        _blitApplyEntireColorLayer_mat.SetFloat("_TotalOpacity01", 1f);
+		        _blitApplyEntireColorLayer_mat.SetFloat("_TotalOpacity01", sourceIsScenePaintBuf ? 1f : layerOpacity01);
 		        TextureTools_SPZ.Blit(source.texArray, ontoHere.texArray, _blitApplyEntireColorLayer_mat);
 	        }
 
@@ -288,16 +290,17 @@ namespace spz {
 	        {
 		        var ncm = activeLayerForOverlay.NoColorMask;
 		        bool applyBrushToNoColor = _isPainting && !isSmudgeTool && isNoColorMode;
+		        float layerOpacity01 = Mathf.Clamp01(activeLayerForOverlay.Opacity);
 		        _blitApplyEntireColorLayer_mat.SetTexture("_SrcTex", ncm.texArray);
 		        RenderUdims.SetNumUdims(ontoHere, _blitApplyEntireColorLayer_mat);
 		        TextureTools_SPZ.SetKeyword_Material(_blitApplyEntireColorLayer_mat, "APPLY_LATEST_BRUSH_TOO", applyBrushToNoColor);
-		        _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", _latestBrushStroke_ref);
+		        _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", LatestBrushStrokeOrBlack());
 		        _blitApplyEntireColorLayer_mat.SetColor("_CurrBrushColor", brushCol);
 		        _blitApplyEntireColorLayer_mat.SetFloat("_Sign", sign);
 		        _blitApplyEntireColorLayer_mat.SetFloat("_MaxPossibleBrushStrength01", maxStrength);
 		        _blitApplyEntireColorLayer_mat.SetInteger("_isColorlessMask", 1);
 		        _blitApplyEntireColorLayer_mat.SetTexture("_ColorlessCheckerTex", _colorlessMaskChecker_tex);
-		        _blitApplyEntireColorLayer_mat.SetFloat("_TotalOpacity01", 1f);
+		        _blitApplyEntireColorLayer_mat.SetFloat("_TotalOpacity01", layerOpacity01);
 		        TextureTools_SPZ.Blit(ncm.texArray, ontoHere.texArray, _blitApplyEntireColorLayer_mat);
 	        }
 	        else if (sceneNoColorPreview)
@@ -306,7 +309,7 @@ namespace spz {
 		        _blitApplyEntireColorLayer_mat.SetTexture("_SrcTex", source.texArray);
 		        RenderUdims.SetNumUdims(ontoHere, _blitApplyEntireColorLayer_mat);
 		        TextureTools_SPZ.SetKeyword_Material(_blitApplyEntireColorLayer_mat, "APPLY_LATEST_BRUSH_TOO", _isPainting);
-		        _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", _latestBrushStroke_ref);
+		        _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", LatestBrushStrokeOrBlack());
 		        _blitApplyEntireColorLayer_mat.SetColor("_CurrBrushColor", brushCol);
 		        _blitApplyEntireColorLayer_mat.SetFloat("_Sign", sign);
 		        _blitApplyEntireColorLayer_mat.SetFloat("_MaxPossibleBrushStrength01", maxStrength);
@@ -316,6 +319,10 @@ namespace spz {
 		        TextureTools_SPZ.Blit(source.texArray, ontoHere.texArray, _blitApplyEntireColorLayer_mat);
 	        }
 	    }
+
+	    /// <summary>Avoid binding a null brush stroke RT into EntireColorLayer (can sample garbage when APPLY_LATEST_BRUSH_TOO is on before the first paint frame).</summary>
+	    Texture LatestBrushStrokeOrBlack()
+		    => _latestBrushStroke_ref != null ? (Texture)_latestBrushStroke_ref : Texture2D.blackTexture;
 
 	    /// <summary>Composite all visible layers into _layerStackCompositeTemp using the EntireColorLayer_BlitApply shader.
 	    /// For each visible layer (bottom to top): blit Content as color (isColorless=0), then blit per-layer
@@ -369,7 +376,7 @@ namespace spz {
 			    _blitApplyEntireColorLayer_mat.SetTexture("_SrcTex", layer.Content.texArray);
 			    RenderUdims.SetNumUdims(_layerStackCompositeTemp, _blitApplyEntireColorLayer_mat);
 			    TextureTools_SPZ.SetKeyword_Material(_blitApplyEntireColorLayer_mat, "APPLY_LATEST_BRUSH_TOO", brushOnContent);
-			    _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", _latestBrushStroke_ref);
+			    _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", LatestBrushStrokeOrBlack());
 			    _blitApplyEntireColorLayer_mat.SetColor("_CurrBrushColor", brushCol);
 			    _blitApplyEntireColorLayer_mat.SetFloat("_Sign", sign);
 			    _blitApplyEntireColorLayer_mat.SetFloat("_MaxPossibleBrushStrength01", maxStrength);
@@ -390,7 +397,7 @@ namespace spz {
 				    _blitApplyEntireColorLayer_mat.SetTexture("_SrcTex", ncm.texArray);
 				    RenderUdims.SetNumUdims(_layerStackCompositeTemp, _blitApplyEntireColorLayer_mat);
 				    TextureTools_SPZ.SetKeyword_Material(_blitApplyEntireColorLayer_mat, "APPLY_LATEST_BRUSH_TOO", brushOnNoColor);
-				    _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", _latestBrushStroke_ref);
+				    _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", LatestBrushStrokeOrBlack());
 				    _blitApplyEntireColorLayer_mat.SetColor("_CurrBrushColor", brushCol);
 				    _blitApplyEntireColorLayer_mat.SetFloat("_Sign", sign);
 				    _blitApplyEntireColorLayer_mat.SetFloat("_MaxPossibleBrushStrength01", maxStrength);
@@ -771,7 +778,7 @@ namespace spz {
 			    _blitApplyEntireColorLayer_mat.SetTexture("_SrcTex", layer.Content.texArray);
 			    RenderUdims.SetNumUdims(_smudgeUnderActiveTemp, _blitApplyEntireColorLayer_mat);
 			    TextureTools_SPZ.SetKeyword_Material(_blitApplyEntireColorLayer_mat, "APPLY_LATEST_BRUSH_TOO", false);
-			    _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", _latestBrushStroke_ref);
+			    _blitApplyEntireColorLayer_mat.SetTexture("_LatestBrushStroke", LatestBrushStrokeOrBlack());
 			    _blitApplyEntireColorLayer_mat.SetColor("_CurrBrushColor", brushCol);
 			    _blitApplyEntireColorLayer_mat.SetFloat("_Sign", sign);
 			    _blitApplyEntireColorLayer_mat.SetFloat("_MaxPossibleBrushStrength01", maxStrength);
