@@ -315,7 +315,11 @@ namespace spz {
 		void OnDisable() {
 			ForceHideFullViewMenuInstant();
 			ViewportFullViewOnScreen_Driver.ActiveChanged -= OnDriverActiveChanged;
-			StopBuildCoroutineIfAny();
+			// Only stop a build coroutine hosted on *this* behaviour. External runners (Addon_MGR /
+			// MainViewport) must keep going — otherwise enable-from-Add-on-Manager after Generate
+			// dies when the workflow-ribbon host disables under the modal.
+			if (_buildCoroutineOwner == (MonoBehaviour)this)
+				StopBuildCoroutineIfAny();
 			// Host (e.g. generate strip) is often disabled when switching other ribbon tabs—do not destroy the dock
 			// then, or the button is gone when returning. Only remove rows when the add-on is off in Add-on Manager.
 			if (Addon_MGR.ShouldTearDownViewportFullViewDockOnHostDisabled()) {
