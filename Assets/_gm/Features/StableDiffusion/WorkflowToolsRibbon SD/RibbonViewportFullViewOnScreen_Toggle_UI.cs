@@ -99,8 +99,10 @@ namespace spz {
 			if (c == null) {
 				return false;
 			}
-			bool rowMissing = c._builtRowRt == null || c._builtRowRt.gameObject == null || !c._builtRowRt.gameObject.activeInHierarchy;
-			bool spacerMissing = c._spacerRowRt == null || c._spacerRowRt.gameObject == null || !c._spacerRowRt.gameObject.activeInHierarchy;
+			bool rowDestroyed = c._builtRowRt == null || c._builtRowRt.gameObject == null;
+			bool spacerDestroyed = c._spacerRowRt == null || c._spacerRowRt.gameObject == null;
+			// Do NOT treat !activeInHierarchy as missing — Gen Art / cancel / layout churn hides the row
+			// briefly; NotifyAttachRequested would TearDownBuiltDock and the button stays gone.
 			if (createdNow || specChanged) {
 				c.NotifyAttachRequested();
 			} else if (!c._built) {
@@ -108,8 +110,11 @@ namespace spz {
 				// while CoBuildWhenGenArtReady is already running — that aborted the wait forever.
 				if (c._buildRoutine == null)
 					c.NudgeOrRebuildWithoutTear();
-			} else if (rowMissing || spacerMissing) {
+			} else if (rowDestroyed || spacerDestroyed) {
 				c.NotifyAttachRequested();
+			} else if (!c._builtRowRt.gameObject.activeInHierarchy
+			           || (c._spacerRowRt != null && !c._spacerRowRt.gameObject.activeInHierarchy)) {
+				c.NudgeOrRebuildWithoutTear();
 			}
 			return true;
 		}
