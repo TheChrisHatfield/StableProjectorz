@@ -747,7 +747,8 @@ namespace spz {
 			try {
 				string addonsPath = Path.Combine(Application.streamingAssetsPath, "Addons");
 				string workDir = Path.GetDirectoryName(serverScriptPath);
-				string batPath = Path.Combine(workDir, "StartAddonServer.bat");
+				// Write launcher bat to TEMP — StreamingAssets is often read-only (Program Files / locked installs).
+				string batPath = Path.Combine(Path.GetTempPath(), "spz_start_addon_server.bat");
 				string httpArg = _enableHttpServer ? $"--http-port {_httpServerPort}" : "--no-http";
 				// Tell Python whether we bound 5555: if not (Editor has it), Python must NOT kill anything on 5557 or it may kill the Editor.
 				string socketBound = (Addon_SocketServer.instance != null && Addon_SocketServer.instance.IsListening) ? "1" : "0";
