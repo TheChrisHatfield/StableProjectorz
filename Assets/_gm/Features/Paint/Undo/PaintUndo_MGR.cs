@@ -159,6 +159,12 @@ namespace spz {
 			_deferredRedoCount = 0;
 			_eagerHeadCopyValid = false;
 			_eagerHeadTarget = null;
+			// Layer Content/NoColorMask may already be Dispose()'d. An in-flight capture can CopyTexture /
+			// AsyncGPUReadback a dead RT and never set done=true, leaving IsBusy stuck (fill/clear wait forever).
+			if (_captureCrt != null) {
+				StopCoroutine(_captureCrt);
+				_captureCrt = null;
+			}
 			if (_logVerbose) Debug.Log("[PaintUndo] Cleared undo/redo (layer stack structure changed).");
 		}
 
