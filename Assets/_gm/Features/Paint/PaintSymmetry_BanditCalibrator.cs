@@ -36,7 +36,14 @@ namespace spz {
 		public static float SuccessDistanceFraction = 0.04f;
 
 		/// <summary>Learned offset only after at least this many <b>total</b> bandit pull updates (across all arms, see <see cref="Observe"/>).</summary>
-		public static int MinPullsBeforeUse = 1;
+		public static int MinPullsBeforeUse = 45;
+
+		/// <summary>
+		/// Posterior-mean advantage a non-center arm must have over the zero-offset (root pivot) arm before
+		/// the plane is nudged. On many geometries the surface-proximity reward cannot discriminate between
+		/// offsets (all arms succeed or all fail); without this margin the plane drifts off the true plane.
+		/// </summary>
+		public static float MeanAdvantageOverCenter = 0.06f;
 
 		/// <summary>Arms explored per observation frame (Thompson-sampled without replacement).</summary>
 		public static int ObservationsPerStrokeFrame = 9;
@@ -216,12 +223,23 @@ namespace spz {
 				else s.beta[a] += 1;
 			}
 
-			int bestMeanArm = 0;
-			double bestMean = -1;
+			// Best arm defaults to the center (zero-offset) arm and ties break toward it. The old argmax
+			// (seeded at -1, strict '>') resolved the common all-tied posterior to arm 0 = max negative
+			// offset, which shoved the mirror plane off the true symmetry plane by up to
+			// OffsetRangeFraction × radius — a constant world-space paint offset that also swung around
+			// with the plane normal whenever the object or view rotated.
+			int mid = (ArmCount - 1) / 2;
+			int bestMeanArm = mid;
+			double bestMean = s.alpha[mid] / (s.alpha[mid] + s.beta[mid]);
+			double midMean = bestMean;
 			for (int a = 0; a < ArmCount; a++) {
 				double mean = s.alpha[a] / (s.alpha[a] + s.beta[a]);
-				if (mean > bestMean) { bestMean = mean; bestMeanArm = a; }
+				bool strictlyBetter = mean > bestMean + 1e-9;
+				bool tieCloserToCenter = mean >= bestMean - 1e-9 && Math.Abs(a - mid) < Math.Abs(bestMeanArm - mid);
+				if (strictlyBetter || tieCloserToCenter) { bestMean = mean; bestMeanArm = a; }
 			}
+			if (bestMeanArm != mid && bestMean < midMean + MeanAdvantageOverCenter)
+				bestMeanArm = mid;
 			s.emaBestArm = Mathf.Lerp(s.emaBestArm, bestMeanArm, Mathf.Clamp01(BestArmEmaAlpha));
 		}
 

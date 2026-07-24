@@ -36,6 +36,8 @@ namespace spz {
 	    static readonly int _SymmetryMode_ID = Shader.PropertyToID("_SymmetryMode");
 	    static readonly int _MirrorPrevNewBrushScreenCoord_ID = Shader.PropertyToID("_MirrorPrevNewBrushScreenCoord");
 	    static readonly int _SymmetryMirrorAngleDeltaRad_ID = Shader.PropertyToID("_SymmetryMirrorAngleDeltaRad");
+	    static readonly int _SymmetryPlanePointWS_ID = Shader.PropertyToID("_SymmetryPlanePointWS");
+	    static readonly int _SymmetryPlaneNormalWS_ID = Shader.PropertyToID("_SymmetryPlaneNormalWS");
 
 	    const int MaxSplotchStamps = 64;
 	    readonly Vector4[] _stampPosSizeStr = new Vector4[MaxSplotchStamps];
@@ -291,10 +293,12 @@ namespace spz {
 
 	        bool symXOn = BrushRibbon_UI_Size.GetPaintSymmetryXOn();
 	        Camera paintCam = UserCameras_MGR.instance?._curr_viewCamera?.myCamera;
-	        // Mesh splotch symmetry: twins are appended in C# (shader splotch uses _SymmetryMode 0; see BrushEffects.cginc). If we
-	        // place up to MaxSplotchStamps primary stamps, stampCount is already 64 and the mirror loop is skipped — no twin side.
-	        bool meshSplotchCSharpDupe = symXOn && useMeshPaintSymmetry() && paintCam != null;
-	        int maxPrimaryStampsForSplotch = meshSplotchCSharpDupe ? MaxSplotchStamps / 2 : MaxSplotchStamps;
+	        // Object-space symmetry (shader mode 3): the Object3d brush shader reflects each FRAGMENT's world
+	        // position across the symmetry plane and evaluates the original stroke there — exact bilateral
+	        // symmetry per texel. No raycasts, no mirrored stroke coords, no C# twin stamps needed.
+	        Vector3 symPlanePoint = default, symPlaneNormal = default;
+	        bool meshMode3 = symXOn && useMeshPaintSymmetry()
+		        && PaintSymmetryMesh.TryGetSymmetryPlane(paintCam, out symPlanePoint, out symPlaneNormal);
 
 	        int stampCount = 0;
 	        if (spacing01 > 0.001f && !_isFirstFrameOfStroke)
@@ -306,8 +310,8 @@ namespace spz {
 	            float dist = Vector2.Distance(from, to);
 	            if (dist >= step)
 	            {
-	                int n = Mathf.Min(maxPrimaryStampsForSplotch, Mathf.FloorToInt(dist / step) + 1);
-	                for (int k = 0; k < n && stampCount < maxPrimaryStampsForSplotch; k++)
+	                int n = Mathf.Min(MaxSplotchStamps, Mathf.FloorToInt(dist / step) + 1);
+	                for (int k = 0; k < n && stampCount < MaxSplotchStamps; k++)
 	                {
 	                    float t = (n > 1) ? (k / (float)n) : 0f;
 	                    Vector2 pos = Vector2.Lerp(from, to, t);
@@ -338,30 +342,24 @@ namespace spz {
 		        _brushMaterial.SetFloat(_SymmetryMode_ID, 0f);
 		        _brushMaterial.SetVector(_MirrorPrevNewBrushScreenCoord_ID, Vector4.zero);
 		        _brushMaterial.SetFloat(_SymmetryMirrorAngleDeltaRad_ID, 0f);
+	        } else if (meshMode3) {
+		        // Exact object mirror, evaluated per fragment in the Object3d brush shader. Covers both the
+		        // continuous segment and splotch stamps — the shader evaluates the same stamps at each
+		        // fragment's reflected position, so no twin duplication is needed here.
+		        _brushMaterial.SetFloat(_SymmetryMode_ID, 3f);
+		        _brushMaterial.SetVector(_SymmetryPlanePointWS_ID, symPlanePoint);
+		        _brushMaterial.SetVector(_SymmetryPlaneNormalWS_ID, symPlaneNormal);
+		        _brushMaterial.SetVector(_MirrorPrevNewBrushScreenCoord_ID, Vector4.zero);
+		        _brushMaterial.SetFloat(_SymmetryMirrorAngleDeltaRad_ID, 0f);
 	        } else if (stampCount > 0) {
-		        bool allowMeshReflection = useMeshPaintSymmetry() && paintCam != null;
-		        if (allowMeshReflection) {
-			        // Mesh symmetry for splotches: duplicate mirrored twins in C# (shader splotch path only supports screen mirror mode 1).
-			        int origCount = stampCount;
-			        for (int k = 0; k < origCount && stampCount < MaxSplotchStamps; k++) {
-				        Vector2 c = new Vector2(_stampPosSizeStr[k].x, _stampPosSizeStr[k].y);
-				        if (!PaintSymmetryMesh.TryMirrorViewportPoint(paintCam, c, out Vector2 mc, true))
-					        mc = PaintSymmetryMesh.ScreenMirrorViewportUV(c);
-				        _stampPosSizeStr[stampCount++] = new Vector4(mc.x, mc.y, _stampPosSizeStr[k].z, _stampPosSizeStr[k].w);
-			        }
-			        _brushMaterial.SetFloat(_SymmetryMode_ID, 0f);
-			        _brushMaterial.SetVector(_MirrorPrevNewBrushScreenCoord_ID, Vector4.zero);
-			        _brushMaterial.SetFloat(_SymmetryMirrorAngleDeltaRad_ID, 0f);
-		        } else {
-			        // Screen symmetry for splotches: let shader mirror centers so mirrored angle delta is applied for directional tips.
-			        _brushMaterial.SetFloat(_SymmetryMode_ID, 1f);
-			        _brushMaterial.SetVector(_MirrorPrevNewBrushScreenCoord_ID, Vector4.zero);
-			        _brushMaterial.SetFloat(_SymmetryMirrorAngleDeltaRad_ID,
-				        PaintSymmetryMesh.ComputeScreenMirrorAngleDelta(_prevPaintPosition, cursorRaw01));
-		        }
+		        // Screen symmetry for splotches: let shader mirror centers so mirrored angle delta is applied for directional tips.
+		        _brushMaterial.SetFloat(_SymmetryMode_ID, 1f);
+		        _brushMaterial.SetVector(_MirrorPrevNewBrushScreenCoord_ID, Vector4.zero);
+		        _brushMaterial.SetFloat(_SymmetryMirrorAngleDeltaRad_ID,
+			        PaintSymmetryMesh.ComputeScreenMirrorAngleDelta(_prevPaintPosition, cursorRaw01));
 	        } else {
-		        PaintSymmetryMesh.SetMaterialSymmetry(_brushMaterial, paintCam, _prevPaintPosition, cursorRaw01, symXOn,
-			        useMeshPaintSymmetry() && paintCam != null);
+		        // 2D screen mirror (background painter, or no symmetry plane available — e.g. nothing selected).
+		        PaintSymmetryMesh.SetMaterialSymmetry(_brushMaterial, paintCam, _prevPaintPosition, cursorRaw01, symXOn, false);
 	        }
 
 	        _brushMaterial.SetVectorArray(_StampPosSizeStr_ID, _stampPosSizeStr);

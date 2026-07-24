@@ -20,8 +20,10 @@ Shader "Custom/Object3d_BrushShader"{
         _BrushSize_andFirstFrameFlag("BrushSize (prev, new, isFirstFrame, 0)", Vector) = (1,1,0,0)
         _BrushAngleRad("Brush angle (radians)", Float) = 0
         _BrushRoundness01("Brush roundness 0-1", Float) = 1
-        _SymmetryMode("Symmetry: 0 off, 1 screen, 2 mesh", Float) = 0
+        _SymmetryMode("Symmetry: 0 off, 1 screen, 2 mesh, 3 object mirror", Float) = 0
         _MirrorPrevNewBrushScreenCoord("Mesh mirror stroke (prev.xy, new.zw)", Vector) = (0,0,0,0)
+        _SymmetryPlanePointWS("Symmetry plane point (world, mode 3)", Vector) = (0,0,0,0)
+        _SymmetryPlaneNormalWS("Symmetry plane normal (world, mode 3)", Vector) = (1,0,0,0)
     }
     SubShader{
         Tags { "RenderType"="Opaque" } 
@@ -78,6 +80,19 @@ Shader "Custom/Object3d_BrushShader"{
             float _SymmetryMode;
             float4 _MirrorPrevNewBrushScreenCoord;
             float _SymmetryMirrorAngleDeltaRad;
+            // Mode 3 (object mirror): mesh symmetry plane in world space. Each fragment's world position is
+            // reflected across this plane and the ORIGINAL stroke is evaluated there — exact bilateral symmetry.
+            float4 _SymmetryPlanePointWS;
+            float4 _SymmetryPlaneNormalWS;
+
+            float3 SymmetryPlaneNormalUnit(){
+                float3 n = _SymmetryPlaneNormalWS.xyz;
+                return dot(n, n) > 1e-8 ? normalize(n) : float3(1, 0, 0);
+            }
+            float3 ReflectWorldAcrossSymmetryPlane(float3 wPos, float3 nUnit){
+                float d = dot(wPos - _SymmetryPlanePointWS.xyz, nUnit);
+                return wPos - 2.0 * d * nUnit;
+            }
             float4 _StampPosSizeStr[64]; // Splotch mode: (x, y, size, strength) per stamp. Unused when _StampCount 0.
             int _StampCount; // >0 = splotch mode; 0 = continuous segment
 
@@ -105,6 +120,12 @@ Shader "Custom/Object3d_BrushShader"{
 
                 float3 objNormal : TEXCOORD2;
                 float3 objViewDir : TEXCOORD3;
+
+                // Mode 3 (object mirror): this fragment's world position reflected across the symmetry
+                // plane, projected with the same VP matrix; plus mirrored normal / view dir for the fade.
+                float4 fragScreenSpaceUV_M : TEXCOORD4;
+                float3 worldNormalM : TEXCOORD5;
+                float3 worldViewDirM : TEXCOORD6;
             };
 
 
@@ -135,6 +156,15 @@ Shader "Custom/Object3d_BrushShader"{
                 pix.objNormal  = g.objNormal;
                 pix.objViewDir = g.objViewDir;
 
+                // Mode 3 (object mirror) data. Cheap enough to compute unconditionally; ignored unless _SymmetryMode == 3.
+                float3 nUnit = SymmetryPlaneNormalUnit();
+                float3 wPos  = mul(unity_ObjectToWorld, float4(g.objVertex.xyz, 1)).xyz;
+                float3 wPosM = ReflectWorldAcrossSymmetryPlane(wPos, nUnit);
+                pix.fragScreenSpaceUV_M = ComputeScreenPos(mul(UNITY_MATRIX_VP, float4(wPosM, 1)));
+                float3 wN = UnityObjectToWorldNormal(g.objNormal);
+                pix.worldNormalM  = wN - 2.0 * dot(wN, nUnit) * nUnit;
+                pix.worldViewDirM = _WorldSpaceCameraPos.xyz - wPosM;
+
                 return pix;
             }
 
@@ -156,6 +186,18 @@ Shader "Custom/Object3d_BrushShader"{
                 viewDir = viewDir;
                 // Discard the triangle if it's facing away
                 bool isFacing =  dot(normal, viewDir) >= 0;
+                if( !isFacing && _SymmetryMode > 2.5 ){
+                    // Object mirror: keep triangles whose plane-reflected twin faces the camera, so the
+                    // mirror side still receives symmetric paint when it is angled away from the view.
+                    float3 nUnit = SymmetryPlaneNormalUnit();
+                    float3 wA = mul(unity_ObjectToWorld, float4(vertices[0].objVertex.xyz, 1)).xyz;
+                    float3 wB = mul(unity_ObjectToWorld, float4(vertices[1].objVertex.xyz, 1)).xyz;
+                    float3 wC = mul(unity_ObjectToWorld, float4(vertices[2].objVertex.xyz, 1)).xyz;
+                    float3 wFaceN = cross(wB - wA, wC - wA);
+                    float3 wFaceNM = wFaceN - 2.0 * dot(wFaceN, nUnit) * nUnit; // mirrored outward normal
+                    float3 centroidM = ReflectWorldAcrossSymmetryPlane((wA + wB + wC) / 3.0, nUnit);
+                    isFacing = dot(wFaceNM, _WorldSpaceCameraPos.xyz - centroidM) >= 0;
+                }
                 if( !isFacing ){ return; }
 
                 uint renderIx = max(0, uv_to_renderTargIX(vertices[0].uv));
@@ -216,10 +258,32 @@ Shader "Custom/Object3d_BrushShader"{
                     depthFalloff = saturate(1.0 - depthDist / _DepthFalloffRange);
                 }
 
+                float gateP = isVis * isInFront * notObscured * depthFalloff;
+
+                // Mode 3 (object mirror): the same gates evaluated at this fragment's plane-reflected
+                // position, so a mirror-side texel paints exactly when/where its geometric twin would.
+                float gateM = 0.0;
+                float2 mirrorUV = i.fragScreenSpaceUV.xy;
+                float normalDotViewM = 1.0;
+                if (_SymmetryMode > 2.5) {
+                    float4 uvM = i.fragScreenSpaceUV_M;
+                    uvM.xyz /= uvM.w;
+                    mirrorUV = uvM.xy;
+                    float isInFrontM = isOutsideScreen_or_behind(uvM) ? 0 : 1;
+                    float depthM   = Linear01Depth(tex2Dlod(_LastCameraDepthTexture, float4(uvM.xy, 0, 0)).r);
+                    float myDepthM = Linear01Depth(uvM.z) - depthOffset;
+                    float notObscuredM = myDepthM <= depthM ? 1 : 0;
+                    float depthFalloffM = 1.0;
+                    if (_DepthFalloffRange > 0.0001 && _ClickDepth01 > 0.0001) {
+                        depthFalloffM = saturate(1.0 - abs(myDepthM - _ClickDepth01) / _DepthFalloffRange);
+                    }
+                    gateM = isVis * isInFrontM * notObscuredM * depthFalloffM;
+                    normalDotViewM = _FadeByNormal==0 ? 1 : dot(normalize(i.worldNormalM), normalize(i.worldViewDirM));
+                }
+
                 // Not visible. NOTICE, discard, - don't optimize it!!
                 // Useful when there is a clone version of objects (allows users to bake two sides at once)
-                if(isVis * isInFront * notObscured == 0){ discard; }
-                if(depthFalloff <= 0){ discard; }
+                if(gateP <= 0 && gateM <= 0){ discard; }
 
                 PaintInBrushStroke_Input pibs_input;
                 pibs_input.screenAspectRatio  = _ScreenAspectRatio;
@@ -234,12 +298,16 @@ Shader "Custom/Object3d_BrushShader"{
                 pibs_input.symmetryMode = _SymmetryMode;
                 pibs_input.MirrorPrevNewBrushScreenCoord = _MirrorPrevNewBrushScreenCoord;
                 pibs_input.symmetryMirrorAngleDeltaRad = _SymmetryMirrorAngleDeltaRad;
+                pibs_input.fragScreenSpaceUV_mirror = mirrorUV;
+                pibs_input.normalDotView_mirror = normalDotViewM;
+                pibs_input.primaryGate01 = gateP; // folds visibility, occlusion and depth falloff
+                pibs_input.mirrorGate01 = gateM;
 
                 pibs_input.currentBrushPath01  =  SAMPLE_TEXTURE_OR_ARRAY(_PrevBrushPathTex, uv_withSliceIx).r;
                 pibs_input.normalDotView =   _FadeByNormal==0?  1 : dot(normalize(i.objNormal), normalize(i.objViewDir));
 
                 float strokeVal = _StampCount > 0 ? PaintInBrushStroke_Splotches(pibs_input, _StampPosSizeStr, _StampCount) : PaintInBrushStroke(pibs_input);
-                return strokeVal * depthFalloff; //[0,1]
+                return strokeVal; //[0,1]. Gates (incl. depth falloff) are already folded into primaryGate01 / mirrorGate01.
             }
             ENDCG
         }//end Pass

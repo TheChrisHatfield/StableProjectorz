@@ -183,15 +183,25 @@ namespace spz {
 			return vp.z > 0f && vp.x >= 0f && vp.x <= 1f && vp.y >= 0f && vp.y <= 1f;
 		}
 
+		static float GetSelectionRadiusWorld () {
+			var sel = ModelsHandler_3D.instance?.selectedMeshes;
+			if (sel == null || !TryEncapsulateSelectionBounds(sel, out Bounds b))
+				return 1f;
+			return Mathf.Max(0.05f, b.extents.magnitude);
+		}
+
 		/// <summary>
-		/// Reject mesh mirror when source + mirror remain on the same lateral half (left/right of x=0.5),
-		/// excluding a small center dead-band to avoid flip-flop exactly on the seam.
+		/// Reject a mesh mirror only when source and mirrored points sit on the same side of the actual
+		/// symmetry plane in world space (small dead band near the seam so on-plane strokes don't flip-flop).
+		/// The previous test compared screen halves (left/right of viewport x=0.5), which wrongly rejected
+		/// correct mirrors whenever the object was off screen-center or the camera orbited to an oblique view —
+		/// painting then fell back to the screen-center mirror, i.e. an offset stamp.
 		/// </summary>
-		static bool ShouldRejectMeshMirrorViewportPoint (Vector2 sourceViewport01, Vector2 meshMirrorViewport01) {
-			const float halfDeadBand = 0.02f;
-			float a = sourceViewport01.x - 0.5f;
-			float b = meshMirrorViewport01.x - 0.5f;
-			return Mathf.Abs(a) > halfDeadBand && Mathf.Abs(b) > halfDeadBand && (a * b > 0f);
+		static bool ShouldRejectMirrorWorldPair (Vector3 sourceWorld, Vector3 mirrorWorld, Vector3 planePoint, Vector3 planeNormalUnit) {
+			float deadBand = GetSelectionRadiusWorld() * 0.02f;
+			float dSrc = Vector3.Dot(sourceWorld - planePoint, planeNormalUnit);
+			float dMir = Vector3.Dot(mirrorWorld - planePoint, planeNormalUnit);
+			return Mathf.Abs(dSrc) > deadBand && Mathf.Abs(dMir) > deadBand && dSrc * dMir > 0f;
 		}
 
 		static bool TryRaycastSelectedAtViewport (Camera cam, Vector2 viewport01, out RaycastHit selectedHit) {
@@ -257,9 +267,10 @@ namespace spz {
 		/// whose world point is closest to <paramref name="targetWorld"/>. This stabilizes symmetry when
 		/// projection alone lands between triangles or on thin silhouettes.
 		/// </summary>
-		static bool TryRaycastSelectedNearViewportForWorldTarget (Camera cam, Vector2 candidate01, Vector3 targetWorld, out Vector2 bestViewport01, out float bestDistSqr) {
+		static bool TryRaycastSelectedNearViewportForWorldTarget (Camera cam, Vector2 candidate01, Vector3 targetWorld, out Vector2 bestViewport01, out float bestDistSqr, out Vector3 bestHitWorld) {
 			bestViewport01 = default;
 			bestDistSqr = float.MaxValue;
+			bestHitWorld = default;
 			if (cam == null)
 				return false;
 
@@ -275,6 +286,7 @@ namespace spz {
 					if (d2 < bestDistSqr) {
 						bestDistSqr = d2;
 						bestViewport01 = p;
+						bestHitWorld = hit.point;
 					}
 				}
 			}
@@ -288,20 +300,22 @@ namespace spz {
 		/// 4) probe a small neighborhood and accept only if re-hit is spatially close to target.
 		/// This prevents offset/same-side artifacts from using projected reflection alone.
 		/// </summary>
-		static bool TryMeshMirrorViewportFromWorldTarget (Camera cam, Vector3 targetWorld, out Vector2 mirrorViewport01) {
+		static bool TryMeshMirrorViewportFromWorldTarget (Camera cam, Vector3 targetWorld, out Vector2 mirrorViewport01, out Vector3 mirrorHitWorld) {
 			mirrorViewport01 = default;
+			mirrorHitWorld = default;
 			if (cam == null)
 				return false;
 			Vector3 vp = cam.WorldToViewportPoint(targetWorld);
 			if (!IsViewportPointVisible01(vp))
 				return false;
 			Vector2 candidate01 = new Vector2(vp.x, vp.y);
-			if (!TryRaycastSelectedNearViewportForWorldTarget(cam, candidate01, targetWorld, out Vector2 bestViewport, out float bestDistSqr))
+			if (!TryRaycastSelectedNearViewportForWorldTarget(cam, candidate01, targetWorld, out Vector2 bestViewport, out float bestDistSqr, out Vector3 bestHitWorld))
 				return false;
 			TryGetMirrorSearchRadius01(out _, out float maxSnapDist);
 			if (bestDistSqr > maxSnapDist * maxSnapDist)
 				return false;
 			mirrorViewport01 = bestViewport;
+			mirrorHitWorld = bestHitWorld;
 			return true;
 		}
 
@@ -324,15 +338,16 @@ namespace spz {
 		/// Model-space bilateral mirror (DCC-style): mirror hit in root local X and re-hit selected mesh.
 		/// This is the primary path for character-style assets authored around local X=0.
 		/// </summary>
-		static bool TryMeshMirrorViewportFromLocalRoot (Camera cam, RaycastHit sourceHit, out Vector2 mirrorViewport01) {
+		static bool TryMeshMirrorViewportFromLocalRoot (Camera cam, RaycastHit sourceHit, out Vector2 mirrorViewport01, out Vector3 mirrorHitWorld) {
 			mirrorViewport01 = default;
+			mirrorHitWorld = default;
 			if (!TryGetHitSelectedMesh(sourceHit, out SD_3D_Mesh hitMesh))
 				return false;
 			Transform root = hitMesh.transform.root != null ? hitMesh.transform.root : hitMesh.transform;
 			Vector3 pLocal = root.InverseTransformPoint(sourceHit.point);
 			pLocal.x = -pLocal.x;
 			Vector3 targetWorld = root.TransformPoint(pLocal);
-			return TryMeshMirrorViewportFromWorldTarget(cam, targetWorld, out mirrorViewport01);
+			return TryMeshMirrorViewportFromWorldTarget(cam, targetWorld, out mirrorViewport01, out mirrorHitWorld);
 		}
 
 		/// <summary>Prefer closest hit on selected meshes; otherwise closest hit on anything.</summary>
@@ -367,12 +382,20 @@ namespace spz {
 			return true;
 		}
 
-		public static bool TryMirrorViewportPoint (Camera cam, Vector2 viewport01, out Vector2 mirrorViewport01, bool allowMeshSymmetry = true) {
+		public static bool TryMirrorViewportPoint (Camera cam, Vector2 viewport01, out Vector2 mirrorViewport01, bool allowMeshSymmetry = true) =>
+			TryMirrorViewportPoint(cam, viewport01, out mirrorViewport01, allowMeshSymmetry, out _);
+
+		/// <param name="sourceOnSelectedMesh">True when the source viewport ray hit a selected mesh. Lets callers
+		/// suppress the mirrored twin (instead of painting an offset screen-center mirror) when the mesh mirror
+		/// could not be resolved while the user is actually painting on the mesh.</param>
+		public static bool TryMirrorViewportPoint (Camera cam, Vector2 viewport01, out Vector2 mirrorViewport01, bool allowMeshSymmetry, out bool sourceOnSelectedMesh) {
 			mirrorViewport01 = ScreenMirrorViewportUV(viewport01);
+			sourceOnSelectedMesh = false;
 			if (!allowMeshSymmetry || cam == null || !TryGetSymmetryPlane(cam, out Vector3 c, out Vector3 n))
 				return false;
 			if (!TryPreferredRaycast(cam, viewport01, out RaycastHit hit))
 				return false;
+			sourceOnSelectedMesh = TryGetHitSelectedMesh(hit, out _);
 
 			// c,n = unlearned symmetry plane. Observe uses that base (arms are absolute offsets in world
 			// space). Then apply at most one learned nudge for the actual reflection.
@@ -388,32 +411,40 @@ namespace spz {
 			}
 
 			// Root-local mirror + selected-mesh re-hit.
-			if (TryMeshMirrorViewportFromLocalRoot(cam, hit, out Vector2 localMir)
-			    && !ShouldRejectMeshMirrorViewportPoint(viewport01, localMir)) {
+			if (TryMeshMirrorViewportFromLocalRoot(cam, hit, out Vector2 localMir, out Vector3 localHitWorld)
+			    && !ShouldRejectMirrorWorldPair(hit.point, localHitWorld, c, n)) {
 				mirrorViewport01 = localMir;
 				return true;
 			}
 
 			// Fallback: geometric plane reflection + selected-mesh re-hit.
 			Vector3 reflected = MirrorWorldFromHit(hit, c, n);
-			if (!TryMeshMirrorViewportFromWorldTarget(cam, reflected, out Vector2 meshMir))
+			if (!TryMeshMirrorViewportFromWorldTarget(cam, reflected, out Vector2 meshMir, out Vector3 meshMirHitWorld))
 				return false;
-			if (ShouldRejectMeshMirrorViewportPoint(viewport01, meshMir))
+			if (ShouldRejectMirrorWorldPair(hit.point, meshMirHitWorld, c, n))
 				return false;
 			mirrorViewport01 = meshMir;
 			return true;
 		}
 
 		public static bool TryMirrorViewportStroke (Camera cam, Vector2 prevViewport01, Vector2 newViewport01,
-			out Vector2 mirrorPrev01, out Vector2 mirrorNew01, bool allowMeshSymmetry = true) {
+			out Vector2 mirrorPrev01, out Vector2 mirrorNew01, bool allowMeshSymmetry = true) =>
+			TryMirrorViewportStroke(cam, prevViewport01, newViewport01, out mirrorPrev01, out mirrorNew01, allowMeshSymmetry, out _);
+
+		/// <param name="sourceOnSelectedMesh">True when the current stroke endpoint ray hit a selected mesh (see
+		/// <see cref="TryMirrorViewportPoint(Camera,Vector2,out Vector2,bool,out bool)"/>).</param>
+		public static bool TryMirrorViewportStroke (Camera cam, Vector2 prevViewport01, Vector2 newViewport01,
+			out Vector2 mirrorPrev01, out Vector2 mirrorNew01, bool allowMeshSymmetry, out bool sourceOnSelectedMesh) {
 			mirrorPrev01 = ScreenMirrorViewportUV(prevViewport01);
 			mirrorNew01 = ScreenMirrorViewportUV(newViewport01);
+			sourceOnSelectedMesh = false;
 			if (!allowMeshSymmetry || cam == null || !TryGetSymmetryPlane(cam, out Vector3 c, out Vector3 n))
 				return false;
 			if (!TryPreferredRaycast(cam, prevViewport01, out RaycastHit hitPrev))
 				return false;
 			if (!TryPreferredRaycast(cam, newViewport01, out RaycastHit hitNew))
 				return false;
+			sourceOnSelectedMesh = TryGetHitSelectedMesh(hitNew, out _);
 
 			if (SymmetryPlaneAllowsBanditNudge() && TryGetSingleRootAnchor(ModelsHandler_3D.instance?.selectedMeshes, out Transform anchor)) {
 				PaintSymmetry_BanditCalibrator.Observe(hitNew, c, n, anchor);
@@ -427,10 +458,10 @@ namespace spz {
 				return true;
 			}
 
-			if (TryMeshMirrorViewportFromLocalRoot(cam, hitPrev, out Vector2 pMirLocal)
-			    && TryMeshMirrorViewportFromLocalRoot(cam, hitNew, out Vector2 nMirLocal)
-			    && !ShouldRejectMeshMirrorViewportPoint(prevViewport01, pMirLocal)
-			    && !ShouldRejectMeshMirrorViewportPoint(newViewport01, nMirLocal)) {
+			if (TryMeshMirrorViewportFromLocalRoot(cam, hitPrev, out Vector2 pMirLocal, out Vector3 pMirLocalWorld)
+			    && TryMeshMirrorViewportFromLocalRoot(cam, hitNew, out Vector2 nMirLocal, out Vector3 nMirLocalWorld)
+			    && !ShouldRejectMirrorWorldPair(hitPrev.point, pMirLocalWorld, c, n)
+			    && !ShouldRejectMirrorWorldPair(hitNew.point, nMirLocalWorld, c, n)) {
 				mirrorPrev01 = pMirLocal;
 				mirrorNew01 = nMirLocal;
 				return true;
@@ -438,10 +469,10 @@ namespace spz {
 
 			Vector3 rPrev = MirrorWorldFromHit(hitPrev, c, n);
 			Vector3 rNew = MirrorWorldFromHit(hitNew, c, n);
-			if (!TryMeshMirrorViewportFromWorldTarget(cam, rPrev, out Vector2 pMir)
-			    || !TryMeshMirrorViewportFromWorldTarget(cam, rNew, out Vector2 nMir))
+			if (!TryMeshMirrorViewportFromWorldTarget(cam, rPrev, out Vector2 pMir, out Vector3 pMirHitWorld)
+			    || !TryMeshMirrorViewportFromWorldTarget(cam, rNew, out Vector2 nMir, out Vector3 nMirHitWorld))
 				return false;
-			if (ShouldRejectMeshMirrorViewportPoint(prevViewport01, pMir) || ShouldRejectMeshMirrorViewportPoint(newViewport01, nMir))
+			if (ShouldRejectMirrorWorldPair(hitPrev.point, pMirHitWorld, c, n) || ShouldRejectMirrorWorldPair(hitNew.point, nMirHitWorld, c, n))
 				return false;
 			mirrorPrev01 = pMir;
 			mirrorNew01 = nMir;
@@ -466,8 +497,10 @@ namespace spz {
 
 		/// <summary>
 		/// Sets symmetry uniforms for brushes/projection cursor.
-		/// mode 0=off, 1=screen mirror, 2=mesh mirror (explicit mirrored stroke coordinates).
-		/// Also sets _SymmetryMirrorAngleDeltaRad so directional tips align on mirrored strokes.
+		/// mode 0=off, 1=screen mirror, 3=object mirror (world plane uniforms; the shader reflects each
+		/// FRAGMENT's world position across the plane and evaluates the original stroke there — exact
+		/// bilateral symmetry). Mode 2 (mirrored stroke coordinates from raycast re-projection) is retired:
+		/// plane-estimate, probe re-hit and perspective errors accumulated into visibly offset twins.
 		/// </summary>
 		public static void SetMaterialSymmetry (Material mat, Camera cam, Vector2 prevViewport01, Vector2 newViewport01,
 			bool symmetryEnabled, bool allowMeshSymmetry) {
@@ -482,11 +515,12 @@ namespace spz {
 				return;
 			}
 
-			if (allowMeshSymmetry && cam != null
-			    && TryMirrorViewportStroke(cam, prevViewport01, newViewport01, out Vector2 mp, out Vector2 mn, true)) {
-				mat.SetVector(mirrorProp, new Vector4(mp.x, mp.y, mn.x, mn.y));
-				mat.SetFloat(modeProp, 2f);
-				mat.SetFloat(angleDeltaProp, ComputeMirrorStrokeAngleDelta(prevViewport01, newViewport01, mp, mn));
+			if (allowMeshSymmetry && TryGetSymmetryPlane(cam, out Vector3 planePoint, out Vector3 planeNormal)) {
+				mat.SetFloat(modeProp, 3f);
+				mat.SetVector("_SymmetryPlanePointWS", planePoint);
+				mat.SetVector("_SymmetryPlaneNormalWS", planeNormal);
+				mat.SetVector(mirrorProp, Vector4.zero);
+				mat.SetFloat(angleDeltaProp, 0f);
 				return;
 			}
 

@@ -86,6 +86,11 @@ Shader "Custom/Screen2d_BrushShader"{
                 pibs_input.BrushStrength01 = abs(_BrushStrength.xy);
                 pibs_input.currentBrushPath01 =  SAMPLE_TEXTURE_OR_ARRAY(_PrevBrushPathTex, float3(i.uv,0));
                 pibs_input.normalDotView = 1.0;
+                // Mode 3 (object mirror) is a 3D-painter feature; 2D screen painting keeps mode 0/1.
+                pibs_input.fragScreenSpaceUV_mirror = i.uv;
+                pibs_input.normalDotView_mirror = 1.0;
+                pibs_input.primaryGate01 = 1.0;
+                pibs_input.mirrorGate01 = 0.0;
 
                 float strokeVal = _StampCount > 0 ? PaintInBrushStroke_Splotches(pibs_input, _StampPosSizeStr, _StampCount) : PaintInBrushStroke(pibs_input);
                 return strokeVal; //[0,1]

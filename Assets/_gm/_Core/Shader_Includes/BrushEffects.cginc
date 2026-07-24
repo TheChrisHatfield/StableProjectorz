@@ -71,10 +71,25 @@ struct PaintInBrushStroke_Input{
     // Brush roundness 0-1 (1 = circle). For elliptical tips.
     float brushRoundness01;
     // 0 = symmetry off. 1 = screen mirror (x' = 1 - x). 2 = mesh mirror: use MirrorPrevNewBrushScreenCoord (xy=prev, zw=new).
+    // 3 = object mirror, evaluated PER FRAGMENT: the caller supplies this fragment's world position reflected
+    //     across the mesh symmetry plane and projected to the same screen space as fragScreenSpaceUV.
+    //     The ORIGINAL (unmirrored) stroke is then evaluated at that mirrored position, so a texel on the
+    //     mirror side paints exactly like its geometric twin under the brush — no mirrored stroke coords,
+    //     no raycasts, exact bilateral symmetry (this is how Substance-style symmetry works).
     float symmetryMode;
     float4 MirrorPrevNewBrushScreenCoord;
     // Additional rotation (radians) applied only on mirrored side, so directional tips align to mirrored stroke direction.
     float symmetryMirrorAngleDeltaRad;
+
+    // ---- mode 3 only (leave defaults otherwise: mirrorUV = fragScreenSpaceUV, dot = 1, gates 1/0) ----
+    // Screen-space projection of this fragment's plane-reflected world position:
+    float2 fragScreenSpaceUV_mirror;
+    // Normal/view fade evaluated at the mirrored point (= the twin texel's own fade, by reflection symmetry):
+    float normalDotView_mirror;
+    // Visibility/occlusion/depth gate for the primary evaluation (1 = fully paintable). Modes 0-2 must pass 1.
+    float primaryGate01;
+    // Same gate evaluated at the mirrored position; 0 disables the mirrored evaluation entirely.
+    float mirrorGate01;
 };
 
 
@@ -129,10 +144,22 @@ float PaintInBrushStroke(PaintInBrushStroke_Input i){
     float angleRad = i.brushAngleRad;
     float roundness01 = i.brushRoundness01 > 0.0 ? i.brushRoundness01 : 1.0;
     float2 brushUV_curr = brushStampUV(i.fragScreenSpaceUV, brushNearPos, brushNearSize, i.screenAspectRatio, angleRad, roundness01);
-    float wanted = sampleBrushStamp(i, brushUV_curr, brushNearStrength);
+    float wanted = sampleBrushStamp(i, brushUV_curr, brushNearStrength) * i.primaryGate01;
     float outv = max(wanted, i.currentBrushPath01);
     if (i.symmetryMode < 0.5)
         return outv;
+
+    if (i.symmetryMode > 2.5) {
+        // Object mirror: evaluate the SAME stroke at this fragment's plane-reflected position.
+        PaintInBrushStroke_Input im = i;
+        im.fragScreenSpaceUV = i.fragScreenSpaceUV_mirror;
+        im.normalDotView = i.normalDotView_mirror;
+        SegmentResult segM3 = nearestPointOnSegment(im.fragScreenSpaceUV, brushPrevPos, brushNewPos,
+            brushPrevSize, brushNewSize, brushPrevStrength, brushNewStrength, i.screenAspectRatio);
+        float2 brushUV_m3 = brushStampUV(im.fragScreenSpaceUV, segM3.nearestPoint, segM3.interpolatedSize, i.screenAspectRatio, angleRad, roundness01);
+        float wantedM3 = sampleBrushStamp(im, brushUV_m3, segM3.interpolatedStrength) * i.mirrorGate01;
+        return max(outv, wantedM3);
+    }
 
     float2 mPrev = (i.symmetryMode < 1.5)
         ? float2(1.0 - brushPrevPos.x, brushPrevPos.y)
@@ -144,7 +171,7 @@ float PaintInBrushStroke(PaintInBrushStroke_Input i){
         brushPrevSize, brushNewSize, brushPrevStrength, brushNewStrength, i.screenAspectRatio);
     float angleRadM = angleRad + i.symmetryMirrorAngleDeltaRad;
     float2 brushUV_m = brushStampUV(i.fragScreenSpaceUV, segM.nearestPoint, segM.interpolatedSize, i.screenAspectRatio, angleRadM, roundness01);
-    float wantedM = sampleBrushStamp(i, brushUV_m, segM.interpolatedStrength);
+    float wantedM = sampleBrushStamp(i, brushUV_m, segM.interpolatedStrength) * i.primaryGate01;
     return max(outv, wantedM);
 }
 
@@ -161,8 +188,22 @@ float PaintInBrushStroke_Splotches(PaintInBrushStroke_Input i, float4 stampPosSi
         float strength = stampPosSizeStr[k].w;
         float2 size2 = float2(size, size);
         float2 uv = brushStampUV(i.fragScreenSpaceUV, center, size2, i.screenAspectRatio, angleRad, roundness01);
-        float w = sampleBrushStamp(i, uv, strength);
+        float w = sampleBrushStamp(i, uv, strength) * i.primaryGate01;
         accum = max(accum, w);
+    }
+    // Object mirror (mode 3): evaluate the SAME stamps at this fragment's plane-reflected position.
+    if (i.symmetryMode > 2.5) {
+        PaintInBrushStroke_Input im = i;
+        im.fragScreenSpaceUV = i.fragScreenSpaceUV_mirror;
+        im.normalDotView = i.normalDotView_mirror;
+        for (int k3 = 0; k3 < stampCount; k3++){
+            float2 center3 = stampPosSizeStr[k3].xy;
+            float2 size3 = float2(stampPosSizeStr[k3].z, stampPosSizeStr[k3].z);
+            float2 uv3 = brushStampUV(im.fragScreenSpaceUV, center3, size3, i.screenAspectRatio, angleRad, roundness01);
+            float w3 = sampleBrushStamp(im, uv3, stampPosSizeStr[k3].w) * i.mirrorGate01;
+            accum = max(accum, w3);
+        }
+        return accum;
     }
     // Screen mirror only (mode 1). Mesh mirror duplicates stamps in C# and uses mode 0 here.
     if (i.symmetryMode > 0.5 && i.symmetryMode < 1.5) {
@@ -173,7 +214,7 @@ float PaintInBrushStroke_Splotches(PaintInBrushStroke_Input i, float4 stampPosSi
             float2 size2M = float2(sizeM, sizeM);
             float angleRadM = angleRad + i.symmetryMirrorAngleDeltaRad;
             float2 uvM = brushStampUV(i.fragScreenSpaceUV, centerM, size2M, i.screenAspectRatio, angleRadM, roundness01);
-            float wM = sampleBrushStamp(i, uvM, strengthM);
+            float wM = sampleBrushStamp(i, uvM, strengthM) * i.primaryGate01;
             accum = max(accum, wM);
         }
     }
@@ -193,6 +234,13 @@ float Mask_by_CurrBrushCursor(PaintInBrushStroke_Input i){
         a = tex2D(i.BrushStamp, brushUV_curr).r;
     if (i.symmetryMode < 0.5)
         return a;
+    if (i.symmetryMode > 2.5) {
+        // Object mirror: cursor ring appears on the surface whose plane-reflected position is under the brush.
+        float2 brushUV_m3 = brushStampUV(i.fragScreenSpaceUV_mirror, brushNewPos, brushNewSize, i.screenAspectRatio, angleRad, roundness01);
+        if (brushUV_m3.x >= 0.0 && brushUV_m3.x <= 1.0 && brushUV_m3.y >= 0.0 && brushUV_m3.y <= 1.0)
+            a = max(a, tex2D(i.BrushStamp, brushUV_m3).r * i.mirrorGate01);
+        return a;
+    }
     float2 mPos = (i.symmetryMode < 1.5)
         ? float2(1.0 - brushNewPos.x, brushNewPos.y)
         : i.MirrorPrevNewBrushScreenCoord.zw;
