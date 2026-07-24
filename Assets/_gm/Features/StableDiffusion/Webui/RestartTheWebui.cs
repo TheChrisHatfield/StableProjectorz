@@ -90,11 +90,12 @@ namespace spz {
 	        string workingDir;
 	        bool showExternalWindows = LaunchWebUIBatFile.PrefsWantShowExternalProcessWindows();
 	        string launchPath = LaunchWebUIBatFile.GetLaunchPathWithGpuSetting(full_path, out workingDir, preferNoConsole: !showExternalWindows);
+	        // keepWindow false — show/hide via hidden only; /K leaves zombie CMD after Forge exits.
 	        uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
 	            launchPath,
 	            isJustFile:true,
 	            workingDir,
-	            keepWindow:showExternalWindows,
+	            keepWindow:false,
 	            hidden:!showExternalWindows,
 	            attachToConsole:false
 	        );

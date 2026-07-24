@@ -756,11 +756,12 @@ namespace spz {
 				UnityEngine.Debug.Log(showExternalWindows
 					? "[Addon_MGR] Starting addon server with visible console (Settings)."
 					: "[Addon_MGR] Starting addon server in background (hidden console; Settings default).");
+				// keepWindow false: /K would leave CMD open after python exits and block ClearStale restart.
 				uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
 					batPath,
 					isJustFile: true,
 					workDir,
-					keepWindow: showExternalWindows,
+					keepWindow: false,
 					hidden: !showExternalWindows,
 					attachToConsole: false
 				);
