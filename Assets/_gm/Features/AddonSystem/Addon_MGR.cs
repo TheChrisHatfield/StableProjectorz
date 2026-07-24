@@ -1245,6 +1245,7 @@ namespace spz {
 		IEnumerator CoEnsureRibbonOnlyFullscreenViewportDock() {
 			yield return null;
 			const int maxFrames = 600;
+			bool attachKicked = false;
 			for (int f = 0; f < maxFrames; f++) {
 				if (this == null) {
 					yield break;
@@ -1252,8 +1253,14 @@ namespace spz {
 				if (!IsAddonEnabled(RibbonOnlyFullscreenAddonId)) {
 					yield break;
 				}
-				Addon_SocketServer.TryAttachViewportFullViewToggleFromCore(null);
-				if (RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyVisibleBuiltDock()) {
+				// Kick attach once (or again only if nothing is building). Per-frame NotifyAttachRequested
+				// previously tore down CoBuildWhenGenArtReady every frame → dial ON, no FULL/SRN button.
+				if (!RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyVisibleBuiltDock()) {
+					if (!attachKicked || !RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyDockBuildInFlight()) {
+						Addon_SocketServer.TryAttachViewportFullViewToggleFromCore(null);
+						attachKicked = true;
+					}
+				} else {
 					UnityEngine.Debug.Log(
 						"[Addon_MGR] RibbonOnlyFullscreen: viewport FULL/SRN dock next to Gen Art is visible (add-on manager path).");
 					yield break;
