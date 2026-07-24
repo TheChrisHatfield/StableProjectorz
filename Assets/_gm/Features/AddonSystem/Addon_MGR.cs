@@ -427,8 +427,8 @@ namespace spz {
 				yield return null;
 			}
 			
-			// Start Python server (includes FastAPI HTTP server if enabled)
-			StartPythonServer(forceHiddenWindow: true);
+			// Start Python server (includes FastAPI HTTP server if enabled). Visibility from Settings (default hide).
+			StartPythonServer();
 			
 			// If server failed and we have addons, auto-restart via Run_with_Addons.bat (built player only; never in Editor to avoid quitting Unity)
 			if (_autoRestartWithAddonsOnServerFail && !_isServerRunning && _enableHttpServer && HasAnyEnabledAddon() && !WasLaunchedByAddonsBat() && !Application.isEditor) {
@@ -685,9 +685,34 @@ namespace spz {
 		}
 
 		/// <summary>
-		/// Starts the Python server process (dual-trigger: runs automatically when exe loads, like quick-start flow).
+		/// Wrapper cmd PID can exit while we keep <see cref="_isServerRunning"/> true, blocking restart.
+		/// Also clear when the tracked Process has exited (Editor path).
 		/// </summary>
-		void StartPythonServer(bool forceHiddenWindow = false) {
+		void ClearStalePythonServerRunningFlag() {
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+			if (_isServerRunning && _pythonServerPid != 0
+			    && !StartExternalProcess.IsProcessRunning(_pythonServerPid)) {
+				UnityEngine.Debug.LogWarning(
+					$"[Addon_MGR] Addon server launcher PID {_pythonServerPid} is gone — clearing running flag so restart can proceed.");
+				_pythonServerPid = 0;
+				_isServerRunning = false;
+			}
+#elif UNITY_EDITOR
+			if (_isServerRunning && _pythonProcess != null && _pythonProcess.HasExited) {
+				UnityEngine.Debug.LogWarning(
+					"[Addon_MGR] Addon Python process has exited — clearing running flag so restart can proceed.");
+				_pythonProcess = null;
+				_isServerRunning = false;
+			}
+#endif
+		}
+
+		/// <summary>
+		/// Starts the Python server process (dual-trigger: runs automatically when exe loads, like quick-start flow).
+		/// Console visibility follows Settings → Show external process windows (default off = hidden).
+		/// </summary>
+		void StartPythonServer() {
+			ClearStalePythonServerRunningFlag();
 			if (_isServerRunning) return;
 
 			string serverScriptPath = null;
@@ -713,7 +738,7 @@ namespace spz {
 			
 			string pythonExe = TryResolvePythonExe();
 			if (string.IsNullOrEmpty(pythonExe)) pythonExe = "python";
-			bool showExternalWindows = !forceHiddenWindow && UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1;
+			bool showExternalWindows = LaunchWebUIBatFile.PrefsWantShowExternalProcessWindows();
 			UnityEngine.Debug.Log($"[Addon_MGR] Starting Python server: socket port {_serverPort}, HTTP port {_httpServerPort}, exe: {pythonExe}");
 			
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
@@ -728,11 +753,9 @@ namespace spz {
 				string socketBound = (Addon_SocketServer.instance != null && Addon_SocketServer.instance.IsListening) ? "1" : "0";
 				string batContent = "@echo off\r\ncd /d \"" + workDir + "\"\r\nset SPZ_SOCKET_BOUND=" + socketBound + "\r\n\"" + pythonExe.Replace("\"", "\"\"") + "\" \"" + serverScriptPath.Replace("\"", "\"\"") + "\" --port " + _serverPort + " --addons-dir \"" + addonsPath.Replace("\"", "\"\"") + "\" " + httpArg + "\r\n";
 				File.WriteAllText(batPath, batContent);
-				UnityEngine.Debug.Log(forceHiddenWindow
-					? "[Addon_MGR] Starting addon server in background (startup always hidden)."
-					: (showExternalWindows
-						? "[Addon_MGR] Starting addon server with visible console (Settings)."
-						: "[Addon_MGR] Starting addon server in background (hidden console)."));
+				UnityEngine.Debug.Log(showExternalWindows
+					? "[Addon_MGR] Starting addon server with visible console (Settings)."
+					: "[Addon_MGR] Starting addon server in background (hidden console; Settings default).");
 				uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
 					batPath,
 					isJustFile: true,
@@ -767,7 +790,7 @@ namespace spz {
 						UseShellExecute = false,
 						RedirectStandardOutput = true,
 						RedirectStandardError = true,
-						CreateNoWindow = false,
+						CreateNoWindow = !showExternalWindows,
 						WorkingDirectory = Path.GetDirectoryName(serverScriptPath)
 					}
 				};
@@ -831,6 +854,7 @@ namespace spz {
 		IEnumerator WaitForAddonServerReady(int maxAttempts = 60, float interval = 0.5f) {
 			if (IsAddonApiShuttingDown())
 				yield break;
+			ClearStalePythonServerRunningFlag();
 			if (!_isServerRunning) {
 				UnityEngine.Debug.LogWarning("[Addon_MGR] Python server not running; attempting to start it now...");
 				StartPythonServer();
