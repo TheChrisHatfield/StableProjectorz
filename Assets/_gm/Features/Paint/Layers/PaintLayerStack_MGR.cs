@@ -85,13 +85,13 @@ namespace spz {
 			UnityEngine.Debug.Log($"[PaintLayerStack] Awake complete: {_layers.Count} layers, active={_activeIndex}.");
 		}
 
+		const string CollapseStickyMsg = "Collapsing layers — please wait…";
+		static readonly Color CollapseStickyColor = new Color(1f, 0.92f, 0.55f, 1f);
+
 		/// <summary>
 		/// Clears scheduled-collapse coroutine ref, resets <see cref="Inpaint_MaskPainter.IsCollapsingLayers"/>, and nudges a full re-render.
 		/// Call after <see cref="MonoBehaviour.StopCoroutine"/> on the scheduled collapse coroutine: Unity does not reliably run iterator <c>finally</c> when a coroutine is stopped.
 		/// </summary>
-		const string CollapseStickyMsg = "Collapsing layers — please wait…";
-		static readonly Color CollapseStickyColor = new Color(1f, 0.92f, 0.55f, 1f);
-
 		void CleanupAfterScheduledCollapse()
 		{
 			_collapseSliceCopyCrt = null;
@@ -129,21 +129,17 @@ namespace spz {
 			st.ReportProgress(Mathf.Clamp01(progress01));
 		}
 
-		static void NotifyCollapseEnd(bool ok, bool wasScheduled)
+		static void NotifyCollapseEnd(bool ok)
 		{
 			var st = Viewport_StatusText.instance;
 			if (st == null) return;
 			st.StopStickyMsg(CollapseStickyMsg);
+			// Always hide the progress bar on completion — leaving it on after a scheduled collapse looked stuck.
+			st.ReportProgress(ok ? 1f : 0f);
 			if (ok)
-			{
-				st.ReportProgress(1f);
-				st.ShowStatusText("Layers collapsed.", false, 2.5f, wasScheduled);
-			}
+				st.ShowStatusText("Layers collapsed.", false, 2.5f, false);
 			else
-			{
-				st.ReportProgress(0f);
 				st.ShowStatusText("Collapse could not finish.", false, 4f, false);
-			}
 		}
 
 		void OnDestroy()
@@ -478,7 +474,7 @@ namespace spz {
 					collapseSched.RegisterCollapsePathObservation(pathBucket, pathArm, ok);
 				}
 
-				NotifyCollapseEnd(pasted, wasScheduled: false);
+				NotifyCollapseEnd(pasted);
 				return true;
 			}
 
@@ -577,7 +573,7 @@ namespace spz {
 					bool ok = completedComposite && collapseSched.CollapseScheduledObservationSuccess(worstHitchMs);
 					collapseSched.RegisterCollapsePathObservation(_collapsePathObsBucket, _collapsePathObsArm, ok);
 				}
-				NotifyCollapseEnd(completedComposite, wasScheduled: true);
+				NotifyCollapseEnd(completedComposite);
 				CleanupAfterScheduledCollapse();
 			}
 		}
@@ -600,7 +596,7 @@ namespace spz {
 					UnityEngine.Debug.LogWarning($"[PaintLayerStack] Collapse: failed to read layer '{l.Name}' to CPU.");
 					foreach (var prevList in allLayerSlices)
 						foreach (var t in prevList) if (t != null) UnityEngine.Object.DestroyImmediate(t);
-					NotifyCollapseEnd(ok: false, wasScheduled: true);
+					NotifyCollapseEnd(ok: false);
 					return false;
 				}
 				allLayerSlices.Add(layerTextures);
@@ -670,7 +666,7 @@ namespace spz {
 
 			foreach (var t in resultTextures) if (t != null) UnityEngine.Object.DestroyImmediate(t);
 
-			NotifyCollapseEnd(pasted, wasScheduled: true);
+			NotifyCollapseEnd(pasted);
 			return true;
 		}
 
