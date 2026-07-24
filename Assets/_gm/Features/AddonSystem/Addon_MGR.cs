@@ -901,8 +901,21 @@ namespace spz {
 				yield break;
 			}
 			if (_sharedAddonReadyKnownOk) {
-				readyOut(true);
-				yield break;
+				// Cached success must not skip a dead :5557 (PID alive, FastAPI gone).
+				ClearStalePythonServerRunningFlag();
+				if (!_isServerRunning || TryReadAddonHttpFailMarker(out _)) {
+					InvalidateSharedAddonReadyCache();
+				} else {
+					bool probeOk = false;
+					yield return CoProbeAddonReadyOnce(ok => probeOk = ok);
+					if (probeOk) {
+						readyOut(true);
+						yield break;
+					}
+					UnityEngine.Debug.LogWarning(
+						"[Addon_MGR] Cached addon /ready is stale (liveness probe failed) — re-polling HTTP.");
+					InvalidateSharedAddonReadyCache();
+				}
 			}
 			_sharedAddonReadyWaiters.Add(readyOut);
 			if (!_sharedAddonReadyPollActive) {
@@ -913,6 +926,28 @@ namespace spz {
 			// Keep this method as a join: wait until our waiter is no longer pending.
 			while (_sharedAddonReadyWaiters.Contains(readyOut))
 				yield return null;
+		}
+
+		/// <summary>Single GET /ready used to validate <see cref="_sharedAddonReadyKnownOk"/> before short-circuit.</summary>
+		IEnumerator CoProbeAddonReadyOnce(Action<bool> done) {
+			if (done == null)
+				yield break;
+			string readyUrl = $"http://127.0.0.1:{_httpServerPort}/ready";
+			using (var req = new UnityWebRequest(readyUrl)) {
+				req.downloadHandler = new DownloadHandlerBuffer();
+				req.timeout = 3;
+				yield return req.SendWebRequest();
+				if (req.result == UnityWebRequest.Result.Success) {
+					try {
+						var json = JObject.Parse(req.downloadHandler?.text ?? "{}");
+						if (json["ready"]?.Value<bool>() == true) {
+							done(true);
+							yield break;
+						}
+					} catch { }
+				}
+			}
+			done(false);
 		}
 
 		void NotifySharedAddonReadyWaiters(bool ok) {
@@ -1105,6 +1140,7 @@ namespace spz {
 				}
 				if (req.result != UnityWebRequest.Result.Success) {
 					UnityEngine.Debug.LogError($"[Addon_MGR] load_addon failed for {addonId}: {req.error}. Ensure Python server is running on port {_httpServerPort}");
+					InvalidateSharedAddonReadyCache();
 					if (epoch < 0 || IsLifecycleEpochCurrent(addonId, epoch))
 						MarkAddonLoadFailed(addonId);
 					yield break;
@@ -1124,6 +1160,7 @@ namespace spz {
 						StartAddonLifecycleOp(addonId, false);
 				} else {
 					UnityEngine.Debug.LogError($"[Addon_MGR] Python reported addon load failure for {addonId}. Raw response: {responseBody}. Check Python console for register()/socket errors.");
+					InvalidateSharedAddonReadyCache();
 					if (epoch < 0 || IsLifecycleEpochCurrent(addonId, epoch))
 						MarkAddonLoadFailed(addonId);
 				}

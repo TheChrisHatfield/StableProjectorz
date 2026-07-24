@@ -36,6 +36,14 @@ public sealed class AddonRibbonEmptyStateTests {
 	}
 
 	[Test]
+	public void AddonMgr_ExposesReadyLivenessProbe() {
+		var method = typeof(Addon_MGR).GetMethod(
+			"CoProbeAddonReadyOnce",
+			BindingFlags.Instance | BindingFlags.NonPublic);
+		Assert.That(method, Is.Not.Null, "Cached /ready must re-probe via CoProbeAddonReadyOnce before short-circuit.");
+	}
+
+	[Test]
 	public void CommandRibbon_WidgetProbeIgnoresTitleOnlyPanels() {
 		var method = typeof(CommandRibbon_UI).GetMethod(
 			"ShellHasAddonPanelWidgets",
