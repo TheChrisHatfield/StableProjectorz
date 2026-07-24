@@ -89,13 +89,61 @@ namespace spz {
 		/// Clears scheduled-collapse coroutine ref, resets <see cref="Inpaint_MaskPainter.IsCollapsingLayers"/>, and nudges a full re-render.
 		/// Call after <see cref="MonoBehaviour.StopCoroutine"/> on the scheduled collapse coroutine: Unity does not reliably run iterator <c>finally</c> when a coroutine is stopped.
 		/// </summary>
+		const string CollapseStickyMsg = "Collapsing layers — please wait…";
+		static readonly Color CollapseStickyColor = new Color(1f, 0.92f, 0.55f, 1f);
+
 		void CleanupAfterScheduledCollapse()
 		{
 			_collapseSliceCopyCrt = null;
 			var mp = Inpaint_MaskPainter.instance;
 			if (mp != null) mp.IsCollapsingLayers = false;
+			// Always clear sticky if a scheduled collapse was stopped mid-flight.
+			Viewport_StatusText.instance?.StopStickyMsg(CollapseStickyMsg);
 			if (Objects_Renderer_MGR.instance != null)
 				Objects_Renderer_MGR.instance.ReRenderAll_soon();
+		}
+
+		/// <summary>User-facing status so a long collapse (many UDIMs) is not mistaken for a hang/error.</summary>
+		static void NotifyCollapseBegin(bool amortizedAcrossFrames, int visibleCount, int udimSlices)
+		{
+			var st = Viewport_StatusText.instance;
+			if (st == null) return;
+			if (amortizedAcrossFrames)
+			{
+				st.ShowStickyMsg(CollapseStickyMsg, CollapseStickyColor);
+				st.ShowStatusText(
+					$"Collapsing {visibleCount} layers ({udimSlices} UDIM slices). This can take a moment — not an error.",
+					false, 12f, true);
+				st.ReportProgress(0f);
+			}
+			else
+			{
+				st.ShowStatusText($"Collapsing {visibleCount} layers…", false, 4f, false);
+			}
+		}
+
+		static void NotifyCollapseProgress(float progress01)
+		{
+			var st = Viewport_StatusText.instance;
+			if (st == null) return;
+			st.ReportProgress(Mathf.Clamp01(progress01));
+		}
+
+		static void NotifyCollapseEnd(bool ok, bool wasScheduled)
+		{
+			var st = Viewport_StatusText.instance;
+			if (st == null) return;
+			st.StopStickyMsg(CollapseStickyMsg);
+			if (ok)
+			{
+				st.ReportProgress(1f);
+				st.ShowStatusText("Layers collapsed.", false, 2.5f, wasScheduled);
+			}
+			else
+			{
+				st.ReportProgress(0f);
+				st.ShowStatusText("Collapse could not finish.", false, 4f, false);
+			}
 		}
 
 		void OnDestroy()
@@ -349,6 +397,8 @@ namespace spz {
 			if (visibleLayers.Count == 0)
 			{
 				UnityEngine.Debug.Log("[PaintLayerStack] Collapse: no visible layer with content.");
+				Viewport_StatusText.instance?.ShowStatusText(
+					"Nothing to collapse — no visible layers with paint.", false, 3f, false);
 				return false;
 			}
 
@@ -383,12 +433,14 @@ namespace spz {
 						StopCoroutine(_collapseSliceCopyCrt);
 						CleanupAfterScheduledCollapse();
 					}
+					NotifyCollapseBegin(amortizedAcrossFrames: true, visCount, first.UdimsCount);
 					_collapsePathObsBucket = pathBucket;
 					_collapsePathObsArm = pathArm;
 					_collapseSliceCopyCrt = StartCoroutine(CollapseVisibleLayersIntoOne_GpuScheduledCoroutine(first));
 					return true;
 				}
 
+				NotifyCollapseBegin(amortizedAcrossFrames: false, visCount, first.UdimsCount);
 				float tImmediate = Time.realtimeSinceStartup;
 				EnsureCollapseResultTemp(first);
 				CompositeTo(_collapseResultTemp);
@@ -404,6 +456,7 @@ namespace spz {
 					if (maskPainter != null) maskPainter.IsCollapsingLayers = false;
 				}
 
+				bool pasted = false;
 				if (newLayer != null && newLayer.Content != null && newLayer.Content.texArray != null
 				    && newLayer.Content.width == _collapseResultTemp.width
 				    && newLayer.Content.height == _collapseResultTemp.height
@@ -412,6 +465,7 @@ namespace spz {
 					CopyAllSlices(_collapseResultTemp, newLayer.Content);
 					newLayer.SyncDataFromContent();
 					newLayer.HasReceivedSceneInject = true;
+					pasted = true;
 				}
 				else
 					UnityEngine.Debug.LogWarning("[PaintLayerStack] Collapse: new layer has no Content; GPU path paste skipped.");
@@ -424,6 +478,7 @@ namespace spz {
 					collapseSched.RegisterCollapsePathObservation(pathBucket, pathArm, ok);
 				}
 
+				NotifyCollapseEnd(pasted, wasScheduled: false);
 				return true;
 			}
 
@@ -505,6 +560,7 @@ namespace spz {
 						float hitchMs = Mathf.Max(0f, (Time.deltaTime - (1f / 60f)) * 1000f);
 						worstHitchMs = Mathf.Max(worstHitchMs, hitchMs);
 						collapseSched.RegisterRestoreBanditObservation(hitchMs, batch);
+						NotifyCollapseProgress(totalSlices > 0 ? cursor / (float)totalSlices : 1f);
 					}
 					if (cursor < totalSlices)
 						yield return null;
@@ -521,6 +577,7 @@ namespace spz {
 					bool ok = completedComposite && collapseSched.CollapseScheduledObservationSuccess(worstHitchMs);
 					collapseSched.RegisterCollapsePathObservation(_collapsePathObsBucket, _collapsePathObsArm, ok);
 				}
+				NotifyCollapseEnd(completedComposite, wasScheduled: true);
 				CleanupAfterScheduledCollapse();
 			}
 		}
@@ -531,6 +588,7 @@ namespace spz {
 			int w = first.width;
 			int h = first.height;
 			int slices = first.UdimsCount;
+			NotifyCollapseBegin(amortizedAcrossFrames: true, visibleLayers.Count, slices);
 
 			var allLayerSlices = new List<List<Texture2D>>();
 			var allLayerOpacities = new List<float>();
@@ -542,6 +600,7 @@ namespace spz {
 					UnityEngine.Debug.LogWarning($"[PaintLayerStack] Collapse: failed to read layer '{l.Name}' to CPU.");
 					foreach (var prevList in allLayerSlices)
 						foreach (var t in prevList) if (t != null) UnityEngine.Object.DestroyImmediate(t);
+					NotifyCollapseEnd(ok: false, wasScheduled: true);
 					return false;
 				}
 				allLayerSlices.Add(layerTextures);
@@ -598,17 +657,20 @@ namespace spz {
 				if (maskPainter != null) maskPainter.IsCollapsingLayers = false;
 			}
 
+			bool pasted = false;
 			if (newLayer != null && newLayer.Content != null && newLayer.Content.texArray != null)
 			{
 				TextureTools_SPZ.TextureArray_Fill_N_Slices(newLayer.Content.texArray, resultTextures, 0);
 				newLayer.SyncDataFromContent();
 				newLayer.HasReceivedSceneInject = true;
+				pasted = true;
 			}
 			else
 				UnityEngine.Debug.LogWarning("[PaintLayerStack] Collapse: new layer has no Content; paste skipped.");
 
 			foreach (var t in resultTextures) if (t != null) UnityEngine.Object.DestroyImmediate(t);
 
+			NotifyCollapseEnd(pasted, wasScheduled: true);
 			return true;
 		}
 

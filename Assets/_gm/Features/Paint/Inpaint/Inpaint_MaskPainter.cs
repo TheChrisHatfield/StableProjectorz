@@ -840,17 +840,28 @@ namespace spz {
 		    var stack = PaintLayerStack_MGR.instance;
 		    if (stack == null || stack.Layers == null || stack.Layers.Count == 0) return false;
 		    RenderUdims firstContent = null;
+		    int visCount = 0;
 		    foreach (var l in stack.Layers)
 		    {
-			    if (l.Visible && l.Content != null) { firstContent = l.Content; break; }
+			    if (l.Visible && l.Content != null)
+			    {
+				    if (firstContent == null) firstContent = l.Content;
+				    visCount++;
+			    }
 		    }
 		    if (firstContent == null)
 		    {
 			    UnityEngine.Debug.LogWarning("[Inpaint_MaskPainter] CollapseLayersIntoScene: no visible layer with content.");
+			    Viewport_StatusText.instance?.ShowStatusText(
+				    "Nothing to collapse — no visible layers with paint.", false, 3f, false);
 			    return false;
 		    }
 		    EnsureLayerStackCompositeTemp(firstContent);
 		    if (_layerStackCompositeTemp == null) return false;
+
+		    Viewport_StatusText.instance?.ShowStatusText(
+			    $"Collapsing {visCount} layers into scene… This can take a moment — not an error.",
+			    false, 8f, false);
 
 		    // 1. Composite all visible layers into temp
 		    _isCollapsingLayers = true;
@@ -887,6 +898,7 @@ namespace spz {
 		    if (Objects_Renderer_MGR.instance != null)
 			    Objects_Renderer_MGR.instance.ReRenderAll_soon();
 		    UnityEngine.Debug.Log("[Inpaint_MaskPainter] CollapseLayersIntoScene: composite → scene buffer → single enumerated Collapse N layer (synchronous).");
+		    Viewport_StatusText.instance?.ShowStatusText("Layers collapsed into scene.", false, 2.5f, false);
 		    return true;
 	    }
 
