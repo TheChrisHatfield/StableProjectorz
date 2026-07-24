@@ -1011,6 +1011,8 @@ namespace spz {
 	             isAllowed &= !SD_WorkflowOptionsRibbon_UI.instance?.IsEyeDropperMagnified ?? false;
 	             isAllowed &= !ClickSelect_Meshes_MGR.instance?._isSelectMode?? false;
 	             isAllowed &= !GlobalClickBlocker.isLocked();
+	             // Amortized collapse writes the new layer across frames — painting into it mid-composite corrupts the merge.
+	             isAllowed &= !_isCollapsingLayers;
 	        if (also_check_viewportHovered){
 	            isAllowed &= MainViewport_UI.instance?.isCursorHoveringMe()?? false;
 	        }
