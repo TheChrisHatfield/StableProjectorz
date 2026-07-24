@@ -824,6 +824,8 @@ namespace spz {
 				} else {
 					arguments += " --no-http";
 				}
+				// Same as IL2CPP: stale FastAPI-fail markers must not poison Editor Load-now / Enable.
+				TryClearAddonHttpFailMarker();
 				_pythonProcess = new Process {
 					StartInfo = new ProcessStartInfo {
 						FileName = pythonExe,
@@ -1184,6 +1186,26 @@ namespace spz {
 				UnityEngine.Debug.Log($"[Addon_MGR] Skipping unload for re-enabled add-on: {addonId}");
 				yield break;
 			}
+			// Dead :5557 / stale fail marker: do not burn 3×8s POSTs while /ready polls also storm.
+			if (TryReadAddonHttpFailMarker(out string failReason)) {
+				UnityEngine.Debug.LogWarning(
+					$"[Addon_MGR] Skipping unload for {addonId}; Python HTTP fail marker present:\n{failReason}");
+				yield break;
+			}
+			bool httpReady = false;
+			yield return CoProbeAddonReadyOnce(ok => httpReady = ok);
+			if (epoch >= 0 && !IsLifecycleEpochCurrent(addonId, epoch))
+				yield break;
+			if (IsAddonEnabled(addonId)) {
+				UnityEngine.Debug.Log($"[Addon_MGR] Skipping unload for re-enabled add-on: {addonId}");
+				yield break;
+			}
+			if (!httpReady) {
+				UnityEngine.Debug.LogWarning(
+					$"[Addon_MGR] Skipping unload for {addonId}; Python HTTP :{_httpServerPort} not ready (Unity UI already torn down).");
+				InvalidateSharedAddonReadyCache();
+				yield break;
+			}
 
 			string url = $"http://127.0.0.1:{_httpServerPort}/unload_addon";
 			string body = "{\"addon_id\":\"" + JsonEscape(addonId) + "\"}";
@@ -1219,6 +1241,7 @@ namespace spz {
 						UnityEngine.Debug.LogWarning(
 							$"[Addon_MGR] unload_addon failed for {addonId} after {attempt} attempts: " +
 							$"{req.error ?? req.downloadHandler?.text}");
+						InvalidateSharedAddonReadyCache();
 						yield break;
 					}
 				}
