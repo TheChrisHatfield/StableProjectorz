@@ -60,6 +60,37 @@ namespace spz {
 	    }
 
 
+	    /// <summary>
+	    /// Ray through a main-viewport UV [0,1] using the SAME projection this camera renders with
+	    /// (FOV expanded to match the content aspect + perspective center shifted to this camera's pin,
+	    /// exactly like <see cref="OnPreCull"/> does before every render).
+	    /// A plain <c>myCamera.ViewportPointToRay</c> uses the raw projection, which in multi-view points
+	    /// at a different pixel than the one visually under the cursor (offset grows the further the pin
+	    /// is from the viewport center) -- use this for any cursor-driven picking against this camera.
+	    /// </summary>
+	    public Ray ViewportPointToRay_RenderMatched( Vector2 mainViewportUv01 ){
+	        _camera.projectionMatrix = ExpandFov_Match_ContentCamFov( with_ShiftPerspectiveCenter:true );
+	        // Build the ray from two unprojected points instead of ViewportPointToRay:
+	        // ViewportToWorldPoint is already proven to respect our custom projection matrix in this codebase.
+	        Vector3 pNear = _camera.ViewportToWorldPoint(new Vector3(mainViewportUv01.x, mainViewportUv01.y, _camera.nearClipPlane));
+	        Vector3 pFar  = _camera.ViewportToWorldPoint(new Vector3(mainViewportUv01.x, mainViewportUv01.y, _camera.farClipPlane));
+	        RestoreMatrices_Proj_and_Cull();
+	        return new Ray(pNear, (pFar - pNear).normalized);
+	    }
+
+	    /// <summary>
+	    /// Project a world point to screen using the SAME FOV + perspective-center shift as rendering.
+	    /// Plain <c>myCamera.WorldToScreenPoint</c> uses the restored (unshifted) matrix between frames,
+	    /// so multi-view pin lock would write centers into the wrong viewport column.
+	    /// </summary>
+	    public Vector3 WorldToScreenPoint_RenderMatched( Vector3 worldPos ){
+	        _camera.projectionMatrix = ExpandFov_Match_ContentCamFov( with_ShiftPerspectiveCenter:true );
+	        Vector3 screen = _camera.WorldToScreenPoint(worldPos);
+	        RestoreMatrices_Proj_and_Cull();
+	        return screen;
+	    }
+
+
 	    public void RenderImmediate_Arr( RenderTexture renderIntoHere,  bool ignore_nonSelected_meshes,  Material withThisMat,
 	                                     bool useClearingColor, Color clearingColor, bool dontFrustumCull=false){
 
