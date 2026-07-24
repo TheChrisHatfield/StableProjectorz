@@ -27,6 +27,15 @@ public sealed class AddonRibbonEmptyStateTests {
 	}
 
 	[Test]
+	public void AddonMgr_SharedReadyPollUsesActiveFlagField() {
+		var field = typeof(Addon_MGR).GetField(
+			"_sharedAddonReadyPollActive",
+			BindingFlags.Instance | BindingFlags.NonPublic);
+		Assert.That(field, Is.Not.Null, "_sharedAddonReadyPollActive must gate parallel /ready polls.");
+		Assert.That(field.FieldType, Is.EqualTo(typeof(bool)));
+	}
+
+	[Test]
 	public void CommandRibbon_WidgetProbeIgnoresTitleOnlyPanels() {
 		var method = typeof(CommandRibbon_UI).GetMethod(
 			"ShellHasAddonPanelWidgets",
