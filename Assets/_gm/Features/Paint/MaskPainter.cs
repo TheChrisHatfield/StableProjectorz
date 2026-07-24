@@ -351,14 +351,21 @@ namespace spz {
 		        _brushMaterial.SetVector(_SymmetryPlaneNormalWS_ID, symPlaneNormal);
 		        _brushMaterial.SetVector(_MirrorPrevNewBrushScreenCoord_ID, Vector4.zero);
 		        _brushMaterial.SetFloat(_SymmetryMirrorAngleDeltaRad_ID, 0f);
+	        } else if (useMeshPaintSymmetry()) {
+		        // Mesh painter but no resolvable symmetry plane (e.g. multi-root selection with opposed local
+		        // axes makes the averaged bilateral axis degenerate): suppress the twin. A screen mirror here
+		        // would paint offset stamps on the mesh — the exact artifact mode 3 exists to eliminate.
+		        _brushMaterial.SetFloat(_SymmetryMode_ID, 0f);
+		        _brushMaterial.SetVector(_MirrorPrevNewBrushScreenCoord_ID, Vector4.zero);
+		        _brushMaterial.SetFloat(_SymmetryMirrorAngleDeltaRad_ID, 0f);
 	        } else if (stampCount > 0) {
-		        // Screen symmetry for splotches: let shader mirror centers so mirrored angle delta is applied for directional tips.
+		        // Screen symmetry for splotches (2D background): let shader mirror centers so mirrored angle delta is applied for directional tips.
 		        _brushMaterial.SetFloat(_SymmetryMode_ID, 1f);
 		        _brushMaterial.SetVector(_MirrorPrevNewBrushScreenCoord_ID, Vector4.zero);
 		        _brushMaterial.SetFloat(_SymmetryMirrorAngleDeltaRad_ID,
 			        PaintSymmetryMesh.ComputeScreenMirrorAngleDelta(_prevPaintPosition, cursorRaw01));
 	        } else {
-		        // 2D screen mirror (background painter, or no symmetry plane available — e.g. nothing selected).
+		        // 2D screen mirror (background painter).
 		        PaintSymmetryMesh.SetMaterialSymmetry(_brushMaterial, paintCam, _prevPaintPosition, cursorRaw01, symXOn, false);
 	        }
 

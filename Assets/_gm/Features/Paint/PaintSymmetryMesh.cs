@@ -515,10 +515,18 @@ namespace spz {
 				return;
 			}
 
-			if (allowMeshSymmetry && TryGetSymmetryPlane(cam, out Vector3 planePoint, out Vector3 planeNormal)) {
-				mat.SetFloat(modeProp, 3f);
-				mat.SetVector("_SymmetryPlanePointWS", planePoint);
-				mat.SetVector("_SymmetryPlaneNormalWS", planeNormal);
+			if (allowMeshSymmetry) {
+				if (TryGetSymmetryPlane(cam, out Vector3 planePoint, out Vector3 planeNormal)) {
+					mat.SetFloat(modeProp, 3f);
+					mat.SetVector("_SymmetryPlanePointWS", planePoint);
+					mat.SetVector("_SymmetryPlaneNormalWS", planeNormal);
+					mat.SetVector(mirrorProp, Vector4.zero);
+					mat.SetFloat(angleDeltaProp, 0f);
+					return;
+				}
+				// Mesh context but no resolvable plane: suppress the twin. Falling back to the screen
+				// mirror would place an offset ring/stamp on the mesh (the artifact mode 3 eliminates).
+				mat.SetFloat(modeProp, 0f);
 				mat.SetVector(mirrorProp, Vector4.zero);
 				mat.SetFloat(angleDeltaProp, 0f);
 				return;
