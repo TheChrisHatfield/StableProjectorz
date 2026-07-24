@@ -1322,6 +1322,7 @@ namespace spz {
 			yield return null;
 			const int maxFrames = 600;
 			bool attachKicked = false;
+			int lastForceGenStripFrame = -999;
 			for (int f = 0; f < maxFrames; f++) {
 				if (this == null) {
 					yield break;
@@ -1332,9 +1333,16 @@ namespace spz {
 				// Kick attach once (or again only if nothing is building). Per-frame NotifyAttachRequested
 				// previously tore down CoBuildWhenGenArtReady every frame → dial ON, no FULL/SRN button.
 				if (!RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyVisibleBuiltDock()) {
-					if (!attachKicked || !RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyDockBuildInFlight()) {
+					bool inFlight = RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyDockBuildInFlight();
+					if (!attachKicked || !inFlight) {
 						Addon_SocketServer.TryAttachViewportFullViewToggleFromCore(null);
 						attachKicked = true;
+					}
+					// Every ~1s without a visible dock, force the Gen Art strip path (workflow host may be inactive).
+					if (!inFlight && f - lastForceGenStripFrame >= 60) {
+						lastForceGenStripFrame = f;
+						RibbonViewportFullViewOnScreen_Toggle_UI.TryEnsureOnGenerateButtonsStrip(
+							RibbonDock_ButtonSpec.FromRpc(null));
 					}
 				} else {
 					UnityEngine.Debug.Log(

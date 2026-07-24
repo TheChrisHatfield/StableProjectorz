@@ -1944,15 +1944,20 @@ namespace spz {
 			var r = new JObject { ["success"] = false };
 			try {
 				var spec = RibbonDock_ButtonSpec.FromRpc(@params);
+				// Prefer the viewport Gen Art strip. SD_WorkflowOptionsRibbon_UI often disables when the user
+				// opens Add-on Manager (or after Generate UI churn); OnDisable stops CoBuildWhenGenArtReady
+				// and PickWorkflowRibbonHost still returns that inactive host — so enable-after-Generate
+				// never reaches TryEnsureOnGenerateButtonsStrip and FULL/SRN never appears.
+				if (RibbonViewportFullViewOnScreen_Toggle_UI.TryEnsureOnGenerateButtonsStrip(spec)) {
+					r["success"] = true;
+					r["host"] = "GenerateButtons_Main_UI";
+					return r;
+				}
 				var host = PickWorkflowRibbonHostForFullViewAttach();
 				if (host != null) {
 					RibbonViewportFullViewOnScreen_Toggle_UI.EnsureCreated(host, spec);
 					r["success"] = true;
-					return r;
-				}
-				// No SD workflow-ribbon host (tab not loaded, single-scene, etc.): still attach on the viewport Gen strip so the dock actually exists.
-				if (RibbonViewportFullViewOnScreen_Toggle_UI.TryEnsureOnGenerateButtonsStrip(spec)) {
-					r["success"] = true;
+					r["host"] = "SD_WorkflowOptionsRibbon_UI";
 					return r;
 				}
 				r["error"] = "SD_WorkflowOptionsRibbon_UI and GenerateButtons_Main_UI not in scene; cannot mount viewport full-view toggle.";
