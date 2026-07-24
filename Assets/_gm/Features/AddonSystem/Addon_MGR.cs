@@ -771,11 +771,13 @@ namespace spz {
 				string httpArg = _enableHttpServer ? $"--http-port {_httpServerPort}" : "--no-http";
 				// Tell Python whether we bound 5555: if not (Editor has it), Python must NOT kill anything on 5557 or it may kill the Editor.
 				string socketBound = (Addon_SocketServer.instance != null && Addon_SocketServer.instance.IsListening) ? "1" : "0";
-				string batContent = "@echo off\r\ncd /d \"" + workDir + "\"\r\nset SPZ_SOCKET_BOUND=" + socketBound + "\r\n\"" + pythonExe.Replace("\"", "\"\"") + "\" \"" + serverScriptPath.Replace("\"", "\"\"") + "\" --port " + _serverPort + " --addons-dir \"" + addonsPath.Replace("\"", "\"\"") + "\" " + httpArg + "\r\n";
+				string batContent = "@echo off\r\ncd /d \"" + workDir + "\"\r\nset SPZ_SOCKET_BOUND=" + socketBound + "\r\n\"" + pythonExe.Replace("\"", "\"\"") + "\" \"" + serverScriptPath.Replace("\"", "\"\"") + "\" --port " + _serverPort + " --addons-dir \"" + addonsPath.Replace("\"", "\"\"") + "\" " + httpArg + " >> \"%TEMP%\\spz_addon_server.log\" 2>&1\r\n";
 				File.WriteAllText(batPath, batContent);
+				// Stale FastAPI-fail markers must not poison a fresh start.
+				TryClearAddonHttpFailMarker();
 				UnityEngine.Debug.Log(showExternalWindows
 					? "[Addon_MGR] Starting addon server with visible console (Settings)."
-					: "[Addon_MGR] Starting addon server in background (hidden console; Settings default).");
+					: "[Addon_MGR] Starting addon server in background (hidden console; Settings default). Log: %TEMP%\\spz_addon_server.log");
 				// keepWindow false: /K would leave CMD open after python exits and block ClearStale restart.
 				uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
 					batPath,
@@ -935,6 +937,14 @@ namespace spz {
 					NotifySharedAddonReadyWaiters(false);
 					yield break;
 				}
+				// Python writes this when FastAPI is missing or :5557 never binds — fail fast vs ~30s of "Cannot connect".
+				if (TryReadAddonHttpFailMarker(out string httpFailReason)) {
+					UnityEngine.Debug.LogError(
+						$"[Addon_MGR] Python HTTP :{_httpServerPort} failed to start:\n{httpFailReason}\n" +
+						"Also check %TEMP%\\spz_addon_server.log");
+					NotifySharedAddonReadyWaiters(false);
+					yield break;
+				}
 				using (var req = new UnityWebRequest(readyUrl)) {
 					req.downloadHandler = new DownloadHandlerBuffer();
 					req.timeout = 4;
@@ -965,6 +975,7 @@ namespace spz {
 								$"[Addon_MGR] HTTP still unreachable after {consecutiveConnectionErrors} probes — restarting Python addon server once.");
 							InvalidateSharedAddonReadyCache();
 							TerminatePythonAddonServerProcess(waitForExit: true);
+							TryClearAddonHttpFailMarker();
 							StartPythonServer();
 							if (_isServerRunning)
 								yield return new WaitForSeconds(2f);
@@ -975,8 +986,35 @@ namespace spz {
 				}
 				yield return new WaitForSeconds(interval);
 			}
-			UnityEngine.Debug.LogWarning("[Addon_MGR] Addon server /ready did not become true within timeout. Check: (1) Is Python running? (2) Does Player.log show [Addon_SocketServer] Started listening on 127.0.0.1:5555?");
+			UnityEngine.Debug.LogWarning("[Addon_MGR] Addon server /ready did not become true within timeout. Check: (1) Is Python running? (2) Does Player.log show [Addon_SocketServer] Started listening on 127.0.0.1:5555? (3) %TEMP%\\spz_addon_server.log / FastAPI deps.");
 			NotifySharedAddonReadyWaiters(false);
+		}
+
+		string AddonHttpFailMarkerPath() {
+			return Path.Combine(Path.GetTempPath(), $"spz_addon_http_{_httpServerPort}_failed.txt");
+		}
+
+		void TryClearAddonHttpFailMarker() {
+			try {
+				string path = AddonHttpFailMarkerPath();
+				if (File.Exists(path))
+					File.Delete(path);
+			} catch (Exception e) {
+				UnityEngine.Debug.LogWarning($"[Addon_MGR] Could not clear HTTP fail marker: {e.Message}");
+			}
+		}
+
+		bool TryReadAddonHttpFailMarker(out string reason) {
+			reason = null;
+			try {
+				string path = AddonHttpFailMarkerPath();
+				if (!File.Exists(path))
+					return false;
+				reason = File.ReadAllText(path);
+				return !string.IsNullOrWhiteSpace(reason);
+			} catch {
+				return false;
+			}
 		}
 
 		IEnumerator RequestLoadAddon(string addonId) {
