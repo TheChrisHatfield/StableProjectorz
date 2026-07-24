@@ -147,8 +147,14 @@ namespace spz {
 	            return; //because slider still sends callback even if not incremented to next integer.
 	        }
 
+	        int previousWanted = _prevSliderValue;
 	        _numCameras_slider.SetSliderValue( _wantedNumCams, invokeCallback:false);
 	        UserCameras_MGR.instance?.EnableExactly_N_ViewCameras( _wantedNumCams );
+
+	        // Enable alone leaves leftover perspective centers; nearest-pin hover then drives the wrong cam.
+	        if (MultiviewPinLayoutRules.ShouldAutoLayoutPinsAfterCamCountChange(previousWanted, _wantedNumCams)) {
+	            CamerasMGR_PinsZone_UI.instance?.ApplyCurrentDefaultPinLayout();
+	        }
         
 	        if(_wantedNumCams > 1){
 	            StopEditMode(_stopEdit_args, keepEdit_if_currIcon_has_1_POV:false);

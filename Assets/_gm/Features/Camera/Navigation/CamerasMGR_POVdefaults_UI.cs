@@ -45,8 +45,18 @@ namespace spz {
 
 	    public void OnOrderPinsButton( List<CameraPovInfo> povInfos ){
 	        _placementVariant_ix++;
+	        ApplyCurrentDefaultPinLayout(povInfos);
+	    }
+
+	    /// <summary>
+	    /// Snap active cameras to the current placement variant without cycling to the next layout.
+	    /// Used when multi-view camera count changes so POV digits land in the correct columns
+	    /// without consuming a Sort/Order click (which advances <see cref="_placementVariant_ix"/>).
+	    /// </summary>
+	    public void ApplyCurrentDefaultPinLayout( List<CameraPovInfo> povInfos ){
+	        if (povInfos == null || povInfos.Count == 0) { return; }
 	        EnsureNotLerping();
-	        _lerpPins_toDefaultPos_crtn =  StartCoroutine( LerpPins_toDefaultPos_crtn(povInfos,0.3f) );
+	        _lerpPins_toDefaultPos_crtn = StartCoroutine( LerpPins_toDefaultPos_crtn(povInfos, 0.3f) );
 	    }
 
 
