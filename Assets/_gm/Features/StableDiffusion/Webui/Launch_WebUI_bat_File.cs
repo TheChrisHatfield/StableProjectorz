@@ -540,11 +540,13 @@ namespace spz {
 	        try {
 	            // Default first-run: hide (ShowExternalProcessWindows = 0). Toggle ON shows the Forge console.
 	            bool showExternalWindows = PrefsWantShowExternalProcessWindows();
+	            // keepWindow must stay false: /K leaves a zombie CMD after Forge exits and falsifies IsProcessRunning.
+	            // Visibility is only hidden/CREATE_NO_WINDOW vs CREATE_NEW_CONSOLE.
 	            uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
 	                launchPath,
 	                isJustFile: true,
 	                workingDir,
-	                keepWindow: showExternalWindows,
+	                keepWindow: false,
 	                hidden: !showExternalWindows,
 	                attachToConsole: false
 	            );
