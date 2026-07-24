@@ -107,6 +107,15 @@ namespace spz {
 	        _pinsDefaults.OnOrderPinsButton(povInfos);
 	    }
 
+	    /// <summary>
+	    /// Re-apply the current default pin layout (no variant cycle). Call after enabling N&gt;1 view cameras.
+	    /// </summary>
+	    public void ApplyCurrentDefaultPinLayout(){
+	        if (UserCameras_MGR.instance == null || _pinsDefaults == null) { return; }
+	        List<CameraPovInfo> povInfos = UserCameras_MGR.instance.get_viewCams_PovInfos();
+	        _pinsDefaults.ApplyCurrentDefaultPinLayout(povInfos);
+	    }
+
 	    void OnToggledViewCamera(int cameraIx, bool isOn){
 	        _cameraPins[cameraIx].gameObject.SetActive(isOn);
 	    }
