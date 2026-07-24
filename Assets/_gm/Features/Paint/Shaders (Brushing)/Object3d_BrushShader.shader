@@ -126,6 +126,10 @@ Shader "Custom/Object3d_BrushShader"{
                 float4 fragScreenSpaceUV_M : TEXCOORD4;
                 float3 worldNormalM : TEXCOORD5;
                 float3 worldViewDirM : TEXCOORD6;
+                // 1 when the triangle was kept ONLY because its mirror twin faces the camera (mode 3).
+                // Such fragments must not receive a primary evaluation — the old geom cull protected the
+                // reverse side from direct painting, and that protection must survive symmetry.
+                float keptForMirrorOnly : TEXCOORD7;
             };
 
 
@@ -139,10 +143,11 @@ Shader "Custom/Object3d_BrushShader"{
             }
 
 
-            PixelInput Init_pixelInput(in GeomInput g, uint renderIx){
+            PixelInput Init_pixelInput(in GeomInput g, uint renderIx, float keptForMirrorOnly){
                 PixelInput pix;
                 
                 pix.renderIx = renderIx;
+                pix.keptForMirrorOnly = keptForMirrorOnly;
                 g.uv = loopUV(g.uv);//so that UDIMs can sample textures like usual, in [0,1] space.
                 pix.uv = g.uv;
 
@@ -185,10 +190,13 @@ Shader "Custom/Object3d_BrushShader"{
                                + vertices[2].objViewDir*0.3333333f;
                 viewDir = viewDir;
                 // Discard the triangle if it's facing away
-                bool isFacing =  dot(normal, viewDir) >= 0;
-                if( !isFacing && _SymmetryMode > 2.5 ){
+                bool isFacingPrimary =  dot(normal, viewDir) >= 0;
+                bool keptForMirrorOnly = false;
+                if( !isFacingPrimary && _SymmetryMode > 2.5 ){
                     // Object mirror: keep triangles whose plane-reflected twin faces the camera, so the
                     // mirror side still receives symmetric paint when it is angled away from the view.
+                    // Marked keptForMirrorOnly: their fragments get the MIRROR evaluation only — the
+                    // primary cull still protects the reverse side from direct painting.
                     float3 nUnit = SymmetryPlaneNormalUnit();
                     float3 wA = mul(unity_ObjectToWorld, float4(vertices[0].objVertex.xyz, 1)).xyz;
                     float3 wB = mul(unity_ObjectToWorld, float4(vertices[1].objVertex.xyz, 1)).xyz;
@@ -196,14 +204,14 @@ Shader "Custom/Object3d_BrushShader"{
                     float3 wFaceN = cross(wB - wA, wC - wA);
                     float3 wFaceNM = wFaceN - 2.0 * dot(wFaceN, nUnit) * nUnit; // mirrored outward normal
                     float3 centroidM = ReflectWorldAcrossSymmetryPlane((wA + wB + wC) / 3.0, nUnit);
-                    isFacing = dot(wFaceNM, _WorldSpaceCameraPos.xyz - centroidM) >= 0;
+                    keptForMirrorOnly = dot(wFaceNM, _WorldSpaceCameraPos.xyz - centroidM) >= 0;
                 }
-                if( !isFacing ){ return; }
+                if( !isFacingPrimary && !keptForMirrorOnly ){ return; }
 
                 uint renderIx = max(0, uv_to_renderTargIX(vertices[0].uv));
 
                 for (int i=0; i<3; i++){
-                    PixelInput pix = Init_pixelInput(vertices[i], renderIx);
+                    PixelInput pix = Init_pixelInput(vertices[i], renderIx, keptForMirrorOnly ? 1.0 : 0.0);
                     triStream.Append(pix);
                 }
             } 
@@ -259,6 +267,8 @@ Shader "Custom/Object3d_BrushShader"{
                 }
 
                 float gateP = isVis * isInFront * notObscured * depthFalloff;
+                // Triangle survived the cull only for its mirror twin: no direct painting on it.
+                gateP *= i.keptForMirrorOnly > 0.5 ? 0.0 : 1.0;
 
                 // Mode 3 (object mirror): the same gates evaluated at this fragment's plane-reflected
                 // position, so a mirror-side texel paints exactly when/where its geometric twin would.
