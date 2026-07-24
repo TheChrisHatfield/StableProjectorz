@@ -853,15 +853,22 @@ namespace spz {
 		}
 		
 		/// <summary>Polls GET /ready until Python has connected to Unity (socket 5555), so create_panel works when we POST /load_addon. Same pattern as SD: Unity is HTTP client, confirms connection by getting a successful response.</summary>
-		IEnumerator WaitForAddonServerReady(int maxAttempts = 60, float interval = 0.5f) {
-			if (IsAddonApiShuttingDown())
+		/// <param name="readyOut">Set true only when <c>/ready</c> reports ready; false on timeout/shutdown/start failure.</param>
+		IEnumerator WaitForAddonServerReady(Action<bool> readyOut, int maxAttempts = 60, float interval = 0.5f) {
+			void Finish(bool ok) {
+				readyOut?.Invoke(ok);
+			}
+			if (IsAddonApiShuttingDown()) {
+				Finish(false);
 				yield break;
+			}
 			ClearStalePythonServerRunningFlag();
 			if (!_isServerRunning) {
 				UnityEngine.Debug.LogWarning("[Addon_MGR] Python server not running; attempting to start it now...");
 				StartPythonServer();
 				if (!_isServerRunning) {
 					UnityEngine.Debug.LogError("[Addon_MGR] Could not start Python server. Check python is installed and on PATH. Addon load aborted.");
+					Finish(false);
 					yield break;
 				}
 				yield return new WaitForSeconds(2f);
@@ -871,8 +878,10 @@ namespace spz {
 			bool loggedHttpReachable = false;
 			int consecutiveConnectionErrors = 0;
 			for (int i = 0; i < maxAttempts; i++) {
-				if (IsAddonApiShuttingDown())
+				if (IsAddonApiShuttingDown()) {
+					Finish(false);
 					yield break;
+				}
 				using (var req = new UnityWebRequest(readyUrl)) {
 					req.downloadHandler = new DownloadHandlerBuffer();
 					req.timeout = 4; // keep polling responsive when local addon HTTP server is unresponsive
@@ -887,6 +896,7 @@ namespace spz {
 							var json = JObject.Parse(req.downloadHandler?.text ?? "{}");
 							if (json["ready"]?.Value<bool>() == true) {
 								UnityEngine.Debug.Log("[Addon_MGR] Addon server ready (Python connected to Unity socket 5555).");
+								Finish(true);
 								yield break;
 							}
 						} catch { }
@@ -900,6 +910,7 @@ namespace spz {
 				yield return new WaitForSeconds(interval);
 			}
 			UnityEngine.Debug.LogWarning("[Addon_MGR] Addon server /ready did not become true within timeout. Check: (1) Is Python running? (2) Does Player.log show [Addon_SocketServer] Started listening on 127.0.0.1:5555?");
+			Finish(false);
 		}
 
 		IEnumerator RequestLoadAddon(string addonId) {
@@ -909,13 +920,20 @@ namespace spz {
 		IEnumerator RequestLoadAddon(string addonId, int epoch) {
 			if (IsAddonApiShuttingDown())
 				yield break;
-			yield return WaitForAddonServerReady();
+			bool serverReady = false;
+			yield return WaitForAddonServerReady(ok => serverReady = ok);
 			if (IsAddonApiShuttingDown())
 				yield break;
 			if (epoch >= 0 && !IsLifecycleEpochCurrent(addonId, epoch))
 				yield break;
 			if (!IsAddonEnabled(addonId)) {
 				UnityEngine.Debug.Log($"[Addon_MGR] Skipping stale load request for disabled add-on: {addonId}");
+				yield break;
+			}
+			if (!serverReady) {
+				UnityEngine.Debug.LogError(
+					$"[Addon_MGR] Cannot load '{addonId}': Python addon server never became ready (empty ribbon tabs without create_panel).");
+				MarkAddonLoadFailed(addonId);
 				yield break;
 			}
 			UnityEngine.Debug.Log($"[Addon_MGR] Sending load request to Python for: {addonId}");

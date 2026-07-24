@@ -175,6 +175,7 @@ namespace spz {
 				SpzUiThemeOps.ApplyToAddonUiRoot(go);
 				if (!parkedPendingRibbon) {
 					PurgeParkedForAddon(addonId, go);
+					ClearAddonShellWaitingPlaceholder(parentForThisAddon);
 				} else {
 					EnsureParkedEntry(addonId, title, go);
 				}
@@ -246,6 +247,7 @@ namespace spz {
 			} else {
 				// Live under ribbon — purge any earlier parked duplicates for this addon.
 				PurgeParkedForAddon(addonId, panelObj);
+				ClearAddonShellWaitingPlaceholder(parentForThisAddon);
 			}
 			
 			// Return panel ID (use GameObject instance ID)
@@ -539,9 +541,18 @@ namespace spz {
 					rt.anchoredPosition = Vector2.zero;
 				}
 				SpzUiThemeOps.ApplyToAddonUiRoot(parked.panel);
+				ClearAddonShellWaitingPlaceholder(shell);
 				UnityEngine.Debug.Log($"[AddonUI_MGR] Migrated parked panel '{parked.panel.name}' onto ribbon shell {shell.name}");
 				_parkedForRibbon.RemoveAt(i);
 			}
+		}
+
+		/// <summary>Removes the temporary “loading…” label CommandRibbon shows before Python create_panel.</summary>
+		static void ClearAddonShellWaitingPlaceholder(Transform shell) {
+			if (shell == null) return;
+			Transform ph = shell.Find("AddonShell_WaitingPlaceholder");
+			if (ph != null)
+				UnityEngine.Object.Destroy(ph.gameObject);
 		}
 		
 		/// <summary>

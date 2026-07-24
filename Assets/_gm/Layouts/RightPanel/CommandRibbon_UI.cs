@@ -345,10 +345,56 @@ namespace spz {
 	        if (_Paint_Panel != null && go != _Paint_Panel.gameObject) _Paint_Panel.gameObject.SetActive(false);
 	        foreach(var p in _addonPanelsById.Values)
 	            if(p != null && p.gameObject != go) p.gameObject.SetActive(false);
+	        // Eager EnableAddon shells can exist before Python create_panel — activate nested content and surface empty state.
+	        if (go.name != null && go.name.StartsWith("Panel_", StringComparison.Ordinal))
+		        ActivateAddonShellContentOrPlaceholder(go.transform);
 	        if (KeyMousePenInput.isKey_Shift_pressed() == false && Viewport_StatusText.instance != null){
 	            string msg = "Use Shift+1, Shift+2, etc to switch tabs faster :)";
 	            Viewport_StatusText.instance.ShowStatusText(msg, false, 1.2f, false);
 	        }
+	    }
+
+	    /// <summary>
+	    /// Ensures <c>AddonPanel_*</c> children are active under an add-on shell; if Python has not populated UI yet, show a visible placeholder.
+	    /// </summary>
+	    void ActivateAddonShellContentOrPlaceholder(Transform shell) {
+		    if (shell == null) return;
+		    bool hasAddonContent = false;
+		    for (int i = 0; i < shell.childCount; i++) {
+			    Transform ch = shell.GetChild(i);
+			    if (ch == null) continue;
+			    string cn = ch.name ?? "";
+			    if (cn.StartsWith("AddonPanel_", StringComparison.Ordinal)) {
+				    ch.gameObject.SetActive(true);
+				    // Title-only panel still counts as "content started"; widgets may arrive mid-frame.
+				    hasAddonContent = ch.childCount > 0;
+			    }
+		    }
+		    const string placeholderName = "AddonShell_WaitingPlaceholder";
+		    Transform existingPh = shell.Find(placeholderName);
+		    if (hasAddonContent) {
+			    if (existingPh != null)
+				    Destroy(existingPh.gameObject);
+		    } else if (existingPh == null) {
+			    var phGo = new GameObject(placeholderName);
+			    phGo.transform.SetParent(shell, false);
+			    var le = phGo.AddComponent<LayoutElement>();
+			    le.minHeight = 48f;
+			    le.preferredHeight = 72f;
+			    le.flexibleWidth = 1f;
+			    var tmp = phGo.AddComponent<TextMeshProUGUI>();
+			    tmp.text = "Add-on UI loading…\nIf this stays empty, open Add-on Manager → Load addons now (Python must be running).";
+			    tmp.fontSize = 14;
+			    tmp.color = new Color(0.92f, 0.92f, 0.92f, 1f);
+			    tmp.alignment = TextAlignmentOptions.TopLeft;
+			    tmp.enableWordWrapping = true;
+			    tmp.raycastTarget = false;
+		    } else {
+			    existingPh.gameObject.SetActive(true);
+		    }
+		    var rt = shell as RectTransform;
+		    if (rt != null)
+			    LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
 	    }
 
 	    void OnArtList_Toggle(TabsGroupElem_UI tab){
@@ -504,14 +550,13 @@ namespace spz {
 	                var label = cell.GetComponentInChildren<TextMeshProUGUI>(true);
 	                if (label != null)
 	                    SpzUiThemeOps.ApplyTmpColor(label, t.textPrimary);
-	                ApplyNomadStudioTabChrome(cell, label, t);
+	                // Palette apply = colors only. Do not rebuild icons/bars/layout on theme change.
+	                ApplyNomadStudioTabColorsOnly(cell, t);
 	                // Soft gold edge on addon dividers when themed.
 	                var cellImg = cell.GetComponent<Image>();
 	                if (cellImg != null && cell.name.StartsWith("AddonTab_", StringComparison.Ordinal))
 	                    SpzUiThemeOps.ApplyGraphicColor(cellImg, t.controlBg);
 	            }
-	            // Nomad icon inset grows minWidth after Harmonize — rebalance so the strip does not overflow.
-	            RebalanceStripTabMinWidthsIfOverflowing(strip);
 	        }
 
 	        if (_addonPanelsById != null) {
@@ -538,94 +583,34 @@ namespace spz {
 	        return null;
 	    }
 
-	    static void ApplyNomadStudioTabChrome(Transform cell, TextMeshProUGUI label, SpzUiThemeOps.ThemeTokens t) {
+	    /// <summary>
+	    /// Retints any leftover Nomad chrome if present; does not create icons/bars or change layout.
+	    /// Apply Nomad Palette must only change colors.
+	    /// </summary>
+	    static void ApplyNomadStudioTabColorsOnly(Transform cell, SpzUiThemeOps.ThemeTokens t) {
 	        if (cell == null) return;
-	        bool enabled = string.Equals(SpzUiThemeOps.ActiveThemeId, "nomad-inspired", StringComparison.Ordinal);
+	        bool nomad = string.Equals(SpzUiThemeOps.ActiveThemeId, "nomad-inspired", StringComparison.Ordinal);
 	        Transform active = cell.Find("go active");
 	        Transform bar = active != null ? active.Find("MonolithActiveBar") : null;
-
-	        if (!enabled) {
-	            if (bar != null) bar.gameObject.SetActive(false);
-	            if (active != null) {
-	                var pillRestore = FindActivePillImage(active);
-	                if (pillRestore != null)
-	                    pillRestore.enabled = true;
-	            }
-	            var oldIcon = cell.Find("MonolithLineIcon");
-	            if (oldIcon != null) oldIcon.gameObject.SetActive(false);
-	            if (label != null && cell.name.StartsWith("Tab: ", StringComparison.Ordinal)) {
-	                label.rectTransform.offsetMin = new Vector2(0f, label.rectTransform.offsetMin.y);
-	                ApplyStripTabMinWidthForLabel(cell.GetComponent<LayoutElement>(), label, kRibbonStripTabLabelHorizontalPad);
-	            }
-	            return;
-	        }
-
-	        if (active != null) {
-	            if (bar == null) {
-	                var barGo = new GameObject("MonolithActiveBar", typeof(RectTransform));
-	                barGo.transform.SetParent(active, false);
-	                bar = barGo.transform;
-	                var image = barGo.AddComponent<Image>();
-	                image.raycastTarget = false;
-	            }
-	            var barRt = bar as RectTransform;
-	            barRt.anchorMin = new Vector2(0f, 0f);
-	            barRt.anchorMax = new Vector2(1f, 0f);
-	            barRt.pivot = new Vector2(0.5f, 0f);
-	            barRt.offsetMin = new Vector2(5f, 1f);
-	            barRt.offsetMax = new Vector2(-5f, 3f);
+	        if (bar != null) {
+	            bar.gameObject.SetActive(nomad);
 	            var barImg = bar.GetComponent<Image>();
-	            barImg.sprite = null;
-	            barImg.type = Image.Type.Simple;
-	            barImg.color = t.accent;
-	            // Stay under go active; visibility follows the tab's active highlight.
-	            bar.gameObject.SetActive(true);
-	            // Disable only the authored active pill — not every Image under go active.
+	            if (barImg != null && nomad)
+	                barImg.color = t.accent;
+	        }
+	        // Always keep the authored active pill drawable; chrome must not disable it.
+	        if (active != null) {
 	            var pill = FindActivePillImage(active);
-	            if (pill != null && pill != barImg)
-	                pill.enabled = false;
+	            if (pill != null)
+	                pill.enabled = true;
 	        }
-
-	        // Runtime tabs have predictable geometry, so they can safely receive compact line glyphs.
-	        if (label == null || !cell.name.StartsWith("Tab: ", StringComparison.Ordinal))
-	            return;
 	        Transform iconTransform = cell.Find("MonolithLineIcon");
-	        if (iconTransform == null) {
-	            var iconGo = new GameObject("MonolithLineIcon", typeof(RectTransform));
-	            iconGo.transform.SetParent(cell, false);
-	            iconTransform = iconGo.transform;
-	            var iconImage = iconGo.AddComponent<Image>();
-	            iconImage.raycastTarget = false;
-	            iconImage.preserveAspect = true;
+	        if (iconTransform != null) {
+	            iconTransform.gameObject.SetActive(nomad);
+	            var icon = iconTransform.GetComponent<Image>();
+	            if (icon != null && nomad)
+	                icon.color = t.textMuted;
 	        }
-	        var iconRt = iconTransform as RectTransform;
-	        iconRt.anchorMin = new Vector2(0f, 0.5f);
-	        iconRt.anchorMax = new Vector2(0f, 0.5f);
-	        iconRt.pivot = new Vector2(0f, 0.5f);
-	        iconRt.anchoredPosition = new Vector2(6f, 0f);
-	        iconRt.sizeDelta = new Vector2(14f, 14f);
-	        var icon = iconTransform.GetComponent<Image>();
-	        icon.sprite = UiRuntimeSprites.GetLineIcon(ResolveStudioTabIcon(label.text));
-	        icon.color = t.textMuted;
-	        iconTransform.gameObject.SetActive(true);
-	        const float nomadIconReserve = 22f;
-	        label.rectTransform.offsetMin = new Vector2(nomadIconReserve, label.rectTransform.offsetMin.y);
-	        // Harmonize measured width before the icon inset; grow minWidth so labels do not ellipsis under Nomad.
-	        ApplyStripTabMinWidthForLabel(cell.GetComponent<LayoutElement>(), label,
-	            kRibbonStripTabLabelHorizontalPad + nomadIconReserve);
-	    }
-
-	    static StudioLineIcon ResolveStudioTabIcon(string label) {
-	        string value = label ?? "";
-	        if (value.IndexOf("paint", StringComparison.OrdinalIgnoreCase) >= 0)
-	            return StudioLineIcon.Brush;
-	        if (value.IndexOf("mesh", StringComparison.OrdinalIgnoreCase) >= 0
-	            || value.IndexOf("3d", StringComparison.OrdinalIgnoreCase) >= 0)
-	            return StudioLineIcon.Mesh;
-	        if (value.IndexOf("control", StringComparison.OrdinalIgnoreCase) >= 0
-	            || value.IndexOf("setting", StringComparison.OrdinalIgnoreCase) >= 0)
-	            return StudioLineIcon.Settings;
-	        return StudioLineIcon.Grid;
 	    }
 
 	    static void ApplyPanelShellColor(RectTransform panel, Color panelBg) {
