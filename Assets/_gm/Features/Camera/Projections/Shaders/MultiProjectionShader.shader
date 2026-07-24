@@ -179,6 +179,10 @@ Shader "Custom/MultiProjectionShader"
             float _SymmetryMode;
             float4 _MirrorPrevNewBrushScreenCoord;
             float _SymmetryMirrorAngleDeltaRad;
+            // Mode 3 (object mirror): world-space mesh symmetry plane; each fragment's world position is
+            // reflected across it so the cursor ring previews exactly where symmetric paint will land.
+            float4 _SymmetryPlanePointWS;
+            float4 _SymmetryPlaneNormalWS;
             int _Cursor_for_POV_ix; //should we preview some POV inside cursor. for example 0,1,2,3,4, or 5.
 
             sampler2D _MultiProj_WrongSide_Tex;
@@ -202,6 +206,7 @@ Shader "Custom/MultiProjectionShader"
                 float4 rasterize_into_uv_SV : SV_POSITION; //to land the vertex into the screen space
 
                   float4 fragScreenSpacePos_cursor : TEXCOORD1;
+                  float4 fragScreenSpacePos_cursorM : TEXCOORD8; //plane-reflected fragment (symmetry mode 3)
 
                   float4 fragScreenSpacePos0 : TEXCOORD2;
 
@@ -230,6 +235,7 @@ Shader "Custom/MultiProjectionShader"
                 pi.rasterize_into_uv_SV = float4(0,0,0,0);
 
                   pi.fragScreenSpacePos_cursor = float4(0,0,0,0);
+                  pi.fragScreenSpacePos_cursorM = float4(0,0,0,0);
                 
                   pi.fragScreenSpacePos0 = float4(0,0,0,0);
 
@@ -262,6 +268,13 @@ Shader "Custom/MultiProjectionShader"
                 pix.uv =  g.uv;
 
                 pix.fragScreenSpacePos_cursor =  ComputeScreenPos( mul(_CurrViewport_VP_matrix, g.worldPos) );
+
+                // Symmetry mode 3: project this fragment's plane-reflected world position too,
+                // so the cursor preview ring appears exactly on the mirror-side surface.
+                float3 symN = _SymmetryPlaneNormalWS.xyz;
+                symN = dot(symN, symN) > 1e-8 ? normalize(symN) : float3(1, 0, 0);
+                float3 wPosM = g.worldPos.xyz - 2.0 * dot(g.worldPos.xyz - _SymmetryPlanePointWS.xyz, symN) * symN;
+                pix.fragScreenSpacePos_cursorM = ComputeScreenPos( mul(_CurrViewport_VP_matrix, float4(wPosM, 1)) );
 
                 // Invert the Y-coordinate of the UV maybe (for DirectX):
                 //https://docs.unity3d.com/Manual/SL-PlatformDifferences.html
@@ -395,6 +408,7 @@ Shader "Custom/MultiProjectionShader"
             struct Frag_processPOV_arg{
                 float4 fragScreenspacePos;
                 float4 fragScreenSpacePos_cursor;
+                float4 fragScreenSpacePos_cursorM;
                 float3 objUV;
                 Texture2DArray uvMask;
                 Texture2DArray projectionVisibility;
@@ -414,7 +428,13 @@ Shader "Custom/MultiProjectionShader"
 
             //find out where the cursor-circle is. 
             //We can show a preview of some pov, inside it.
-            float MaskByCursor( float2 fragScreenSpacePos ){
+            //'fragScreenSpacePos_mirrorUndivided' is NOT divided by w yet: a plane-reflected point can land
+            //BEHIND the camera (negative w) and the divided uv would alias back into valid screen range,
+            //drawing a phantom mirrored ring. Gate on w before dividing.
+            float MaskByCursor( float2 fragScreenSpacePos, float4 fragScreenSpacePos_mirrorUndivided ){
+                float mirrorGate01 = fragScreenSpacePos_mirrorUndivided.w > 0 ? 1.0 : 0.0;
+                float2 mirrorUV = fragScreenSpacePos_mirrorUndivided.xy / max(fragScreenSpacePos_mirrorUndivided.w, 1e-6);
+
                 PaintInBrushStroke_Input pibs;
                 pibs.screenAspectRatio  = _ScreenAspectRatio;
                 pibs.fragScreenSpaceUV  = fragScreenSpacePos.xy;
@@ -430,6 +450,10 @@ Shader "Custom/MultiProjectionShader"
                 pibs.symmetryMode = _SymmetryMode;
                 pibs.MirrorPrevNewBrushScreenCoord = _MirrorPrevNewBrushScreenCoord;
                 pibs.symmetryMirrorAngleDeltaRad = _SymmetryMirrorAngleDeltaRad;
+                pibs.fragScreenSpaceUV_mirror = mirrorUV; //mode 3 only
+                pibs.normalDotView_mirror = 1.0;
+                pibs.primaryGate01 = 1.0;
+                pibs.mirrorGate01 = mirrorGate01; //no occlusion gating for preview, only behind-camera
                 float mask01 = Mask_by_CurrBrushCursor(pibs);
                 return mask01;
             }
@@ -458,7 +482,7 @@ Shader "Custom/MultiProjectionShader"
                 float uvBrushMask_02 =  UNITY_SAMPLE_TEX2DARRAY_SAMPLER(a.uvMask,  _linear_repeat,  a.objUV).r * 2; //[0,1] --> [0,2]. Anything above 1 is for fighting the invisibility.
                 float uvMask_vs_invisibility =  saturate(uvBrushMask_02-invisibility) * visibilityReal;
 
-                float cursorMask = MaskByCursor(a.fragScreenSpacePos_cursor.xy);
+                float cursorMask = MaskByCursor(a.fragScreenSpacePos_cursor.xy, a.fragScreenSpacePos_cursorM);
 
                 // using two summands gives the wrongSideText "a second chance to appear".
                 // Otherwise, multiplying all three would cause text to disappear.
@@ -521,6 +545,7 @@ Shader "Custom/MultiProjectionShader"
                 Frag_processPOV_arg arg;                                     \
                 arg.fragScreenspacePos = i.fragScreenSpacePos##ix;           \
                 arg.fragScreenSpacePos_cursor = i.fragScreenSpacePos_cursor; \
+                arg.fragScreenSpacePos_cursorM = i.fragScreenSpacePos_cursorM; \
                 arg.objUV  =  float3(i.uv, i.renderIx);                      \
                 arg.uvMask = _POV##ix##_additive_uvMask;                     \
                 arg.projectionVisibility   = _POV##ix##_ProjVisibility;      \
@@ -532,6 +557,8 @@ Shader "Custom/MultiProjectionShader"
             float4 frag(PixelInput i) : SV_Target{    
                 
                 i.fragScreenSpacePos_cursor.xyzw /= i.fragScreenSpacePos_cursor.w;
+                // NOTE: fragScreenSpacePos_cursorM is intentionally NOT divided by w here —
+                // MaskByCursor needs the raw w to reject plane-reflected points behind the camera.
 
                 Frag_processPOV_out o;
                 o.colorSoFar = fixed4(0,0,0,0);
