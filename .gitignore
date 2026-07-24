@@ -40,8 +40,41 @@ build_*.txt
 # Cursor IDE — local/editor state and skills (not for remote)
 .cursor/
 
-# Dev-only docs (audits, design notes, phase summaries — not needed to build or for user instruction)
+# --- Local / agent / not required for end-user Unity compile-build ---
+# Agent & Hive
+.hive/
+AGENTS.md
+START_HERE.md
 /continual-learning/
+/cartridge/
+/context-library/
+.github/
+
+# Dev tooling & Python soil (not the Unity app)
+/tools/
+/src/
+/tests/
+/pyproject.toml
+/spec-kit-agent-integration.md
+
+# Agent planning docs (specs, proposals, delta) — not needed to open/build in Unity
+/docs/
+
+# Local SD / webui clone (huge; install separately)
+/stable-diffusion-webui-forge/
+
+# Root junk / local push helpers / machine-specific
+/*.lnk
+/AbrDump.cs
+/AUDIT_*.md
+/push_to_github.bat
+/update_github.bat
+/spz.config
+/BUILD_SYSTEM_ANALYSIS.md
+/UNITY_HUB_LOCATIONS.md
+/compile_check.txt
+/module_install_log.txt
+/push_diagnostic.txt
 
 # Visual Studio cache directory
 .vs/
