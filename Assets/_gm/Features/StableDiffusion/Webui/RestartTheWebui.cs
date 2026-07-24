@@ -16,7 +16,7 @@ namespace spz {
 	    [SerializeField] protected Button _fileButton; //allows to specify path to the file that should be launched
 	    [SerializeField] protected string _openFile_os_window_headerMsg;
 	    [Space(10)]
-	    [SerializeField] protected string _defaultRelativePath = "./" + LaunchWebUIBatFile.WebuiFolderName + "/run_noQuickEdit.lnk";
+	    [SerializeField] protected string _defaultRelativePath = "./" + LaunchWebUIBatFile.WebuiFolderName + "/run_noQuickEdit.bat";
 	    [SerializeField] protected string _playerPrefs_filepathID = "_RestartWebuiFilepath";
 	    [SerializeField] protected Animation _anim;
 
@@ -81,6 +81,14 @@ namespace spz {
 	        if (!File.Exists(full_path)){
 	            full_path = TryFindFileInParentDirectories(full_path);
 	        }
+	        // Prefs/default often point at a missing .lnk; fall back to the same aggressive search as auto-launch.
+	        if (!File.Exists(full_path)) {
+	            string discovered = LaunchWebUIBatFile.GetWebuiFilePathStatic(printStatusTextIfNotFound: false);
+	            if (!string.IsNullOrEmpty(discovered) && File.Exists(discovered)) {
+	                full_path = discovered;
+	                Debug.Log($"[RestartTheWebui] Using discovered WebUI launch path: {full_path}");
+	            }
+	        }
 	        if (File.Exists(full_path) == false){
 	            Print_Webui_NotFound();
 	            return; 
@@ -122,7 +130,7 @@ namespace spz {
 
 	    protected virtual void OnSpecifyFileButton(){
         
-	        FileBrowser.SetFilters(true, new FileBrowser.Filter("Executables", "bat", "exe", "sh"));
+	        FileBrowser.SetFilters(true, new FileBrowser.Filter("Executables", "bat", "cmd", "lnk", "exe", "sh"));
 	        FileBrowser.SetDefaultFilter("bat");
 
 	        FileBrowser.ShowLoadDialog( (paths) => {
