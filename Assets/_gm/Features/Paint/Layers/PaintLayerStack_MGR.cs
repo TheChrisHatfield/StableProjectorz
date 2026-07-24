@@ -478,7 +478,7 @@ namespace spz {
 				}
 
 				NotifyCollapseEnd(pasted);
-				return true;
+				return pasted;
 			}
 
 			return CollapseVisibleLayersIntoOne_CpuFallback(visibleLayers);
@@ -670,7 +670,7 @@ namespace spz {
 			foreach (var t in resultTextures) if (t != null) UnityEngine.Object.DestroyImmediate(t);
 
 			NotifyCollapseEnd(pasted);
-			return true;
+			return pasted;
 		}
 
 		/// <summary>Remove all layers and add a single empty layer (e.g. after collapsing into scene buffer). Used by Inpaint_MaskPainter.CollapseLayersIntoScene.</summary>
