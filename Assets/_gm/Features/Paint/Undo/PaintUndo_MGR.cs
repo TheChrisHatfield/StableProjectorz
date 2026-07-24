@@ -597,9 +597,18 @@ namespace spz {
 					break;
 				}
 				case PaintUndoNonStackTarget.InpaintNoColorMask: {
-					// Fallback when snapshot lost layer binding: restore into whatever No Color currently paints.
-					var inp = Inpaint_MaskPainter.instance;
-					target = inp != null ? inp.GetPaintTarget_Undo() : null;
+					// Fallback when snapshot lost layer binding: do NOT use GetPaintTarget_Undo() — that follows
+					// the current ribbon mode and restores into Content after switching to Color.
+					var stackNc = PaintLayerStack_MGR.instance;
+					var al = stackNc?.ActiveLayer;
+					if (al != null) {
+						al.EnsureNoColorMaskMatchesContent();
+						target = al.NoColorMask;
+					}
+					if (target == null) {
+						var inp = Inpaint_MaskPainter.instance;
+						target = inp != null ? inp._ObjectUV_brushedColorRGBA : null;
+					}
 					break;
 				}
 				case PaintUndoNonStackTarget.BackgroundGenMask:
