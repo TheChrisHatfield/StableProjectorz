@@ -91,9 +91,11 @@ namespace spz {
 			}
 			try {
 				string workDir = Path.GetDirectoryName(path);
+				// Default: hide the CMD black box (Settings → Show external process windows to show).
+				bool showExternalWindows = LaunchWebUIBatFile.PrefsWantShowExternalProcessWindows();
 				// attachToConsole:false — FreeConsole/AttachConsole on the Unity process during restart can stall or crash.
 				uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
-					path, isJustFile: true, workDir, keepWindow: false, hidden: false, attachToConsole: false);
+					path, isJustFile: true, workDir, keepWindow: showExternalWindows, hidden: !showExternalWindows, attachToConsole: false);
 				if (pid != 0) {
 					Debug.Log($"[Launch_Addons] Launched {DefaultBatName} PID {pid}");
 					return true;

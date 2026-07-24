@@ -97,6 +97,8 @@ namespace Lavender.Systems
 
 	    const uint NORMAL_PRIORITY_CLASS = 0x0020;
 	    const uint CREATE_NO_WINDOW = 0x08000000;
+	    const uint CREATE_NEW_CONSOLE = 0x00000010;
+	    const uint STARTF_USESHOWWINDOW = 0x00000001;
 	    const uint INFINITE = 0xFFFFFFFF;
 	    const uint PROCESS_ALL_ACCESS = 0x001F0FFF;
 
@@ -119,9 +121,10 @@ namespace Lavender.Systems
 	    }
 
 
-	    /// <param name="attachToConsole">If true (default), attach to child's console. If false, child keeps its own visible console window.</param>
+	    /// <param name="attachToConsole">If true, attach Unity to the child's console. Prefer false for game launches.</param>
+	    /// <param name="hidden">Default true — black CMD/console stays hidden unless caller opts into a visible window.</param>
 	    public static uint Run_Bat_or_Shortcut_or_Command( string filepath_or_command,  bool isJustFile,  string workingDir, 
-	                                                        bool keepWindow=false,  bool hidden = false, bool attachToConsole = true ){
+	                                                        bool keepWindow=false,  bool hidden = true, bool attachToConsole = false ){
 	        string fileToLaunch = "C:\\Windows\\System32\\cmd.exe";
 	        string arguments = "";
 
@@ -129,8 +132,11 @@ namespace Lavender.Systems
 	            var extension = Path.GetExtension(filepath_or_command).ToLowerInvariant();
 	            if (extension == ".lnk"){
 	                // keepWindow: use /K so the CMD window stays open; user sees it and "start" opens the .lnk in another window
+	                // When hidden, avoid "start" (always pops a visible box) — use start /B instead.
 	                string prefix = keepWindow ? "/K " : "/C ";
-	                arguments = $"{prefix}start \"\" \"{filepath_or_command}\"";
+	                arguments = hidden
+	                    ? $"{prefix}start \"\" /B \"{filepath_or_command}\""
+	                    : $"{prefix}start \"\" \"{filepath_or_command}\"";
 	            } else if (extension == ".bat" || extension == ".cmd"){
 	                // CreateProcessW cannot run .bat/.cmd directly; must run via cmd.exe
 	                string prefix = keepWindow ? "/K " : "/C ";
@@ -145,20 +151,27 @@ namespace Lavender.Systems
 	            arguments = $"{prefix}\"{filepath_or_command}\"";
 	        }
 	        uint creationFlags  = NORMAL_PRIORITY_CLASS;
-	                creationFlags |= hidden? CREATE_NO_WINDOW : 0;
+	        // Do not combine CREATE_NO_WINDOW with DETACHED_PROCESS — Windows ignores CREATE_NO_WINDOW in that case.
+	        if (hidden)
+	            creationFlags |= CREATE_NO_WINDOW;
+	        // Own console for visible child when we are not attaching Unity to it (avoids FreeConsole on our process).
+	        if (!hidden && !attachToConsole)
+	            creationFlags |= CREATE_NEW_CONSOLE;
 
 	        string commandLine = $"{fileToLaunch} {arguments}";
 	        Debug.Log($"Attempting to execute: {commandLine}");
 	        Debug.Log($"Working directory: {workingDir}");
 
-	        // Detach from the current console (so we can attach soon).
-	        // Attaching to console is important for bat files, which otherwise don't spawn console no matter what.
-	        FreeConsole();
+	        // Only detach Unity's console when we plan to AttachConsole to the child.
+	        // FreeConsole during "Restart with addons" (and similar) can stall/crash the player.
+	        if (attachToConsole)
+	            FreeConsole();
 
 	        STARTUPINFO si = new STARTUPINFO();
 	        PROCESS_INFORMATION pi;
 	        si.cb = Marshal.SizeOf(si);
-	        si.wShowWindow = 1; // SW_SHOWNORMAL
+	        si.dwFlags = STARTF_USESHOWWINDOW;
+	        si.wShowWindow = hidden ? (short)SW_HIDE : (short)1; // SW_SHOWNORMAL = 1
 
 	        bool success = CreateProcessW(  null,  commandLine,  IntPtr.Zero,  IntPtr.Zero,  false,
 	                                        creationFlags,  IntPtr.Zero,  workingDir,  ref si,  out pi );

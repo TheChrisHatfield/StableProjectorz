@@ -124,10 +124,8 @@ namespace spz {
 	        EventsBinder.Bind_Clickable_to_event("Settings:set_ignoreCtrl_if_clickSelectingMeshes", _ignoreCtrl_if_clickSelectMeshes_toggle);
 	        if (_showExternalProcessWindows_toggle != null) {
 	            EventsBinder.Bind_Clickable_to_event("Settings:set_showExternalProcessWindows", _showExternalProcessWindows_toggle);
-	            // Keep toggle face in sync with Settings_MGR / first-run default (hide = off).
-	            bool show = Settings_MGR.instance != null
-	                ? Settings_MGR.instance.get_showExternalProcessWindows()
-	                : UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1;
+	            // Same source as launch paths (PlayerPrefs) — avoid Settings_MGR field before tryLoad.
+	            bool show = LaunchWebUIBatFile.PrefsWantShowExternalProcessWindows();
 	            _showExternalProcessWindows_toggle.SetIsOnWithoutNotify(show);
 	        }
 	        if (_webUiOpenBrowserOnStartup_toggle != null)
@@ -231,7 +229,7 @@ namespace spz {
 	        labelText.color = new Color(0.9f, 0.9f, 0.9f, 1f);
 	        labelText.raycastTarget = false;
 
-	        bool current = UnityEngine.PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1;
+	        bool current = LaunchWebUIBatFile.PrefsWantShowExternalProcessWindows();
 	        var toggle = CreateRuntimeSpzStyledToggle(row.transform, "Toggle_ShowExternalProcessWindows", new Vector2(112f, 28f),
 		        current, greenWhenOn: false);
 	        _showExternalProcessWindows_toggle = toggle;
