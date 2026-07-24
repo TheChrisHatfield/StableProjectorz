@@ -153,6 +153,10 @@ namespace spz {
 		readonly Dictionary<string, int> _addonLifecycleEpochById = new Dictionary<string, int>();
 		/// <summary>Deferred ribbon tab create when CommandRibbon_UI is not ready at Enable / prefs restore.</summary>
 		readonly Dictionary<string, Coroutine> _ribbonShellEnsureById = new Dictionary<string, Coroutine>();
+		/// <summary>Single shared /ready poll so parallel Enable/Load-now do not storm HTTP + socket.</summary>
+		Coroutine _sharedAddonReadyWaitCrtn;
+		readonly List<Action<bool>> _sharedAddonReadyWaiters = new List<Action<bool>>();
+		bool _sharedAddonReadyKnownOk;
 
 		static bool s_addonApiQuitShutdownDone;
 		static bool s_appliedRememberedEnabledOnFirstDiscover;
@@ -325,6 +329,7 @@ namespace spz {
 			}
 #endif
 			_isServerRunning = false;
+			InvalidateSharedAddonReadyCache();
 		}
 
 #if UNITY_EDITOR
@@ -696,6 +701,7 @@ namespace spz {
 					$"[Addon_MGR] Addon server launcher PID {_pythonServerPid} is gone — clearing running flag so restart can proceed.");
 				_pythonServerPid = 0;
 				_isServerRunning = false;
+				InvalidateSharedAddonReadyCache();
 			}
 #elif UNITY_EDITOR
 			if (_isServerRunning && _pythonProcess != null && _pythonProcess.HasExited) {
@@ -703,6 +709,7 @@ namespace spz {
 					"[Addon_MGR] Addon Python process has exited — clearing running flag so restart can proceed.");
 				_pythonProcess = null;
 				_isServerRunning = false;
+				InvalidateSharedAddonReadyCache();
 			}
 #endif
 		}
@@ -714,6 +721,7 @@ namespace spz {
 		void StartPythonServer() {
 			ClearStalePythonServerRunningFlag();
 			if (_isServerRunning) return;
+			InvalidateSharedAddonReadyCache();
 
 			string serverScriptPath = null;
 			try {
@@ -863,14 +871,47 @@ namespace spz {
 			onComplete?.Invoke();
 		}
 		
-		/// <summary>Polls GET /ready until Python has connected to Unity (socket 5555), so create_panel works when we POST /load_addon. Same pattern as SD: Unity is HTTP client, confirms connection by getting a successful response.</summary>
-		/// <param name="readyOut">Set true only when <c>/ready</c> reports ready; false on timeout/shutdown/start failure.</param>
+		/// <summary>Polls GET /ready until Python has connected to Unity (socket 5555), so create_panel works when we POST /load_addon.</summary>
+		/// <remarks>Joins a single shared poll — parallel loaders must not each run 60× GET /ready.</remarks>
 		IEnumerator WaitForAddonServerReady(Action<bool> readyOut, int maxAttempts = 60, float interval = 0.5f) {
-			void Finish(bool ok) {
-				readyOut?.Invoke(ok);
-			}
+			if (readyOut == null)
+				yield break;
 			if (IsAddonApiShuttingDown()) {
-				Finish(false);
+				readyOut(false);
+				yield break;
+			}
+			if (_sharedAddonReadyKnownOk) {
+				readyOut(true);
+				yield break;
+			}
+			_sharedAddonReadyWaiters.Add(readyOut);
+			if (_sharedAddonReadyWaitCrtn == null)
+				_sharedAddonReadyWaitCrtn = StartCoroutine(CoSharedAddonServerReadyPoll(maxAttempts, interval));
+			// Caller continues after their callback fires from the shared poll (not when this IEnumerator ends).
+			// Keep this method as a join: wait until our waiter is no longer pending.
+			while (_sharedAddonReadyWaiters.Contains(readyOut))
+				yield return null;
+		}
+
+		void NotifySharedAddonReadyWaiters(bool ok) {
+			_sharedAddonReadyKnownOk = ok;
+			var waiters = _sharedAddonReadyWaiters.ToArray();
+			_sharedAddonReadyWaiters.Clear();
+			_sharedAddonReadyWaitCrtn = null;
+			for (int i = 0; i < waiters.Length; i++) {
+				try { waiters[i]?.Invoke(ok); } catch (Exception e) {
+					UnityEngine.Debug.LogWarning($"[Addon_MGR] Shared ready waiter threw: {e.Message}");
+				}
+			}
+		}
+
+		void InvalidateSharedAddonReadyCache() {
+			_sharedAddonReadyKnownOk = false;
+		}
+
+		IEnumerator CoSharedAddonServerReadyPoll(int maxAttempts, float interval) {
+			if (IsAddonApiShuttingDown()) {
+				NotifySharedAddonReadyWaiters(false);
 				yield break;
 			}
 			ClearStalePythonServerRunningFlag();
@@ -879,7 +920,7 @@ namespace spz {
 				StartPythonServer();
 				if (!_isServerRunning) {
 					UnityEngine.Debug.LogError("[Addon_MGR] Could not start Python server. Check python is installed and on PATH. Addon load aborted.");
-					Finish(false);
+					NotifySharedAddonReadyWaiters(false);
 					yield break;
 				}
 				yield return new WaitForSeconds(2f);
@@ -888,14 +929,15 @@ namespace spz {
 			string readyUrl = $"http://127.0.0.1:{_httpServerPort}/ready";
 			bool loggedHttpReachable = false;
 			int consecutiveConnectionErrors = 0;
+			bool didMidPollRestart = false;
 			for (int i = 0; i < maxAttempts; i++) {
 				if (IsAddonApiShuttingDown()) {
-					Finish(false);
+					NotifySharedAddonReadyWaiters(false);
 					yield break;
 				}
 				using (var req = new UnityWebRequest(readyUrl)) {
 					req.downloadHandler = new DownloadHandlerBuffer();
-					req.timeout = 4; // keep polling responsive when local addon HTTP server is unresponsive
+					req.timeout = 4;
 					yield return req.SendWebRequest();
 					if (req.result == UnityWebRequest.Result.Success) {
 						consecutiveConnectionErrors = 0;
@@ -907,7 +949,7 @@ namespace spz {
 							var json = JObject.Parse(req.downloadHandler?.text ?? "{}");
 							if (json["ready"]?.Value<bool>() == true) {
 								UnityEngine.Debug.Log("[Addon_MGR] Addon server ready (Python connected to Unity socket 5555).");
-								Finish(true);
+								NotifySharedAddonReadyWaiters(true);
 								yield break;
 							}
 						} catch { }
@@ -916,12 +958,25 @@ namespace spz {
 						if (consecutiveConnectionErrors >= 10 && !loggedHttpReachable) {
 							UnityEngine.Debug.LogWarning($"[Addon_MGR] Cannot reach Python HTTP server after {consecutiveConnectionErrors} attempts. Is Python running? Error: {req.error}");
 						}
+						// PID may be alive while HTTP is dead — one shared restart mid-poll.
+						if (!didMidPollRestart && consecutiveConnectionErrors >= 12) {
+							didMidPollRestart = true;
+							UnityEngine.Debug.LogWarning(
+								$"[Addon_MGR] HTTP still unreachable after {consecutiveConnectionErrors} probes — restarting Python addon server once.");
+							InvalidateSharedAddonReadyCache();
+							TerminatePythonAddonServerProcess(waitForExit: true);
+							StartPythonServer();
+							if (_isServerRunning)
+								yield return new WaitForSeconds(2f);
+							consecutiveConnectionErrors = 0;
+							loggedHttpReachable = false;
+						}
 					}
 				}
 				yield return new WaitForSeconds(interval);
 			}
 			UnityEngine.Debug.LogWarning("[Addon_MGR] Addon server /ready did not become true within timeout. Check: (1) Is Python running? (2) Does Player.log show [Addon_SocketServer] Started listening on 127.0.0.1:5555?");
-			Finish(false);
+			NotifySharedAddonReadyWaiters(false);
 		}
 
 		IEnumerator RequestLoadAddon(string addonId) {
