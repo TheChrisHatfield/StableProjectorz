@@ -155,6 +155,8 @@ namespace spz {
 		readonly Dictionary<string, Coroutine> _ribbonShellEnsureById = new Dictionary<string, Coroutine>();
 		/// <summary>Single shared /ready poll so parallel Enable/Load-now do not storm HTTP + socket.</summary>
 		Coroutine _sharedAddonReadyWaitCrtn;
+		/// <summary>Set before StartCoroutine so two WaitForAddonServerReady callers in one frame cannot both spawn polls.</summary>
+		bool _sharedAddonReadyPollActive;
 		readonly List<Action<bool>> _sharedAddonReadyWaiters = new List<Action<bool>>();
 		bool _sharedAddonReadyKnownOk;
 
@@ -887,8 +889,10 @@ namespace spz {
 				yield break;
 			}
 			_sharedAddonReadyWaiters.Add(readyOut);
-			if (_sharedAddonReadyWaitCrtn == null)
+			if (!_sharedAddonReadyPollActive) {
+				_sharedAddonReadyPollActive = true;
 				_sharedAddonReadyWaitCrtn = StartCoroutine(CoSharedAddonServerReadyPoll(maxAttempts, interval));
+			}
 			// Caller continues after their callback fires from the shared poll (not when this IEnumerator ends).
 			// Keep this method as a join: wait until our waiter is no longer pending.
 			while (_sharedAddonReadyWaiters.Contains(readyOut))
@@ -897,6 +901,7 @@ namespace spz {
 
 		void NotifySharedAddonReadyWaiters(bool ok) {
 			_sharedAddonReadyKnownOk = ok;
+			_sharedAddonReadyPollActive = false;
 			var waiters = _sharedAddonReadyWaiters.ToArray();
 			_sharedAddonReadyWaiters.Clear();
 			_sharedAddonReadyWaitCrtn = null;
@@ -965,7 +970,8 @@ namespace spz {
 						} catch { }
 					} else {
 						consecutiveConnectionErrors++;
-						if (consecutiveConnectionErrors >= 10 && !loggedHttpReachable) {
+						if (consecutiveConnectionErrors >= 10 && !loggedHttpReachable
+						    && (consecutiveConnectionErrors == 10 || consecutiveConnectionErrors % 10 == 0)) {
 							UnityEngine.Debug.LogWarning($"[Addon_MGR] Cannot reach Python HTTP server after {consecutiveConnectionErrors} attempts. Is Python running? Error: {req.error}");
 						}
 						// PID may be alive while HTTP is dead — one shared restart mid-poll.
@@ -1428,6 +1434,9 @@ namespace spz {
 			if (shell == null)
 				return false;
 			UnityEngine.Debug.Log($"[Addon_MGR] Ribbon tab ready for enabled add-on: {addonId} ({title})");
+			// Seed native widgets as soon as the shell exists so SPZ GO/Nomad are not blank while /ready polls.
+			if (SupportsNativeUiWithoutPython(addonId) && AddonUI_MGR.instance != null)
+				AddonUI_MGR.instance.EnsureNativeFallbackUiWhenPythonMissing(addonId);
 			return true;
 		}
 
