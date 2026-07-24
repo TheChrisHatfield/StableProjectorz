@@ -27,18 +27,46 @@ except ImportError:
     sys.exit(1)
 
 # Try to import FastAPI (optional - will fall back if not available)
+_FASTAPI_IMPORT_ERROR = None
 try:
     from fastapi import FastAPI
     import uvicorn
     FASTAPI_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     FASTAPI_AVAILABLE = False
-    print("Warning: FastAPI not available. Install with: pip install fastapi uvicorn")
+    _FASTAPI_IMPORT_ERROR = e
+    print("Warning: FastAPI not available. Install with: pip install fastapi uvicorn typing_extensions click")
+    print(f"Import error: {e}")
     print("HTTP REST API will not be available.")
+
+
+def _http_fail_marker_path(http_port):
+    return os.path.join(tempfile.gettempdir(), f"spz_addon_http_{http_port}_failed.txt")
+
+
+def write_http_fail_marker(http_port, reason):
+    """Unity polls this when /ready never answers — fail fast instead of waiting ~30s on a dead :5557."""
+    path = _http_fail_marker_path(http_port)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(str(reason).strip() + "\n")
+        print(f"[Add-on Server] Wrote HTTP fail marker: {path}")
+    except OSError as e:
+        print(f"[Add-on Server] Could not write HTTP fail marker: {e}")
+
+
+def clear_http_fail_marker(http_port):
+    path = _http_fail_marker_path(http_port)
+    try:
+        if os.path.isfile(path):
+            os.remove(path)
+    except OSError:
+        pass
 
 
 # Registry of loaded addon modules by id (for invoking callbacks from Unity)
 _loaded_addon_modules = {}
+_addon_registry_lock = threading.RLock()
 
 
 
@@ -67,10 +95,19 @@ def discover_addons(addons_dir):
     return addons
 
 
-def load_addon(addon_info):
+def _load_addon_unlocked(addon_info):
     """Load and register an add-on"""
     addon_id = addon_info["id"]
     init_file = addon_info["init_file"]
+
+    # If Unity (or user) requests load again, unload first so register() does not stack duplicate Unity panels.
+    old_mod = _loaded_addon_modules.pop(addon_id, None)
+    if old_mod is not None:
+        try:
+            if hasattr(old_mod, "unregister"):
+                old_mod.unregister()
+        except Exception as e:
+            print(f"[Addon Server] Warning: unregister() for {addon_id} before reload: {e}")
     
     try:
         # Load the add-on module
@@ -110,6 +147,34 @@ def load_addon(addon_info):
         return False
 
 
+def load_addon(addon_info):
+    """Serialize load/reload against disable requests for the same process."""
+    with _addon_registry_lock:
+        return _load_addon_unlocked(addon_info)
+
+
+def unload_addon_by_id(addon_id):
+    """Call unregister() and remove a loaded add-on module. Idempotent."""
+    with _addon_registry_lock:
+        module = _loaded_addon_modules.get(addon_id)
+        if module is None:
+            print(f"[Addon Server] unload_addon({addon_id}): already unloaded")
+            return True
+        try:
+            unregister = getattr(module, "unregister", None)
+            if callable(unregister):
+                unregister()
+            _loaded_addon_modules.pop(addon_id, None)
+            sys.modules.pop(f"addon_{addon_id}", None)
+            print(f"[Addon Server] Unloaded add-on: {addon_id}")
+            return True
+        except Exception as e:
+            print(f"[Addon Server] Error unregistering add-on {addon_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+
 def load_addon_by_id(addon_id, addons_dir):
     """Load a single addon by id. Used when Unity enables an addon or at startup."""
     print(f"[Addon Server] load_addon_by_id requested: {addon_id}")
@@ -123,7 +188,7 @@ def load_addon_by_id(addon_id, addons_dir):
     return False
 
 
-def invoke_addon_callback(addon_id, callback_name):
+def _invoke_addon_callback_unlocked(addon_id, callback_name):
     """Invoke a named function in a loaded addon. Called by Unity when user clicks an addon button."""
     module = _loaded_addon_modules.get(addon_id)
     if module is None:
@@ -141,6 +206,12 @@ def invoke_addon_callback(addon_id, callback_name):
         import traceback
         traceback.print_exc()
         return False
+
+
+def invoke_addon_callback(addon_id, callback_name):
+    """Serialize callbacks against reload/unload lifecycle transitions."""
+    with _addon_registry_lock:
+        return _invoke_addon_callback_unlocked(addon_id, callback_name)
 
 
 def main():
@@ -200,9 +271,17 @@ def main():
 
     if FASTAPI_AVAILABLE and not args.no_http:
         try:
-            from http_server import start_server, set_api_instance, set_load_addon_callback, set_invoke_callback, set_connection_ready_callback
+            from http_server import (
+                start_server,
+                set_api_instance,
+                set_load_addon_callback,
+                set_unload_addon_callback,
+                set_invoke_callback,
+                set_connection_ready_callback,
+            )
             set_api_instance(api)
             set_load_addon_callback(lambda addon_id: load_addon_by_id(addon_id, addons_dir))
+            set_unload_addon_callback(unload_addon_by_id)
             set_invoke_callback(invoke_addon_callback)
             set_connection_ready_callback(_check_connection_ready)
             _http_alive = [False]
@@ -212,6 +291,7 @@ def main():
                     start_server(host, port)
                 except Exception as e:
                     print(f"[Add-on Server] HTTP server died: {e}")
+                    write_http_fail_marker(port, f"HTTP server died: {e}")
                 finally:
                     _http_alive[0] = False
             http_thread = threading.Thread(
@@ -222,6 +302,7 @@ def main():
             http_thread.start()
             time.sleep(1.0)
             if http_thread.is_alive():
+                clear_http_fail_marker(args.http_port)
                 print(f"[Add-on Server] HTTP REST API running on port {args.http_port}")
                 print(f"[Add-on Server] API docs: http://127.0.0.1:{args.http_port}/docs")
             else:
@@ -236,12 +317,27 @@ def main():
                 http_thread.start()
                 time.sleep(1.0)
                 if http_thread.is_alive():
+                    clear_http_fail_marker(args.http_port)
                     print(f"[Add-on Server] HTTP REST API running on port {args.http_port} (retry succeeded)")
                 else:
+                    write_http_fail_marker(
+                        args.http_port,
+                        f"HTTP server cannot bind port {args.http_port}. Addons will not load via FastAPI.",
+                    )
                     print(f"[Add-on Server] ERROR: HTTP server still cannot bind port {args.http_port}. Addons will not load.")
         except Exception as e:
+            write_http_fail_marker(args.http_port, f"Could not start HTTP server: {e}")
             print(f"[Add-on Server] Warning: Could not start HTTP server: {e}")
     else:
+        if not args.no_http and not FASTAPI_AVAILABLE:
+            write_http_fail_marker(
+                args.http_port,
+                "FastAPI import failed: {err}\n"
+                "Install: pip install fastapi uvicorn typing_extensions click\n"
+                "Unity cannot POST /load_addon without HTTP :{port}.".format(
+                    err=_FASTAPI_IMPORT_ERROR, port=args.http_port
+                ),
+            )
         if not addons:
             print("No add-ons found")
         else:
@@ -335,11 +431,13 @@ def main():
         else:
             print("No add-ons found.")
     
-    # If HTTP server is disabled, load all addons at startup (legacy behavior)
+    # If HTTP server is disabled, do NOT auto-load every add-on (that forced ribbon tabs on).
+    # Unity owns enable/load via POST /load_addon when FastAPI is available.
     if not (FASTAPI_AVAILABLE and not args.no_http) and addons:
-        print(f"Loading {len(addons)} add-on(s)...")
-        for addon_info in addons:
-            load_addon(addon_info)
+        print(
+            f"HTTP disabled: discovered {len(addons)} add-on(s) but not auto-loading. "
+            "Start with FastAPI (default) so Unity can load only enabled add-ons."
+        )
     
     # Keep server running
     print("Add-on server running. Press Ctrl+C to stop.")
