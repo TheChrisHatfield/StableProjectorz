@@ -70,7 +70,53 @@ namespace spz {
 			if (gbm == null) {
 				return false;
 			}
+			// CoEnsure used to AddComponent on GBM while a dock already lived on the workflow host → dual instances.
+			DestroyDockComponentsNotOn(gbm.gameObject);
 			return ApplyComponentToGameObject(gbm.gameObject, spec);
+		}
+
+		/// <summary>True if any dock MonoBehaviour exists (including inactive hosts / unfinished builds).</summary>
+		public static bool HasAnyDockComponent() {
+			PruneRegisteredInstances();
+			for (int i = 0; i < RegisteredInstances.Count; i++) {
+				if (RegisteredInstances[i] != null)
+					return true;
+			}
+			return false;
+		}
+
+		static void PruneRegisteredInstances() {
+			for (int i = RegisteredInstances.Count - 1; i >= 0; i--) {
+				if (RegisteredInstances[i] == null)
+					RegisteredInstances.RemoveAt(i);
+			}
+		}
+
+		/// <summary>Remove stray dock behaviours so only one host owns FULL/SRN (prefer Gen Art strip).</summary>
+		static void DestroyDockComponentsNotOn(GameObject keepHost) {
+			PruneRegisteredInstances();
+			for (int i = RegisteredInstances.Count - 1; i >= 0; i--) {
+				var c = RegisteredInstances[i];
+				if (c == null) {
+					RegisteredInstances.RemoveAt(i);
+					continue;
+				}
+				if (keepHost != null && c.gameObject == keepHost)
+					continue;
+				c.TeardownForAddonDisabled();
+				RegisteredInstances.RemoveAt(i);
+				UnityEngine.Object.Destroy(c);
+			}
+			// Also strip orphans that never registered (edge cases).
+			var all = UnityEngine.Object.FindObjectsByType<RibbonViewportFullViewOnScreen_Toggle_UI>(
+				FindObjectsInactive.Include, FindObjectsSortMode.None);
+			for (int i = 0; i < all.Length; i++) {
+				var c = all[i];
+				if (c == null) continue;
+				if (keepHost != null && c.gameObject == keepHost) continue;
+				c.TeardownForAddonDisabled();
+				UnityEngine.Object.Destroy(c);
+			}
 		}
 
 		/// <returns>False if the dock component could not be added (e.g. <see cref="GameObject.AddComponent"/> failed).</returns>
