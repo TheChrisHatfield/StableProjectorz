@@ -740,6 +740,17 @@ namespace spz {
 			if (string.IsNullOrEmpty(pythonExe)) pythonExe = "python";
 			bool showExternalWindows = LaunchWebUIBatFile.PrefsWantShowExternalProcessWindows();
 			UnityEngine.Debug.Log($"[Addon_MGR] Starting Python server: socket port {_serverPort}, HTTP port {_httpServerPort}, exe: {pythonExe}");
+
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+			// Stale FastAPI on 5557 keeps _isServerRunning true with no /ready — free before spawn (same helper as WebUI :7860).
+			if (_enableHttpServer) {
+				try {
+					AddonPortHelper.TryKillProcessesOnPort(_httpServerPort);
+				} catch (Exception e) {
+					UnityEngine.Debug.LogWarning($"[Addon_MGR] Could not free HTTP port {_httpServerPort} before start: {e.Message}");
+				}
+			}
+#endif
 			
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
 			// IL2CPP: System.Diagnostics.Process.Start() triggers "Process::CreateProcess_internal" assertion.
