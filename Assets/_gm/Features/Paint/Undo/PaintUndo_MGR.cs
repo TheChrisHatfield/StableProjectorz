@@ -640,19 +640,36 @@ namespace spz {
 
 		void LateUpdate() {
 			if (_restoreSession == null) return;
+			var session = _restoreSession;
+			// Structure-change clear nulls _restoreSession but a local ref can remain; disposed layer RTs must not upload.
+			if (session.Target?.texArray == null || session.SliceData == null || session.Order == null) {
+				_restoreSession = null;
+				return;
+			}
 			float dt = Time.deltaTime;
 			PushSchedulerInspectorSettings();
 			_scheduler.BeginRestoreTick(dt);
-			var session = _restoreSession;
 			int remaining = session.Order.Length - session.OrderCursor;
 			if (remaining > 0) {
 				_scheduler.GetFrameBudget(remaining, out float budgetMs, out int maxSlices);
 				float start = Time.realtimeSinceStartup;
 				int uploaded = 0;
 				while (uploaded < maxSlices && session.OrderCursor < session.Order.Length) {
+					if (session.Target?.texArray == null) {
+						_restoreSession = null;
+						return;
+					}
 					if ((Time.realtimeSinceStartup - start) * 1000f >= budgetMs) break;
 					int sliceIx = session.Order[session.OrderCursor];
+					if (sliceIx < 0 || sliceIx >= session.SliceData.Count) {
+						session.OrderCursor++;
+						continue;
+					}
 					byte[] raw = session.SliceData[sliceIx];
+					if (raw == null) {
+						session.OrderCursor++;
+						continue;
+					}
 					EnsureUploadStaging(session.Target.width, session.Target.height, session.Target.graphicsFormat);
 					_uploadStaging.LoadRawTextureData(raw);
 					_uploadStaging.Apply(false, false);
