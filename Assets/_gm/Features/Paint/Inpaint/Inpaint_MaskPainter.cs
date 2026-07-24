@@ -914,12 +914,19 @@ namespace spz {
 
 	    public override void ResetPaintMask(){
 	        base.ResetPaintMask();
-	        if (PaintLayerStack_MGR.instance != null && PaintLayerStack_MGR.instance.ActiveLayer != null)
+	        // Clear every layer — Bake Colors extracts the full composite then calls this; clearing only
+	        // ActiveLayer left other layers' Content/NoColorMask and paint reappeared on the next blit.
+	        var stack = PaintLayerStack_MGR.instance;
+	        if (stack?.Layers != null)
 	        {
-		        var al = PaintLayerStack_MGR.instance.ActiveLayer;
-		        al.Content?.ClearTheTextures(Color.clear);
-		        al.Data?.ClearTheTextures(Color.clear);
-		        al.NoColorMask?.ClearTheTextures(Color.clear);
+		        for (int i = 0; i < stack.Layers.Count; i++)
+		        {
+			        var L = stack.Layers[i];
+			        if (L == null) continue;
+			        L.Content?.ClearTheTextures(Color.clear);
+			        L.Data?.ClearTheTextures(Color.clear);
+			        L.NoColorMask?.ClearTheTextures(Color.clear);
+		        }
 	        }
 	        _ObjectUV_brushedColorRGBA?.ClearTheTextures(Color.clear);
 	        isPaintMaskEmpty=true;
