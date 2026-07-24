@@ -933,6 +933,8 @@ namespace spz {
 			        L.Content?.ClearTheTextures(Color.clear);
 			        L.Data?.ClearTheTextures(Color.clear);
 			        L.NoColorMask?.ClearTheTextures(Color.clear);
+			        // Allow scene re-inject after a full clear (otherwise EnsureBottomLayerHasSceneForComposite no-ops forever).
+			        L.HasReceivedSceneInject = false;
 		        }
 	        }
 	        _ObjectUV_brushedColorRGBA?.ClearTheTextures(Color.clear);
