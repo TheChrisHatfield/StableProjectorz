@@ -29,4 +29,21 @@ public sealed class MultiviewPinLayoutTests {
 		// writes leftover centers onto inactive cameras. Only camera 0 should be centered at startup.
 		Assert.That(MultiviewPinLayoutRules.ShouldSeedAllCamerasAsEnabledDuringInit(), Is.False);
 	}
+
+	[Test]
+	public void PerspectiveCenterVoronoi_PicksNearestActiveColumn() {
+		var centers = new UnityEngine.Vector2[] {
+			new UnityEngine.Vector2(0.2f, 0.5f),
+			new UnityEngine.Vector2(0.5f, 0.5f),
+			new UnityEngine.Vector2(0.8f, 0.5f),
+		};
+		var active = new[] { true, true, true };
+		Assert.That(MultiviewPinLayoutRules.FindNearestPerspectiveCenterIndex(
+			new UnityEngine.Vector2(0.75f, 0.5f), centers, active), Is.EqualTo(2));
+		Assert.That(MultiviewPinLayoutRules.FindNearestPerspectiveCenterIndex(
+			new UnityEngine.Vector2(0.3f, 0.5f), centers, active), Is.EqualTo(0));
+		active[2] = false;
+		Assert.That(MultiviewPinLayoutRules.FindNearestPerspectiveCenterIndex(
+			new UnityEngine.Vector2(0.9f, 0.5f), centers, active), Is.EqualTo(1));
+	}
 }

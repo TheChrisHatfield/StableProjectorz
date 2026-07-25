@@ -58,6 +58,7 @@ namespace spz {
 	            _haveBeenPanningFor = 0;
 	            _lockedPanDistance = ResolvePanDistanceScale();
 	            _haveLockedPanDistance = true;
+	            UserCameras_MGR.instance.LockNavigationCamera(UserCameras_MGR.instance.ix_specificViewCam(_myViewCam));
 	            _havePanAnchorWorld = ModelsHandler_3D.instance != null
 	                && ModelsHandler_3D.instance.TryGetNavigationReferenceWorldPoint(_myViewCam, out _panAnchorWorld);
 	        }
@@ -72,12 +73,22 @@ namespace spz {
 	        //   _theCurrentlyPanning=null; return; }//doing something else.
 
 	        if(KeyMousePenInput.isKey_CtrlOrCommand_pressed()){ 
-	            _theCurrentlyPanning=null; _haveBeenPanningFor=0; _haveLockedPanDistance = false; _havePanAnchorWorld = false; return; }//doing something else.
+	            EndPanDrag(); return; }//doing something else.
 
 	        if(KeyMousePenInput.isMMBpressed()==false){  
-	            _theCurrentlyPanning=null; _haveBeenPanningFor=0; _haveLockedPanDistance = false; _havePanAnchorWorld = false; return; }
+	            EndPanDrag(); return; }
 	        Pan();
 	        _haveBeenPanningFor += Time.deltaTime;
+	    }
+
+	    void EndPanDrag(){
+	        if (_theCurrentlyPanning == this && UserCameras_MGR.instance != null) {
+		        UserCameras_MGR.instance.ClearNavigationCameraLock();
+	        }
+	        _theCurrentlyPanning = null;
+	        _haveBeenPanningFor = 0;
+	        _haveLockedPanDistance = false;
+	        _havePanAnchorWorld = false;
 	    }
 
 

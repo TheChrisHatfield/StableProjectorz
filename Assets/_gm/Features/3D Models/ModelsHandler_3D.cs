@@ -133,6 +133,11 @@ namespace spz {
 		    if (id != 0) {
 			    var m = getMesh_byUniqueID(id);
 			    if (m != null) {
+				    // Prefer the surface point under the cursor (same as orbit lock), not bounds.center —
+				    // center made multi-view pan/drag feel offset from the mouse.
+				    if (ClickSelect_Meshes_MGR.TryResolveWorldPointOnMeshUnderCursor(m, vCam, out worldRef)) {
+					    return true;
+				    }
 				    worldRef = m.bounds.center;
 				    return true;
 			    }
