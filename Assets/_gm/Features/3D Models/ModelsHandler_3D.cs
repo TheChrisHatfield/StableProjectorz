@@ -103,28 +103,29 @@ namespace spz {
 
     /// <summary>
     /// Orbit/pan/zoom reference world point under the cursor.
-    /// Priority (multi-view safe):
+    /// Priority:
     ///   1) <paramref name="vCam"/>'s ray hits a *selected* mesh's collider -> precise hit point.
-    ///   2) ANY active view camera's ray (multi-camera "directional raycast") -> precise hit point.
-    ///      This recovers cases where the picked mesh is only visible through a different sub-view.
-    ///   3) Mesh-ID composite buffer identifies the mesh under the cursor (camera-independent) -> mesh.bounds.center.
-    ///   4) Depth buffer + vCam unproject. ONLY trustworthy in single-view: in multi-view the depth
-    ///      pixel may have been written by a *different* camera, but we'd unproject through vCam,
-    ///      yielding a world point off the actual surface. So we skip this in multi-view.
+    ///   2) Single-view only: any-active-camera ray (degenerates to one cam). Skipped in multi-view —
+    ///      other columns' rays through the same UV hit a different asset and make MMB pan feel offset.
+    ///   3) Mesh-ID composite -> surface point via owning camera only (not other cams / bounds steal).
+    ///   4) Depth buffer + vCam unproject. ONLY in single-view (multi-view depth may be from another cam).
     ///   5) Focused mesh (from <see cref="GetManipulationTargetMesh"/>) bounds center.
     ///   6) Total selected bounds center.
-    /// ROLLBACK NOTE: original priority was 1) single-cam ray, 2) depth, 3) ID, 4) focused, 5) union.
-    ///   Reordered + added multi-camera raycast + gated depth by single-view to fix multi-view
-    ///   pan/zoom snapping to the wrong character.
     /// </summary>
 	    public bool TryGetNavigationReferenceWorldPoint(View_UserCamera vCam, out Vector3 worldRef) {
 		    worldRef = default;
 		    if (MainViewport_UI.instance == null) { return false; }
+		    bool isMultiView = UserCameras_MGR.instance != null
+		                       && UserCameras_MGR.instance.numActiveViewCameras() > 1;
+
 		    if (ClickSelect_Meshes_MGR.TryRaycastSelectedMeshUnderMainViewport(vCam, out var raySel, out var hitPt) && raySel != null) {
 			    worldRef = hitPt;
 			    return true;
 		    }
-		    if (ClickSelect_Meshes_MGR.TryRaycastSelectedMeshUnder_AnyActiveViewCamera(out var rayAny, out var hitAny) && rayAny != null) {
+		    // Multi-view: never borrow another column's ray — same UV + different pin shift lands on
+		    // a different asset (MMB pan/dolly pivot offset "per character").
+		    if (!isMultiView
+		        && ClickSelect_Meshes_MGR.TryRaycastSelectedMeshUnder_AnyActiveViewCamera(out var rayAny, out var hitAny) && rayAny != null) {
 			    worldRef = hitAny;
 			    return true;
 		    }
@@ -133,18 +134,14 @@ namespace spz {
 		    if (id != 0) {
 			    var m = getMesh_byUniqueID(id);
 			    if (m != null) {
-				    // Prefer the surface point under the cursor (same as orbit lock), not bounds.center —
-				    // center made multi-view pan/drag feel offset from the mouse.
-				    if (ClickSelect_Meshes_MGR.TryResolveWorldPointOnMeshUnderCursor(m, vCam, out worldRef)) {
+				    if (ClickSelect_Meshes_MGR.TryResolveWorldPointOnMeshUnderCursor(m, vCam, out worldRef, owningCameraOnly: isMultiView)) {
 					    return true;
 				    }
 				    worldRef = m.bounds.center;
 				    return true;
 			    }
 		    }
-		    bool isSingleView = UserCameras_MGR.instance == null
-		                        || UserCameras_MGR.instance.numActiveViewCameras() <= 1;
-		    if (isSingleView
+		    if (!isMultiView
 		        && UserCameras_MGR.instance != null
 		        && UserCameras_MGR.instance.TryGetWorldPoint_UnderMainViewportCursorDepth(vCam, out var depthPt)) {
 			    worldRef = depthPt;

@@ -57,4 +57,10 @@ public sealed class MultiviewPinLayoutTests {
 		Assert.That(MultiviewPinLayoutRules.NavLockClearShouldApply(currentOwner: move, clearRequester: move), Is.True);
 		Assert.That(MultiviewPinLayoutRules.NavLockClearShouldApply(currentOwner: null, clearRequester: move), Is.False);
 	}
+
+	[Test]
+	public void MmbOnMeshPrefersPanOverPinGrab() {
+		Assert.That(MultiviewPinLayoutRules.MmbShouldPreferPanOverPinGrab(cursorOverMesh: true), Is.True);
+		Assert.That(MultiviewPinLayoutRules.MmbShouldPreferPanOverPinGrab(cursorOverMesh: false), Is.False);
+	}
 }

@@ -287,27 +287,34 @@ namespace spz {
     /// World point on <paramref name="mesh"/> under the main-viewport cursor: render-matched rays
     /// (owning / nearest camera first), then closest-point on the collider along that ray so drag
     /// pivots stay locked to where the user is pointing instead of snapping to bounds.center.
+    /// Pass <paramref name="owningCameraOnly"/> for multi-view nav (MMB pan/dolly): other cameras'
+    /// rays through the same UV hit a *different* asset's surface and feel like an offset pivot.
     /// </summary>
-    public static bool TryResolveWorldPointOnMeshUnderCursor(SD_3D_Mesh mesh, View_UserCamera preferCam, out Vector3 hitPointWorld) {
+    public static bool TryResolveWorldPointOnMeshUnderCursor(SD_3D_Mesh mesh, View_UserCamera preferCam, out Vector3 hitPointWorld, bool owningCameraOnly = false) {
 		    hitPointWorld = default;
 		    if (mesh == null || MainViewport_UI.instance == null) { return false; }
 		    Vector2 uv = MainViewport_UI.instance.cursorMainViewportPos01;
 		    var col = mesh.GetComponent<Collider>();
 		    if (col == null) { return false; }
 
-		    View_UserCamera nearest = UserCameras_MGR.instance != null ? UserCameras_MGR.instance.NearestToCursor() : null;
 		    if (TryColliderRayHit(preferCam, col, uv, out hitPointWorld)) { return true; }
-		    if (nearest != preferCam && TryColliderRayHit(nearest, col, uv, out hitPointWorld)) { return true; }
-		    if (UserCameras_MGR.instance != null) {
-			    int n = UserCameras_MGR.instance.GetViewCameraCount();
-			    for (int i = 0; i < n; ++i) {
-				    var v = UserCameras_MGR.instance.GetViewCamera(i);
-				    if (v == null || v == preferCam || v == nearest) { continue; }
-				    if (TryColliderRayHit(v, col, uv, out hitPointWorld)) { return true; }
+		    if (!owningCameraOnly) {
+			    View_UserCamera nearest = UserCameras_MGR.instance != null ? UserCameras_MGR.instance.NearestToCursor() : null;
+			    if (nearest != preferCam && TryColliderRayHit(nearest, col, uv, out hitPointWorld)) { return true; }
+			    if (UserCameras_MGR.instance != null) {
+				    int n = UserCameras_MGR.instance.GetViewCameraCount();
+				    for (int i = 0; i < n; ++i) {
+					    var v = UserCameras_MGR.instance.GetViewCamera(i);
+					    if (v == null || v == preferCam || v == nearest) { continue; }
+					    if (TryColliderRayHit(v, col, uv, out hitPointWorld)) { return true; }
+				    }
 			    }
 		    }
 		    // Soft lock: project along the owning camera's ray to the closest point on the collider.
-		    View_UserCamera softCam = preferCam != null ? preferCam : nearest;
+		    View_UserCamera softCam = preferCam;
+		    if (softCam == null && !owningCameraOnly) {
+			    softCam = UserCameras_MGR.instance != null ? UserCameras_MGR.instance.NearestToCursor() : null;
+		    }
 		    if (softCam != null && softCam.myCamera != null && softCam.gameObject.activeInHierarchy) {
 			    var ray = softCam.ViewportPointToRay_RenderMatched(uv);
 			    float guessDist = Vector3.Distance(softCam.transform.position, mesh.bounds.center);
