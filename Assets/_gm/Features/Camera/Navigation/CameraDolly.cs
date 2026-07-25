@@ -40,10 +40,11 @@ namespace spz {
 	        bool pressedThisFrame  = KeyMousePenInput.isRMBpressedThisFrame();
 	        bool hovering   =  MainViewport_UI.instance.isCursorHoveringMe();
 	        if(pressedThisFrame && hovering){
+	            // Do NOT LockNavigationCamera here: bare RMB is CameraMove fly. Locking/clearing
+	            // from Dolly stole or wiped Move's sticky multi-view ownership every frame that
+	            // Alt was not held (StopDollyMaybe treat as dontZoom). Alt+RMB zoom rides the
+	            // same camera Move already locked; scroll-wheel zoom is instantaneous.
 	            _allowZoom=true;
-	            if (UserCameras_MGR.instance != null) {
-		            UserCameras_MGR.instance.LockNavigationCamera(UserCameras_MGR.instance.ix_specificViewCam(_myViewCam), this);
-	            }
 	            return; 
 	        }
 	    }
@@ -60,9 +61,6 @@ namespace spz {
 	             dontZoom &=  mouseScroll==0 || MainViewport_UI.instance.isCursorHoveringMe()==false;
 
 	        if(dontZoom){
-	            if (_allowZoom && UserCameras_MGR.instance != null) {
-		            UserCameras_MGR.instance.ClearNavigationCameraLock(this);
-	            }
 	            _allowZoom = false;
 	            _isZooming = false;
 	            return; 
