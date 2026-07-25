@@ -305,12 +305,16 @@ namespace spz {
 	        _draggedPinIx = sensor_ix;
 	        _pinsDefaults.EnsureNotLerping();
 	        _draggedPin_cursorOffset = (Vector2)_draggedPin.transform.position - KeyMousePenInput.cursorScreenPos();
+	        // Sticky column while dragging: pin moves change Voronoi ownership; lock so pan/orbit
+	        // mid-gesture cannot jump to a neighbor. Steal so pin wins over a residual Move/Orbit lock.
+	        UserCameras_MGR.instance?.LockNavigationCamera(sensor_ix, this, stealIfHeldByOther: true);
 	    }
 
 	    void OnPinDropped(bool isLeftMouseButton){
 	        int pinIx = _draggedPinIx;
 	        _draggedPin = null;
 	        _draggedPinIx = -1;
+	        UserCameras_MGR.instance?.ClearNavigationCameraLock(this);
 	    }
 
 	    Vector2 NormalizedPositionInRect_unclamped(Rect rect, Vector2 localPoint){

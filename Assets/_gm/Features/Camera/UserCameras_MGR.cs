@@ -169,11 +169,16 @@ namespace spz {
 	    /// <summary>
 	    /// Lock navigation ownership to <paramref name="cameraIndex"/> until
 	    /// <see cref="ClearNavigationCameraLock"/> with the same <paramref name="owner"/>.
+	    /// By default does not steal a lock held by another owner (Orbit must not wipe Move/Pan).
+	    /// Pin drag may pass <paramref name="stealIfHeldByOther"/> so column ownership follows the pin.
 	    /// </summary>
-	    public void LockNavigationCamera(int cameraIndex, object owner) {
+	    public void LockNavigationCamera(int cameraIndex, object owner, bool stealIfHeldByOther = false) {
 		    if (owner == null) { return; }
 		    if (cameraIndex < 0 || cameraIndex >= _viewCameras.Count) { return; }
 		    if (_viewCameras[cameraIndex] == null || !_viewCameras[cameraIndex].gameObject.activeInHierarchy) { return; }
+		    if (!stealIfHeldByOther && _navLockOwner != null && !ReferenceEquals(_navLockOwner, owner)) {
+			    return;
+		    }
 		    _navLockedCameraIx = cameraIndex;
 		    _navLockOwner = owner;
 	    }
