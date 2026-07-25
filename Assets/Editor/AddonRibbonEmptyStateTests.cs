@@ -14,8 +14,9 @@ public sealed class AddonRibbonEmptyStateTests {
 			"EnsureNativeFallbackUiWhenPythonMissing",
 			BindingFlags.Instance | BindingFlags.Public);
 		Assert.That(method, Is.Not.Null, "EnsureNativeFallbackUiWhenPythonMissing must remain public for ribbon activation.");
-		Assert.That(method.GetParameters().Length, Is.EqualTo(1));
+		Assert.That(method.GetParameters().Length, Is.EqualTo(2));
 		Assert.That(method.GetParameters()[0].ParameterType, Is.EqualTo(typeof(string)));
+		Assert.That(method.GetParameters()[1].ParameterType, Is.EqualTo(typeof(bool)));
 	}
 
 	[Test]
