@@ -70,7 +70,10 @@ namespace spz {
 
 		/// <summary>User-defined face plane must not be shifted by online calibration.</summary>
 		static bool SymmetryPlaneAllowsBanditNudge () {
-			return true;
+			var sz = BrushRibbon_UI_Size.instance;
+			if (sz == null)
+				return true;
+			return sz.paintSymmetryPlaneSource != PaintSymmetryPlaneSource.FacePick;
 		}
 
 		/// <summary>Single place calibrator offset is added to the plane (world units along <paramref name="nUnit"/>).</summary>
