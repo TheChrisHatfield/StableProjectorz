@@ -203,6 +203,10 @@ namespace spz {
 		Color _statusFail = new Color(239f / 255f, 68f / 255f, 68f / 255f, 1f);
 		Color _statusMuted = new Color(0.63f, 0.63f, 0.67f, 1f);
 		bool? _lastStatusIsSuccess;
+		float _themeTitleBasePt = -1f;
+		float _themeFilterLabelBasePt = -1f;
+		float _themeStatusBasePt = -1f;
+		float _themeRememberLabelBasePt = -1f;
 		
 		[SerializeField] GameObject _panel;
 		[SerializeField] Button _openPanel_button;
@@ -1286,18 +1290,30 @@ namespace spz {
 					shell.a = Mathf.Max(shell.a, 0.96f);
 					SpzUiThemeOps.ApplyGraphicColor(panelImg, shell);
 				}
+				var panelVlg = _panel.GetComponent<UnityEngine.UI.VerticalLayoutGroup>();
+				if (panelVlg != null) {
+					int pad = Mathf.RoundToInt(SpzUiThemeOps.ScaledSpace(4));
+					panelVlg.spacing = SpzUiThemeOps.ScaledSpace(1);
+					panelVlg.padding = new RectOffset(pad, pad, pad, pad);
+				}
 				var title = _panel.transform.Find("Header/Title")?.GetComponent<TextMeshProUGUI>();
-				if (title != null)
-					SpzUiThemeOps.ApplyTmpColor(title, t.textPrimary);
+				if (title != null) {
+					CaptureBasePt(ref _themeTitleBasePt, title, 22f);
+					SpzUiThemeOps.ApplyTmpScaled(title, t.textPrimary, _themeTitleBasePt);
+				}
 				var filterLabel = _panel.transform.Find("FilterBar/FilterLabel")?.GetComponent<TextMeshProUGUI>();
-				if (filterLabel != null)
-					SpzUiThemeOps.ApplyTmpColor(filterLabel, t.textPrimary);
+				if (filterLabel != null) {
+					CaptureBasePt(ref _themeFilterLabelBasePt, filterLabel, 14f);
+					SpzUiThemeOps.ApplyTmpScaled(filterLabel, t.textPrimary, _themeFilterLabelBasePt);
+				}
 				var pills = _panel.transform.Find("FilterBar/FilterPills")?.GetComponent<Image>();
 				if (pills != null)
 					SpzUiThemeOps.ApplyGraphicColor(pills, new Color(t.controlBg.r, t.controlBg.g, t.controlBg.b, 0.55f));
 				var rememberLabel = _panel.transform.Find("RememberEnabledRow/Label")?.GetComponent<TextMeshProUGUI>();
-				if (rememberLabel != null)
-					SpzUiThemeOps.ApplyTmpColor(rememberLabel, t.textMuted);
+				if (rememberLabel != null) {
+					CaptureBasePt(ref _themeRememberLabelBasePt, rememberLabel, 13f);
+					SpzUiThemeOps.ApplyTmpScaled(rememberLabel, t.textMuted, _themeRememberLabelBasePt);
+				}
 			}
 			if (_closePanel_button != null)
 				SpzUiThemeOps.ApplySelectableToken(_closePanel_button, t.controlBg, t.accent);
@@ -1328,17 +1344,24 @@ namespace spz {
 				var listImg = _addonsListParent.GetComponent<Image>();
 				if (listImg != null)
 					SpzUiThemeOps.ApplyGraphicColor(listImg, t.fieldBg);
+				var listVlg = _addonsListParent.GetComponent<UnityEngine.UI.VerticalLayoutGroup>();
+				if (listVlg != null) {
+					int listPad = Mathf.RoundToInt(SpzUiThemeOps.ScaledSpace(1));
+					listVlg.spacing = SpzUiThemeOps.ScaledSpace(2);
+					listVlg.padding = new RectOffset(0, 0, listPad, listPad);
+				}
 			}
 			foreach (var item in _addonUIItems.Values) {
 				if (item == null) continue;
 				ThemeAddonListItem(item, t);
 			}
-			if (_statusText != null && !string.IsNullOrEmpty(_statusText.text))
-				_statusText.color = _lastStatusIsSuccess.HasValue
+			if (_statusText != null) {
+				CaptureBasePt(ref _themeStatusBasePt, _statusText, 13f);
+				Color statusColor = !string.IsNullOrEmpty(_statusText.text) && _lastStatusIsSuccess.HasValue
 					? (_lastStatusIsSuccess.Value ? _statusOk : _statusFail)
 					: t.textMuted;
-			else if (_statusText != null)
-				SpzUiThemeOps.ApplyTmpColor(_statusText, t.textMuted);
+				SpzUiThemeOps.ApplyTmpScaled(_statusText, statusColor, _themeStatusBasePt);
+			}
 			if (_filterAllToggle != null || _filterEnabledToggle != null || _filterDisabledToggle != null) {
 				ThemeFilterToggle(_filterAllToggle, t);
 				ThemeFilterToggle(_filterEnabledToggle, t);
@@ -1351,12 +1374,24 @@ namespace spz {
 			}
 		}
 
+		static void CaptureBasePt(ref float stored, TextMeshProUGUI tmp, float fallback) {
+			if (stored > 0.05f || tmp == null) return;
+			float current = tmp.fontSize;
+			float scale = SpzUiThemeOps.Active.fontScale;
+			if (scale > 0.05f && Mathf.Abs(scale - 1f) > 0.001f)
+				stored = current / scale;
+			else
+				stored = current > 0.05f ? current : fallback;
+		}
+
 		static void ThemeHeaderButton(Button button, Color normal, Color highlighted, Color foreground) {
 			if (button == null) return;
 			SpzUiThemeOps.ApplySelectableToken(button, normal, highlighted);
 			var label = button.transform.Find("Text")?.GetComponent<TextMeshProUGUI>();
-			if (label != null)
-				SpzUiThemeOps.ApplyTmpColor(label, foreground);
+			if (label != null) {
+				float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(label, 13f);
+				SpzUiThemeOps.ApplyTmpScaled(label, foreground, basePt);
+			}
 			var icon = button.transform.Find("LineIcon")?.GetComponent<Image>();
 			if (icon != null)
 				SpzUiThemeOps.ApplyGraphicColor(icon, foreground);
@@ -1369,8 +1404,10 @@ namespace spz {
 				: new Color(t.controlBg.r, t.controlBg.g, t.controlBg.b, 0f);
 			SpzUiThemeOps.ApplySelectableToken(toggle, normal, toggle.isOn ? t.textPrimary : t.tabActive);
 			var label = toggle.GetComponentInChildren<TextMeshProUGUI>(true);
-			if (label != null)
-				SpzUiThemeOps.ApplyTmpColor(label, toggle.isOn ? t.panelBg : t.textMuted);
+			if (label != null) {
+				float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(label, 12f);
+				SpzUiThemeOps.ApplyTmpScaled(label, toggle.isOn ? t.panelBg : t.textMuted, basePt);
+			}
 		}
 
 		void ThemeAddonListItem(GameObject item, SpzUiThemeOps.ThemeTokens t) {
@@ -1383,8 +1420,10 @@ namespace spz {
 					SpzUiThemeOps.ApplySelectableToken(removeBtn, dangerBg, Color.Lerp(dangerBg, t.danger, 0.28f));
 				}
 				var removeLabel = remove.GetComponentInChildren<TextMeshProUGUI>(true);
-				if (removeLabel != null)
-					SpzUiThemeOps.ApplyTmpColor(removeLabel, new Color(t.danger.r, t.danger.g, t.danger.b, 0.88f));
+				if (removeLabel != null) {
+					float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(removeLabel, 12f);
+					SpzUiThemeOps.ApplyTmpScaled(removeLabel, new Color(t.danger.r, t.danger.g, t.danger.b, 0.88f), basePt);
+				}
 			}
 			var toggle = item.transform.Find("StatusToggle")?.GetComponent<Toggle>();
 			if (toggle == null)
@@ -1397,8 +1436,10 @@ namespace spz {
 			    && Addon_MGR.instance.GetAddons().TryGetValue(itemAddonId, out var liveInfo) && liveInfo != null)
 				enabled = GetDraftEnabled(itemAddonId, liveInfo.isEnabled);
 			var name = item.transform.Find("Name")?.GetComponent<TextMeshProUGUI>();
-			if (name != null)
-				SpzUiThemeOps.ApplyTmpColor(name, t.textPrimary);
+			if (name != null) {
+				float nameBase = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(name, 14f);
+				SpzUiThemeOps.ApplyTmpScaled(name, t.textPrimary, nameBase);
+			}
 			if (toggle != null) {
 				Color ringColor = enabled ? t.success : t.textMuted;
 				var ringImg = toggle.transform.Find("Ring")?.GetComponent<Image>();
