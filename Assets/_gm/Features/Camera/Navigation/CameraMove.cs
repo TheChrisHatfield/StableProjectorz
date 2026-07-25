@@ -65,7 +65,7 @@ namespace spz {
 
 	        Move();
 	        Rotate();
-	        CameraOrbit_ClickPivot.instance.ForceInFrontOfCamera();
+	        CameraOrbit_ClickPivot.instance.ForceInFrontOfCamera(_cam);
 	    }
 
 
