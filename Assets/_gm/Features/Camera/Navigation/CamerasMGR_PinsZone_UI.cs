@@ -238,6 +238,19 @@ namespace spz {
 
 
 	    public int FindNearestPin(){
+	        // Multi-view: same column ownership as NearestToCursor (perspective-center Voronoi in
+	        // inner-viewport space). Screen-distance to pin GameObjects disagrees when POV digits
+	        // have drifted — MMB near a mesh could grab camera 2's pin while pan/orbit drove camera 1.
+	        if (UserCameras_MGR.instance != null && UserCameras_MGR.instance.numActiveViewCameras() > 1) {
+		        int voronoiIx = UserCameras_MGR.instance.FindNearestViewCameraIndex_ByPerspectiveCenters();
+		        if (voronoiIx >= 0 && _cameraPins != null && voronoiIx < _cameraPins.Count) {
+			        var pinGO = _cameraPins[voronoiIx];
+			        if (pinGO != null && pinGO.activeInHierarchy) {
+				        return voronoiIx;
+			        }
+		        }
+	        }
+
 	        float smallestDist = float.MaxValue;
 	        Vector2 cursorPos = KeyMousePenInput.cursorScreenPos();
 	        int nearestPinIx = -1;
