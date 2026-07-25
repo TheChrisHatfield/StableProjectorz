@@ -1202,7 +1202,7 @@ namespace spz {
 			}
 			if (!httpReady) {
 				UnityEngine.Debug.LogWarning(
-					$"[Addon_MGR] Skipping unload for {addonId}; Python HTTP :{_httpServerPort} not ready (Unity UI already torn down).");
+					$"[Addon_MGR] Skipping unload for {addonId}; Python HTTP :{_httpServerPort} not ready (Unity will still tear UI after this op).");
 				InvalidateSharedAddonReadyCache();
 				yield break;
 			}
@@ -1394,38 +1394,59 @@ namespace spz {
 		
 		/// <summary>
 		/// Unloads an add-on and destroys its UI elements (panel content, ribbon tab, and clears all registries).
+		/// When HTTP is up, waits for Python <c>unregister()</c> first so panel get_value/save can still run.
 		/// </summary>
 		public void UnloadAddon(string addonId) {
 			if (!_registeredAddons.ContainsKey(addonId)) return;
 			
 			var addon = _registeredAddons[addonId];
 			addon.isEnabled = false;
-			if (_enableHttpServer)
-				StartAddonLifecycleOp(addonId, false);
 
 			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal)) {
 				RibbonViewportFullViewOnScreen_Toggle_UI.TeardownAllDocksForAddonDisabled();
 			}
-			
-			// 1) AddonUI_MGR: destroy panel content + buttons and clear its state (callbacks, element refs)
+
+			if (_enableHttpServer) {
+				// Do not DestroyAddonUI before POST /unload_addon — GenerationDoneAudio/GpuFlow unregister
+				// still read panel values via get_value (AddonDebug showed get_value after RemoveAddonPanel).
+				StartCoroutine(CoPythonUnloadThenDestroyUi(addonId));
+				return;
+			}
+
+			DestroyAddonUiShell(addonId);
+			UnityEngine.Debug.Log($"[Addon_MGR] Unloaded add-on: {addonId}");
+			OnAddonEnabledStateChanged?.Invoke(addonId);
+		}
+
+		IEnumerator CoPythonUnloadThenDestroyUi(string addonId) {
+			int epoch = BumpLifecycleEpoch(addonId);
+			Coroutine op = StartCoroutine(RequestUnloadAddon(addonId, epoch));
+			_addonLifecycleOpById[addonId] = op;
+			yield return op;
+			if (IsAddonEnabled(addonId))
+				yield break;
+			if (!IsLifecycleEpochCurrent(addonId, epoch))
+				yield break;
+			DestroyAddonUiShell(addonId);
+			UnityEngine.Debug.Log($"[Addon_MGR] Unloaded add-on: {addonId}");
+			OnAddonEnabledStateChanged?.Invoke(addonId);
+		}
+
+		void DestroyAddonUiShell(string addonId) {
+			if (string.IsNullOrEmpty(addonId) || !_registeredAddons.TryGetValue(addonId, out var addon) || addon == null)
+				return;
 			if (AddonUI_MGR.instance != null)
 				AddonUI_MGR.instance.DestroyAddonUI(addonId);
-			
-			// 2) CommandRibbon_UI: remove addon tab and panel (same resolution as AddonRibbonIntegration.ResolveCommandRibbon)
 			var ribbon = AddonRibbonIntegration.ResolveCommandRibbon();
 			if (ribbon != null)
 				ribbon.RemoveAddonPanel(addonId);
-
 			if (addon.uiElements != null) {
 				foreach (var go in addon.uiElements) {
 					if (go != null)
 						UnityEngine.Object.Destroy(go);
 				}
+				addon.uiElements.Clear();
 			}
-			addon.uiElements.Clear();
-			
-			UnityEngine.Debug.Log($"[Addon_MGR] Unloaded add-on: {addonId}");
-			OnAddonEnabledStateChanged?.Invoke(addonId);
 		}
 		
 		static string JsonEscape(string s) {
