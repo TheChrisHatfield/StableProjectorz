@@ -68,11 +68,18 @@ namespace spz {
 
 		/// <summary>
 		/// Live perspective-center / projection updates during MMB pan compound with camera Translate
-		/// and break standard-mode cursor tracking. Track pin *UI* every frame; commit projection on release.
+		/// and break standard-mode cursor tracking. Track pin *UI* every frame; never auto-commit
+		/// projection on release (that "snap" yanked multi-view framing after positioning).
 		/// </summary>
 		public static bool MmbPanShouldUpdatePerspectiveCenterEveryFrame() => false;
 
 		/// <summary>POV digit UI should follow the panned asset every frame (without frustum changes).</summary>
 		public static bool MmbPanShouldTrackPinUiEveryFrame() => true;
+
+		/// <summary>
+		/// Committing perspective-center onto the mesh when MMB is released fights free multi-view
+		/// framing. Pin drag is the intentional way to move projection centers.
+		/// </summary>
+		public static bool MmbPanShouldCommitPerspectiveCenterOnRelease() => false;
 	}
 }

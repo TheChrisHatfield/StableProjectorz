@@ -74,4 +74,9 @@ public sealed class MultiviewPinLayoutTests {
 	public void MmbPanTracksPinUiEveryFrame() {
 		Assert.That(MultiviewPinLayoutRules.MmbPanShouldTrackPinUiEveryFrame(), Is.True);
 	}
+
+	[Test]
+	public void MmbPanDoesNotCommitPerspectiveCenterOnRelease() {
+		Assert.That(MultiviewPinLayoutRules.MmbPanShouldCommitPerspectiveCenterOnRelease(), Is.False);
+	}
 }
