@@ -22,5 +22,35 @@ namespace spz {
 		/// that seeds inactive cameras with multi-pin leftover centers.
 		/// </summary>
 		public static bool ShouldSeedAllCamerasAsEnabledDuringInit() => false;
+
+		/// <summary>
+		/// Which active camera "owns" the cursor: nearest perspective-center in the same [0,1] space
+		/// the pins live in (inner-viewport / projectionMat_center). Prefer this over raw pin
+		/// GameObject screen positions when digits have drifted — Voronoi of the centers matches
+		/// the visual multi-view columns.
+		/// </summary>
+		/// <param name="cursor01">Cursor in the same space as <paramref name="centers01"/>.</param>
+		/// <param name="centers01">Perspective center per camera index (may include inactive slots).</param>
+		/// <param name="active">Parallel flags; inactive slots are skipped.</param>
+		/// <returns>Owning camera index, or -1 if none active.</returns>
+		public static int FindNearestPerspectiveCenterIndex(
+			UnityEngine.Vector2 cursor01,
+			UnityEngine.Vector2[] centers01,
+			bool[] active) {
+			if (centers01 == null || active == null) { return -1; }
+			int n = UnityEngine.Mathf.Min(centers01.Length, active.Length);
+			int best = -1;
+			float bestSqr = float.MaxValue;
+			for (int i = 0; i < n; ++i) {
+				if (!active[i]) { continue; }
+				float dx = centers01[i].x - cursor01.x;
+				float dy = centers01[i].y - cursor01.y;
+				float sqr = dx * dx + dy * dy;
+				if (sqr >= bestSqr) { continue; }
+				bestSqr = sqr;
+				best = i;
+			}
+			return best;
+		}
 	}
 }

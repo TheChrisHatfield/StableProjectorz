@@ -45,6 +45,8 @@ namespace spz {
 	        if(!pressedThisFrame || !hovering_mainView || !navAllowed) { return; }
 	        _theCurrentlyOrbiting = this;
 	        _clickStartTime = Time.time;
+	        // Do not LockNavigationCamera here: LMB alone (paint / click) also enters this path.
+	        // Lock when Alt+orbit actually begins (see Orbit_Selection_maybe).
 	    }
 
     
@@ -71,6 +73,9 @@ namespace spz {
 	        // (still kept below as the precise-hit-point fallback when the camera ray *does* hit the
 	        // picked mesh's collider).
 	        if (hasALT && !_havePivotLock) {
+		        if (UserCameras_MGR.instance != null) {
+			        UserCameras_MGR.instance.LockNavigationCamera(UserCameras_MGR.instance.ix_specificViewCam(_myViewCam));
+		        }
 		        if (ModelsHandler_3D.instance != null
 		            && ClickSelect_Meshes_MGR.TryPickSelectedMeshAndPoint(_myViewCam, out var smHit, out var hitPt) && smHit != null) {
 			        ModelsHandler_3D.instance.SetManipulationFocusMesh(smHit);
@@ -95,7 +100,12 @@ namespace spz {
 
 
 	    void StopOrbit_ifWas(){
-	        if (_theCurrentlyOrbiting == this) { ClearPivotLock(); }
+	        if (_theCurrentlyOrbiting == this) {
+		        ClearPivotLock();
+		        if (UserCameras_MGR.instance != null) {
+			        UserCameras_MGR.instance.ClearNavigationCameraLock();
+		        }
+	        }
 	        _theCurrentlyOrbiting =  _theCurrentlyOrbiting==this?  null : _theCurrentlyOrbiting;
 	    }
 

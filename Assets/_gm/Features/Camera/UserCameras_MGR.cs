@@ -160,25 +160,80 @@ namespace spz {
     
 	    public void FocusViewCamera(int ix)
 	        => _viewCameras[ix].cameraFocus.Focus_Selection_maybe(forceTheFocus:true);
+	    // While MMB/RMB/Alt+LMB navigation is held, keep routing to the camera that owned the press
+	    // so a drifting cursor (or offset POV digit) cannot steal the drag mid-gesture.
+	    int _navLockedCameraIx = -1;
+
+	    /// <summary>
+	    /// Lock navigation ownership to <paramref name="cameraIndex"/> until <see cref="ClearNavigationCameraLock"/>
+	    /// (call on press of orbit/pan/dolly/fly; clear on release).
+	    /// </summary>
+	    public void LockNavigationCamera(int cameraIndex) {
+		    if (cameraIndex < 0 || cameraIndex >= _viewCameras.Count) { return; }
+		    if (_viewCameras[cameraIndex] == null || !_viewCameras[cameraIndex].gameObject.activeInHierarchy) { return; }
+		    _navLockedCameraIx = cameraIndex;
+	    }
+
+	    public void ClearNavigationCameraLock() {
+		    _navLockedCameraIx = -1;
+	    }
+
+	    public bool HasNavigationCameraLock => _navLockedCameraIx >= 0;
+
     /// <summary>
-    /// Route navigation to the viewport pin nearest the cursor (OG behavior), so orbit / focus / zoom
-    /// operate on the camera the user is actively hovering in multi-view.
+    /// Route navigation to the multi-view column under the cursor (perspective-center Voronoi in
+    /// inner-viewport space — same space as pin anchors). Falls back to pin screen distance (OG).
+    /// While a nav lock is held, returns that camera so drag/move cannot jump to a neighbor.
     /// </summary>
     public View_UserCamera NearestToCursor(){
-		    var pins = CamerasMGR_PinsZone_UI.instance;
-		    if (pins == null || _viewCameras == null || _viewCameras.Count == 0) {
+		    if (_viewCameras == null || _viewCameras.Count == 0) {
 			    return _curr_viewCamera;
 		    }
-		    int nearestPin = pins.FindNearestPin();
-		    if (nearestPin < 0 || nearestPin >= _viewCameras.Count) {
+		    if (_navLockedCameraIx >= 0 && _navLockedCameraIx < _viewCameras.Count) {
+			    var locked = _viewCameras[_navLockedCameraIx];
+			    if (locked != null && locked.gameObject.activeInHierarchy) {
+				    return locked;
+			    }
+			    _navLockedCameraIx = -1;
+		    }
+
+		    int nearestIx = FindNearestViewCameraIndex_ByPerspectiveCenters();
+		    if (nearestIx < 0) {
+			    var pins = CamerasMGR_PinsZone_UI.instance;
+			    nearestIx = pins != null ? pins.FindNearestPin() : -1;
+		    }
+		    if (nearestIx < 0 || nearestIx >= _viewCameras.Count) {
 			    return _curr_viewCamera;
 		    }
-		    var nearestCam = _viewCameras[nearestPin];
+		    var nearestCam = _viewCameras[nearestIx];
 		    if (nearestCam != null && nearestCam.gameObject.activeInHierarchy) {
 			    return nearestCam;
 		    }
 		    return _curr_viewCamera;
     }
+
+	    /// <summary>
+	    /// Active camera whose <c>perspectiveCenter01</c> is nearest the cursor in inner-viewport [0,1]
+	    /// (pin / projection-matrix space). -1 if unavailable.
+	    /// </summary>
+	    public int FindNearestViewCameraIndex_ByPerspectiveCenters() {
+		    if (MainViewport_UI.instance == null || _viewCameras == null) { return -1; }
+		    int n = _viewCameras.Count;
+		    var centers = new Vector2[n];
+		    var active = new bool[n];
+		    bool any = false;
+		    for (int i = 0; i < n; ++i) {
+			    var vc = _viewCameras[i];
+			    active[i] = vc != null && vc.gameObject.activeInHierarchy;
+			    if (!active[i]) { continue; }
+			    centers[i] = vc._projectionMat_center;
+			    any = true;
+		    }
+		    if (!any) { return -1; }
+		    // Perspective centers / pins live in inner-viewport space (CamerasMGR_PinsZone resized to inner).
+		    Vector2 cursor01 = MainViewport_UI.instance.cursorInnerViewportPos01;
+		    return MultiviewPinLayoutRules.FindNearestPerspectiveCenterIndex(cursor01, centers, active);
+	    }
 
 	    /// <summary>World position on the surface under the main-viewport cursor from the linear depth buffer; false if sky/invalid.</summary>
 	    public bool TryGetWorldPoint_UnderMainViewportCursorDepth(View_UserCamera vCam, out Vector3 worldPos) {

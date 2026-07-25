@@ -40,7 +40,10 @@ namespace spz {
 	        bool pressedThisFrame  = KeyMousePenInput.isRMBpressedThisFrame();
 	        bool hovering   =  MainViewport_UI.instance.isCursorHoveringMe();
 	        if(pressedThisFrame && hovering){
-	            _allowZoom=true; 
+	            _allowZoom=true;
+	            if (UserCameras_MGR.instance != null) {
+		            UserCameras_MGR.instance.LockNavigationCamera(UserCameras_MGR.instance.ix_specificViewCam(_myViewCam));
+	            }
 	            return; 
 	        }
 	    }
@@ -57,6 +60,9 @@ namespace spz {
 	             dontZoom &=  mouseScroll==0 || MainViewport_UI.instance.isCursorHoveringMe()==false;
 
 	        if(dontZoom){
+	            if (_allowZoom && UserCameras_MGR.instance != null) {
+		            UserCameras_MGR.instance.ClearNavigationCameraLock();
+	            }
 	            _allowZoom = false;
 	            _isZooming = false;
 	            return; 

@@ -263,10 +263,8 @@ namespace spz {
 
     /// <summary>
     /// Identifies the selected mesh under the cursor (ID-buffer first, then multi-camera raycast)
-    /// AND derives a precise world point on that mesh:
-    ///   1) <paramref name="vCam"/>'s ray against the picked mesh's collider (best when this view rendered the mesh).
-    ///   2) any other active view camera's ray against the picked mesh's collider.
-    ///   3) <c>mesh.bounds.center</c> as a last resort.
+    /// AND derives a precise world point on that mesh under the cursor (not mesh bounds center —
+    /// that fallback made multi-view orbit/pan feel "offset" from the mouse).
     /// </summary>
     public static bool TryPickSelectedMeshAndPoint(View_UserCamera vCam, out SD_3D_Mesh meshOut, out Vector3 hitPointWorld) {
 		    meshOut = null;
@@ -278,28 +276,55 @@ namespace spz {
 			    }
 			    return true;
 		    }
-		    if (MainViewport_UI.instance != null) {
-			    Vector2 uv = MainViewport_UI.instance.cursorMainViewportPos01;
-			    var col = meshOut.GetComponent<Collider>();
-			    // Render-matched rays throughout (see ViewportPointToRay_RenderMatched): raw
-			    // ViewportPointToRay ignores the pin-shifted projection and lands off-surface in multi-view.
-			    // try requested view first
-			    if (col != null && vCam != null && vCam.myCamera != null) {
-				    var ray = vCam.ViewportPointToRay_RenderMatched(uv);
-				    if (col.Raycast(ray, out RaycastHit hh, 1e5f)) { hitPointWorld = hh.point; return true; }
-			    }
-			    // try every other active view camera
-			    if (col != null && UserCameras_MGR.instance != null) {
-				    int n = UserCameras_MGR.instance.GetViewCameraCount();
-				    for (int i = 0; i < n; ++i) {
-					    var v = UserCameras_MGR.instance.GetViewCamera(i);
-					    if (v == null || v == vCam || !v.gameObject.activeInHierarchy || v.myCamera == null) { continue; }
-					    var ray = v.ViewportPointToRay_RenderMatched(uv);
-					    if (col.Raycast(ray, out RaycastHit h2, 1e5f)) { hitPointWorld = h2.point; return true; }
-				    }
-			    }
+		    if (TryResolveWorldPointOnMeshUnderCursor(meshOut, vCam, out hitPointWorld)) {
+			    return true;
 		    }
 		    hitPointWorld = meshOut.bounds.center;
+		    return true;
+    }
+
+    /// <summary>
+    /// World point on <paramref name="mesh"/> under the main-viewport cursor: render-matched rays
+    /// (owning / nearest camera first), then closest-point on the collider along that ray so drag
+    /// pivots stay locked to where the user is pointing instead of snapping to bounds.center.
+    /// </summary>
+    public static bool TryResolveWorldPointOnMeshUnderCursor(SD_3D_Mesh mesh, View_UserCamera preferCam, out Vector3 hitPointWorld) {
+		    hitPointWorld = default;
+		    if (mesh == null || MainViewport_UI.instance == null) { return false; }
+		    Vector2 uv = MainViewport_UI.instance.cursorMainViewportPos01;
+		    var col = mesh.GetComponent<Collider>();
+		    if (col == null) { return false; }
+
+		    View_UserCamera nearest = UserCameras_MGR.instance != null ? UserCameras_MGR.instance.NearestToCursor() : null;
+		    if (TryColliderRayHit(preferCam, col, uv, out hitPointWorld)) { return true; }
+		    if (nearest != preferCam && TryColliderRayHit(nearest, col, uv, out hitPointWorld)) { return true; }
+		    if (UserCameras_MGR.instance != null) {
+			    int n = UserCameras_MGR.instance.GetViewCameraCount();
+			    for (int i = 0; i < n; ++i) {
+				    var v = UserCameras_MGR.instance.GetViewCamera(i);
+				    if (v == null || v == preferCam || v == nearest) { continue; }
+				    if (TryColliderRayHit(v, col, uv, out hitPointWorld)) { return true; }
+			    }
+		    }
+		    // Soft lock: project along the owning camera's ray to the closest point on the collider.
+		    View_UserCamera softCam = preferCam != null ? preferCam : nearest;
+		    if (softCam != null && softCam.myCamera != null && softCam.gameObject.activeInHierarchy) {
+			    var ray = softCam.ViewportPointToRay_RenderMatched(uv);
+			    float guessDist = Vector3.Distance(softCam.transform.position, mesh.bounds.center);
+			    guessDist = Mathf.Max(0.05f, guessDist);
+			    Vector3 guess = ray.GetPoint(guessDist);
+			    hitPointWorld = col.ClosestPoint(guess);
+			    return true;
+		    }
+		    return false;
+    }
+
+    static bool TryColliderRayHit(View_UserCamera vc, Collider col, Vector2 uv, out Vector3 hitPointWorld) {
+		    hitPointWorld = default;
+		    if (vc == null || !vc.gameObject.activeInHierarchy || vc.myCamera == null || col == null) { return false; }
+		    var ray = vc.ViewportPointToRay_RenderMatched(uv);
+		    if (!col.Raycast(ray, out RaycastHit hh, 1e5f)) { return false; }
+		    hitPointWorld = hh.point;
 		    return true;
     }
 

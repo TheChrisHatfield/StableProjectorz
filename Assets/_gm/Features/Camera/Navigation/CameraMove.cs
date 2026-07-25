@@ -38,10 +38,16 @@ namespace spz {
 	        bool navAllowed =  DimensionMode_MGR.instance.is_3d_navigation_allowed;
 	        if(pressedThisFrame && hovering && navAllowed){
 	            _currentMover = this;
+	            if (UserCameras_MGR.instance != null) {
+		            UserCameras_MGR.instance.LockNavigationCamera(UserCameras_MGR.instance.ix_specificViewCam(_cam));
+	            }
 	        }
 	    }
 
 	    void StopMoveRotate(){
+	        if (_currentMover == this && UserCameras_MGR.instance != null) {
+		        UserCameras_MGR.instance.ClearNavigationCameraLock();
+	        }
 	        _currentMover =  _currentMover==this?  null : _currentMover;
 	    }
 
