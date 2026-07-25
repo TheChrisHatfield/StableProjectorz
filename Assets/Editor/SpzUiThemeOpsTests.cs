@@ -151,17 +151,100 @@ public sealed class SpzUiThemeOpsTests {
 	}
 
 	[Test]
-	public void MetadataReportsP2SchemaAndSurfaces() {
+	public void MetadataReportsP3TypedSchemaAndSurfaces() {
 		var result = SpzUiThemeOps.GetThemeResult();
-		Assert.That((string)result["addon_rpc_theme_version"], Is.EqualTo("1.12"));
-		Assert.That(result["token_schema"].ToString(), Does.Contain("success"));
-		Assert.That(result["token_schema"].ToString(), Does.Contain("tab_active"));
+		Assert.That((string)result["addon_rpc_theme_version"], Is.EqualTo("1.13"));
+		Assert.That((string)result["ui_scale_source"], Is.EqualTo("chrome"));
+		var schema = (JArray)result["token_schema"];
+		Assert.That(schema, Is.Not.Null);
+		bool sawFont = false, sawSpacing = false, sawAccent = false;
+		foreach (var entry in schema) {
+			Assert.That(entry["name"], Is.Not.Null);
+			Assert.That(entry["type"], Is.Not.Null);
+			string name = (string)entry["name"];
+			string type = (string)entry["type"];
+			if (name == "accent") {
+				sawAccent = true;
+				Assert.That(type, Is.EqualTo("color"));
+			}
+			if (name == "font_scale") {
+				sawFont = true;
+				Assert.That(type, Is.EqualTo("float"));
+				Assert.That((float)entry["min"], Is.EqualTo(0.75f));
+				Assert.That((float)entry["max"], Is.EqualTo(1.5f));
+			}
+			if (name == "spacing_scale") {
+				sawSpacing = true;
+				Assert.That(type, Is.EqualTo("float"));
+			}
+		}
+		Assert.That(sawAccent && sawFont && sawSpacing, Is.True);
 		Assert.That(result["reserved_token_names"].ToString(), Does.Not.Contain("danger"));
 		var surfaces = (JArray)result["surfaces"];
 		Assert.That(surfaces.Count, Is.GreaterThanOrEqualTo(7));
 		foreach (var surface in surfaces)
 			Assert.That((bool)surface["bound"], Is.True, surface["id"]?.ToString());
 		Assert.That(result["composes_with"].ToString(), Does.Contain("spz.cmd.set_ui_scale"));
+	}
+
+	[Test]
+	public void ScaleTokensApplyAndScaledSpaceRespectsSpacing() {
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-experiment",
+			new JObject { ["font_scale"] = 1.25, ["spacing_scale"] = 1.5 },
+			"patch",
+			out string error), Is.True, error);
+		var tokens = SpzUiThemeOps.GetThemeResult()["tokens"];
+		Assert.That((float)tokens["font_scale"], Is.EqualTo(1.25f).Within(0.001f));
+		Assert.That((float)tokens["spacing_scale"], Is.EqualTo(1.5f).Within(0.001f));
+		Assert.That(SpzUiThemeOps.ScaledSpace(1), Is.EqualTo(ProjectUiScale.Space(1) * 1.5f).Within(0.01f));
+		Assert.That(SpzUiThemeOps.Active.fontScale, Is.EqualTo(1.25f).Within(0.001f));
+	}
+
+	[Test]
+	public void InvalidScaleFailsClosedWithoutMutatingColors() {
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-experiment",
+			Tokens(("accent", "#112233")),
+			"replace",
+			out string error), Is.True, error);
+		string accentBefore = (string)SpzUiThemeOps.GetThemeResult()["tokens"]["accent"];
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-experiment",
+			new JObject { ["font_scale"] = 2.0 },
+			"patch",
+			out error), Is.False);
+		Assert.That(error, Does.Contain("between").IgnoreCase);
+		Assert.That((string)SpzUiThemeOps.GetThemeResult()["tokens"]["accent"], Is.EqualTo(accentBefore));
+		Assert.That((float)SpzUiThemeOps.GetThemeResult()["tokens"]["font_scale"], Is.EqualTo(1.0f).Within(0.001f));
+	}
+
+	[Test]
+	public void ApplyToAddonUiRootScalesTmpWithFontScale() {
+		var root = new GameObject("AddonPanel_test-scale");
+		try {
+			var tmpGo = new GameObject("Label");
+			tmpGo.transform.SetParent(root.transform, false);
+			var tmp = tmpGo.AddComponent<TextMeshProUGUI>();
+			tmp.fontSize = 20f;
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				new JObject { ["font_scale"] = 1.25 },
+				"replace",
+				out string error), Is.True, error);
+			SpzUiThemeOps.ApplyToAddonUiRoot(root);
+			Assert.That(tmp.fontSize, Is.EqualTo(25f).Within(0.05f));
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				new JObject { ["font_scale"] = 1.5 },
+				"patch",
+				out error), Is.True, error);
+			SpzUiThemeOps.ApplyToAddonUiRoot(root);
+			Assert.That(tmp.fontSize, Is.EqualTo(30f).Within(0.05f));
+		} finally {
+			UnityEngine.Object.DestroyImmediate(root);
+			SpzUiThemeOps.ResetTheme();
+		}
 	}
 
 	[Test]

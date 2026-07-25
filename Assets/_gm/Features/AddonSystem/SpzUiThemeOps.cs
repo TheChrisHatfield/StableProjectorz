@@ -8,24 +8,20 @@ using UnityEngine.UI;
 namespace spz {
 
 	/// <summary>
-	/// Validated runtime color tokens for add-on UI. Core UI may opt in by reading tokens
-	/// or subscribing to <see cref="ThemeChanged"/>; this class never scans arbitrary scene UI.
+	/// Validated runtime theme tokens for add-on UI (colors + scale multipliers).
+	/// Core UI may opt in by reading tokens or subscribing to <see cref="ThemeChanged"/>;
+	/// this class never scans arbitrary scene UI.
 	/// </summary>
 	public static class SpzUiThemeOps {
 
 		public const string DefaultThemeId = "stableprojectorz-default";
-		public const string ThemeApiVersion = "1.12";
+		public const string ThemeApiVersion = "1.13";
 		const int kMaxThemeIdChars = 64;
 		const int kMaxLabelChars = 128;
 		const int kMaxRegisteredThemes = 32;
+		public const float ScaleTokenMin = 0.75f;
+		public const float ScaleTokenMax = 1.5f;
 
-		static readonly string[] TokenSchema = {
-			"panel_bg", "control_bg", "field_bg", "accent",
-			"text_primary", "text_muted", "handle",
-			"success", "danger", "border", "tab_active", "selection",
-		};
-
-		// P2 promoted all former reserved role names into TokenSchema.
 		static readonly string[] ReservedTokenNames = { };
 
 		sealed class ThemePreset {
@@ -48,6 +44,8 @@ namespace spz {
 			public Color border;
 			public Color tabActive;
 			public Color selection;
+			public float fontScale = 1f;
+			public float spacingScale = 1f;
 
 			public ThemeTokens Clone() {
 				return (ThemeTokens)MemberwiseClone();
@@ -67,6 +65,8 @@ namespace spz {
 			border = new Color(1f, 1f, 1f, 0.08f),             // #FFFFFF14
 			tabActive = new Color(0.329f, 0.329f, 0.329f, 1f), // #545454
 			selection = new Color(0.231f, 0.510f, 0.965f, 1f), // #3B82F6
+			fontScale = 1f,
+			spacingScale = 1f,
 		};
 
 		static ThemeTokens _active = Defaults.Clone();
@@ -84,10 +84,11 @@ namespace spz {
 				["success"] = true,
 				["theme_id"] = _activeThemeId,
 				["tokens"] = SerializeTokens(_active),
-				["token_schema"] = new JArray(TokenSchema),
+				["token_schema"] = BuildTokenSchema(),
 				["reserved_token_names"] = new JArray(ReservedTokenNames),
 				["surfaces"] = BuildSurfaces(),
 				["addon_rpc_theme_version"] = ThemeApiVersion,
+				["ui_scale_source"] = "chrome",
 				["composes_with"] = new JArray {
 					"spz.cmd.set_ui_scale",
 					"spz.cmd.list_ui_targets",
@@ -143,7 +144,7 @@ namespace spz {
 			}
 			owner = owner != null ? owner.Trim() : "";
 			if (tokenValues == null || !tokenValues.HasValues) {
-				error = "tokens must contain at least one supported color";
+				error = "tokens must contain at least one supported token";
 				return false;
 			}
 
@@ -206,7 +207,7 @@ namespace spz {
 
 			bool hasTokens = tokenValues != null;
 			if (hasTokens && !tokenValues.HasValues) {
-				error = "tokens must contain at least one supported color";
+				error = "tokens must contain at least one supported token";
 				return false;
 			}
 			bool hasPreset = TryGetPresetTokens(themeId, out ThemeTokens presetTokens);
@@ -318,10 +319,32 @@ namespace spz {
 			foreach (var text in root.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 				if (text == null)
 					continue;
-				text.color = string.Equals(text.gameObject.name, "Placeholder", StringComparison.Ordinal)
+				Color c = string.Equals(text.gameObject.name, "Placeholder", StringComparison.Ordinal)
 					? tokens.textMuted
 					: tokens.textPrimary;
+				float basePt = ResolveOrCaptureDesignFontPt(text, 14f);
+				ApplyTmpScaled(text, c, basePt);
 			}
+		}
+
+		/// <summary>
+		/// Captures design TMP point size once so repeated theme applies do not compound <c>font_scale</c>.
+		/// </summary>
+		public static float ResolveOrCaptureDesignFontPt(TMP_Text text, float fallbackBasePt) {
+			if (text == null)
+				return fallbackBasePt > 0.05f ? fallbackBasePt : 14f;
+			var tag = text.gameObject.GetComponent<SpzUiThemeDesignFontPt>();
+			if (tag == null) {
+				tag = text.gameObject.AddComponent<SpzUiThemeDesignFontPt>();
+				float scale = _active.fontScale;
+				float current = text.fontSize > 0.05f ? text.fontSize : fallbackBasePt;
+				tag.designPt = (scale > 0.05f && Mathf.Abs(scale - 1f) > 0.001f)
+					? current / scale
+					: current;
+				if (tag.designPt < 0.05f)
+					tag.designPt = fallbackBasePt > 0.05f ? fallbackBasePt : 14f;
+			}
+			return tag.designPt;
 		}
 
 		/// <summary>
@@ -350,6 +373,59 @@ namespace spz {
 				text.color = token;
 		}
 
+		/// <summary>
+		/// Sets TMP color and <c>fontSize = basePt * Active.fontScale</c> (does not compound across applies).
+		/// </summary>
+		public static void ApplyTmpScaled(TMP_Text text, Color token, float basePt) {
+			if (text == null)
+				return;
+			text.color = token;
+			if (basePt > 0.05f)
+				text.fontSize = basePt * _active.fontScale;
+		}
+
+		/// <summary>
+		/// <see cref="ProjectUiScale.Space(int)"/> multiplied by the active theme <c>spacing_scale</c>.
+		/// </summary>
+		public static float ScaledSpace(int n) {
+			return ProjectUiScale.Space(n, _active.spacingScale);
+		}
+
+		static JArray BuildTokenSchema() {
+			return new JArray {
+				SchemaColor("panel_bg"),
+				SchemaColor("control_bg"),
+				SchemaColor("field_bg"),
+				SchemaColor("accent"),
+				SchemaColor("text_primary"),
+				SchemaColor("text_muted"),
+				SchemaColor("handle"),
+				SchemaColor("success"),
+				SchemaColor("danger"),
+				SchemaColor("border"),
+				SchemaColor("tab_active"),
+				SchemaColor("selection"),
+				SchemaFloat("font_scale", ScaleTokenMin, ScaleTokenMax),
+				SchemaFloat("spacing_scale", ScaleTokenMin, ScaleTokenMax),
+			};
+		}
+
+		static JObject SchemaColor(string name) {
+			return new JObject {
+				["name"] = name,
+				["type"] = "color",
+			};
+		}
+
+		static JObject SchemaFloat(string name, float min, float max) {
+			return new JObject {
+				["name"] = name,
+				["type"] = "float",
+				["min"] = min,
+				["max"] = max,
+			};
+		}
+
 		static JObject SerializeTokens(ThemeTokens tokens) {
 			return new JObject {
 				["panel_bg"] = ColorToHex(tokens.panelBg),
@@ -364,6 +440,8 @@ namespace spz {
 				["border"] = ColorToHex(tokens.border),
 				["tab_active"] = ColorToHex(tokens.tabActive),
 				["selection"] = ColorToHex(tokens.selection),
+				["font_scale"] = tokens.fontScale,
+				["spacing_scale"] = tokens.spacingScale,
 			};
 		}
 
@@ -388,7 +466,11 @@ namespace spz {
 				Surface("addon_manager", true, "AddonManager_UI; REF roles → tokens"),
 				Surface("settings", true, "Settings_UI chrome; product prefs untouched"),
 				Surface("viewport_statusline", true, "Viewport_StatusText RGB; sticky caller-owned"),
-				Surface("viewport_ribbons", true, "LeftRibbon_UI + WorkflowRibbon_UI known controls"),
+				Surface("viewport_ribbons", true, "LeftRibbon_UI + WorkflowRibbon_UI + GenerateButtons_Main"),
+				Surface("sd_input_panel", true, "SD_InputPanel_UI column (models/VAE/dials/fields)"),
+				Surface("export_save_menu", true, "ExportSave_UI_MGR save/load/export slide-out"),
+				Surface("scene_resolution", true, "SceneResolution_MGR SAVE Nx / filter toggles"),
+				Surface("connection_panels", true, "ConnectionPanel_UI SD SERV / 3D SERV chrome"),
 			};
 		}
 
@@ -444,23 +526,52 @@ namespace spz {
 					error = $"Duplicate theme token after normalization: {tokenName}";
 					return false;
 				}
-				if (!TryParseColor(property.Value, out var color)) {
-					error = $"Invalid color for token '{property.Name}'; expected #RRGGBB or #RRGGBBAA";
-					return false;
-				}
 				switch (tokenName) {
-					case "panel_bg": candidate.panelBg = color; break;
-					case "control_bg": candidate.controlBg = color; break;
-					case "field_bg": candidate.fieldBg = color; break;
-					case "accent": candidate.accent = color; break;
-					case "text_primary": candidate.textPrimary = color; break;
-					case "text_muted": candidate.textMuted = color; break;
-					case "handle": candidate.handle = color; break;
-					case "success": candidate.success = color; break;
-					case "danger": candidate.danger = color; break;
-					case "border": candidate.border = color; break;
-					case "tab_active": candidate.tabActive = color; break;
-					case "selection": candidate.selection = color; break;
+					case "font_scale":
+					case "spacing_scale":
+						if (!TryParseScale(property.Value, out float scale, out error)) {
+							if (string.IsNullOrEmpty(error))
+								error = $"Invalid float for token '{property.Name}'; expected number in [{ScaleTokenMin},{ScaleTokenMax}]";
+							else
+								error = $"Invalid float for token '{property.Name}': {error}";
+							return false;
+						}
+						if (tokenName == "font_scale")
+							candidate.fontScale = scale;
+						else
+							candidate.spacingScale = scale;
+						break;
+					case "panel_bg":
+					case "control_bg":
+					case "field_bg":
+					case "accent":
+					case "text_primary":
+					case "text_muted":
+					case "handle":
+					case "success":
+					case "danger":
+					case "border":
+					case "tab_active":
+					case "selection":
+						if (!TryParseColor(property.Value, out var color)) {
+							error = $"Invalid color for token '{property.Name}'; expected #RRGGBB or #RRGGBBAA";
+							return false;
+						}
+						switch (tokenName) {
+							case "panel_bg": candidate.panelBg = color; break;
+							case "control_bg": candidate.controlBg = color; break;
+							case "field_bg": candidate.fieldBg = color; break;
+							case "accent": candidate.accent = color; break;
+							case "text_primary": candidate.textPrimary = color; break;
+							case "text_muted": candidate.textMuted = color; break;
+							case "handle": candidate.handle = color; break;
+							case "success": candidate.success = color; break;
+							case "danger": candidate.danger = color; break;
+							case "border": candidate.border = color; break;
+							case "tab_active": candidate.tabActive = color; break;
+							case "selection": candidate.selection = color; break;
+						}
+						break;
 					default:
 						error = $"Unknown theme token: {property.Name}";
 						return false;
@@ -490,6 +601,37 @@ namespace spz {
 			target.border = source.border;
 			target.tabActive = source.tabActive;
 			target.selection = source.selection;
+			target.fontScale = source.fontScale;
+			target.spacingScale = source.spacingScale;
+		}
+
+		static bool TryParseScale(JToken token, out float scale, out string error) {
+			scale = 1f;
+			error = null;
+			if (token == null) {
+				error = "value is null";
+				return false;
+			}
+			if (token.Type == JTokenType.Float || token.Type == JTokenType.Integer) {
+				scale = token.Value<float>();
+			}
+			else if (token.Type == JTokenType.String) {
+				string s = token.ToString().Trim();
+				if (!float.TryParse(s, System.Globalization.NumberStyles.Float,
+					System.Globalization.CultureInfo.InvariantCulture, out scale)) {
+					error = "expected number";
+					return false;
+				}
+			}
+			else {
+				error = "expected number";
+				return false;
+			}
+			if (scale < ScaleTokenMin || scale > ScaleTokenMax) {
+				error = $"must be between {ScaleTokenMin} and {ScaleTokenMax}";
+				return false;
+			}
+			return true;
 		}
 
 		static bool TryParseColor(JToken token, out Color color) {
@@ -506,5 +648,10 @@ namespace spz {
 			var c = (Color32)color;
 			return $"#{c.r:X2}{c.g:X2}{c.b:X2}{c.a:X2}";
 		}
+	}
+
+	/// <summary>Stores design-time TMP point size for theme <c>font_scale</c> without compounding.</summary>
+	public sealed class SpzUiThemeDesignFontPt : MonoBehaviour {
+		public float designPt = 14f;
 	}
 }
