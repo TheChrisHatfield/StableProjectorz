@@ -37,15 +37,15 @@ namespace spz {
 	    }
 
 	    void StartDolly_maybe(){
-	        bool pressedThisFrame  = KeyMousePenInput.isRMBpressedThisFrame();
 	        bool hovering   =  MainViewport_UI.instance.isCursorHoveringMe();
-	        if(pressedThisFrame && hovering){
-	            // Do NOT LockNavigationCamera here: bare RMB is CameraMove fly. Locking/clearing
-	            // from Dolly stole or wiped Move's sticky multi-view ownership every frame that
-	            // Alt was not held (StopDollyMaybe treat as dontZoom). Alt+RMB zoom rides the
-	            // same camera Move already locked; scroll-wheel zoom is instantaneous.
+	        if(!hovering){ return; }
+	        // Arm on Alt+RMB held — not only RMB-down. Move fly starts on bare RMB and clears
+	        // _allowZoom the same frame (StopDollyMaybe, no Alt yet); pressing Alt afterward while
+	        // RMB is still held never re-armed, so Alt+RMB dolly after fly was dead.
+	        // Do NOT LockNavigationCamera here: bare RMB is CameraMove fly. Alt+RMB zoom rides
+	        // the same camera Move already locked; scroll-wheel zoom is instantaneous.
+	        if(KeyMousePenInput.isRMBpressed() && KeyMousePenInput.isKey_alt_pressed()){
 	            _allowZoom=true;
-	            return; 
 	        }
 	    }
 
