@@ -118,8 +118,8 @@ Shader "Custom/Object3d_BrushShader"{
                 float4 screenPos_SV : SV_POSITION;
                 uint renderIx : SV_RenderTargetArrayIndex;
 
-                float3 objNormal : TEXCOORD2;
-                float3 objViewDir : TEXCOORD3;
+                float3 worldNormal : TEXCOORD2;
+                float3 worldViewDir : TEXCOORD3;
 
                 // Mode 3 (object mirror): this fragment's world position reflected across the symmetry
                 // plane, projected with the same VP matrix; plus mirrored normal / view dir for the fade.
@@ -158,15 +158,17 @@ Shader "Custom/Object3d_BrushShader"{
                 float2 clipSpaceUV =  g.uv*2 - 1; // Convert UVs from [0, 1] range to [-1, 1] (clip space)
                 pix.screenPos_SV =  float4(clipSpaceUV, 0, 1); // Set z to zero and w to one for correct depth
 
-                pix.objNormal  = g.objNormal;
-                pix.objViewDir = g.objViewDir;
-
-                // Mode 3 (object mirror) data. Cheap enough to compute unconditionally; ignored unless _SymmetryMode == 3.
+                // World-space normal/view for FadeByNormal — must match the mirror path's basis.
+                // Object-space dots diverge under non-uniform scale and made symmetric twins unequal.
                 float3 nUnit = SymmetryPlaneNormalUnit();
                 float3 wPos  = mul(unity_ObjectToWorld, float4(g.objVertex.xyz, 1)).xyz;
+                float3 wN = UnityObjectToWorldNormal(g.objNormal);
+                pix.worldNormal  = wN;
+                pix.worldViewDir = _WorldSpaceCameraPos.xyz - wPos;
+
+                // Mode 3 (object mirror) data. Cheap enough to compute unconditionally; ignored unless _SymmetryMode == 3.
                 float3 wPosM = ReflectWorldAcrossSymmetryPlane(wPos, nUnit);
                 pix.fragScreenSpaceUV_M = ComputeScreenPos(mul(UNITY_MATRIX_VP, float4(wPosM, 1)));
-                float3 wN = UnityObjectToWorldNormal(g.objNormal);
                 pix.worldNormalM  = wN - 2.0 * dot(wN, nUnit) * nUnit;
                 pix.worldViewDirM = _WorldSpaceCameraPos.xyz - wPosM;
 
@@ -319,7 +321,7 @@ Shader "Custom/Object3d_BrushShader"{
                 pibs_input.mirrorGate01 = gateM;
 
                 pibs_input.currentBrushPath01  =  SAMPLE_TEXTURE_OR_ARRAY(_PrevBrushPathTex, uv_withSliceIx).r;
-                pibs_input.normalDotView =   _FadeByNormal==0?  1 : dot(normalize(i.objNormal), normalize(i.objViewDir));
+                pibs_input.normalDotView =   _FadeByNormal==0?  1 : dot(normalize(i.worldNormal), normalize(i.worldViewDir));
 
                 float strokeVal = _StampCount > 0 ? PaintInBrushStroke_Splotches(pibs_input, _StampPosSizeStr, _StampCount) : PaintInBrushStroke(pibs_input);
                 return strokeVal; //[0,1]. Gates (incl. depth falloff) are already folded into primaryGate01 / mirrorGate01.
