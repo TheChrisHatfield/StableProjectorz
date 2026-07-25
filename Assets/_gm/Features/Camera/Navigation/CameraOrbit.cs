@@ -51,7 +51,13 @@ namespace spz {
 
     
 	    void Orbit_Selection_maybe(){
-	        if(ModelsHandler_3D.instance == null) { return; } //scene is probably still loading
+	        // Must stop (not bare-return): StartOrbit_maybe sets _theCurrentlyOrbiting on any LMB.
+	        // A null ModelsHandler during load left orbit sticky until focus loss.
+	        if(ModelsHandler_3D.instance == null) {
+		        ClearPivotLock();
+		        StopOrbit_ifWas();
+		        return;
+	        }
 
 	        bool hasALT   = KeyMousePenInput.isKey_alt_pressed();
 	        bool hasCtrl  = KeyMousePenInput.isKey_CtrlOrCommand_pressed();
