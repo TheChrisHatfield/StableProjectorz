@@ -38,7 +38,10 @@ namespace spz {
 			    return false;
 		    }
 		    Vector2 uv = MainViewport_UI.instance.cursorMainViewportPos01;
-		    var ray = vCam.myCamera.ViewportPointToRay(new Vector3(uv.x, uv.y, 0f));
+		    // Render-matched ray: uses the same FOV-expanded + pin-shifted projection the camera renders
+		    // with, so the ray goes through the pixel actually under the cursor (raw ViewportPointToRay
+		    // was offset in multi-view / widescreen viewports -- the "imprecise targeting" symptom).
+		    var ray = vCam.ViewportPointToRay_RenderMatched(uv);
 		    int mask = LayerMask.GetMask("Geometry");
 		    if (!Physics.Raycast(ray, out RaycastHit hit, 1e5f, mask, QueryTriggerInteraction.Ignore)) {
 			    return false;
@@ -63,12 +66,12 @@ namespace spz {
     /// Use this in multi-view where a single-camera physics raycast cannot reach a mesh that's only visible
     /// through a *different* sub-view camera's frustum.
     ///
-    /// Internally a small NxN window around the cursor is sampled (default radius = 3 px) to absorb single-
+    /// Internally a small NxN window around the cursor is sampled (default radius = 2 px) to absorb single-
     /// pixel ID-buffer flicker on mesh edges -- without that, the cursor sliding across a silhouette would
     /// briefly read background (id=0) and a downstream snap-back path could re-pick the wrong mesh.
     /// The dominant non-zero ID weighted by inverse-distance from the cursor wins.
     /// </summary>
-    public static bool TryPickSelectedMeshUnderCursor_byIdBuffer(out SD_3D_Mesh meshOut, int searchRadiusPx = 3) {
+    public static bool TryPickSelectedMeshUnderCursor_byIdBuffer(out SD_3D_Mesh meshOut, int searchRadiusPx = 2) {
 		    meshOut = null;
 		    if (ModelsHandler_3D.instance == null || MainViewport_UI.instance == null) { return false; }
 		    if (UserCameras_MGR.instance == null || UserCameras_MGR.instance.camTextures == null) { return false; }
@@ -76,8 +79,11 @@ namespace spz {
 		    if (id_tex == null) { return false; }
 
 		    Vector2 uv = MainViewport_UI.instance.cursorMainViewportPos01;
-		    int cx = Mathf.Clamp(Mathf.RoundToInt(uv.x * id_tex.width),  0, id_tex.width  - 1);
-		    int cy = Mathf.Clamp(Mathf.RoundToInt(uv.y * id_tex.height), 0, id_tex.height - 1);
+		    // Floor, not Round: pixel index = floor(uv * size). This keeps hover focus sampling the EXACT
+		    // same texel that SampleMeshIdAtViewport01_static reads on click (ReadPixels truncates), so what
+		    // the hover targets is always what a click would select -- rounding could disagree by 1px on edges.
+		    int cx = Mathf.Clamp(Mathf.FloorToInt(uv.x * id_tex.width),  0, id_tex.width  - 1);
+		    int cy = Mathf.Clamp(Mathf.FloorToInt(uv.y * id_tex.height), 0, id_tex.height - 1);
 
 		    // PRECISION FIRST: sample the exact pixel under the cursor. When the cursor is unambiguously
 		    // over a mesh (the common case, especially when zoomed in close where two meshes overlap on
@@ -101,20 +107,46 @@ namespace spz {
 				    meshOut = mc;
 				    return true;
 			    }
+			    // Center pixel is a real mesh that is just not selected (an occluder / neighbor).
+			    // Do NOT run the window vote here: it let a selected mesh 1-2 px away "win" focus even
+			    // though the cursor is visibly on a different object -- mis-targeting when meshes are
+			    // close together. The window fallback is for EMPTY center pixels only (silhouette/AA edge).
+			    return false;
 		    }
 
 		    // Fallback: NxN search ONLY when the center pixel is empty (cursor on a silhouette edge or
 		    // background). Smaller default radius (was 3, now 2) so we don't drag in pixels that span
 		    // a different mesh when zoomed close.
+		    ushort bestId = SampleDominantMeshIdNearViewport01(viewportUv01: uv, searchRadiusPx);
+		    if (bestId == 0) { return false; }
+		    var m = ModelsHandler_3D.instance.getMesh_byUniqueID(bestId);
+		    if (m == null || !m._isSelected) { return false; }
+		    meshOut = m;
+		    return true;
+    }
+
+    /// <summary>
+    /// Dominant non-zero mesh ID in a small window around the cursor texel of the composite ID buffer
+    /// (inverse-distance^4 weighted vote, i.e. effectively "nearest non-zero neighbor"). Returns 0 when
+    /// the whole window is empty. Shared by hover focus and click selection so both tolerate the 1-2 px
+    /// gap between the antialiased view render and the non-MSAA ID buffer footprint.
+    /// </summary>
+    public static ushort SampleDominantMeshIdNearViewport01(Vector2 viewportUv01, int searchRadiusPx) {
+		    if (UserCameras_MGR.instance == null || UserCameras_MGR.instance.camTextures == null) { return 0; }
+		    RenderTexture id_tex = UserCameras_MGR.instance.camTextures._viewCam_meshIDs_ref;
+		    if (id_tex == null) { return 0; }
+		    int cx = Mathf.Clamp(Mathf.FloorToInt(viewportUv01.x * id_tex.width),  0, id_tex.width  - 1);
+		    int cy = Mathf.Clamp(Mathf.FloorToInt(viewportUv01.y * id_tex.height), 0, id_tex.height - 1);
+
 		    int r = Mathf.Clamp(searchRadiusPx, 0, 16);
-		    if (r <= 0) { return false; }
+		    if (r <= 0) { return 0; }
 		    int x0 = Mathf.Max(0, cx - r);
 		    int y0 = Mathf.Max(0, cy - r);
 		    int x1 = Mathf.Min(id_tex.width  - 1, cx + r);
 		    int y1 = Mathf.Min(id_tex.height - 1, cy + r);
 		    int w = x1 - x0 + 1;
 		    int h = y1 - y0 + 1;
-		    if (w <= 0 || h <= 0) { return false; }
+		    if (w <= 0 || h <= 0) { return 0; }
 
 		    Texture2D tex = new Texture2D(w, h, TextureFormat.RG16, false);
 		    RenderTexture prev = RenderTexture.active;
@@ -140,7 +172,6 @@ namespace spz {
 		    }
 		    Destroy(tex);
 
-		    if (scoreById.Count == 0) { return false; }
 		    ushort bestId = 0;
 		    float bestScore = -1f;
 		    foreach (var kv in scoreById) {
@@ -148,45 +179,85 @@ namespace spz {
 			    bestScore = kv.Value;
 			    bestId = kv.Key;
 		    }
-		    var m = ModelsHandler_3D.instance.getMesh_byUniqueID(bestId);
-		    if (m == null || !m._isSelected) { return false; }
-		    meshOut = m;
-		    return true;
+		    return bestId;
     }
 
     /// <summary>
-    /// "Directional" multi-camera mesh pick: casts a ray from EVERY active sub-view camera through the
-    /// shared cursor viewport position and returns the closest hit on a *selected* mesh's <c>Geometry</c>
+    /// "Directional" multi-camera mesh pick: casts a render-matched ray from active sub-view cameras
+    /// through the shared cursor viewport position and returns a hit on a *selected* mesh's <c>Geometry</c>
     /// collider. This is the right tool when the ID buffer is ambiguous (cursor on edge / background) but
-    /// the cursor is genuinely over a mesh that is only visible through a non-current sub-view camera.
+    /// the cursor is genuinely over a mesh visible through one of the sub-view cameras.
     /// In single-view it degenerates to the OG one-camera raycast.
+    ///
+    /// Priority: the camera whose PIN is nearest the cursor is tried FIRST and wins outright if it hits --
+    /// that's the sub-view the user is visually working in (same ownership rule navigation uses, see
+    /// <see cref="UserCameras_MGR.NearestToCursor"/>). Only if it misses do the remaining cameras get a
+    /// vote, closest hit wins among them.
+    /// ROLLBACK NOTE: previously ALL cameras competed by raw hh.distance -- distances measured from
+    /// different camera origins are not comparable, so a far-away sub-view could steal the target from
+    /// the sub-view actually under the cursor ("overlap" mis-targeting in multi-view).
     /// </summary>
     public static bool TryRaycastSelectedMeshUnder_AnyActiveViewCamera(out SD_3D_Mesh meshOut, out Vector3 hitPointWorld) {
+		    return TryRaycastMeshUnder_AnyActiveViewCamera(requireSelected: true, out meshOut, out hitPointWorld);
+    }
+
+    /// <summary>
+    /// Same pin-priority multi-camera pick, generalized: <paramref name="requireSelected"/> false accepts
+    /// any VISIBLE mesh (renderer on). Used by click selection as a last resort so thin silhouettes /
+    /// tiny sub-view objects that the non-MSAA ID buffer misses can still be clicked. Hidden meshes keep
+    /// their colliders, so visibility is checked explicitly -- a background click must not toggle an
+    /// invisible mesh.
+    /// </summary>
+    public static bool TryRaycastMeshUnder_AnyActiveViewCamera(bool requireSelected, out SD_3D_Mesh meshOut, out Vector3 hitPointWorld) {
 		    meshOut = null;
 		    hitPointWorld = default;
 		    if (UserCameras_MGR.instance == null || MainViewport_UI.instance == null) { return false; }
 		    Vector2 uv = MainViewport_UI.instance.cursorMainViewportPos01;
 		    int mask = LayerMask.GetMask("Geometry");
+
+		    // Tier 1: the sub-view that "owns" the cursor (nearest pin).
+		    View_UserCamera nearestCam = UserCameras_MGR.instance.NearestToCursor();
+		    if (TryRaycastMesh_throughCamera(nearestCam, uv, mask, requireSelected, out var nearestMesh, out var nearestPt)) {
+			    meshOut = nearestMesh;
+			    hitPointWorld = nearestPt;
+			    return true;
+		    }
+
+		    // Tier 2: remaining active cameras; closest hit wins among them.
 		    int n = UserCameras_MGR.instance.GetViewCameraCount();
 		    float bestDist = float.MaxValue;
 		    SD_3D_Mesh bestMesh = null;
 		    Vector3 bestPt = default;
 		    for (int i = 0; i < n; ++i) {
 			    var vc = UserCameras_MGR.instance.GetViewCamera(i);
-			    if (vc == null || !vc.gameObject.activeInHierarchy) { continue; }
-			    if (vc.myCamera == null) { continue; }
-			    var ray = vc.myCamera.ViewportPointToRay(new Vector3(uv.x, uv.y, 0f));
-			    if (!Physics.Raycast(ray, out RaycastHit hh, 1e5f, mask, QueryTriggerInteraction.Ignore)) { continue; }
-			    var sm = hh.collider != null ? hh.collider.GetComponent<SD_3D_Mesh>() : null;
-			    if (sm == null || !sm._isSelected) { continue; }
-			    if (hh.distance >= bestDist) { continue; }
-			    bestDist = hh.distance;
+			    if (vc == null || vc == nearestCam) { continue; }
+			    if (!TryRaycastMesh_throughCamera(vc, uv, mask, requireSelected, out var sm, out var pt)) { continue; }
+			    float d = (pt - vc.transform.position).sqrMagnitude;
+			    if (d >= bestDist) { continue; }
+			    bestDist = d;
 			    bestMesh = sm;
-			    bestPt = hh.point;
+			    bestPt = pt;
 		    }
 		    if (bestMesh == null) { return false; }
 		    meshOut = bestMesh;
 		    hitPointWorld = bestPt;
+		    return true;
+    }
+
+    /// <summary>One camera's render-matched cursor ray vs mesh Geometry colliders (selected-only or any visible).</summary>
+    static bool TryRaycastMesh_throughCamera(View_UserCamera vc, Vector2 uv, int mask, bool requireSelected,
+                                             out SD_3D_Mesh meshOut, out Vector3 hitPointWorld) {
+		    meshOut = null;
+		    hitPointWorld = default;
+		    if (vc == null || !vc.gameObject.activeInHierarchy || vc.myCamera == null) { return false; }
+		    var ray = vc.ViewportPointToRay_RenderMatched(uv);
+		    if (!Physics.Raycast(ray, out RaycastHit hh, 1e5f, mask, QueryTriggerInteraction.Ignore)) { return false; }
+		    var sm = hh.collider != null ? hh.collider.GetComponent<SD_3D_Mesh>() : null;
+		    if (sm == null) { return false; }
+		    if (requireSelected && !sm._isSelected) { return false; }
+		    if (!requireSelected && !sm._isVisible) { return false; }
+		    meshOut = sm;
+		    hitPointWorld = hh.point;
 		    return true;
     }
 
@@ -210,9 +281,11 @@ namespace spz {
 		    if (MainViewport_UI.instance != null) {
 			    Vector2 uv = MainViewport_UI.instance.cursorMainViewportPos01;
 			    var col = meshOut.GetComponent<Collider>();
+			    // Render-matched rays throughout (see ViewportPointToRay_RenderMatched): raw
+			    // ViewportPointToRay ignores the pin-shifted projection and lands off-surface in multi-view.
 			    // try requested view first
 			    if (col != null && vCam != null && vCam.myCamera != null) {
-				    var ray = vCam.myCamera.ViewportPointToRay(new Vector3(uv.x, uv.y, 0f));
+				    var ray = vCam.ViewportPointToRay_RenderMatched(uv);
 				    if (col.Raycast(ray, out RaycastHit hh, 1e5f)) { hitPointWorld = hh.point; return true; }
 			    }
 			    // try every other active view camera
@@ -221,7 +294,7 @@ namespace spz {
 				    for (int i = 0; i < n; ++i) {
 					    var v = UserCameras_MGR.instance.GetViewCamera(i);
 					    if (v == null || v == vCam || !v.gameObject.activeInHierarchy || v.myCamera == null) { continue; }
-					    var ray = v.myCamera.ViewportPointToRay(new Vector3(uv.x, uv.y, 0f));
+					    var ray = v.ViewportPointToRay_RenderMatched(uv);
 					    if (col.Raycast(ray, out RaycastHit h2, 1e5f)) { hitPointWorld = h2.point; return true; }
 				    }
 			    }
@@ -263,10 +336,10 @@ namespace spz {
 		    //   A) ID-buffer with a small NxN search window around the cursor (camera-independent;
 		    //      composite of every sub-view's mesh IDs; the same source Click_maybe uses for click
 		    //      selection -- so hover focus stays in agreement with what a click would select).
-		    //   B) "Directional" multi-camera physics raycast: cast through the cursor uv from EVERY
-		    //      active view camera; closest hit on a selected mesh wins. This recovers the cases
-		    //      where the ID buffer briefly returns 0 on a silhouette edge, but the cursor is
-		    //      genuinely over a mesh that's only visible through another sub-view's frustum.
+		    //   B) "Directional" multi-camera physics raycast (render-matched rays): the sub-view whose
+		    //      pin is nearest the cursor is tried first; only if it misses do the other cameras vote.
+		    //      This recovers the cases where the ID buffer briefly returns 0 on a silhouette edge,
+		    //      but the cursor is genuinely over a mesh visible through another sub-view's frustum.
 		    //
 		    // STICKY: if neither tier finds a selected mesh (cursor on background / between meshes),
 		    // KEEP the existing focus. Do NOT fall back to a single-camera (_curr_viewCamera) raycast --
@@ -338,7 +411,21 @@ namespace spz {
 	            Vector2 viewportPos = MainViewport_UI.instance.cursorMainViewportPos01;
 	            //get the mesh-id that was encoded in a pixel of id-view-texture (full-viewport id RT):
 	            ushort id = SampleMeshId(viewportPos);
+	            if (id == 0) {
+		            // Edge tolerance (same idea as hover focus): the ID buffer is rendered without MSAA,
+		            // so it is ~1px tighter than the antialiased view render -- and in multi-view each
+		            // sub-view object covers few pixels. Clicking the visible silhouette edge read id 0
+		            // and silently did nothing (felt like an offset / "doesn't always select"). Take the
+		            // nearest non-zero ID in a small window before giving up.
+		            id = SampleDominantMeshIdNearViewport01(viewportPos, searchRadiusPx: 2);
+	            }
 	            SD_3D_Mesh mesh = ModelsHandler_3D.instance.getMesh_byUniqueID(id);
+	            if (mesh == null) {
+		            // Final fallback: render-matched physics ray through the sub-view that owns the cursor
+		            // (nearest pin first). Catches thin geometry the ID window still misses. Visible meshes
+		            // only -- hidden meshes keep colliders and must not toggle from a background click.
+		            if (!TryRaycastMeshUnder_AnyActiveViewCamera(requireSelected: false, out mesh, out _)) { return; }
+	            }
 	            if(mesh == null){ return; }
 	            bool wasSelected = mesh._isSelected;
 	            bool isSuccess = false;
