@@ -74,7 +74,7 @@ namespace spz {
 	        // picked mesh's collider).
 	        if (hasALT && !_havePivotLock) {
 		        if (UserCameras_MGR.instance != null) {
-			        UserCameras_MGR.instance.LockNavigationCamera(UserCameras_MGR.instance.ix_specificViewCam(_myViewCam));
+			        UserCameras_MGR.instance.LockNavigationCamera(UserCameras_MGR.instance.ix_specificViewCam(_myViewCam), this);
 		        }
 		        if (ModelsHandler_3D.instance != null
 		            && ClickSelect_Meshes_MGR.TryPickSelectedMeshAndPoint(_myViewCam, out var smHit, out var hitPt) && smHit != null) {
@@ -103,7 +103,7 @@ namespace spz {
 	        if (_theCurrentlyOrbiting == this) {
 		        ClearPivotLock();
 		        if (UserCameras_MGR.instance != null) {
-			        UserCameras_MGR.instance.ClearNavigationCameraLock();
+			        UserCameras_MGR.instance.ClearNavigationCameraLock(this);
 		        }
 	        }
 	        _theCurrentlyOrbiting =  _theCurrentlyOrbiting==this?  null : _theCurrentlyOrbiting;

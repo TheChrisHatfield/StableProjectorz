@@ -42,7 +42,7 @@ namespace spz {
 	        if(pressedThisFrame && hovering){
 	            _allowZoom=true;
 	            if (UserCameras_MGR.instance != null) {
-		            UserCameras_MGR.instance.LockNavigationCamera(UserCameras_MGR.instance.ix_specificViewCam(_myViewCam));
+		            UserCameras_MGR.instance.LockNavigationCamera(UserCameras_MGR.instance.ix_specificViewCam(_myViewCam), this);
 	            }
 	            return; 
 	        }
@@ -61,7 +61,7 @@ namespace spz {
 
 	        if(dontZoom){
 	            if (_allowZoom && UserCameras_MGR.instance != null) {
-		            UserCameras_MGR.instance.ClearNavigationCameraLock();
+		            UserCameras_MGR.instance.ClearNavigationCameraLock(this);
 	            }
 	            _allowZoom = false;
 	            _isZooming = false;

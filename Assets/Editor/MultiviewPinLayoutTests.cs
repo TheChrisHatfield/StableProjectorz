@@ -46,4 +46,15 @@ public sealed class MultiviewPinLayoutTests {
 		Assert.That(MultiviewPinLayoutRules.FindNearestPerspectiveCenterIndex(
 			new UnityEngine.Vector2(0.9f, 0.5f), centers, active), Is.EqualTo(1));
 	}
+
+	[Test]
+	public void NavLockClearRequiresSameOwner() {
+		// Documents the owner-scoped sticky-lock contract used by UserCameras_MGR:
+		// a Clear from Orbit/Dolly must not wipe a Move/Pan lock held by a different owner.
+		object move = new object();
+		object orbit = new object();
+		Assert.That(MultiviewPinLayoutRules.NavLockClearShouldApply(currentOwner: move, clearRequester: orbit), Is.False);
+		Assert.That(MultiviewPinLayoutRules.NavLockClearShouldApply(currentOwner: move, clearRequester: move), Is.True);
+		Assert.That(MultiviewPinLayoutRules.NavLockClearShouldApply(currentOwner: null, clearRequester: move), Is.False);
+	}
 }
