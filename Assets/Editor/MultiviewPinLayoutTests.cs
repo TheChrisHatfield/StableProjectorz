@@ -69,4 +69,9 @@ public sealed class MultiviewPinLayoutTests {
 		// Documents CameraPanning: translate-only during drag (standard/single-asset feel).
 		Assert.That(MultiviewPinLayoutRules.MmbPanShouldUpdatePerspectiveCenterEveryFrame(), Is.False);
 	}
+
+	[Test]
+	public void MmbPanTracksPinUiEveryFrame() {
+		Assert.That(MultiviewPinLayoutRules.MmbPanShouldTrackPinUiEveryFrame(), Is.True);
+	}
 }
