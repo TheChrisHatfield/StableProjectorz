@@ -53,14 +53,16 @@ namespace spz {
 
 
 	    void MoveRotate(){ 
-	        if(KeyMousePenInput.isKey_alt_pressed()){ return; }//probably already doing Dolly zoom.
-	        if(KeyMousePenInput.isKey_Shift_pressed()){ return; }//possibly resizing the paint-brush via Shift+RightMouseButton
-	        if(KeyMousePenInput.isKey_CtrlOrCommand_pressed()){ return; }
-        
+	        // RMB release must win over modifier early-outs: otherwise releasing RMB while Alt/Ctrl/Shift
+	        // is still held left _currentMover + sticky nav lock stuck until the modifier was released.
 	        if(!KeyMousePenInput.isRMBpressed()){
 	            StopMoveRotate();
 	            return; 
 	        }
+	        if(KeyMousePenInput.isKey_alt_pressed()){ return; }//probably already doing Dolly zoom.
+	        if(KeyMousePenInput.isKey_Shift_pressed()){ return; }//possibly resizing the paint-brush via Shift+RightMouseButton
+	        if(KeyMousePenInput.isKey_CtrlOrCommand_pressed()){ return; }
+
 	        Move();
 	        Rotate();
 	        CameraOrbit_ClickPivot.instance.ForceInFrontOfCamera();
