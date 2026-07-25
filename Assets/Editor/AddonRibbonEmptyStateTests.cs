@@ -27,6 +27,15 @@ public sealed class AddonRibbonEmptyStateTests {
 	}
 
 	[Test]
+	public void AddonUiMgr_NativeFallbackSupportsForceSeed() {
+		var method = typeof(AddonUI_MGR).GetMethod(
+			"EnsureNativeFallbackUiWhenPythonMissing",
+			BindingFlags.Instance | BindingFlags.Public);
+		Assert.That(method, Is.Not.Null);
+		Assert.That(method.GetParameters().Length, Is.EqualTo(2), "addonId + force must exist so load-fail can seed while HTTP PID is still alive.");
+	}
+
+	[Test]
 	public void AddonMgr_SharedReadyPollUsesActiveFlagField() {
 		var field = typeof(Addon_MGR).GetField(
 			"_sharedAddonReadyPollActive",
