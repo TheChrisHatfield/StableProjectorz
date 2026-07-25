@@ -58,5 +58,12 @@ namespace spz {
 			if (clearRequester == null || currentOwner == null) { return false; }
 			return ReferenceEquals(currentOwner, clearRequester);
 		}
+
+		/// <summary>
+		/// MMB on a mesh under the owning column should pan (single-asset feel), not steal the
+		/// POV digit even when the cursor is inside the pin grab radius. Pin drag only when the
+		/// cursor is near the pin and NOT over a mesh.
+		/// </summary>
+		public static bool MmbShouldPreferPanOverPinGrab(bool cursorOverMesh) => cursorOverMesh;
 	}
 }

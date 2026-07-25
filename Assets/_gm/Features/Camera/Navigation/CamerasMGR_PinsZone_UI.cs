@@ -83,9 +83,35 @@ namespace spz {
 	        if (lmb && dim == DimensionMode.dim_gen_3d) { return false; }
 	        if (lmb && dim == DimensionMode.dim_sd && !isMultiViewEditing) { return false; }
 
+	        // POV digits sit on assets in multi-view; MMB on the mesh must pan like single-view, not steal the pin.
+	        if (MultiviewPinLayoutRules.MmbShouldPreferPanOverPinGrab(IsCursorOverMeshForMmbPanPriority())) {
+		        return false;
+	        }
+
 	        int nearestPinIx = FindNearestPin();
 	        if (nearestPinIx < 0) { return false; }
 	        return IsCursorWithinMmbGrabRadiusToPin(nearestPinIx);
+	    }
+
+	    /// <summary>
+	    /// Cursor over geometry in the owning column (ray or ID buffer). Used so MMB-on-asset pans
+	    /// instead of grabbing the POV digit parked on that mesh.
+	    /// </summary>
+	    bool IsCursorOverMeshForMmbPanPriority() {
+		    if (UserCameras_MGR.instance == null || MainViewport_UI.instance == null) { return false; }
+		    View_UserCamera cam = UserCameras_MGR.instance.NearestToCursor();
+		    if (cam != null
+		        && ClickSelect_Meshes_MGR.TryRaycastSelectedMeshUnderMainViewport(cam, out var sel, out _)
+		        && sel != null) {
+			    return true;
+		    }
+		    // ID buffer is camera-independent and matches what the user sees under the cursor.
+		    if (ModelsHandler_3D.instance == null) { return false; }
+		    ushort id = ClickSelect_Meshes_MGR.SampleMeshIdAtViewport01_static(
+			    MainViewport_UI.instance.cursorMainViewportPos01);
+		    if (id == 0) { return false; }
+		    var m = ModelsHandler_3D.instance.getMesh_byUniqueID(id);
+		    return m != null && m._isVisible;
 	    }
 
 	    bool IsCursorWithinMmbGrabRadiusToPin(int pinIx) {
@@ -229,6 +255,11 @@ namespace spz {
 	        if(isLMBpressed && is_dimension_sd && !isMultiViewEditing){ return; }
 	        if(is_dimension_uv){ return; }//no draggnig of pins during inspection of UV.
 	        if (KeyMousePenInput.isMMBpressedThisFrame() && !IsCursorWithinMmbGrabRadiusToPin(nearestPinIx)) { return; }
+	        // Same rule as MmbDownWouldGrabNearestPin: MMB on the asset pans; pin only off-mesh / near digit.
+	        if (KeyMousePenInput.isMMBpressedThisFrame()
+	            && MultiviewPinLayoutRules.MmbShouldPreferPanOverPinGrab(IsCursorOverMeshForMmbPanPriority())) {
+		        return;
+	        }
 
 	        OnPinGrabbed(nearestPinIx, isMMBpressed);
 	    }
