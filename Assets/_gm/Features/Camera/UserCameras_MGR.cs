@@ -162,20 +162,27 @@ namespace spz {
 	        => _viewCameras[ix].cameraFocus.Focus_Selection_maybe(forceTheFocus:true);
 	    // While MMB/RMB/Alt+LMB navigation is held, keep routing to the camera that owned the press
 	    // so a drifting cursor (or offset POV digit) cannot steal the drag mid-gesture.
+	    // Owner-scoped: only the locker may clear (Orbit/Dolly stop must not wipe Move/Pan locks).
 	    int _navLockedCameraIx = -1;
+	    object _navLockOwner;
 
 	    /// <summary>
-	    /// Lock navigation ownership to <paramref name="cameraIndex"/> until <see cref="ClearNavigationCameraLock"/>
-	    /// (call on press of orbit/pan/dolly/fly; clear on release).
+	    /// Lock navigation ownership to <paramref name="cameraIndex"/> until
+	    /// <see cref="ClearNavigationCameraLock"/> with the same <paramref name="owner"/>.
 	    /// </summary>
-	    public void LockNavigationCamera(int cameraIndex) {
+	    public void LockNavigationCamera(int cameraIndex, object owner) {
+		    if (owner == null) { return; }
 		    if (cameraIndex < 0 || cameraIndex >= _viewCameras.Count) { return; }
 		    if (_viewCameras[cameraIndex] == null || !_viewCameras[cameraIndex].gameObject.activeInHierarchy) { return; }
 		    _navLockedCameraIx = cameraIndex;
+		    _navLockOwner = owner;
 	    }
 
-	    public void ClearNavigationCameraLock() {
+	    /// <summary>Clears the sticky nav lock only if <paramref name="owner"/> is the current locker.</summary>
+	    public void ClearNavigationCameraLock(object owner) {
+		    if (owner == null || _navLockOwner != owner) { return; }
 		    _navLockedCameraIx = -1;
+		    _navLockOwner = null;
 	    }
 
 	    public bool HasNavigationCameraLock => _navLockedCameraIx >= 0;

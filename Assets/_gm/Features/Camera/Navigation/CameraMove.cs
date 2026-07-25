@@ -39,14 +39,14 @@ namespace spz {
 	        if(pressedThisFrame && hovering && navAllowed){
 	            _currentMover = this;
 	            if (UserCameras_MGR.instance != null) {
-		            UserCameras_MGR.instance.LockNavigationCamera(UserCameras_MGR.instance.ix_specificViewCam(_cam));
+		            UserCameras_MGR.instance.LockNavigationCamera(UserCameras_MGR.instance.ix_specificViewCam(_cam), this);
 	            }
 	        }
 	    }
 
 	    void StopMoveRotate(){
 	        if (_currentMover == this && UserCameras_MGR.instance != null) {
-		        UserCameras_MGR.instance.ClearNavigationCameraLock();
+		        UserCameras_MGR.instance.ClearNavigationCameraLock(this);
 	        }
 	        _currentMover =  _currentMover==this?  null : _currentMover;
 	    }

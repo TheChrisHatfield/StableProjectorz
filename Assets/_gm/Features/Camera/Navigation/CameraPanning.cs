@@ -58,7 +58,7 @@ namespace spz {
 	            _haveBeenPanningFor = 0;
 	            _lockedPanDistance = ResolvePanDistanceScale();
 	            _haveLockedPanDistance = true;
-	            UserCameras_MGR.instance.LockNavigationCamera(UserCameras_MGR.instance.ix_specificViewCam(_myViewCam));
+	            UserCameras_MGR.instance.LockNavigationCamera(UserCameras_MGR.instance.ix_specificViewCam(_myViewCam), this);
 	            _havePanAnchorWorld = ModelsHandler_3D.instance != null
 	                && ModelsHandler_3D.instance.TryGetNavigationReferenceWorldPoint(_myViewCam, out _panAnchorWorld);
 	        }
@@ -83,7 +83,7 @@ namespace spz {
 
 	    void EndPanDrag(){
 	        if (_theCurrentlyPanning == this && UserCameras_MGR.instance != null) {
-		        UserCameras_MGR.instance.ClearNavigationCameraLock();
+		        UserCameras_MGR.instance.ClearNavigationCameraLock(this);
 	        }
 	        _theCurrentlyPanning = null;
 	        _haveBeenPanningFor = 0;

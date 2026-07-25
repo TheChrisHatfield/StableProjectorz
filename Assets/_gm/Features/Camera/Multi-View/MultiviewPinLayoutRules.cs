@@ -52,5 +52,11 @@ namespace spz {
 			}
 			return best;
 		}
+
+		/// <summary>Owner-scoped sticky nav lock: only the locker may clear.</summary>
+		public static bool NavLockClearShouldApply(object currentOwner, object clearRequester) {
+			if (clearRequester == null || currentOwner == null) { return false; }
+			return ReferenceEquals(currentOwner, clearRequester);
+		}
 	}
 }
