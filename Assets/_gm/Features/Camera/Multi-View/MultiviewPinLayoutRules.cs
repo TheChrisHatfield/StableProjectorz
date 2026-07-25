@@ -67,9 +67,12 @@ namespace spz {
 		public static bool MmbShouldPreferPanOverPinGrab(bool cursorOverMesh) => cursorOverMesh;
 
 		/// <summary>
-		/// Live perspective-center updates during MMB pan compound with camera Translate and break
-		/// standard-mode cursor tracking. Snap pin once on release instead.
+		/// Live perspective-center / projection updates during MMB pan compound with camera Translate
+		/// and break standard-mode cursor tracking. Track pin *UI* every frame; commit projection on release.
 		/// </summary>
 		public static bool MmbPanShouldUpdatePerspectiveCenterEveryFrame() => false;
+
+		/// <summary>POV digit UI should follow the panned asset every frame (without frustum changes).</summary>
+		public static bool MmbPanShouldTrackPinUiEveryFrame() => true;
 	}
 }

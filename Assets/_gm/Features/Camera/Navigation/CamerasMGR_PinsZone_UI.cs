@@ -55,12 +55,19 @@ namespace spz {
 		    if (UserCameras_MGR.instance == null) { return; }
 		    var povInfos = UserCameras_MGR.instance.get_viewCams_PovInfos();
 		    if (povInfos == null || cameraIndex >= povInfos.Count) { return; }
-		    CameraPovInfo inf = povInfos[cameraIndex];
+		    RepositionPinUIToPerspectiveCenter01(cameraIndex, povInfos[cameraIndex].perspectiveCenter01);
+	    }
+
+	    /// <summary>
+	    /// Move pin UI only (no projection change). Used while MMB-panning so the digit tracks the
+	    /// asset without shifting the frustum mid-drag.
+	    /// </summary>
+	    public void RepositionPinUIToPerspectiveCenter01(int cameraIndex, Vector2 perspectiveCenter01) {
+		    if (_cameraPins == null || cameraIndex < 0 || cameraIndex >= _cameraPins.Count) { return; }
 		    RectTransform pinRectTr = _cameraPins[cameraIndex].transform as RectTransform;
 		    if (pinRectTr == null) { return; }
-		    Vector2 center01 = inf.perspectiveCenter01;
-		    pinRectTr.anchorMin = center01;
-		    pinRectTr.anchorMax = center01;
+		    pinRectTr.anchorMin = perspectiveCenter01;
+		    pinRectTr.anchorMax = perspectiveCenter01;
 		    pinRectTr.anchoredPosition = Vector2.zero;
 	    }
 
@@ -218,7 +225,11 @@ namespace spz {
 	        List<CameraPovInfo> povInfos = UserCameras_MGR.instance?.get_viewCams_PovInfos();
 	        if(povInfos==null){ return; }//scenes are probably loading.
 
+	        // While MMB pan tracks the digit in UI-only mode, do not reset that pin from stale POV data.
+	        int panningCamIx = CameraPanning.PanningViewCameraIndex;
+
 	        for(int i=0; i<povInfos.Count; ++i){
+	            if (i == panningCamIx) { continue; }
 	            CameraPovInfo inf = povInfos[i];
 	            RectTransform pinRectTr =  _cameraPins[i].transform as RectTransform;
 	            Vector2 center01    = inf.perspectiveCenter01;

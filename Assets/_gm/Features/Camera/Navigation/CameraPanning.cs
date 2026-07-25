@@ -13,6 +13,14 @@ namespace spz {
 
 	    public static float _haveBeenPanningFor = 0; //0 if not panning, else keeps increasing every frame.
 
+	    /// <summary>Camera index currently MMB-panning, or -1. PinsZone skips POV reset for this pin so the digit can track the asset in UI-only mode.</summary>
+	    public static int PanningViewCameraIndex {
+		    get {
+			    if (_theCurrentlyPanning == null || UserCameras_MGR.instance == null) { return -1; }
+			    return UserCameras_MGR.instance.ix_specificViewCam(_theCurrentlyPanning._myViewCam);
+		    }
+	    }
+
 	    // Lock distance for one drag so pan scale stays stable (same idea as standard/single-view).
 	    float _lockedPanDistance = 0f;
 	    bool _haveLockedPanDistance = false;
@@ -126,13 +134,31 @@ namespace spz {
 	        // live perspective-center updates compounded with Translate and made multi-view
 	        // MMB feel offset vs single-asset standard mode.
 	        transform.Translate(moveInput, Space.Self);
+	        // Digit UI only: follow the asset on screen while the frustum stays fixed until release.
+	        TrackPovPinUiToPanAnchor_WhenMultiview();
 	    }
 
 	    /// <summary>
-	    /// One-shot after MMB release: park the POV digit on the pan-start world point.
-	    /// ROLLBACK NOTE: prior code called this every pan frame (LockPovNumber…); that was the
-	    /// multi-view vs standard offset. Re-enable only the per-frame path if digit drift mid-pan
-	    /// is preferred over cursor-matched pan feel.
+	    /// Moves the POV number UI with the panned asset without changing perspective-center /
+	    /// projection (keeps pan feel). Projection is committed in <see cref="SnapPovPinToPanAnchor_WhenMultiview"/>.
+	    /// </summary>
+	    void TrackPovPinUiToPanAnchor_WhenMultiview() {
+		    if (UserCameras_MGR.instance == null) { return; }
+		    if (UserCameras_MGR.instance.numActiveViewCameras() <= 1) { return; }
+		    if (!_havePanAnchorWorld) { return; }
+		    int camIx = UserCameras_MGR.instance.ix_specificViewCam(_myViewCam);
+		    if (camIx < 0 || _myViewCam.myCamera == null) { return; }
+		    Vector3 vp = _myViewCam.WorldToViewportPoint_RenderMatched(_panAnchorWorld);
+		    if (vp.z < 0f) { return; }
+		    Vector2 p01 = _myViewCam.CameraFrame01_to_PerspectiveCenter01(new Vector2(vp.x, vp.y));
+		    p01.x = Mathf.Clamp01(p01.x);
+		    p01.y = Mathf.Clamp01(p01.y);
+		    CamerasMGR_PinsZone_UI.instance?.RepositionPinUIToPerspectiveCenter01(camIx, p01);
+	    }
+
+	    /// <summary>
+	    /// One-shot after MMB release: commit perspective-center so the digit stays on the asset
+	    /// after UI-only tracking ends. Must not run every pan frame (breaks standard pan feel).
 	    /// </summary>
 	    void SnapPovPinToPanAnchor_WhenMultiview() {
 		    if (UserCameras_MGR.instance == null || MainViewport_UI.instance == null) { return; }
