@@ -560,8 +560,14 @@ namespace spz {
 		/// <summary>
 		/// When Python HTTP never runs create_panel, seed a minimal in-process panel for known add-ons so the ribbon tab is not blank.
 		/// </summary>
-		public void EnsureNativeFallbackUiWhenPythonMissing(string addonId) {
+		/// <summary>
+		/// When Python HTTP never runs create_panel, seed a minimal in-process panel for known add-ons so the ribbon tab is not blank.
+		/// </summary>
+		/// <param name="force">True from MarkAddonLoadFailed — seed even while the launcher PID is still alive.</param>
+		public void EnsureNativeFallbackUiWhenPythonMissing(string addonId, bool force = false) {
 			if (string.IsNullOrEmpty(addonId) || !Addon_MGR.IsAddonEnabledStatic(addonId))
+				return;
+			if (!force && !Addon_MGR.ShouldSeedNativeAddonFallbackStatic())
 				return;
 			if (string.Equals(addonId, StableProjectorzGoAddonId, StringComparison.Ordinal)) {
 				EnsureNativeSpzGoPanel();

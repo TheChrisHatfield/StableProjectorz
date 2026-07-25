@@ -1294,7 +1294,7 @@ namespace spz {
 					$"[Addon_MGR] Python load failed for {addonId}, but keeping enabled — seeding native ribbon UI (HTTP :{_httpServerPort} unavailable).");
 				EnsureRibbonShellForEnabledAddon(addonId);
 				if (AddonUI_MGR.instance != null)
-					AddonUI_MGR.instance.EnsureNativeFallbackUiWhenPythonMissing(addonId);
+					AddonUI_MGR.instance.EnsureNativeFallbackUiWhenPythonMissing(addonId, force: true);
 				return;
 			}
 			addon.isEnabled = false;
@@ -1316,6 +1316,28 @@ namespace spz {
 				return false;
 			return string.Equals(addonId, StableProjectorzGoAddonId, StringComparison.Ordinal)
 			       || string.Equals(addonId, NomadThemeAddonId, StringComparison.Ordinal);
+		}
+
+		/// <summary>
+		/// True when native SPZ GO/Nomad UI should be seeded. False while HTTP is up and /ready succeeded
+		/// (or still starting) so we do not flash incomplete native panels before Python create_panel.
+		/// </summary>
+		public bool ShouldSeedNativeAddonFallback() {
+			if (!_enableHttpServer)
+				return true;
+			if (TryReadAddonHttpFailMarker(out _))
+				return true;
+			if (_sharedAddonReadyKnownOk)
+				return false;
+			// Launcher running / mid /ready — wait for Python or MarkAddonLoadFailed.
+			if (_isServerRunning)
+				return false;
+			return true;
+		}
+
+		/// <summary>Static gate for ribbon activate / UI_MGR when instance may be null (seed if unsure).</summary>
+		public static bool ShouldSeedNativeAddonFallbackStatic() {
+			return instance == null || instance.ShouldSeedNativeAddonFallback();
 		}
 
 		/// <summary>StreamingAssets add-on id for on-screen full view ribbon dock (matches folder name and Python <c>ADDON_ID</c>).</summary>
@@ -1572,9 +1594,9 @@ namespace spz {
 			if (shell == null)
 				return false;
 			UnityEngine.Debug.Log($"[Addon_MGR] Ribbon tab ready for enabled add-on: {addonId} ({title})");
-			// Seed native widgets as soon as the shell exists so SPZ GO/Nomad are not blank while /ready polls.
-			if (SupportsNativeUiWithoutPython(addonId) && AddonUI_MGR.instance != null)
-				AddonUI_MGR.instance.EnsureNativeFallbackUiWhenPythonMissing(addonId);
+			// Do not seed native SPZ GO/Nomad here — when HTTP is up, Python create_panel arrives
+			// immediately and ClearAddonPanelChildren wipes the native seed (flash). Native seed runs
+			// from MarkAddonLoadFailed / tab activate only when ShouldSeedNativeAddonFallback().
 			return true;
 		}
 
