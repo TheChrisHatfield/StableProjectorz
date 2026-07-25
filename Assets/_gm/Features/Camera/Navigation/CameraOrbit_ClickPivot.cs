@@ -33,11 +33,15 @@ namespace spz {
 	    }
     
 	    public void ForceInFrontOfCamera(){
+	        ForceInFrontOfCamera(UserCameras_MGR.instance._curr_viewCamera);
+	    }
+
+	    // Multi-view fly (RMB Move) uses NearestToCursor, not _curr_viewCamera. Keep the pivot
+	    // in front of the camera that is actually translating/rotating.
+	    public void ForceInFrontOfCamera(View_UserCamera viewCam){
 	        _keepRecentering = false;
-	        // ROLLBACK NOTE: reverted to OG (_curr_viewCamera). Click-pivot is gated off in multi-view
-	        // (see RecenterOntoPivot_maybe: _isEditingMode==false disables recenter), so per-cursor camera
-	        // resolution here is not needed and would just couple unrelated logic to NearestToCursor.
-	        Transform camTransf = UserCameras_MGR.instance._curr_viewCamera.myCamera.transform;
+	        if(viewCam == null || viewCam.myCamera == null){ return; }
+	        Transform camTransf = viewCam.myCamera.transform;
 	        float distance      = (transform.position - camTransf.position).magnitude;
 	        transform.position  = camTransf.position + camTransf.forward*distance;
 	        _ignoreBlinkColor_requests = true;//moved camera, conceal coordinate until MMB is clicked again.
