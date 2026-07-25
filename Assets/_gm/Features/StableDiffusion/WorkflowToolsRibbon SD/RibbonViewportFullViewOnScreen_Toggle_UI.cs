@@ -57,6 +57,10 @@ namespace spz {
 				&& string.Equals(a.Label ?? string.Empty, b.Label ?? string.Empty, StringComparison.Ordinal);
 		}
 
+		static bool SpecsSameCommand(in RibbonDock_ButtonSpec a, in RibbonDock_ButtonSpec b) {
+			return string.Equals(a.CommandId, b.CommandId, StringComparison.Ordinal);
+		}
+
 		public static void EnsureCreated(SD_WorkflowOptionsRibbon_UI host, RibbonDock_ButtonSpec spec) {
 			if (host == null) {
 				return;
@@ -126,7 +130,7 @@ namespace spz {
 			}
 			var c = go.GetComponent<RibbonViewportFullViewOnScreen_Toggle_UI>();
 			bool createdNow = false;
-			bool specChanged = false;
+			bool commandChanged = false;
 			if (c == null) {
 				createdNow = true;
 				int gid = go.GetInstanceID();
@@ -138,7 +142,7 @@ namespace spz {
 					PendingDockSpecs.Remove(gid);
 				}
 			} else {
-				specChanged = !SpecsEqual(c._spec, spec);
+				commandChanged = !SpecsSameCommand(c._spec, spec);
 				c.ApplySpec(spec);
 			}
 			// AddComponent can throw (e.g. game object being destroyed); do not dereference a still-null c.
@@ -149,8 +153,14 @@ namespace spz {
 			bool spacerDestroyed = c._spacerRowRt == null || c._spacerRowRt.gameObject == null;
 			// Do NOT treat !activeInHierarchy as missing — Gen Art / cancel / layout churn hides the row
 			// briefly; NotifyAttachRequested would TearDownBuiltDock and the button stays gone.
-			if (createdNow || specChanged) {
-				c.NotifyAttachRequested();
+			if (createdNow) {
+				// Awake already started CoBuildWhenGenArtReady. NotifyAttachRequested would TearDown → flash.
+				if (!c._built && c._buildRoutine == null)
+					c.NudgeOrRebuildWithoutTear();
+			} else if (commandChanged) {
+				// ApplySpec already tore; ensure a build starts.
+				if (!c._built && c._buildRoutine == null)
+					c.NudgeOrRebuildWithoutTear();
 			} else if (!c._built) {
 				// Addon_MGR polls attach every frame while waiting for Gen Art. Do not TearDownBuiltDock
 				// while CoBuildWhenGenArtReady is already running — that aborted the wait forever.
@@ -163,6 +173,18 @@ namespace spz {
 				c.NudgeOrRebuildWithoutTear();
 			}
 			return true;
+		}
+
+		/// <summary>True when a dock row exists (active or not) or a build is still running — stop re-attach thrash.</summary>
+		public static bool IsAnyDockBuiltOrBuilding() {
+			PruneRegisteredInstances();
+			for (int i = 0; i < RegisteredInstances.Count; i++) {
+				var c = RegisteredInstances[i];
+				if (c == null) continue;
+				if (c._buildRoutine != null) return true;
+				if (c._built && c._builtRowRt != null && c._builtRowRt.gameObject != null) return true;
+			}
+			return false;
 		}
 
 		/// <summary>True if any instance finished layout with an active row (for <see cref="Addon_MGR"/>; RPC can return before async build completes).</summary>
@@ -256,13 +278,25 @@ namespace spz {
 		}
 
 		public void ApplySpec(RibbonDock_ButtonSpec spec) {
-			bool specChanged =
-				!string.Equals(_spec.CommandId, spec.CommandId, StringComparison.Ordinal)
-				|| !string.Equals(_spec.Label ?? string.Empty, spec.Label ?? string.Empty, StringComparison.Ordinal);
-			if (specChanged) {
+			bool commandChanged = !string.Equals(_spec.CommandId, spec.CommandId, StringComparison.Ordinal);
+			bool labelChanged = !string.Equals(_spec.Label ?? string.Empty, spec.Label ?? string.Empty, StringComparison.Ordinal);
+			// Label text on the face is hardcoded FULL/SRN; tearing on label-only (Unity FULL\nSCREEN vs Python FULL\nSRN)
+			// caused the dock to appear then flash away when enable + HTTP register both attached.
+			if (commandChanged) {
 				TearDownBuiltDock();
 			}
 			_spec = spec;
+			if (!commandChanged && labelChanged && _built) {
+				TryRefreshBuiltLabelText();
+			}
+		}
+
+		void TryRefreshBuiltLabelText() {
+			if (_builtRowRt == null) return;
+			var face = _builtRowRt.Find("DockButtonFace") as RectTransform;
+			var tmp = face != null ? face.GetComponentInChildren<TextMeshProUGUI>(true) : null;
+			if (tmp == null) return;
+			ApplyFullSrnLabelStyle(tmp, null, tmp.rectTransform);
 		}
 
 		/// <summary>Stops wait/build, removes dock row(s), restores Gen Art anchors. Called on every <see cref="NotifyAttachRequested"/>, <see cref="ApplySpec"/> when spec changes, and <see cref="OnDestroy"/>.</summary>
