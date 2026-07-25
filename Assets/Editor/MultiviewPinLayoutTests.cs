@@ -63,4 +63,10 @@ public sealed class MultiviewPinLayoutTests {
 		Assert.That(MultiviewPinLayoutRules.MmbShouldPreferPanOverPinGrab(cursorOverMesh: true), Is.True);
 		Assert.That(MultiviewPinLayoutRules.MmbShouldPreferPanOverPinGrab(cursorOverMesh: false), Is.False);
 	}
+
+	[Test]
+	public void MmbPanDoesNotLiveUpdatePerspectiveCenter() {
+		// Documents CameraPanning: translate-only during drag (standard/single-asset feel).
+		Assert.That(MultiviewPinLayoutRules.MmbPanShouldUpdatePerspectiveCenterEveryFrame(), Is.False);
+	}
 }

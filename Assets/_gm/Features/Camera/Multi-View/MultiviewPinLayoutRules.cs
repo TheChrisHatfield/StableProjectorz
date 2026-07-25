@@ -65,5 +65,11 @@ namespace spz {
 		/// cursor is near the pin and NOT over a mesh.
 		/// </summary>
 		public static bool MmbShouldPreferPanOverPinGrab(bool cursorOverMesh) => cursorOverMesh;
+
+		/// <summary>
+		/// Live perspective-center updates during MMB pan compound with camera Translate and break
+		/// standard-mode cursor tracking. Snap pin once on release instead.
+		/// </summary>
+		public static bool MmbPanShouldUpdatePerspectiveCenterEveryFrame() => false;
 	}
 }
