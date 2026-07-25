@@ -129,7 +129,14 @@ namespace spz {
 
 	    void OnDestroy()
 	    {
+	        _allowZoom = false;
+	        _isZooming = false;
 	        Update_callbacks_MGR.navigation -= OnUpdate;
+	    }
+
+	    void OnDisable(){
+	        _allowZoom = false;
+	        _isZooming = false;
 	    }
 
 

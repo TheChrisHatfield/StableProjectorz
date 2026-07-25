@@ -211,7 +211,13 @@ namespace spz {
 	    }
 
 	    void OnDestroy(){
+	        StopOrbit_ifWas();
 	        Update_callbacks_MGR.navigation -= OnUpdate;
+	    }
+
+	    void OnDisable(){
+	        // Multi-view can deactivate this camera mid Alt+LMB orbit; clear sticky orbit + nav lock.
+	        StopOrbit_ifWas();
 	    }
 
 	}

@@ -180,7 +180,13 @@ namespace spz {
 	    }
 
 	    void OnDestroy(){
+	        EndPanDrag();
 	        Update_callbacks_MGR.navigation -= OnUpdate;
+	    }
+
+	    void OnDisable(){
+	        // Multi-view can deactivate this camera mid-MMB-pan; clear panner + sticky nav lock.
+	        EndPanDrag();
 	    }
 	}
 }//end namespace
