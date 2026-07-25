@@ -148,6 +148,13 @@ namespace spz {
 	        _cameraPins.ForEach( p=>p.transform.SetParent(_noEditMode_enabledGO, worldPositionStays:true) );
 	    }
 
+	    void OnApplicationFocus(bool focus){
+	        // Mid-pin-drag + file dialog / alt-tab left IsDraggingViewPin + sticky nav lock held,
+	        // which blocked CameraPanning from taking MMB until an explicit DropPin ran.
+	        if (_draggedPin == null) { return; }
+	        OnPinDropped(isLeftMouseButton: false);
+	    }
+
 
 	    void Update(){
 	        ResizeSelf_to_InnerViewport();
