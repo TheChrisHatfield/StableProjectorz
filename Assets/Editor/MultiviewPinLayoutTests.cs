@@ -96,4 +96,9 @@ public sealed class MultiviewPinLayoutTests {
 		Assert.That(MultiviewPinLayoutRules.PovDigitLocksToSelectedMeshCenter(), Is.True);
 		Assert.That(MultiviewPinLayoutRules.SoleSelectionLocksAllActivePins(), Is.True);
 	}
+
+	[Test]
+	public void NavOwnershipPrefersMeshUnderCursor() {
+		Assert.That(MultiviewPinLayoutRules.NavOwnershipPrefersMeshUnderCursor(), Is.True);
+	}
 }

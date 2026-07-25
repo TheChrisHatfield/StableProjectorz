@@ -102,5 +102,11 @@ namespace spz {
 
 		/// <summary>Sole selection: lock every active multi-view column to that one mesh.</summary>
 		public static bool SoleSelectionLocksAllActivePins() => true;
+
+		/// <summary>
+		/// When a mesh is under the cursor, navigation ownership must follow that mesh (pin-lock /
+		/// ray hit), not raw perspective-center Voronoi — digits at feet made "hover 4, pan 2".
+		/// </summary>
+		public static bool NavOwnershipPrefersMeshUnderCursor() => true;
 	}
 }

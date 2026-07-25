@@ -47,6 +47,102 @@ namespace spz {
 		    return cameraIndex >= 0 && cameraIndex < _pinLockedToMesh.Length && _pinLockedToMesh[cameraIndex] != null;
 	    }
 
+	    /// <summary>Mesh the POV digit for <paramref name="cameraIndex"/> is locked to, or null.</summary>
+	    public SD_3D_Mesh GetPinLockedMesh(int cameraIndex) {
+		    EnsurePinLockArray();
+		    if (cameraIndex < 0 || cameraIndex >= _pinLockedToMesh.Length) { return null; }
+		    return _pinLockedToMesh[cameraIndex];
+	    }
+
+	    /// <summary>
+	    /// Multi-view column ownership from what is under the cursor (mesh ID / lock / owning-cam ray),
+	    /// not raw pin Voronoi. Pin centers can sit at mesh feet while the cursor is on the torso —
+	    /// Voronoi then wrongly handed MMB to a neighbor (hover 4, pan 2).
+	    /// Returns -1 if unresolved.
+	    /// </summary>
+	    public int FindViewCameraIndex_UnderCursorMesh() {
+		    if (UserCameras_MGR.instance == null || MainViewport_UI.instance == null) { return -1; }
+		    if (UserCameras_MGR.instance.numActiveViewCameras() <= 1) { return -1; }
+		    if (ModelsHandler_3D.instance == null) { return -1; }
+
+		    Vector2 uv = MainViewport_UI.instance.cursorMainViewportPos01;
+		    ushort id = ClickSelect_Meshes_MGR.SampleMeshIdAtViewport01_static(uv);
+		    if (id == 0) {
+			    id = ClickSelect_Meshes_MGR.SampleDominantMeshIdNearViewport01(uv, searchRadiusPx: 1);
+		    }
+		    if (id == 0) { return -1; }
+		    SD_3D_Mesh mesh = ModelsHandler_3D.instance.getMesh_byUniqueID(id);
+		    if (mesh == null) { return -1; }
+
+		    EnsurePinLockArray();
+		    // 1) Prefer the column whose digit is locked to this mesh (multi-select assignment).
+		    int lockedMatch = -1;
+		    int lockedMatches = 0;
+		    for (int i = 0; i < _pinLockedToMesh.Length; ++i) {
+			    if (_pinLockedToMesh[i] != mesh) { continue; }
+			    var vc = UserCameras_MGR.instance.GetViewCamera(i);
+			    if (vc == null || !vc.gameObject.activeInHierarchy) { continue; }
+			    lockedMatch = i;
+			    lockedMatches++;
+		    }
+		    if (lockedMatches == 1) { return lockedMatch; }
+		    if (lockedMatches > 1) {
+			    return FindNearestAmongCameraIndices_ByPerspectiveCenters(CollectActiveIndicesLockedTo(mesh));
+		    }
+
+		    // 2) Among active cameras, which one's render-matched ray hits THIS mesh under the cursor.
+		    int mask = LayerMask.GetMask("Geometry");
+		    var hitters = new List<int>(8);
+		    int n = UserCameras_MGR.instance.GetViewCameraCount();
+		    for (int i = 0; i < n; ++i) {
+			    var vc = UserCameras_MGR.instance.GetViewCamera(i);
+			    if (vc == null || !vc.gameObject.activeInHierarchy) { continue; }
+			    var ray = vc.ViewportPointToRay_RenderMatched(uv);
+			    if (!Physics.Raycast(ray, out RaycastHit hh, 1e5f, mask, QueryTriggerInteraction.Ignore)) { continue; }
+			    var hitMesh = hh.collider != null ? hh.collider.GetComponent<SD_3D_Mesh>() : null;
+			    if (hitMesh != mesh) { continue; }
+			    hitters.Add(i);
+		    }
+		    if (hitters.Count == 1) { return hitters[0]; }
+		    if (hitters.Count > 1) {
+			    return FindNearestAmongCameraIndices_ByPerspectiveCenters(hitters);
+		    }
+		    return -1;
+	    }
+
+	    List<int> CollectActiveIndicesLockedTo(SD_3D_Mesh mesh) {
+		    var list = new List<int>(8);
+		    EnsurePinLockArray();
+		    for (int i = 0; i < _pinLockedToMesh.Length; ++i) {
+			    if (_pinLockedToMesh[i] != mesh) { continue; }
+			    var vc = UserCameras_MGR.instance?.GetViewCamera(i);
+			    if (vc == null || !vc.gameObject.activeInHierarchy) { continue; }
+			    list.Add(i);
+		    }
+		    return list;
+	    }
+
+	    int FindNearestAmongCameraIndices_ByPerspectiveCenters(List<int> indices) {
+		    if (indices == null || indices.Count == 0 || MainViewport_UI.instance == null) { return -1; }
+		    if (indices.Count == 1) { return indices[0]; }
+		    Vector2 cursor01 = MainViewport_UI.instance.cursorInnerViewportPos01;
+		    int best = -1;
+		    float bestSqr = float.MaxValue;
+		    for (int k = 0; k < indices.Count; ++k) {
+			    int i = indices[k];
+			    var vc = UserCameras_MGR.instance.GetViewCamera(i);
+			    if (vc == null) { continue; }
+			    Vector2 c = vc._projectionMat_center;
+			    float dx = c.x - cursor01.x;
+			    float dy = c.y - cursor01.y;
+			    float sqr = dx * dx + dy * dy;
+			    if (sqr >= bestSqr) { continue; }
+			    bestSqr = sqr;
+			    best = i;
+		    }
+		    return best;
+	    }
+
 	    /// <summary>True while a camera pin is being moved (LMB or MMB drag).</summary>
 	    public bool IsDraggingViewPin => _draggedPin != null;
 
@@ -302,10 +398,16 @@ namespace spz {
 
 
 	    public int FindNearestPin(){
-	        // Multi-view: same column ownership as NearestToCursor (perspective-center Voronoi in
-	        // inner-viewport space). Screen-distance to pin GameObjects disagrees when POV digits
-	        // have drifted — MMB near a mesh could grab camera 2's pin while pan/orbit drove camera 1.
+	        // Prefer mesh-under-cursor ownership (same as NearestToCursor) so hovering figure 4
+	        // does not grab/pan camera 2 when digit 4 is far from the cursor (e.g. at the feet).
 	        if (UserCameras_MGR.instance != null && UserCameras_MGR.instance.numActiveViewCameras() > 1) {
+		        int meshIx = FindViewCameraIndex_UnderCursorMesh();
+		        if (meshIx >= 0 && _cameraPins != null && meshIx < _cameraPins.Count) {
+			        var pinGO = _cameraPins[meshIx];
+			        if (pinGO != null && pinGO.activeInHierarchy) {
+				        return meshIx;
+			        }
+		        }
 		        int voronoiIx = UserCameras_MGR.instance.FindNearestViewCameraIndex_ByPerspectiveCenters();
 		        if (voronoiIx >= 0 && _cameraPins != null && voronoiIx < _cameraPins.Count) {
 			        var pinGO = _cameraPins[voronoiIx];
