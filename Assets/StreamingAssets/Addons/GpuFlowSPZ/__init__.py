@@ -242,4 +242,10 @@ def register() -> None:
 
 def unregister() -> None:
     _save_settings()
+    # Dial-off must stop Adaptive/Fixed pacing — routes stay mounted for the process lifetime.
+    try:
+        _set_mode(0, announce=False)
+        print(f"[{ADDON_ID}] Mode forced Off on unregister (Unity SD/Gen3D hooks will no-op delays).")
+    except Exception as e:
+        print(f"[{ADDON_ID}] Could not force Off on unregister: {e}")
     print(f"[{ADDON_ID}] Unregistered")

@@ -28,6 +28,9 @@ namespace spz {
 			// During app shutdown, never block on pacing HTTP calls.
 			if (Addon_MGR.IsAddonApiShuttingDown())
 				yield break;
+			// Dial-off must skip HTTP — Python routes remain mounted after unregister if mode was left Adaptive.
+			if (!Addon_MGR.IsAddonEnabledStatic("GpuFlowSPZ"))
+				yield break;
 			// Match FastAPI PaceBody / Python pace clamp so we never send 422 or under-size the HTTP timeout.
 			int clampedMs = Mathf.Clamp(maxWaitMs, 50, 120000);
 			int port = Addon_MGR.instance != null ? Addon_MGR.instance.GetHttpServerPort() : 5557;
