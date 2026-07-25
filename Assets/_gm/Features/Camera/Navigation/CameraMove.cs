@@ -112,7 +112,14 @@ namespace spz {
 	    }
 
 	    void OnDestroy(){
+	        StopMoveRotate();
 	        Update_callbacks_MGR.navigation -= OnUpdate;
+	    }
+
+	    void OnDisable(){
+	        // Multi-view cam count can deactivate this GO mid-RMB-fly. Navigation callbacks still
+	        // fire (custom delegate), and a leftover _currentMover blocked every other column.
+	        StopMoveRotate();
 	    }
 
 	}
