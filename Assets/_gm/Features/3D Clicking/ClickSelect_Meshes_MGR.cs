@@ -114,10 +114,11 @@ namespace spz {
 			    return false;
 		    }
 
-		    // Fallback: NxN search ONLY when the center pixel is empty (cursor on a silhouette edge or
-		    // background). Smaller default radius (was 3, now 2) so we don't drag in pixels that span
-		    // a different mesh when zoomed close.
-		    ushort bestId = SampleDominantMeshIdNearViewport01(viewportUv01: uv, searchRadiusPx);
+		    // Fallback: nearest non-zero ID texel ONLY when the center pixel is empty (silhouette /
+		    // AA edge). Radius 1 in multi-view so a larger close neighbor cannot steal the pick.
+		    int edgeR = (UserCameras_MGR.instance != null && UserCameras_MGR.instance.numActiveViewCameras() > 1)
+			    ? 1 : searchRadiusPx;
+		    ushort bestId = SampleDominantMeshIdNearViewport01(viewportUv01: uv, edgeR);
 		    if (bestId == 0) { return false; }
 		    var m = ModelsHandler_3D.instance.getMesh_byUniqueID(bestId);
 		    if (m == null || !m._isSelected) { return false; }
@@ -126,10 +127,9 @@ namespace spz {
     }
 
     /// <summary>
-    /// Dominant non-zero mesh ID in a small window around the cursor texel of the composite ID buffer
-    /// (inverse-distance^4 weighted vote, i.e. effectively "nearest non-zero neighbor"). Returns 0 when
-    /// the whole window is empty. Shared by hover focus and click selection so both tolerate the 1-2 px
-    /// gap between the antialiased view render and the non-MSAA ID buffer footprint.
+    /// Non-zero mesh ID nearest the cursor texel (true nearest neighbor in a small window).
+    /// Prefer this over area-weighted voting when assets sit close — a larger neighbor used to
+    /// win the vote even when the cursor was on a thinner silhouette.
     /// </summary>
     public static ushort SampleDominantMeshIdNearViewport01(Vector2 viewportUv01, int searchRadiusPx) {
 		    if (UserCameras_MGR.instance == null || UserCameras_MGR.instance.camTextures == null) { return 0; }
@@ -155,30 +155,21 @@ namespace spz {
 		    tex.Apply();
 		    RenderTexture.active = prev;
 
-		    Dictionary<ushort, float> scoreById = new Dictionary<ushort, float>();
+		    ushort bestId = 0;
+		    float bestSqr = float.MaxValue;
 		    for (int yy = 0; yy < h; ++yy) {
 			    for (int xx = 0; xx < w; ++xx) {
 				    ushort id = SD_3D_Mesh_UniqueIDMaker.DecodeID_fromColor(tex.GetPixel(xx, yy));
 				    if (id == 0) { continue; }
 				    float dx = (x0 + xx) - cx;
 				    float dy = (y0 + yy) - cy;
-				    // Steeper inverse-distance falloff (^2) so far pixels barely contribute,
-				    // which keeps the fallback close to "nearest non-zero neighbor".
-				    float invD2 = 1f / (1f + dx*dx + dy*dy);
-				    float wPix = invD2 * invD2;
-				    scoreById.TryGetValue(id, out float prevScore);
-				    scoreById[id] = prevScore + wPix;
+				    float sqr = dx * dx + dy * dy;
+				    if (sqr >= bestSqr) { continue; }
+				    bestSqr = sqr;
+				    bestId = id;
 			    }
 		    }
 		    Destroy(tex);
-
-		    ushort bestId = 0;
-		    float bestScore = -1f;
-		    foreach (var kv in scoreById) {
-			    if (kv.Value <= bestScore) { continue; }
-			    bestScore = kv.Value;
-			    bestId = kv.Key;
-		    }
 		    return bestId;
     }
 
@@ -191,11 +182,9 @@ namespace spz {
     ///
     /// Priority: the camera whose PIN is nearest the cursor is tried FIRST and wins outright if it hits --
     /// that's the sub-view the user is visually working in (same ownership rule navigation uses, see
-    /// <see cref="UserCameras_MGR.NearestToCursor"/>). Only if it misses do the remaining cameras get a
-    /// vote, closest hit wins among them.
-    /// ROLLBACK NOTE: previously ALL cameras competed by raw hh.distance -- distances measured from
-    /// different camera origins are not comparable, so a far-away sub-view could steal the target from
-    /// the sub-view actually under the cursor ("overlap" mis-targeting in multi-view).
+    /// <see cref="UserCameras_MGR.NearestToCursor"/>). In multi-view, other cameras are NOT tried: the same
+    /// UV through a different pin shift hits a neighboring asset when figures sit close on screen.
+    /// Single-view may still fall through remaining cameras for robustness.
     /// </summary>
     public static bool TryRaycastSelectedMeshUnder_AnyActiveViewCamera(out SD_3D_Mesh meshOut, out Vector3 hitPointWorld) {
 		    return TryRaycastMeshUnder_AnyActiveViewCamera(requireSelected: true, out meshOut, out hitPointWorld);
@@ -214,8 +203,9 @@ namespace spz {
 		    if (UserCameras_MGR.instance == null || MainViewport_UI.instance == null) { return false; }
 		    Vector2 uv = MainViewport_UI.instance.cursorMainViewportPos01;
 		    int mask = LayerMask.GetMask("Geometry");
+		    bool isMultiView = UserCameras_MGR.instance.numActiveViewCameras() > 1;
 
-		    // Tier 1: the sub-view that "owns" the cursor (nearest pin).
+		    // Tier 1: the sub-view that "owns" the cursor (nearest pin / perspective-center Voronoi).
 		    View_UserCamera nearestCam = UserCameras_MGR.instance.NearestToCursor();
 		    if (TryRaycastMesh_throughCamera(nearestCam, uv, mask, requireSelected, out var nearestMesh, out var nearestPt)) {
 			    meshOut = nearestMesh;
@@ -223,7 +213,12 @@ namespace spz {
 			    return true;
 		    }
 
-		    // Tier 2: remaining active cameras; closest hit wins among them.
+		    // Tier 2 (single-view only): remaining cameras. Multi-view must not borrow other columns —
+		    // close-together assets were selected from the wrong figure via another cam's ray.
+		    if (!MultiviewPinLayoutRules.MeshPickMayUseOtherViewCameras(isMultiView)) {
+			    return false;
+		    }
+
 		    int n = UserCameras_MGR.instance.GetViewCameraCount();
 		    float bestDist = float.MaxValue;
 		    SD_3D_Mesh bestMesh = null;
@@ -441,21 +436,35 @@ namespace spz {
 	    void Click_maybe(){
 	        if(KeyMousePenInput.isLMBpressedThisFrame()){ 
 	            Vector2 viewportPos = MainViewport_UI.instance.cursorMainViewportPos01;
-	            //get the mesh-id that was encoded in a pixel of id-view-texture (full-viewport id RT):
+	            bool isMultiView = UserCameras_MGR.instance != null
+	                               && UserCameras_MGR.instance.numActiveViewCameras() > 1;
+	            // Exact texel under the cursor first — required when assets sit close in multi-view.
 	            ushort id = SampleMeshId(viewportPos);
-	            if (id == 0) {
-		            // Edge tolerance (same idea as hover focus): the ID buffer is rendered without MSAA,
-		            // so it is ~1px tighter than the antialiased view render -- and in multi-view each
-		            // sub-view object covers few pixels. Clicking the visible silhouette edge read id 0
-		            // and silently did nothing (felt like an offset / "doesn't always select"). Take the
-		            // nearest non-zero ID in a small window before giving up.
-		            id = SampleDominantMeshIdNearViewport01(viewportPos, searchRadiusPx: 2);
+	            SD_3D_Mesh mesh = id != 0 ? ModelsHandler_3D.instance.getMesh_byUniqueID(id) : null;
+
+	            // Owning-column ray before any edge window: window / other-cam fallbacks stole the
+	            // neighbor when silhouettes nearly touch (see multi-view close-asset pick).
+	            if (mesh == null && UserCameras_MGR.instance != null) {
+		            View_UserCamera own = UserCameras_MGR.instance.NearestToCursor();
+		            int mask = LayerMask.GetMask("Geometry");
+		            if (TryRaycastMesh_throughCamera(own, viewportPos, mask, requireSelected: false, out mesh, out _)
+		                && mesh != null) {
+			            // keep mesh
+		            } else {
+			            mesh = null;
+		            }
 	            }
-	            SD_3D_Mesh mesh = ModelsHandler_3D.instance.getMesh_byUniqueID(id);
+
 	            if (mesh == null) {
-		            // Final fallback: render-matched physics ray through the sub-view that owns the cursor
-		            // (nearest pin first). Catches thin geometry the ID window still misses. Visible meshes
-		            // only -- hidden meshes keep colliders and must not toggle from a background click.
+		            // Edge tolerance: nearest non-zero ID texel (not area-weighted). Radius 1 when
+		            // multi-view / close assets so a larger neighbor cannot win from 2px away.
+		            int edgeR = isMultiView ? 1 : 2;
+		            id = SampleDominantMeshIdNearViewport01(viewportPos, searchRadiusPx: edgeR);
+		            mesh = id != 0 ? ModelsHandler_3D.instance.getMesh_byUniqueID(id) : null;
+	            }
+
+	            if (mesh == null) {
+		            // Single-view may still try remaining cameras; multi-view stays owning-column only.
 		            if (!TryRaycastMeshUnder_AnyActiveViewCamera(requireSelected: false, out mesh, out _)) { return; }
 	            }
 	            if(mesh == null){ return; }

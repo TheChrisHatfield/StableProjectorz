@@ -79,4 +79,15 @@ public sealed class MultiviewPinLayoutTests {
 	public void MmbPanDoesNotCommitPerspectiveCenterOnRelease() {
 		Assert.That(MultiviewPinLayoutRules.MmbPanShouldCommitPerspectiveCenterOnRelease(), Is.False);
 	}
+
+	[Test]
+	public void MultiViewMeshPickDoesNotUseOtherCameras() {
+		Assert.That(MultiviewPinLayoutRules.MeshPickMayUseOtherViewCameras(isMultiView: true), Is.False);
+		Assert.That(MultiviewPinLayoutRules.MeshPickMayUseOtherViewCameras(isMultiView: false), Is.True);
+	}
+
+	[Test]
+	public void MeshPickIdEdgeUsesNearestNeighbor() {
+		Assert.That(MultiviewPinLayoutRules.MeshPickIdEdgeFallbackUsesNearestNeighbor(), Is.True);
+	}
 }
