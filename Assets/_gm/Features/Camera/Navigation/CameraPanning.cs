@@ -23,6 +23,13 @@ namespace spz {
 	    Vector3 _panAnchorWorld;
 	    bool _havePanAnchorWorld;
 
+	    void OnApplicationFocus(bool focus){
+	        // Same class of bug as CameraOrbit/CameraMove/CameraDolly: after a file dialog or
+	        // alt-tab mid-MMB-pan, _theCurrentlyPanning + sticky nav lock stayed held and blocked
+	        // further multi-view pan ownership until a matching EndPanDrag ran.
+	        EndPanDrag();
+	    }
+
 	    void OnUpdate(){
 	        StartMoveRotate_ifCan();
 	        MoveRotate();
