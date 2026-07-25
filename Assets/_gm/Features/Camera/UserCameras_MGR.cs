@@ -206,7 +206,13 @@ namespace spz {
 			    if (locked != null && locked.gameObject.activeInHierarchy) {
 				    return locked;
 			    }
+			    // Drop both ix and owner: leaving a stale owner makes LockNavigationCamera
+			    // refuse-steal forever (Orbit/Move/Pan can no longer sticky-lock columns).
 			    _navLockedCameraIx = -1;
+			    _navLockOwner = null;
+		    } else if (_navLockedCameraIx >= 0) {
+			    _navLockedCameraIx = -1;
+			    _navLockOwner = null;
 		    }
 
 		    int nearestIx = FindNearestViewCameraIndex_ByPerspectiveCenters();
