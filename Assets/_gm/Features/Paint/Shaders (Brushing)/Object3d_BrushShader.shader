@@ -277,18 +277,23 @@ Shader "Custom/Object3d_BrushShader"{
                 float normalDotViewM = 1.0;
                 if (_SymmetryMode > 2.5) {
                     float4 uvM = i.fragScreenSpaceUV_M;
-                    uvM.xyz /= uvM.w;
-                    mirrorUV = uvM.xy;
-                    float isInFrontM = isOutsideScreen_or_behind(uvM) ? 0 : 1;
-                    float depthM   = Linear01Depth(tex2Dlod(_LastCameraDepthTexture, float4(uvM.xy, 0, 0)).r);
-                    float myDepthM = Linear01Depth(uvM.z) - depthOffset;
-                    float notObscuredM = myDepthM <= depthM ? 1 : 0;
-                    float depthFalloffM = 1.0;
-                    if (_DepthFalloffRange > 0.0001 && _ClickDepth01 > 0.0001) {
-                        depthFalloffM = saturate(1.0 - abs(myDepthM - _ClickDepth01) / _DepthFalloffRange);
+                    // Reflected point can land behind the camera (w<=0). Dividing then aliases UV/depth
+                    // back into valid range and can open gateM on the wrong surface — same class of bug
+                    // as the MultiProjection cursor phantom ring.
+                    if (uvM.w > 0.0) {
+                        uvM.xyz /= uvM.w;
+                        mirrorUV = uvM.xy;
+                        float isInFrontM = isOutsideScreen_or_behind(uvM) ? 0 : 1;
+                        float depthM   = Linear01Depth(tex2Dlod(_LastCameraDepthTexture, float4(uvM.xy, 0, 0)).r);
+                        float myDepthM = Linear01Depth(uvM.z) - depthOffset;
+                        float notObscuredM = myDepthM <= depthM ? 1 : 0;
+                        float depthFalloffM = 1.0;
+                        if (_DepthFalloffRange > 0.0001 && _ClickDepth01 > 0.0001) {
+                            depthFalloffM = saturate(1.0 - abs(myDepthM - _ClickDepth01) / _DepthFalloffRange);
+                        }
+                        gateM = isVis * isInFrontM * notObscuredM * depthFalloffM;
+                        normalDotViewM = _FadeByNormal==0 ? 1 : dot(normalize(i.worldNormalM), normalize(i.worldViewDirM));
                     }
-                    gateM = isVis * isInFrontM * notObscuredM * depthFalloffM;
-                    normalDotViewM = _FadeByNormal==0 ? 1 : dot(normalize(i.worldNormalM), normalize(i.worldViewDirM));
                 }
 
                 // Not visible. NOTICE, discard, - don't optimize it!!
