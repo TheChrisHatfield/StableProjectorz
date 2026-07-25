@@ -193,8 +193,10 @@ namespace spz {
 	    public bool HasNavigationCameraLock => _navLockedCameraIx >= 0;
 
     /// <summary>
-    /// Route navigation to the multi-view column under the cursor (perspective-center Voronoi in
-    /// inner-viewport space — same space as pin anchors). Falls back to pin screen distance (OG).
+    /// Route navigation to the multi-view column under the cursor.
+    /// Prefer the mesh under the cursor (ID + pin-lock / owning-cam ray) so MMB on figure 4
+    /// drives camera 4 even when digit 4 sits at the feet and Voronoi would pick a neighbor.
+    /// Falls back to perspective-center Voronoi, then pin screen distance (OG).
     /// While a nav lock is held, returns that camera so drag/move cannot jump to a neighbor.
     /// </summary>
     public View_UserCamera NearestToCursor(){
@@ -215,9 +217,15 @@ namespace spz {
 			    _navLockOwner = null;
 		    }
 
-		    int nearestIx = FindNearestViewCameraIndex_ByPerspectiveCenters();
+		    var pins = CamerasMGR_PinsZone_UI.instance;
+		    int nearestIx = -1;
+		    if (numActiveViewCameras() > 1 && pins != null) {
+			    nearestIx = pins.FindViewCameraIndex_UnderCursorMesh();
+		    }
 		    if (nearestIx < 0) {
-			    var pins = CamerasMGR_PinsZone_UI.instance;
+			    nearestIx = FindNearestViewCameraIndex_ByPerspectiveCenters();
+		    }
+		    if (nearestIx < 0) {
 			    nearestIx = pins != null ? pins.FindNearestPin() : -1;
 		    }
 		    if (nearestIx < 0 || nearestIx >= _viewCameras.Count) {
