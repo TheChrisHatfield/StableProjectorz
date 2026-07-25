@@ -125,12 +125,13 @@ namespace spz {
 		    var pins = CamerasMGR_PinsZone_UI.instance;
 		    if (pins != null && pins.IsDraggingThisCameraPin(camIx)) { return; }
 		    if (_myViewCam.myCamera == null) { return; }
-		    // Must match OnPreCull / content projection; raw WorldToScreenPoint parks pins in the wrong tile.
-		    Vector3 sp = _myViewCam.WorldToScreenPoint_RenderMatched(_panAnchorWorld);
-		    if (sp.z < 0f) { return; }
-		    var inner = MainViewport_UI.instance.innerViewportRect;
-		    if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(inner, (Vector2)sp, null, out Vector2 local)) { return; }
-		    Vector2 p01 = Rect.PointToNormalized(inner.rect, local);
+		    // OG pattern: pin centers live in viewport-01 spaces, never window pixels. Camera frame 01
+		    // (render-matched) -> perspective-center 01 via the exact inverse of ShiftPerspectiveCenter.
+		    // WorldToScreenPoint was wrong here: its pixel rect is the whole game window, so with side
+		    // panels open the digits parked offset from their sub-view (and hover drove the wrong camera).
+		    Vector3 vp = _myViewCam.WorldToViewportPoint_RenderMatched(_panAnchorWorld);
+		    if (vp.z < 0f) { return; }
+		    Vector2 p01 = _myViewCam.CameraFrame01_to_PerspectiveCenter01(new Vector2(vp.x, vp.y));
 		    p01.x = Mathf.Clamp01(p01.x);
 		    p01.y = Mathf.Clamp01(p01.y);
 		    UserCameras_MGR.instance.Set_ProjMatrixCenter_ofCamera(camIx, p01);

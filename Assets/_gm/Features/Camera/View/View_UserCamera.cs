@@ -79,15 +79,39 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Project a world point to screen using the SAME FOV + perspective-center shift as rendering.
-	    /// Plain <c>myCamera.WorldToScreenPoint</c> uses the restored (unshifted) matrix between frames,
-	    /// so multi-view pin lock would write centers into the wrong viewport column.
+	    /// Project a world point into this camera's FRAME [0,1] using the SAME FOV + perspective-center
+	    /// shift as rendering (see <see cref="OnPreCull"/>). The frame maps 1:1 onto
+	    /// <see cref="MainViewport_UI.mainViewportRect"/> on screen.
+	    /// Do NOT use <c>myCamera.WorldToScreenPoint</c> for pin math: its pixel rect is the whole game
+	    /// window (side panels included), not the displayed viewport, so results land offset.
 	    /// </summary>
-	    public Vector3 WorldToScreenPoint_RenderMatched( Vector3 worldPos ){
+	    public Vector3 WorldToViewportPoint_RenderMatched( Vector3 worldPos ){
 	        _camera.projectionMatrix = ExpandFov_Match_ContentCamFov( with_ShiftPerspectiveCenter:true );
-	        Vector3 screen = _camera.WorldToScreenPoint(worldPos);
+	        Vector3 vp = _camera.WorldToViewportPoint(worldPos);
 	        RestoreMatrices_Proj_and_Cull();
-	        return screen;
+	        return vp;
+	    }
+
+	    /// <summary>
+	    /// Inverse of <see cref="ShiftPerspectiveCenter"/>'s mapping: camera-frame [0,1] (main viewport)
+	    /// back to perspective-center [0,1] (inner viewport / pin space, what
+	    /// <see cref="UserCameras_MGR.Set_ProjMatrixCenter_ofCamera"/> expects).
+	    /// </summary>
+	    public Vector2 CameraFrame01_to_PerspectiveCenter01( Vector2 frame01 ){
+	        Vector2 f = Get_PerspectiveShift_SizeFactor();
+	        return (frame01 - Vector2.one * 0.5f) * f + Vector2.one * 0.5f;
+	    }
+
+	    /// <summary>mainViewportRect size / innerViewportRect size (1 in between-ribbons full view). Shared by shift + its inverse.</summary>
+	    static Vector2 Get_PerspectiveShift_SizeFactor(){
+	        if (MainViewport_UI.instance == null) { return Vector2.one; }
+	        Vector2 vc = MainViewport_UI.instance.mainViewportRect.rect.size;
+	        Vector2 cc = MainViewport_UI.instance.innerViewportRect.rect.size;
+	        if (ViewportFullViewOnScreen_Driver.ShouldUseBetweenRibbonsMainViewportPlacement()) {
+		        cc = vc;
+	        }
+	        if (cc.x < 1e-4f || cc.y < 1e-4f) { return Vector2.one; }
+	        return vc / cc;
 	    }
 
 
@@ -231,12 +255,7 @@ namespace spz {
 	        if (MainViewport_UI.instance == null) {
 		        return;
 	        }
-	        Vector2 vc_viewportSize = MainViewport_UI.instance.mainViewportRect.rect.size;
-	        Vector2 cc_viewportSize = MainViewport_UI.instance.innerViewportRect.rect.size;
-	        if (ViewportFullViewOnScreen_Driver.ShouldUseBetweenRibbonsMainViewportPlacement()) {
-		        cc_viewportSize = vc_viewportSize;
-	        }
-	        Vector2 sizeFactor = vc_viewportSize / cc_viewportSize;
+	        Vector2 sizeFactor = Get_PerspectiveShift_SizeFactor();
 	        Vector2 perspCenterShift01 = (_projectionMat_center - Vector2.one * 0.5f) / sizeFactor + Vector2.one * 0.5f;
 	        CameraTools.ShiftViewportCenter_ofProjMat(_camera, perspCenterShift01);
 	    }
