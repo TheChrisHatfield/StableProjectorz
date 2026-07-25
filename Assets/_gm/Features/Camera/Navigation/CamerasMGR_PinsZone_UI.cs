@@ -35,7 +35,17 @@ namespace spz {
 	    //   re-remove this field and the MMB+radius line in GrabPin_maybe to restore that behavior.
 	    [SerializeField] float _mmbPinGrabRadiusPx = 64f;
 
+	    // Per-camera: POV digit stays locked to this mesh's bounds center (multi-select stable).
+	    // Index = view-camera index. Cleared on deselect / pin drag / Order Pins.
+	    SD_3D_Mesh[] _pinLockedToMesh;
+
 	    int NumVisiblePins(){ return _cameraPins.Count(p=>p.gameObject.activeInHierarchy); }
+
+	    /// <summary>True while a camera pin's digit is locked to a selected mesh center.</summary>
+	    public bool IsPinLockedToMesh(int cameraIndex) {
+		    EnsurePinLockArray();
+		    return cameraIndex >= 0 && cameraIndex < _pinLockedToMesh.Length && _pinLockedToMesh[cameraIndex] != null;
+	    }
 
 	    /// <summary>True while a camera pin is being moved (LMB or MMB drag).</summary>
 	    public bool IsDraggingViewPin => _draggedPin != null;
@@ -136,6 +146,7 @@ namespace spz {
 
 
 	    public void OnOrderPinsButton(){
+	        ClearAllPinMeshLocks();
 	        List<CameraPovInfo> povInfos =  UserCameras_MGR.instance.get_viewCams_PovInfos();
 	        _pinsDefaults.OnOrderPinsButton(povInfos);
 	    }
@@ -145,6 +156,7 @@ namespace spz {
 	    /// </summary>
 	    public void ApplyCurrentDefaultPinLayout(){
 	        if (UserCameras_MGR.instance == null || _pinsDefaults == null) { return; }
+	        ClearAllPinMeshLocks();
 	        List<CameraPovInfo> povInfos = UserCameras_MGR.instance.get_viewCams_PovInfos();
 	        _pinsDefaults.ApplyCurrentDefaultPinLayout(povInfos);
 	    }
@@ -196,6 +208,7 @@ namespace spz {
 	        GrabPin_maybe();
 	        DropPin_maybe();
 	        DragPin_maybe();
+	        ApplyPinLocksToSelectedMeshCenters();
 
 
 	        bool hoverMainView = MainViewport_UI.instance.isCursorHoveringMe();
@@ -227,9 +240,11 @@ namespace spz {
 
 	        // While MMB pan tracks the digit in UI-only mode, do not reset that pin from stale POV data.
 	        int panningCamIx = CameraPanning.PanningViewCameraIndex;
+	        EnsurePinLockArray();
 
 	        for(int i=0; i<povInfos.Count; ++i){
 	            if (i == panningCamIx) { continue; }
+	            if (IsPinLockedToMesh(i)) { continue; } // ApplyPinLocksToSelectedMeshCenters owns this digit
 	            CameraPovInfo inf = povInfos[i];
 	            RectTransform pinRectTr =  _cameraPins[i].transform as RectTransform;
 	            Vector2 center01    = inf.perspectiveCenter01;
@@ -354,6 +369,8 @@ namespace spz {
 	        _draggedPinIx = sensor_ix;
 	        _pinsDefaults.EnsureNotLerping();
 	        _draggedPin_cursorOffset = (Vector2)_draggedPin.transform.position - KeyMousePenInput.cursorScreenPos();
+	        // Manual pin drag overrides selection-center lock for this column.
+	        ClearPinMeshLock(sensor_ix);
 	        // Sticky column while dragging: pin moves change Voronoi ownership; lock so pan/orbit
 	        // mid-gesture cannot jump to a neighbor. Steal so pin wins over a residual Move/Orbit lock.
 	        UserCameras_MGR.instance?.LockNavigationCamera(sensor_ix, this, stealIfHeldByOther: true);
@@ -371,6 +388,121 @@ namespace spz {
 	        float normalizedX = (localPoint.x - rect.xMin) / rect.width;
 	        float normalizedY = (localPoint.y - rect.yMin) / rect.height;
 	        return new Vector2(normalizedX, normalizedY);
+	    }
+	#endregion
+
+	#region pin-lock-to-selected-mesh-center
+	    void EnsurePinLockArray() {
+		    int n = _cameraPins != null ? _cameraPins.Count : 0;
+		    if (_pinLockedToMesh != null && _pinLockedToMesh.Length == n) { return; }
+		    var next = new SD_3D_Mesh[n];
+		    if (_pinLockedToMesh != null) {
+			    int copy = Mathf.Min(_pinLockedToMesh.Length, n);
+			    for (int i = 0; i < copy; ++i) { next[i] = _pinLockedToMesh[i]; }
+		    }
+		    _pinLockedToMesh = next;
+	    }
+
+	    void ClearPinMeshLock(int cameraIndex) {
+		    EnsurePinLockArray();
+		    if (cameraIndex < 0 || cameraIndex >= _pinLockedToMesh.Length) { return; }
+		    _pinLockedToMesh[cameraIndex] = null;
+	    }
+
+	    void ClearAllPinMeshLocks() {
+		    EnsurePinLockArray();
+		    for (int i = 0; i < _pinLockedToMesh.Length; ++i) { _pinLockedToMesh[i] = null; }
+	    }
+
+	    void ClearPinLocksForMesh(SD_3D_Mesh mesh) {
+		    if (mesh == null) { return; }
+		    EnsurePinLockArray();
+		    for (int i = 0; i < _pinLockedToMesh.Length; ++i) {
+			    if (_pinLockedToMesh[i] == mesh) { _pinLockedToMesh[i] = null; }
+		    }
+	    }
+
+	    /// <summary>
+	    /// On select: remember which mesh this column's digit belongs to (object bounds center).
+	    /// Sole selection locks every active column so all POV digits sit on that asset; multi-select
+	    /// only locks the column under the cursor so each number stays on its assigned object.
+	    /// </summary>
+	    void OnMeshSelected_LockPinToCenter(SD_3D_Mesh mesh) {
+		    if (mesh == null || UserCameras_MGR.instance == null) { return; }
+		    if (UserCameras_MGR.instance.numActiveViewCameras() <= 1) { return; }
+		    EnsurePinLockArray();
+
+		    int selectedCount = ModelsHandler_3D.instance != null
+			    ? ModelsHandler_3D.instance.selectedMeshes.Count : 0;
+		    // Act_OnMeshSelected fires as the mesh joins selection; count already includes it when
+		    // ModelsHandler ran first. Treat 0/1 as sole-selection lock-all.
+		    bool soleSelection = selectedCount <= 1;
+
+		    if (soleSelection) {
+			    int n = UserCameras_MGR.instance.GetViewCameraCount();
+			    for (int i = 0; i < n && i < _pinLockedToMesh.Length; ++i) {
+				    var vc = UserCameras_MGR.instance.GetViewCamera(i);
+				    if (vc == null || !vc.gameObject.activeInHierarchy) { continue; }
+				    LockPinToMeshCenter(i, mesh, commitPerspective: true);
+			    }
+			    return;
+		    }
+
+		    int ownIx = UserCameras_MGR.instance.FindNearestViewCameraIndex_ByPerspectiveCenters();
+		    if (ownIx < 0) { ownIx = UserCameras_MGR.instance.ix_specificViewCam(UserCameras_MGR.instance.NearestToCursor()); }
+		    if (ownIx < 0) { return; }
+		    LockPinToMeshCenter(ownIx, mesh, commitPerspective: true);
+	    }
+
+	    void OnMeshDeselected_ClearPinLock(SD_3D_Mesh mesh) => ClearPinLocksForMesh(mesh);
+	    void OnMeshWillDestroy_ClearPinLock(SD_3D_Mesh mesh) => ClearPinLocksForMesh(mesh);
+
+	    void LockPinToMeshCenter(int cameraIndex, SD_3D_Mesh mesh, bool commitPerspective) {
+		    EnsurePinLockArray();
+		    if (mesh == null || cameraIndex < 0 || cameraIndex >= _pinLockedToMesh.Length) { return; }
+		    _pinLockedToMesh[cameraIndex] = mesh;
+		    if (commitPerspective) {
+			    TryProjectMeshCenterToPin(cameraIndex, mesh, writePerspectiveCenter: true);
+		    }
+	    }
+
+	    /// <summary>
+	    /// Keep locked digits on each assigned mesh's bounds center (UI every frame; POV already
+	    /// committed on select). Skips the column being MMB-panned or pin-dragged.
+	    /// </summary>
+	    void ApplyPinLocksToSelectedMeshCenters() {
+		    if (UserCameras_MGR.instance == null) { return; }
+		    if (UserCameras_MGR.instance.numActiveViewCameras() <= 1) { return; }
+		    EnsurePinLockArray();
+		    int panningCamIx = CameraPanning.PanningViewCameraIndex;
+		    for (int i = 0; i < _pinLockedToMesh.Length; ++i) {
+			    if (i == panningCamIx) { continue; }
+			    if (i == _draggedPinIx) { continue; }
+			    var mesh = _pinLockedToMesh[i];
+			    if (mesh == null) { continue; }
+			    if (!mesh._isSelected) {
+				    _pinLockedToMesh[i] = null;
+				    continue;
+			    }
+			    TryProjectMeshCenterToPin(i, mesh, writePerspectiveCenter: false);
+		    }
+	    }
+
+	    bool TryProjectMeshCenterToPin(int cameraIndex, SD_3D_Mesh mesh, bool writePerspectiveCenter) {
+		    if (UserCameras_MGR.instance == null || mesh == null) { return false; }
+		    var vc = UserCameras_MGR.instance.GetViewCamera(cameraIndex);
+		    if (vc == null || vc.myCamera == null || !vc.gameObject.activeInHierarchy) { return false; }
+		    Vector3 worldCenter = mesh.bounds.center;
+		    Vector3 vp = vc.WorldToViewportPoint_RenderMatched(worldCenter);
+		    if (vp.z < 0f) { return false; }
+		    Vector2 p01 = vc.CameraFrame01_to_PerspectiveCenter01(new Vector2(vp.x, vp.y));
+		    p01.x = Mathf.Clamp01(p01.x);
+		    p01.y = Mathf.Clamp01(p01.y);
+		    if (writePerspectiveCenter) {
+			    UserCameras_MGR.instance.Set_ProjMatrixCenter_ofCamera(cameraIndex, p01);
+		    }
+		    RepositionPinUIToPerspectiveCenter01(cameraIndex, p01);
+		    return true;
 	    }
 	#endregion
 
@@ -394,12 +526,17 @@ namespace spz {
 	        instance = this;
 
 	        _editMode_disabledGO.gameObject.SetActive(false);
+	        EnsurePinLockArray();
 
 	        UserCameras_MGR._Act_OnTogledViewCamera += OnToggledViewCamera;
 	        UserCameras_MGR._Act_OnRestoreCameraPlacements += OnCameraPlacements_Restored;
 
 	        MultiView_Ribbon_UI.OnStartEditMode += OnEditMode_Started;
 	        MultiView_Ribbon_UI.OnStop1_EditMode += OnEditMode_Stopped;
+
+	        SD_3D_Mesh.Act_OnMeshSelected += OnMeshSelected_LockPinToCenter;
+	        SD_3D_Mesh.Act_OnMeshDeselected += OnMeshDeselected_ClearPinLock;
+	        SD_3D_Mesh.Act_OnWillDestroyMesh += OnMeshWillDestroy_ClearPinLock;
 
 	        for (int i=0; i<_cameraPins.Count; ++i){
 	            int i_cpy = i;
@@ -412,6 +549,18 @@ namespace spz {
 
 	    void Start(){
 	        OnStartInvoked?.Invoke();
+	    }
+
+	    void OnDestroy(){
+	        if (instance == this) { instance = null; }
+	        UserCameras_MGR._Act_OnTogledViewCamera -= OnToggledViewCamera;
+	        UserCameras_MGR._Act_OnRestoreCameraPlacements -= OnCameraPlacements_Restored;
+	        MultiView_Ribbon_UI.OnStartEditMode -= OnEditMode_Started;
+	        MultiView_Ribbon_UI.OnStop1_EditMode -= OnEditMode_Stopped;
+	        SD_3D_Mesh.Act_OnMeshSelected -= OnMeshSelected_LockPinToCenter;
+	        SD_3D_Mesh.Act_OnMeshDeselected -= OnMeshDeselected_ClearPinLock;
+	        SD_3D_Mesh.Act_OnWillDestroyMesh -= OnMeshWillDestroy_ClearPinLock;
+	        CameraFocus._Act_onFocused -= OnWillFocus;
 	    }
      
 	}

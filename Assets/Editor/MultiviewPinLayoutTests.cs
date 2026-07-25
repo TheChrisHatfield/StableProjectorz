@@ -90,4 +90,10 @@ public sealed class MultiviewPinLayoutTests {
 	public void MeshPickIdEdgeUsesNearestNeighbor() {
 		Assert.That(MultiviewPinLayoutRules.MeshPickIdEdgeFallbackUsesNearestNeighbor(), Is.True);
 	}
+
+	[Test]
+	public void PovDigitLocksToSelectedMeshCenter() {
+		Assert.That(MultiviewPinLayoutRules.PovDigitLocksToSelectedMeshCenter(), Is.True);
+		Assert.That(MultiviewPinLayoutRules.SoleSelectionLocksAllActivePins(), Is.True);
+	}
 }

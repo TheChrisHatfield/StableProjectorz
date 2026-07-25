@@ -93,5 +93,14 @@ namespace spz {
 		/// area-weighted vote — larger neighbors won when assets were close together.
 		/// </summary>
 		public static bool MeshPickIdEdgeFallbackUsesNearestNeighbor() => true;
+
+		/// <summary>
+		/// On mesh select, POV digits lock to that mesh's bounds center and keep the assignment when
+		/// more meshes are multi-selected (per-column), instead of jumping with hover focus.
+		/// </summary>
+		public static bool PovDigitLocksToSelectedMeshCenter() => true;
+
+		/// <summary>Sole selection: lock every active multi-view column to that one mesh.</summary>
+		public static bool SoleSelectionLocksAllActivePins() => true;
 	}
 }
