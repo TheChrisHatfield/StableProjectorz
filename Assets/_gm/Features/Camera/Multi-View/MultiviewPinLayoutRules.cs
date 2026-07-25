@@ -81,5 +81,17 @@ namespace spz {
 		/// framing. Pin drag is the intentional way to move projection centers.
 		/// </summary>
 		public static bool MmbPanShouldCommitPerspectiveCenterOnRelease() => false;
+
+		/// <summary>
+		/// Multi-view click/hover must not cast through other columns' cameras: the same viewport UV
+		/// with a different pin shift hits a neighboring asset when figures sit close on screen.
+		/// </summary>
+		public static bool MeshPickMayUseOtherViewCameras(bool isMultiView) => !isMultiView;
+
+		/// <summary>
+		/// Edge ID fallback should pick the nearest non-zero texel (true nearest neighbor), not an
+		/// area-weighted vote — larger neighbors won when assets were close together.
+		/// </summary>
+		public static bool MeshPickIdEdgeFallbackUsesNearestNeighbor() => true;
 	}
 }
