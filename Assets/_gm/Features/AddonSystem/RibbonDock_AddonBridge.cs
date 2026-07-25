@@ -19,11 +19,13 @@ namespace spz {
 		}
 
 		/// <summary>Transport defaults when RPC omits keys (legacy clients); add-ons should pass explicit values.</summary>
-		public static RibbonDock_ButtonSpec FromRpc(JObject p) {
+			public static RibbonDock_ButtonSpec FromRpc(JObject p) {
 			p ??= new JObject();
 			string label = p["button_label"]?.ToString();
 			if (string.IsNullOrWhiteSpace(label)) {
-				label = "FULL\nSCREEN";
+				// Match RibbonOnlyFullscreen Python register() and ApplyFullSrnLabelStyle — not "FULL\nSCREEN"
+				// (label-only mismatch used to TearDownBuiltDock → appear/flash on enable after HTTP load).
+				label = "FULL\nSRN";
 			}
 			label = label.Length > 200 ? label.Substring(0, 200) : label;
 			string cmd = p["command"]?.ToString();

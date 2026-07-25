@@ -1357,7 +1357,9 @@ namespace spz {
 				// previously tore down CoBuildWhenGenArtReady every frame → dial ON, no FULL/SRN button.
 				if (!RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyVisibleBuiltDock()) {
 					bool inFlight = RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyDockBuildInFlight();
-					if (!attachKicked || !inFlight) {
+					bool alreadyBuiltOrBuilding = RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyDockBuiltOrBuilding();
+					// Do not re-call attach while a dock already exists/builds — that tore/rebuilt and flashed.
+					if (!alreadyBuiltOrBuilding && (!attachKicked || !inFlight)) {
 						Addon_SocketServer.TryAttachViewportFullViewToggleFromCore(null);
 						attachKicked = true;
 					}
