@@ -278,11 +278,34 @@ namespace spz {
 					continue;
 				if (IsUnderNamedAncestor(tmp.transform, "Swatch", "Brush_"))
 					continue;
+				// Design base must be stable across applies — never derive from current fontSize/scale
+				// (that cancels font_scale changes: size/s * s == size).
+				float basePt = ResolvePaintLabelDesignBasePt(tmp);
 				if (tmp.gameObject.name == "Header" || tmp.gameObject.name == "Placeholder")
-					SpzUiThemeOps.ApplyTmpColor(tmp, t.textMuted);
+					SpzUiThemeOps.ApplyTmpScaled(tmp, t.textMuted, basePt);
 				else
-					SpzUiThemeOps.ApplyTmpColor(tmp, t.textPrimary);
+					SpzUiThemeOps.ApplyTmpScaled(tmp, t.textPrimary, basePt);
 			}
+		}
+
+		const float kPaintLabelDesignBasePt = 12f;
+
+		static float ResolvePaintLabelDesignBasePt(TextMeshProUGUI tmp)
+		{
+			if (tmp == null) return kPaintLabelDesignBasePt;
+			var tag = tmp.gameObject.GetComponent<PaintTab_ThemeDesignFontPt>();
+			if (tag == null) {
+				tag = tmp.gameObject.AddComponent<PaintTab_ThemeDesignFontPt>();
+				float scale = SpzUiThemeOps.Active.fontScale;
+				float current = tmp.fontSize > 0.05f ? tmp.fontSize : kPaintLabelDesignBasePt;
+				// First sight: undo active scale if TMP was already theme-sized; else treat as design size.
+				tag.designPt = (scale > 0.05f && Mathf.Abs(scale - 1f) > 0.001f)
+					? current / scale
+					: current;
+				if (tag.designPt < 0.05f)
+					tag.designPt = kPaintLabelDesignBasePt;
+			}
+			return tag.designPt;
 		}
 
 		/// <summary>
@@ -2028,13 +2051,13 @@ namespace spz {
 				}, wholeNumbers: true);
 
 			var smudgeMeshUnderToggle = MakeBrushOptsCheckboxRow(smudgeOptsRoot.transform, "SmudgeMeshUnderRow",
-				"Sample mesh UV under paint layers", PaintTab_SmudgeBrushOptions.IncludeUvMeshInLayerSmudge, isOn =>
+				"Sample Art / mesh UV under paint layers", PaintTab_SmudgeBrushOptions.IncludeUvMeshInLayerSmudge, isOn =>
 				{
 					PaintTab_SmudgeBrushOptions.SetIncludeUvMeshInLayerSmudge(isOn);
 					Viewport_StatusText.instance?.ShowStatusText(
 						isOn
-							? "Smudge: mesh UV can show through transparent strokes"
-							: "Smudge: layers only (no mesh UV underlay)",
+							? "Smudge: Art/mesh UV adapts under transparent layer paint"
+							: "Smudge: layers only (no Art/mesh UV underlay)",
 						false, 0.65f, false);
 				});
 
@@ -2469,5 +2492,10 @@ namespace spz {
 			if (le == null) le = rect.gameObject.AddComponent<LayoutElement>();
 			le.flexibleWidth = flexibleWidth;
 		}
+	}
+
+	/// <summary>Stores design-time TMP point size so theme <c>font_scale</c> does not compound.</summary>
+	sealed class PaintTab_ThemeDesignFontPt : MonoBehaviour {
+		public float designPt = 12f;
 	}
 }
