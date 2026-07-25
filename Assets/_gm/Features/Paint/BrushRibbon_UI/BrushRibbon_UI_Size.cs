@@ -124,10 +124,32 @@ namespace spz {
 
 	    PaintSymmetryPlaneSource _paintSymmetryPlaneSource = PaintSymmetryPlaneSource.Auto;
 	    public PaintSymmetryPlaneSource paintSymmetryPlaneSource => _paintSymmetryPlaneSource;
-	    Vector3 _symmetryPlanePointWorld;
-	    Vector3 _symmetryPlaneNormalWorld = Vector3.right;
-	    public Vector3 symmetryPlanePointWorld => _symmetryPlanePointWorld;
-	    public Vector3 symmetryPlaneNormalWorld => _symmetryPlaneNormalWorld;
+
+	    // FacePick: store the plane in the hit object's local space so rotating/moving the mesh keeps
+	    // the mirror glued to the picked face. World getters transform live; fallback fields cover
+	    // load-from-save (no live anchor) until the user re-picks.
+	    Transform _symmetryPlaneAnchor;
+	    Vector3 _symmetryPlanePointLocal;
+	    Vector3 _symmetryPlaneNormalLocal = Vector3.right;
+	    Vector3 _symmetryPlanePointWorldFallback;
+	    Vector3 _symmetryPlaneNormalWorldFallback = Vector3.right;
+
+	    public Vector3 symmetryPlanePointWorld {
+		    get {
+			    if (_symmetryPlaneAnchor)
+				    return _symmetryPlaneAnchor.TransformPoint(_symmetryPlanePointLocal);
+			    return _symmetryPlanePointWorldFallback;
+		    }
+	    }
+	    public Vector3 symmetryPlaneNormalWorld {
+		    get {
+			    if (_symmetryPlaneAnchor) {
+				    Vector3 n = _symmetryPlaneAnchor.TransformDirection(_symmetryPlaneNormalLocal);
+				    return n.sqrMagnitude > 1e-12f ? n.normalized : Vector3.up;
+			    }
+			    return _symmetryPlaneNormalWorldFallback;
+		    }
+	    }
 
 	    /// <summary> ±1; flips lateral mirror direction when <see cref="paintSymmetryPlaneSource"/> is ObjectLocal. </summary>
 	    int _symmetryObjectLocalSign = 1;
@@ -143,15 +165,28 @@ namespace spz {
 	    public void ApplySymmetryPlaneFromFaceHit(RaycastHit hit)
 	    {
 		    _paintSymmetryPlaneSource = PaintSymmetryPlaneSource.FacePick;
-		    _symmetryPlanePointWorld = hit.point;
-		    _symmetryPlaneNormalWorld = hit.normal.sqrMagnitude > 1e-12f ? hit.normal.normalized : Vector3.up;
+		    Vector3 nWorld = hit.normal.sqrMagnitude > 1e-12f ? hit.normal.normalized : Vector3.up;
+		    Transform anchor = hit.collider != null ? hit.collider.transform : hit.transform;
+		    _symmetryPlaneAnchor = anchor;
+		    if (anchor) {
+			    _symmetryPlanePointLocal = anchor.InverseTransformPoint(hit.point);
+			    Vector3 nLocal = anchor.InverseTransformDirection(nWorld);
+			    _symmetryPlaneNormalLocal = nLocal.sqrMagnitude > 1e-12f ? nLocal.normalized : Vector3.up;
+			    _symmetryPlanePointWorldFallback = hit.point;
+			    _symmetryPlaneNormalWorldFallback = nWorld;
+		    } else {
+			    _symmetryPlanePointWorldFallback = hit.point;
+			    _symmetryPlaneNormalWorldFallback = nWorld;
+		    }
 		    OnBrushSettingsChanged?.Invoke();
 	    }
 
 	    public void FlipPickedSymmetryPlaneNormal()
 	    {
 		    if (_paintSymmetryPlaneSource != PaintSymmetryPlaneSource.FacePick) return;
-		    _symmetryPlaneNormalWorld = -_symmetryPlaneNormalWorld;
+		    if (_symmetryPlaneAnchor)
+			    _symmetryPlaneNormalLocal = -_symmetryPlaneNormalLocal;
+		    _symmetryPlaneNormalWorldFallback = -_symmetryPlaneNormalWorldFallback;
 		    OnBrushSettingsChanged?.Invoke();
 	    }
 
@@ -251,8 +286,10 @@ namespace spz {
 	        trSL.maskBrush_symmetryObjectLocalSign = _symmetryObjectLocalSign < 0 ? -1 : 1;
 	        if (_paintSymmetryPlaneSource == PaintSymmetryPlaneSource.FacePick)
 	        {
-		        trSL.maskBrush_symmetryPlanePoint = new Vector3Serializable(_symmetryPlanePointWorld.x, _symmetryPlanePointWorld.y, _symmetryPlanePointWorld.z);
-		        trSL.maskBrush_symmetryPlaneNormal = new Vector3Serializable(_symmetryPlaneNormalWorld.x, _symmetryPlaneNormalWorld.y, _symmetryPlaneNormalWorld.z);
+		        Vector3 pw = symmetryPlanePointWorld;
+		        Vector3 nw = symmetryPlaneNormalWorld;
+		        trSL.maskBrush_symmetryPlanePoint = new Vector3Serializable(pw.x, pw.y, pw.z);
+		        trSL.maskBrush_symmetryPlaneNormal = new Vector3Serializable(nw.x, nw.y, nw.z);
 	        }
 	        else
 	        {
@@ -286,12 +323,13 @@ namespace spz {
 	        if (_paintSymmetryPlaneSource == PaintSymmetryPlaneSource.FacePick
 	            && trSL.maskBrush_symmetryPlanePoint != null && trSL.maskBrush_symmetryPlaneNormal != null)
 	        {
-		        _symmetryPlanePointWorld = trSL.maskBrush_symmetryPlanePoint.toVec3();
-		        _symmetryPlaneNormalWorld = trSL.maskBrush_symmetryPlaneNormal.toVec3();
-		        if (_symmetryPlaneNormalWorld.sqrMagnitude < 1e-8f)
+		        _symmetryPlaneAnchor = null; // re-pick after load to re-bind; world fallback keeps pose-at-save
+		        _symmetryPlanePointWorldFallback = trSL.maskBrush_symmetryPlanePoint.toVec3();
+		        _symmetryPlaneNormalWorldFallback = trSL.maskBrush_symmetryPlaneNormal.toVec3();
+		        if (_symmetryPlaneNormalWorldFallback.sqrMagnitude < 1e-8f)
 			        _paintSymmetryPlaneSource = PaintSymmetryPlaneSource.Auto;
 		        else
-			        _symmetryPlaneNormalWorld.Normalize();
+			        _symmetryPlaneNormalWorldFallback.Normalize();
 	        }
 	        else if (_paintSymmetryPlaneSource == PaintSymmetryPlaneSource.FacePick)
 		        _paintSymmetryPlaneSource = PaintSymmetryPlaneSource.Auto;
