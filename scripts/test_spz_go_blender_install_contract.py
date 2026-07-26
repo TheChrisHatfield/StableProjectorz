@@ -28,10 +28,11 @@ class SpzGoBlenderInstallContractTests(unittest.TestCase):
 	def test_register_has_install_button_and_auto_call(self):
 		src = ADDON.read_text(encoding="utf-8")
 		self.assertIn('add_button("Install into Blender", "do_install_blender_addon_force")', src)
-		self.assertIn("do_install_blender_addon(force=False)", src)
+		self.assertIn("do_install_blender_addon(force=False, report_status=False)", src)
 		self.assertIn("threading.Thread", src)
 		self.assertIn("SpzGoBlenderAutoInstall", src)
 		self.assertIn("def do_install_blender_addon", src)
+		self.assertIn("report_status", src)
 		self.assertIn("def bridge_ship_dir", src)
 
 	def test_parse_bl_info_version(self):
