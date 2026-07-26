@@ -460,6 +460,19 @@ public sealed class SpzUiThemeOpsTests {
 	}
 
 	[Test]
+	public void BuiltinDefaultIsActiveUntilNonDefaultApply() {
+		Assert.That(SpzUiThemeOps.IsBuiltinDefaultActive, Is.True);
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-experiment",
+			new JObject { ["accent"] = "#112233FF" },
+			"replace",
+			out string error), Is.True, error);
+		Assert.That(SpzUiThemeOps.IsBuiltinDefaultActive, Is.False);
+		SpzUiThemeOps.ResetTheme();
+		Assert.That(SpzUiThemeOps.IsBuiltinDefaultActive, Is.True);
+	}
+
+	[Test]
 	public void ThemeFloatTokensRejectNaNAndInfinity() {
 		Assert.That(SpzUiThemeOps.TryApplyTheme(
 			"p1-experiment",
