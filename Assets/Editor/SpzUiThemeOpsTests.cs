@@ -450,15 +450,81 @@ public sealed class SpzUiThemeOpsTests {
 		Assert.That(icon, Is.EqualTo(StudioLineIcon.Eraser));
 		Assert.That(SpzUiThemeOps.TryParseStudioLineIcon("Smudge", out icon, out error), Is.True, error);
 		Assert.That(icon, Is.EqualTo(StudioLineIcon.Smudge));
+		Assert.That(SpzUiThemeOps.TryParseStudioLineIcon("Bullseye", out icon, out error), Is.True, error);
+		Assert.That(icon, Is.EqualTo(StudioLineIcon.Bullseye));
 		Assert.That(SpzUiThemeOps.ListLineIconNames().ToString(), Does.Contain("Mesh"));
 		Assert.That(SpzUiThemeOps.ListLineIconNames().ToString(), Does.Contain("Bucket"));
 		Assert.That(SpzUiThemeOps.ListLineIconNames().ToString(), Does.Contain("Cursor"));
+		Assert.That(SpzUiThemeOps.ListLineIconNames().ToString(), Does.Contain("Bullseye"));
 		Assert.That(SpzUiThemeOps.ListLineIconNames().ToString(), Does.Contain("Expand"));
 		Assert.That(RibbonViewportFullViewOnScreen_Toggle_UI.ResolveFullViewDockIcon(), Is.EqualTo(StudioLineIcon.Expand));
 		Assert.That(RibbonViewportFullViewOnScreen_Toggle_UI.ResolveOpenRightDockIcon(false), Is.EqualTo(StudioLineIcon.ChevronRight));
 		Assert.That(RibbonViewportFullViewOnScreen_Toggle_UI.ResolveOpenRightDockIcon(true), Is.EqualTo(StudioLineIcon.ChevronLeft));
 		Assert.That(SpzUiChromeOps.ListUiTargetIds(), Does.Contain("left_ribbon"));
 		Assert.That(SpzUiChromeOps.ListUiTargetIds(), Does.Contain("workflow_options"));
+	}
+
+	[Test]
+	public void SnapshotAuthoredColorBlockCapturesBeforeManualTint() {
+		var go = new GameObject("CbSnap", typeof(RectTransform));
+		var img = go.AddComponent<Image>();
+		var btn = go.AddComponent<Button>();
+		btn.targetGraphic = img;
+		var authored = btn.colors;
+		authored.highlightedColor = Color.magenta;
+		btn.colors = authored;
+		try {
+			SpzUiThemeOps.SnapshotAuthoredColorBlock(btn);
+			var tinted = btn.colors;
+			tinted.highlightedColor = Color.cyan;
+			btn.colors = tinted;
+			SpzUiThemeOps.RestoreAuthoredColorBlock(btn);
+			Assert.That(btn.colors.highlightedColor, Is.EqualTo(Color.magenta));
+		} finally {
+			UnityEngine.Object.DestroyImmediate(go);
+		}
+	}
+
+	[Test]
+	public void RestoreBoundChromeUnderUnwindsSelectableColorBlockAndHandleSize() {
+		var root = new GameObject("RestoreChromeRoot", typeof(RectTransform));
+		var btnGo = new GameObject("Btn", typeof(RectTransform));
+		btnGo.transform.SetParent(root.transform, false);
+		var img = btnGo.AddComponent<Image>();
+		var btn = btnGo.AddComponent<Button>();
+		btn.targetGraphic = img;
+		var authoredBlock = btn.colors;
+		authoredBlock.highlightedColor = Color.red;
+		btn.colors = authoredBlock;
+
+		var handleGo = new GameObject("Handle", typeof(RectTransform));
+		handleGo.transform.SetParent(root.transform, false);
+		var handleRt = handleGo.GetComponent<RectTransform>();
+		handleRt.sizeDelta = new Vector2(40f, 40f);
+		handleGo.AddComponent<Image>();
+
+		try {
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				Tokens(("accent", "#F2CA50FF"), ("control_bg", "#292A2EFF")),
+				"replace",
+				out string error), Is.True, error);
+			SpzUiThemeOps.ApplyBoundChromeSelectable(btn, SpzUiThemeOps.Active.controlBg, SpzUiThemeOps.Active.accent);
+			Assert.That(btn.colors.highlightedColor, Is.Not.EqualTo(Color.red));
+
+			var tag = handleGo.AddComponent<SpzUiThemeSliderHandleLayout>();
+			tag.authoredSizeDelta = new Vector2(40f, 40f);
+			tag.hasSnapshot = true;
+			handleRt.sizeDelta = new Vector2(22f, 22f);
+
+			SpzUiThemeOps.ResetTheme();
+			SpzUiThemeOps.RestoreBoundChromeUnder(root.transform);
+			Assert.That(btn.colors.highlightedColor, Is.EqualTo(Color.red));
+			Assert.That(handleRt.sizeDelta.x, Is.EqualTo(40f).Within(0.01f));
+		} finally {
+			UnityEngine.Object.DestroyImmediate(root);
+			SpzUiThemeOps.ResetTheme();
+		}
 	}
 
 	[Test]
@@ -663,6 +729,48 @@ public sealed class SpzUiThemeOpsTests {
 			Assert.That(found.gameObject.activeSelf, Is.False);
 		} finally {
 			UnityEngine.Object.DestroyImmediate(parent);
+		}
+	}
+
+	[Test]
+	public void NomadVerticalSliderChromeUsesSegmentTileAndBullseye() {
+		var root = new GameObject("NomadSlider", typeof(RectTransform));
+		var bgGo = new GameObject("Background", typeof(RectTransform));
+		bgGo.transform.SetParent(root.transform, false);
+		var bg = bgGo.AddComponent<Image>();
+		var fillArea = new GameObject("Fill Area", typeof(RectTransform));
+		fillArea.transform.SetParent(root.transform, false);
+		var fillGo = new GameObject("Fill", typeof(RectTransform));
+		fillGo.transform.SetParent(fillArea.transform, false);
+		var fill = fillGo.AddComponent<Image>();
+		var handleSlide = new GameObject("Handle Slide Area", typeof(RectTransform));
+		handleSlide.transform.SetParent(root.transform, false);
+		var handleGo = new GameObject("Handle", typeof(RectTransform));
+		handleGo.transform.SetParent(handleSlide.transform, false);
+		var handle = handleGo.AddComponent<Image>();
+		var slider = root.AddComponent<Slider>();
+		slider.targetGraphic = bg;
+		slider.fillRect = fill.rectTransform;
+		slider.handleRect = handle.rectTransform;
+		slider.direction = Slider.Direction.BottomToTop;
+		try {
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				Tokens(("field_bg", "#121317FF"), ("danger", "#FFB4ABFF"), ("icon_tint", "#D0C5AFFF")),
+				"replace",
+				out string error), Is.True, error);
+			SpzUiThemeOps.ApplyNomadSliderChrome(slider);
+			Assert.That(fill.sprite, Is.EqualTo(UiRuntimeSprites.NomadSliderSegmentTile));
+			Assert.That(fill.type, Is.EqualTo(Image.Type.Tiled));
+			Assert.That(handle.sprite, Is.EqualTo(UiRuntimeSprites.GetLineIcon(StudioLineIcon.Bullseye)));
+			Assert.That(UiRuntimeSprites.IsNomadSliderSegmentTile(fill.sprite), Is.True);
+
+			SpzUiThemeOps.ResetTheme();
+			SpzUiThemeOps.ApplyNomadSliderChrome(slider);
+			Assert.That(UiRuntimeSprites.IsNomadSliderSegmentTile(fill.sprite), Is.False);
+		} finally {
+			UnityEngine.Object.DestroyImmediate(root);
+			SpzUiThemeOps.ResetTheme();
 		}
 	}
 

@@ -233,18 +233,13 @@ namespace spz {
 	    /// <summary>Colors SAVE Nx / +/- / point-bilinear chrome from the active palette.</summary>
 	    void ApplyThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
-	            if (_save_texResQuality_text != null) {
-	                SpzUiThemeOps.RestoreAuthoredGraphic(_save_texResQuality_text);
-	                var saveBtn = _save_texResQuality_text.GetComponentInParent<Button>();
-	                if (saveBtn != null)
-	                    SpzUiThemeOps.RestoreAuthoredGraphic(saveBtn.targetGraphic);
-	            }
-	            if (_sub_texResolutionQuality != null)
-	                SpzUiThemeOps.RestoreAuthoredGraphic(_sub_texResolutionQuality.targetGraphic);
-	            if (_add_texResolutionQuality != null)
-	                SpzUiThemeOps.RestoreAuthoredGraphic(_add_texResolutionQuality.targetGraphic);
-	            RestoreFilterToggle(_textureFilterPoint_toggle);
-	            RestoreFilterToggle(_textureFilterBilinear_toggle);
+	            UnwindBoundChrome(_save_texResQuality_text != null
+	                ? _save_texResQuality_text.GetComponentInParent<Button>()
+	                : null);
+	            UnwindBoundChrome(_sub_texResolutionQuality);
+	            UnwindBoundChrome(_add_texResolutionQuality);
+	            UnwindBoundChrome(_textureFilterPoint_toggle);
+	            UnwindBoundChrome(_textureFilterBilinear_toggle);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
@@ -262,12 +257,9 @@ namespace spz {
 	        ThemeFilterToggle(_textureFilterBilinear_toggle, t);
 	    }
 
-	    static void RestoreFilterToggle(Toggle tgl) {
-	        if (tgl == null) return;
-	        SpzUiThemeOps.RestoreAuthoredGraphic(tgl.targetGraphic);
-	        var label = tgl.GetComponentInChildren<TextMeshProUGUI>(true);
-	        if (label != null)
-	            SpzUiThemeOps.RestoreAuthoredGraphic(label);
+	    static void UnwindBoundChrome(Selectable sel) {
+	        if (sel == null) return;
+	        SpzUiThemeOps.RestoreBoundChromeUnder(sel.transform);
 	    }
 
 	    static void ThemeFilterToggle(Toggle tgl, SpzUiThemeOps.ThemeTokens t) {

@@ -132,7 +132,8 @@ namespace spz {
 				AuthoredGraphicColors[id] = graphic.color;
 		}
 
-		static void SnapshotAuthoredColorBlock(Selectable selectable) {
+		/// <summary>Snapshots Selectable ColorBlock once so Restore SPZ can unwind accent hover/press tints.</summary>
+		public static void SnapshotAuthoredColorBlock(Selectable selectable) {
 			if (selectable == null) return;
 			int id = selectable.GetInstanceID();
 			if (!AuthoredColorBlocks.ContainsKey(id))
