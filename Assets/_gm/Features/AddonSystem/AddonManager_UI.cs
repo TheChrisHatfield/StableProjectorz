@@ -1283,6 +1283,11 @@ namespace spz {
 					foreach (var g in _panel.GetComponentsInChildren<Graphic>(true))
 						SpzUiThemeOps.RestoreAuthoredGraphic(g);
 					SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(_panel.transform);
+					RestoreHeaderButtonAuthoredChrome(_installFromFile_button);
+					RestoreHeaderButtonAuthoredChrome(_refresh_button);
+					RestoreHeaderButtonAuthoredChrome(_loadAddonsNow_button);
+					RestoreHeaderButtonAuthoredChrome(_saveAddonSettings_button);
+					RestoreHeaderButtonAuthoredChrome(_restartWithAddons_button);
 				}
 				if (_closePanel_button != null)
 					SpzUiThemeOps.RestoreAuthoredGraphic(_closePanel_button.targetGraphic);
@@ -1292,6 +1297,7 @@ namespace spz {
 			_statusOk = t.success;
 			_statusFail = t.danger;
 			_statusMuted = t.textMuted;
+			bool nomad = string.Equals(SpzUiThemeOps.ActiveThemeId, "nomad-inspired", System.StringComparison.Ordinal);
 			if (_panel != null) {
 				var panelImg = _panel.GetComponent<Image>();
 				if (panelImg != null) {
@@ -1302,14 +1308,29 @@ namespace spz {
 				}
 				var panelVlg = _panel.GetComponent<UnityEngine.UI.VerticalLayoutGroup>();
 				if (panelVlg != null) {
-					int pad = Mathf.RoundToInt(SpzUiThemeOps.ScaledSpace(4));
-					panelVlg.spacing = SpzUiThemeOps.ScaledSpace(1);
+					int pad = Mathf.RoundToInt(SpzUiThemeOps.ScaledSpace(nomad ? 3 : 4));
+					panelVlg.spacing = SpzUiThemeOps.ScaledSpace(nomad ? 2 : 1);
 					panelVlg.padding = new RectOffset(pad, pad, pad, pad);
+				}
+				var header = _panel.transform.Find("Header");
+				if (header != null) {
+					var headerHlg = header.GetComponent<HorizontalLayoutGroup>();
+					if (headerHlg != null) {
+						headerHlg.spacing = SpzUiThemeOps.ScaledSpace(nomad ? 6 : 8);
+						headerHlg.childAlignment = TextAnchor.MiddleLeft;
+						int hPad = Mathf.RoundToInt(SpzUiThemeOps.ScaledSpace(nomad ? 2 : 0));
+						headerHlg.padding = new RectOffset(hPad, hPad, 0, 0);
+					}
 				}
 				var title = _panel.transform.Find("Header/Title")?.GetComponent<TextMeshProUGUI>();
 				if (title != null) {
 					CaptureBasePt(ref _themeTitleBasePt, title, 22f);
 					SpzUiThemeOps.ApplyBoundChromeTmp(title, t.textPrimary, _themeTitleBasePt);
+					if (nomad && SpzUiThemeOps.RibbonIconOnlyActive) {
+						// Use design base — never title.fontSize * 0.92 (would compound if capture raced).
+						float basePt = _themeTitleBasePt > 0.05f ? _themeTitleBasePt : 22f;
+						title.fontSize = Mathf.Max(16f, basePt * t.fontScale * 0.92f);
+					}
 				}
 				var filterLabel = _panel.transform.Find("FilterBar/FilterLabel")?.GetComponent<TextMeshProUGUI>();
 				if (filterLabel != null) {
@@ -1331,7 +1352,6 @@ namespace spz {
 				ThemeHeaderButton(_installFromFile_button, t.controlBg, t.accent, t.textPrimary);
 			if (_refresh_button != null)
 				ThemeHeaderButton(_refresh_button, t.controlBg, t.accent, t.textPrimary);
-			bool nomad = string.Equals(SpzUiThemeOps.ActiveThemeId, "nomad-inspired", System.StringComparison.Ordinal);
 			if (_loadAddonsNow_button != null)
 				ThemeHeaderButton(_loadAddonsNow_button,
 					nomad ? t.controlBg : t.success,
@@ -1398,15 +1418,84 @@ namespace spz {
 			if (button == null) return;
 			SpzUiThemeOps.ApplyBoundChromeSelectable(button, normal, highlighted);
 			var label = button.transform.Find("Text")?.GetComponent<TextMeshProUGUI>();
-			if (label != null) {
-				float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(label, 13f);
-				SpzUiThemeOps.ApplyBoundChromeTmp(label, foreground, basePt);
-			}
 			var icon = button.transform.Find("LineIcon")?.GetComponent<Image>();
-			if (icon != null && SpzUiThemeOps.ShouldRecolorBoundChrome)
+			bool nomad = string.Equals(SpzUiThemeOps.ActiveThemeId, "nomad-inspired", System.StringComparison.Ordinal);
+			bool iconOnly = nomad && SpzUiThemeOps.RibbonIconOnlyActive;
+			if (icon != null && SpzUiThemeOps.ShouldRecolorBoundChrome) {
+				var iconRt = icon.rectTransform;
+				iconRt.anchorMin = new Vector2(iconOnly ? 0.5f : 0f, 0.5f);
+				iconRt.anchorMax = new Vector2(iconOnly ? 0.5f : 0f, 0.5f);
+				iconRt.pivot = new Vector2(iconOnly ? 0.5f : 0f, 0.5f);
+				iconRt.sizeDelta = new Vector2(iconOnly ? 18f : 16f, iconOnly ? 18f : 16f);
+				iconRt.anchoredPosition = iconOnly ? Vector2.zero : new Vector2(10f, 0f);
+				icon.gameObject.SetActive(true);
 				SpzUiThemeOps.ApplyLineIconTint(icon);
+				if (iconOnly)
+					icon.color = foreground.a > 0.01f ? foreground : SpzUiThemeOps.Active.iconTint;
+			}
+			if (label != null) {
+				if (iconOnly) {
+					label.maxVisibleCharacters = 0;
+					label.color = new Color(foreground.r, foreground.g, foreground.b, 0f);
+				} else {
+					label.maxVisibleCharacters = int.MaxValue;
+					float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(label, 13f);
+					SpzUiThemeOps.ApplyBoundChromeTmp(label, foreground, basePt);
+					var labelRt = label.rectTransform;
+					// Leave a fixed gutter after the left-aligned line icon so labels share one column.
+					labelRt.offsetMin = new Vector2(nomad ? 30f : 25f, 0f);
+					labelRt.offsetMax = new Vector2(-5f, 0f);
+				}
+			}
 			if (button.targetGraphic is Image btnImg)
 				SpzUiThemeOps.ApplyRoundedControlSprite(btnImg);
+			var le = button.GetComponent<LayoutElement>();
+			if (le != null) {
+				if (iconOnly) {
+					le.preferredWidth = 40f;
+					le.minWidth = 36f;
+				} else {
+					float authored = ResolveAuthoredHeaderButtonWidth(button.gameObject.name);
+					le.preferredWidth = authored;
+					le.minWidth = authored;
+				}
+			}
+		}
+
+		static float ResolveAuthoredHeaderButtonWidth(string goName) {
+			if (string.Equals(goName, "InstallButton", StringComparison.Ordinal)) return 122f;
+			if (string.Equals(goName, "RefreshButton", StringComparison.Ordinal)) return 82f;
+			if (string.Equals(goName, "LoadAddonsNowButton", StringComparison.Ordinal)) return 126f;
+			if (string.Equals(goName, "SaveAddonSettingsButton", StringComparison.Ordinal)) return 118f;
+			if (string.Equals(goName, "RunWithAddonsButton", StringComparison.Ordinal)) return 142f;
+			return 100f;
+		}
+
+		static void RestoreHeaderButtonAuthoredChrome(Button button) {
+			if (button == null) return;
+			var label = button.transform.Find("Text")?.GetComponent<TextMeshProUGUI>();
+			if (label != null) {
+				label.maxVisibleCharacters = int.MaxValue;
+				var labelRt = label.rectTransform;
+				labelRt.offsetMin = new Vector2(25f, 0f);
+				labelRt.offsetMax = new Vector2(-5f, 0f);
+			}
+			var icon = button.transform.Find("LineIcon")?.GetComponent<Image>();
+			if (icon != null) {
+				var iconRt = icon.rectTransform;
+				iconRt.anchorMin = new Vector2(0f, 0.5f);
+				iconRt.anchorMax = new Vector2(0f, 0.5f);
+				iconRt.pivot = new Vector2(0f, 0.5f);
+				iconRt.anchoredPosition = new Vector2(8f, 0f);
+				iconRt.sizeDelta = new Vector2(14f, 14f);
+				icon.gameObject.SetActive(true);
+			}
+			var le = button.GetComponent<LayoutElement>();
+			if (le != null) {
+				float authored = ResolveAuthoredHeaderButtonWidth(button.gameObject.name);
+				le.preferredWidth = authored;
+				le.minWidth = authored;
+			}
 		}
 
 		static void ThemeFilterToggle(Toggle toggle, SpzUiThemeOps.ThemeTokens t) {

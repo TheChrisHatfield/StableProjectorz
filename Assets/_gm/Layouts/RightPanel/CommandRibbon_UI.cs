@@ -269,19 +269,19 @@ namespace spz {
 		    float basis = designBasis * SpzUiThemeOps.Active.fontScale;
 		    // Match ApplyThemeTokens: icon-only widths only while non-builtin theme chrome is active.
 		    bool iconOnly = SpzUiThemeOps.ShouldRecolorBoundChrome && SpzUiThemeOps.RibbonIconOnlyActive;
+		    if (iconOnly)
+			    return; // ApplyThemeTokens owns icon-only cell widths; do not auto-size hidden labels.
 		    foreach (var elem in strip.GetComponentsInChildren<TabsGroupElem_UI>(true))
 		    {
 			    if (elem == null || elem.transform.parent != strip) continue;
 			    var tmp = elem.GetComponentInChildren<TextMeshProUGUI>(true);
 			    if (tmp == null) continue;
 			    ConfigureResponsiveRibbonTabText(tmp, refTmp, basis);
-			    if (iconOnly) continue; // ApplyThemeTokens owns icon-only cell widths
 			    var le = elem.GetComponent<LayoutElement>();
 			    if (le != null)
 				    ApplyStripTabMinWidthForLabel(le, tmp, kRibbonStripTabLabelHorizontalPad);
 		    }
-		    if (!iconOnly)
-			    RebalanceStripTabMinWidthsIfOverflowing(strip);
+		    RebalanceStripTabMinWidthsIfOverflowing(strip);
 	    }
 
 	    // One tab + one panel per addon (Blender N-panel style)
@@ -772,6 +772,8 @@ namespace spz {
 	            if (leBuiltin != null) {
 	                leBuiltin.flexibleWidth = 1f;
 	                leBuiltin.preferredWidth = -1f;
+	                // Drop icon-only lock so Harmonize / label measure can reflow.
+	                leBuiltin.minWidth = 0f;
 	            }
 	            return;
 	        }
@@ -837,7 +839,8 @@ namespace spz {
 	            } else {
 	                le.flexibleWidth = 1f;
 	                le.preferredWidth = -1f;
-	                // minWidth: HarmonizeStripTabTypography / ApplyStripTabMinWidthForLabel owns next.
+	                // Clear icon-only minWidth before Harmonize; empty labels early-out and would leave 40px locks.
+	                le.minWidth = 0f;
 	            }
 	        }
 	    }
