@@ -142,9 +142,15 @@ def do_import_from_path():
     print("  raw path:", repr(_panel.get_value(_eid_import)))
     print("  normalized path:", path)
     print("  exists:", os.path.isfile(path))
+    if not os.path.isfile(path):
+        print(ADDON_ID + ": import aborted — file not found:", path)
+        try:
+            spz.get_api().ui_chrome.show_status_text("Import: file not found", 4.0)
+        except Exception as ex:
+            print(ADDON_ID + " show_status_text:", ex)
+        return
     try:
-        if os.path.isfile(path):
-            print("  size_bytes:", os.path.getsize(path))
+        print("  size_bytes:", os.path.getsize(path))
     except OSError as e:
         print("  size_bytes: <error>", e)
     api = spz.get_api()
