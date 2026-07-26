@@ -257,19 +257,10 @@ namespace spz {
 	    /// </summary>
 	    void ApplyThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
-	            if (_openPanel_button != null)
-	                SpzUiThemeOps.RestoreAuthoredGraphic(_openPanel_button.targetGraphic);
+	            // Full unwind: ColorBlocks / TMP tracking / rounded sprites — not colors alone.
+	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
 	            if (_panel != null)
-	                SpzUiThemeOps.RestoreAuthoredGraphic(_panel.GetComponent<Image>());
-	            if (_ip_text != null) {
-	                SpzUiThemeOps.RestoreAuthoredGraphic(_ip_text.GetComponent<Image>());
-	                if (_ip_text.textComponent != null)
-	                    SpzUiThemeOps.RestoreAuthoredGraphic(_ip_text.textComponent);
-	                if (_ip_text.placeholder is TMPro.TMP_Text ph)
-	                    SpzUiThemeOps.RestoreAuthoredGraphic(ph);
-	            }
-	            if (_resetToDefault_button != null)
-	                SpzUiThemeOps.RestoreAuthoredGraphic(_resetToDefault_button.targetGraphic);
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_panel.transform);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
