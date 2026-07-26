@@ -637,8 +637,9 @@ namespace spz {
 	                        activeImg.color = Color.Lerp(t.tabActive, t.accent, 0.72f);
 	                    }
 	                }
-	                var label = cell.GetComponentInChildren<TextMeshProUGUI>(true);
-	                if (label != null) {
+	                // Hide every strip-cell TMP (prefabs may have more than one label).
+	                foreach (var label in cell.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	                    if (label == null) continue;
 	                    if (iconOnly) {
 	                        // Keep GameObject active for layout/hit targets; hide glyphs only.
 	                        label.maxVisibleCharacters = 0;
@@ -743,12 +744,18 @@ namespace spz {
 	            SpzUiThemeOps.ApplyLineIconTint(icon);
 	        }
 	        // Tighten strip cell when icon-only so the row reads like a toolbox.
-	        // When leaving icon-only, do not wipe LayoutElement — HarmonizeStripTabTypography owns widths.
+	        // Leaving icon-only must clear preferredWidth/flexibleWidth locks so Harmonize can reflow.
 	        var le = cell.GetComponent<LayoutElement>();
-	        if (le != null && iconOnly) {
-	            le.flexibleWidth = 0f;
-	            le.preferredWidth = 40f;
-	            le.minWidth = 36f;
+	        if (le != null) {
+	            if (iconOnly) {
+	                le.flexibleWidth = 0f;
+	                le.preferredWidth = 40f;
+	                le.minWidth = 36f;
+	            } else {
+	                le.flexibleWidth = 1f;
+	                le.preferredWidth = -1f;
+	                // minWidth: HarmonizeStripTabTypography / ApplyStripTabMinWidthForLabel owns next.
+	            }
 	        }
 	    }
 
