@@ -29,6 +29,8 @@ class SpzGoBlenderInstallContractTests(unittest.TestCase):
 		src = ADDON.read_text(encoding="utf-8")
 		self.assertIn('add_button("Install into Blender", "do_install_blender_addon_force")', src)
 		self.assertIn("do_install_blender_addon(force=False)", src)
+		self.assertIn("threading.Thread", src)
+		self.assertIn("SpzGoBlenderAutoInstall", src)
 		self.assertIn("def do_install_blender_addon", src)
 		self.assertIn("def bridge_ship_dir", src)
 
