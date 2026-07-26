@@ -234,8 +234,11 @@ def do_autofill_mesh_paths():
         if val:
             if not _panel.set_value(eid, val):
                 print(ADDON_ID + " could not set", eid)
-    if not (ip and ep):
-        print(ADDON_ID + ": save a project in SPZ to fill exchange paths, or type paths.")
+    if not ip and not ep:
+        print(ADDON_ID + ": no data_dir yet — paths empty; type them or retry after SPZ is ready.")
+    elif not ip or not ep:
+        missing = "import" if not ip else "export"
+        print(ADDON_ID + f": autofill partial — {missing} path still empty.")
 
 
 def do_show_data_dir():
@@ -246,7 +249,7 @@ def do_show_data_dir():
     if d:
         print(ADDON_ID + " data_dir:", d)
     else:
-        print(ADDON_ID + ": no project data_dir — save a project in StableProjectorz first.")
+        print(ADDON_ID + ": no project data_dir — session folder unavailable.")
 
 
 def do_export_interactive():
@@ -273,16 +276,17 @@ def register():
     i_default = default_import_mesh_path() or ""
     o_default = default_export_mesh_path() or ""
 
-    _eid_blender = _panel.add_text_input("Blender.exe path (auto + editable)", b_default)
-    _eid_import = _panel.add_text_input("Import: mesh file from Blender → SPZ", i_default)
-    _eid_export = _panel.add_text_input("Export: mesh file from SPZ → disk", o_default)
+    # Primary paths first; Blender.exe demoted (informational only — does not launch Blender).
+    _eid_import = _panel.add_text_input("Import path", i_default)
+    _eid_export = _panel.add_text_input("Export path", o_default)
+    _eid_blender = _panel.add_text_input("Blender.exe (optional)", b_default)
 
-    _panel.add_button("Refresh Blender path", "do_refresh_blender_path")
-    _panel.add_button("Autofill import/export (needs saved project)", "do_autofill_mesh_paths")
     _panel.add_button("Import", "do_import_from_path")
     _panel.add_button("Export", "do_export_to_path")
-    _panel.add_button("Export (file dialogs)…", "do_export_interactive")
-    _panel.add_button("Print data_dir to log", "do_show_data_dir")
+    _panel.add_button("Autofill paths", "do_autofill_mesh_paths")
+    _panel.add_button("Refresh Blender", "do_refresh_blender_path")
+    _panel.add_button("Export with dialogs…", "do_export_interactive")
+    _panel.add_button("Print data_dir", "do_show_data_dir")
     print(ADDON_ID + " registered")
 
 
