@@ -417,9 +417,32 @@ public sealed class SpzUiThemeOpsTests {
 		Assert.That(shell.a, Is.EqualTo(0.5f).Within(0.01f));
 		Assert.That(SpzUiThemeOps.TryParseStudioLineIcon("Brush", out StudioLineIcon icon, out error), Is.True, error);
 		Assert.That(icon, Is.EqualTo(StudioLineIcon.Brush));
+		Assert.That(SpzUiThemeOps.TryParseStudioLineIcon("Expand", out icon, out error), Is.True, error);
+		Assert.That(icon, Is.EqualTo(StudioLineIcon.Expand));
+		Assert.That(SpzUiThemeOps.TryParseStudioLineIcon("ChevronLeft", out icon, out error), Is.True, error);
+		Assert.That(icon, Is.EqualTo(StudioLineIcon.ChevronLeft));
+		Assert.That(SpzUiThemeOps.TryParseStudioLineIcon("ChevronRight", out icon, out error), Is.True, error);
+		Assert.That(icon, Is.EqualTo(StudioLineIcon.ChevronRight));
 		Assert.That(SpzUiThemeOps.ListLineIconNames().ToString(), Does.Contain("Mesh"));
+		Assert.That(SpzUiThemeOps.ListLineIconNames().ToString(), Does.Contain("Expand"));
+		Assert.That(RibbonViewportFullViewOnScreen_Toggle_UI.ResolveFullViewDockIcon(), Is.EqualTo(StudioLineIcon.Expand));
+		Assert.That(RibbonViewportFullViewOnScreen_Toggle_UI.ResolveOpenRightDockIcon(false), Is.EqualTo(StudioLineIcon.ChevronRight));
+		Assert.That(RibbonViewportFullViewOnScreen_Toggle_UI.ResolveOpenRightDockIcon(true), Is.EqualTo(StudioLineIcon.ChevronLeft));
 		Assert.That(SpzUiChromeOps.ListUiTargetIds(), Does.Contain("left_ribbon"));
 		Assert.That(SpzUiChromeOps.ListUiTargetIds(), Does.Contain("workflow_options"));
+	}
+
+	[Test]
+	public void StripLineIconResolveDefaultsDoNotRequireOverwriteOnRefresh() {
+		// Regression: ApplyStudioTabChromeColors must keep compose/set_line_icon sprites
+		// (only assign ResolveStripTabLineIcon when Image.sprite is null).
+		Assert.That(SpzUiThemeOps.TryParseStudioLineIcon("Brush", out StudioLineIcon brush, out string error), Is.True, error);
+		Assert.That(brush, Is.EqualTo(StudioLineIcon.Brush));
+		Sprite a = UiRuntimeSprites.GetLineIcon(StudioLineIcon.Brush);
+		Sprite b = UiRuntimeSprites.GetLineIcon(StudioLineIcon.Eye);
+		Assert.That(a, Is.Not.Null);
+		Assert.That(b, Is.Not.Null);
+		Assert.That(ReferenceEquals(a, b), Is.False);
 	}
 
 	[Test]

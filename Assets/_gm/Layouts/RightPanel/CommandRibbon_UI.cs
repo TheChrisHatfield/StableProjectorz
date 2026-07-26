@@ -776,13 +776,27 @@ namespace spz {
 	            return;
 	        }
 
-	        if (bar != null) {
+	        // Nomad sculpt: thin accent underline under the active pill (create if missing).
+	        if (active != null) {
+	            if (bar == null) {
+	                var barGo = new GameObject("MonolithActiveBar", typeof(RectTransform));
+	                barGo.transform.SetParent(active, false);
+	                bar = barGo.transform;
+	                var barImgNew = barGo.AddComponent<Image>();
+	                barImgNew.raycastTarget = false;
+	            }
+	            var barRt = bar as RectTransform;
+	            if (barRt != null) {
+	                barRt.anchorMin = new Vector2(0.18f, 0f);
+	                barRt.anchorMax = new Vector2(0.82f, 0f);
+	                barRt.pivot = new Vector2(0.5f, 0f);
+	                barRt.sizeDelta = new Vector2(0f, 2f);
+	                barRt.anchoredPosition = Vector2.zero;
+	            }
 	            bar.gameObject.SetActive(true);
 	            var barImg = bar.GetComponent<Image>();
 	            if (barImg != null)
 	                barImg.color = t.accent;
-	        }
-	        if (active != null) {
 	            var pill = FindActivePillImage(active);
 	            if (pill != null)
 	                pill.enabled = true;
@@ -793,28 +807,21 @@ namespace spz {
 	            iconTransform = go.transform;
 	            var img = go.AddComponent<Image>();
 	            img.raycastTarget = false;
-	            img.sprite = UiRuntimeSprites.GetLineIcon(ResolveStripTabLineIcon(cell.name));
 	            img.preserveAspect = true;
 	        }
 	        iconTransform.gameObject.SetActive(true);
 	        var iconRt = iconTransform as RectTransform;
 	        if (iconRt != null) {
-	            if (iconOnly) {
-	                iconRt.anchorMin = new Vector2(0.5f, 0.5f);
-	                iconRt.anchorMax = new Vector2(0.5f, 0.5f);
-	                iconRt.pivot = new Vector2(0.5f, 0.5f);
-	                iconRt.sizeDelta = new Vector2(22f, 22f);
-	                iconRt.anchoredPosition = Vector2.zero;
-	            } else {
-	                iconRt.anchorMin = new Vector2(0.5f, 0.55f);
-	                iconRt.anchorMax = new Vector2(0.5f, 0.55f);
-	                iconRt.pivot = new Vector2(0.5f, 0.5f);
-	                iconRt.sizeDelta = new Vector2(18f, 18f);
-	                iconRt.anchoredPosition = new Vector2(0f, 6f);
-	            }
+	            // Icon-only and label+icon share the same center so strip glyphs stay aligned.
+	            iconRt.anchorMin = new Vector2(0.5f, 0.5f);
+	            iconRt.anchorMax = new Vector2(0.5f, 0.5f);
+	            iconRt.pivot = new Vector2(0.5f, 0.5f);
+	            iconRt.anchoredPosition = Vector2.zero;
+	            iconRt.sizeDelta = iconOnly ? new Vector2(24f, 24f) : new Vector2(18f, 18f);
 	        }
 	        var icon = iconTransform.GetComponent<Image>();
 	        if (icon != null) {
+	            // Do not overwrite sprites set by set_line_icon / ComposeNomadStripIconsNative.
 	            if (icon.sprite == null)
 	                icon.sprite = UiRuntimeSprites.GetLineIcon(ResolveStripTabLineIcon(cell.name));
 	            SpzUiThemeOps.ApplyLineIconTint(icon);
@@ -825,8 +832,8 @@ namespace spz {
 	        if (le != null) {
 	            if (iconOnly) {
 	                le.flexibleWidth = 0f;
-	                le.preferredWidth = 40f;
-	                le.minWidth = 36f;
+	                le.preferredWidth = 44f;
+	                le.minWidth = 40f;
 	            } else {
 	                le.flexibleWidth = 1f;
 	                le.preferredWidth = -1f;
