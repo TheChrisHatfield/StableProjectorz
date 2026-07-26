@@ -25,6 +25,10 @@ namespace spz {
 	    [SerializeField] Color _nearestPin_color;
 	    [SerializeField] CamerasMGR_POVdefaults_UI _pinsDefaults;
 
+	    Color _authoredPinColor;
+	    Color _authoredNearestPinColor;
+	    bool _authoredPinColorsSnapshotted;
+
 	    GameObject _draggedPin = null;
 	    int _draggedPinIx = -1;
 	    Vector2 _draggedPin_cursorOffset;
@@ -661,7 +665,14 @@ namespace spz {
 	    /// Uses theme accent for “nearest” highlight color field when present.
 	    /// </summary>
 	    void ApplyPinsChromeThemeTokens() {
+	        if (!_authoredPinColorsSnapshotted) {
+	            _authoredPinColor = _pinColor;
+	            _authoredNearestPinColor = _nearestPin_color;
+	            _authoredPinColorsSnapshotted = true;
+	        }
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            _pinColor = _authoredPinColor;
+	            _nearestPin_color = _authoredNearestPinColor;
 	            if (_cameraPins != null) {
 	                for (int i = 0; i < _cameraPins.Count; i++) {
 	                    var pin = _cameraPins[i];

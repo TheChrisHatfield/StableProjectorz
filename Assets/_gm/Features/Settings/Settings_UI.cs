@@ -893,12 +893,18 @@ namespace spz {
 	    /// <summary>Same ColorBlock as built-in Settings_UI.prefab toggles (tints sliced frame).</summary>
 	    static void ApplySettingsPrefabMatchToggleColors(Selectable sel) {
 	        var t = SpzUiThemeOps.Active;
+	        Color accent = SpzUiThemeOps.ShouldRecolorBoundChrome
+	            ? t.accent
+	            : new Color(0.55f, 0.55f, 0.58f, 1f);
+	        Color success = SpzUiThemeOps.ShouldRecolorBoundChrome
+	            ? t.success
+	            : new Color(0.35f, 0.72f, 0.42f, 1f);
 	        sel.transition = Selectable.Transition.ColorTint;
 	        sel.colors = new ColorBlock {
 	            normalColor = Color.white,
-	            highlightedColor = Color.Lerp(Color.white, t.accent, 0.15f),
-	            pressedColor = Color.Lerp(Color.white, t.accent, 0.35f),
-	            selectedColor = Color.Lerp(Color.white, t.success, 0.35f),
+	            highlightedColor = Color.Lerp(Color.white, accent, 0.15f),
+	            pressedColor = Color.Lerp(Color.white, accent, 0.35f),
+	            selectedColor = Color.Lerp(Color.white, success, 0.35f),
 	            disabledColor = new Color(0.78431374f, 0.78431374f, 0.78431374f, 0.5019608f),
 	            colorMultiplier = 1f,
 	            fadeDuration = 0.1f
@@ -912,15 +918,22 @@ namespace spz {
 
 	    /// <summary>Apply hover/pressed/selected colors so the control looks selectable and shows active state.</summary>
 	    static void ApplySelectableColors(Selectable sel, Color? whenOnTint = null) {
-	        var t = SpzUiThemeOps.Active;
 	        sel.transition = Selectable.Transition.ColorTint;
-	        if (sel.targetGraphic != null)
-	            sel.targetGraphic.color = t.controlBg;
+	        var t = SpzUiThemeOps.Active;
+	        // On builtin, keep the authored targetGraphic set by CreateToggle*; only retint when themed.
+	        if (SpzUiThemeOps.ShouldRecolorBoundChrome && sel.targetGraphic != null)
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(sel.targetGraphic, t.controlBg);
+	        Color accent = SpzUiThemeOps.ShouldRecolorBoundChrome
+	            ? t.accent
+	            : new Color(0.55f, 0.55f, 0.58f, 1f);
+	        Color success = SpzUiThemeOps.ShouldRecolorBoundChrome
+	            ? t.success
+	            : new Color(0.35f, 0.72f, 0.42f, 1f);
 	        var block = new ColorBlock {
 	            normalColor = Color.white,
-	            highlightedColor = Color.Lerp(Color.white, t.accent, 0.25f),
-	            pressedColor = Color.Lerp(Color.white, t.accent, 0.55f),
-	            selectedColor = whenOnTint ?? t.success,
+	            highlightedColor = Color.Lerp(Color.white, accent, 0.25f),
+	            pressedColor = Color.Lerp(Color.white, accent, 0.55f),
+	            selectedColor = whenOnTint ?? success,
 	            disabledColor = new Color(0.2f, 0.2f, 0.2f, 0.5f),
 	            colorMultiplier = 1f,
 	            fadeDuration = 0.12f

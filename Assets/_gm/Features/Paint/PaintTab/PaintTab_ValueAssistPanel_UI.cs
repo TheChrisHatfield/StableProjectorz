@@ -223,15 +223,19 @@ namespace spz {
 		void OnEnable() {
 			PaintTab_ValueAssistOptions.Changed -= OnOptionsChanged;
 			PaintTab_ValueAssistOptions.Changed += OnOptionsChanged;
+			SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+			SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
 			if (_blendDial != null) {
 				SyncControlsFromStore();
 				ApplyEnabledChrome();
 				RefreshStatusLine();
 			}
+			ApplyThemeTokens();
 		}
 
 		void OnDisable() {
 			PaintTab_ValueAssistOptions.Changed -= OnOptionsChanged;
+			SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 			// Panel SetActive(false) on collapse — hide pinned bar so it does not block Brush options.
 			if (_pinnedCollapseGo != null)
 				_pinnedCollapseGo.SetActive(false);
@@ -239,11 +243,19 @@ namespace spz {
 
 		void OnDestroy() {
 			PaintTab_ValueAssistOptions.Changed -= OnOptionsChanged;
+			SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 			if (_pinnedCollapseGo != null) {
 				// Immediate: same-frame EnsureUnder must not Find a deferred-destroy pin.
 				UnityEngine.Object.DestroyImmediate(_pinnedCollapseGo);
 				_pinnedCollapseGo = null;
 			}
+		}
+
+		void ApplyThemeTokens() {
+			SpzUiThemeOps.ApplyContextMenuChrome(gameObject);
+			var bg = GetComponent<Image>();
+			if (bg != null)
+				SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
 		}
 
 		void Update() {
@@ -359,10 +371,10 @@ namespace spz {
 
 			var t = SpzUiThemeOps.Active;
 			var bg = gameObject.GetComponent<Image>() ?? gameObject.AddComponent<Image>();
-			bg.sprite = UiRuntimeSprites.RoundedRectSliced;
-			bg.type = Image.Type.Sliced;
-			// Match BrushOptsPanel chrome
-			bg.color = new Color(0.16f, 0.18f, 0.22f, 0.98f);
+			SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
+			// Authored shell first so ApplyBoundChrome can snapshot/restore; do not paint Active on builtin.
+			bg.color = new Color(0.14f, 0.14f, 0.16f, 0.96f);
+			SpzUiThemeOps.ApplyBoundChromeGraphic(bg, t.panelBg);
 			bg.raycastTarget = true;
 
 			var vlg = gameObject.GetComponent<VerticalLayoutGroup>() ?? gameObject.AddComponent<VerticalLayoutGroup>();
@@ -678,7 +690,7 @@ namespace spz {
 			var sw = spz.MlpDecimacon.DecimaconProductGate.StartTimer();
 			_proposal = _assist.ProposeFromColor(sample, default);
 			spz.MlpDecimacon.DecimaconProductGate.EndInference(
-				lavd, spz.MlpDecimacon.DecimaconProductGate.ElapsedMs(sw), ranForward: true, accuracyProxy: 0.99f);
+				lavd, spz.MlpDecimacon.DecimaconProductGate.ElapsedMs(sw), ranForward: true);
 			_proposalBaseColor = sample;
 			_hasProposal = true;
 			_proposalFromNeural = PaintTab_ValueAssistOptions.UseNeural;
@@ -703,6 +715,7 @@ namespace spz {
 			}
 			bool ok = ValuePaintProposalApplier.TryAccept(_proposal, _proposalBaseColor, out string reason);
 			if (ok) {
+				spz.MlpDecimacon.DecimaconProductGate.ReportUserOutcome(accepted: true);
 				// Snapshot consumed — Accept locks the brush; pending Propose UI must release so Armed status works.
 				_hasProposal = false;
 				if (_acceptBtn != null) _acceptBtn.interactable = false;
@@ -720,6 +733,7 @@ namespace spz {
 		}
 
 		void OnDismiss() {
+			spz.MlpDecimacon.DecimaconProductGate.ReportUserOutcome(accepted: false);
 			ClearPendingProposal(null);
 			ValuePaintProposalApplier.ClearArmed();
 			// Stop Live from immediately re-arming under the tip; clear when Live dial turns on again.
@@ -1054,8 +1068,7 @@ namespace spz {
 			le.preferredWidth = 56f;
 			le.minHeight = 22f;
 			var img = go.AddComponent<Image>();
-			img.sprite = UiRuntimeSprites.RoundedRectSliced;
-			img.type = Image.Type.Sliced;
+			SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
 			img.color = bg;
 			img.raycastTarget = true;
 			var btn = go.AddComponent<Button>();
