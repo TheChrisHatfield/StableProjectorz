@@ -10,6 +10,7 @@ import glob
 import sys
 import traceback
 import subprocess
+import threading
 
 addon_system_dir = os.path.join(os.path.dirname(__file__), "..", "..", "AddonSystem")
 if os.path.exists(addon_system_dir):
@@ -427,12 +428,16 @@ def register():
     _panel.add_button("Export with dialogs…", "do_export_interactive")
     _panel.add_button("Print data_dir", "do_show_data_dir")
     print(ADDON_ID + " registered")
-    # Best-effort auto-install when Blender is present; never fail register().
-    try:
-        if b_default:
-            do_install_blender_addon(force=False)
-    except Exception as e:
-        print(ADDON_ID + " auto-install Blender bridge skipped:", e)
+    # Best-effort auto-install when Blender is present — background so register() is not blocked (up to 180s).
+    if b_default:
+        def _auto_install():
+            try:
+                do_install_blender_addon(force=False)
+            except Exception as e:
+                print(ADDON_ID + " auto-install Blender bridge skipped:", e)
+
+        t = threading.Thread(target=_auto_install, name="SpzGoBlenderAutoInstall", daemon=True)
+        t.start()
 
 
 def unregister():
