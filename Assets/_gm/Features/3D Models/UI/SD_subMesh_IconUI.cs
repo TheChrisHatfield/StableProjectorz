@@ -16,6 +16,9 @@ namespace spz {
 
 	    bool _destroyed = false;
 	    bool _sendEvent_duringDestroy = true;//for example, if we are placeholder and have to be removed dur game start.
+	    Color _authoredSelected;
+	    Color _authoredNotSelected;
+	    bool _authoredBgSnapshotted;
 
 	    public SD_3D_Mesh myMesh { get; private set; } = null;
 	    public bool isSelected => myMesh._isSelected;
@@ -25,6 +28,7 @@ namespace spz {
 	    public void Init( SD_3D_Mesh myMesh ){
 	        this.myMesh = myMesh;
 	        _name.text = myMesh.gameObject.name;
+	        SnapshotAuthoredBgColors();
         
 	        //doing it all here, because Start() might not be invoked until entire panel becomes active:
 	        _wholeIcon_button.onClick.AddListener(OnWholeIcon_button);
@@ -40,12 +44,24 @@ namespace spz {
 	        OnSomeMesh_Selected(myMesh);
 	    }
 
+	    void SnapshotAuthoredBgColors() {
+	        if (_authoredBgSnapshotted) return;
+	        _authoredSelected = _color_Selected;
+	        _authoredNotSelected = _color_NotSelected;
+	        _authoredBgSnapshotted = true;
+	    }
+
 	    void ApplyThemeTokens() {
+	        SnapshotAuthoredBgColors();
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            _color_Selected = _authoredSelected;
+	            _color_NotSelected = _authoredNotSelected;
 	            if (_name != null)
 	                SpzUiThemeOps.RestoreAuthoredGraphic(_name);
 	            if (_rmvButton != null)
 	                SpzUiThemeOps.RestoreAuthoredGraphic(_rmvButton.targetGraphic);
+	            if (_background != null && myMesh != null)
+	                ToggleBG(myMesh._isSelected);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
