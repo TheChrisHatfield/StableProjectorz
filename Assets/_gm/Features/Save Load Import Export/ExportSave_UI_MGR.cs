@@ -96,10 +96,8 @@ namespace spz {
 
 	    static void RestoreMenuButton(Button btn) {
 	        if (btn == null) return;
-	        SpzUiThemeOps.RestoreAuthoredGraphic(btn.targetGraphic);
-	        var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
-	        if (label != null)
-	            SpzUiThemeOps.RestoreAuthoredGraphic(label);
+	        // Full unwind: ColorBlocks / TMP tracking / font scale — not Graphic colors alone.
+	        SpzUiThemeOps.RestoreBoundChromeUnder(btn.transform);
 	    }
 
 	    static void ThemeMenuButton(Button btn, SpzUiThemeOps.ThemeTokens t) {
