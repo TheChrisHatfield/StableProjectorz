@@ -49,6 +49,7 @@ class SpzGoBlenderInstallContractTests(unittest.TestCase):
 		self.assertIn("SPZ_GO_INSTALL_SKIP", script)
 		self.assertIn("SPZ_GO_INSTALL_FAIL", script)
 		self.assertIn("spz_blender_bridge", script)
+		self.assertIn("save_userpref", script)
 
 
 if __name__ == "__main__":

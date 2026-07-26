@@ -114,19 +114,28 @@ def _enable(module: str) -> bool:
 		bpy.ops.preferences.addon_refresh()
 	except Exception:
 		pass
+	enabled = False
 	try:
 		bpy.ops.preferences.addon_enable(module=module)
-		return True
+		enabled = True
 	except Exception as e:
 		# Already enabled or alternate key
 		print("SPZ_GO_INSTALL_NOTE: addon_enable: " + str(e))
 		try:
 			addons = bpy.context.preferences.addons
 			if module in addons:
-				return True
+				enabled = True
 		except Exception:
 			pass
+	if not enabled:
 		return False
+	# Background installs must write prefs or enable is lost on next Blender launch.
+	try:
+		bpy.ops.wm.save_userpref()
+	except Exception as e:
+		print("SPZ_GO_INSTALL_NOTE: save_userpref: " + str(e))
+		# Still treat as success if enable worked this session.
+	return True
 
 
 if __name__ == "__main__":
