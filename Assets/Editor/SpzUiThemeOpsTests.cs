@@ -470,6 +470,10 @@ public sealed class SpzUiThemeOpsTests {
 		Assert.That(CommandRibbon_UI.ResolveStripTabLineIconFromHaystack("mesh"),
 			Is.EqualTo(StudioLineIcon.Mesh));
 		Assert.That(CommandRibbon_UI.ResolveStripTabDisplayName(null), Is.EqualTo("Tab"));
+		// Compose needles must hit identity beyond GameObject.name alone.
+		Assert.That("Tab: 3d mesh mesh".IndexOf("Mesh", StringComparison.OrdinalIgnoreCase), Is.GreaterThanOrEqualTo(0));
+		Assert.That("Tab: controlnet + anim controlnet ctrl".IndexOf("CTRL", StringComparison.OrdinalIgnoreCase),
+			Is.GreaterThanOrEqualTo(0));
 	}
 
 	[Test]
