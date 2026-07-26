@@ -614,9 +614,18 @@ namespace spz {
 				return;
 			}
 			UnityEngine.Debug.Log("[AddonUI_MGR] Seeding native SPZ GO panel (Python create_panel missing / HTTP :5557 down).");
+			string importDefault = "";
+			string exportDefault = "";
+			var fp = FastPath_API.instance;
+			string dataDir = fp != null ? fp.GetProjectDataDirOrSession() : null;
+			if (!string.IsNullOrEmpty(dataDir)) {
+				string exchange = Path.Combine(dataDir, "StableProjectorzGO_exchange");
+				importDefault = Path.Combine(exchange, "from_blender.fbx");
+				exportDefault = Path.Combine(exchange, "from_spz.fbx");
+			}
 			AddTextInput(StableProjectorzGoAddonId, panelId, "Blender.exe path (auto + editable)", "");
-			AddTextInput(StableProjectorzGoAddonId, panelId, "Import: mesh file from Blender → SPZ", "");
-			AddTextInput(StableProjectorzGoAddonId, panelId, "Export: mesh file from SPZ → disk", "");
+			AddTextInput(StableProjectorzGoAddonId, panelId, "Import: mesh file from Blender → SPZ", importDefault);
+			AddTextInput(StableProjectorzGoAddonId, panelId, "Export: mesh file from SPZ → disk", exportDefault);
 			AddButton(StableProjectorzGoAddonId, panelId, "Import", "do_import_from_path");
 			AddButton(StableProjectorzGoAddonId, panelId, "Export", "do_export_to_path");
 		}
