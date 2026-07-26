@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using TMPro;
 using UnityEngine;
@@ -15,12 +16,28 @@ namespace spz {
 	public static class SpzUiThemeOps {
 
 		public const string DefaultThemeId = "stableprojectorz-default";
-		public const string ThemeApiVersion = "1.13";
+		public const string ThemeApiVersion = "1.18";
 		const int kMaxThemeIdChars = 64;
 		const int kMaxLabelChars = 128;
 		const int kMaxRegisteredThemes = 32;
 		public const float ScaleTokenMin = 0.75f;
 		public const float ScaleTokenMax = 1.5f;
+		public const float CornerRadiusMin = 0f;
+		public const float CornerRadiusMax = 12f;
+		public const float DefaultCornerRadius = 6f;
+		public const float PanelWidthMin = 180f;
+		public const float PanelWidthMax = 400f;
+		public const float DefaultPanelWidth = 220f;
+		public const float PanelAlphaMin = 0.5f;
+		public const float PanelAlphaMax = 1f;
+		public const float DefaultPanelAlpha = 1f;
+		public const float RibbonIconOnlyMin = 0f;
+		public const float RibbonIconOnlyMax = 1f;
+		public const float DefaultRibbonIconOnly = 0f;
+
+		const string PrefsActiveThemeId = "SpzUiTheme.ActiveThemeId";
+		const string PrefsActiveTokensJson = "SpzUiTheme.ActiveTokensJson";
+		static bool _suppressPersist;
 
 		static readonly string[] ReservedTokenNames = { };
 
@@ -44,8 +61,13 @@ namespace spz {
 			public Color border;
 			public Color tabActive;
 			public Color selection;
+			public Color iconTint;
 			public float fontScale = 1f;
 			public float spacingScale = 1f;
+			public float cornerRadius = DefaultCornerRadius;
+			public float panelWidth = DefaultPanelWidth;
+			public float panelAlpha = DefaultPanelAlpha;
+			public float ribbonIconOnly = DefaultRibbonIconOnly;
 
 			public ThemeTokens Clone() {
 				return (ThemeTokens)MemberwiseClone();
@@ -65,8 +87,13 @@ namespace spz {
 			border = new Color(1f, 1f, 1f, 0.08f),             // #FFFFFF14
 			tabActive = new Color(0.329f, 0.329f, 0.329f, 1f), // #545454
 			selection = new Color(0.231f, 0.510f, 0.965f, 1f), // #3B82F6
+			iconTint = new Color(0.5f, 0.5f, 0.5f, 1f),
 			fontScale = 1f,
 			spacingScale = 1f,
+			cornerRadius = DefaultCornerRadius,
+			panelWidth = DefaultPanelWidth,
+			panelAlpha = DefaultPanelAlpha,
+			ribbonIconOnly = DefaultRibbonIconOnly,
 		};
 
 		static ThemeTokens _active = Defaults.Clone();
@@ -79,6 +106,10 @@ namespace spz {
 		public static string ActiveThemeId => _activeThemeId;
 		public static ThemeTokens Active => _active.Clone();
 
+		/// <summary>True when <c>ribbon_icon_only</c> ≥ 0.5 (CommandRibbon strip hides labels, enlarges line icons).</summary>
+		public static bool RibbonIconOnlyActive =>
+			_active.ribbonIconOnly >= 0.5f;
+
 		public static JObject GetThemeResult() {
 			return new JObject {
 				["success"] = true,
@@ -89,6 +120,9 @@ namespace spz {
 				["surfaces"] = BuildSurfaces(),
 				["addon_rpc_theme_version"] = ThemeApiVersion,
 				["ui_scale_source"] = "chrome",
+				["persistence"] = "player_prefs",
+				["persisted_theme_id"] = PlayerPrefs.GetString(PrefsActiveThemeId, ""),
+				["line_icons"] = ListLineIconNames(),
 				["composes_with"] = new JArray {
 					"spz.cmd.set_ui_scale",
 					"spz.cmd.list_ui_targets",
@@ -234,6 +268,7 @@ namespace spz {
 			_activeThemeId = themeId;
 			_active = candidate;
 			NotifyThemeChanged();
+			PersistActiveTheme();
 			return true;
 		}
 
@@ -241,6 +276,68 @@ namespace spz {
 			_activeThemeId = DefaultThemeId;
 			_active = Defaults.Clone();
 			NotifyThemeChanged();
+			ClearPersistedTheme();
+		}
+
+		/// <summary>
+		/// Restores last applied theme from PlayerPrefs (token body). Returns false when nothing to restore.
+		/// </summary>
+		public static bool TryRestorePersistedTheme(out string detail) {
+			detail = null;
+			string themeId = PlayerPrefs.GetString(PrefsActiveThemeId, "");
+			string tokensJson = PlayerPrefs.GetString(PrefsActiveTokensJson, "");
+			if (string.IsNullOrEmpty(themeId)
+			    || string.Equals(themeId, DefaultThemeId, StringComparison.Ordinal)) {
+				detail = "no persisted non-default theme";
+				return false;
+			}
+			if (string.IsNullOrEmpty(tokensJson)) {
+				detail = "persisted theme id without token body";
+				return false;
+			}
+			JObject tokens;
+			try {
+				tokens = JObject.Parse(tokensJson);
+			} catch (Exception e) {
+				detail = $"invalid persisted tokens: {e.Message}";
+				return false;
+			}
+			_suppressPersist = true;
+			try {
+				// Re-register common add-on presets so list_themes stays honest after boot.
+				if (string.Equals(themeId, "nomad-inspired", StringComparison.Ordinal))
+					TryRegisterTheme(themeId, "Nomad inspired", tokens, "NomadThemeSPZ", out _);
+				if (!TryApplyTheme(themeId, tokens, "replace", out string error)) {
+					detail = error ?? "apply failed";
+					return false;
+				}
+			} finally {
+				_suppressPersist = false;
+			}
+			// Re-write prefs so persisted_theme_id stays aligned after a successful restore.
+			PersistActiveTheme();
+			detail = $"restored '{themeId}'";
+			return true;
+		}
+
+		public static void ClearPersistedTheme() {
+			if (_suppressPersist)
+				return;
+			PlayerPrefs.DeleteKey(PrefsActiveThemeId);
+			PlayerPrefs.DeleteKey(PrefsActiveTokensJson);
+			PlayerPrefs.Save();
+		}
+
+		static void PersistActiveTheme() {
+			if (_suppressPersist)
+				return;
+			if (string.Equals(_activeThemeId, DefaultThemeId, StringComparison.Ordinal)) {
+				ClearPersistedTheme();
+				return;
+			}
+			PlayerPrefs.SetString(PrefsActiveThemeId, _activeThemeId);
+			PlayerPrefs.SetString(PrefsActiveTokensJson, SerializeTokens(_active).ToString(Formatting.None));
+			PlayerPrefs.Save();
 		}
 
 		static void NotifyThemeChanged() {
@@ -268,7 +365,7 @@ namespace spz {
 
 			var rootImage = root.GetComponent<Image>();
 			if (rootImage != null && root.name.StartsWith("AddonPanel_", StringComparison.Ordinal))
-				rootImage.color = tokens.panelBg;
+				rootImage.color = ResolvePanelShellColor();
 
 			foreach (var button in root.GetComponentsInChildren<Button>(true)) {
 				if (button == null || button.targetGraphic == null)
@@ -282,6 +379,9 @@ namespace spz {
 				// Image.color is the token; ColorBlock stays a white-based multiplier so Unity does
 				// not darken tokens by multiplying the same color twice.
 				button.targetGraphic.color = normal;
+				if (button.targetGraphic is Image btnImg)
+					ApplyRoundedControlSprite(btnImg);
+				ApplyPanelWidth(button.GetComponent<LayoutElement>());
 				var colors = button.colors;
 				colors.normalColor = Color.white;
 				colors.highlightedColor = Color.Lerp(Color.white, tokens.accent, 0.25f);
@@ -294,8 +394,136 @@ namespace spz {
 				if (input == null)
 					continue;
 				var bg = input.GetComponent<Image>();
-				if (bg != null)
+				if (bg != null) {
 					bg.color = tokens.fieldBg;
+					ApplyRoundedControlSprite(bg);
+				}
+				ApplyPanelWidth(input.GetComponent<LayoutElement>());
+				var parentLe = input.transform.parent != null
+					? input.transform.parent.GetComponent<LayoutElement>()
+					: null;
+				ApplyPanelWidth(parentLe);
+			}
+
+			foreach (var slider in root.GetComponentsInChildren<Slider>(true)) {
+				if (slider == null)
+					continue;
+				var bg = slider.GetComponent<Image>();
+				if (bg != null) {
+					bg.color = tokens.fieldBg;
+					ApplyRoundedControlSprite(bg);
+				}
+				if (slider.fillRect != null) {
+					var fill = slider.fillRect.GetComponent<Image>();
+					if (fill != null)
+						fill.color = tokens.accent;
+				}
+				if (slider.handleRect != null) {
+					var handleImage = slider.handleRect.GetComponent<Image>();
+					if (handleImage != null)
+						handleImage.color = tokens.handle;
+				}
+			}
+
+			foreach (var toggle in root.GetComponentsInChildren<Toggle>(true)) {
+				if (toggle == null || toggle.targetGraphic == null)
+					continue;
+				Color normal = toggle.isOn
+					? Color.Lerp(tokens.tabActive, tokens.accent, 0.45f)
+					: tokens.controlBg;
+				ApplySelectableToken(toggle, normal, tokens.accent);
+				if (toggle.targetGraphic is Image toggleBg)
+					ApplyRoundedControlSprite(toggleBg);
+				ApplyPanelWidth(toggle.GetComponent<LayoutElement>());
+				if (toggle.graphic is Image check)
+					check.color = tokens.accent;
+			}
+
+			foreach (var text in root.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+				if (text == null)
+					continue;
+				Color c = string.Equals(text.gameObject.name, "Placeholder", StringComparison.Ordinal)
+					? tokens.textMuted
+					: tokens.textPrimary;
+				float basePt = ResolveOrCaptureDesignFontPt(text, 14f);
+				ApplyTmpScaled(text, c, basePt);
+			}
+
+			foreach (var img in root.GetComponentsInChildren<Image>(true)) {
+				if (img == null)
+					continue;
+				string n = img.gameObject.name ?? "";
+				if (n == "LineIcon" || n == "MonolithLineIcon")
+					ApplyLineIconTint(img);
+			}
+		}
+
+		/// <summary>
+		/// Assigns the active <c>corner_radius</c> 9-slice to eligible control Images only
+		/// (tagged or already using a runtime rounded sprite). Never retargets RawImage art.
+		/// </summary>
+		public static void ApplyRoundedControlSprite(Image image, bool markEligible = false) {
+			if (image == null)
+				return;
+			var tag = image.GetComponent<SpzUiThemeRoundedControl>();
+			if (tag == null) {
+				bool eligible = markEligible || UiRuntimeSprites.IsCachedRoundedRect(image.sprite);
+				if (!eligible)
+					return;
+				tag = image.gameObject.AddComponent<SpzUiThemeRoundedControl>();
+			}
+			int radius = Mathf.RoundToInt(Mathf.Clamp(_active.cornerRadius, CornerRadiusMin, CornerRadiusMax));
+			image.sprite = UiRuntimeSprites.GetRoundedRectSliced(radius);
+			image.type = Image.Type.Sliced;
+		}
+
+		/// <summary>Panel shell color with glass-lite <c>panel_alpha</c> multiplied onto <c>panel_bg</c> alpha.</summary>
+		public static Color ResolvePanelShellColor() {
+			Color c = _active.panelBg;
+			c.a = Mathf.Clamp01(c.a * Mathf.Clamp(_active.panelAlpha, PanelAlphaMin, PanelAlphaMax));
+			return c;
+		}
+
+		/// <summary>Tints a line-icon Image with the active <c>icon_tint</c> token.</summary>
+		public static void ApplyLineIconTint(Image image) {
+			if (image == null)
+				return;
+			image.color = _active.iconTint;
+		}
+
+		/// <summary>Applies active <c>panel_width</c> to a control LayoutElement (preferred + min width).</summary>
+		public static void ApplyPanelWidth(LayoutElement layout) {
+			if (layout == null)
+				return;
+			float w = Mathf.Clamp(_active.panelWidth, PanelWidthMin, PanelWidthMax);
+			layout.preferredWidth = w;
+			if (layout.minWidth > 0.5f)
+				layout.minWidth = Mathf.Min(layout.minWidth, w);
+		}
+
+		/// <summary>
+		/// Themes a context-menu ownership root (panel/buttons/TMP/circle sliders) without walking the global skeleton.
+		/// </summary>
+		public static void ApplyContextMenuChrome(GameObject root) {
+			if (root == null)
+				return;
+			var tokens = _active;
+			var rootImage = root.GetComponent<Image>();
+			if (rootImage != null)
+				rootImage.color = ResolvePanelShellColor();
+
+			foreach (var button in root.GetComponentsInChildren<Button>(true)) {
+				if (button == null || button.targetGraphic == null)
+					continue;
+				ApplySelectableToken(button, tokens.controlBg, tokens.accent);
+				if (button.targetGraphic is Image btnImg)
+					ApplyRoundedControlSprite(btnImg);
+			}
+
+			foreach (var text in root.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+				if (text == null)
+					continue;
+				ApplyTmpScaledCaptured(text, tokens.textPrimary);
 			}
 
 			foreach (var slider in root.GetComponentsInChildren<Slider>(true)) {
@@ -316,25 +544,9 @@ namespace spz {
 				}
 			}
 
-			foreach (var toggle in root.GetComponentsInChildren<Toggle>(true)) {
-				if (toggle == null || toggle.targetGraphic == null)
-					continue;
-				Color normal = toggle.isOn
-					? Color.Lerp(tokens.tabActive, tokens.accent, 0.45f)
-					: tokens.controlBg;
-				ApplySelectableToken(toggle, normal, tokens.accent);
-				if (toggle.graphic is Image check)
-					check.color = tokens.accent;
-			}
-
-			foreach (var text in root.GetComponentsInChildren<TextMeshProUGUI>(true)) {
-				if (text == null)
-					continue;
-				Color c = string.Equals(text.gameObject.name, "Placeholder", StringComparison.Ordinal)
-					? tokens.textMuted
-					: tokens.textPrimary;
-				float basePt = ResolveOrCaptureDesignFontPt(text, 14f);
-				ApplyTmpScaled(text, c, basePt);
+			foreach (var circle in root.GetComponentsInChildren<CircleSlider_Snapping_UI>(true)) {
+				if (circle != null)
+					circle.ApplyThemeTokens(tokens.accent, tokens.textPrimary);
 			}
 		}
 
@@ -454,8 +666,13 @@ namespace spz {
 				SchemaColor("border"),
 				SchemaColor("tab_active"),
 				SchemaColor("selection"),
+				SchemaColor("icon_tint"),
 				SchemaFloat("font_scale", ScaleTokenMin, ScaleTokenMax),
 				SchemaFloat("spacing_scale", ScaleTokenMin, ScaleTokenMax),
+				SchemaFloat("corner_radius", CornerRadiusMin, CornerRadiusMax),
+				SchemaFloat("panel_width", PanelWidthMin, PanelWidthMax),
+				SchemaFloat("panel_alpha", PanelAlphaMin, PanelAlphaMax),
+				SchemaFloat("ribbon_icon_only", RibbonIconOnlyMin, RibbonIconOnlyMax),
 			};
 		}
 
@@ -489,8 +706,13 @@ namespace spz {
 				["border"] = ColorToHex(tokens.border),
 				["tab_active"] = ColorToHex(tokens.tabActive),
 				["selection"] = ColorToHex(tokens.selection),
+				["icon_tint"] = ColorToHex(tokens.iconTint),
 				["font_scale"] = tokens.fontScale,
 				["spacing_scale"] = tokens.spacingScale,
+				["corner_radius"] = tokens.cornerRadius,
+				["panel_width"] = tokens.panelWidth,
+				["panel_alpha"] = tokens.panelAlpha,
+				["ribbon_icon_only"] = tokens.ribbonIconOnly,
 			};
 		}
 
@@ -510,18 +732,21 @@ namespace spz {
 		static JArray BuildSurfaces() {
 			return new JArray {
 				Surface("addon_panels", true, "AddonUI_MGR AddonPanel_* roots; colors + font_scale"),
-				Surface("command_ribbon", true, "CommandRibbon_UI strip/panels/tabs; colors + font_scale"),
+				Surface("command_ribbon", true, "CommandRibbon_UI strip/panels/tabs; colors + font_scale; ribbon_icon_only hides labels"),
 				Surface("paint_tab", true, "PaintTab Collect/Krita/Layers; colors + font_scale + spacing where VLG"),
 				Surface("addon_manager", true, "AddonManager_UI; REF roles → tokens; font_scale + spacing_scale"),
 				Surface("settings", true, "Settings_UI chrome; font_scale + spacing; product prefs untouched"),
 				Surface("viewport_statusline", true, "Viewport_StatusText RGB + font_scale; sticky caller-owned"),
-				Surface("viewport_ribbons", true, "LeftRibbon + WorkflowRibbon + GenButtons; colors + font_scale"),
+				Surface("viewport_ribbons", true, "LeftRibbon + WorkflowRibbon mode toggles + GenButtons; colors + font_scale"),
 				Surface("sd_input_panel", true, "SD_InputPanel_UI column; colors + font_scale"),
 				Surface("export_save_menu", true, "ExportSave_UI_MGR buttons; colors + font_scale"),
 				Surface("scene_resolution", true, "SceneResolution_MGR SAVE Nx / filters; colors + font_scale"),
 				Surface("connection_panels", true, "ConnectionPanel_UI SD SERV / 3D SERV chrome; colors + font_scale"),
-				Surface("right_panel_lists", true, "Art/BG IconsUI_List header+scroll; Mesh ModelsHandler_3D_UI; Art3D + ControlNet thumbs chrome only"),
+				Surface("right_panel_lists", true, "Art/BG/Mesh/Art3D/CN list chrome + selection frames / row select colors"),
 				Surface("multiview_pins", true, "MultiView_Ribbon_UI + CamerasMGR_PinsZone_UI pin/TMP chrome"),
+				Surface("workflow_options", true, "Colors slide-out + SD_WorkflowOptionsRibbon_UI chrome"),
+				Surface("context_menus", true, "Art/AO/3D icon context menus; Value Assist panel chrome"),
+				Surface("chrome_targets", true, "spz.cmd.list_ui_targets / set_ui_target_active show-hide only (constrained DOM)"),
 			};
 		}
 
@@ -592,6 +817,46 @@ namespace spz {
 						else
 							candidate.spacingScale = scale;
 						break;
+					case "corner_radius":
+						if (!TryParseCornerRadius(property.Value, out float radius, out error)) {
+							if (string.IsNullOrEmpty(error))
+								error = $"Invalid float for token '{property.Name}'; expected number in [{CornerRadiusMin},{CornerRadiusMax}]";
+							else
+								error = $"Invalid float for token '{property.Name}': {error}";
+							return false;
+						}
+						candidate.cornerRadius = radius;
+						break;
+					case "panel_width":
+						if (!TryParsePanelWidth(property.Value, out float width, out error)) {
+							if (string.IsNullOrEmpty(error))
+								error = $"Invalid float for token '{property.Name}'; expected number in [{PanelWidthMin},{PanelWidthMax}]";
+							else
+								error = $"Invalid float for token '{property.Name}': {error}";
+							return false;
+						}
+						candidate.panelWidth = width;
+						break;
+					case "panel_alpha":
+						if (!TryParsePanelAlpha(property.Value, out float alpha, out error)) {
+							if (string.IsNullOrEmpty(error))
+								error = $"Invalid float for token '{property.Name}'; expected number in [{PanelAlphaMin},{PanelAlphaMax}]";
+							else
+								error = $"Invalid float for token '{property.Name}': {error}";
+							return false;
+						}
+						candidate.panelAlpha = alpha;
+						break;
+					case "ribbon_icon_only":
+						if (!TryParseRibbonIconOnly(property.Value, out float iconOnly, out error)) {
+							if (string.IsNullOrEmpty(error))
+								error = $"Invalid float for token '{property.Name}'; expected number in [{RibbonIconOnlyMin},{RibbonIconOnlyMax}]";
+							else
+								error = $"Invalid float for token '{property.Name}': {error}";
+							return false;
+						}
+						candidate.ribbonIconOnly = iconOnly;
+						break;
 					case "panel_bg":
 					case "control_bg":
 					case "field_bg":
@@ -604,6 +869,7 @@ namespace spz {
 					case "border":
 					case "tab_active":
 					case "selection":
+					case "icon_tint":
 						if (!TryParseColor(property.Value, out var color)) {
 							error = $"Invalid color for token '{property.Name}'; expected #RRGGBB or #RRGGBBAA";
 							return false;
@@ -621,6 +887,7 @@ namespace spz {
 							case "border": candidate.border = color; break;
 							case "tab_active": candidate.tabActive = color; break;
 							case "selection": candidate.selection = color; break;
+							case "icon_tint": candidate.iconTint = color; break;
 						}
 						break;
 					default:
@@ -652,8 +919,178 @@ namespace spz {
 			target.border = source.border;
 			target.tabActive = source.tabActive;
 			target.selection = source.selection;
+			target.iconTint = source.iconTint;
 			target.fontScale = source.fontScale;
 			target.spacingScale = source.spacingScale;
+			target.cornerRadius = source.cornerRadius;
+			target.panelWidth = source.panelWidth;
+			target.panelAlpha = source.panelAlpha;
+			target.ribbonIconOnly = source.ribbonIconOnly;
+		}
+
+		static bool TryParseRibbonIconOnly(JToken token, out float value, out string error) {
+			value = DefaultRibbonIconOnly;
+			error = null;
+			if (token == null) {
+				error = "value is null";
+				return false;
+			}
+			if (token.Type == JTokenType.Boolean) {
+				value = token.Value<bool>() ? 1f : 0f;
+				return true;
+			}
+			if (token.Type == JTokenType.Float || token.Type == JTokenType.Integer) {
+				value = token.Value<float>();
+			}
+			else if (token.Type == JTokenType.String) {
+				string s = token.ToString().Trim();
+				if (string.Equals(s, "true", StringComparison.OrdinalIgnoreCase)) {
+					value = 1f;
+					return true;
+				}
+				if (string.Equals(s, "false", StringComparison.OrdinalIgnoreCase)) {
+					value = 0f;
+					return true;
+				}
+				if (!float.TryParse(s, System.Globalization.NumberStyles.Float,
+					System.Globalization.CultureInfo.InvariantCulture, out value)) {
+					error = "expected number or bool";
+					return false;
+				}
+			}
+			else {
+				error = "expected number or bool";
+				return false;
+			}
+			if (value < RibbonIconOnlyMin || value > RibbonIconOnlyMax) {
+				error = $"must be between {RibbonIconOnlyMin} and {RibbonIconOnlyMax}";
+				return false;
+			}
+			return true;
+		}
+
+		static bool TryParsePanelAlpha(JToken token, out float alpha, out string error) {
+			alpha = DefaultPanelAlpha;
+			error = null;
+			if (token == null) {
+				error = "value is null";
+				return false;
+			}
+			if (token.Type == JTokenType.Float || token.Type == JTokenType.Integer) {
+				alpha = token.Value<float>();
+			}
+			else if (token.Type == JTokenType.String) {
+				string s = token.ToString().Trim();
+				if (!float.TryParse(s, System.Globalization.NumberStyles.Float,
+					System.Globalization.CultureInfo.InvariantCulture, out alpha)) {
+					error = "expected number";
+					return false;
+				}
+			}
+			else {
+				error = "expected number";
+				return false;
+			}
+			if (alpha < PanelAlphaMin || alpha > PanelAlphaMax) {
+				error = $"must be between {PanelAlphaMin} and {PanelAlphaMax}";
+				return false;
+			}
+			return true;
+		}
+
+		/// <summary>Names of built-in <see cref="StudioLineIcon"/> glyphs (icon pack v1).</summary>
+		public static JArray ListLineIconNames() {
+			var arr = new JArray();
+			foreach (StudioLineIcon icon in Enum.GetValues(typeof(StudioLineIcon)))
+				arr.Add(icon.ToString());
+			return arr;
+		}
+
+		public static bool TryParseStudioLineIcon(string name, out StudioLineIcon icon, out string error) {
+			icon = StudioLineIcon.Folder;
+			error = null;
+			if (string.IsNullOrWhiteSpace(name)) {
+				error = "icon name is empty";
+				return false;
+			}
+			if (Enum.TryParse(name.Trim(), true, out icon))
+				return true;
+			error = $"Unknown line icon '{name}'. Use list_line_icons.";
+			return false;
+		}
+
+		/// <summary>
+		/// Sets a CommandRibbon strip tab's MonolithLineIcon glyph by tab name substring match.
+		/// </summary>
+		public static bool TrySetStripTabLineIcon(string tabMatch, string iconName, out string error) {
+			error = null;
+			if (!TryParseStudioLineIcon(iconName, out StudioLineIcon icon, out error))
+				return false;
+			if (CommandRibbon_UI.instance == null) {
+				error = "CommandRibbon_UI not available";
+				return false;
+			}
+			if (!CommandRibbon_UI.instance.TrySetStripTabLineIcon(tabMatch, icon, out error))
+				return false;
+			return true;
+		}
+
+		static bool TryParsePanelWidth(JToken token, out float width, out string error) {
+			width = DefaultPanelWidth;
+			error = null;
+			if (token == null) {
+				error = "value is null";
+				return false;
+			}
+			if (token.Type == JTokenType.Float || token.Type == JTokenType.Integer) {
+				width = token.Value<float>();
+			}
+			else if (token.Type == JTokenType.String) {
+				string s = token.ToString().Trim();
+				if (!float.TryParse(s, System.Globalization.NumberStyles.Float,
+					System.Globalization.CultureInfo.InvariantCulture, out width)) {
+					error = "expected number";
+					return false;
+				}
+			}
+			else {
+				error = "expected number";
+				return false;
+			}
+			if (width < PanelWidthMin || width > PanelWidthMax) {
+				error = $"must be between {PanelWidthMin} and {PanelWidthMax}";
+				return false;
+			}
+			return true;
+		}
+
+		static bool TryParseCornerRadius(JToken token, out float radius, out string error) {
+			radius = DefaultCornerRadius;
+			error = null;
+			if (token == null) {
+				error = "value is null";
+				return false;
+			}
+			if (token.Type == JTokenType.Float || token.Type == JTokenType.Integer) {
+				radius = token.Value<float>();
+			}
+			else if (token.Type == JTokenType.String) {
+				string s = token.ToString().Trim();
+				if (!float.TryParse(s, System.Globalization.NumberStyles.Float,
+					System.Globalization.CultureInfo.InvariantCulture, out radius)) {
+					error = "expected number";
+					return false;
+				}
+			}
+			else {
+				error = "expected number";
+				return false;
+			}
+			if (radius < CornerRadiusMin || radius > CornerRadiusMax) {
+				error = $"must be between {CornerRadiusMin} and {CornerRadiusMax}";
+				return false;
+			}
+			return true;
 		}
 
 		static bool TryParseScale(JToken token, out float scale, out string error) {
@@ -711,4 +1148,7 @@ namespace spz {
 		public float spacing;
 		public int padL, padR, padT, padB;
 	}
+
+	/// <summary>Marks an Image as eligible for theme <c>corner_radius</c> 9-slice updates.</summary>
+	public sealed class SpzUiThemeRoundedControl : MonoBehaviour { }
 }

@@ -63,6 +63,8 @@ namespace spz {
 				["spacing_scale"] = spacingScale,
 				["corner_radius"] = 5,
 				["panel_width"] = 220,
+				["panel_alpha"] = 0.92,
+				["ribbon_icon_only"] = 1,
 			};
 		}
 		
@@ -109,8 +111,10 @@ namespace spz {
 				yield break;
 			}
 			UnityEngine.Debug.Log($"[AddonUI_MGR] Theme restore: {detail}");
-			if (string.Equals(SpzUiThemeOps.ActiveThemeId, NomadThemeId, StringComparison.Ordinal))
+			if (string.Equals(SpzUiThemeOps.ActiveThemeId, NomadThemeId, StringComparison.Ordinal)) {
 				ComposeNomadSkyboxNative();
+				ComposeNomadStripIconsNative();
+			}
 		}
 
 		void OnDestroy() {
@@ -1045,8 +1049,29 @@ namespace spz {
 				return;
 			}
 			ComposeNomadSkyboxNative();
-			UnityEngine.Debug.Log($"[AddonUI_MGR] Applied native Nomad theme '{NomadThemeId}' (font={fontScale:F2}, spacing={spacingScale:F2}) + skybox");
+			ComposeNomadStripIconsNative();
+			UnityEngine.Debug.Log($"[AddonUI_MGR] Applied native Nomad theme '{NomadThemeId}' (font={fontScale:F2}, spacing={spacingScale:F2}) + skybox + strip icons");
 			ShowAddonButtonStatus("Pro-Studio Nomad palette applied", true);
+		}
+
+		void ComposeNomadStripIconsNative() {
+			var pairs = new (string tab, string icon)[] {
+				("Paint", "Brush"),
+				("Art", "Eye"),
+				("BG", "Eye"),
+				("Control", "Grid"),
+				("CTRL", "Grid"),
+				("Mesh", "Mesh"),
+				("3D", "Mesh"),
+				("Obj", "Mesh"),
+				("Nomad", "Settings"),
+			};
+			int ok = 0;
+			foreach (var pair in pairs) {
+				if (SpzUiThemeOps.TrySetStripTabLineIcon(pair.tab, pair.icon, out _))
+					ok++;
+			}
+			UnityEngine.Debug.Log($"[AddonUI_MGR] Nomad strip line icons applied ({ok}/{pairs.Length} matches)");
 		}
 
 		void RestoreSpzThemeNative() {

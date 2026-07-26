@@ -265,18 +265,22 @@ namespace spz {
 		    Transform strip = ResolveEffectiveTabStripTransform();
 		    if (strip == null) return;
 		    TextMeshProUGUI refTmp = GetRibbonStripTypographyReferenceTMP(strip, null);
-		    float basis = refTmp != null && refTmp.fontSize > 0.05f ? refTmp.fontSize : kRibbonStripTabLabelDefaultPt;
+		    float designBasis = kRibbonStripTabLabelDefaultPt;
+		    float basis = designBasis * SpzUiThemeOps.Active.fontScale;
+		    bool iconOnly = SpzUiThemeOps.RibbonIconOnlyActive;
 		    foreach (var elem in strip.GetComponentsInChildren<TabsGroupElem_UI>(true))
 		    {
 			    if (elem == null || elem.transform.parent != strip) continue;
 			    var tmp = elem.GetComponentInChildren<TextMeshProUGUI>(true);
 			    if (tmp == null) continue;
 			    ConfigureResponsiveRibbonTabText(tmp, refTmp, basis);
+			    if (iconOnly) continue; // ApplyThemeTokens owns icon-only cell widths
 			    var le = elem.GetComponent<LayoutElement>();
 			    if (le != null)
 				    ApplyStripTabMinWidthForLabel(le, tmp, kRibbonStripTabLabelHorizontalPad);
 		    }
-		    RebalanceStripTabMinWidthsIfOverflowing(strip);
+		    if (!iconOnly)
+			    RebalanceStripTabMinWidthsIfOverflowing(strip);
 	    }
 
 	    // One tab + one panel per addon (Blender N-panel style)
@@ -346,12 +350,32 @@ namespace spz {
 	        foreach(var p in _addonPanelsById.Values)
 	            if(p != null && p.gameObject != go) p.gameObject.SetActive(false);
 	        // Eager EnableAddon shells can exist before Python create_panel — activate nested content and surface empty state.
-	        if (go.name != null && go.name.StartsWith("Panel_", StringComparison.Ordinal))
+	        // Only real add-on shells (in _addonPanelsById). Built-in Paint is also named Panel_Paint and must not get the HTTP :5557 placeholder.
+	        if (IsRegisteredAddonShell(go))
 		        ActivateAddonShellContentOrPlaceholder(go.transform);
+	        else
+		        ClearMistakenAddonShellPlaceholder(go.transform);
 	        if (KeyMousePenInput.isKey_Shift_pressed() == false && Viewport_StatusText.instance != null){
 	            string msg = "Use Shift+1, Shift+2, etc to switch tabs faster :)";
 	            Viewport_StatusText.instance.ShowStatusText(msg, false, 1.2f, false);
 	        }
+	    }
+
+	    /// <summary>True when <paramref name="go"/> is an add-on ribbon body registered via <see cref="GetOrCreatePanelForAddon"/>.</summary>
+	    bool IsRegisteredAddonShell(GameObject go) {
+		    if (go == null || _addonPanelsById == null || _addonPanelsById.Count == 0) return false;
+		    foreach (var shell in _addonPanelsById.Values) {
+			    if (shell != null && shell.gameObject == go) return true;
+		    }
+		    return false;
+	    }
+
+	    /// <summary>Removes a placeholder wrongly attached to built-in panels (e.g. Panel_Paint matched the Panel_ prefix).</summary>
+	    static void ClearMistakenAddonShellPlaceholder(Transform shell) {
+		    if (shell == null) return;
+		    Transform ph = shell.Find("AddonShell_WaitingPlaceholder");
+		    if (ph != null)
+			    Destroy(ph.gameObject);
 	    }
 
 	    /// <summary>
@@ -580,6 +604,7 @@ namespace spz {
 	    /// </summary>
 	    void ApplyThemeTokens() {
 	        var t = SpzUiThemeOps.Active;
+	        bool iconOnly = SpzUiThemeOps.RibbonIconOnlyActive;
 	        ApplyPanelShellColor(_SD_ArtList_Panel, t.panelBg);
 	        ApplyPanelShellColor(_SD_ArtBgList_Panel, t.panelBg);
 	        ApplyPanelShellColor(_SD_3D_Models_Panels, t.panelBg);
@@ -591,7 +616,8 @@ namespace spz {
 	            for (int i = 0; i < strip.childCount; i++) {
 	                Transform cell = strip.GetChild(i);
 	                if (cell == null) continue;
-	                if (cell.name.StartsWith("AddonDivider_", StringComparison.Ordinal)) {
+	                if (cell.name.StartsWith("StripDivider_", StringComparison.Ordinal)
+	                    || cell.name.StartsWith("AddonDivider_", StringComparison.Ordinal)) {
 	                    var divImg = cell.GetComponent<Image>();
 	                    if (divImg != null) {
 	                        Color c = t.border;
@@ -600,6 +626,9 @@ namespace spz {
 	                    }
 	                    continue;
 	                }
+	                // Only real strip tabs — never invent chrome on spacer/scroll scaffolding.
+	                if (cell.GetComponent<TabsGroupElem_UI>() == null)
+	                    continue;
 	                var active = cell.Find("go active");
 	                if (active != null) {
 	                    var activeImg = FindActivePillImage(active);
@@ -609,10 +638,18 @@ namespace spz {
 	                    }
 	                }
 	                var label = cell.GetComponentInChildren<TextMeshProUGUI>(true);
-	                if (label != null)
-	                    SpzUiThemeOps.ApplyTmpColor(label, t.textPrimary);
-	                // Palette apply = colors only. Do not rebuild icons/bars/layout on theme change.
-	                ApplyNomadStudioTabColorsOnly(cell, t);
+	                if (label != null) {
+	                    if (iconOnly) {
+	                        // Keep GameObject active for layout/hit targets; hide glyphs only.
+	                        label.maxVisibleCharacters = 0;
+	                        label.color = new Color(t.textPrimary.r, t.textPrimary.g, t.textPrimary.b, 0f);
+	                    } else {
+	                        label.maxVisibleCharacters = int.MaxValue;
+	                        SpzUiThemeOps.ApplyTmpScaled(label, t.textPrimary, kRibbonStripTabLabelDefaultPt);
+	                    }
+	                }
+	                // Palette apply = colors + scale + icon tint (+ optional icon-only layout).
+	                ApplyStudioTabChromeColors(cell, t);
 	                // Soft gold edge on addon dividers when themed.
 	                var cellImg = cell.GetComponent<Image>();
 	                if (cellImg != null && cell.name.StartsWith("AddonTab_", StringComparison.Ordinal))
@@ -626,6 +663,10 @@ namespace spz {
 	                    ApplyPanelShellColor(kvp.Value, t.panelBg);
 	            }
 	        }
+
+	        // Leaving icon-only must re-run label-based strip widths (ThemeChanged alone used to wipe LE to -1).
+	        if (!iconOnly)
+	            HarmonizeStripTabTypography();
 	    }
 
 	    /// <summary>Prefer the authored pill graphic; never retint Monolith chrome overlays.</summary>
@@ -645,40 +686,134 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Retints any leftover Nomad chrome if present; does not create icons/bars or change layout.
-	    /// Apply Nomad Palette must only change colors.
+	    /// Studio chrome on strip tabs: active bar + line icon (create if missing) tinted by tokens.
+	    /// When <see cref="SpzUiThemeOps.RibbonIconOnlyActive"/>, centers a larger icon (Nomad-like).
 	    /// </summary>
-	    static void ApplyNomadStudioTabColorsOnly(Transform cell, SpzUiThemeOps.ThemeTokens t) {
+	    static void ApplyStudioTabChromeColors(Transform cell, SpzUiThemeOps.ThemeTokens t) {
 	        if (cell == null) return;
-	        bool nomad = string.Equals(SpzUiThemeOps.ActiveThemeId, "nomad-inspired", StringComparison.Ordinal);
+	        bool iconOnly = SpzUiThemeOps.RibbonIconOnlyActive;
 	        Transform active = cell.Find("go active");
 	        Transform bar = active != null ? active.Find("MonolithActiveBar") : null;
 	        if (bar != null) {
-	            bar.gameObject.SetActive(nomad);
+	            bar.gameObject.SetActive(true);
 	            var barImg = bar.GetComponent<Image>();
-	            if (barImg != null && nomad)
+	            if (barImg != null)
 	                barImg.color = t.accent;
 	        }
-	        // Always keep the authored active pill drawable; chrome must not disable it.
 	        if (active != null) {
 	            var pill = FindActivePillImage(active);
 	            if (pill != null)
 	                pill.enabled = true;
 	        }
 	        Transform iconTransform = cell.Find("MonolithLineIcon");
-	        if (iconTransform != null) {
-	            iconTransform.gameObject.SetActive(nomad);
-	            var icon = iconTransform.GetComponent<Image>();
-	            if (icon != null && nomad)
-	                icon.color = t.textMuted;
+	        if (iconTransform == null) {
+	            var go = new GameObject("MonolithLineIcon", typeof(RectTransform));
+	            go.transform.SetParent(cell, false);
+	            iconTransform = go.transform;
+	            var img = go.AddComponent<Image>();
+	            img.raycastTarget = false;
+	            img.sprite = UiRuntimeSprites.GetLineIcon(ResolveStripTabLineIcon(cell.name));
+	            img.preserveAspect = true;
 	        }
+	        iconTransform.gameObject.SetActive(true);
+	        var iconRt = iconTransform as RectTransform;
+	        if (iconRt != null) {
+	            if (iconOnly) {
+	                iconRt.anchorMin = new Vector2(0.5f, 0.5f);
+	                iconRt.anchorMax = new Vector2(0.5f, 0.5f);
+	                iconRt.pivot = new Vector2(0.5f, 0.5f);
+	                iconRt.sizeDelta = new Vector2(22f, 22f);
+	                iconRt.anchoredPosition = Vector2.zero;
+	            } else {
+	                iconRt.anchorMin = new Vector2(0.5f, 0.55f);
+	                iconRt.anchorMax = new Vector2(0.5f, 0.55f);
+	                iconRt.pivot = new Vector2(0.5f, 0.5f);
+	                iconRt.sizeDelta = new Vector2(18f, 18f);
+	                iconRt.anchoredPosition = new Vector2(0f, 6f);
+	            }
+	        }
+	        var icon = iconTransform.GetComponent<Image>();
+	        if (icon != null) {
+	            if (icon.sprite == null)
+	                icon.sprite = UiRuntimeSprites.GetLineIcon(ResolveStripTabLineIcon(cell.name));
+	            SpzUiThemeOps.ApplyLineIconTint(icon);
+	        }
+	        // Tighten strip cell when icon-only so the row reads like a toolbox.
+	        // When leaving icon-only, do not wipe LayoutElement — HarmonizeStripTabTypography owns widths.
+	        var le = cell.GetComponent<LayoutElement>();
+	        if (le != null && iconOnly) {
+	            le.flexibleWidth = 0f;
+	            le.preferredWidth = 40f;
+	            le.minWidth = 36f;
+	        }
+	    }
+
+	    static StudioLineIcon ResolveStripTabLineIcon(string cellName) {
+	        string n = cellName ?? "";
+	        if (n.IndexOf("Paint", StringComparison.OrdinalIgnoreCase) >= 0)
+	            return StudioLineIcon.Brush;
+	        if (n.IndexOf("Mesh", StringComparison.OrdinalIgnoreCase) >= 0
+	            || n.IndexOf("3D", StringComparison.OrdinalIgnoreCase) >= 0)
+	            return StudioLineIcon.Mesh;
+	        if (n.IndexOf("Control", StringComparison.OrdinalIgnoreCase) >= 0)
+	            return StudioLineIcon.Grid;
+	        if (n.IndexOf("Art", StringComparison.OrdinalIgnoreCase) >= 0
+	            || n.IndexOf("BG", StringComparison.OrdinalIgnoreCase) >= 0)
+	            return StudioLineIcon.Eye;
+	        if (n.IndexOf("Addon", StringComparison.OrdinalIgnoreCase) >= 0
+	            || n.IndexOf("Nomad", StringComparison.OrdinalIgnoreCase) >= 0)
+	            return StudioLineIcon.Settings;
+	        return StudioLineIcon.Folder;
+	    }
+
+	    /// <summary>
+	    /// Icon pack v1: assign a <see cref="StudioLineIcon"/> glyph on a strip tab whose name contains <paramref name="tabMatch"/>.
+	    /// </summary>
+	    public bool TrySetStripTabLineIcon(string tabMatch, StudioLineIcon icon, out string error) {
+	        error = null;
+	        if (string.IsNullOrWhiteSpace(tabMatch)) {
+	            error = "tab match is empty";
+	            return false;
+	        }
+	        Transform strip = ResolveEffectiveTabStripTransform();
+	        if (strip == null) {
+	            error = "tab strip not available";
+	            return false;
+	        }
+	        string needle = tabMatch.Trim();
+	        for (int i = 0; i < strip.childCount; i++) {
+	            Transform cell = strip.GetChild(i);
+	            if (cell == null) continue;
+	            string n = cell.name ?? "";
+	            if (n.StartsWith("StripDivider_", StringComparison.Ordinal)
+	                || n.StartsWith("AddonDivider_", StringComparison.Ordinal))
+	                continue;
+	            if (n.IndexOf(needle, StringComparison.OrdinalIgnoreCase) < 0)
+	                continue;
+	            ApplyStudioTabChromeColors(cell, SpzUiThemeOps.Active);
+	            Transform iconTransform = cell.Find("MonolithLineIcon");
+	            if (iconTransform == null) {
+	                error = $"line icon missing after ensure on '{n}'";
+	                return false;
+	            }
+	            var img = iconTransform.GetComponent<Image>();
+	            if (img == null) {
+	                error = "MonolithLineIcon has no Image";
+	                return false;
+	            }
+	            img.sprite = UiRuntimeSprites.GetLineIcon(icon);
+	            SpzUiThemeOps.ApplyLineIconTint(img);
+	            return true;
+	        }
+	        error = $"No strip tab matching '{needle}'";
+	        return false;
 	    }
 
 	    static void ApplyPanelShellColor(RectTransform panel, Color panelBg) {
 	        if (panel == null) return;
 	        var img = panel.GetComponent<Image>();
 	        if (img != null)
-	            SpzUiThemeOps.ApplyGraphicColor(img, panelBg);
+	            SpzUiThemeOps.ApplyGraphicColor(img, SpzUiThemeOps.ResolvePanelShellColor());
 	    }
 
 	    IEnumerator PaintCollect_WaitForSingletons_crtn(PaintTab_CollectPaintUI collector)
@@ -1315,7 +1450,7 @@ namespace spz {
 	        if (tabText != null)
 	        {
 		        TextMeshProUGUI refForPts = GetRibbonStripTypographyReferenceTMP(tabStrip, null);
-		        float basis = refForPts != null && refForPts.fontSize > 0.05f ? refForPts.fontSize : kRibbonStripTabLabelDefaultPt;
+		        float basis = kRibbonStripTabLabelDefaultPt * SpzUiThemeOps.Active.fontScale;
 		        ConfigureResponsiveRibbonTabText(tabText, refForPts, basis);
 	        }
 	    }

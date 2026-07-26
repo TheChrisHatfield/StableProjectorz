@@ -1,5 +1,5 @@
 {
   "displayName": "Nomad Theme",
   "version": "1.0.0",
-  "description": "Pro-Studio Nomad palette for add-on panels and P2 core chrome. Requires theme API rpc 1.12."
+  "description": "Pro-Studio Nomad palette + mild font_scale for add-on panels and core chrome. Requires theme API rpc 1.13."
 }
