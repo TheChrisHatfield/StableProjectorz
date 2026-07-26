@@ -332,20 +332,22 @@ def _ensure_image_to_principled_basecolor(obj, image_path: str):
         pass
 
 
-def _auto_apply_exchange_texture_after_import(fbx_path: str):
+def _auto_apply_exchange_texture_after_import(fbx_path: str) -> bool:
+    """Apply best exchange texture to selected/active meshes. Returns True if at least one mesh was wired."""
     tex = _find_best_exchange_texture_for_fbx(fbx_path)
     if not tex:
         print("SPZ GO: no exchange texture found to auto-assign for", fbx_path)
-        return
+        return False
     targets = [o for o in bpy.context.selected_objects if o and o.type == "MESH"]
     if not targets and bpy.context.active_object and bpy.context.active_object.type == "MESH":
         targets = [bpy.context.active_object]
     if not targets:
         print("SPZ GO: no target mesh object selected after import; texture not auto-assigned.")
-        return
+        return False
     for o in targets:
         _ensure_image_to_principled_basecolor(o, tex)
     print(f"SPZ GO: auto-assigned texture '{tex}' to {len(targets)} mesh object(s).")
+    return True
 
 
 def _export_fbx_for_spz(context, filepath: str) -> set:
@@ -636,7 +638,12 @@ class SPZ_OT_go_apply_maps_only(Operator):
         if not ok:
             self.report({"WARNING"}, f"SPZ: {r!r}")
             return {"CANCELLED"}
-        _auto_apply_exchange_texture_after_import(fbx)
+        if not _auto_apply_exchange_texture_after_import(fbx):
+            self.report(
+                {"WARNING"},
+                "SPZ export OK but no texture applied — select a mesh and ensure exchange maps exist beside the FBX.",
+            )
+            return {"CANCELLED"}
         self.report({"INFO"}, "SPZ maps applied to selected mesh(es).")
         return {"FINISHED"}
 
