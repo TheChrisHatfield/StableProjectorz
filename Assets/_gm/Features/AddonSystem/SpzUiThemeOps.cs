@@ -1026,7 +1026,7 @@ namespace spz {
 		}
 
 		/// <summary>
-		/// Sets a CommandRibbon strip tab's MonolithLineIcon glyph by tab name substring match.
+		/// Sets CommandRibbon strip tab MonolithLineIcon glyphs for every tab whose name contains <paramref name="tabMatch"/>.
 		/// </summary>
 		public static bool TrySetStripTabLineIcon(string tabMatch, string iconName, out string error) {
 			error = null;
