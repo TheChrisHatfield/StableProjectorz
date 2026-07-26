@@ -599,18 +599,52 @@ namespace spz {
 	    }
 
 	    /// <summary>
+	    /// Authored Image colors captured before the first non-default recolor, restored on builtin.
+	    /// </summary>
+	    static readonly Dictionary<int, Color> _authoredGraphicColorSnapshot = new Dictionary<int, Color>();
+
+	    static void SnapshotAuthoredGraphicColor(Graphic graphic) {
+	        if (graphic == null) return;
+	        int id = graphic.GetInstanceID();
+	        if (!_authoredGraphicColorSnapshot.ContainsKey(id))
+	            _authoredGraphicColorSnapshot[id] = graphic.color;
+	    }
+
+	    static void RestoreAuthoredGraphicColor(Graphic graphic) {
+	        if (graphic == null) return;
+	        if (_authoredGraphicColorSnapshot.TryGetValue(graphic.GetInstanceID(), out Color c))
+	            graphic.color = c;
+	    }
+
+	    static void RecolorOrRestorePanelShell(RectTransform panel, bool recolorChrome) {
+	        if (panel == null) return;
+	        var img = panel.GetComponent<Image>();
+	        if (img == null) return;
+	        if (recolorChrome) {
+	            SnapshotAuthoredGraphicColor(img);
+	            ApplyPanelShellColor(panel, SpzUiThemeOps.Active.panelBg);
+	        } else {
+	            RestoreAuthoredGraphicColor(img);
+	        }
+	    }
+
+	    /// <summary>
 	    /// Ownership-root theme apply for ribbon strip cells, active pills, panel shells, and dividers.
-	    /// Always applies active tokens (including builtin defaults) — P2 bound surface; not OG-prefab-only.
+	    /// Always runs for P2 binding. On builtin default, keep authored SPZ strip/panel colors
+	    /// (no accent-lerp / border wash); non-default themes get full token colors.
 	    /// Does not scan the global UI skeleton.
 	    /// </summary>
 	    void ApplyThemeTokens() {
 	        var t = SpzUiThemeOps.Active;
 	        bool iconOnly = SpzUiThemeOps.RibbonIconOnlyActive;
-	        ApplyPanelShellColor(_SD_ArtList_Panel, t.panelBg);
-	        ApplyPanelShellColor(_SD_ArtBgList_Panel, t.panelBg);
-	        ApplyPanelShellColor(_SD_3D_Models_Panels, t.panelBg);
-	        ApplyPanelShellColor(_SD_ControlNets_List_Panel, t.panelBg);
-	        ApplyPanelShellColor(_Paint_Panel, t.panelBg);
+	        // Builtin token id still hosts Monolith structure; color retints are what drifted from prefab.
+	        bool recolorChrome = !SpzUiThemeOps.IsBuiltinDefaultActive;
+
+	        RecolorOrRestorePanelShell(_SD_ArtList_Panel, recolorChrome);
+	        RecolorOrRestorePanelShell(_SD_ArtBgList_Panel, recolorChrome);
+	        RecolorOrRestorePanelShell(_SD_3D_Models_Panels, recolorChrome);
+	        RecolorOrRestorePanelShell(_SD_ControlNets_List_Panel, recolorChrome);
+	        RecolorOrRestorePanelShell(_Paint_Panel, recolorChrome);
 
 	        Transform strip = ResolveEffectiveTabStripTransform();
 	        if (strip != null) {
@@ -621,9 +655,14 @@ namespace spz {
 	                    || cell.name.StartsWith("AddonDivider_", StringComparison.Ordinal)) {
 	                    var divImg = cell.GetComponent<Image>();
 	                    if (divImg != null) {
-	                        Color c = t.border;
-	                        c.a = Mathf.Max(c.a, 0.55f);
-	                        divImg.color = c;
+	                        if (recolorChrome) {
+	                            SnapshotAuthoredGraphicColor(divImg);
+	                            Color c = t.border;
+	                            c.a = Mathf.Max(c.a, 0.55f);
+	                            divImg.color = c;
+	                        } else {
+	                            RestoreAuthoredGraphicColor(divImg);
+	                        }
 	                    }
 	                    continue;
 	                }
@@ -634,8 +673,14 @@ namespace spz {
 	                if (active != null) {
 	                    var activeImg = FindActivePillImage(active);
 	                    if (activeImg != null) {
-	                        // Accent on the active pill is the main visible Nomad cue (gold vs cool blue default).
-	                        activeImg.color = Color.Lerp(t.tabActive, t.accent, 0.72f);
+	                        if (recolorChrome) {
+	                            SnapshotAuthoredGraphicColor(activeImg);
+	                            // Accent lerp is the Nomad/custom cue (gold vs cool blue).
+	                            activeImg.color = Color.Lerp(t.tabActive, t.accent, 0.72f);
+	                        } else {
+	                            // Builtin: restore prefab pill gray (do not lean toward default accent blue).
+	                            RestoreAuthoredGraphicColor(activeImg);
+	                        }
 	                    }
 	                }
 	                // Hide every strip-cell TMP (prefabs may have more than one label).
@@ -647,22 +692,32 @@ namespace spz {
 	                        label.color = new Color(t.textPrimary.r, t.textPrimary.g, t.textPrimary.b, 0f);
 	                    } else {
 	                        label.maxVisibleCharacters = int.MaxValue;
-	                        SpzUiThemeOps.ApplyTmpScaled(label, t.textPrimary, kRibbonStripTabLabelDefaultPt);
+	                        if (recolorChrome) {
+	                            SnapshotAuthoredGraphicColor(label);
+	                            SpzUiThemeOps.ApplyTmpScaled(label, t.textPrimary, kRibbonStripTabLabelDefaultPt);
+	                        } else {
+	                            RestoreAuthoredGraphicColor(label);
+	                        }
 	                    }
 	                }
-	                // Palette apply = colors + scale + icon tint (+ optional icon-only layout).
-	                ApplyStudioTabChromeColors(cell, t);
-	                // Soft gold edge on addon dividers when themed.
+	                // Structure/icons always; accent bar / icon tint only when recoloring.
+	                ApplyStudioTabChromeColors(cell, t, recolorChrome);
 	                var cellImg = cell.GetComponent<Image>();
-	                if (cellImg != null && cell.name.StartsWith("AddonTab_", StringComparison.Ordinal))
-	                    SpzUiThemeOps.ApplyGraphicColor(cellImg, t.controlBg);
+	                if (cellImg != null && cell.name.StartsWith("AddonTab_", StringComparison.Ordinal)) {
+	                    if (recolorChrome) {
+	                        SnapshotAuthoredGraphicColor(cellImg);
+	                        SpzUiThemeOps.ApplyGraphicColor(cellImg, t.controlBg);
+	                    } else {
+	                        RestoreAuthoredGraphicColor(cellImg);
+	                    }
+	                }
 	            }
 	        }
 
 	        if (_addonPanelsById != null) {
 	            foreach (var kvp in _addonPanelsById) {
 	                if (kvp.Value != null)
-	                    ApplyPanelShellColor(kvp.Value, t.panelBg);
+	                    RecolorOrRestorePanelShell(kvp.Value, recolorChrome);
 	            }
 	        }
 
@@ -692,20 +747,23 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Studio chrome on strip tabs: active bar + line icon (create if missing) tinted by tokens.
-	    /// Token-driven for all active themes including builtin (P2/B4) — not Nomad-only.
+	    /// Studio chrome on strip tabs: active bar + line icon (create if missing).
+	    /// Token-driven for all themes (P2/B4). When <paramref name="recolorChrome"/> is false (builtin default),
+	    /// keep structure/icons but do not force accent bar color (prefab/authored colors stay).
 	    /// When <see cref="SpzUiThemeOps.RibbonIconOnlyActive"/>, centers a larger icon (Nomad-like).
 	    /// </summary>
-	    static void ApplyStudioTabChromeColors(Transform cell, SpzUiThemeOps.ThemeTokens t) {
+	    static void ApplyStudioTabChromeColors(Transform cell, SpzUiThemeOps.ThemeTokens t, bool recolorChrome = true) {
 	        if (cell == null) return;
 	        bool iconOnly = SpzUiThemeOps.RibbonIconOnlyActive;
 	        Transform active = cell.Find("go active");
 	        Transform bar = active != null ? active.Find("MonolithActiveBar") : null;
 	        if (bar != null) {
 	            bar.gameObject.SetActive(true);
-	            var barImg = bar.GetComponent<Image>();
-	            if (barImg != null)
-	                barImg.color = t.accent;
+	            if (recolorChrome) {
+	                var barImg = bar.GetComponent<Image>();
+	                if (barImg != null)
+	                    barImg.color = t.accent;
+	            }
 	        }
 	        if (active != null) {
 	            var pill = FindActivePillImage(active);
@@ -743,7 +801,8 @@ namespace spz {
 	        if (icon != null) {
 	            if (icon.sprite == null)
 	                icon.sprite = UiRuntimeSprites.GetLineIcon(ResolveStripTabLineIcon(cell.name));
-	            SpzUiThemeOps.ApplyLineIconTint(icon);
+	            if (recolorChrome)
+	                SpzUiThemeOps.ApplyLineIconTint(icon);
 	        }
 	        // Tighten strip cell when icon-only so the row reads like a toolbox.
 	        // Leaving icon-only must clear preferredWidth/flexibleWidth locks so Harmonize can reflow.
