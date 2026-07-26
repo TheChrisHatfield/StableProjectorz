@@ -32,6 +32,7 @@ namespace spz {
 		Image _bgImage;
 		Button _dockButton;
 		Color _fillBase = Color.white;
+		Color _authoredFillBase = FallbackFill;
 		bool _built;
 		Coroutine _buildRoutine;
 		MonoBehaviour _buildCoroutineOwner;
@@ -42,6 +43,8 @@ namespace spz {
 		float _fullViewMenuOpenedAtUnscaledTime;
 		/// <summary>Label on the secondary "open/hide right dock" control (OPEN RIGHT vs HIDE RIGHT).</summary>
 		TextMeshProUGUI _openRightDockLabel;
+		Image _fullSrnLineIcon;
+		Image _openRightLineIcon;
 
 		RectTransform _genArtAnchorRestoreTarget;
 		Vector2 _genArtSavedAnchorMin;
@@ -311,6 +314,8 @@ namespace spz {
 			_fullViewMenuRt = null;
 			_fullViewMenuCg = null;
 			_openRightDockLabel = null;
+			_fullSrnLineIcon = null;
+			_openRightLineIcon = null;
 			_built = false;
 			RestoreGenArtAnchorsIfSaved();
 		}
@@ -392,14 +397,17 @@ namespace spz {
 
 		void OnEnable() {
 			ViewportFullViewOnScreen_Driver.ActiveChanged += OnDriverActiveChanged;
+			SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
 			// Do not use NotifyAttachRequested() here: it always TearDownBuiltDock(), so the button vanishes
 			// whenever the host re-enables after Art / Paint / other command-ribbon tab changes.
 			NudgeOrRebuildWithoutTear();
+			ApplyThemeTokens();
 		}
 
 		void OnDisable() {
 			ForceHideFullViewMenuInstant();
 			ViewportFullViewOnScreen_Driver.ActiveChanged -= OnDriverActiveChanged;
+			SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 			// Only stop a build coroutine hosted on *this* behaviour. External runners (Addon_MGR /
 			// MainViewport) must keep going — otherwise enable-from-Add-on-Manager after Generate
 			// dies when the workflow-ribbon host disables under the modal.
@@ -413,6 +421,7 @@ namespace spz {
 		}
 
 		void OnDestroy() {
+			SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 			ForceHideFullViewMenuInstant();
 			StopBuildCoroutineIfAny();
 			RegisteredInstances.Remove(this);
@@ -783,6 +792,7 @@ namespace spz {
 				_fillBase = FallbackFill;
 				_bgImage.color = _fillBase;
 			}
+			_authoredFillBase = _fillBase;
 
 			var button = faceGo.AddComponent<Button>();
 			button.targetGraphic = _bgImage;
@@ -815,7 +825,9 @@ namespace spz {
 			textRt.SetParent(faceRt, false);
 			var tmp = textGo.AddComponent<TextMeshProUGUI>();
 			ApplyFullSrnLabelStyle(tmp, genRefTmp, textRt);
+			EnsureDockLineIcon(faceRt, ResolveFullViewDockIcon(), out _fullSrnLineIcon);
 			EnsureFullViewMenu(faceRt, genRefImg, genRefTmp);
+			ApplyThemeTokens();
 		}
 
 		void EnsureFullViewMenu(RectTransform faceRt, Image genRefImg, TextMeshProUGUI genRefTmp) {
@@ -927,6 +939,125 @@ namespace spz {
 			txt.fontSize = Mathf.Max(11f, txt.fontSize - 1f);
 			if (string.Equals(name, "OpenRightDock", StringComparison.Ordinal)) {
 				_openRightDockLabel = txt;
+				EnsureDockLineIcon(rowRt, ResolveOpenRightDockIcon(rightPanelOpen: false), out _openRightLineIcon);
+			}
+		}
+
+		/// <summary>Nomad sculpt: Expand glyph for FULL/SRN dock face.</summary>
+		internal static StudioLineIcon ResolveFullViewDockIcon() => StudioLineIcon.Expand;
+
+		/// <summary>OPEN RIGHT → ChevronRight; HIDE RIGHT (right open) → ChevronLeft.</summary>
+		internal static StudioLineIcon ResolveOpenRightDockIcon(bool rightPanelOpen) =>
+			rightPanelOpen ? StudioLineIcon.ChevronLeft : StudioLineIcon.ChevronRight;
+
+		static void EnsureDockLineIcon(RectTransform parent, StudioLineIcon glyph, out Image iconImg) {
+			iconImg = null;
+			if (parent == null) return;
+			Transform existing = parent.Find("LineIcon");
+			RectTransform iconRt;
+			if (existing == null) {
+				var go = new GameObject("LineIcon", typeof(RectTransform));
+				go.layer = parent.gameObject.layer;
+				iconRt = go.GetComponent<RectTransform>();
+				iconRt.SetParent(parent, false);
+				iconImg = go.AddComponent<Image>();
+				iconImg.raycastTarget = false;
+				iconImg.preserveAspect = true;
+			} else {
+				iconRt = existing as RectTransform;
+				iconImg = existing.GetComponent<Image>();
+				if (iconImg == null)
+					iconImg = existing.gameObject.AddComponent<Image>();
+			}
+			if (iconRt != null) {
+				// Match Gen Art face center so FULL / OPEN RIGHT glyphs share one vertical column.
+				iconRt.anchorMin = new Vector2(0.5f, 0.5f);
+				iconRt.anchorMax = new Vector2(0.5f, 0.5f);
+				iconRt.pivot = new Vector2(0.5f, 0.5f);
+				iconRt.anchoredPosition = Vector2.zero;
+				iconRt.sizeDelta = new Vector2(22f, 22f);
+			}
+			if (iconImg != null) {
+				iconImg.sprite = UiRuntimeSprites.GetLineIcon(glyph);
+				// Only hide newly created icons; rebinding an existing glyph must not flash/hide sculpt chrome.
+				if (existing == null)
+					iconImg.gameObject.SetActive(false);
+			}
+		}
+
+		void ApplyThemeTokens() {
+			if (!_built && _builtRowRt == null && _dockButton == null)
+				return;
+			bool sculpt = SpzUiThemeOps.ShouldRecolorBoundChrome;
+			var t = SpzUiThemeOps.Active;
+
+			if (_bgImage != null) {
+				bool on = IsInOnScreenFullViewSession();
+				if (sculpt) {
+					_fillBase = t.controlBg;
+					_bgImage.color = on ? Color.Lerp(t.controlBg, t.accent, 0.35f) : t.controlBg;
+				} else {
+					_fillBase = _authoredFillBase;
+					_bgImage.color = on ? Color.Lerp(_fillBase, Color.black, 0.14f) : _fillBase;
+				}
+			}
+
+			ApplyDockFaceChrome(_dockButton != null ? _dockButton.transform as RectTransform : null,
+				ref _fullSrnLineIcon, ResolveFullViewDockIcon(), sculpt, t);
+
+			bool rightOpen = false;
+			var sk = Global_Skeleton_UI.instance;
+			if (sk != null && sk.TryGetSidePanelVisibility(out bool left, out bool right))
+				rightOpen = !left && right;
+			StudioLineIcon openGlyph = ResolveOpenRightDockIcon(rightOpen);
+
+			if (_fullViewMenuRt != null) {
+				var openRt = _fullViewMenuRt.Find("OpenRightDock") as RectTransform;
+				if (openRt != null) {
+					var openImg = openRt.GetComponent<Image>();
+					if (openImg != null) {
+						if (sculpt)
+							openImg.color = t.controlBg;
+						else if (_bgImage != null)
+							openImg.color = _authoredFillBase;
+					}
+					ApplyDockFaceChrome(openRt, ref _openRightLineIcon, openGlyph, sculpt, t);
+					if (_openRightDockLabel == null)
+						_openRightDockLabel = openRt.GetComponentInChildren<TextMeshProUGUI>(true);
+				}
+			}
+
+			RefreshOpenRightSecondaryLabel();
+		}
+
+		static void ApplyDockFaceChrome(RectTransform face, ref Image iconImg, StudioLineIcon glyph, bool sculpt, SpzUiThemeOps.ThemeTokens t) {
+			if (face == null) return;
+			if (iconImg == null)
+				EnsureDockLineIcon(face, glyph, out iconImg);
+			var label = face.GetComponentInChildren<TextMeshProUGUI>(true);
+			if (sculpt) {
+				if (label != null) {
+					label.maxVisibleCharacters = 0;
+					label.color = new Color(t.textPrimary.r, t.textPrimary.g, t.textPrimary.b, 0f);
+				}
+				if (iconImg != null) {
+					iconImg.sprite = UiRuntimeSprites.GetLineIcon(glyph);
+					iconImg.gameObject.SetActive(true);
+					SpzUiThemeOps.ApplyLineIconTint(iconImg);
+					var iconRt = iconImg.rectTransform;
+					iconRt.anchorMin = new Vector2(0.5f, 0.5f);
+					iconRt.anchorMax = new Vector2(0.5f, 0.5f);
+					iconRt.pivot = new Vector2(0.5f, 0.5f);
+					iconRt.anchoredPosition = Vector2.zero;
+					iconRt.sizeDelta = new Vector2(22f, 22f);
+				}
+			} else {
+				if (label != null) {
+					label.maxVisibleCharacters = int.MaxValue;
+					label.color = Color.black;
+				}
+				if (iconImg != null)
+					iconImg.gameObject.SetActive(false);
 			}
 		}
 
@@ -1058,9 +1189,16 @@ namespace spz {
 			}
 			// "On" while the left column is hidden: center-only fullscreen, or right-only (paint) — same session.
 			bool on = IsInOnScreenFullViewSession();
-			_bgImage.color = on ? Color.Lerp(_fillBase, Color.black, 0.14f) : _fillBase;
+			if (SpzUiThemeOps.ShouldRecolorBoundChrome) {
+				var t = SpzUiThemeOps.Active;
+				_bgImage.color = on ? Color.Lerp(t.controlBg, t.accent, 0.35f) : t.controlBg;
+			} else {
+				_bgImage.color = on ? Color.Lerp(_fillBase, Color.black, 0.14f) : _fillBase;
+			}
 			SetSecondaryButtonVisible(on);
 			RefreshOpenRightSecondaryLabel();
+			if (SpzUiThemeOps.ShouldRecolorBoundChrome)
+				ApplyThemeTokens();
 		}
 
 		void RefreshOpenRightSecondaryLabel() {
@@ -1068,22 +1206,24 @@ namespace spz {
 				var t = _fullViewMenuRt.Find("OpenRightDock");
 				if (t != null) {
 					_openRightDockLabel = t.GetComponentInChildren<TextMeshProUGUI>(true);
+					if (_openRightLineIcon == null)
+						EnsureDockLineIcon(t as RectTransform, ResolveOpenRightDockIcon(false), out _openRightLineIcon);
 				}
 			}
-			if (_openRightDockLabel == null) {
-				return;
-			}
+			bool rightOpen = false;
+			string label = "OPEN\nRIGHT";
 			var sk = Global_Skeleton_UI.instance;
-			if (sk == null || !sk.TryGetSidePanelVisibility(out bool left, out bool right)) {
-				_openRightDockLabel.text = "OPEN\nRIGHT";
-				return;
+			if (sk != null && sk.TryGetSidePanelVisibility(out bool left, out bool right)) {
+				rightOpen = !left && right;
+				if (rightOpen)
+					label = "HIDE\nRIGHT";
 			}
-			if (!left && !right) {
-				_openRightDockLabel.text = "OPEN\nRIGHT";
-			} else if (!left && right) {
-				_openRightDockLabel.text = "HIDE\nRIGHT";
-			} else {
-				_openRightDockLabel.text = "OPEN\nRIGHT";
+			if (_openRightDockLabel != null)
+				_openRightDockLabel.text = label;
+			if (_openRightLineIcon != null && SpzUiThemeOps.ShouldRecolorBoundChrome) {
+				_openRightLineIcon.sprite = UiRuntimeSprites.GetLineIcon(ResolveOpenRightDockIcon(rightOpen));
+				SpzUiThemeOps.ApplyLineIconTint(_openRightLineIcon);
+				_openRightLineIcon.gameObject.SetActive(true);
 			}
 		}
 
@@ -1198,10 +1338,16 @@ namespace spz {
 					reuseBtn.targetGraphic = reuseImg;
 					_dockButton = reuseBtn;
 					_bgImage = reuseImg;
-					_fillBase = reuseImg.color;
+					// Prefer Gen Art authored fill — reuseImg.color may still be a prior theme tint.
+					_authoredFillBase = genRefImg != null ? genRefImg.color : FallbackFill;
+					_fillBase = _authoredFillBase;
+					if (!SpzUiThemeOps.ShouldRecolorBoundChrome)
+						reuseImg.color = _authoredFillBase;
+					EnsureDockLineIcon(reuseFace, ResolveFullViewDockIcon(), out _fullSrnLineIcon);
 					EnsureFullViewMenu(reuseFace, genRefImg, genRefTmp);
 					_built = true;
 					LayoutRebuilder.ForceRebuildLayoutImmediate(vlgRoot);
+					ApplyThemeTokens();
 					RefreshActiveFill();
 					return true;
 				}
