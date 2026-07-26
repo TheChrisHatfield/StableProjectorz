@@ -190,14 +190,25 @@ namespace spz {
 				// Reload / second create_panel: clear widgets so add_button does not stack duplicates.
 				ClearAddonPanelChildren(go.transform);
 				var reuseTitle = go.GetComponentInChildren<TextMeshProUGUI>(true);
-				if (reuseTitle != null)
+				if (reuseTitle != null) {
 					reuseTitle.text = title;
-				else {
+					if (reuseTitle.GetComponent<LayoutElement>() == null) {
+						var titleLe = reuseTitle.gameObject.AddComponent<LayoutElement>();
+						titleLe.preferredHeight = ProjectUiScale.Space(3);
+						titleLe.minHeight = ProjectUiScale.Space(2);
+						titleLe.flexibleWidth = 1f;
+					}
+				} else {
 					var titleObj = new GameObject("Title");
 					titleObj.transform.SetParent(go.transform, false);
+					var titleLe = titleObj.AddComponent<LayoutElement>();
+					titleLe.preferredHeight = ProjectUiScale.Space(3);
+					titleLe.minHeight = ProjectUiScale.Space(2);
+					titleLe.flexibleWidth = 1f;
 					reuseTitle = titleObj.AddComponent<TextMeshProUGUI>();
 					reuseTitle.text = title;
 					reuseTitle.fontSize = 18;
+					reuseTitle.overflowMode = TextOverflowModes.Ellipsis;
 					ApplyRuntimeTmpFont(reuseTitle);
 				}
 				SpzUiThemeOps.ApplyToAddonUiRoot(go);
@@ -232,10 +243,13 @@ namespace spz {
 				image.color = new Color(0.2f, 0.2f, 0.2f, 0.8f);
 				
 				var verticalLayout = panelObj.AddComponent<VerticalLayoutGroup>();
-				verticalLayout.spacing = 10f;
-				verticalLayout.padding = new RectOffset(10, 10, 10, 10);
+				int pad = Mathf.RoundToInt(ProjectUiScale.Space(1)); // 8px grid
+				verticalLayout.spacing = ProjectUiScale.Space(1);
+				verticalLayout.padding = new RectOffset(pad, pad, pad, pad); // left, right, top, bottom
 				verticalLayout.childControlHeight = false;
 				verticalLayout.childControlWidth = true;
+				verticalLayout.childForceExpandHeight = false;
+				verticalLayout.childForceExpandWidth = true;
 			}
 			
 			// Set title if panel has a text component
@@ -244,12 +258,23 @@ namespace spz {
 				// Try to find or create title
 				var titleObj = new GameObject("Title");
 				titleObj.transform.SetParent(panelObj.transform, false);
+				var titleLe = titleObj.AddComponent<LayoutElement>();
+				titleLe.preferredHeight = ProjectUiScale.Space(3); // 24
+				titleLe.minHeight = ProjectUiScale.Space(2);
+				titleLe.flexibleWidth = 1f;
 				titleText = titleObj.AddComponent<TextMeshProUGUI>();
 				titleText.text = title;
 				titleText.fontSize = 18;
+				titleText.overflowMode = TextOverflowModes.Ellipsis;
 				ApplyRuntimeTmpFont(titleText);
 			} else {
 				titleText.text = title;
+				if (titleText.GetComponent<LayoutElement>() == null) {
+					var titleLe = titleText.gameObject.AddComponent<LayoutElement>();
+					titleLe.preferredHeight = ProjectUiScale.Space(3);
+					titleLe.minHeight = ProjectUiScale.Space(2);
+					titleLe.flexibleWidth = 1f;
+				}
 			}
 			
 			// Register with add-on
@@ -623,9 +648,10 @@ namespace spz {
 				importDefault = Path.Combine(exchange, "from_blender.fbx");
 				exportDefault = Path.Combine(exchange, "from_spz.fbx");
 			}
-			AddTextInput(StableProjectorzGoAddonId, panelId, "Blender.exe path (auto + editable)", "");
-			AddTextInput(StableProjectorzGoAddonId, panelId, "Import: mesh file from Blender → SPZ", importDefault);
-			AddTextInput(StableProjectorzGoAddonId, panelId, "Export: mesh file from SPZ → disk", exportDefault);
+			// Order: primary paths first, optional Blender last (matches Python register()).
+			AddTextInput(StableProjectorzGoAddonId, panelId, "Import path", importDefault);
+			AddTextInput(StableProjectorzGoAddonId, panelId, "Export path", exportDefault);
+			AddTextInput(StableProjectorzGoAddonId, panelId, "Blender.exe (optional)", "");
 			AddButton(StableProjectorzGoAddonId, panelId, "Import", "do_import_from_path");
 			AddButton(StableProjectorzGoAddonId, panelId, "Export", "do_export_to_path");
 		}
@@ -699,16 +725,21 @@ namespace spz {
 			GameObject buttonObj;
 			if (_buttonPrefab != null) {
 				buttonObj = Instantiate(_buttonPrefab, panelObj.transform);
+				// Widget probes and theme roles key off Button_*; prefab asset names break empty-shell detection.
+				buttonObj.name = $"Button_{label}";
+				var prefabLabel = buttonObj.GetComponentInChildren<TextMeshProUGUI>(true);
+				if (prefabLabel != null)
+					prefabLabel.text = label;
 			} else {
 				// Create basic button if no prefab
 				buttonObj = new GameObject($"Button_{label}");
 				buttonObj.transform.SetParent(panelObj.transform, false);
 				
 				var rectTransform = buttonObj.AddComponent<RectTransform>();
-				rectTransform.sizeDelta = new Vector2(220, 36);
+				rectTransform.sizeDelta = new Vector2(220, ProjectUiScale.Space(4) + 4f); // ~36
 				var layoutElement = buttonObj.AddComponent<LayoutElement>();
-				layoutElement.preferredHeight = 36f;
-				layoutElement.minHeight = 32f;
+				layoutElement.preferredHeight = ProjectUiScale.Space(4) + 4f;
+				layoutElement.minHeight = ProjectUiScale.Space(4);
 				layoutElement.preferredWidth = 220f;
 				layoutElement.flexibleWidth = 1f;
 				
@@ -1018,7 +1049,42 @@ namespace spz {
 				Viewport_StatusText.instance.ShowStatusText(message, false, ok ? 3.5f : 5f, false);
 		}
 		
-		/// <summary>Order of TextInput_* rows from register(): Blender, Import path, Export path.</summary>
+		/// <summary>
+		/// Resolve Import/Export path fields by label name (not sibling index) so demoting Blender.exe
+		/// or reordering rows cannot wire the wrong TMP field.
+		/// </summary>
+		static TMP_InputField FindSpzGoPathField(List<Transform> textRowRoots, bool isImport) {
+			if (textRowRoots == null || textRowRoots.Count == 0)
+				return null;
+			string needle = isImport ? "Import" : "Export";
+			for (int i = 0; i < textRowRoots.Count; i++) {
+				var t = textRowRoots[i];
+				if (t == null || t.name == null) continue;
+				// Skip optional Blender row even if it somehow matched.
+				if (t.name.IndexOf("Blender", StringComparison.OrdinalIgnoreCase) >= 0)
+					continue;
+				if (t.name.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0)
+					return t.GetComponentInChildren<TMP_InputField>(true);
+			}
+			// Legacy fallback: Blender, Import, Export (old register order) OR Import, Export, Blender.
+			var fields = new List<TMP_InputField>(3);
+			for (int i = 0; i < textRowRoots.Count; i++) {
+				var inf = textRowRoots[i].GetComponentInChildren<TMP_InputField>(true);
+				if (inf != null) fields.Add(inf);
+			}
+			if (fields.Count >= 3) {
+				// Prefer indices 0/1 when first row is Import; else 1/2 for Blender-first.
+				string n0 = textRowRoots[0] != null ? textRowRoots[0].name : "";
+				if (!string.IsNullOrEmpty(n0) && n0.IndexOf("Import", StringComparison.OrdinalIgnoreCase) >= 0)
+					return fields[isImport ? 0 : 1];
+				return fields[isImport ? 1 : 2];
+			}
+			if (fields.Count >= 2)
+				return fields[isImport ? 0 : 1];
+			return null;
+		}
+
+		/// <summary>Path fields are resolved by name (Import / Export); Blender.exe is optional and demoted.</summary>
 		void SpzGoRunHeadlessImportOrExportFromPanel(string addonId, string panelId, string callbackName, bool isImport) {
 			bool okNative = TrySpzGoRunHeadlessImportOrExportFromPanel(panelId, isImport);
 			if (okNative) {
@@ -1047,18 +1113,13 @@ namespace spz {
 				if (t.name.StartsWith("TextInput_", StringComparison.Ordinal))
 					textRowRoots.Add(t);
 			}
-			var fields = new List<TMP_InputField>(3);
-			for (int i = 0; i < textRowRoots.Count; i++) {
-				var inf = textRowRoots[i].GetComponentInChildren<TMP_InputField>(true);
-				if (inf != null) fields.Add(inf);
-			}
-			if (fields.Count < 3) {
-				UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO: expected 3 text rows (blender, import, export), got " + fields.Count);
-				SpzGoStatusLine("Set mesh paths in the add-on (Autofill) or re-enable the add-on", false);
+			var field = FindSpzGoPathField(textRowRoots, isImport);
+			if (field == null) {
+				UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO: Import/Export path field not found (got " + textRowRoots.Count + " text rows).");
+				SpzGoStatusLine("Set Import/Export paths in the add-on panel", false);
 				return false;
 			}
-			int idx = isImport ? 1 : 2;
-			string path = fields[idx].text;
+			string path = field.text;
 			if (string.IsNullOrWhiteSpace(path)) {
 				SpzGoStatusLine(isImport ? "Import: path is empty" : "Export: path is empty", false);
 				return false;
@@ -1322,36 +1383,61 @@ namespace spz {
 				return null;
 			}
 			
-			// Create text input container
+			// Stacked label-above-field (full width) — side-by-side 30/70 clipped long SPZ GO path labels.
 			GameObject inputObj = new GameObject($"TextInput_{label}");
 			inputObj.transform.SetParent(panelObj.transform, false);
 			
 			var inputRect = inputObj.AddComponent<RectTransform>();
-			inputRect.sizeDelta = new Vector2(200, 40);
+			float rowH = ProjectUiScale.Space(2) + ProjectUiScale.Space(4) + 4f; // label ~16 + field ~36
+			inputRect.sizeDelta = new Vector2(0f, rowH);
+			var rowLe = inputObj.AddComponent<LayoutElement>();
+			rowLe.preferredHeight = rowH;
+			rowLe.minHeight = rowH;
+			rowLe.flexibleWidth = 1f;
+
+			var rowLayout = inputObj.AddComponent<VerticalLayoutGroup>();
+			rowLayout.spacing = 0f;
+			rowLayout.padding = new RectOffset(0, 0, 0, 0);
+			// Must control child heights or LayoutElement on Label/InputField is ignored and rows collapse to 0.
+			rowLayout.childControlHeight = true;
+			rowLayout.childControlWidth = true;
+			rowLayout.childForceExpandHeight = false;
+			rowLayout.childForceExpandWidth = true;
 			
-			// Add label
+			// Label (full width, above field)
 			var labelObj = new GameObject("Label");
 			labelObj.transform.SetParent(inputObj.transform, false);
-			var labelRect = labelObj.AddComponent<RectTransform>();
-			labelRect.anchorMin = new Vector2(0, 0.5f);
-			labelRect.anchorMax = new Vector2(0.3f, 1);
-			labelRect.sizeDelta = Vector2.zero;
+			var labelRt = labelObj.GetComponent<RectTransform>() ?? labelObj.AddComponent<RectTransform>();
+			labelRt.sizeDelta = new Vector2(0f, ProjectUiScale.Space(2));
+			var labelLe = labelObj.AddComponent<LayoutElement>();
+			labelLe.preferredHeight = ProjectUiScale.Space(2);
+			labelLe.minHeight = ProjectUiScale.Space(2);
+			labelLe.flexibleWidth = 1f;
+			labelLe.flexibleHeight = 0f;
 			var labelText = labelObj.AddComponent<TextMeshProUGUI>();
 			labelText.text = label;
 			labelText.fontSize = 12;
 			labelText.color = Color.white;
 			labelText.raycastTarget = false;
+			labelText.enableWordWrapping = false;
+			labelText.overflowMode = TextOverflowModes.Ellipsis;
 			ApplyRuntimeTmpFont(labelText);
 			
-			// Add input field
+			// Input field (full width)
 			var fieldObj = new GameObject("InputField");
 			fieldObj.transform.SetParent(inputObj.transform, false);
-			var fieldRect = fieldObj.AddComponent<RectTransform>();
-			fieldRect.anchorMin = new Vector2(0.3f, 0);
-			fieldRect.anchorMax = new Vector2(1, 1);
-			fieldRect.sizeDelta = Vector2.zero;
+			float fieldH = ProjectUiScale.Space(4) + 4f;
+			var fieldRt = fieldObj.GetComponent<RectTransform>() ?? fieldObj.AddComponent<RectTransform>();
+			fieldRt.sizeDelta = new Vector2(0f, fieldH);
+			var fieldLe = fieldObj.AddComponent<LayoutElement>();
+			fieldLe.preferredHeight = fieldH;
+			fieldLe.minHeight = fieldH;
+			fieldLe.flexibleWidth = 1f;
+			fieldLe.flexibleHeight = 0f;
 			
 			var fieldBg = fieldObj.AddComponent<Image>();
+			fieldBg.sprite = UiRuntimeSprites.RoundedRectSliced;
+			fieldBg.type = Image.Type.Sliced;
 			fieldBg.color = new Color(0.15f, 0.15f, 0.15f, 1f);
 			
 			var textObj = new GameObject("Text");
@@ -1360,12 +1446,13 @@ namespace spz {
 			textRect.anchorMin = Vector2.zero;
 			textRect.anchorMax = Vector2.one;
 			textRect.sizeDelta = Vector2.zero;
-			textRect.offsetMin = new Vector2(5, 2);
-			textRect.offsetMax = new Vector2(-5, -2);
+			textRect.offsetMin = new Vector2(ProjectUiScale.Space(1), 2);
+			textRect.offsetMax = new Vector2(-ProjectUiScale.Space(1), -2);
 			var text = textObj.AddComponent<TextMeshProUGUI>();
 			text.text = defaultValue;
 			text.fontSize = 12;
 			text.color = Color.white;
+			text.overflowMode = TextOverflowModes.Ellipsis;
 			ApplyRuntimeTmpFont(text);
 			
 			var placeholderObj = new GameObject("Placeholder");
@@ -1374,10 +1461,10 @@ namespace spz {
 			placeholderRect.anchorMin = Vector2.zero;
 			placeholderRect.anchorMax = Vector2.one;
 			placeholderRect.sizeDelta = Vector2.zero;
-			placeholderRect.offsetMin = new Vector2(5, 2);
-			placeholderRect.offsetMax = new Vector2(-5, -2);
+			placeholderRect.offsetMin = new Vector2(ProjectUiScale.Space(1), 2);
+			placeholderRect.offsetMax = new Vector2(-ProjectUiScale.Space(1), -2);
 			var placeholder = placeholderObj.AddComponent<TextMeshProUGUI>();
-			placeholder.text = label;
+			placeholder.text = "Path…";
 			placeholder.fontSize = 12;
 			placeholder.color = new Color(0.5f, 0.5f, 0.5f, 1f);
 			placeholder.gameObject.SetActive(string.IsNullOrEmpty(defaultValue));
