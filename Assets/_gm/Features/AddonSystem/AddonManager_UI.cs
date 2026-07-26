@@ -202,6 +202,9 @@ namespace spz {
 		Color _statusOk = new Color(34f / 255f, 197f / 255f, 94f / 255f, 1f);
 		Color _statusFail = new Color(239f / 255f, 68f / 255f, 68f / 255f, 1f);
 		Color _statusMuted = new Color(0.63f, 0.63f, 0.67f, 1f);
+		static readonly Color kAuthoredStatusOk = new Color(34f / 255f, 197f / 255f, 94f / 255f, 1f);
+		static readonly Color kAuthoredStatusFail = new Color(239f / 255f, 68f / 255f, 68f / 255f, 1f);
+		static readonly Color kAuthoredStatusMuted = new Color(0.63f, 0.63f, 0.67f, 1f);
 		bool? _lastStatusIsSuccess;
 		float _themeTitleBasePt = -1f;
 		float _themeFilterLabelBasePt = -1f;
@@ -1273,6 +1276,9 @@ namespace spz {
 		/// </summary>
 		void ApplyThemeTokens() {
 			if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+				_statusOk = kAuthoredStatusOk;
+				_statusFail = kAuthoredStatusFail;
+				_statusMuted = kAuthoredStatusMuted;
 				if (_panel != null) {
 					foreach (var g in _panel.GetComponentsInChildren<Graphic>(true))
 						SpzUiThemeOps.RestoreAuthoredGraphic(g);
@@ -1291,7 +1297,7 @@ namespace spz {
 					// Keep the manager shell opaque so viewport help text does not bleed through.
 					Color shell = t.panelBg;
 					shell.a = Mathf.Max(shell.a, 0.96f);
-					SpzUiThemeOps.ApplyGraphicColor(panelImg, shell);
+					SpzUiThemeOps.ApplyBoundChromeGraphic(panelImg, shell);
 				}
 				var panelVlg = _panel.GetComponent<UnityEngine.UI.VerticalLayoutGroup>();
 				if (panelVlg != null) {
@@ -1302,24 +1308,24 @@ namespace spz {
 				var title = _panel.transform.Find("Header/Title")?.GetComponent<TextMeshProUGUI>();
 				if (title != null) {
 					CaptureBasePt(ref _themeTitleBasePt, title, 22f);
-					SpzUiThemeOps.ApplyTmpScaled(title, t.textPrimary, _themeTitleBasePt);
+					SpzUiThemeOps.ApplyBoundChromeTmp(title, t.textPrimary, _themeTitleBasePt);
 				}
 				var filterLabel = _panel.transform.Find("FilterBar/FilterLabel")?.GetComponent<TextMeshProUGUI>();
 				if (filterLabel != null) {
 					CaptureBasePt(ref _themeFilterLabelBasePt, filterLabel, 14f);
-					SpzUiThemeOps.ApplyTmpScaled(filterLabel, t.textPrimary, _themeFilterLabelBasePt);
+					SpzUiThemeOps.ApplyBoundChromeTmp(filterLabel, t.textPrimary, _themeFilterLabelBasePt);
 				}
 				var pills = _panel.transform.Find("FilterBar/FilterPills")?.GetComponent<Image>();
 				if (pills != null)
-					SpzUiThemeOps.ApplyGraphicColor(pills, new Color(t.controlBg.r, t.controlBg.g, t.controlBg.b, 0.55f));
+					SpzUiThemeOps.ApplyBoundChromeGraphic(pills, new Color(t.controlBg.r, t.controlBg.g, t.controlBg.b, 0.55f));
 				var rememberLabel = _panel.transform.Find("RememberEnabledRow/Label")?.GetComponent<TextMeshProUGUI>();
 				if (rememberLabel != null) {
 					CaptureBasePt(ref _themeRememberLabelBasePt, rememberLabel, 13f);
-					SpzUiThemeOps.ApplyTmpScaled(rememberLabel, t.textMuted, _themeRememberLabelBasePt);
+					SpzUiThemeOps.ApplyBoundChromeTmp(rememberLabel, t.textMuted, _themeRememberLabelBasePt);
 				}
 			}
 			if (_closePanel_button != null)
-				SpzUiThemeOps.ApplySelectableToken(_closePanel_button, t.controlBg, t.accent);
+				SpzUiThemeOps.ApplyBoundChromeSelectable(_closePanel_button, t.controlBg, t.accent);
 			if (_installFromFile_button != null)
 				ThemeHeaderButton(_installFromFile_button, t.controlBg, t.accent, t.textPrimary);
 			if (_refresh_button != null)
@@ -1346,7 +1352,7 @@ namespace spz {
 			if (_addonsListParent != null) {
 				var listImg = _addonsListParent.GetComponent<Image>();
 				if (listImg != null)
-					SpzUiThemeOps.ApplyGraphicColor(listImg, t.fieldBg);
+					SpzUiThemeOps.ApplyBoundChromeGraphic(listImg, t.fieldBg);
 				var listVlg = _addonsListParent.GetComponent<UnityEngine.UI.VerticalLayoutGroup>();
 				if (listVlg != null) {
 					int listPad = Mathf.RoundToInt(SpzUiThemeOps.ScaledSpace(1));
@@ -1363,7 +1369,7 @@ namespace spz {
 				Color statusColor = !string.IsNullOrEmpty(_statusText.text) && _lastStatusIsSuccess.HasValue
 					? (_lastStatusIsSuccess.Value ? _statusOk : _statusFail)
 					: t.textMuted;
-				SpzUiThemeOps.ApplyTmpScaled(_statusText, statusColor, _themeStatusBasePt);
+				SpzUiThemeOps.ApplyBoundChromeTmp(_statusText, statusColor, _themeStatusBasePt);
 			}
 			if (_filterAllToggle != null || _filterEnabledToggle != null || _filterDisabledToggle != null) {
 				ThemeFilterToggle(_filterAllToggle, t);
@@ -1371,9 +1377,9 @@ namespace spz {
 				ThemeFilterToggle(_filterDisabledToggle, t);
 			}
 			if (_rememberEnabledAddonToggle != null) {
-				SpzUiThemeOps.ApplySelectableToken(_rememberEnabledAddonToggle, t.controlBg, t.accent);
+				SpzUiThemeOps.ApplyBoundChromeSelectable(_rememberEnabledAddonToggle, t.controlBg, t.accent);
 				if (_rememberEnabledAddonToggle.graphic != null)
-					SpzUiThemeOps.ApplyGraphicColor(_rememberEnabledAddonToggle.graphic, t.success);
+					SpzUiThemeOps.ApplyBoundChromeGraphic(_rememberEnabledAddonToggle.graphic, t.success);
 			}
 		}
 
@@ -1389,14 +1395,14 @@ namespace spz {
 
 		static void ThemeHeaderButton(Button button, Color normal, Color highlighted, Color foreground) {
 			if (button == null) return;
-			SpzUiThemeOps.ApplySelectableToken(button, normal, highlighted);
+			SpzUiThemeOps.ApplyBoundChromeSelectable(button, normal, highlighted);
 			var label = button.transform.Find("Text")?.GetComponent<TextMeshProUGUI>();
 			if (label != null) {
 				float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(label, 13f);
-				SpzUiThemeOps.ApplyTmpScaled(label, foreground, basePt);
+				SpzUiThemeOps.ApplyBoundChromeTmp(label, foreground, basePt);
 			}
 			var icon = button.transform.Find("LineIcon")?.GetComponent<Image>();
-			if (icon != null)
+			if (icon != null && SpzUiThemeOps.ShouldRecolorBoundChrome)
 				SpzUiThemeOps.ApplyLineIconTint(icon);
 			if (button.targetGraphic is Image btnImg)
 				SpzUiThemeOps.ApplyRoundedControlSprite(btnImg);
@@ -1407,11 +1413,11 @@ namespace spz {
 			Color normal = toggle.isOn
 				? t.textPrimary
 				: new Color(t.controlBg.r, t.controlBg.g, t.controlBg.b, 0f);
-			SpzUiThemeOps.ApplySelectableToken(toggle, normal, toggle.isOn ? t.textPrimary : t.tabActive);
+			SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, normal, toggle.isOn ? t.textPrimary : t.tabActive);
 			var label = toggle.GetComponentInChildren<TextMeshProUGUI>(true);
 			if (label != null) {
 				float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(label, 12f);
-				SpzUiThemeOps.ApplyTmpScaled(label, toggle.isOn ? t.panelBg : t.textMuted, basePt);
+				SpzUiThemeOps.ApplyBoundChromeTmp(label, toggle.isOn ? t.panelBg : t.textMuted, basePt);
 			}
 		}
 
@@ -1422,12 +1428,12 @@ namespace spz {
 				var removeBtn = remove.GetComponent<Button>();
 				if (removeBtn != null) {
 					Color dangerBg = Color.Lerp(t.panelBg, t.danger, 0.18f);
-					SpzUiThemeOps.ApplySelectableToken(removeBtn, dangerBg, Color.Lerp(dangerBg, t.danger, 0.28f));
+					SpzUiThemeOps.ApplyBoundChromeSelectable(removeBtn, dangerBg, Color.Lerp(dangerBg, t.danger, 0.28f));
 				}
 				var removeLabel = remove.GetComponentInChildren<TextMeshProUGUI>(true);
 				if (removeLabel != null) {
 					float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(removeLabel, 12f);
-					SpzUiThemeOps.ApplyTmpScaled(removeLabel, new Color(t.danger.r, t.danger.g, t.danger.b, 0.88f), basePt);
+					SpzUiThemeOps.ApplyBoundChromeTmp(removeLabel, new Color(t.danger.r, t.danger.g, t.danger.b, 0.88f), basePt);
 				}
 			}
 			var toggle = item.transform.Find("StatusToggle")?.GetComponent<Toggle>();
@@ -1443,20 +1449,20 @@ namespace spz {
 			var name = item.transform.Find("Name")?.GetComponent<TextMeshProUGUI>();
 			if (name != null) {
 				float nameBase = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(name, 14f);
-				SpzUiThemeOps.ApplyTmpScaled(name, t.textPrimary, nameBase);
+				SpzUiThemeOps.ApplyBoundChromeTmp(name, t.textPrimary, nameBase);
 			}
 			if (toggle != null) {
 				Color ringColor = enabled ? t.success : t.textMuted;
 				var ringImg = toggle.transform.Find("Ring")?.GetComponent<Image>();
 				if (ringImg != null) {
-					ringImg.color = ringColor;
+					SpzUiThemeOps.ApplyBoundChromeGraphic(ringImg, ringColor);
 					ringImg.preserveAspect = true;
 				}
 				Image fill = toggle.graphic as Image;
 				if (fill == null)
 					fill = toggle.transform.Find("Ring/Checkmark")?.GetComponent<Image>();
 				if (fill != null) {
-					SpzUiThemeOps.ApplyGraphicColor(fill, t.success);
+					SpzUiThemeOps.ApplyBoundChromeGraphic(fill, t.success);
 					fill.preserveAspect = true;
 					fill.gameObject.SetActive(true);
 					fill.canvasRenderer.SetAlpha(enabled ? 1f : 0f);
