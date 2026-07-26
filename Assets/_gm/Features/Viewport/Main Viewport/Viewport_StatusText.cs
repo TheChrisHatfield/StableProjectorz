@@ -89,10 +89,16 @@ namespace spz {
 
 	    Color _statusTextRgb = Color.white;
 	    Color _textBackgroundRgb = new Color(0f, 0f, 0f, 1f);
+	    Color _authoredStatusTextRgb = Color.white;
+	    Color _authoredTextBackgroundRgb = new Color(0f, 0f, 0f, 1f);
+	    bool _authoredStatusColorsSnapshotted;
+	    ColorBlock _authoredHelpButtonColors;
+	    bool _authoredHelpButtonSnapshotted;
 
 	    void Awake(){
 	        if(instance != null){  DestroyImmediate(this.gameObject); return;  }
 	        instance = this;
+	        SnapshotAuthoredStatusColors();
 	        _help_button.onClick.AddListener(OnHelpButton);
 	        _openWelcomeNovice_button.onClick.AddListener(OnWelcomeNoviceButton);
 	        _openCheckForUpdates_button.onClick.AddListener(OnCheckUpdatesButton);
@@ -109,15 +115,32 @@ namespace spz {
 	            instance = null;
 	    }
 
+	    void SnapshotAuthoredStatusColors() {
+	        if (!_authoredStatusColorsSnapshotted) {
+	            _authoredStatusTextRgb = _statusTextRgb;
+	            _authoredTextBackgroundRgb = _textBackgroundRgb;
+	            _authoredStatusColorsSnapshotted = true;
+	        }
+	        if (!_authoredHelpButtonSnapshotted && _help_button != null) {
+	            _authoredHelpButtonColors = _help_button.colors;
+	            _authoredHelpButtonSnapshotted = true;
+	        }
+	    }
+
 	    /// <summary>
 	    /// Themes status-line RGB from tokens while preserving fade alpha and caller-owned sticky alert colors.
 	    /// </summary>
 	    void ApplyThemeTokens() {
+	        SnapshotAuthoredStatusColors();
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            _statusTextRgb = _authoredStatusTextRgb;
+	            _textBackgroundRgb = _authoredTextBackgroundRgb;
 	            if (_statusText != null)
 	                SpzUiThemeOps.RestoreAuthoredGraphic(_statusText);
 	            if (_progressTotal != null)
 	                SpzUiThemeOps.RestoreAuthoredGraphic(_progressTotal);
+	            if (_help_button != null && _authoredHelpButtonSnapshotted)
+	                _help_button.colors = _authoredHelpButtonColors;
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
