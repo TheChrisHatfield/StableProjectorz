@@ -1234,13 +1234,22 @@ namespace spz {
 						message = "failed to start blender";
 						return false;
 					}
-					string stdout = proc.StandardOutput.ReadToEnd();
-					string stderr = proc.StandardError.ReadToEnd();
+					// Concurrent drain — sequential ReadToEnd can deadlock when stderr/stdout buffers fill.
+					string stdout = null;
+					string stderr = null;
+					var tOut = new System.Threading.Thread(() => { try { stdout = proc.StandardOutput.ReadToEnd(); } catch { stdout = ""; } });
+					var tErr = new System.Threading.Thread(() => { try { stderr = proc.StandardError.ReadToEnd(); } catch { stderr = ""; } });
+					tOut.IsBackground = true;
+					tErr.IsBackground = true;
+					tOut.Start();
+					tErr.Start();
 					if (!proc.WaitForExit(SpzGoBlenderInstallTimeoutMs)) {
 						try { proc.Kill(); } catch { }
 						message = "blender install timed out";
 						return false;
 					}
+					tOut.Join(5000);
+					tErr.Join(5000);
 					string combined = (stdout ?? "") + "\n" + (stderr ?? "");
 					string marker = null;
 					foreach (var line in combined.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)) {

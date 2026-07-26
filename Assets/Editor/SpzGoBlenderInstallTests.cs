@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Reflection;
 using NUnit.Framework;
@@ -36,5 +37,23 @@ public sealed class SpzGoBlenderInstallTests {
 			Directory.GetCurrentDirectory(),
 			"Assets", "StreamingAssets", "Addons", "StableProjectorzGO", "BlenderBridge", "install_into_blender.py");
 		Assert.That(File.Exists(path), Is.True, path);
+	}
+
+	[Test]
+	public void TryInstall_DrainsStdoutAndStderrConcurrently() {
+		string path = Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "FastPath_API.cs");
+		Assert.That(File.Exists(path), Is.True);
+		string src = File.ReadAllText(path);
+		int start = src.IndexOf("public bool TryInstallSpzGoBlenderBridge", StringComparison.Ordinal);
+		Assert.That(start, Is.GreaterThanOrEqualTo(0));
+		int end = src.IndexOf("public bool ExportProjectionTextures", start, StringComparison.Ordinal);
+		Assert.That(end, Is.GreaterThan(start));
+		string body = src.Substring(start, end - start);
+		Assert.That(body, Does.Contain("new System.Threading.Thread"),
+			"Must drain stdout/stderr on background threads to avoid pipe deadlock.");
+		Assert.That(body, Does.Contain("StandardOutput.ReadToEnd"));
+		Assert.That(body, Does.Contain("StandardError.ReadToEnd"));
 	}
 }
