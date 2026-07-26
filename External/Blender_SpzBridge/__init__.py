@@ -393,16 +393,33 @@ def _export_fbx_for_spz(context, filepath: str) -> set:
 _go_timer_state = None
 
 
+def _file_fingerprint(path: str):
+    """Return (mtime, size) or None if missing/unreadable."""
+    try:
+        if not os.path.isfile(path):
+            return None
+        st = os.stat(path)
+        return (st.st_mtime, st.st_size)
+    except OSError:
+        return None
+
+
 def _go_import_timer():
     global _go_timer_state
     if not _go_timer_state:
         return None
-    path, n = _go_timer_state
+    # (path, tick, prior_fingerprint) — prior is fingerprint before SPZ export request
+    path, n, prior = _go_timer_state
     if n > 100:
         _go_timer_state = None
         print("SPZ GO: timeout waiting for:", path)
         return None
-    if os.path.isfile(path) and os.path.getsize(path) > 32:
+    fp = _file_fingerprint(path)
+    if fp is not None and fp[1] > 32:
+        # Refuse a pre-existing exchange FBX that was not rewritten by this request.
+        if prior is not None and fp == prior:
+            _go_timer_state = (path, n + 1, prior)
+            return 0.2
         try:
             bpy.ops.import_scene.fbx(filepath=path)
             _auto_apply_exchange_texture_after_import(path)
@@ -410,7 +427,7 @@ def _go_import_timer():
             print("SPZ GO import_scene.fbx:", e)
         _go_timer_state = None
         return None
-    _go_timer_state = (path, n + 1)
+    _go_timer_state = (path, n + 1, prior)
     return 0.2
 
 
@@ -587,6 +604,8 @@ class SPZ_OT_go_import(Operator):
         if d and not _ensure_dir(d):
             self.report({"ERROR"}, f"Could not create: {d}")
             return {"CANCELLED"}
+        # Snapshot before SPZ rewrite so the wait timer does not import a stale exchange FBX.
+        prior = _file_fingerprint(fbx)
         try:
             r = spz_http.post_export_3d_to_path(p.base_url, fbx)
         except spz_http.SpzHttpError as e:
@@ -596,7 +615,7 @@ class SPZ_OT_go_import(Operator):
         if not ok:
             self.report({"WARNING"}, f"SPZ: {r!r}")
             return {"CANCELLED"}
-        _go_timer_state = (fbx, 0)
+        _go_timer_state = (fbx, 0, prior)
         try:
             if hasattr(bpy.app.timers, "is_registered") and bpy.app.timers.is_registered(
                 _go_import_timer
