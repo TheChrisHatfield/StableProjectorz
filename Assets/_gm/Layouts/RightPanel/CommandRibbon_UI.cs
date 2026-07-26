@@ -823,11 +823,14 @@ namespace spz {
 	        }
 	        var icon = iconTransform.GetComponent<Image>();
 	        if (icon != null) {
-	            // Do not overwrite sprites set by set_line_icon / ComposeNomadStripIconsNative.
-	            if (icon.sprite == null)
-	                icon.sprite = UiRuntimeSprites.GetLineIcon(ResolveStripTabLineIcon(cell.name));
+	            var overrideMark = cell.GetComponent<SpzStripLineIconOverride>();
+	            StudioLineIcon glyph = overrideMark != null
+	                ? overrideMark.Icon
+	                : ResolveStripTabLineIcon(cell);
+	            icon.sprite = UiRuntimeSprites.GetLineIcon(glyph);
 	            SpzUiThemeOps.ApplyLineIconTint(icon);
 	        }
+	        EnsureStripTabHoverTooltip(cell);
 	        // Tighten strip cell when icon-only so the row reads like a toolbox.
 	        // Leaving icon-only must clear preferredWidth/flexibleWidth locks so Harmonize can reflow.
 	        var le = cell.GetComponent<LayoutElement>();
@@ -845,20 +848,100 @@ namespace spz {
 	        }
 	    }
 
+	    /// <summary>Hover label for icon-only strip tabs (Paint, Art, Mesh, …).</summary>
+	    static void EnsureStripTabHoverTooltip(Transform cell) {
+	        if (cell == null) return;
+	        var tip = cell.GetComponent<CanShowTooltip_UI>();
+	        if (tip == null)
+	            tip = cell.gameObject.AddComponent<CanShowTooltip_UI>();
+	        tip.set_overrideMessage(ResolveStripTabDisplayName(cell));
+	    }
+
+	    /// <summary>User-facing name for tooltips — prefers visible label, then TabsGroup title.</summary>
+	    public static string ResolveStripTabDisplayName(Transform cell) {
+	        if (cell == null) return "Tab";
+	        foreach (var tmp in cell.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (tmp == null) continue;
+	            string label = (tmp.text ?? "").Trim();
+	            if (label.Length == 0) continue;
+	            // Collapse whitespace / newlines from prefab labels like "ART  (BG)".
+	            label = System.Text.RegularExpressions.Regex.Replace(label, @"\s+", " ");
+	            return label;
+	        }
+	        var elem = cell.GetComponent<TabsGroupElem_UI>();
+	        if (elem != null && !string.IsNullOrWhiteSpace(elem.title))
+	            return PrettifyStripTabTitle(elem.title);
+	        string n = cell.name ?? "";
+	        if (n.StartsWith("Tab:", StringComparison.OrdinalIgnoreCase))
+	            return n.Substring(4).Trim();
+	        if (n.StartsWith("AddonTab_", StringComparison.OrdinalIgnoreCase))
+	            return n.Substring("AddonTab_".Length).Trim();
+	        return string.IsNullOrWhiteSpace(n) ? "Tab" : n;
+	    }
+
+	    static string PrettifyStripTabTitle(string title) {
+	        string t = (title ?? "").Trim();
+	        if (string.Equals(t, "paint", StringComparison.OrdinalIgnoreCase)) return "Paint";
+	        if (string.Equals(t, "art list", StringComparison.OrdinalIgnoreCase)) return "Art";
+	        if (string.Equals(t, "art bg list", StringComparison.OrdinalIgnoreCase)) return "Art BG";
+	        if (string.Equals(t, "mesh", StringComparison.OrdinalIgnoreCase)) return "Mesh";
+	        if (string.Equals(t, "controlnet", StringComparison.OrdinalIgnoreCase)) return "Control";
+	        if (t.StartsWith("addon_", StringComparison.OrdinalIgnoreCase))
+	            return t.Substring(6);
+	        return t;
+	    }
+
+	/// <summary>Map strip tab identity (name + title + label) to a descriptive line icon.</summary>
+	    public static StudioLineIcon ResolveStripTabLineIcon(Transform cell) {
+	        string hay = BuildStripTabMatchHaystack(cell);
+	        return ResolveStripTabLineIconFromHaystack(hay);
+	    }
+
+	    /// <summary>Legacy name-only resolve kept for callers that only have a string.</summary>
 	    static StudioLineIcon ResolveStripTabLineIcon(string cellName) {
-	        string n = cellName ?? "";
+	        return ResolveStripTabLineIconFromHaystack(cellName ?? "");
+	    }
+
+	    static string BuildStripTabMatchHaystack(Transform cell) {
+	        if (cell == null) return "";
+	        var sb = new System.Text.StringBuilder(cell.name ?? "");
+	        var elem = cell.GetComponent<TabsGroupElem_UI>();
+	        if (elem != null && !string.IsNullOrEmpty(elem.title)) {
+	            sb.Append(' ');
+	            sb.Append(elem.title);
+	        }
+	        foreach (var tmp in cell.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (tmp == null || string.IsNullOrEmpty(tmp.text)) continue;
+	            sb.Append(' ');
+	            sb.Append(tmp.text);
+	        }
+	        return sb.ToString();
+	    }
+
+	    public static StudioLineIcon ResolveStripTabLineIconFromHaystack(string haystack) {
+	        string n = haystack ?? "";
+	        // Order matters: Paint before Art (label "Paint" must not fall through).
 	        if (n.IndexOf("Paint", StringComparison.OrdinalIgnoreCase) >= 0)
 	            return StudioLineIcon.Brush;
-	        if (n.IndexOf("Mesh", StringComparison.OrdinalIgnoreCase) >= 0
-	            || n.IndexOf("3D", StringComparison.OrdinalIgnoreCase) >= 0)
-	            return StudioLineIcon.Mesh;
-	        if (n.IndexOf("Control", StringComparison.OrdinalIgnoreCase) >= 0)
+	        if (n.IndexOf("Control", StringComparison.OrdinalIgnoreCase) >= 0
+	            || n.IndexOf("CTRL", StringComparison.OrdinalIgnoreCase) >= 0
+	            || n.IndexOf("controlnet", StringComparison.OrdinalIgnoreCase) >= 0)
 	            return StudioLineIcon.Grid;
-	        if (n.IndexOf("Art", StringComparison.OrdinalIgnoreCase) >= 0
-	            || n.IndexOf("BG", StringComparison.OrdinalIgnoreCase) >= 0)
-	            return StudioLineIcon.Eye;
+	        if (n.IndexOf("Mesh", StringComparison.OrdinalIgnoreCase) >= 0
+	            || n.IndexOf("3D", StringComparison.OrdinalIgnoreCase) >= 0
+	            || n.IndexOf("Obj", StringComparison.OrdinalIgnoreCase) >= 0)
+	            return StudioLineIcon.Mesh;
+	        // Art BG before Art — "art bg list" / "ART (BG)".
+	        if (n.IndexOf("art bg", StringComparison.OrdinalIgnoreCase) >= 0
+	            || n.IndexOf("ArtBG", StringComparison.OrdinalIgnoreCase) >= 0
+	            || (n.IndexOf("BG", StringComparison.OrdinalIgnoreCase) >= 0
+	                && n.IndexOf("Art", StringComparison.OrdinalIgnoreCase) >= 0))
+	            return StudioLineIcon.Layers;
+	        if (n.IndexOf("Art", StringComparison.OrdinalIgnoreCase) >= 0)
+	            return StudioLineIcon.Image;
 	        if (n.IndexOf("Addon", StringComparison.OrdinalIgnoreCase) >= 0
-	            || n.IndexOf("Nomad", StringComparison.OrdinalIgnoreCase) >= 0)
+	            || n.IndexOf("Nomad", StringComparison.OrdinalIgnoreCase) >= 0
+	            || n.IndexOf("Settings", StringComparison.OrdinalIgnoreCase) >= 0)
 	            return StudioLineIcon.Settings;
 	        return StudioLineIcon.Folder;
 	    }
@@ -888,7 +971,9 @@ namespace spz {
 	            if (n.StartsWith("StripDivider_", StringComparison.Ordinal)
 	                || n.StartsWith("AddonDivider_", StringComparison.Ordinal))
 	                continue;
-	            if (n.IndexOf(needle, StringComparison.OrdinalIgnoreCase) < 0)
+	            // Match name + TabsGroup title + label text (e.g. "Mesh" → "Tab: 3d" / title mesh).
+	            string hay = BuildStripTabMatchHaystack(cell);
+	            if (hay.IndexOf(needle, StringComparison.OrdinalIgnoreCase) < 0)
 	                continue;
 	            ApplyStudioTabChromeColors(cell, SpzUiThemeOps.Active);
 	            Transform iconTransform = cell.Find("MonolithLineIcon");
@@ -903,6 +988,10 @@ namespace spz {
 	            }
 	            img.sprite = UiRuntimeSprites.GetLineIcon(icon);
 	            SpzUiThemeOps.ApplyLineIconTint(img);
+	            var mark = cell.GetComponent<SpzStripLineIconOverride>()
+	                       ?? cell.gameObject.AddComponent<SpzStripLineIconOverride>();
+	            mark.Icon = icon;
+	            EnsureStripTabHoverTooltip(cell);
 	            matched++;
 	        }
 	        if (matched == 0) {
