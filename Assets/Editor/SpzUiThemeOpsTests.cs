@@ -474,6 +474,11 @@ public sealed class SpzUiThemeOpsTests {
 		Assert.That("Tab: 3d mesh mesh".IndexOf("Mesh", StringComparison.OrdinalIgnoreCase), Is.GreaterThanOrEqualTo(0));
 		Assert.That("Tab: controlnet + anim controlnet ctrl".IndexOf("CTRL", StringComparison.OrdinalIgnoreCase),
 			Is.GreaterThanOrEqualTo(0));
+		Assert.That(CommandRibbon_UI.PrettifyStripTabTitle("controlnet"), Is.EqualTo("Control"));
+		Assert.That(CommandRibbon_UI.PrettifyStripTabTitle("art list"), Is.EqualTo("Art"));
+		Assert.That(CommandRibbon_UI.PrettifyStripTabLabel("ctrl"), Is.EqualTo("Control"));
+		Assert.That(CommandRibbon_UI.PrettifyStripTabLabel("ART (BG)"), Is.EqualTo("Art BG"));
+		Assert.That(CommandRibbon_UI.PrettifyStripTabLabel("ART"), Is.EqualTo("Art"));
 	}
 
 	[Test]

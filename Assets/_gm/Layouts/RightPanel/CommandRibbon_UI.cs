@@ -857,37 +857,62 @@ namespace spz {
 	        tip.set_overrideMessage(ResolveStripTabDisplayName(cell));
 	    }
 
-	    /// <summary>User-facing name for tooltips — prefers visible label, then TabsGroup title.</summary>
+	    /// <summary>User-facing name for tooltips — prefers TabsGroup title (prettified), then visible label.</summary>
 	    public static string ResolveStripTabDisplayName(Transform cell) {
 	        if (cell == null) return "Tab";
+	        var elem = cell.GetComponent<TabsGroupElem_UI>();
+	        if (elem != null && !string.IsNullOrWhiteSpace(elem.title)) {
+	            string pretty = PrettifyStripTabTitle(elem.title);
+	            if (!string.IsNullOrWhiteSpace(pretty))
+	                return pretty;
+	        }
 	        foreach (var tmp in cell.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp == null) continue;
 	            string label = (tmp.text ?? "").Trim();
 	            if (label.Length == 0) continue;
 	            // Collapse whitespace / newlines from prefab labels like "ART  (BG)".
 	            label = System.Text.RegularExpressions.Regex.Replace(label, @"\s+", " ");
-	            return label;
+	            return PrettifyStripTabLabel(label);
 	        }
-	        var elem = cell.GetComponent<TabsGroupElem_UI>();
-	        if (elem != null && !string.IsNullOrWhiteSpace(elem.title))
-	            return PrettifyStripTabTitle(elem.title);
 	        string n = cell.name ?? "";
 	        if (n.StartsWith("Tab:", StringComparison.OrdinalIgnoreCase))
-	            return n.Substring(4).Trim();
+	            return PrettifyStripTabTitle(n.Substring(4).Trim());
 	        if (n.StartsWith("AddonTab_", StringComparison.OrdinalIgnoreCase))
 	            return n.Substring("AddonTab_".Length).Trim();
 	        return string.IsNullOrWhiteSpace(n) ? "Tab" : n;
 	    }
 
-	    static string PrettifyStripTabTitle(string title) {
+	    public static string PrettifyStripTabTitle(string title) {
 	        string t = (title ?? "").Trim();
 	        if (string.Equals(t, "paint", StringComparison.OrdinalIgnoreCase)) return "Paint";
 	        if (string.Equals(t, "art list", StringComparison.OrdinalIgnoreCase)) return "Art";
 	        if (string.Equals(t, "art bg list", StringComparison.OrdinalIgnoreCase)) return "Art BG";
 	        if (string.Equals(t, "mesh", StringComparison.OrdinalIgnoreCase)) return "Mesh";
+	        if (string.Equals(t, "3d", StringComparison.OrdinalIgnoreCase)) return "Mesh";
 	        if (string.Equals(t, "controlnet", StringComparison.OrdinalIgnoreCase)) return "Control";
 	        if (t.StartsWith("addon_", StringComparison.OrdinalIgnoreCase))
 	            return t.Substring(6);
+	        return t;
+	    }
+
+	    /// <summary>Normalize prefab TMP labels (ctrl, ART, ART (BG)) for hover tooltips.</summary>
+	    public static string PrettifyStripTabLabel(string label) {
+	        string t = (label ?? "").Trim();
+	        if (string.Equals(t, "ctrl", StringComparison.OrdinalIgnoreCase)
+	            || string.Equals(t, "control", StringComparison.OrdinalIgnoreCase)
+	            || string.Equals(t, "controlnet", StringComparison.OrdinalIgnoreCase))
+	            return "Control";
+	        if (string.Equals(t, "ART", StringComparison.OrdinalIgnoreCase)
+	            || string.Equals(t, "Art", StringComparison.Ordinal))
+	            return "Art";
+	        if (t.IndexOf("BG", StringComparison.OrdinalIgnoreCase) >= 0
+	            && t.IndexOf("ART", StringComparison.OrdinalIgnoreCase) >= 0)
+	            return "Art BG";
+	        if (string.Equals(t, "mesh", StringComparison.OrdinalIgnoreCase)
+	            || string.Equals(t, "3d", StringComparison.OrdinalIgnoreCase))
+	            return "Mesh";
+	        if (string.Equals(t, "paint", StringComparison.OrdinalIgnoreCase))
+	            return "Paint";
 	        return t;
 	    }
 
