@@ -106,13 +106,77 @@ namespace spz {
 		public static string ActiveThemeId => _activeThemeId;
 		public static ThemeTokens Active => _active.Clone();
 
-		/// <summary>True when the builtin SPZ palette id is active (token Defaults still apply on bound surfaces).</summary>
+		/// <summary>True when the builtin SPZ palette id is active.</summary>
 		public static bool IsBuiltinDefaultActive =>
 			string.Equals(_activeThemeId, DefaultThemeId, StringComparison.Ordinal);
+
+		/// <summary>
+		/// Bound core chrome may retint only when a non-builtin theme is active.
+		/// Authored SPZ colors stay until Nomad/custom Apply — addon theme vs permanent UI boundary.
+		/// </summary>
+		public static bool ShouldRecolorBoundChrome => !IsBuiltinDefaultActive;
 
 		/// <summary>True when <c>ribbon_icon_only</c> ≥ 0.5 (CommandRibbon strip hides labels, enlarges line icons).</summary>
 		public static bool RibbonIconOnlyActive =>
 			_active.ribbonIconOnly >= 0.5f;
+
+		static readonly Dictionary<int, Color> AuthoredGraphicColors =
+			new Dictionary<int, Color>();
+
+		static void SnapshotAuthoredGraphic(Graphic graphic) {
+			if (graphic == null) return;
+			int id = graphic.GetInstanceID();
+			if (!AuthoredGraphicColors.ContainsKey(id))
+				AuthoredGraphicColors[id] = graphic.color;
+		}
+
+		/// <summary>Restores a graphic's pre-theme color when snapshotted; no-op otherwise.</summary>
+		public static void RestoreAuthoredGraphic(Graphic graphic) {
+			if (graphic == null) return;
+			if (AuthoredGraphicColors.TryGetValue(graphic.GetInstanceID(), out Color c))
+				graphic.color = c;
+		}
+
+		/// <summary>
+		/// Applies a chrome token color only when <see cref="ShouldRecolorBoundChrome"/>;
+		/// otherwise restores the authored snapshot (if any).
+		/// </summary>
+		public static void ApplyBoundChromeGraphic(Graphic graphic, Color token) {
+			if (graphic == null) return;
+			if (!ShouldRecolorBoundChrome) {
+				RestoreAuthoredGraphic(graphic);
+				return;
+			}
+			SnapshotAuthoredGraphic(graphic);
+			graphic.color = token;
+		}
+
+		/// <summary>
+		/// Selectable chrome apply gated by <see cref="ShouldRecolorBoundChrome"/>.
+		/// </summary>
+		public static void ApplyBoundChromeSelectable(Selectable selectable, Color normal, Color accent) {
+			if (selectable == null || selectable.targetGraphic == null)
+				return;
+			if (!ShouldRecolorBoundChrome) {
+				RestoreAuthoredGraphic(selectable.targetGraphic);
+				return;
+			}
+			SnapshotAuthoredGraphic(selectable.targetGraphic);
+			ApplySelectableToken(selectable, normal, accent);
+		}
+
+		/// <summary>
+		/// TMP color/scale apply gated by <see cref="ShouldRecolorBoundChrome"/>.
+		/// </summary>
+		public static void ApplyBoundChromeTmp(TMP_Text text, Color token, float fallbackBasePt = 14f) {
+			if (text == null) return;
+			if (!ShouldRecolorBoundChrome) {
+				RestoreAuthoredGraphic(text);
+				return;
+			}
+			SnapshotAuthoredGraphic(text);
+			ApplyTmpScaledCaptured(text, token, fallbackBasePt);
+		}
 
 		public static JObject GetThemeResult() {
 			return new JObject {
@@ -371,6 +435,13 @@ namespace spz {
 		public static void ApplyToAddonUiRoot(GameObject root) {
 			if (root == null)
 				return;
+			if (!ShouldRecolorBoundChrome) {
+				foreach (var g in root.GetComponentsInChildren<Graphic>(true))
+					RestoreAuthoredGraphic(g);
+				return;
+			}
+			foreach (var g in root.GetComponentsInChildren<Graphic>(true))
+				SnapshotAuthoredGraphic(g);
 			var tokens = _active;
 
 			var rootImage = root.GetComponent<Image>();
@@ -517,14 +588,22 @@ namespace spz {
 		public static void ApplyContextMenuChrome(GameObject root) {
 			if (root == null)
 				return;
+			if (!ShouldRecolorBoundChrome) {
+				foreach (var g in root.GetComponentsInChildren<Graphic>(true))
+					RestoreAuthoredGraphic(g);
+				return;
+			}
 			var tokens = _active;
 			var rootImage = root.GetComponent<Image>();
-			if (rootImage != null)
+			if (rootImage != null) {
+				SnapshotAuthoredGraphic(rootImage);
 				rootImage.color = ResolvePanelShellColor();
+			}
 
 			foreach (var button in root.GetComponentsInChildren<Button>(true)) {
 				if (button == null || button.targetGraphic == null)
 					continue;
+				SnapshotAuthoredGraphic(button.targetGraphic);
 				ApplySelectableToken(button, tokens.controlBg, tokens.accent);
 				if (button.targetGraphic is Image btnImg)
 					ApplyRoundedControlSprite(btnImg);
@@ -533,6 +612,7 @@ namespace spz {
 			foreach (var text in root.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 				if (text == null)
 					continue;
+				SnapshotAuthoredGraphic(text);
 				ApplyTmpScaledCaptured(text, tokens.textPrimary);
 			}
 
@@ -540,17 +620,23 @@ namespace spz {
 				if (slider == null)
 					continue;
 				var bg = slider.GetComponent<Image>();
-				if (bg != null)
+				if (bg != null) {
+					SnapshotAuthoredGraphic(bg);
 					bg.color = tokens.fieldBg;
+				}
 				if (slider.fillRect != null) {
 					var fill = slider.fillRect.GetComponent<Image>();
-					if (fill != null)
+					if (fill != null) {
+						SnapshotAuthoredGraphic(fill);
 						fill.color = tokens.accent;
+					}
 				}
 				if (slider.handleRect != null) {
 					var handleImage = slider.handleRect.GetComponent<Image>();
-					if (handleImage != null)
+					if (handleImage != null) {
+						SnapshotAuthoredGraphic(handleImage);
 						handleImage.color = tokens.handle;
+					}
 				}
 			}
 
@@ -742,20 +828,20 @@ namespace spz {
 		static JArray BuildSurfaces() {
 			return new JArray {
 				Surface("addon_panels", true, "AddonUI_MGR AddonPanel_* roots; colors + font_scale"),
-				Surface("command_ribbon", true, "CommandRibbon_UI strip/panels/tabs; colors + font_scale; ribbon_icon_only hides labels"),
-				Surface("paint_tab", true, "PaintTab Collect/Krita/Layers; colors + font_scale + spacing where VLG"),
-				Surface("addon_manager", true, "AddonManager_UI; REF roles → tokens; font_scale + spacing_scale"),
-				Surface("settings", true, "Settings_UI chrome; font_scale + spacing; product prefs untouched"),
-				Surface("viewport_statusline", true, "Viewport_StatusText RGB + font_scale; sticky caller-owned"),
-				Surface("viewport_ribbons", true, "LeftRibbon + WorkflowRibbon mode toggles + GenButtons; colors + font_scale"),
-				Surface("sd_input_panel", true, "SD_InputPanel_UI column; colors + font_scale"),
-				Surface("export_save_menu", true, "ExportSave_UI_MGR buttons; colors + font_scale"),
-				Surface("scene_resolution", true, "SceneResolution_MGR SAVE Nx / filters; colors + font_scale"),
-				Surface("connection_panels", true, "ConnectionPanel_UI SD SERV / 3D SERV chrome; colors + font_scale"),
-				Surface("right_panel_lists", true, "Art/BG/Mesh/Art3D/CN list chrome + selection frames / row select colors"),
-				Surface("multiview_pins", true, "MultiView_Ribbon_UI + CamerasMGR_PinsZone_UI pin/TMP chrome"),
-				Surface("workflow_options", true, "Colors slide-out + SD_WorkflowOptionsRibbon_UI chrome"),
-				Surface("context_menus", true, "Art/AO/3D icon context menus; Value Assist panel chrome"),
+				Surface("command_ribbon", true, "CommandRibbon_UI strip/panels/tabs; recolor only when non-builtin theme; Monolith icons gated; ribbon_icon_only hides labels"),
+				Surface("paint_tab", true, "PaintTab Collect/Krita/Layers; colors only when non-builtin theme"),
+				Surface("addon_manager", true, "AddonManager_UI; REF roles → tokens when non-builtin theme"),
+				Surface("settings", true, "Settings_UI chrome when non-builtin theme; product prefs untouched"),
+				Surface("viewport_statusline", true, "Viewport_StatusText RGB when non-builtin theme; sticky caller-owned"),
+				Surface("viewport_ribbons", true, "LeftRibbon + WorkflowRibbon + GenButtons; colors when non-builtin theme"),
+				Surface("sd_input_panel", true, "SD_InputPanel_UI column; colors when non-builtin theme"),
+				Surface("export_save_menu", true, "ExportSave_UI_MGR buttons; colors when non-builtin theme"),
+				Surface("scene_resolution", true, "SceneResolution_MGR SAVE Nx / filters; colors when non-builtin theme"),
+				Surface("connection_panels", true, "ConnectionPanel_UI SD SERV / 3D SERV; colors when non-builtin theme"),
+				Surface("right_panel_lists", true, "Art/BG/Mesh/Art3D/CN list chrome; colors when non-builtin theme"),
+				Surface("multiview_pins", true, "MultiView_Ribbon_UI + CamerasMGR_PinsZone_UI; colors when non-builtin theme"),
+				Surface("workflow_options", true, "Colors slide-out + SD_WorkflowOptionsRibbon_UI; colors when non-builtin theme"),
+				Surface("context_menus", true, "Art/AO/3D icon context menus; Value Assist; colors when non-builtin theme"),
 				Surface("chrome_targets", true, "spz.cmd.list_ui_targets / set_ui_target_active show-hide only (constrained DOM)"),
 			};
 		}

@@ -74,6 +74,7 @@ namespace spz {
 
 	    void ShowFrame_maybe(){
 	        _frame.gameObject.SetActive(_myOwnerList._clickedThumb == this);
+	        ApplyThemeTokens();
 
 	        bool hovers = false;
 	        Vector2 cursorPos = KeyMousePenInput.cursorScreenPos();
@@ -125,6 +126,21 @@ namespace spz {
 	        _ui_material_cpy = new Material(_ui_material);
 	        _ui_material = null;//to avoid mistakes. Use the _cpy from now on.
 	        _rawImg.material = _ui_material_cpy;
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        ApplyThemeTokens();
+	    }
+
+	    void ApplyThemeTokens() {
+	        if (_frame == null) return;
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreAuthoredGraphic(_frame);
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        bool selected = _myOwnerList != null && _myOwnerList._clickedThumb == this;
+	        SpzUiThemeOps.ApplyBoundChromeGraphic(_frame, selected
+	            ? Color.Lerp(t.tabActive, t.accent, 0.65f)
+	            : t.controlBg);
 	    }
 
 	    void Start(){
@@ -137,6 +153,7 @@ namespace spz {
 	    }
 
 	    void OnDestroy(){
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 	        DestroyImmediate(_ui_material_cpy);
 	        UserCameras_Permissions.LockOrUnlock_ByType(_texType, this, isLock: false);
 	    }

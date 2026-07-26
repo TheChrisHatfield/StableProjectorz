@@ -246,6 +246,9 @@ namespace spz {
 	        GenData2D_Archive.OnWillDispose_GenerationData += OnWillDispose_GenerationData;
 
 	        _turnMeON_ifEditingMode.SetActive(false);
+
+	        SpzUiThemeOps.ThemeChanged += ApplyMultiviewChromeThemeTokens;
+	        ApplyMultiviewChromeThemeTokens();
 	    }
     
 	    void Start(){
@@ -264,7 +267,59 @@ namespace spz {
 	        OnSettings_ToolRibbonSwapped( Settings_MGR.instance.get_viewport_isSwapVerticalRibbons() );
 	    }
 
+	    /// <summary>Themes Multiview ribbon chrome — not POV edit semantics.</summary>
+	    void ApplyMultiviewChromeThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            foreach (var g in GetComponentsInChildren<Graphic>(true))
+	                SpzUiThemeOps.RestoreAuthoredGraphic(g);
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        var rootImg = GetComponent<Image>();
+	        if (rootImg != null)
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.panelBg);
+	        if (_BlendCams_button != null && _BlendCams_button.targetGraphic != null) {
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(_BlendCams_button, t.controlBg, t.accent);
+	            var label = _BlendCams_button.GetComponentInChildren<TextMeshProUGUI>(true);
+	            if (label != null)
+	                SpzUiThemeOps.ApplyBoundChromeTmp(label, t.textPrimary);
+	        }
+	        if (_showGrid_toggle != null) {
+	            Color normal = _showGrid_toggle.isOn
+	                ? Color.Lerp(t.tabActive, t.accent, 0.45f)
+	                : t.controlBg;
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(_showGrid_toggle, normal, t.accent);
+	            var gLabel = _showGrid_toggle.GetComponentInChildren<TextMeshProUGUI>(true);
+	            if (gLabel != null)
+	                SpzUiThemeOps.ApplyBoundChromeTmp(gLabel, t.textPrimary);
+	        }
+	        if (_numCams_numberText != null)
+	            SpzUiThemeOps.ApplyBoundChromeTmp(_numCams_numberText, t.textPrimary);
+	        if (_editPOV_toggles != null) {
+	            foreach (var pov in _editPOV_toggles) {
+	                if (pov == null) continue;
+	                Color normal = pov.isOn
+	                    ? Color.Lerp(t.tabActive, t.accent, 0.55f)
+	                    : t.controlBg;
+	                SpzUiThemeOps.ApplyBoundChromeSelectable(pov, normal, t.accent);
+	                var povLabel = pov.GetComponentInChildren<TextMeshProUGUI>(true);
+	                if (povLabel != null)
+	                    SpzUiThemeOps.ApplyBoundChromeTmp(povLabel, t.textPrimary);
+	            }
+	        }
+	        if (_sortPins_Button != null) {
+	            var sortBtn = _sortPins_Button.GetComponent<Button>();
+	            if (sortBtn != null && sortBtn.targetGraphic != null)
+	                SpzUiThemeOps.ApplyBoundChromeSelectable(sortBtn, t.controlBg, t.accent);
+	            foreach (var tmp in _sortPins_Button.GetComponentsInChildren<TextMeshProUGUI>(true))
+	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	        }
+	        foreach (var lg in GetComponentsInChildren<LayoutGroup>(true))
+	            SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
+	    }
+
 	    void OnDestroy(){
+	        SpzUiThemeOps.ThemeChanged -= ApplyMultiviewChromeThemeTokens;
 	        UserCameras_MGR._Act_OnRestoreCameraPlacements -= OnCameraPlacements_Restored;
 	        UserCameras_MGR._Act_OnTogledViewCamera -= OnViewCamera_Toggled;
 	        Settings_MGR._Act_verticalRibbonsSwapped -= OnSettings_ToolRibbonSwapped;

@@ -182,18 +182,67 @@ namespace spz {
 	    }
 
 	    void RefreshColors_of_GenArt_buttons(){
-	        var artColor = _generateART_button.image.color;
-	        var bgColor  = _generateBG_button .image.color;
-	        var color3d  = _generate3D_button .image.color;
-	        var color3d_rtex  = _generate3D_retexture_button.image.color;
-	        artColor.a = _genArt_button_interactable ? 1 : 0.5f;
-	        bgColor.a  = _genBG_button_interactable ? 1 : 0.5f;
-	        color3d.a  = _gen3D_button_interactable? 1 : 0.5f;
-	        color3d_rtex.a = _gen3D_retex_button_interactable ? 1 : 0.5f;
-	        _generateART_button.image.color = artColor;
-	        _generateBG_button .image.color  = bgColor;
-	        _generate3D_button .image.color  = color3d;
-	        _generate3D_retexture_button.image.color = color3d_rtex;
+	        ApplyGenButtonFace(_generateART_button, _genArt_button_interactable);
+	        ApplyGenButtonFace(_generateBG_button, _genBG_button_interactable);
+	        ApplyGenButtonFace(_generate3D_button, _gen3D_button_interactable);
+	        ApplyGenButtonFace(_generate3D_retexture_button, _gen3D_retex_button_interactable);
+	    }
+
+	    void ApplyGenButtonFace(Button btn, bool interactable) {
+	        if (btn == null || btn.image == null) return;
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreAuthoredGraphic(btn.image);
+	            if (btn.image != null) {
+	                var restored = btn.image.color;
+	                restored.a = interactable ? 1f : 0.5f;
+	                btn.image.color = restored;
+	            }
+	            return;
+	        }
+	        var c = _genButtonThemeBase;
+	        c.a = interactable ? 1f : 0.5f;
+	        btn.image.color = c;
+	    }
+
+	    Color _genButtonThemeBase = new Color(0.55f, 0.45f, 0.35f, 1f);
+
+	    void ApplyThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            foreach (var g in GetComponentsInChildren<Graphic>(true))
+	                SpzUiThemeOps.RestoreAuthoredGraphic(g);
+	            _genButtonThemeBase = new Color(0.55f, 0.45f, 0.35f, 1f);
+	            RefreshColors_of_GenArt_buttons();
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        _genButtonThemeBase = t.controlBg;
+	        ThemeGenButton(_generateART_button, t);
+	        ThemeGenButton(_generateBG_button, t);
+	        ThemeGenButton(_generate3D_button, t);
+	        ThemeGenButton(_generate3D_retexture_button, t);
+	        if (_cancelGeneration_button != null && _cancelGeneration_button.targetGraphic != null) {
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(_cancelGeneration_button, t.danger, t.accent);
+	            var cancelLabel = _cancelGeneration_button.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+	            if (cancelLabel != null)
+	                SpzUiThemeOps.ApplyBoundChromeTmp(cancelLabel, t.textPrimary);
+	        }
+	        if (_deleteLast_button != null) {
+	            var delBtn = _deleteLast_button.GetComponent<Button>();
+	            if (delBtn != null && delBtn.targetGraphic != null)
+	                SpzUiThemeOps.ApplyBoundChromeSelectable(delBtn, t.controlBg, t.accent);
+	            var delLabel = _deleteLast_button.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+	            if (delLabel != null)
+	                SpzUiThemeOps.ApplyBoundChromeTmp(delLabel, t.textPrimary);
+	        }
+	        RefreshColors_of_GenArt_buttons();
+	    }
+
+	    static void ThemeGenButton(Button btn, SpzUiThemeOps.ThemeTokens t) {
+	        if (btn == null || btn.targetGraphic == null) return;
+	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+	        var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+	        if (label != null)
+	            SpzUiThemeOps.ApplyBoundChromeTmp(label, t.textPrimary);
 	    }
 
 	    void UpdateTooltips_GenButtons(Button genArt, Button genBG, Button gen3D, Button gen3D_retex){
@@ -233,6 +282,11 @@ namespace spz {
 	        UpdateTooltips_GenButtons(_generateART_button, _generateBG_button, _generate3D_button, _generate3D_retexture_button);
 	    }
 
+	    protected virtual void OnDestroy() {
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	        DimensionMode_MGR._Act_OnDimensionChanged -= OnDimensionChanged;
+	    }
+
 	    protected virtual void Awake(){
 	        _cancelGeneration_button.onClick.AddListener( ()=>OnCancelGenerationButton?.Invoke() );
 
@@ -245,6 +299,8 @@ namespace spz {
 	        _generate3D_retexture_button.onClick.AddListener( OnButton_Gen3D_Retexture_if_allowed );
 
 	        DimensionMode_MGR._Act_OnDimensionChanged += OnDimensionChanged;
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        ApplyThemeTokens();
 	        // Keep local visuals consistent without mutating global generation state during late init.
 	        if(isGenerating){
 	            _cancelGeneration_button.gameObject.SetActive(true);

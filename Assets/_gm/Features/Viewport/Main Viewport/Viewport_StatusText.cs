@@ -87,6 +87,9 @@ namespace spz {
 	    }
 
 
+	    Color _statusTextRgb = Color.white;
+	    Color _textBackgroundRgb = new Color(0f, 0f, 0f, 1f);
+
 	    void Awake(){
 	        if(instance != null){  DestroyImmediate(this.gameObject); return;  }
 	        instance = this;
@@ -95,6 +98,50 @@ namespace spz {
 	        _openCheckForUpdates_button.onClick.AddListener(OnCheckUpdatesButton);
 	        _3dGenerators_catalogue_button.onClick.AddListener(OnOpen3DGenCatalogueButton);
 	        ShowStatusText("", false, -999, progressVisibility:false);
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        ApplyThemeTokens();
+	    }
+
+	    void OnDestroy(){
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	        Update_callbacks_MGR.general_UI -= OnUpdate;
+	        if (instance == this)
+	            instance = null;
+	    }
+
+	    /// <summary>
+	    /// Themes status-line RGB from tokens while preserving fade alpha and caller-owned sticky alert colors.
+	    /// </summary>
+	    void ApplyThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            if (_statusText != null)
+	                SpzUiThemeOps.RestoreAuthoredGraphic(_statusText);
+	            if (_progressTotal != null)
+	                SpzUiThemeOps.RestoreAuthoredGraphic(_progressTotal);
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        _statusTextRgb = t.textPrimary;
+	        _textBackgroundRgb = t.panelBg;
+	        if (_statusText != null) {
+	            float a = _statusText.alpha;
+	            SpzUiThemeOps.ApplyBoundChromeTmp(_statusText, _statusTextRgb);
+	            Color c = _statusText.color;
+	            c.a = a;
+	            _statusText.color = c;
+	        }
+	        if (_progressTotal != null)
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(_progressTotal, t.accent);
+	        // Help button uses authored icon art — only nudge ColorBlock multipliers, do not replace Image.color.
+	        if (_help_button != null && _help_button.targetGraphic != null) {
+	            var colors = _help_button.colors;
+	            colors.normalColor = Color.white;
+	            colors.highlightedColor = Color.Lerp(Color.white, t.accent, 0.25f);
+	            colors.pressedColor = Color.Lerp(Color.white, t.accent, 0.55f);
+	            colors.selectedColor = colors.highlightedColor;
+	            _help_button.colors = colors;
+	        }
+	        // Sticky message colors remain caller-owned (ShowStickyMessage).
 	    }
 
     
@@ -178,13 +225,18 @@ namespace spz {
 	    void FadeTheText_andBG(){
 	        float txtFade01 = Mathf.InverseLerp(_fadeOutText_after, _fadeOutText_after + 0.8f, Time.time);
 	        txtFade01 = Mathf.Clamp01(txtFade01);
-	        _statusText.alpha = 1.0f - txtFade01;
+	        float alpha = 1.0f - txtFade01;
+	        if (_statusText != null) {
+	            Color c = _statusTextRgb;
+	            c.a = alpha;
+	            _statusText.color = c;
+	        }
 
 	        _textBackground.enabled = _statusText.text != "";
 	        if (!_textBackground.enabled) { return; }
         
-	        Color bgCol = _textBackground.color;
-	        bgCol.a = 0.2f * _statusText.alpha;
+	        Color bgCol = _textBackgroundRgb;
+	        bgCol.a = 0.2f * alpha;
 	        _textBackground.color = bgCol;
 	    }
 

@@ -496,6 +496,76 @@ namespace spz {
 
 	        _blur_slider.onValueChanged.AddListener(OnBlurSlider);
 	        _edgeThresh_slider.onValueChanged.AddListener(OnEdgeThreshSlider);
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        ApplyThemeTokens();
+	    }
+
+	    void OnDestroy() {
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	        if (instance == this)
+	            instance = null;
+	    }
+
+	    void ApplyThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            if (_wholePanel_canvGrp != null) {
+	                foreach (var g in _wholePanel_canvGrp.GetComponentsInChildren<Graphic>(true))
+	                    SpzUiThemeOps.RestoreAuthoredGraphic(g);
+	            }
+	            RestoreGraphic(_reThink_text);
+	            RestoreGraphic(_reThink_text_mini);
+	            RestoreGraphic(_mask_blur_text);
+	            RestoreSelectable(_softInpaint);
+	            RestoreSelectable(_tileableInpaint);
+	            RestoreSelectable(_ignoreDepthOrNormals);
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        if (_wholePanel_canvGrp != null) {
+	            var panelImg = _wholePanel_canvGrp.GetComponent<Image>();
+	            if (panelImg != null)
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(panelImg, t.panelBg);
+	            foreach (var tmp in _wholePanel_canvGrp.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	                if (tmp != null)
+	                    SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	            }
+	        }
+	        ThemeTmp(_reThink_text, t);
+	        ThemeTmp(_reThink_text_mini, t);
+	        ThemeTmp(_mask_blur_text, t);
+	        ThemeCircle(_reThink_slider, t);
+	        ThemeCircle(_reThink_slider_mini, t);
+	        ThemeCircle(_blur_slider, t);
+	        ThemeCircle(_edgeThresh_slider, t);
+	        ThemeCircle(_edgeThick_slider, t);
+	        ThemeToggle(_softInpaint, t);
+	        ThemeToggle(_tileableInpaint, t);
+	        ThemeToggle(_ignoreDepthOrNormals, t);
+	    }
+
+	    static void RestoreGraphic(Graphic g) => SpzUiThemeOps.RestoreAuthoredGraphic(g);
+
+	    static void RestoreSelectable(Selectable s) {
+	        if (s != null)
+	            SpzUiThemeOps.RestoreAuthoredGraphic(s.targetGraphic);
+	    }
+
+	    static void ThemeTmp(TextMeshProUGUI tmp, SpzUiThemeOps.ThemeTokens t) {
+	        if (tmp != null)
+	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	    }
+
+	    static void ThemeCircle(CircleSlider_Snapping_UI slider, SpzUiThemeOps.ThemeTokens t) {
+	        if (slider != null)
+	            slider.ApplyThemeTokens(t.accent, t.textPrimary);
+	    }
+
+	    static void ThemeToggle(Toggle toggle, SpzUiThemeOps.ThemeTokens tokens) {
+	        if (toggle == null) return;
+	        Color normal = toggle.isOn
+	            ? Color.Lerp(tokens.tabActive, tokens.accent, 0.45f)
+	            : tokens.controlBg;
+	        SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, normal, tokens.accent);
 	    }
 
 	}

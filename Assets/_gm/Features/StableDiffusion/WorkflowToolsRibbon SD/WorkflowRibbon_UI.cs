@@ -163,6 +163,7 @@ namespace spz {
     
 	    void OnToggle_ValueChanged(IWorkflowModeToggle tog){
 	        Set_CurrentMode( GetMode_from_Toggle(tog), playAttentionAnim:false );
+	        ApplyThemeTokens();
 	        if (WorkflowRibbon_ProjMask_UI.didShowHint_thisFrame()){ return; }
 	        if (WorkflowRibbon_Colors_UI.didShowHint_thisFrame()){ return; }
 	        if (WorkflowRibbon_NoColor_UI.didShowHint_thisFrame()){ return; }//to avoid showing our own hint. (theirs is more important and rare).
@@ -282,14 +283,86 @@ namespace spz {
 	        _AntiShade_UI.onValueChanged += isOn=>{ if(isOn){ OnToggle_ValueChanged(_AntiShade_UI); }};
         
 	        _coloring.onBakeColors_button += ()=> Act_onBakeColors_button?.Invoke();
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
 	    }
 
 	    void Start(){
 	         EarlyUpdate_callbacks_MGR.instance.onEarlyUpdate3 += EarlyUpdate;
+	         ApplyThemeTokens();
 	    }
 
 	    void OnDestroy(){
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 	        UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.ContentUserCam, this, isLock: false);
+	        if (instance == this)
+	            instance = null;
+	    }
+
+	    /// <summary>Themes known workflow mode toggles and selected states only.</summary>
+	    void ApplyThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            if (_holderGO_turnMeOnOff != null)
+	                SpzUiThemeOps.RestoreAuthoredGraphic(_holderGO_turnMeOnOff.GetComponent<Image>());
+	            RestoreWorkflowModeAuthored(_projMasking as MonoBehaviour);
+	            RestoreWorkflowModeAuthored(_coloring as MonoBehaviour);
+	            RestoreWorkflowModeAuthored(_colorless as MonoBehaviour);
+	            RestoreWorkflowModeAuthored(_entireObj as MonoBehaviour);
+	            RestoreWorkflowModeAuthored(_WhereEmpty_UI as MonoBehaviour);
+	            RestoreWorkflowModeAuthored(_AntiShade_UI as MonoBehaviour);
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        ThemeModeToggle(_projMasking as MonoBehaviour, _projMasking != null && _projMasking.isOn, t);
+	        ThemeModeToggle(_coloring as MonoBehaviour, _coloring != null && _coloring.isOn, t);
+	        ThemeModeToggle(_colorless as MonoBehaviour, _colorless != null && _colorless.isOn, t);
+	        ThemeModeToggle(_entireObj as MonoBehaviour, _entireObj != null && _entireObj.isOn, t);
+	        ThemeModeToggle(_WhereEmpty_UI as MonoBehaviour, _WhereEmpty_UI != null && _WhereEmpty_UI.isOn, t);
+	        ThemeModeToggle(_AntiShade_UI as MonoBehaviour, _AntiShade_UI != null && _AntiShade_UI.isOn, t);
+	        if (_holderGO_turnMeOnOff != null) {
+	            var holderImg = _holderGO_turnMeOnOff.GetComponent<Image>();
+	            if (holderImg != null)
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(holderImg, t.panelBg);
+	        }
+	    }
+
+	    static void RestoreWorkflowModeAuthored(MonoBehaviour modeUi) {
+	        if (modeUi == null) return;
+	        foreach (var g in modeUi.GetComponentsInChildren<Graphic>(true))
+	            SpzUiThemeOps.RestoreAuthoredGraphic(g);
+	    }
+
+	    static void ThemeModeToggle(MonoBehaviour modeUi, bool selected, SpzUiThemeOps.ThemeTokens t) {
+	        if (modeUi == null) return;
+	        var toggle = modeUi.GetComponentInChildren<Toggle>(true);
+	        if (toggle != null) {
+	            Color normal = selected ? t.tabActive : t.controlBg;
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, normal, t.accent);
+	        }
+	        else {
+	            var img = modeUi.GetComponent<Image>();
+	            if (img != null)
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(img, selected ? t.tabActive : t.controlBg);
+	        }
+	        var rootTmp = modeUi.GetComponent<TMPro.TextMeshProUGUI>();
+	        if (rootTmp != null)
+	            SpzUiThemeOps.ApplyBoundChromeTmp(rootTmp, t.textPrimary);
+	        for (int i = 0; i < modeUi.transform.childCount; i++) {
+	            var child = modeUi.transform.GetChild(i);
+	            if (child == null) continue;
+	            string cn = child.name ?? "";
+	            if (StartsWithToken(cn, "Option") || StartsWithToken(cn, "Hover")
+	                || StartsWithToken(cn, "Panel") || StartsWithToken(cn, "Slide"))
+	                continue;
+	            var tmp = child.GetComponent<TMPro.TextMeshProUGUI>();
+	            if (tmp != null)
+	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	        }
+	    }
+
+	    static bool StartsWithToken(string name, string token) {
+	        if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(token)) return false;
+	        if (!name.StartsWith(token, StringComparison.OrdinalIgnoreCase)) return false;
+	        return name.Length == token.Length || !char.IsLetterOrDigit(name[token.Length]);
 	    }
 
     

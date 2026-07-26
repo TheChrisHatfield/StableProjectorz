@@ -33,8 +33,32 @@ namespace spz {
 	        SD_3D_Mesh.Act_OnWillDestroyMesh += OnWillDestroyMesh;
 	        SD_3D_Mesh.Act_OnMeshSelected += OnSomeMesh_Selected;
 	        SD_3D_Mesh.Act_OnMeshDeselected += OnSomeMesh_Deselected;
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        ApplyThemeTokens();
 
 	        OnSomeMesh_Selected(myMesh);
+	    }
+
+	    void ApplyThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            if (_name != null)
+	                SpzUiThemeOps.RestoreAuthoredGraphic(_name);
+	            if (_rmvButton != null)
+	                SpzUiThemeOps.RestoreAuthoredGraphic(_rmvButton.targetGraphic);
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        _color_Selected = t.selection.a > 0.2f
+	            ? new Color(t.selection.r, t.selection.g, t.selection.b, 1f)
+	            : Color.Lerp(t.tabActive, t.accent, 0.55f);
+	        _color_NotSelected = t.controlBg;
+	        if (_background != null && myMesh != null)
+	            ToggleBG(myMesh._isSelected);
+	        if (_name != null)
+	            SpzUiThemeOps.ApplyBoundChromeTmp(_name, t.textPrimary);
+	        if (_rmvButton != null)
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(_rmvButton, t.controlBg, t.danger);
 	    }
 
 
@@ -52,6 +76,7 @@ namespace spz {
 
 	    void Cleanup(){
 	        _destroyed = true;
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 	        if (_sendEvent_duringDestroy){  Act_OnWillDestroy_Icon?.Invoke(this);  }
 	        SD_3D_Mesh.Act_OnWillDestroyMesh -= OnWillDestroyMesh;
 	        SD_3D_Mesh.Act_OnMeshSelected -= OnSomeMesh_Selected;

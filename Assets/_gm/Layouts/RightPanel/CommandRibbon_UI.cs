@@ -637,8 +637,8 @@ namespace spz {
 	    void ApplyThemeTokens() {
 	        var t = SpzUiThemeOps.Active;
 	        bool iconOnly = SpzUiThemeOps.RibbonIconOnlyActive;
-	        // Builtin token id still hosts Monolith structure; color retints are what drifted from prefab.
-	        bool recolorChrome = !SpzUiThemeOps.IsBuiltinDefaultActive;
+	        // Builtin: authored strip/panel colors + no Monolith line icons. Non-default themes: full chrome.
+	        bool recolorChrome = SpzUiThemeOps.ShouldRecolorBoundChrome;
 
 	        RecolorOrRestorePanelShell(_SD_ArtList_Panel, recolorChrome);
 	        RecolorOrRestorePanelShell(_SD_ArtBgList_Panel, recolorChrome);
@@ -748,8 +748,8 @@ namespace spz {
 
 	    /// <summary>
 	    /// Studio chrome on strip tabs: active bar + line icon (create if missing).
-	    /// Token-driven for all themes (P2/B4). When <paramref name="recolorChrome"/> is false (builtin default),
-	    /// keep structure/icons but do not force accent bar color (prefab/authored colors stay).
+	    /// Only when <paramref name="recolorChrome"/> (non-builtin theme): create/show Monolith icons and tint.
+	    /// Builtin default: hide Monolith overlays so strip matches authored OG text tabs.
 	    /// When <see cref="SpzUiThemeOps.RibbonIconOnlyActive"/>, centers a larger icon (Nomad-like).
 	    /// </summary>
 	    static void ApplyStudioTabChromeColors(Transform cell, SpzUiThemeOps.ThemeTokens t, bool recolorChrome = true) {
@@ -757,20 +757,32 @@ namespace spz {
 	        bool iconOnly = SpzUiThemeOps.RibbonIconOnlyActive;
 	        Transform active = cell.Find("go active");
 	        Transform bar = active != null ? active.Find("MonolithActiveBar") : null;
+	        Transform iconTransform = cell.Find("MonolithLineIcon");
+
+	        if (!recolorChrome) {
+	            if (bar != null)
+	                bar.gameObject.SetActive(false);
+	            if (iconTransform != null)
+	                iconTransform.gameObject.SetActive(false);
+	            var leBuiltin = cell.GetComponent<LayoutElement>();
+	            if (leBuiltin != null) {
+	                leBuiltin.flexibleWidth = 1f;
+	                leBuiltin.preferredWidth = -1f;
+	            }
+	            return;
+	        }
+
 	        if (bar != null) {
 	            bar.gameObject.SetActive(true);
-	            if (recolorChrome) {
-	                var barImg = bar.GetComponent<Image>();
-	                if (barImg != null)
-	                    barImg.color = t.accent;
-	            }
+	            var barImg = bar.GetComponent<Image>();
+	            if (barImg != null)
+	                barImg.color = t.accent;
 	        }
 	        if (active != null) {
 	            var pill = FindActivePillImage(active);
 	            if (pill != null)
 	                pill.enabled = true;
 	        }
-	        Transform iconTransform = cell.Find("MonolithLineIcon");
 	        if (iconTransform == null) {
 	            var go = new GameObject("MonolithLineIcon", typeof(RectTransform));
 	            go.transform.SetParent(cell, false);
@@ -801,8 +813,7 @@ namespace spz {
 	        if (icon != null) {
 	            if (icon.sprite == null)
 	                icon.sprite = UiRuntimeSprites.GetLineIcon(ResolveStripTabLineIcon(cell.name));
-	            if (recolorChrome)
-	                SpzUiThemeOps.ApplyLineIconTint(icon);
+	            SpzUiThemeOps.ApplyLineIconTint(icon);
 	        }
 	        // Tighten strip cell when icon-only so the row reads like a toolbox.
 	        // Leaving icon-only must clear preferredWidth/flexibleWidth locks so Harmonize can reflow.

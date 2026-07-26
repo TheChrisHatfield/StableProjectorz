@@ -198,15 +198,20 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Retints the SD input column ownership root (dropdowns, dials, fields, presets) — colors only.
+	    /// Retints the SD input column ownership root (dropdowns, dials, fields, presets) — colors + font_scale.
 	    /// </summary>
 	    void ApplyThemeTokens() {
+	        // Bound chrome: authored SPZ colors until a non-default theme is applied.
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            RestoreInputPanelAuthoredChrome();
+	            return;
+	        }
 	        Transform root = _movableRectTransform != null ? _movableRectTransform : transform;
 	        if (root == null) return;
 	        var t = SpzUiThemeOps.Active;
 	        var rootImg = root.GetComponent<Image>();
 	        if (rootImg != null)
-	            SpzUiThemeOps.ApplyGraphicColor(rootImg, t.panelBg);
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.panelBg);
 
 	        foreach (var btn in root.GetComponentsInChildren<Button>(true)) {
 	            if (btn == null || btn.targetGraphic == null) continue;
@@ -215,29 +220,28 @@ namespace spz {
 	                continue;
 	            bool isField = btn.GetComponent<TMP_Dropdown>() != null
 	                || string.Equals(btn.gameObject.name, "Dropdown", System.StringComparison.Ordinal);
-	            SpzUiThemeOps.ApplySelectableToken(btn, isField ? t.fieldBg : t.controlBg, t.accent);
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, isField ? t.fieldBg : t.controlBg, t.accent);
 	        }
 	        foreach (var dd in root.GetComponentsInChildren<TMP_Dropdown>(true)) {
 	            if (dd == null || dd.targetGraphic == null) continue;
-	            SpzUiThemeOps.ApplySelectableToken(dd, t.fieldBg, t.accent);
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(dd, t.fieldBg, t.accent);
 	            if (dd.captionText != null)
-	                SpzUiThemeOps.ApplyTmpColor(dd.captionText, t.textPrimary);
+	                SpzUiThemeOps.ApplyBoundChromeTmp(dd.captionText, t.textPrimary);
 	        }
 	        foreach (var input in root.GetComponentsInChildren<TMP_InputField>(true)) {
 	            if (input == null) continue;
 	            var bg = input.GetComponent<Image>();
 	            if (bg != null)
-	                SpzUiThemeOps.ApplyGraphicColor(bg, t.fieldBg);
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(bg, t.fieldBg);
 	            if (input.textComponent != null)
-	                SpzUiThemeOps.ApplyTmpColor(input.textComponent, t.textPrimary);
+	                SpzUiThemeOps.ApplyBoundChromeTmp(input.textComponent, t.textPrimary);
 	            if (input.placeholder is TMP_Text ph)
-	                SpzUiThemeOps.ApplyTmpColor(ph, t.textMuted);
+	                SpzUiThemeOps.ApplyBoundChromeTmp(ph, t.textMuted);
 	        }
 	        foreach (var tmp in root.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp == null) continue;
 	            if (tmp.gameObject.name == "Placeholder") continue;
-	            // Skip labels already handled as dropdown captions / input text.
-	            SpzUiThemeOps.ApplyTmpColor(tmp, t.textPrimary);
+	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
 	        }
 	        if (_sampleSteps_slider != null)
 	            _sampleSteps_slider.ApplyThemeTokens(t.accent, t.textPrimary);
@@ -248,11 +252,23 @@ namespace spz {
 	        ThemeResolutionPreset(_resolutionPreset_1024, t);
 	        ThemeResolutionPreset(_resolutionPreset_1536, t);
 	        ThemeResolutionPreset(_resolutionPreset_2048, t);
+	        foreach (var lg in root.GetComponentsInChildren<LayoutGroup>(true))
+	            SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
+	    }
+
+	    void RestoreInputPanelAuthoredChrome() {
+	        Transform root = _movableRectTransform != null ? _movableRectTransform : transform;
+	        if (root == null) return;
+	        foreach (var g in root.GetComponentsInChildren<Graphic>(true))
+	            SpzUiThemeOps.RestoreAuthoredGraphic(g);
 	    }
 
 	    static void ThemeResolutionPreset(Button btn, SpzUiThemeOps.ThemeTokens t) {
 	        if (btn == null || btn.targetGraphic == null) return;
-	        SpzUiThemeOps.ApplySelectableToken(btn, t.controlBg, t.accent);
+	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+	        var label = btn.GetComponentInChildren<TextMeshProUGUI>(true);
+	        if (label != null)
+	            SpzUiThemeOps.ApplyBoundChromeTmp(label, t.textPrimary);
 	    }
 
 	    void OnEnable() {

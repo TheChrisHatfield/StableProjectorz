@@ -796,23 +796,30 @@ namespace spz {
 	    /// </summary>
 	    void ApplyThemeTokens() {
 	        if (_settingsPanel_go == null) return;
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            foreach (var g in _settingsPanel_go.GetComponentsInChildren<Graphic>(true)) {
+	                if (IsUnderProductColorSurface(g.transform)) continue;
+	                SpzUiThemeOps.RestoreAuthoredGraphic(g);
+	            }
+	            return;
+	        }
 	        var t = SpzUiThemeOps.Active;
 	        var panelImg = _settingsPanel_go.GetComponent<Image>();
 	        if (panelImg != null) {
 	            // Opaque enough that welcome/help text does not ghost through the settings list.
 	            Color shell = t.panelBg;
 	            shell.a = Mathf.Max(shell.a, 0.96f);
-	            SpzUiThemeOps.ApplyGraphicColor(panelImg, shell);
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(panelImg, shell);
 	        }
 	        foreach (var input in _settingsPanel_go.GetComponentsInChildren<TMP_InputField>(true)) {
 	            if (input == null || IsUnderProductColorSurface(input.transform)) continue;
 	            var bg = input.GetComponent<Image>();
 	            if (bg != null)
-	                SpzUiThemeOps.ApplyGraphicColor(bg, t.fieldBg);
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(bg, t.fieldBg);
 	            if (input.textComponent != null)
-	                SpzUiThemeOps.ApplyTmpColor(input.textComponent, t.textPrimary);
+	                SpzUiThemeOps.ApplyBoundChromeTmp(input.textComponent, t.textPrimary);
 	            if (input.placeholder is TMP_Text ph)
-	                SpzUiThemeOps.ApplyTmpColor(ph, t.textMuted);
+	                SpzUiThemeOps.ApplyBoundChromeTmp(ph, t.textMuted);
 	        }
 	        foreach (var btn in _settingsPanel_go.GetComponentsInChildren<Button>(true)) {
 	            if (btn == null || btn.targetGraphic == null) continue;
@@ -821,7 +828,7 @@ namespace spz {
 	                continue;
 	            if (IsUnderProductColorSurface(btn.transform))
 	                continue;
-	            SpzUiThemeOps.ApplySelectableToken(btn, t.controlBg, t.accent);
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
 	        }
 	        foreach (var toggle in _settingsPanel_go.GetComponentsInChildren<Toggle>(true)) {
 	            if (toggle == null || IsUnderProductColorSurface(toggle.transform)) continue;
@@ -831,7 +838,7 @@ namespace spz {
 	            if (tmp == null || IsUnderProductColorSurface(tmp.transform)) continue;
 	            if (tmp.gameObject.name == "Placeholder" || tmp.gameObject.name == "Checkmark")
 	                continue;
-	            SpzUiThemeOps.ApplyTmpColor(tmp, t.textPrimary);
+	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
 	            if (tmp.lineSpacing < 0f)
 	                tmp.lineSpacing = 0f;
 	        }
@@ -839,17 +846,21 @@ namespace spz {
 	            if (slider == null || IsUnderProductColorSurface(slider.transform)) continue;
 	            var bg = slider.GetComponent<Image>();
 	            if (bg != null)
-	                SpzUiThemeOps.ApplyGraphicColor(bg, t.fieldBg);
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(bg, t.fieldBg);
 	            if (slider.fillRect != null) {
 	                var fill = slider.fillRect.GetComponent<Image>();
 	                if (fill != null)
-	                    SpzUiThemeOps.ApplyGraphicColor(fill, t.accent);
+	                    SpzUiThemeOps.ApplyBoundChromeGraphic(fill, t.accent);
 	            }
 	            if (slider.handleRect != null) {
 	                var handle = slider.handleRect.GetComponent<Image>();
 	                if (handle != null)
-	                    SpzUiThemeOps.ApplyGraphicColor(handle, t.handle);
+	                    SpzUiThemeOps.ApplyBoundChromeGraphic(handle, t.handle);
 	            }
+	        }
+	        foreach (var lg in _settingsPanel_go.GetComponentsInChildren<LayoutGroup>(true)) {
+	            if (lg == null || IsUnderProductColorSurface(lg.transform)) continue;
+	            SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
 	        }
 	    }
 
@@ -867,7 +878,7 @@ namespace spz {
 	        tgl.transition = Selectable.Transition.ColorTint;
 	        // Image.color = chrome token; ColorBlock stays white-based so Unity does not multiply twice.
 	        if (tgl.targetGraphic != null)
-	            tgl.targetGraphic.color = t.controlBg;
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(tgl.targetGraphic, t.controlBg);
 	        var colors = tgl.colors;
 	        colors.normalColor = Color.white;
 	        colors.highlightedColor = Color.Lerp(Color.white, t.accent, 0.25f);
@@ -876,7 +887,7 @@ namespace spz {
 	        colors.disabledColor = new Color(1f, 1f, 1f, 0.45f);
 	        tgl.colors = colors;
 	        if (tgl.graphic != null)
-	            SpzUiThemeOps.ApplyGraphicColor(tgl.graphic, t.success);
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(tgl.graphic, t.success);
 	    }
 
 	    /// <summary>Same ColorBlock as built-in Settings_UI.prefab toggles (tints sliced frame).</summary>

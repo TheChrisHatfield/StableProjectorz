@@ -175,10 +175,59 @@ namespace spz {
 
 	        _loadModel_button.GetComponent<MouseHoverSensor_UI>().onSurfaceEnter += (cursor)=>OnImportButtonHover(isStoppedHover:false);
 	        _loadModel_button.GetComponent<MouseHoverSensor_UI>().onSurfaceExit  += (cursor)=>OnImportButtonHover(isStoppedHover:true);
+
+	        SpzUiThemeOps.ThemeChanged += ApplyMeshListChromeThemeTokens;
+	        ApplyMeshListChromeThemeTokens();
+	    }
+
+	    /// <summary>Themes mesh-panel chrome (header buttons / scroll parent) — not per-submesh selection colors.</summary>
+	    void ApplyMeshListChromeThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            foreach (var g in GetComponentsInChildren<Graphic>(true)) {
+	                if (g.GetComponentInParent<SD_subMesh_IconUI>() != null) continue;
+	                SpzUiThemeOps.RestoreAuthoredGraphic(g);
+	            }
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        ThemeChromeButton(_loadModel_button, t);
+	        ThemeChromeButton(_import_button, t);
+	        ThemeChromeButton(_import_andKeepIcons_button, t);
+	        ThemeChromeButton(_selectAll_button, t);
+	        ThemeChromeButton(_deleteAllNonSelected_button, t);
+	        if (_showVertexColors_toggle != null) {
+	            var btn = _showVertexColors_toggle.GetComponent<Button>();
+	            if (btn != null && btn.targetGraphic != null)
+	                SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+	            var label = _showVertexColors_toggle.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+	            if (label != null)
+	                SpzUiThemeOps.ApplyBoundChromeTmp(label, t.textPrimary);
+	        }
+	        if (_contentParent != null) {
+	            var img = _contentParent.GetComponent<Image>();
+	            if (img != null)
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(img, t.panelBg);
+	            foreach (var lg in _contentParent.GetComponentsInChildren<LayoutGroup>(true)) {
+	                if (lg.GetComponentInParent<SD_subMesh_IconUI>() != null) continue;
+	                SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
+	            }
+	        }
+	        var rootImg = GetComponent<Image>();
+	        if (rootImg != null)
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.panelBg);
+	    }
+
+	    static void ThemeChromeButton(Button btn, SpzUiThemeOps.ThemeTokens t) {
+	        if (btn == null || btn.targetGraphic == null) return;
+	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+	        var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+	        if (label != null)
+	            SpzUiThemeOps.ApplyBoundChromeTmp(label, t.textPrimary);
 	    }
 
 
 	    void OnDestroy(){
+	        SpzUiThemeOps.ThemeChanged -= ApplyMeshListChromeThemeTokens;
 	        SD_subMesh_IconUI.Act_OnWillDestroy_Icon -= OnWillDestroy_Icon;
 	        ModelsHandler_3D.Act_onImported -= OnModelsHandler_ImportDone; 
 	    }

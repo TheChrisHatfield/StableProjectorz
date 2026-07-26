@@ -107,6 +107,69 @@ namespace spz {
 				Objects_Renderer_MGR.instance.ReRenderAll_soon();
 		}
 
+		void OnEnable()
+		{
+			SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+			SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+		}
+
+		void OnDisable()
+		{
+			SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+		}
+
+		public void ApplyThemeTokens()
+		{
+			if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+				if (_addLayerButton != null)
+					SpzUiThemeOps.RestoreAuthoredGraphic(_addLayerButton.targetGraphic);
+				if (_collapseButton != null)
+					SpzUiThemeOps.RestoreAuthoredGraphic(_collapseButton.targetGraphic);
+				for (int i = 0; i < _rows.Count; i++) {
+					var row = _rows[i];
+					if (row == null) continue;
+					foreach (var g in row.GetComponentsInChildren<Graphic>(true))
+						SpzUiThemeOps.RestoreAuthoredGraphic(g);
+				}
+				return;
+			}
+			var t = SpzUiThemeOps.Active;
+			_visOn = t.accent; _visOn.a = 1f;
+			_visOff = t.controlBg; _visOff.a = 0.95f;
+			_rowDefault = t.panelBg; _rowDefault.a = 0.2f;
+			_rowActive = t.selection; _rowActive.a = 0.45f;
+			if (_addLayerButton != null)
+				SpzUiThemeOps.ApplyBoundChromeSelectable(_addLayerButton, t.success, t.accent);
+			if (_collapseButton != null)
+				SpzUiThemeOps.ApplyBoundChromeSelectable(_collapseButton, t.controlBg, t.accent);
+			RefreshActiveHighlight();
+			for (int i = 0; i < _rows.Count; i++)
+			{
+				var row = _rows[i];
+				if (row == null) continue;
+				var del = row.transform.Find("Delete");
+				if (del == null) del = row.transform.Find("DeleteBtn");
+				if (del != null)
+				{
+					var delBtn = del.GetComponent<Button>();
+					if (delBtn != null)
+						SpzUiThemeOps.ApplyBoundChromeSelectable(delBtn, t.danger, t.accent);
+				}
+				var vis = row.transform.Find("Visibility");
+				if (vis != null)
+				{
+					var visImg = vis.GetComponent<Image>();
+					if (visImg != null && _layerStack != null)
+					{
+						int layerIx = LayerIndexFromDisplay(i);
+						bool visible = layerIx >= 0 && layerIx < _layerStack.Layers.Count
+							&& _layerStack.Layers[layerIx].Visible;
+						visImg.color = visible ? _visOn : _visOff;
+					}
+				}
+			}
+		}
+
 		void Start()
 		{
 			if (_layerStack == null) _layerStack = FindObjectOfType<PaintLayerStack_MGR>();
@@ -159,7 +222,7 @@ namespace spz {
 				if (rowBg == null) continue;
 				int layerIx = LayerIndexFromDisplay(i);
 				bool isActive = layerIx >= 0 && _layerStack.ActiveLayerIndex == layerIx;
-				rowBg.color = isActive ? RowBgActive : RowBgDefault;
+				rowBg.color = isActive ? _rowActive : _rowDefault;
 			}
 		}
 
@@ -287,6 +350,12 @@ namespace spz {
 		{
 			if (_layerStack == null || _listRoot == null) return;
 			_renameRowIndex = -1;
+			// Snapshot theme once before row build (avoid per-cell Active clones).
+			var snap = SpzUiThemeOps.Active;
+			_visOn = snap.accent; _visOn.a = 1f;
+			_visOff = snap.controlBg; _visOff.a = 0.95f;
+			_rowDefault = snap.panelBg; _rowDefault.a = 0.2f;
+			_rowActive = snap.selection; _rowActive.a = 0.45f;
 			foreach (var go in _rows)
 			{
 				if (go != null) Destroy(go);
@@ -303,13 +372,14 @@ namespace spz {
 			}
 
 			LayoutRebuilder.ForceRebuildLayoutImmediate(_listRoot);
+			ApplyThemeTokens();
 		}
 
-		// Visibility button colors: discernible on/off
-		static readonly Color VisibilityOnColor  = new Color(0.18f, 0.35f, 0.58f, 1f);   // dark blue when visible
-		static readonly Color VisibilityOffColor = new Color(0.55f, 0.6f, 0.7f, 0.95f); // light when hidden
-		static readonly Color RowBgDefault      = new Color(0, 0, 0, 0.2f);
-		static readonly Color RowBgActive       = new Color(0.2f, 0.38f, 0.55f, 0.45f);  // blue tint so user sees which layer is active
+		// Visibility / row colors: snapshotted from theme (one Active clone per ApplyThemeTokens).
+		Color _visOn = new Color(0.18f, 0.35f, 0.58f, 1f);
+		Color _visOff = new Color(0.55f, 0.6f, 0.7f, 0.95f);
+		Color _rowDefault = new Color(0, 0, 0, 0.2f);
+		Color _rowActive = new Color(0.2f, 0.38f, 0.55f, 0.45f);
 
 		// --- Drag-to-reorder: grip handle on each row drives MoveLayer ---
 
@@ -426,7 +496,7 @@ namespace spz {
 
 			bool isActive = _layerStack != null && _layerStack.ActiveLayerIndex == index;
 			var rowBg = row.AddComponent<Image>();
-			rowBg.color = isActive ? RowBgActive : RowBgDefault;
+			rowBg.color = isActive ? _rowActive : _rowDefault;
 			rowBg.raycastTarget = true;
 			var rowBtn = row.AddComponent<Button>();
 			rowBtn.targetGraphic = rowBg;
@@ -472,7 +542,7 @@ namespace spz {
 			visLE.minWidth = 24;
 			visLE.preferredWidth = 24;
 			var visImg = visGo.AddComponent<Image>();
-			visImg.color = layer.Visible ? VisibilityOnColor : VisibilityOffColor;
+			visImg.color = layer.Visible ? _visOn : _visOff;
 			visImg.raycastTarget = true;
 			var visBtn = visGo.AddComponent<Button>();
 			visBtn.targetGraphic = visImg;
@@ -483,7 +553,7 @@ namespace spz {
 				_layerStack.SetActiveLayer(idx);
 				bool newVisible = !_layerStack.Layers[idx].Visible;
 				_layerStack.SetLayerVisible(idx, newVisible);
-				visImg.color = newVisible ? VisibilityOnColor : VisibilityOffColor;
+				visImg.color = newVisible ? _visOn : _visOff;
 				RequestReRender();
 			});
 

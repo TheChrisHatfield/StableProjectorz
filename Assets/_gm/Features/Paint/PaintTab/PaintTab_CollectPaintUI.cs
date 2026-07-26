@@ -218,6 +218,19 @@ namespace spz {
 		{
 			if (_layout == null) _layout = GetComponent<PaintTab_KritaLayout_UI>();
 			if (_layout == null) return;
+			if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+				foreach (var g in GetComponentsInChildren<Graphic>(true))
+					SpzUiThemeOps.RestoreAuthoredGraphic(g);
+				_layout.ApplyThemeTokens();
+				PaintTab_LayersPanel_UI layersRestore = null;
+				if (_layout.LayersSection != null)
+					layersRestore = _layout.LayersSection.GetComponentInChildren<PaintTab_LayersPanel_UI>(true);
+				if (layersRestore == null)
+					layersRestore = GetComponentInChildren<PaintTab_LayersPanel_UI>(true);
+				if (layersRestore != null)
+					layersRestore.ApplyThemeTokens();
+				return;
+			}
 			var t = SpzUiThemeOps.Active;
 			_layout.ApplyThemeTokens();
 			ThemeOwnedSection(_layout.ToolOptionsSection, t);
@@ -241,18 +254,18 @@ namespace spz {
 				if (slider == null) continue;
 				var bg = slider.GetComponent<Image>();
 				if (bg != null)
-					SpzUiThemeOps.ApplyGraphicColor(bg, t.fieldBg);
+					SpzUiThemeOps.ApplyBoundChromeGraphic(bg, t.fieldBg);
 				if (slider.fillRect != null)
 				{
 					var fill = slider.fillRect.GetComponent<Image>();
 					if (fill != null)
-						SpzUiThemeOps.ApplyGraphicColor(fill, t.accent);
+						SpzUiThemeOps.ApplyBoundChromeGraphic(fill, t.accent);
 				}
 				if (slider.handleRect != null)
 				{
 					var handle = slider.handleRect.GetComponent<Image>();
 					if (handle != null)
-						SpzUiThemeOps.ApplyGraphicColor(handle, t.handle);
+						SpzUiThemeOps.ApplyBoundChromeGraphic(handle, t.handle);
 				}
 			}
 			foreach (var btn in section.GetComponentsInChildren<Button>(true))
@@ -268,7 +281,7 @@ namespace spz {
 				else if (IsPaintActionName(n, "Delete", "Clear", "Remove", "−", "-"))
 					normal = t.danger;
 				// Tool-on accent must come from explicit tool-state refresh — never color heuristics.
-				SpzUiThemeOps.ApplySelectableToken(btn, normal, t.accent);
+				SpzUiThemeOps.ApplyBoundChromeSelectable(btn, normal, t.accent);
 			}
 			foreach (var tmp in section.GetComponentsInChildren<TextMeshProUGUI>(true))
 			{
@@ -282,9 +295,9 @@ namespace spz {
 				// (that cancels font_scale changes: size/s * s == size).
 				float basePt = ResolvePaintLabelDesignBasePt(tmp);
 				if (tmp.gameObject.name == "Header" || tmp.gameObject.name == "Placeholder")
-					SpzUiThemeOps.ApplyTmpScaled(tmp, t.textMuted, basePt);
+					SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textMuted, basePt);
 				else
-					SpzUiThemeOps.ApplyTmpScaled(tmp, t.textPrimary, basePt);
+					SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, basePt);
 			}
 		}
 

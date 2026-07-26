@@ -113,6 +113,36 @@ namespace spz {
 	        for(int i=0; i<numChildren; ++i){
 	            DestroyImmediate( _thumbs_parent.GetChild(0).gameObject );
 	        }
+	        SpzUiThemeOps.ThemeChanged += ApplyControlNetListChromeThemeTokens;
+	        ApplyControlNetListChromeThemeTokens();
+	    }
+
+	    void OnDestroy() {
+	        SpzUiThemeOps.ThemeChanged -= ApplyControlNetListChromeThemeTokens;
+	        ControlNetUnit_Thumb_UI._Act_OnUnitThumb_Pressed -= OnClickThumb_ShowPanel;
+	    }
+
+	    /// <summary>Themes ControlNet thumbs strip chrome — not unit preview content / domain state.</summary>
+	    void ApplyControlNetListChromeThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            if (_thumbs_parent != null)
+	                SpzUiThemeOps.RestoreAuthoredGraphic(_thumbs_parent.GetComponent<Image>());
+	            SpzUiThemeOps.RestoreAuthoredGraphic(GetComponent<Image>());
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        if (_thumbs_parent != null) {
+	            var img = _thumbs_parent.GetComponent<Image>();
+	            if (img != null)
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(img, t.panelBg);
+	            foreach (var lg in _thumbs_parent.GetComponentsInChildren<LayoutGroup>(true)) {
+	                if (lg.GetComponentInParent<ControlNetUnit_Thumb_UI>() != null) continue;
+	                SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
+	            }
+	        }
+	        var rootImg = GetComponent<Image>();
+	        if (rootImg != null)
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.panelBg);
 	    }
 	}
 }//end namespace
