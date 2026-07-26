@@ -760,8 +760,10 @@ namespace spz {
 	        if (cell == null) return;
 	        bool iconOnly = recolorChrome && SpzUiThemeOps.RibbonIconOnlyActive;
 	        Transform active = cell.Find("go active");
-	        Transform bar = active != null ? active.Find("MonolithActiveBar") : null;
-	        Transform iconTransform = cell.Find("MonolithLineIcon");
+	        Transform bar = active != null
+	            ? SpzUiThemeOps.FindDirectChildIncludingInactive(active, "MonolithActiveBar")
+	            : null;
+	        Transform iconTransform = SpzUiThemeOps.FindDirectChildIncludingInactive(cell, "MonolithLineIcon");
 
 	        if (!recolorChrome) {
 	            if (bar != null)
@@ -1001,7 +1003,7 @@ namespace spz {
 	            if (hay.IndexOf(needle, StringComparison.OrdinalIgnoreCase) < 0)
 	                continue;
 	            ApplyStudioTabChromeColors(cell, SpzUiThemeOps.Active);
-	            Transform iconTransform = cell.Find("MonolithLineIcon");
+	            Transform iconTransform = SpzUiThemeOps.FindDirectChildIncludingInactive(cell, "MonolithLineIcon");
 	            if (iconTransform == null) {
 	                error = $"line icon missing after ensure on '{n}'";
 	                return false;

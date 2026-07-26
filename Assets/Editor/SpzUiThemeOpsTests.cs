@@ -641,11 +641,28 @@ public sealed class SpzUiThemeOpsTests {
 			}
 			Assert.That(monolithCount, Is.EqualTo(1));
 			Assert.That(line.gameObject.activeSelf, Is.True);
-			Assert.That(line.GetComponent<Image>().sprite,
-				Is.EqualTo(UiRuntimeSprites.GetLineIcon(StudioLineIcon.Eraser)));
+		Assert.That(line.GetComponent<Image>().sprite,
+			Is.EqualTo(UiRuntimeSprites.GetLineIcon(StudioLineIcon.Eraser)));
 		} finally {
 			UnityEngine.Object.DestroyImmediate(go);
 			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
+	public void FindDirectChildIncludingInactiveFindsDeactivatedMonolith() {
+		var parent = new GameObject("StripCell", typeof(RectTransform));
+		var child = new GameObject("MonolithLineIcon", typeof(RectTransform));
+		child.transform.SetParent(parent.transform, false);
+		child.SetActive(false);
+		try {
+			Assert.That(parent.transform.Find("MonolithLineIcon"), Is.Null,
+				"Unity Transform.Find must skip inactive (documents the bug class)");
+			Transform found = SpzUiThemeOps.FindDirectChildIncludingInactive(parent.transform, "MonolithLineIcon");
+			Assert.That(found, Is.Not.Null);
+			Assert.That(found.gameObject.activeSelf, Is.False);
+		} finally {
+			UnityEngine.Object.DestroyImmediate(parent);
 		}
 	}
 
