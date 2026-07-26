@@ -123,14 +123,13 @@ namespace spz {
 			if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 				ApplyAuthoredRowPalette();
 				if (_addLayerButton != null)
-					SpzUiThemeOps.RestoreAuthoredGraphic(_addLayerButton.targetGraphic);
+					SpzUiThemeOps.RestoreBoundChromeUnder(_addLayerButton.transform);
 				if (_collapseButton != null)
-					SpzUiThemeOps.RestoreAuthoredGraphic(_collapseButton.targetGraphic);
+					SpzUiThemeOps.RestoreBoundChromeUnder(_collapseButton.transform);
 				for (int i = 0; i < _rows.Count; i++) {
 					var row = _rows[i];
 					if (row == null) continue;
-					foreach (var g in row.GetComponentsInChildren<Graphic>(true))
-						SpzUiThemeOps.RestoreAuthoredGraphic(g);
+					SpzUiThemeOps.RestoreBoundChromeUnder(row.transform);
 				}
 				RefreshActiveHighlight();
 				RefreshVisibilityColors();
