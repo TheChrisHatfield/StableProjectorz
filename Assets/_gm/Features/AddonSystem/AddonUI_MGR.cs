@@ -1452,7 +1452,9 @@ namespace spz {
 			text.text = defaultValue;
 			text.fontSize = 12;
 			text.color = Color.white;
-			text.overflowMode = TextOverflowModes.Ellipsis;
+			// Do not use Ellipsis on the editable component — long paths must remain fully editable/selectable.
+			text.overflowMode = TextOverflowModes.Overflow;
+			text.enableWordWrapping = false;
 			ApplyRuntimeTmpFont(text);
 			
 			var placeholderObj = new GameObject("Placeholder");
