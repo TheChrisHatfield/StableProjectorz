@@ -336,15 +336,20 @@ namespace spz {
 			// Queue command for main thread execution
 			_pendingResponses[id] = null; // Mark as pending
 			_mainThreadQueue.Enqueue(() => {
-				JObject response;
 				try {
-					response = ExecuteCommand(method, @params);
+					// Headless 3D+textures export starts async texture I/O after the mesh write.
+					// Do not mark success until Save_MGR finishes, or Blender/SPZ GO apply stale maps.
+					if (DefersResponseUntilProjectSaveIdle(method)) {
+						BeginCommandAndRespondWhenProjectSaveIdle(id, method, @params);
+						return;
+					}
+					JObject response = ExecuteCommand(method, @params);
 					response["id"] = JToken.FromObject(id);
+					_pendingResponses[id] = response;
 				}
 				catch (Exception e) {
-					response = CreateErrorResponse(-32603, $"Internal error: {e.Message}", JToken.FromObject(id));
+					_pendingResponses[id] = CreateErrorResponse(-32603, $"Internal error: {e.Message}", JToken.FromObject(id));
 				}
-				_pendingResponses[id] = response;
 			});
 			
 			// Wait for command to execute (with timeout)
@@ -385,6 +390,55 @@ namespace spz {
 				default:
 					return false;
 			}
+		}
+
+		/// <summary>
+		/// True when JSON-RPC success must wait for <see cref="Save_MGR._isSaving"/> to clear
+		/// (mesh write is sync; texture encode/write is deferred via coroutines).
+		/// </summary>
+		public static bool DefersResponseUntilProjectSaveIdle(string method) {
+			return string.Equals(method, "spz.cmd.export_3d_with_textures_to_path", StringComparison.Ordinal);
+		}
+
+		void BeginCommandAndRespondWhenProjectSaveIdle(string id, string method, JObject @params) {
+			JObject result;
+			try {
+				result = ExecuteFastPathCommand(method, @params ?? new JObject());
+			} catch (Exception e) {
+				_pendingResponses[id] = CreateErrorResponse(-32603, $"Internal error: {e.Message}", JToken.FromObject(id));
+				return;
+			}
+			bool started = result["success"]?.ToObject<bool>() ?? false;
+			if (!started) {
+				_pendingResponses[id] = new JObject {
+					["jsonrpc"] = "2.0",
+					["result"] = result,
+					["id"] = JToken.FromObject(id)
+				};
+				return;
+			}
+			StartCoroutine(CoRespondWhenProjectSaveIdle(id, result));
+		}
+
+		IEnumerator CoRespondWhenProjectSaveIdle(string id, JObject result) {
+			float timeoutSec = COMMAND_TIMEOUT_LONG_OP_MS / 1000f;
+			float elapsed = 0f;
+			var sm = Save_MGR.instance;
+			// Export sets _isSaving before returning; wait until texture pipeline OnComplete clears it.
+			while (sm != null && sm._isSaving && elapsed < timeoutSec) {
+				elapsed += Time.unscaledDeltaTime;
+				yield return null;
+			}
+			if (sm != null && sm._isSaving) {
+				result["success"] = false;
+				result["error"] = "export to path timed out waiting for texture write";
+				UnityEngine.Debug.LogWarning("[Addon_SocketServer] export_3d_with_textures_to_path: texture write still in progress after timeout.");
+			}
+			_pendingResponses[id] = new JObject {
+				["jsonrpc"] = "2.0",
+				["result"] = result,
+				["id"] = JToken.FromObject(id)
+			};
 		}
 		
 		/// <summary>
@@ -481,7 +535,7 @@ namespace spz {
 				"spz.cmd.trigger_3d_generation", "spz.cmd.trigger_texture_generation",
 			};
 			var ui = new JArray {
-				"spz.ui.add_button", "spz.ui.add_dropdown", "spz.ui.add_slider", "spz.ui.add_text_input",
+				"spz.ui.add_button", "spz.ui.add_dropdown", "spz.ui.add_slider", "spz.ui.add_text_input", "spz.ui.add_toggle",
 				"spz.ui.attach_viewport_fullview_toggle",
 				"spz.ui.apply_theme", "spz.ui.create_panel", "spz.ui.get_theme", "spz.ui.get_value",
 				"spz.ui.list_themes", "spz.ui.register_theme", "spz.ui.reset_theme",
@@ -489,7 +543,7 @@ namespace spz {
 			};
 			return new JObject {
 				["success"] = true,
-				["addon_rpc_version"] = "1.12",
+				["addon_rpc_version"] = "1.14",
 				["spz_cmd"] = cmd,
 				["spz_ui"] = ui,
 				["context_command"] = "spz.cmd.get_addon_context",
@@ -2072,6 +2126,21 @@ namespace spz {
 							result["button_id"] = buttonId;
 						} else {
 							result["error"] = "Failed to create button";
+						}
+						break;
+
+					case "spz.ui.add_toggle":
+						addonId = @params["addon_id"]?.ToString() ?? "";
+						panelIdParam = @params["panel_id"]?.ToString() ?? "";
+						label = @params["label"]?.ToString() ?? "Toggle";
+						bool defaultOn = @params["default"]?.ToObject<bool>() ?? false;
+						callbackName = @params["callback"]?.ToString();
+						string toggleId = uiMgr.AddToggle(addonId, panelIdParam, label, defaultOn, callbackName);
+						if (toggleId != null) {
+							result["success"] = true;
+							result["element_id"] = toggleId;
+						} else {
+							result["error"] = "Failed to create toggle";
 						}
 						break;
 						
