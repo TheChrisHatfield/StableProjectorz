@@ -1,3 +1,4 @@
+using System;
 using System.Reflection;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
@@ -435,7 +436,23 @@ public sealed class SpzUiThemeOpsTests {
 		Assert.That(icon, Is.EqualTo(StudioLineIcon.ChevronLeft));
 		Assert.That(SpzUiThemeOps.TryParseStudioLineIcon("ChevronRight", out icon, out error), Is.True, error);
 		Assert.That(icon, Is.EqualTo(StudioLineIcon.ChevronRight));
+		Assert.That(SpzUiThemeOps.TryParseStudioLineIcon("Wireframe", out icon, out error), Is.True, error);
+		Assert.That(icon, Is.EqualTo(StudioLineIcon.Wireframe));
+		Assert.That(SpzUiThemeOps.TryParseStudioLineIcon("Cursor", out icon, out error), Is.True, error);
+		Assert.That(icon, Is.EqualTo(StudioLineIcon.Cursor));
+		Assert.That(SpzUiThemeOps.TryParseStudioLineIcon("Camera", out icon, out error), Is.True, error);
+		Assert.That(icon, Is.EqualTo(StudioLineIcon.Camera));
+		Assert.That(SpzUiThemeOps.TryParseStudioLineIcon("Bucket", out icon, out error), Is.True, error);
+		Assert.That(icon, Is.EqualTo(StudioLineIcon.Bucket));
+		Assert.That(SpzUiThemeOps.TryParseStudioLineIcon("Drop", out icon, out error), Is.True, error);
+		Assert.That(icon, Is.EqualTo(StudioLineIcon.Drop));
+		Assert.That(SpzUiThemeOps.TryParseStudioLineIcon("Eraser", out icon, out error), Is.True, error);
+		Assert.That(icon, Is.EqualTo(StudioLineIcon.Eraser));
+		Assert.That(SpzUiThemeOps.TryParseStudioLineIcon("Smudge", out icon, out error), Is.True, error);
+		Assert.That(icon, Is.EqualTo(StudioLineIcon.Smudge));
 		Assert.That(SpzUiThemeOps.ListLineIconNames().ToString(), Does.Contain("Mesh"));
+		Assert.That(SpzUiThemeOps.ListLineIconNames().ToString(), Does.Contain("Bucket"));
+		Assert.That(SpzUiThemeOps.ListLineIconNames().ToString(), Does.Contain("Cursor"));
 		Assert.That(SpzUiThemeOps.ListLineIconNames().ToString(), Does.Contain("Expand"));
 		Assert.That(RibbonViewportFullViewOnScreen_Toggle_UI.ResolveFullViewDockIcon(), Is.EqualTo(StudioLineIcon.Expand));
 		Assert.That(RibbonViewportFullViewOnScreen_Toggle_UI.ResolveOpenRightDockIcon(false), Is.EqualTo(StudioLineIcon.ChevronRight));
@@ -547,6 +564,65 @@ public sealed class SpzUiThemeOpsTests {
 		SpzUiThemeOps.ResetTheme();
 		Assert.That(SpzUiThemeOps.IsBuiltinDefaultActive, Is.True);
 		Assert.That(SpzUiThemeOps.ShouldRecolorBoundChrome, Is.False);
+	}
+
+	[Test]
+	public void BoundChromeTmpAppliesNomadTrackingAndControlLineIconRestores() {
+		var go = new GameObject("NomadChromeTmp");
+		var owner = new GameObject("ToolOwner", typeof(RectTransform));
+		owner.transform.SetParent(go.transform, false);
+		var authoredIcon = new GameObject("icon", typeof(RectTransform));
+		authoredIcon.transform.SetParent(owner.transform, false);
+		var authoredImg = authoredIcon.AddComponent<Image>();
+		authoredImg.enabled = true;
+		var tmpGo = new GameObject("Label", typeof(RectTransform));
+		tmpGo.transform.SetParent(go.transform, false);
+		var tmp = tmpGo.AddComponent<TextMeshProUGUI>();
+		tmp.characterSpacing = 0f;
+		tmp.fontSize = 14f;
+		try {
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				Tokens(("text_primary", "#E3E2E7FF"), ("icon_tint", "#D0C5AFFF")),
+				"replace",
+				out string error), Is.True, error);
+			SpzUiThemeOps.ApplyBoundChromeTmp(tmp, SpzUiThemeOps.Active.textPrimary);
+			Assert.That(tmp.characterSpacing, Is.EqualTo(10f).Within(0.01f));
+			SpzUiThemeOps.ApplyControlLineIcon(owner.transform, StudioLineIcon.Brush, 22f);
+			Assert.That(authoredImg.enabled, Is.False);
+			Transform line = owner.transform.Find("MonolithLineIcon");
+			Assert.That(line, Is.Not.Null);
+			Assert.That(line.gameObject.activeSelf, Is.True);
+			Assert.That(line.GetComponent<Image>().sprite,
+				Is.EqualTo(UiRuntimeSprites.GetLineIcon(StudioLineIcon.Brush)));
+
+			SpzUiThemeOps.ResetTheme();
+			SpzUiThemeOps.ApplyBoundChromeTmp(tmp, Color.white);
+			SpzUiThemeOps.ApplyControlLineIcon(owner.transform, StudioLineIcon.Brush, 22f);
+			Assert.That(tmp.characterSpacing, Is.EqualTo(0f).Within(0.01f));
+			Assert.That(line.gameObject.activeSelf, Is.False);
+			Assert.That(authoredImg.enabled, Is.True);
+
+			// Leave→re-Apply must reuse the inactive MonolithLineIcon (Transform.Find cannot see it).
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				Tokens(("text_primary", "#E3E2E7FF"), ("icon_tint", "#D0C5AFFF")),
+				"replace",
+				out error), Is.True, error);
+			SpzUiThemeOps.ApplyControlLineIcon(owner.transform, StudioLineIcon.Eraser, 22f);
+			int monolithCount = 0;
+			for (int i = 0; i < owner.transform.childCount; i++) {
+				if (owner.transform.GetChild(i).name == "MonolithLineIcon")
+					monolithCount++;
+			}
+			Assert.That(monolithCount, Is.EqualTo(1));
+			Assert.That(line.gameObject.activeSelf, Is.True);
+			Assert.That(line.GetComponent<Image>().sprite,
+				Is.EqualTo(UiRuntimeSprites.GetLineIcon(StudioLineIcon.Eraser)));
+		} finally {
+			UnityEngine.Object.DestroyImmediate(go);
+			SpzUiThemeOps.ResetTheme();
+		}
 	}
 
 	[Test]
