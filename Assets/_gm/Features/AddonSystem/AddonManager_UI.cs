@@ -1282,6 +1282,7 @@ namespace spz {
 				if (_panel != null) {
 					foreach (var g in _panel.GetComponentsInChildren<Graphic>(true))
 						SpzUiThemeOps.RestoreAuthoredGraphic(g);
+					SpzUiThemeOps.RestoreRoundedControlSpritesUnder(_panel.transform);
 					SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(_panel.transform);
 					RestoreHeaderButtonAuthoredChrome(_installFromFile_button);
 					RestoreHeaderButtonAuthoredChrome(_refresh_button);

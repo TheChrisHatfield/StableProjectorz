@@ -801,6 +801,7 @@ namespace spz {
 	                if (IsUnderProductColorSurface(g.transform)) continue;
 	                SpzUiThemeOps.RestoreAuthoredGraphic(g);
 	            }
+	            SpzUiThemeOps.RestoreRoundedControlSpritesUnder(_settingsPanel_go.transform);
 	            SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(_settingsPanel_go.transform);
 	            return;
 	        }
@@ -812,16 +813,6 @@ namespace spz {
 	            shell.a = Mathf.Max(shell.a, 0.96f);
 	            SpzUiThemeOps.ApplyBoundChromeGraphic(panelImg, shell);
 	        }
-	        foreach (var input in _settingsPanel_go.GetComponentsInChildren<TMP_InputField>(true)) {
-	            if (input == null || IsUnderProductColorSurface(input.transform)) continue;
-	            var bg = input.GetComponent<Image>();
-	            if (bg != null)
-	                SpzUiThemeOps.ApplyBoundChromeGraphic(bg, t.fieldBg);
-	            if (input.textComponent != null)
-	                SpzUiThemeOps.ApplyBoundChromeTmp(input.textComponent, t.textPrimary);
-	            if (input.placeholder is TMP_Text ph)
-	                SpzUiThemeOps.ApplyBoundChromeTmp(ph, t.textMuted);
-	        }
 	        foreach (var btn in _settingsPanel_go.GetComponentsInChildren<Button>(true)) {
 	            if (btn == null || btn.targetGraphic == null) continue;
 	            // Skip product color swatch buttons (wireframe/noise) — those are prefs, not chrome.
@@ -829,11 +820,31 @@ namespace spz {
 	                continue;
 	            if (IsUnderProductColorSurface(btn.transform))
 	                continue;
-	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+	            bool primary = ReferenceEquals(btn, _restoreDefaults_button)
+	                           || ReferenceEquals(btn, _openAddonManager_button);
+	            Color normal = primary ? Color.Lerp(t.controlBg, t.accent, 0.55f) : t.controlBg;
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, normal, t.accent);
+	            if (btn.targetGraphic is Image btnImg)
+	                SpzUiThemeOps.ApplyRoundedControlSprite(btnImg, markEligible: true);
 	        }
 	        foreach (var toggle in _settingsPanel_go.GetComponentsInChildren<Toggle>(true)) {
 	            if (toggle == null || IsUnderProductColorSurface(toggle.transform)) continue;
 	            ApplyThemeToggleColors(toggle, t);
+	            // Round the frame only — never replace the checkmark face sprite.
+	            if (toggle.targetGraphic is Image toggleBg)
+	                SpzUiThemeOps.ApplyRoundedControlSprite(toggleBg, markEligible: true);
+	        }
+	        foreach (var input in _settingsPanel_go.GetComponentsInChildren<TMP_InputField>(true)) {
+	            if (input == null || IsUnderProductColorSurface(input.transform)) continue;
+	            var bg = input.GetComponent<Image>();
+	            if (bg != null) {
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(bg, t.fieldBg);
+	                SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
+	            }
+	            if (input.textComponent != null)
+	                SpzUiThemeOps.ApplyBoundChromeTmp(input.textComponent, t.textPrimary);
+	            if (input.placeholder is TMP_Text ph)
+	                SpzUiThemeOps.ApplyBoundChromeTmp(ph, t.textMuted);
 	        }
 	        foreach (var tmp in _settingsPanel_go.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp == null || IsUnderProductColorSurface(tmp.transform)) continue;
@@ -846,8 +857,10 @@ namespace spz {
 	        foreach (var slider in _settingsPanel_go.GetComponentsInChildren<Slider>(true)) {
 	            if (slider == null || IsUnderProductColorSurface(slider.transform)) continue;
 	            var bg = slider.GetComponent<Image>();
-	            if (bg != null)
+	            if (bg != null) {
 	                SpzUiThemeOps.ApplyBoundChromeGraphic(bg, t.fieldBg);
+	                SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
+	            }
 	            if (slider.fillRect != null) {
 	                var fill = slider.fillRect.GetComponent<Image>();
 	                if (fill != null)
@@ -855,8 +868,10 @@ namespace spz {
 	            }
 	            if (slider.handleRect != null) {
 	                var handle = slider.handleRect.GetComponent<Image>();
-	                if (handle != null)
+	                if (handle != null) {
 	                    SpzUiThemeOps.ApplyBoundChromeGraphic(handle, t.handle);
+	                    SpzUiThemeOps.ApplyRoundedControlSprite(handle, markEligible: true);
+	                }
 	            }
 	        }
 	        foreach (var lg in _settingsPanel_go.GetComponentsInChildren<LayoutGroup>(true)) {

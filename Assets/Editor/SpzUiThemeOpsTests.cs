@@ -355,10 +355,18 @@ public sealed class SpzUiThemeOpsTests {
 		var go = new GameObject("PhaseB4_RoundedBtn");
 		try {
 			var img = go.AddComponent<Image>();
+			var authored = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f));
+			img.sprite = authored;
+			img.type = Image.Type.Simple;
 			SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
 			Assert.That(img.type, Is.EqualTo(Image.Type.Sliced));
 			Assert.That(ReferenceEquals(img.sprite, b), Is.True);
 			Assert.That(go.GetComponent<SpzUiThemeRoundedControl>(), Is.Not.Null);
+
+			SpzUiThemeOps.RestoreRoundedControlSpritesUnder(go.transform);
+			Assert.That(ReferenceEquals(img.sprite, authored), Is.True);
+			Assert.That(img.type, Is.EqualTo(Image.Type.Simple));
+			Assert.That(go.GetComponent<SpzUiThemeRoundedControl>(), Is.Null);
 
 			var iconGo = new GameObject("LineIcon");
 			iconGo.transform.SetParent(go.transform, false);
@@ -419,6 +427,10 @@ public sealed class SpzUiThemeOpsTests {
 		Assert.That(icon, Is.EqualTo(StudioLineIcon.Brush));
 		Assert.That(SpzUiThemeOps.TryParseStudioLineIcon("Expand", out icon, out error), Is.True, error);
 		Assert.That(icon, Is.EqualTo(StudioLineIcon.Expand));
+		Assert.That(SpzUiThemeOps.TryParseStudioLineIcon("Image", out icon, out error), Is.True, error);
+		Assert.That(icon, Is.EqualTo(StudioLineIcon.Image));
+		Assert.That(SpzUiThemeOps.TryParseStudioLineIcon("Layers", out icon, out error), Is.True, error);
+		Assert.That(icon, Is.EqualTo(StudioLineIcon.Layers));
 		Assert.That(SpzUiThemeOps.TryParseStudioLineIcon("ChevronLeft", out icon, out error), Is.True, error);
 		Assert.That(icon, Is.EqualTo(StudioLineIcon.ChevronLeft));
 		Assert.That(SpzUiThemeOps.TryParseStudioLineIcon("ChevronRight", out icon, out error), Is.True, error);
@@ -443,6 +455,21 @@ public sealed class SpzUiThemeOpsTests {
 		Assert.That(a, Is.Not.Null);
 		Assert.That(b, Is.Not.Null);
 		Assert.That(ReferenceEquals(a, b), Is.False);
+	}
+
+	[Test]
+	public void StripTabHaystackMapsPaintArtBgAndControlToDescriptiveIcons() {
+		Assert.That(CommandRibbon_UI.ResolveStripTabLineIconFromHaystack("Tab: Paint paint Paint"),
+			Is.EqualTo(StudioLineIcon.Brush));
+		Assert.That(CommandRibbon_UI.ResolveStripTabLineIconFromHaystack("Tab: art list art list ART"),
+			Is.EqualTo(StudioLineIcon.Image));
+		Assert.That(CommandRibbon_UI.ResolveStripTabLineIconFromHaystack("Tab: art bg list ART (BG)"),
+			Is.EqualTo(StudioLineIcon.Layers));
+		Assert.That(CommandRibbon_UI.ResolveStripTabLineIconFromHaystack("controlnet ctrl"),
+			Is.EqualTo(StudioLineIcon.Grid));
+		Assert.That(CommandRibbon_UI.ResolveStripTabLineIconFromHaystack("mesh"),
+			Is.EqualTo(StudioLineIcon.Mesh));
+		Assert.That(CommandRibbon_UI.ResolveStripTabDisplayName(null), Is.EqualTo("Tab"));
 	}
 
 	[Test]
