@@ -801,6 +801,7 @@ namespace spz {
 	                if (IsUnderProductColorSurface(g.transform)) continue;
 	                SpzUiThemeOps.RestoreAuthoredGraphic(g);
 	            }
+	            SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(_settingsPanel_go.transform);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;

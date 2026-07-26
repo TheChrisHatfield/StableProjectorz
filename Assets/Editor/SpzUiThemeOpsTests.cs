@@ -521,6 +521,32 @@ public sealed class SpzUiThemeOpsTests {
 	}
 
 	[Test]
+	public void ScaledLayoutGroupUnwindsWhenSpacingScaleReturnsToOne() {
+		var go = new GameObject("theme-layout-scale-test", typeof(RectTransform), typeof(VerticalLayoutGroup));
+		try {
+			var vlg = go.GetComponent<VerticalLayoutGroup>();
+			vlg.spacing = 8f;
+			vlg.padding = new RectOffset(4, 4, 4, 4);
+
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				new JObject { ["spacing_scale"] = 2.0 },
+				"replace",
+				out string error), Is.True, error);
+			SpzUiThemeOps.ApplyScaledLayoutGroup(vlg);
+			Assert.That(vlg.spacing, Is.EqualTo(16f).Within(0.01f));
+
+			SpzUiThemeOps.ResetTheme();
+			SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(go.transform);
+			Assert.That(vlg.spacing, Is.EqualTo(8f).Within(0.01f));
+			Assert.That(vlg.padding.left, Is.EqualTo(4));
+		}
+		finally {
+			UnityEngine.Object.DestroyImmediate(go);
+		}
+	}
+
+	[Test]
 	public void ThemeFloatTokensRejectNaNAndInfinity() {
 		Assert.That(SpzUiThemeOps.TryApplyTheme(
 			"p1-experiment",

@@ -127,6 +127,7 @@ namespace spz {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            // Leaving Nomad: restore fills/labels snapped during theme apply.
 	            RestoreLeftRibbonAuthoredChrome();
+	            SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(transform);
 	            SnapshotNomadChromeSelection();
 	            return;
 	        }

@@ -272,6 +272,7 @@ namespace spz {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            foreach (var g in GetComponentsInChildren<Graphic>(true))
 	                SpzUiThemeOps.RestoreAuthoredGraphic(g);
+	            SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(transform);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;

@@ -1282,6 +1282,7 @@ namespace spz {
 				if (_panel != null) {
 					foreach (var g in _panel.GetComponentsInChildren<Graphic>(true))
 						SpzUiThemeOps.RestoreAuthoredGraphic(g);
+					SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(_panel.transform);
 				}
 				if (_closePanel_button != null)
 					SpzUiThemeOps.RestoreAuthoredGraphic(_closePanel_button.targetGraphic);
