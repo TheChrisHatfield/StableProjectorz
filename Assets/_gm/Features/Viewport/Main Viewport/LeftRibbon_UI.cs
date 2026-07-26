@@ -157,6 +157,7 @@ namespace spz {
 	    }
 
 	    void RestoreLeftRibbonAuthoredChrome() {
+	        SpzUiThemeOps.RestoreControlLineIconsUnder(transform);
 	        foreach (var g in GetComponentsInChildren<Graphic>(true))
 	            SpzUiThemeOps.RestoreAuthoredGraphic(g);
 	        // Hide Monolith bars created for Nomad selection chrome.
@@ -222,6 +223,7 @@ namespace spz {
 	            if (img != null)
 	                SpzUiThemeOps.ApplyBoundChromeGraphic(img, wireNormal);
 	        }
+	        SpzUiThemeOps.ApplyControlLineIcon(_toggleWireframe.transform, StudioLineIcon.Wireframe, 20f);
 	        ApplyActiveBar(_toggleWireframe.transform, _toggleWireframe.isPressed, t.accent);
 	    }
 
@@ -235,7 +237,7 @@ namespace spz {
 
 	    static void ApplyActiveBar(Transform owner, bool selected, Color accent) {
 	        if (owner == null) return;
-	        Transform bar = owner.Find("MonolithActiveBar");
+	        Transform bar = SpzUiThemeOps.FindDirectChildIncludingInactive(owner, "MonolithActiveBar");
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome || !selected) {
 	            if (bar != null) bar.gameObject.SetActive(false);
 	            return;

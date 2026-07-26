@@ -276,7 +276,11 @@ namespace spz {
 				iconT.SetAsLastSibling();
 		}
 
-		static Transform FindDirectChildIncludingInactive(Transform parent, string childName) {
+		/// <summary>
+		/// Like <see cref="Transform.Find(string)"/> for a direct child, but includes inactive objects
+		/// (Unity's Find skips inactive children and would duplicate Monolith overlays on re-Apply).
+		/// </summary>
+		public static Transform FindDirectChildIncludingInactive(Transform parent, string childName) {
 			if (parent == null || string.IsNullOrEmpty(childName)) return null;
 			for (int i = 0; i < parent.childCount; i++) {
 				Transform child = parent.GetChild(i);
