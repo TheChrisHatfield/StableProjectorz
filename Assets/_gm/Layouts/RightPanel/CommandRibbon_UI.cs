@@ -599,49 +599,18 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Prefab Image/TMP colors captured before the first non-default theme mutate.
-	    /// Restored when returning to <see cref="SpzUiThemeOps.IsBuiltinDefaultActive"/> (OG look).
-	    /// </summary>
-	    static readonly Dictionary<int, Color> _builtinGraphicColorSnapshot = new Dictionary<int, Color>();
-
-	    static void SnapshotGraphicColorBeforeTheme(Graphic graphic) {
-	        if (graphic == null) return;
-	        int id = graphic.GetInstanceID();
-	        if (!_builtinGraphicColorSnapshot.ContainsKey(id))
-	            _builtinGraphicColorSnapshot[id] = graphic.color;
-	    }
-
-	    static void RestoreSnapshottedGraphicColor(Graphic graphic) {
-	        if (graphic == null) return;
-	        if (_builtinGraphicColorSnapshot.TryGetValue(graphic.GetInstanceID(), out Color c))
-	            graphic.color = c;
-	    }
-
-	    /// <summary>
 	    /// Ownership-root theme apply for ribbon strip cells, active pills, panel shells, and dividers.
-	    /// Builtin default matches OG CommandRibbon (no Monolith line icons / accent pill lerp).
+	    /// Always applies active tokens (including builtin defaults) — P2 bound surface; not OG-prefab-only.
 	    /// Does not scan the global UI skeleton.
 	    /// </summary>
 	    void ApplyThemeTokens() {
-	        bool builtin = SpzUiThemeOps.IsBuiltinDefaultActive;
-	        bool iconOnly = SpzUiThemeOps.RibbonIconOnlyActive;
-	        // Icon-only can legally ride on a custom token body even if theme_id were default; treat as studio.
-	        bool studioChrome = !builtin || iconOnly;
 	        var t = SpzUiThemeOps.Active;
-
-	        if (studioChrome) {
-	            SnapshotAndApplyPanelShell(_SD_ArtList_Panel);
-	            SnapshotAndApplyPanelShell(_SD_ArtBgList_Panel);
-	            SnapshotAndApplyPanelShell(_SD_3D_Models_Panels);
-	            SnapshotAndApplyPanelShell(_SD_ControlNets_List_Panel);
-	            SnapshotAndApplyPanelShell(_Paint_Panel);
-	        } else {
-	            RestorePanelShellSnapshot(_SD_ArtList_Panel);
-	            RestorePanelShellSnapshot(_SD_ArtBgList_Panel);
-	            RestorePanelShellSnapshot(_SD_3D_Models_Panels);
-	            RestorePanelShellSnapshot(_SD_ControlNets_List_Panel);
-	            RestorePanelShellSnapshot(_Paint_Panel);
-	        }
+	        bool iconOnly = SpzUiThemeOps.RibbonIconOnlyActive;
+	        ApplyPanelShellColor(_SD_ArtList_Panel, t.panelBg);
+	        ApplyPanelShellColor(_SD_ArtBgList_Panel, t.panelBg);
+	        ApplyPanelShellColor(_SD_3D_Models_Panels, t.panelBg);
+	        ApplyPanelShellColor(_SD_ControlNets_List_Panel, t.panelBg);
+	        ApplyPanelShellColor(_Paint_Panel, t.panelBg);
 
 	        Transform strip = ResolveEffectiveTabStripTransform();
 	        if (strip != null) {
@@ -652,14 +621,9 @@ namespace spz {
 	                    || cell.name.StartsWith("AddonDivider_", StringComparison.Ordinal)) {
 	                    var divImg = cell.GetComponent<Image>();
 	                    if (divImg != null) {
-	                        if (studioChrome) {
-	                            SnapshotGraphicColorBeforeTheme(divImg);
-	                            Color c = t.border;
-	                            c.a = Mathf.Max(c.a, 0.55f);
-	                            divImg.color = c;
-	                        } else {
-	                            RestoreSnapshottedGraphicColor(divImg);
-	                        }
+	                        Color c = t.border;
+	                        c.a = Mathf.Max(c.a, 0.55f);
+	                        divImg.color = c;
 	                    }
 	                    continue;
 	                }
@@ -670,13 +634,8 @@ namespace spz {
 	                if (active != null) {
 	                    var activeImg = FindActivePillImage(active);
 	                    if (activeImg != null) {
-	                        if (studioChrome) {
-	                            SnapshotGraphicColorBeforeTheme(activeImg);
-	                            // Accent on the active pill is the main visible Nomad cue (gold vs cool blue default).
-	                            activeImg.color = Color.Lerp(t.tabActive, t.accent, 0.72f);
-	                        } else {
-	                            RestoreSnapshottedGraphicColor(activeImg);
-	                        }
+	                        // Accent on the active pill is the main visible Nomad cue (gold vs cool blue default).
+	                        activeImg.color = Color.Lerp(t.tabActive, t.accent, 0.72f);
 	                    }
 	                }
 	                // Hide every strip-cell TMP (prefabs may have more than one label).
@@ -688,34 +647,22 @@ namespace spz {
 	                        label.color = new Color(t.textPrimary.r, t.textPrimary.g, t.textPrimary.b, 0f);
 	                    } else {
 	                        label.maxVisibleCharacters = int.MaxValue;
-	                        if (studioChrome) {
-	                            SnapshotGraphicColorBeforeTheme(label);
-	                            SpzUiThemeOps.ApplyTmpScaled(label, t.textPrimary, kRibbonStripTabLabelDefaultPt);
-	                        } else {
-	                            RestoreSnapshottedGraphicColor(label);
-	                        }
+	                        SpzUiThemeOps.ApplyTmpScaled(label, t.textPrimary, kRibbonStripTabLabelDefaultPt);
 	                    }
 	                }
-	                ApplyStudioTabChromeColors(cell, t, studioChrome);
+	                // Palette apply = colors + scale + icon tint (+ optional icon-only layout).
+	                ApplyStudioTabChromeColors(cell, t);
+	                // Soft gold edge on addon dividers when themed.
 	                var cellImg = cell.GetComponent<Image>();
-	                if (cellImg != null && cell.name.StartsWith("AddonTab_", StringComparison.Ordinal)) {
-	                    if (studioChrome) {
-	                        SnapshotGraphicColorBeforeTheme(cellImg);
-	                        SpzUiThemeOps.ApplyGraphicColor(cellImg, t.controlBg);
-	                    } else {
-	                        RestoreSnapshottedGraphicColor(cellImg);
-	                    }
-	                }
+	                if (cellImg != null && cell.name.StartsWith("AddonTab_", StringComparison.Ordinal))
+	                    SpzUiThemeOps.ApplyGraphicColor(cellImg, t.controlBg);
 	            }
 	        }
 
 	        if (_addonPanelsById != null) {
 	            foreach (var kvp in _addonPanelsById) {
-	                if (kvp.Value == null) continue;
-	                if (studioChrome)
-	                    SnapshotAndApplyPanelShell(kvp.Value);
-	                else
-	                    RestorePanelShellSnapshot(kvp.Value);
+	                if (kvp.Value != null)
+	                    ApplyPanelShellColor(kvp.Value, t.panelBg);
 	            }
 	        }
 
@@ -726,18 +673,6 @@ namespace spz {
 	        // Icon-only preferredWidth (and Harmonize mins) must rebuild this frame — Refresh used to rebuild before ApplyThemeTokens.
 	        if (strip != null && strip is RectTransform stripRt)
 	            UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(stripRt);
-	    }
-
-	    void SnapshotAndApplyPanelShell(RectTransform panel) {
-	        if (panel == null) return;
-	        var img = panel.GetComponent<Image>();
-	        SnapshotGraphicColorBeforeTheme(img);
-	        ApplyPanelShellColor(panel, SpzUiThemeOps.Active.panelBg);
-	    }
-
-	    void RestorePanelShellSnapshot(RectTransform panel) {
-	        if (panel == null) return;
-	        RestoreSnapshottedGraphicColor(panel.GetComponent<Image>());
 	    }
 
 	    /// <summary>Prefer the authored pill graphic; never retint Monolith chrome overlays.</summary>
@@ -758,29 +693,14 @@ namespace spz {
 
 	    /// <summary>
 	    /// Studio chrome on strip tabs: active bar + line icon (create if missing) tinted by tokens.
-	    /// When builtin default (OG), hides Monolith overlays instead of inventing them.
+	    /// Token-driven for all active themes including builtin (P2/B4) — not Nomad-only.
 	    /// When <see cref="SpzUiThemeOps.RibbonIconOnlyActive"/>, centers a larger icon (Nomad-like).
 	    /// </summary>
-	    static void ApplyStudioTabChromeColors(Transform cell, SpzUiThemeOps.ThemeTokens t, bool studioChrome) {
+	    static void ApplyStudioTabChromeColors(Transform cell, SpzUiThemeOps.ThemeTokens t) {
 	        if (cell == null) return;
 	        bool iconOnly = SpzUiThemeOps.RibbonIconOnlyActive;
 	        Transform active = cell.Find("go active");
 	        Transform bar = active != null ? active.Find("MonolithActiveBar") : null;
-	        Transform iconTransform = cell.Find("MonolithLineIcon");
-
-	        if (!studioChrome) {
-	            if (bar != null)
-	                bar.gameObject.SetActive(false);
-	            if (iconTransform != null)
-	                iconTransform.gameObject.SetActive(false);
-	            var leOff = cell.GetComponent<LayoutElement>();
-	            if (leOff != null) {
-	                leOff.flexibleWidth = 1f;
-	                leOff.preferredWidth = -1f;
-	            }
-	            return;
-	        }
-
 	        if (bar != null) {
 	            bar.gameObject.SetActive(true);
 	            var barImg = bar.GetComponent<Image>();
@@ -792,6 +712,7 @@ namespace spz {
 	            if (pill != null)
 	                pill.enabled = true;
 	        }
+	        Transform iconTransform = cell.Find("MonolithLineIcon");
 	        if (iconTransform == null) {
 	            var go = new GameObject("MonolithLineIcon", typeof(RectTransform));
 	            go.transform.SetParent(cell, false);
@@ -885,7 +806,7 @@ namespace spz {
 	                continue;
 	            if (n.IndexOf(needle, StringComparison.OrdinalIgnoreCase) < 0)
 	                continue;
-	            ApplyStudioTabChromeColors(cell, SpzUiThemeOps.Active, studioChrome: true);
+	            ApplyStudioTabChromeColors(cell, SpzUiThemeOps.Active);
 	            Transform iconTransform = cell.Find("MonolithLineIcon");
 	            if (iconTransform == null) {
 	                error = $"line icon missing after ensure on '{n}'";

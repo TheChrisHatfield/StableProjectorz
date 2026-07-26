@@ -106,7 +106,7 @@ namespace spz {
 		public static string ActiveThemeId => _activeThemeId;
 		public static ThemeTokens Active => _active.Clone();
 
-		/// <summary>True when the builtin SPZ palette is active (OG prefab aesthetics; no Monolith studio chrome).</summary>
+		/// <summary>True when the builtin SPZ palette id is active (token Defaults still apply on bound surfaces).</summary>
 		public static bool IsBuiltinDefaultActive =>
 			string.Equals(_activeThemeId, DefaultThemeId, StringComparison.Ordinal);
 
