@@ -109,12 +109,16 @@
 - `AddDropdown()` - Create dropdown with options
 - `GetUIElementValue()` - Get element value
 - `SetUIElementValue()` - Set element value
-- Python: `panel.add_slider()`, `panel.add_text_input()`, `panel.add_dropdown()`, `panel.get_value()`, `panel.set_value()`
+- Python: `panel.add_slider()`, `panel.add_text_input()`, `panel.add_dropdown()`, `panel.add_toggle()` (rpc **1.14**), `panel.get_value()`, `panel.set_value()`
 
 **Still Missing (Optional):**
-- Toggles/checkboxes (could be added)
 - Value change callbacks to Python (currently logged only)
-- App-wide theme bindings and preset add-ons (the token/API foundation currently styles add-on-owned UI)
+- Theme preset catalog / patch apply / surface schema — completed at rpc 1.11
+- Core chrome theme bindings (ribbon / Paint / Manager / Settings / status / viewport ribbons) — completed at rpc 1.12 (`docs/specs/addon-theme-api-p2/`)
+- Typed `font_scale` / `spacing_scale` + schema — completed at rpc 1.13 (`docs/specs/addon-theme-api-p3/`)
+- Phase A–C + B4–B8 — through glass-lite `panel_alpha`, icon pack v1, constrained chrome show/hide (theme **1.17**, addon **1.15**)
+- Theme **1.18** — CommandRibbon `ribbon_icon_only` (Nomad icon-only strip; reversible via reset)
+- Remaining hard non-goals: true blur shaders · custom icon upload · create/destroy built-in widgets · theme file export/import
 
 ### 14. ControlNet Operations ✅ COMPLETED
 **Status:** Full operations implemented  
@@ -195,7 +199,6 @@
 - ✅ Add Get/Set value operations
 
 **Future Enhancements:**
-- Toggles/checkboxes
 - Value change callbacks to Python
-- App-wide theme bindings and preset add-ons
+- Optional B4 shape/icon theme tokens
 - Horizontal layout groups

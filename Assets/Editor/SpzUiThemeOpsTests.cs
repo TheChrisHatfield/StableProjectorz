@@ -11,8 +11,10 @@ public sealed class SpzUiThemeOpsTests {
 	[SetUp]
 	public void SetUp() {
 		SpzUiThemeOps.ResetTheme();
+		SpzUiThemeOps.ClearPersistedTheme();
 		Cleanup("p1-preset");
 		Cleanup("p1-experiment");
+		Cleanup("nomad-inspired");
 		for (int i = 0; i < 33; i++)
 			Cleanup($"p1-cap-{i:00}");
 	}
@@ -153,11 +155,13 @@ public sealed class SpzUiThemeOpsTests {
 	[Test]
 	public void MetadataReportsP3TypedSchemaAndSurfaces() {
 		var result = SpzUiThemeOps.GetThemeResult();
-		Assert.That((string)result["addon_rpc_theme_version"], Is.EqualTo("1.13"));
+		Assert.That((string)result["addon_rpc_theme_version"], Is.EqualTo("1.18"));
 		Assert.That((string)result["ui_scale_source"], Is.EqualTo("chrome"));
+		Assert.That((string)result["persistence"], Is.EqualTo("player_prefs"));
+		Assert.That(result["line_icons"].ToString(), Does.Contain("Brush"));
 		var schema = (JArray)result["token_schema"];
 		Assert.That(schema, Is.Not.Null);
-		bool sawFont = false, sawSpacing = false, sawAccent = false;
+		bool sawFont = false, sawSpacing = false, sawAccent = false, sawCorner = false, sawIconTint = false, sawPanelWidth = false, sawPanelAlpha = false, sawRibbonIconOnly = false;
 		foreach (var entry in schema) {
 			Assert.That(entry["name"], Is.Not.Null);
 			Assert.That(entry["type"], Is.Not.Null);
@@ -165,6 +169,10 @@ public sealed class SpzUiThemeOpsTests {
 			string type = (string)entry["type"];
 			if (name == "accent") {
 				sawAccent = true;
+				Assert.That(type, Is.EqualTo("color"));
+			}
+			if (name == "icon_tint") {
+				sawIconTint = true;
 				Assert.That(type, Is.EqualTo("color"));
 			}
 			if (name == "font_scale") {
@@ -177,14 +185,334 @@ public sealed class SpzUiThemeOpsTests {
 				sawSpacing = true;
 				Assert.That(type, Is.EqualTo("float"));
 			}
+			if (name == "corner_radius") {
+				sawCorner = true;
+				Assert.That(type, Is.EqualTo("float"));
+				Assert.That((float)entry["min"], Is.EqualTo(0f));
+				Assert.That((float)entry["max"], Is.EqualTo(12f));
+			}
+			if (name == "panel_width") {
+				sawPanelWidth = true;
+				Assert.That(type, Is.EqualTo("float"));
+				Assert.That((float)entry["min"], Is.EqualTo(180f));
+				Assert.That((float)entry["max"], Is.EqualTo(400f));
+			}
+			if (name == "panel_alpha") {
+				sawPanelAlpha = true;
+				Assert.That(type, Is.EqualTo("float"));
+				Assert.That((float)entry["min"], Is.EqualTo(0.5f));
+				Assert.That((float)entry["max"], Is.EqualTo(1f));
+			}
+			if (name == "ribbon_icon_only") {
+				sawRibbonIconOnly = true;
+				Assert.That(type, Is.EqualTo("float"));
+				Assert.That((float)entry["min"], Is.EqualTo(0f));
+				Assert.That((float)entry["max"], Is.EqualTo(1f));
+			}
 		}
-		Assert.That(sawAccent && sawFont && sawSpacing, Is.True);
+		Assert.That(sawAccent && sawFont && sawSpacing && sawCorner && sawIconTint && sawPanelWidth && sawPanelAlpha && sawRibbonIconOnly, Is.True);
 		Assert.That(result["reserved_token_names"].ToString(), Does.Not.Contain("danger"));
 		var surfaces = (JArray)result["surfaces"];
-		Assert.That(surfaces.Count, Is.GreaterThanOrEqualTo(7));
-		foreach (var surface in surfaces)
+		Assert.That(surfaces.Count, Is.GreaterThanOrEqualTo(16));
+		bool sawLists = false, sawMultiview = false, sawWorkflowOpts = false, sawContextMenus = false, sawChromeTargets = false;
+		foreach (var surface in surfaces) {
 			Assert.That((bool)surface["bound"], Is.True, surface["id"]?.ToString());
+			if ((string)surface["id"] == "right_panel_lists")
+				sawLists = true;
+			if ((string)surface["id"] == "multiview_pins")
+				sawMultiview = true;
+			if ((string)surface["id"] == "workflow_options")
+				sawWorkflowOpts = true;
+			if ((string)surface["id"] == "context_menus")
+				sawContextMenus = true;
+			if ((string)surface["id"] == "chrome_targets")
+				sawChromeTargets = true;
+		}
+		Assert.That(sawLists && sawMultiview && sawWorkflowOpts && sawContextMenus && sawChromeTargets, Is.True);
 		Assert.That(result["composes_with"].ToString(), Does.Contain("spz.cmd.set_ui_scale"));
+		Assert.That(result["composes_with"].ToString(), Does.Contain("spz.cmd.set_skybox_color"));
+	}
+
+	[Test]
+	public void ApplyTmpScaledCapturedTracksFontScaleWithoutCompounding() {
+		var go = new GameObject("PhaseA_TmpScale");
+		try {
+			var tmp = go.AddComponent<TextMeshProUGUI>();
+			tmp.fontSize = 20f;
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				new JObject { ["font_scale"] = 1.25 },
+				"replace",
+				out string error), Is.True, error);
+			SpzUiThemeOps.ApplyTmpScaledCaptured(tmp, Color.white, 20f);
+			Assert.That(tmp.fontSize, Is.EqualTo(25f).Within(0.05f));
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				new JObject { ["font_scale"] = 1.5 },
+				"patch",
+				out error), Is.True, error);
+			SpzUiThemeOps.ApplyTmpScaledCaptured(tmp, Color.white, 20f);
+			Assert.That(tmp.fontSize, Is.EqualTo(30f).Within(0.05f));
+		} finally {
+			UnityEngine.Object.DestroyImmediate(go);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
+	public void ApplyScaledLayoutGroupTracksSpacingScale() {
+		var go = new GameObject("PhaseA_LayoutScale", typeof(RectTransform));
+		try {
+			var vlg = go.AddComponent<VerticalLayoutGroup>();
+			vlg.spacing = 8f;
+			vlg.padding = new RectOffset(4, 4, 4, 4);
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				new JObject { ["spacing_scale"] = 1.5 },
+				"replace",
+				out string error), Is.True, error);
+			SpzUiThemeOps.ApplyScaledLayoutGroup(vlg);
+			Assert.That(vlg.spacing, Is.EqualTo(12f).Within(0.05f));
+			Assert.That(vlg.padding.left, Is.EqualTo(6));
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				new JObject { ["spacing_scale"] = 1.0 },
+				"patch",
+				out error), Is.True, error);
+			SpzUiThemeOps.ApplyScaledLayoutGroup(vlg);
+			Assert.That(vlg.spacing, Is.EqualTo(8f).Within(0.05f));
+			Assert.That(vlg.padding.left, Is.EqualTo(4));
+		} finally {
+			UnityEngine.Object.DestroyImmediate(go);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
+	public void PersistAndRestoreActiveThemeAcrossReset() {
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-experiment",
+			Tokens(("accent", "#F2CA50"), ("font_scale", "1.2")),
+			"replace",
+			out string error), Is.True, error);
+		Assert.That((string)SpzUiThemeOps.GetThemeResult()["persisted_theme_id"], Is.EqualTo("p1-experiment"));
+
+		var tokensBefore = SpzUiThemeOps.GetThemeResult()["tokens"].DeepClone();
+		string id = UnityEngine.PlayerPrefs.GetString("SpzUiTheme.ActiveThemeId", "");
+		string json = UnityEngine.PlayerPrefs.GetString("SpzUiTheme.ActiveTokensJson", "");
+		Assert.That(id, Is.EqualTo("p1-experiment"));
+		Assert.That(json, Is.Not.Empty);
+
+		// ResetTheme clears prefs; rewrite them to simulate cold start with saved prefs.
+		SpzUiThemeOps.ResetTheme();
+		UnityEngine.PlayerPrefs.SetString("SpzUiTheme.ActiveThemeId", id);
+		UnityEngine.PlayerPrefs.SetString("SpzUiTheme.ActiveTokensJson", json);
+		UnityEngine.PlayerPrefs.Save();
+
+		Assert.That(SpzUiThemeOps.TryRestorePersistedTheme(out string detail), Is.True, detail);
+		Assert.That(SpzUiThemeOps.ActiveThemeId, Is.EqualTo("p1-experiment"));
+		Assert.That((string)SpzUiThemeOps.GetThemeResult()["tokens"]["accent"], Is.EqualTo("#F2CA50FF"));
+		Assert.That((float)SpzUiThemeOps.GetThemeResult()["tokens"]["font_scale"], Is.EqualTo(1.2f).Within(0.001f));
+		Assert.That(tokensBefore.ToString(), Is.EqualTo(SpzUiThemeOps.GetThemeResult()["tokens"].ToString()));
+	}
+
+	[Test]
+	public void ResetThemeClearsPersistedTheme() {
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-experiment",
+			Tokens(("accent", "#112233")),
+			"replace",
+			out string error), Is.True, error);
+		SpzUiThemeOps.ResetTheme();
+		Assert.That((string)SpzUiThemeOps.GetThemeResult()["persisted_theme_id"], Is.EqualTo(""));
+		Assert.That(SpzUiThemeOps.TryRestorePersistedTheme(out _), Is.False);
+	}
+
+	[Test]
+	public void CornerRadiusFailClosedAndApplyRoundedSprite() {
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-experiment",
+			new JObject { ["corner_radius"] = 20 },
+			"replace",
+			out string error), Is.False);
+		Assert.That(error, Does.Contain("between").IgnoreCase);
+
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-experiment",
+			new JObject { ["corner_radius"] = 8, ["icon_tint"] = "#AABBCC" },
+			"replace",
+			out error), Is.True, error);
+		Assert.That((float)SpzUiThemeOps.GetThemeResult()["tokens"]["corner_radius"], Is.EqualTo(8f).Within(0.001f));
+		Assert.That((string)SpzUiThemeOps.GetThemeResult()["tokens"]["icon_tint"], Is.EqualTo("#AABBCCFF"));
+
+		var a = UiRuntimeSprites.GetRoundedRectSliced(4);
+		var b = UiRuntimeSprites.GetRoundedRectSliced(8);
+		Assert.That(a, Is.Not.Null);
+		Assert.That(b, Is.Not.Null);
+		Assert.That(ReferenceEquals(a, b), Is.False);
+		Assert.That(UiRuntimeSprites.IsCachedRoundedRect(a), Is.True);
+
+		var go = new GameObject("PhaseB4_RoundedBtn");
+		try {
+			var img = go.AddComponent<Image>();
+			SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
+			Assert.That(img.type, Is.EqualTo(Image.Type.Sliced));
+			Assert.That(ReferenceEquals(img.sprite, b), Is.True);
+			Assert.That(go.GetComponent<SpzUiThemeRoundedControl>(), Is.Not.Null);
+
+			var iconGo = new GameObject("LineIcon");
+			iconGo.transform.SetParent(go.transform, false);
+			var icon = iconGo.AddComponent<Image>();
+			icon.color = Color.white;
+			SpzUiThemeOps.ApplyToAddonUiRoot(go);
+			Assert.That(icon.color, Is.EqualTo(SpzUiThemeOps.Active.iconTint));
+		} finally {
+			UnityEngine.Object.DestroyImmediate(go);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
+	public void PanelWidthFailClosedAndAppliesLayoutElement() {
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-experiment",
+			new JObject { ["panel_width"] = 50 },
+			"replace",
+			out string error), Is.False);
+		Assert.That(error, Does.Contain("between").IgnoreCase);
+
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-experiment",
+			new JObject { ["panel_width"] = 280 },
+			"replace",
+			out error), Is.True, error);
+		var go = new GameObject("PhaseB7_Width");
+		try {
+			var le = go.AddComponent<LayoutElement>();
+			le.preferredWidth = 220f;
+			le.minWidth = 100f;
+			SpzUiThemeOps.ApplyPanelWidth(le);
+			Assert.That(le.preferredWidth, Is.EqualTo(280f).Within(0.01f));
+		} finally {
+			UnityEngine.Object.DestroyImmediate(go);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
+	public void PanelAlphaFailClosedAndResolveShellMultipliesAlpha() {
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-experiment",
+			new JObject { ["panel_alpha"] = 0.2 },
+			"replace",
+			out string error), Is.False);
+		Assert.That(error, Does.Contain("between").IgnoreCase);
+
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-experiment",
+			Tokens(("panel_bg", "#112233FF"), ("panel_alpha", "0.5")),
+			"replace",
+			out error), Is.True, error);
+		Color shell = SpzUiThemeOps.ResolvePanelShellColor();
+		Assert.That(shell.a, Is.EqualTo(0.5f).Within(0.01f));
+		Assert.That(SpzUiThemeOps.TryParseStudioLineIcon("Brush", out StudioLineIcon icon, out error), Is.True, error);
+		Assert.That(icon, Is.EqualTo(StudioLineIcon.Brush));
+		Assert.That(SpzUiThemeOps.ListLineIconNames().ToString(), Does.Contain("Mesh"));
+		Assert.That(SpzUiChromeOps.ListUiTargetIds(), Does.Contain("left_ribbon"));
+		Assert.That(SpzUiChromeOps.ListUiTargetIds(), Does.Contain("workflow_options"));
+	}
+
+	[Test]
+	public void RibbonIconOnlyFailClosedAndActivatesAtHalf() {
+		Assert.That(SpzUiThemeOps.RibbonIconOnlyActive, Is.False);
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-experiment",
+			new JObject { ["ribbon_icon_only"] = 1.5 },
+			"replace",
+			out string error), Is.False);
+		Assert.That(error, Does.Contain("between").IgnoreCase);
+		Assert.That(SpzUiThemeOps.RibbonIconOnlyActive, Is.False);
+
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-experiment",
+			new JObject { ["ribbon_icon_only"] = true },
+			"replace",
+			out error), Is.True, error);
+		Assert.That(SpzUiThemeOps.RibbonIconOnlyActive, Is.True);
+		Assert.That(SpzUiThemeOps.Active.ribbonIconOnly, Is.EqualTo(1f).Within(0.001f));
+
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-experiment",
+			new JObject { ["ribbon_icon_only"] = 0.5 },
+			"replace",
+			out error), Is.True, error);
+		Assert.That(SpzUiThemeOps.RibbonIconOnlyActive, Is.True);
+
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-experiment",
+			new JObject { ["ribbon_icon_only"] = 0.49 },
+			"replace",
+			out error), Is.True, error);
+		Assert.That(SpzUiThemeOps.RibbonIconOnlyActive, Is.False);
+
+		SpzUiThemeOps.ResetTheme();
+		Assert.That(SpzUiThemeOps.RibbonIconOnlyActive, Is.False);
+	}
+
+	[Test]
+	public void RibbonIconOnlyOffDoesNotStayLatchedAfterReplaceWithoutToken() {
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-experiment",
+			new JObject { ["ribbon_icon_only"] = 1, ["accent"] = "#112233FF" },
+			"replace",
+			out string error), Is.True, error);
+		Assert.That(SpzUiThemeOps.RibbonIconOnlyActive, Is.True);
+
+		// Form A replace from defaults without ribbon_icon_only must clear the gate (not orphan it).
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-experiment",
+			new JObject { ["accent"] = "#AABBCCFF" },
+			"replace",
+			out error), Is.True, error);
+		Assert.That(SpzUiThemeOps.RibbonIconOnlyActive, Is.False);
+		Assert.That(SpzUiThemeOps.Active.ribbonIconOnly, Is.EqualTo(0f).Within(0.001f));
+	}
+
+	[Test]
+	public void NomadInspiredPresetRegistersScalesAndPatchesWithoutWipingAccent() {
+		var tokens = new JObject {
+			["panel_bg"] = "#1E1F23F2",
+			["control_bg"] = "#292A2EFF",
+			["field_bg"] = "#121317FF",
+			["accent"] = "#F2CA50FF",
+			["text_primary"] = "#E3E2E7FF",
+			["text_muted"] = "#D0C5AFFF",
+			["handle"] = "#C8C5CBFF",
+			["success"] = "#7BC96FFF",
+			["danger"] = "#FFB4ABFF",
+			["border"] = "#99907C66",
+			["tab_active"] = "#343539FF",
+			["selection"] = "#F2CA5033",
+			["font_scale"] = 1.05,
+			["spacing_scale"] = 1.0,
+		};
+		Assert.That(SpzUiThemeOps.TryRegisterTheme(
+			"nomad-inspired", "Nomad inspired", tokens, "NomadThemeSPZ", out string error), Is.True, error);
+		Assert.That(SpzUiThemeOps.TryApplyTheme("nomad-inspired", null, "replace", out error), Is.True, error);
+		var active = SpzUiThemeOps.GetThemeResult()["tokens"];
+		Assert.That((string)active["accent"], Is.EqualTo("#F2CA50FF"));
+		Assert.That((float)active["font_scale"], Is.EqualTo(1.05f).Within(0.001f));
+		Assert.That((float)active["spacing_scale"], Is.EqualTo(1.0f).Within(0.001f));
+
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"nomad-inspired",
+			new JObject { ["font_scale"] = 1.2, ["spacing_scale"] = 1.1 },
+			"patch",
+			out error), Is.True, error);
+		var patched = SpzUiThemeOps.GetThemeResult()["tokens"];
+		Assert.That((string)patched["accent"], Is.EqualTo("#F2CA50FF"));
+		Assert.That((float)patched["font_scale"], Is.EqualTo(1.2f).Within(0.001f));
+		Assert.That((float)patched["spacing_scale"], Is.EqualTo(1.1f).Within(0.001f));
 	}
 
 	[Test]
