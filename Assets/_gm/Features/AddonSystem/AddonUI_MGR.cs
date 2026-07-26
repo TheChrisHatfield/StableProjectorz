@@ -31,9 +31,20 @@ namespace spz {
 		const string NomadThemeAddonId = "NomadThemeSPZ";
 		const string NomadThemeId = "nomad-inspired";
 		const string NomadThemeLabel = "Nomad inspired";
+		const float NomadDefaultFontScale = 1.05f;
+		const float NomadDefaultSpacingScale = 1.0f;
+		/// <summary>Charcoal skybox RGB from Nomad panel_bg / field_bg.</summary>
+		static readonly Color NomadSkyboxTop = new Color(0x1E / 255f, 0x1F / 255f, 0x23 / 255f, 1f);
+		static readonly Color NomadSkyboxBottom = new Color(0x12 / 255f, 0x13 / 255f, 0x17 / 255f, 1f);
 
-		/// <summary>Pro-Studio Monolith palette from the supplied Nomad UI replication design.</summary>
-		static JObject BuildNomadThemeTokens() {
+		string _nomadFontScaleSliderId;
+		string _nomadSpacingScaleSliderId;
+		bool _nomadSkyboxCaptured;
+		Color _nomadSkyboxTopBefore = Color.clear;
+		Color _nomadSkyboxBottomBefore = Color.clear;
+
+		/// <summary>Pro-Studio Monolith palette from the supplied Nomad UI replication design (rpc 1.13 scales).</summary>
+		static JObject BuildNomadThemeTokens(float fontScale = NomadDefaultFontScale, float spacingScale = NomadDefaultSpacingScale) {
 			return new JObject {
 				["panel_bg"] = "#1E1F23F2",
 				["control_bg"] = "#292A2EFF",
@@ -47,6 +58,8 @@ namespace spz {
 				["border"] = "#99907C66",
 				["tab_active"] = "#343539FF",
 				["selection"] = "#F2CA5033",
+				["font_scale"] = fontScale,
+				["spacing_scale"] = spacingScale,
 			};
 		}
 		
@@ -81,6 +94,20 @@ namespace spz {
 			// Legacy mid-screen AddonPanelsRoot (center anchors) must never stay visible.
 			QuarantineLegacyMidScreenFallbackRoot();
 			EnsureRibbonMigrateCoroutine();
+			StartCoroutine(CoRestorePersistedThemeNextFrame());
+		}
+
+		System.Collections.IEnumerator CoRestorePersistedThemeNextFrame() {
+			// Let other ThemeChanged subscribers finish Awake/Start first.
+			yield return null;
+			if (!SpzUiThemeOps.TryRestorePersistedTheme(out string detail)) {
+				if (!string.IsNullOrEmpty(detail) && detail.IndexOf("no persisted", StringComparison.OrdinalIgnoreCase) < 0)
+					UnityEngine.Debug.LogWarning($"[AddonUI_MGR] Theme restore skipped: {detail}");
+				yield break;
+			}
+			UnityEngine.Debug.Log($"[AddonUI_MGR] Theme restore: {detail}");
+			if (string.Equals(SpzUiThemeOps.ActiveThemeId, NomadThemeId, StringComparison.Ordinal))
+				ComposeNomadSkyboxNative();
 		}
 
 		void OnDestroy() {
@@ -605,6 +632,10 @@ namespace spz {
 			UnityEngine.Debug.Log("[AddonUI_MGR] Seeding native Nomad Theme panel (Python create_panel missing / HTTP :5557 down).");
 			AddButton(NomadThemeAddonId, panelId, "Apply Pro-Studio Nomad palette", "apply_nomad_palette");
 			AddButton(NomadThemeAddonId, panelId, "Restore StableProjectorz palette", "restore_stableprojectorz_palette");
+			_nomadFontScaleSliderId = AddSlider(NomadThemeAddonId, panelId, "Font scale", 0.75f, 1.5f, NomadDefaultFontScale);
+			_nomadSpacingScaleSliderId = AddSlider(NomadThemeAddonId, panelId, "Spacing scale", 0.75f, 1.5f, NomadDefaultSpacingScale);
+			AddButton(NomadThemeAddonId, panelId, "Apply Scales", "apply_nomad_scales");
+			AddButton(NomadThemeAddonId, panelId, "Refresh Theme Status", "refresh_nomad_theme_status");
 		}
 
 		bool HasLiveAddonPanelWithWidgets(string addonId) {
@@ -623,7 +654,8 @@ namespace spz {
 					if (ch.name.StartsWith("Button_", StringComparison.Ordinal)
 					    || ch.name.StartsWith("TextInput_", StringComparison.Ordinal)
 					    || ch.name.StartsWith("Slider_", StringComparison.Ordinal)
-					    || ch.name.StartsWith("Dropdown_", StringComparison.Ordinal))
+					    || ch.name.StartsWith("Dropdown_", StringComparison.Ordinal)
+					    || ch.name.StartsWith("Toggle_", StringComparison.Ordinal))
 						controls++;
 				}
 				if (controls > 0) return true;
@@ -721,6 +753,87 @@ namespace spz {
 			
 			return buttonObj.GetInstanceID().ToString();
 		}
+
+		/// <summary>
+		/// Adds a checkbox-style toggle to a panel (rpc 1.14+). Value is bool via get/set_value.
+		/// Optional <paramref name="callbackName"/> is invoked when the user toggles (same channel as buttons).
+		/// </summary>
+		public string AddToggle(string addonId, string panelId, string label, bool defaultOn, string callbackName = null) {
+			GameObject panelObj = FindUIElement(panelId);
+			if (panelObj == null) {
+				UnityEngine.Debug.LogError($"[AddonUI_MGR] Panel {panelId} not found");
+				return null;
+			}
+
+			GameObject toggleObj = new GameObject($"Toggle_{label}");
+			toggleObj.transform.SetParent(panelObj.transform, false);
+			var toggleRect = toggleObj.AddComponent<RectTransform>();
+			toggleRect.sizeDelta = new Vector2(220, 32);
+			var layoutElement = toggleObj.AddComponent<LayoutElement>();
+			layoutElement.preferredHeight = 32f;
+			layoutElement.minHeight = 28f;
+			layoutElement.preferredWidth = 220f;
+			layoutElement.flexibleWidth = 1f;
+
+			var bg = toggleObj.AddComponent<Image>();
+			bg.sprite = UiRuntimeSprites.RoundedRectSliced;
+			bg.type = Image.Type.Sliced;
+			bg.color = new Color(0.3f, 0.3f, 0.3f, 1f);
+			bg.raycastTarget = true;
+
+			var toggle = toggleObj.AddComponent<Toggle>();
+			toggle.targetGraphic = bg;
+			toggle.isOn = defaultOn;
+
+			var checkGo = new GameObject("Checkmark");
+			checkGo.transform.SetParent(toggleObj.transform, false);
+			var checkRt = checkGo.AddComponent<RectTransform>();
+			checkRt.anchorMin = new Vector2(0f, 0.2f);
+			checkRt.anchorMax = new Vector2(0.18f, 0.8f);
+			checkRt.offsetMin = Vector2.zero;
+			checkRt.offsetMax = Vector2.zero;
+			var checkImg = checkGo.AddComponent<Image>();
+			checkImg.sprite = UiRuntimeSprites.RoundedRectSliced;
+			checkImg.type = Image.Type.Sliced;
+			checkImg.color = new Color(0.3f, 0.6f, 1f, 1f);
+			checkImg.raycastTarget = false;
+			toggle.graphic = checkImg;
+
+			var labelGo = new GameObject("Label");
+			labelGo.transform.SetParent(toggleObj.transform, false);
+			var labelRt = labelGo.AddComponent<RectTransform>();
+			labelRt.anchorMin = new Vector2(0.2f, 0f);
+			labelRt.anchorMax = new Vector2(1f, 1f);
+			labelRt.offsetMin = Vector2.zero;
+			labelRt.offsetMax = Vector2.zero;
+			var labelTmp = labelGo.AddComponent<TextMeshProUGUI>();
+			labelTmp.text = label ?? "Toggle";
+			labelTmp.fontSize = 14;
+			labelTmp.alignment = TextAlignmentOptions.Left;
+			labelTmp.color = Color.white;
+			labelTmp.raycastTarget = false;
+			ApplyRuntimeTmpFont(labelTmp);
+
+			string elementId = toggleObj.GetInstanceID().ToString();
+			_uiElementValues[elementId] = defaultOn;
+			_uiElementComponents[elementId] = toggle;
+			toggle.onValueChanged.AddListener(isOn => {
+				_uiElementValues[elementId] = isOn;
+				SendValueChangeToPython(addonId, elementId, "toggle", isOn);
+				if (!string.IsNullOrEmpty(callbackName)) {
+					string callbackId = $"{addonId}_{callbackName}";
+					if (_buttonCallbacks.ContainsKey(callbackId))
+						_buttonCallbacks[callbackId]?.Invoke();
+					else
+						SendCallbackToPython(addonId, callbackName);
+				}
+			});
+
+			if (_addonUIElements.ContainsKey(addonId))
+				_addonUIElements[addonId].Add(toggleObj);
+			SpzUiThemeOps.ApplyToAddonUiRoot(toggleObj);
+			return elementId;
+		}
 		
 		/// <summary>
 		/// SPZ GO Import/Export must work when FastAPI is up but the add-on is registered in-Unity; HTTP /invoke_callback can fail
@@ -737,7 +850,7 @@ namespace spz {
 		}
 
 		/// <summary>
-		/// Nomad Theme Apply/Restore must work even when Python HTTP /invoke_callback is down or the module is not loaded.
+		/// Nomad Theme Apply/Restore/scales must work even when Python HTTP /invoke_callback is down or the module is not loaded.
 		/// Mirrors the SPZ GO in-process button pattern so ribbon clicks are not dead.
 		/// </summary>
 		void RegisterNomadThemeNativeButtonCallbackIfNeeded(string addonId, string callbackName) {
@@ -747,11 +860,71 @@ namespace spz {
 				RegisterButtonCallback(addonId, callbackName, ApplyNomadThemeNative);
 			} else if (string.Equals(callbackName, "restore_stableprojectorz_palette", StringComparison.Ordinal)) {
 				RegisterButtonCallback(addonId, callbackName, RestoreSpzThemeNative);
+			} else if (string.Equals(callbackName, "apply_nomad_scales", StringComparison.Ordinal)) {
+				RegisterButtonCallback(addonId, callbackName, ApplyNomadScalesNative);
+			} else if (string.Equals(callbackName, "refresh_nomad_theme_status", StringComparison.Ordinal)) {
+				RegisterButtonCallback(addonId, callbackName, RefreshNomadThemeStatusNative);
 			}
 		}
 
+		float ReadNomadSliderOrDefault(string elementId, float fallback) {
+			if (string.IsNullOrEmpty(elementId))
+				return fallback;
+			object raw = GetUIElementValue(elementId);
+			if (raw is float f)
+				return f;
+			if (raw is double d)
+				return (float)d;
+			if (raw != null && float.TryParse(raw.ToString(), out float parsed))
+				return parsed;
+			return fallback;
+		}
+
+		void CaptureNomadSkyboxIfNeeded() {
+			if (_nomadSkyboxCaptured)
+				return;
+			var skybox = SkyboxBackground_MGR.instance;
+			if (skybox != null) {
+				_nomadSkyboxTopBefore = skybox.GetTopColor();
+				_nomadSkyboxBottomBefore = skybox.GetBottomColor();
+			} else {
+				_nomadSkyboxTopBefore = Color.clear;
+				_nomadSkyboxBottomBefore = Color.clear;
+			}
+			_nomadSkyboxCaptured = true;
+		}
+
+		void ComposeNomadSkyboxNative() {
+			CaptureNomadSkyboxIfNeeded();
+			var fastPath = FastPath_API.instance;
+			if (fastPath == null) {
+				UnityEngine.Debug.LogWarning("[AddonUI_MGR] Nomad skybox compose skipped — FastPath_API missing.");
+				return;
+			}
+			bool okTop = fastPath.SetSkyboxColor(true, NomadSkyboxTop.r, NomadSkyboxTop.g, NomadSkyboxTop.b, NomadSkyboxTop.a);
+			bool okBot = fastPath.SetSkyboxColor(false, NomadSkyboxBottom.r, NomadSkyboxBottom.g, NomadSkyboxBottom.b, NomadSkyboxBottom.a);
+			if (!okTop || !okBot)
+				UnityEngine.Debug.LogWarning($"[AddonUI_MGR] Nomad skybox compose partial failure (top={okTop}, bottom={okBot}).");
+		}
+
+		void RestoreNomadSkyboxNative() {
+			var fastPath = FastPath_API.instance;
+			Color top = _nomadSkyboxCaptured ? _nomadSkyboxTopBefore : Color.clear;
+			Color bottom = _nomadSkyboxCaptured ? _nomadSkyboxBottomBefore : Color.clear;
+			_nomadSkyboxCaptured = false;
+			if (fastPath == null) {
+				UnityEngine.Debug.LogWarning("[AddonUI_MGR] Nomad skybox restore skipped — FastPath_API missing.");
+				return;
+			}
+			fastPath.SetSkyboxColor(true, top.r, top.g, top.b, top.a);
+			fastPath.SetSkyboxColor(false, bottom.r, bottom.g, bottom.b, bottom.a);
+		}
+
 		void ApplyNomadThemeNative() {
-			var tokens = BuildNomadThemeTokens();
+			MaybeBindNomadSlidersFromExistingPanel();
+			float fontScale = ReadNomadSliderOrDefault(_nomadFontScaleSliderId, NomadDefaultFontScale);
+			float spacingScale = ReadNomadSliderOrDefault(_nomadSpacingScaleSliderId, NomadDefaultSpacingScale);
+			var tokens = BuildNomadThemeTokens(fontScale, spacingScale);
 			if (!SpzUiThemeOps.TryRegisterTheme(NomadThemeId, NomadThemeLabel, tokens, NomadThemeAddonId, out string error)) {
 				UnityEngine.Debug.LogWarning($"[AddonUI_MGR] Nomad register_theme failed: {error}");
 				ShowAddonButtonStatus($"Nomad theme register failed: {error}", false);
@@ -762,14 +935,73 @@ namespace spz {
 				ShowAddonButtonStatus($"Nomad theme apply failed: {error}", false);
 				return;
 			}
-			UnityEngine.Debug.Log($"[AddonUI_MGR] Applied native Nomad theme '{NomadThemeId}'");
+			ComposeNomadSkyboxNative();
+			UnityEngine.Debug.Log($"[AddonUI_MGR] Applied native Nomad theme '{NomadThemeId}' (font={fontScale:F2}, spacing={spacingScale:F2}) + skybox");
 			ShowAddonButtonStatus("Pro-Studio Nomad palette applied", true);
 		}
 
 		void RestoreSpzThemeNative() {
 			SpzUiThemeOps.ResetTheme();
-			UnityEngine.Debug.Log("[AddonUI_MGR] Restored StableProjectorz default palette (native)");
+			RestoreNomadSkyboxNative();
+			UnityEngine.Debug.Log("[AddonUI_MGR] Restored StableProjectorz default palette + skybox (native)");
 			ShowAddonButtonStatus("StableProjectorz palette restored", true);
+		}
+
+		void ApplyNomadScalesNative() {
+			if (!string.Equals(SpzUiThemeOps.ActiveThemeId, NomadThemeId, StringComparison.Ordinal)) {
+				UnityEngine.Debug.LogWarning("[AddonUI_MGR] apply_nomad_scales refused — Nomad theme not active.");
+				ShowAddonButtonStatus("Apply Nomad Palette first", false);
+				return;
+			}
+			MaybeBindNomadSlidersFromExistingPanel();
+			float fontScale = ReadNomadSliderOrDefault(_nomadFontScaleSliderId, NomadDefaultFontScale);
+			float spacingScale = ReadNomadSliderOrDefault(_nomadSpacingScaleSliderId, NomadDefaultSpacingScale);
+			var patch = new JObject {
+				["font_scale"] = fontScale,
+				["spacing_scale"] = spacingScale,
+			};
+			if (!SpzUiThemeOps.TryApplyTheme(NomadThemeId, patch, "patch", out string error)) {
+				UnityEngine.Debug.LogWarning($"[AddonUI_MGR] Nomad scale patch failed: {error}");
+				ShowAddonButtonStatus($"Nomad scale patch failed: {error}", false);
+				return;
+			}
+			UnityEngine.Debug.Log($"[AddonUI_MGR] Patched Nomad scales font={fontScale:F3} spacing={spacingScale:F3}");
+			ShowAddonButtonStatus($"Scales applied ({fontScale:F2}/{spacingScale:F2})", true);
+		}
+
+		void RefreshNomadThemeStatusNative() {
+			var theme = SpzUiThemeOps.GetThemeResult();
+			var catalog = SpzUiThemeOps.ListThemesResult();
+			var surfaces = theme["surfaces"] as JArray;
+			int bound = 0;
+			int total = surfaces != null ? surfaces.Count : 0;
+			if (surfaces != null) {
+				foreach (var s in surfaces) {
+					if (s is JObject jo && jo["bound"] != null && jo["bound"].Type == JTokenType.Boolean && (bool)jo["bound"])
+						bound++;
+				}
+			}
+			string msg =
+				$"theme={theme["theme_id"]} bound={bound}/{total} registered={catalog["registered_count"]}";
+			UnityEngine.Debug.Log($"[AddonUI_MGR] Nomad theme status: {msg}");
+			ShowAddonButtonStatus(msg, true);
+		}
+
+		/// <summary>
+		/// When Python created the panel first, native apply still needs slider instance ids.
+		/// </summary>
+		void MaybeBindNomadSlidersFromExistingPanel() {
+			if (!string.IsNullOrEmpty(_nomadFontScaleSliderId) && !string.IsNullOrEmpty(_nomadSpacingScaleSliderId))
+				return;
+			if (!_addonUIElements.TryGetValue(NomadThemeAddonId, out var list) || list == null)
+				return;
+			foreach (var go in list) {
+				if (go == null) continue;
+				if (go.name.StartsWith("Slider_Font scale", StringComparison.Ordinal))
+					_nomadFontScaleSliderId = go.GetInstanceID().ToString();
+				else if (go.name.StartsWith("Slider_Spacing scale", StringComparison.Ordinal))
+					_nomadSpacingScaleSliderId = go.GetInstanceID().ToString();
+			}
 		}
 
 		static void ShowAddonButtonStatus(string message, bool ok) {
@@ -850,11 +1082,35 @@ namespace spz {
 				bool ok = fp.Import3DModelFromFile(path);
 				SpzGoStatusLine(ok ? "Import OK" : "Import failed (see log)", ok);
 				return ok;
-			} else {
-				bool ok = fp.Export3DWithTexturesToPath(path);
-				SpzGoStatusLine(ok ? "Export OK" : "Export failed (save project, valid path?)", ok);
-				return ok;
 			}
+			// Mesh write is sync; albedo/AO encode continues under Save_MGR._isSaving.
+			// Returning true here only means "started" — do not fall back to Python mid-write.
+			bool started = fp.Export3DWithTexturesToPath(path);
+			if (!started) {
+				SpzGoStatusLine("Export failed (valid path / API ready?)", false);
+				return false;
+			}
+			StartCoroutine(CoSpzGoFinishExportWhenSaveIdle());
+			return true;
+		}
+
+		/// <summary>
+		/// After native headless export starts, wait for texture pipeline before claiming success
+		/// (same contract as deferred TCP <c>export_3d_with_textures_to_path</c>).
+		/// </summary>
+		IEnumerator CoSpzGoFinishExportWhenSaveIdle() {
+			SpzGoStatusLine("Export: writing textures…", true);
+			const float timeoutSec = 120f;
+			float elapsed = 0f;
+			var sm = Save_MGR.instance;
+			while (sm != null && sm._isSaving && elapsed < timeoutSec) {
+				elapsed += Time.unscaledDeltaTime;
+				yield return null;
+			}
+			bool ok = sm == null || !sm._isSaving;
+			if (!ok)
+				UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO native export: texture write still in progress after timeout.");
+			SpzGoStatusLine(ok ? "Export OK" : "Export failed (texture write timeout)", ok);
 		}
 		
 		void SpzGoStatusLine(string text, bool ok) {
@@ -1036,6 +1292,13 @@ namespace spz {
 				_addonUIElements[addonId].Add(sliderObj);
 			}
 			SpzUiThemeOps.ApplyToAddonUiRoot(sliderObj);
+
+			if (string.Equals(addonId, NomadThemeAddonId, StringComparison.Ordinal)) {
+				if (string.Equals(label, "Font scale", StringComparison.Ordinal))
+					_nomadFontScaleSliderId = elementId;
+				else if (string.Equals(label, "Spacing scale", StringComparison.Ordinal))
+					_nomadSpacingScaleSliderId = elementId;
+			}
 			
 			return elementId;
 		}
@@ -1330,6 +1593,19 @@ namespace spz {
 					dropdown.value = intValue;
 					_uiElementValues[elementId] = dropdown.value;
 					return true;
+				} else if (component is Toggle toggle) {
+					bool on;
+					if (value is bool b)
+						on = b;
+					else if (value is int i)
+						on = i != 0;
+					else if (!bool.TryParse(value.ToString(), out on)) {
+						UnityEngine.Debug.LogWarning($"[AddonUI_MGR] Cannot set non-bool value to toggle: {value.GetType()}");
+						return false;
+					}
+					toggle.isOn = on;
+					_uiElementValues[elementId] = toggle.isOn;
+					return true;
 				}
 			} catch (Exception e) {
 				UnityEngine.Debug.LogError($"[AddonUI_MGR] Error setting UI element value: {e.Message}");
@@ -1401,9 +1677,16 @@ namespace spz {
 		void CleanupNomadThemeOwnershipIfNeeded(string addonId) {
 			if (!string.Equals(addonId, NomadThemeAddonId, StringComparison.Ordinal))
 				return;
-			if (string.Equals(SpzUiThemeOps.ActiveThemeId, NomadThemeId, StringComparison.Ordinal))
+			if (string.Equals(SpzUiThemeOps.ActiveThemeId, NomadThemeId, StringComparison.Ordinal)) {
 				SpzUiThemeOps.ResetTheme();
+				RestoreNomadSkyboxNative();
+			} else if (_nomadSkyboxCaptured) {
+				// Theme already reset elsewhere; still undo compose if we had captured.
+				RestoreNomadSkyboxNative();
+			}
 			SpzUiThemeOps.TryUnregisterTheme(NomadThemeId, out _);
+			_nomadFontScaleSliderId = null;
+			_nomadSpacingScaleSliderId = null;
 		}
 
 		/// <summary>

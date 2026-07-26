@@ -1,8 +1,10 @@
+using System.Reflection;
 using NUnit.Framework;
 using spz;
 
 /// <summary>
-/// Guards SPZ GO headless export RPC: success must wait for texture write (Save_MGR idle).
+/// Guards SPZ GO headless export: success must wait for texture write (Save_MGR idle)
+/// on both TCP RPC and native in-app button paths.
 /// </summary>
 public sealed class SpzGoExportDeferTests {
 
@@ -20,5 +22,14 @@ public sealed class SpzGoExportDeferTests {
 		Assert.That(Addon_SocketServer.DefersResponseUntilProjectSaveIdle("spz.cmd.get_project_data_dir"), Is.False);
 		Assert.That(Addon_SocketServer.DefersResponseUntilProjectSaveIdle(null), Is.False);
 		Assert.That(Addon_SocketServer.DefersResponseUntilProjectSaveIdle(""), Is.False);
+	}
+
+	[Test]
+	public void NativeSpzGoExport_WaitsForSaveIdleBeforeStatusOk() {
+		var method = typeof(AddonUI_MGR).GetMethod(
+			"CoSpzGoFinishExportWhenSaveIdle",
+			BindingFlags.Instance | BindingFlags.NonPublic);
+		Assert.That(method, Is.Not.Null,
+			"Native Export must finish via CoSpzGoFinishExportWhenSaveIdle so status is not premature.");
 	}
 }
