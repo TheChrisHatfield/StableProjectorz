@@ -542,6 +542,7 @@ namespace spz {
 		/// <summary>
 		/// Assigns the active <c>corner_radius</c> 9-slice to eligible control Images only
 		/// (tagged or already using a runtime rounded sprite). Never retargets RawImage art.
+		/// Snapshots the authored sprite once so <see cref="RestoreRoundedControlSpritesUnder"/> can unwind.
 		/// </summary>
 		public static void ApplyRoundedControlSprite(Image image, bool markEligible = false) {
 			if (image == null)
@@ -552,10 +553,35 @@ namespace spz {
 				if (!eligible)
 					return;
 				tag = image.gameObject.AddComponent<SpzUiThemeRoundedControl>();
+				tag.authoredSprite = image.sprite;
+				tag.authoredType = image.type;
+				tag.hasAuthoredSnapshot = true;
 			}
 			int radius = Mathf.RoundToInt(Mathf.Clamp(_active.cornerRadius, CornerRadiusMin, CornerRadiusMax));
 			image.sprite = UiRuntimeSprites.GetRoundedRectSliced(radius);
 			image.type = Image.Type.Sliced;
+		}
+
+		/// <summary>
+		/// Restores authored sprites replaced by <see cref="ApplyRoundedControlSprite"/> and removes tags.
+		/// Call when leaving non-builtin theme chrome (e.g. Settings / Addon Manager restore paths).
+		/// </summary>
+		public static void RestoreRoundedControlSpritesUnder(Transform root) {
+			if (root == null) return;
+			var tags = root.GetComponentsInChildren<SpzUiThemeRoundedControl>(true);
+			for (int i = 0; i < tags.Length; i++) {
+				var tag = tags[i];
+				if (tag == null) continue;
+				var img = tag.GetComponent<Image>();
+				if (img != null && tag.hasAuthoredSnapshot) {
+					img.sprite = tag.authoredSprite;
+					img.type = tag.authoredType;
+				}
+				if (Application.isPlaying)
+					UnityEngine.Object.Destroy(tag);
+				else
+					UnityEngine.Object.DestroyImmediate(tag);
+			}
 		}
 
 		/// <summary>Panel shell color with glass-lite <c>panel_alpha</c> multiplied onto <c>panel_bg</c> alpha.</summary>
@@ -1252,5 +1278,17 @@ namespace spz {
 	}
 
 	/// <summary>Marks an Image as eligible for theme <c>corner_radius</c> 9-slice updates.</summary>
-	public sealed class SpzUiThemeRoundedControl : MonoBehaviour { }
+	public sealed class SpzUiThemeRoundedControl : MonoBehaviour {
+		public Sprite authoredSprite;
+		public Image.Type authoredType = Image.Type.Simple;
+		public bool hasAuthoredSnapshot;
+	}
+
+	/// <summary>
+	/// On a CommandRibbon strip cell: sprite was set by <c>spz.ui.set_line_icon</c> / compose —
+	/// do not replace with auto-resolved tab glyphs on ThemeChanged.
+	/// </summary>
+	public sealed class SpzStripLineIconOverride : MonoBehaviour {
+		public StudioLineIcon Icon;
+	}
 }
