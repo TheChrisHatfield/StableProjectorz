@@ -100,12 +100,10 @@ namespace spz {
 
 	    void ApplyThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
-	            if (_options_slideOut != null) {
-	                foreach (var g in _options_slideOut.GetComponentsInChildren<Graphic>(true))
-	                    SpzUiThemeOps.RestoreAuthoredGraphic(g);
-	            }
+	            if (_options_slideOut != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_options_slideOut.transform);
 	            if (_bakeColors_button != null)
-	                SpzUiThemeOps.RestoreAuthoredGraphic(_bakeColors_button.targetGraphic);
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_bakeColors_button.transform);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
