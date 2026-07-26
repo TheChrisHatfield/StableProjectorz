@@ -508,10 +508,8 @@ namespace spz {
 
 	    void ApplyThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
-	            if (_wholePanel_canvGrp != null) {
-	                foreach (var g in _wholePanel_canvGrp.GetComponentsInChildren<Graphic>(true))
-	                    SpzUiThemeOps.RestoreAuthoredGraphic(g);
-	            }
+	            if (_wholePanel_canvGrp != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_wholePanel_canvGrp.transform);
 	            RestoreGraphic(_reThink_text);
 	            RestoreGraphic(_reThink_text_mini);
 	            RestoreGraphic(_mask_blur_text);
@@ -547,7 +545,7 @@ namespace spz {
 
 	    static void RestoreSelectable(Selectable s) {
 	        if (s != null)
-	            SpzUiThemeOps.RestoreAuthoredGraphic(s.targetGraphic);
+	            SpzUiThemeOps.RestoreBoundChromeUnder(s.transform);
 	    }
 
 	    static void ThemeTmp(TextMeshProUGUI tmp, SpzUiThemeOps.ThemeTokens t) {
