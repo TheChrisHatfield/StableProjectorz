@@ -1,0 +1,64 @@
+{
+  "by_key": {
+    "baseline-6core:8.0": {
+      "max_nodes": 2,
+      "max_stages": 3,
+      "activation_sparsity_budget": 0.2,
+      "early_exit_confidence_threshold": 0.85
+    },
+    "baseline-6core:10.0": {
+      "max_nodes": 2,
+      "max_stages": 3,
+      "activation_sparsity_budget": 0.30000000000000004,
+      "early_exit_confidence_threshold": 0.95
+    },
+    "edge-2core:10.0": {
+      "max_nodes": 4,
+      "max_stages": 3,
+      "activation_sparsity_budget": 0.2,
+      "early_exit_confidence_threshold": 0.95
+    },
+    "host-LLM1-36core:10.0": {
+      "max_nodes": 2,
+      "max_stages": 3,
+      "activation_sparsity_budget": 0.29285714285714287,
+      "early_exit_confidence_threshold": 0.95
+    },
+    "host-LLM1-36core:5.0": {
+      "max_nodes": 2,
+      "max_stages": 3,
+      "activation_sparsity_budget": 0.4,
+      "early_exit_confidence_threshold": 0.85
+    },
+    "laptop-4core:10.0": {
+      "max_nodes": 2,
+      "max_stages": 3,
+      "activation_sparsity_budget": 0.4,
+      "early_exit_confidence_threshold": 0.95
+    },
+    "laptop-4core:5.0": {
+      "max_nodes": 2,
+      "max_stages": 3,
+      "activation_sparsity_budget": 0.5,
+      "early_exit_confidence_threshold": 0.85
+    },
+    "baseline-6core:7.0": {
+      "max_nodes": 2,
+      "max_stages": 3,
+      "activation_sparsity_budget": 0.5,
+      "early_exit_confidence_threshold": 0.85
+    },
+    "baseline-6core:15.0": {
+      "max_nodes": 2,
+      "max_stages": 3,
+      "activation_sparsity_budget": 0.4,
+      "early_exit_confidence_threshold": 0.95
+    }
+  },
+  "global_defaults": {
+    "max_nodes": 4,
+    "max_stages": 3,
+    "activation_sparsity_budget": 0.0,
+    "early_exit_confidence_threshold": 0.95
+  }
+}

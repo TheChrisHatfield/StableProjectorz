@@ -1,4 +1,5 @@
 using UnityEngine;
+using spz.MlpDecimacon;
 
 namespace spz {
 
@@ -27,7 +28,6 @@ namespace spz {
 			HasLastProposal = false;
 			LastProposal = default;
 			_lastDesired = (ValuePaintBand)(-1);
-			// Allow the next band announce immediately after invalidate (neural/live toggle).
 			_lastLiveArmTime = -999f;
 		}
 
@@ -41,29 +41,33 @@ namespace spz {
 				reason = "non-finite sample";
 				return false;
 			}
+			var lavd = DecimaconProductGate.BeginLive();
+			if (!DecimaconProductGate.LastRunForward) {
+				reason = "lavd skip:" + (DecimaconProductGate.LastSkipReason ?? "ultra_lean");
+				return false;
+			}
 			EnsureAssist();
 			if (_assist == null) {
 				reason = "no assist";
 				return false;
 			}
+			var sw = DecimaconProductGate.StartTimer();
 			var proposal = _assist.ProposeFromColor(surfaceSample, default);
-			// Live must arm the value plane under the tip. Assist models often collapse Desired→Midtone,
-			// which made every stroke the same wash; force DesiredBin from surface luminance.
 			float lum = DeterministicValuePaintAssist.Luminance01(surfaceSample);
 			ValuePaintBand plane = DeterministicValuePaintAssist.BandFromLuminance(lum);
 			proposal.CurrentBin = plane;
 			proposal.DesiredBin = plane;
 			proposal.MeanLuminance01 = lum;
 			proposal.StrokeRole = ValuePaintStrokeRole.ReinforcePlane;
-			// Band-scaled opacity so dark planes lay denser than highlights.
 			if (!float.IsFinite(proposal.OpacityHint01) || proposal.OpacityHint01 < 0.05f)
 				proposal.OpacityHint01 = OpacityForPlane(plane);
 			else
 				proposal.OpacityHint01 = Mathf.Lerp(proposal.OpacityHint01, OpacityForPlane(plane), 0.65f);
 			if (!ValuePaintProposalApplier.TryLiveArm(proposal, out reason)) {
-				// Do not leave a "live" UI proposal that was never armed (false success).
+				DecimaconProductGate.EndInference(lavd, DecimaconProductGate.ElapsedMs(sw), ranForward: true, accuracyProxy: 0.9f);
 				return false;
 			}
+			DecimaconProductGate.EndInference(lavd, DecimaconProductGate.ElapsedMs(sw), ranForward: true, accuracyProxy: 0.99f);
 			LastProposal = proposal;
 			HasLastProposal = true;
 			return true;
@@ -92,10 +96,8 @@ namespace spz {
 			_lastDesired = (ValuePaintBand)(-1);
 		}
 
-		/// <summary>True when desired band changed and debounce elapsed — caller may refresh cursor tint.</summary>
 		public static bool ShouldAnnounceBandChange(ValuePaintBand desired) {
 			if (desired == _lastDesired) return false;
-			// Do not consume the new band while debouncing — otherwise a skipped announce never retries.
 			if (Time.unscaledTime - _lastLiveArmTime < 0.35f) return false;
 			_lastDesired = desired;
 			_lastLiveArmTime = Time.unscaledTime;

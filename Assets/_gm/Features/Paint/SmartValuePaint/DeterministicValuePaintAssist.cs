@@ -80,7 +80,7 @@ namespace spz {
 		/// One clear value-plane step for Propose/Accept. Midtone no longer maps to itself
 		/// (that made Value Assist paint a single flat wash).
 		/// </summary>
-		static ValuePaintBand DesireAdjacentValueStep(ValuePaintBand current) {
+		public static ValuePaintBand DesireAdjacentValueStep(ValuePaintBand current) {
 			switch (current) {
 				case ValuePaintBand.Highlight: return ValuePaintBand.Light;
 				case ValuePaintBand.Light: return ValuePaintBand.Highlight;
@@ -91,7 +91,7 @@ namespace spz {
 			}
 		}
 
-		static ValuePaintStrokeRole RoleForTransition(ValuePaintBand current, ValuePaintBand desired) {
+		public static ValuePaintStrokeRole RoleForTransition(ValuePaintBand current, ValuePaintBand desired) {
 			if (current == desired) return ValuePaintStrokeRole.ReinforcePlane;
 			// AccentDark role only when the desired bin is AccentDark (true accent stroke), not when leaving it toward mid.
 			if (desired == ValuePaintBand.AccentDark)
