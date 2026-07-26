@@ -771,7 +771,7 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Icon pack v1: assign a <see cref="StudioLineIcon"/> glyph on a strip tab whose name contains <paramref name="tabMatch"/>.
+	    /// Icon pack v1: assign a <see cref="StudioLineIcon"/> glyph on every strip tab whose name contains <paramref name="tabMatch"/>.
 	    /// </summary>
 	    public bool TrySetStripTabLineIcon(string tabMatch, StudioLineIcon icon, out string error) {
 	        error = null;
@@ -785,6 +785,7 @@ namespace spz {
 	            return false;
 	        }
 	        string needle = tabMatch.Trim();
+	        int matched = 0;
 	        for (int i = 0; i < strip.childCount; i++) {
 	            Transform cell = strip.GetChild(i);
 	            if (cell == null) continue;
@@ -809,10 +810,13 @@ namespace spz {
 	            }
 	            img.sprite = UiRuntimeSprites.GetLineIcon(icon);
 	            SpzUiThemeOps.ApplyLineIconTint(img);
-	            return true;
+	            matched++;
 	        }
-	        error = $"No strip tab matching '{needle}'";
-	        return false;
+	        if (matched == 0) {
+	            error = $"No strip tab matching '{needle}'";
+	            return false;
+	        }
+	        return true;
 	    }
 
 	    static void ApplyPanelShellColor(RectTransform panel, Color panelBg) {
