@@ -204,6 +204,8 @@ namespace spz {
 	        // Bound chrome: authored SPZ colors until a non-default theme is applied.
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            RestoreInputPanelAuthoredChrome();
+	            Transform rootRestore = _movableRectTransform != null ? _movableRectTransform : transform;
+	            SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(rootRestore);
 	            return;
 	        }
 	        Transform root = _movableRectTransform != null ? _movableRectTransform : transform;

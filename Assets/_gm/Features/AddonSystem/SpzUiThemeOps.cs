@@ -698,6 +698,7 @@ namespace spz {
 
 		/// <summary>
 		/// Scales an existing layout group's spacing/padding from design bases stored on first apply.
+		/// Safe to call on builtin (spacing_scale 1) to unwind a prior non-default scale.
 		/// </summary>
 		public static void ApplyScaledLayoutGroup(LayoutGroup group) {
 			if (group == null)
@@ -723,6 +724,16 @@ namespace spz {
 				Mathf.RoundToInt(tag.padR * s),
 				Mathf.RoundToInt(tag.padT * s),
 				Mathf.RoundToInt(tag.padB * s));
+		}
+
+		/// <summary>
+		/// Re-applies <see cref="ApplyScaledLayoutGroup"/> under a root so leaving a theme
+		/// (spacing_scale → 1) unwinds scaled padding/spacing even when color chrome is gated off.
+		/// </summary>
+		public static void RefreshScaledLayoutGroupsUnder(Transform root) {
+			if (root == null) return;
+			foreach (var lg in root.GetComponentsInChildren<LayoutGroup>(true))
+				ApplyScaledLayoutGroup(lg);
 		}
 
 		public static void ApplyTmpColor(TMP_Text text, Color token) {

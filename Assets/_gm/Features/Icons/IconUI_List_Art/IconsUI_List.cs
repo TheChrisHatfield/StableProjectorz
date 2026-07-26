@@ -503,6 +503,7 @@ namespace spz {
 	                if (g.GetComponentInParent<IconUI>() != null) continue;
 	                SpzUiThemeOps.RestoreAuthoredGraphic(g);
 	            }
+	            SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(transform);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;

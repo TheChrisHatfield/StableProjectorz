@@ -40,6 +40,7 @@ namespace spz {
 	                if (g.GetComponentInParent<Icon3D_UI>() != null) continue;
 	                SpzUiThemeOps.RestoreAuthoredGraphic(g);
 	            }
+	            SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(transform);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
