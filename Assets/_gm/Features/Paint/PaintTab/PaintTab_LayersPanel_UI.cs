@@ -121,6 +121,7 @@ namespace spz {
 		public void ApplyThemeTokens()
 		{
 			if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+				ApplyAuthoredRowPalette();
 				if (_addLayerButton != null)
 					SpzUiThemeOps.RestoreAuthoredGraphic(_addLayerButton.targetGraphic);
 				if (_collapseButton != null)
@@ -131,6 +132,8 @@ namespace spz {
 					foreach (var g in row.GetComponentsInChildren<Graphic>(true))
 						SpzUiThemeOps.RestoreAuthoredGraphic(g);
 				}
+				RefreshActiveHighlight();
+				RefreshVisibilityColors();
 				return;
 			}
 			var t = SpzUiThemeOps.Active;
@@ -155,18 +158,25 @@ namespace spz {
 					if (delBtn != null)
 						SpzUiThemeOps.ApplyBoundChromeSelectable(delBtn, t.danger, t.accent);
 				}
+			}
+			RefreshVisibilityColors();
+		}
+
+		void RefreshVisibilityColors()
+		{
+			if (_layerStack == null) return;
+			for (int i = 0; i < _rows.Count; i++)
+			{
+				var row = _rows[i];
+				if (row == null) continue;
 				var vis = row.transform.Find("Visibility");
-				if (vis != null)
-				{
-					var visImg = vis.GetComponent<Image>();
-					if (visImg != null && _layerStack != null)
-					{
-						int layerIx = LayerIndexFromDisplay(i);
-						bool visible = layerIx >= 0 && layerIx < _layerStack.Layers.Count
-							&& _layerStack.Layers[layerIx].Visible;
-						visImg.color = visible ? _visOn : _visOff;
-					}
-				}
+				if (vis == null) continue;
+				var visImg = vis.GetComponent<Image>();
+				if (visImg == null) continue;
+				int layerIx = LayerIndexFromDisplay(i);
+				bool visible = layerIx >= 0 && layerIx < _layerStack.Layers.Count
+					&& _layerStack.Layers[layerIx].Visible;
+				visImg.color = visible ? _visOn : _visOff;
 			}
 		}
 
@@ -350,12 +360,16 @@ namespace spz {
 		{
 			if (_layerStack == null || _listRoot == null) return;
 			_renameRowIndex = -1;
-			// Snapshot theme once before row build (avoid per-cell Active clones).
-			var snap = SpzUiThemeOps.Active;
-			_visOn = snap.accent; _visOn.a = 1f;
-			_visOff = snap.controlBg; _visOff.a = 0.95f;
-			_rowDefault = snap.panelBg; _rowDefault.a = 0.2f;
-			_rowActive = snap.selection; _rowActive.a = 0.45f;
+			// Builtin keeps authored row palette; themed chrome may use Active tokens.
+			if (SpzUiThemeOps.ShouldRecolorBoundChrome) {
+				var snap = SpzUiThemeOps.Active;
+				_visOn = snap.accent; _visOn.a = 1f;
+				_visOff = snap.controlBg; _visOff.a = 0.95f;
+				_rowDefault = snap.panelBg; _rowDefault.a = 0.2f;
+				_rowActive = snap.selection; _rowActive.a = 0.45f;
+			} else {
+				ApplyAuthoredRowPalette();
+			}
 			foreach (var go in _rows)
 			{
 				if (go != null) Destroy(go);
@@ -375,11 +389,24 @@ namespace spz {
 			ApplyThemeTokens();
 		}
 
-		// Visibility / row colors: snapshotted from theme (one Active clone per ApplyThemeTokens).
-		Color _visOn = new Color(0.18f, 0.35f, 0.58f, 1f);
-		Color _visOff = new Color(0.55f, 0.6f, 0.7f, 0.95f);
-		Color _rowDefault = new Color(0, 0, 0, 0.2f);
-		Color _rowActive = new Color(0.2f, 0.38f, 0.55f, 0.45f);
+		// Visibility / row colors: authored SPZ defaults unless a non-builtin theme is active.
+		static readonly Color kAuthoredVisOn = new Color(0.18f, 0.35f, 0.58f, 1f);
+		static readonly Color kAuthoredVisOff = new Color(0.55f, 0.6f, 0.7f, 0.95f);
+		static readonly Color kAuthoredRowDefault = new Color(0, 0, 0, 0.2f);
+		static readonly Color kAuthoredRowActive = new Color(0.2f, 0.38f, 0.55f, 0.45f);
+
+		void ApplyAuthoredRowPalette()
+		{
+			_visOn = kAuthoredVisOn;
+			_visOff = kAuthoredVisOff;
+			_rowDefault = kAuthoredRowDefault;
+			_rowActive = kAuthoredRowActive;
+		}
+
+		Color _visOn = kAuthoredVisOn;
+		Color _visOff = kAuthoredVisOff;
+		Color _rowDefault = kAuthoredRowDefault;
+		Color _rowActive = kAuthoredRowActive;
 
 		// --- Drag-to-reorder: grip handle on each row drives MoveLayer ---
 
