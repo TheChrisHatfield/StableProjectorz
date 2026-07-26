@@ -135,6 +135,8 @@ namespace spz {
 			if (graphic == null) return;
 			if (AuthoredGraphicColors.TryGetValue(graphic.GetInstanceID(), out Color c))
 				graphic.color = c;
+			if (graphic is TMP_Text tmp)
+				RestoreNomadTypography(tmp);
 		}
 
 		/// <summary>
@@ -167,15 +169,165 @@ namespace spz {
 
 		/// <summary>
 		/// TMP color/scale apply gated by <see cref="ShouldRecolorBoundChrome"/>.
+		/// Non-builtin themes also apply Nomad-style tracking (open character spacing).
 		/// </summary>
 		public static void ApplyBoundChromeTmp(TMP_Text text, Color token, float fallbackBasePt = 14f) {
 			if (text == null) return;
 			if (!ShouldRecolorBoundChrome) {
 				RestoreAuthoredGraphic(text);
+				RestoreNomadTypography(text);
 				return;
 			}
 			SnapshotAuthoredGraphic(text);
+			SnapshotNomadTypography(text);
 			ApplyTmpScaledCaptured(text, token, fallbackBasePt);
+			ApplyNomadTypographyMetrics(text);
+		}
+
+		const string ControlLineIconChildName = "MonolithLineIcon";
+		const float NomadLabelCharacterSpacing = 10f;
+
+		static void SnapshotNomadTypography(TMP_Text text) {
+			if (text == null) return;
+			var tag = text.GetComponent<SpzUiThemeDesignTypography>();
+			if (tag == null) {
+				tag = text.gameObject.AddComponent<SpzUiThemeDesignTypography>();
+				tag.characterSpacing = text.characterSpacing;
+				tag.fontStyle = text.fontStyle;
+				tag.hasSnapshot = true;
+			}
+			else if (!tag.hasSnapshot) {
+				tag.characterSpacing = text.characterSpacing;
+				tag.fontStyle = text.fontStyle;
+				tag.hasSnapshot = true;
+			}
+		}
+
+		static void RestoreNomadTypography(TMP_Text text) {
+			if (text == null) return;
+			var tag = text.GetComponent<SpzUiThemeDesignTypography>();
+			if (tag == null || !tag.hasSnapshot) return;
+			text.characterSpacing = tag.characterSpacing;
+			text.fontStyle = tag.fontStyle;
+		}
+
+		/// <summary>Open tracking for sculpt-chrome labels (no font-asset swap — LiberationSans SDF).</summary>
+		static void ApplyNomadTypographyMetrics(TMP_Text text) {
+			if (text == null) return;
+			text.characterSpacing = NomadLabelCharacterSpacing;
+		}
+
+		/// <summary>
+		/// Ensures a centered <c>MonolithLineIcon</c> under <paramref name="owner"/> and hides authored
+		/// icon Images named icon/Icon. Restores when builtin default is active.
+		/// </summary>
+		public static void ApplyControlLineIcon(Transform owner, StudioLineIcon glyph, float sizePx = 22f) {
+			if (owner == null) return;
+			// Transform.Find skips inactive children — must scan manually or leave→re-Apply duplicates icons.
+			Transform iconT = FindDirectChildIncludingInactive(owner, ControlLineIconChildName);
+			if (!ShouldRecolorBoundChrome) {
+				if (iconT != null)
+					iconT.gameObject.SetActive(false);
+				RestoreHiddenAuthoredIconsUnder(owner);
+				return;
+			}
+			HideAuthoredIconsUnder(owner);
+			bool created = false;
+			if (iconT == null) {
+				var go = new GameObject(ControlLineIconChildName, typeof(RectTransform));
+				go.transform.SetParent(owner, false);
+				iconT = go.transform;
+				var imgNew = go.AddComponent<Image>();
+				imgNew.raycastTarget = false;
+				imgNew.preserveAspect = true;
+				created = true;
+			}
+			iconT.gameObject.SetActive(true);
+			var rt = iconT as RectTransform;
+			if (rt != null) {
+				rt.anchorMin = new Vector2(0.5f, 0.5f);
+				rt.anchorMax = new Vector2(0.5f, 0.5f);
+				rt.pivot = new Vector2(0.5f, 0.5f);
+				rt.anchoredPosition = Vector2.zero;
+				rt.sizeDelta = new Vector2(sizePx, sizePx);
+			}
+			var icon = iconT.GetComponent<Image>();
+			if (icon != null) {
+				icon.sprite = UiRuntimeSprites.GetLineIcon(glyph);
+				icon.enabled = true;
+				ApplyLineIconTint(icon);
+			}
+			if (created)
+				iconT.SetAsLastSibling();
+		}
+
+		static Transform FindDirectChildIncludingInactive(Transform parent, string childName) {
+			if (parent == null || string.IsNullOrEmpty(childName)) return null;
+			for (int i = 0; i < parent.childCount; i++) {
+				Transform child = parent.GetChild(i);
+				if (child != null && child.name == childName)
+					return child;
+			}
+			return null;
+		}
+
+		/// <summary>Deactivates MonolithLineIcon children and restores authored icon Images under <paramref name="root"/>.</summary>
+		public static void RestoreControlLineIconsUnder(Transform root) {
+			if (root == null) return;
+			foreach (var t in root.GetComponentsInChildren<Transform>(true)) {
+				if (t != null && t.name == ControlLineIconChildName)
+					t.gameObject.SetActive(false);
+			}
+			RestoreHiddenAuthoredIconsUnder(root);
+		}
+
+		static void HideAuthoredIconsUnder(Transform owner) {
+			if (owner == null) return;
+			foreach (var img in owner.GetComponentsInChildren<Image>(true)) {
+				if (img == null) continue;
+				string n = img.gameObject.name ?? "";
+				if (n == ControlLineIconChildName || n == "MonolithActiveBar")
+					continue;
+				if (!IsAuthoredIconImageName(n))
+					continue;
+				var tag = img.GetComponent<SpzUiThemeHiddenGraphic>();
+				if (tag == null) {
+					tag = img.gameObject.AddComponent<SpzUiThemeHiddenGraphic>();
+					tag.wasEnabled = img.enabled;
+					tag.hasSnapshot = true;
+				}
+				else if (!tag.hasSnapshot) {
+					tag.wasEnabled = img.enabled;
+					tag.hasSnapshot = true;
+				}
+				img.enabled = false;
+			}
+		}
+
+		static void RestoreHiddenAuthoredIconsUnder(Transform root) {
+			if (root == null) return;
+			var tags = root.GetComponentsInChildren<SpzUiThemeHiddenGraphic>(true);
+			for (int i = 0; i < tags.Length; i++) {
+				var tag = tags[i];
+				if (tag == null) continue;
+				var img = tag.GetComponent<Image>();
+				if (img != null && tag.hasSnapshot)
+					img.enabled = tag.wasEnabled;
+				if (Application.isPlaying)
+					UnityEngine.Object.Destroy(tag);
+				else
+					UnityEngine.Object.DestroyImmediate(tag);
+			}
+		}
+
+		static bool IsAuthoredIconImageName(string name) {
+			if (string.IsNullOrEmpty(name)) return false;
+			if (name.IndexOf("Monolith", StringComparison.OrdinalIgnoreCase) >= 0)
+				return false;
+			return name.Equals("icon", StringComparison.OrdinalIgnoreCase)
+				|| name.StartsWith("icon_", StringComparison.OrdinalIgnoreCase)
+				|| name.EndsWith("_icon", StringComparison.OrdinalIgnoreCase)
+				|| name.IndexOf("Icon", StringComparison.OrdinalIgnoreCase) >= 0;
 		}
 
 		public static JObject GetThemeResult() {
@@ -1290,5 +1442,18 @@ namespace spz {
 	/// </summary>
 	public sealed class SpzStripLineIconOverride : MonoBehaviour {
 		public StudioLineIcon Icon;
+	}
+
+	/// <summary>Snapshots authored TMP tracking/style so Nomad typography can unwind on builtin restore.</summary>
+	public sealed class SpzUiThemeDesignTypography : MonoBehaviour {
+		public float characterSpacing;
+		public FontStyles fontStyle;
+		public bool hasSnapshot;
+	}
+
+	/// <summary>Marks an authored icon Image hidden while a MonolithLineIcon overlay is shown.</summary>
+	public sealed class SpzUiThemeHiddenGraphic : MonoBehaviour {
+		public bool wasEnabled = true;
+		public bool hasSnapshot;
 	}
 }
