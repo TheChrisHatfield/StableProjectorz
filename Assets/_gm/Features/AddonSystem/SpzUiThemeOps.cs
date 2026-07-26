@@ -122,12 +122,21 @@ namespace spz {
 
 		static readonly Dictionary<int, Color> AuthoredGraphicColors =
 			new Dictionary<int, Color>();
+		static readonly Dictionary<int, ColorBlock> AuthoredColorBlocks =
+			new Dictionary<int, ColorBlock>();
 
 		static void SnapshotAuthoredGraphic(Graphic graphic) {
 			if (graphic == null) return;
 			int id = graphic.GetInstanceID();
 			if (!AuthoredGraphicColors.ContainsKey(id))
 				AuthoredGraphicColors[id] = graphic.color;
+		}
+
+		static void SnapshotAuthoredColorBlock(Selectable selectable) {
+			if (selectable == null) return;
+			int id = selectable.GetInstanceID();
+			if (!AuthoredColorBlocks.ContainsKey(id))
+				AuthoredColorBlocks[id] = selectable.colors;
 		}
 
 		/// <summary>Restores a graphic's pre-theme color when snapshotted; no-op otherwise.</summary>
@@ -137,6 +146,34 @@ namespace spz {
 				graphic.color = c;
 			if (graphic is TMP_Text tmp)
 				RestoreNomadTypography(tmp);
+		}
+
+		/// <summary>Restores Selectable ColorBlock snapshotted before Nomad accent tinting.</summary>
+		public static void RestoreAuthoredColorBlock(Selectable selectable) {
+			if (selectable == null) return;
+			if (AuthoredColorBlocks.TryGetValue(selectable.GetInstanceID(), out ColorBlock block))
+				selectable.colors = block;
+		}
+
+		/// <summary>
+		/// Full BoundChrome unwind under a root (line icons, rounded/flat sprites, colors, ColorBlocks, slider thumbs).
+		/// Call from ThemeChanged leave paths so Restore SPZ does not leave Nomad holdovers.
+		/// </summary>
+		public static void RestoreBoundChromeUnder(Transform root) {
+			if (root == null) return;
+			RestoreControlLineIconsUnder(root);
+			RestoreRoundedControlSpritesUnder(root);
+			RestoreSliderHandleLayoutsUnder(root);
+			foreach (var g in root.GetComponentsInChildren<Graphic>(true))
+				RestoreAuthoredGraphic(g);
+			foreach (var s in root.GetComponentsInChildren<Selectable>(true))
+				RestoreAuthoredColorBlock(s);
+			foreach (var tmp in root.GetComponentsInChildren<TMP_Text>(true)) {
+				if (tmp == null) continue;
+				var fontTag = tmp.GetComponent<SpzUiThemeDesignFontPt>();
+				if (fontTag != null && fontTag.designPt > 0.05f)
+					tmp.fontSize = fontTag.designPt;
+			}
 		}
 
 		/// <summary>
@@ -161,9 +198,11 @@ namespace spz {
 				return;
 			if (!ShouldRecolorBoundChrome) {
 				RestoreAuthoredGraphic(selectable.targetGraphic);
+				RestoreAuthoredColorBlock(selectable);
 				return;
 			}
 			SnapshotAuthoredGraphic(selectable.targetGraphic);
+			SnapshotAuthoredColorBlock(selectable);
 			ApplySelectableToken(selectable, normal, accent);
 		}
 
@@ -347,6 +386,106 @@ namespace spz {
 				|| name.StartsWith("icon_", StringComparison.OrdinalIgnoreCase)
 				|| name.EndsWith("_icon", StringComparison.OrdinalIgnoreCase)
 				|| name.IndexOf("Icon", StringComparison.OrdinalIgnoreCase) >= 0;
+		}
+
+		/// <summary>
+		/// Nomad sculpt vertical slider: charcoal pill track, segmented coral fill, bullseye thumb.
+		/// Horizontal sliders get pill + solid accent fill + handle tint only (no segment tile).
+		/// </summary>
+		public static void ApplyNomadSliderChrome(Slider slider) {
+			if (slider == null) return;
+			if (!ShouldRecolorBoundChrome) {
+				RestoreBoundChromeUnder(slider.transform);
+				return;
+			}
+			var t = _active;
+			bool vertical = slider.direction == Slider.Direction.BottomToTop
+				|| slider.direction == Slider.Direction.TopToBottom;
+
+			Image bg = slider.targetGraphic as Image;
+			if (bg == null)
+				bg = slider.GetComponent<Image>();
+			if (bg != null) {
+				ApplyBoundChromeGraphic(bg, t.fieldBg);
+				ApplyRoundedControlSprite(bg, markEligible: true);
+			}
+
+			if (slider.fillRect != null) {
+				var fill = slider.fillRect.GetComponent<Image>();
+				if (fill != null) {
+					ApplyRoundedControlSprite(fill, markEligible: true);
+					if (vertical) {
+						fill.sprite = UiRuntimeSprites.NomadSliderSegmentTile;
+						fill.type = Image.Type.Tiled;
+						ApplyBoundChromeGraphic(fill, ResolveNomadSliderFillColor(t));
+					}
+					else {
+						fill.sprite = UiRuntimeSprites.GetRoundedRectSliced(
+							Mathf.RoundToInt(Mathf.Clamp(t.cornerRadius, CornerRadiusMin, CornerRadiusMax)));
+						fill.type = Image.Type.Sliced;
+						ApplyBoundChromeGraphic(fill, t.accent);
+					}
+				}
+			}
+
+			if (slider.handleRect != null) {
+				RestoreControlLineIconsUnder(slider.handleRect);
+				var handle = slider.handleRect.GetComponent<Image>();
+				if (handle != null) {
+					ApplyRoundedControlSprite(handle, markEligible: true);
+					if (vertical) {
+						SnapshotSliderHandleLayout(slider.handleRect);
+						handle.sprite = UiRuntimeSprites.GetLineIcon(StudioLineIcon.Bullseye);
+						handle.type = Image.Type.Simple;
+						handle.preserveAspect = true;
+						ApplyBoundChromeGraphic(handle, t.iconTint);
+						var hrt = slider.handleRect;
+						if (hrt != null) {
+							float s = Mathf.Clamp(Mathf.Max(hrt.sizeDelta.x, hrt.sizeDelta.y), 18f, 28f);
+							hrt.sizeDelta = new Vector2(s, s);
+						}
+					}
+					else {
+						ApplyBoundChromeGraphic(handle, t.handle);
+					}
+				}
+			}
+		}
+
+		static void SnapshotSliderHandleLayout(RectTransform handleRect) {
+			if (handleRect == null) return;
+			var tag = handleRect.GetComponent<SpzUiThemeSliderHandleLayout>();
+			if (tag == null) {
+				tag = handleRect.gameObject.AddComponent<SpzUiThemeSliderHandleLayout>();
+				tag.authoredSizeDelta = handleRect.sizeDelta;
+				tag.hasSnapshot = true;
+			}
+			else if (!tag.hasSnapshot) {
+				tag.authoredSizeDelta = handleRect.sizeDelta;
+				tag.hasSnapshot = true;
+			}
+		}
+
+		static void RestoreSliderHandleLayoutsUnder(Transform root) {
+			if (root == null) return;
+			var tags = root.GetComponentsInChildren<SpzUiThemeSliderHandleLayout>(true);
+			for (int i = 0; i < tags.Length; i++) {
+				var tag = tags[i];
+				if (tag == null) continue;
+				var rt = tag.transform as RectTransform;
+				if (rt != null && tag.hasSnapshot)
+					rt.sizeDelta = tag.authoredSizeDelta;
+				if (Application.isPlaying)
+					UnityEngine.Object.Destroy(tag);
+				else
+					UnityEngine.Object.DestroyImmediate(tag);
+			}
+		}
+
+		/// <summary>Muted coral fill (Nomad sculpt) — danger token darkened toward terracotta.</summary>
+		public static Color ResolveNomadSliderFillColor(ThemeTokens tokens) {
+			Color coral = new Color(0.72f, 0.38f, 0.34f, 1f);
+			return Color.Lerp(tokens.danger, coral, 0.55f);
 		}
 
 		public static JObject GetThemeResult() {
@@ -607,8 +746,7 @@ namespace spz {
 			if (root == null)
 				return;
 			if (!ShouldRecolorBoundChrome) {
-				foreach (var g in root.GetComponentsInChildren<Graphic>(true))
-					RestoreAuthoredGraphic(g);
+				RestoreBoundChromeUnder(root.transform);
 				return;
 			}
 			foreach (var g in root.GetComponentsInChildren<Graphic>(true))
@@ -634,6 +772,7 @@ namespace spz {
 				if (button.targetGraphic is Image btnImg)
 					ApplyRoundedControlSprite(btnImg);
 				ApplyPanelWidth(button.GetComponent<LayoutElement>());
+				SnapshotAuthoredColorBlock(button);
 				var colors = button.colors;
 				colors.normalColor = Color.white;
 				colors.highlightedColor = Color.Lerp(Color.white, tokens.accent, 0.25f);
@@ -683,6 +822,7 @@ namespace spz {
 				Color normal = toggle.isOn
 					? Color.Lerp(tokens.tabActive, tokens.accent, 0.45f)
 					: tokens.controlBg;
+				SnapshotAuthoredColorBlock(toggle);
 				ApplySelectableToken(toggle, normal, tokens.accent);
 				if (toggle.targetGraphic is Image toggleBg)
 					ApplyRoundedControlSprite(toggleBg);
@@ -786,8 +926,7 @@ namespace spz {
 			if (root == null)
 				return;
 			if (!ShouldRecolorBoundChrome) {
-				foreach (var g in root.GetComponentsInChildren<Graphic>(true))
-					RestoreAuthoredGraphic(g);
+				RestoreBoundChromeUnder(root.transform);
 				return;
 			}
 			var tokens = _active;
@@ -801,6 +940,7 @@ namespace spz {
 				if (button == null || button.targetGraphic == null)
 					continue;
 				SnapshotAuthoredGraphic(button.targetGraphic);
+				SnapshotAuthoredColorBlock(button);
 				ApplySelectableToken(button, tokens.controlBg, tokens.accent);
 				if (button.targetGraphic is Image btnImg)
 					ApplyRoundedControlSprite(btnImg);
@@ -1473,6 +1613,12 @@ namespace spz {
 	/// <summary>Marks an authored icon Image hidden while a MonolithLineIcon overlay is shown.</summary>
 	public sealed class SpzUiThemeHiddenGraphic : MonoBehaviour {
 		public bool wasEnabled = true;
+		public bool hasSnapshot;
+	}
+
+	/// <summary>Snapshots vertical slider handle sizeDelta so bullseye thumbs unwind on Restore SPZ.</summary>
+	public sealed class SpzUiThemeSliderHandleLayout : MonoBehaviour {
+		public Vector2 authoredSizeDelta;
 		public bool hasSnapshot;
 	}
 }
