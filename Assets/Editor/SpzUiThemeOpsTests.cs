@@ -460,6 +460,30 @@ public sealed class SpzUiThemeOpsTests {
 	}
 
 	[Test]
+	public void ThemeFloatTokensRejectNaNAndInfinity() {
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-experiment",
+			new JObject { ["ribbon_icon_only"] = "NaN" },
+			"replace",
+			out string error), Is.False);
+		Assert.That(error, Does.Contain("finite").IgnoreCase);
+
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-experiment",
+			new JObject { ["font_scale"] = "Infinity" },
+			"replace",
+			out error), Is.False);
+		Assert.That(error, Does.Contain("finite").IgnoreCase);
+
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-experiment",
+			new JObject { ["panel_alpha"] = float.NaN },
+			"replace",
+			out error), Is.False);
+		Assert.That(error, Does.Contain("finite").IgnoreCase);
+	}
+
+	[Test]
 	public void RibbonIconOnlyOffDoesNotStayLatchedAfterReplaceWithoutToken() {
 		Assert.That(SpzUiThemeOps.TryApplyTheme(
 			"p1-experiment",

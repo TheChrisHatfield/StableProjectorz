@@ -968,11 +968,7 @@ namespace spz {
 				error = "expected number or bool";
 				return false;
 			}
-			if (value < RibbonIconOnlyMin || value > RibbonIconOnlyMax) {
-				error = $"must be between {RibbonIconOnlyMin} and {RibbonIconOnlyMax}";
-				return false;
-			}
-			return true;
+			return TryValidateFiniteFloatInRange(value, RibbonIconOnlyMin, RibbonIconOnlyMax, out error);
 		}
 
 		static bool TryParsePanelAlpha(JToken token, out float alpha, out string error) {
@@ -997,11 +993,7 @@ namespace spz {
 				error = "expected number";
 				return false;
 			}
-			if (alpha < PanelAlphaMin || alpha > PanelAlphaMax) {
-				error = $"must be between {PanelAlphaMin} and {PanelAlphaMax}";
-				return false;
-			}
-			return true;
+			return TryValidateFiniteFloatInRange(alpha, PanelAlphaMin, PanelAlphaMax, out error);
 		}
 
 		/// <summary>Names of built-in <see cref="StudioLineIcon"/> glyphs (icon pack v1).</summary>
@@ -1064,11 +1056,7 @@ namespace spz {
 				error = "expected number";
 				return false;
 			}
-			if (width < PanelWidthMin || width > PanelWidthMax) {
-				error = $"must be between {PanelWidthMin} and {PanelWidthMax}";
-				return false;
-			}
-			return true;
+			return TryValidateFiniteFloatInRange(width, PanelWidthMin, PanelWidthMax, out error);
 		}
 
 		static bool TryParseCornerRadius(JToken token, out float radius, out string error) {
@@ -1093,11 +1081,7 @@ namespace spz {
 				error = "expected number";
 				return false;
 			}
-			if (radius < CornerRadiusMin || radius > CornerRadiusMax) {
-				error = $"must be between {CornerRadiusMin} and {CornerRadiusMax}";
-				return false;
-			}
-			return true;
+			return TryValidateFiniteFloatInRange(radius, CornerRadiusMin, CornerRadiusMax, out error);
 		}
 
 		static bool TryParseScale(JToken token, out float scale, out string error) {
@@ -1122,8 +1106,18 @@ namespace spz {
 				error = "expected number";
 				return false;
 			}
-			if (scale < ScaleTokenMin || scale > ScaleTokenMax) {
-				error = $"must be between {ScaleTokenMin} and {ScaleTokenMax}";
+			return TryValidateFiniteFloatInRange(scale, ScaleTokenMin, ScaleTokenMax, out error);
+		}
+
+		/// <summary>Reject NaN/Infinity — bare min/max compares treat NaN as in-range.</summary>
+		static bool TryValidateFiniteFloatInRange(float value, float min, float max, out string error) {
+			error = null;
+			if (float.IsNaN(value) || float.IsInfinity(value)) {
+				error = "must be a finite number";
+				return false;
+			}
+			if (value < min || value > max) {
+				error = $"must be between {min} and {max}";
 				return false;
 			}
 			return true;
