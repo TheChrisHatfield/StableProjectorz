@@ -58,8 +58,11 @@ namespace spz {
 				["border"] = "#99907C66",
 				["tab_active"] = "#343539FF",
 				["selection"] = "#F2CA5033",
+				["icon_tint"] = "#D0C5AFFF",
 				["font_scale"] = fontScale,
 				["spacing_scale"] = spacingScale,
+				["corner_radius"] = 5,
+				["panel_width"] = 220,
 			};
 		}
 		
@@ -654,6 +657,7 @@ namespace spz {
 			AddTextInput(StableProjectorzGoAddonId, panelId, "Blender.exe (optional)", "");
 			AddButton(StableProjectorzGoAddonId, panelId, "Import", "do_import_from_path");
 			AddButton(StableProjectorzGoAddonId, panelId, "Export", "do_export_to_path");
+			AddButton(StableProjectorzGoAddonId, panelId, "Install into Blender", "do_install_blender_addon_force");
 		}
 
 		void EnsureNativeNomadThemePanel() {
@@ -736,16 +740,16 @@ namespace spz {
 				buttonObj.transform.SetParent(panelObj.transform, false);
 				
 				var rectTransform = buttonObj.AddComponent<RectTransform>();
-				rectTransform.sizeDelta = new Vector2(220, ProjectUiScale.Space(4) + 4f); // ~36
+				float panelW = Mathf.Clamp(SpzUiThemeOps.Active.panelWidth, SpzUiThemeOps.PanelWidthMin, SpzUiThemeOps.PanelWidthMax);
+				rectTransform.sizeDelta = new Vector2(panelW, ProjectUiScale.Space(4) + 4f); // ~36
 				var layoutElement = buttonObj.AddComponent<LayoutElement>();
 				layoutElement.preferredHeight = ProjectUiScale.Space(4) + 4f;
 				layoutElement.minHeight = ProjectUiScale.Space(4);
-				layoutElement.preferredWidth = 220f;
+				layoutElement.preferredWidth = panelW;
 				layoutElement.flexibleWidth = 1f;
 				
 				var image = buttonObj.AddComponent<Image>();
-				image.sprite = UiRuntimeSprites.RoundedRectSliced;
-				image.type = Image.Type.Sliced;
+				SpzUiThemeOps.ApplyRoundedControlSprite(image, markEligible: true);
 				image.color = new Color(0.3f, 0.3f, 0.3f, 1f);
 				image.raycastTarget = true;
 				
@@ -808,16 +812,16 @@ namespace spz {
 			GameObject toggleObj = new GameObject($"Toggle_{label}");
 			toggleObj.transform.SetParent(panelObj.transform, false);
 			var toggleRect = toggleObj.AddComponent<RectTransform>();
-			toggleRect.sizeDelta = new Vector2(220, 32);
+			float panelW = Mathf.Clamp(SpzUiThemeOps.Active.panelWidth, SpzUiThemeOps.PanelWidthMin, SpzUiThemeOps.PanelWidthMax);
+			toggleRect.sizeDelta = new Vector2(panelW, 32);
 			var layoutElement = toggleObj.AddComponent<LayoutElement>();
 			layoutElement.preferredHeight = 32f;
 			layoutElement.minHeight = 28f;
-			layoutElement.preferredWidth = 220f;
+			layoutElement.preferredWidth = panelW;
 			layoutElement.flexibleWidth = 1f;
 
 			var bg = toggleObj.AddComponent<Image>();
-			bg.sprite = UiRuntimeSprites.RoundedRectSliced;
-			bg.type = Image.Type.Sliced;
+			SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
 			bg.color = new Color(0.3f, 0.3f, 0.3f, 1f);
 			bg.raycastTarget = true;
 
@@ -833,8 +837,7 @@ namespace spz {
 			checkRt.offsetMin = Vector2.zero;
 			checkRt.offsetMax = Vector2.zero;
 			var checkImg = checkGo.AddComponent<Image>();
-			checkImg.sprite = UiRuntimeSprites.RoundedRectSliced;
-			checkImg.type = Image.Type.Sliced;
+			SpzUiThemeOps.ApplyRoundedControlSprite(checkImg, markEligible: true);
 			checkImg.color = new Color(0.3f, 0.6f, 1f, 1f);
 			checkImg.raycastTarget = false;
 			toggle.graphic = checkImg;
@@ -886,7 +889,47 @@ namespace spz {
 				RegisterButtonCallback(addonId, callbackName, () => SpzGoRunHeadlessImportOrExportFromPanel(addonId, panelId, callbackName, isImport: true));
 			} else if (string.Equals(callbackName, "do_export_to_path", StringComparison.Ordinal)) {
 				RegisterButtonCallback(addonId, callbackName, () => SpzGoRunHeadlessImportOrExportFromPanel(addonId, panelId, callbackName, isImport: false));
+			} else if (string.Equals(callbackName, "do_install_blender_addon_force", StringComparison.Ordinal)) {
+				RegisterButtonCallback(addonId, callbackName, () => SpzGoNativeInstallBlenderBridge(panelId));
 			}
+		}
+
+		void SpzGoNativeInstallBlenderBridge(string panelId) {
+			string blender = SpzGoReadBlenderExeFromPanel(panelId);
+			if (string.IsNullOrEmpty(blender))
+				blender = FastPath_API.FindBlenderExecutable();
+			var fp = FastPath_API.instance;
+			if (fp == null) {
+				SpzGoStatusLine("3D / API not ready", false);
+				return;
+			}
+			bool ok = fp.TryInstallSpzGoBlenderBridge(blender, force: true, out string message);
+			UnityEngine.Debug.Log($"[AddonUI_MGR] SPZ GO Blender install: ok={ok} {message}");
+			if (ok && message != null && message.StartsWith("SPZ_GO_INSTALL_SKIP", StringComparison.Ordinal))
+				SpzGoStatusLine("Blender add-on up to date", true);
+			else if (ok)
+				SpzGoStatusLine("Blender add-on installed", true);
+			else
+				SpzGoStatusLine(string.IsNullOrEmpty(message) ? "Blender install failed" : message, false);
+		}
+
+		string SpzGoReadBlenderExeFromPanel(string panelId) {
+			var panel = FindUIElement(panelId);
+			if (panel == null) return "";
+			var allT = panel.transform.GetComponentsInChildren<Transform>(true);
+			for (int i = 0; i < allT.Length; i++) {
+				var t = allT[i];
+				if (t == null || t.name == null) continue;
+				if (!t.name.StartsWith("TextInput_", StringComparison.Ordinal)) continue;
+				if (t.name.IndexOf("Blender", StringComparison.OrdinalIgnoreCase) < 0) continue;
+				var inf = t.GetComponentInChildren<TMP_InputField>(true);
+				if (inf == null) continue;
+				string path = (inf.text ?? "").Trim().Trim('"');
+				if (string.IsNullOrEmpty(path))
+					break; // empty Blender field — fall back to FindBlenderExecutable
+				try { return Path.GetFullPath(path); } catch { return path; }
+			}
+			return "";
 		}
 
 		/// <summary>
@@ -1436,8 +1479,7 @@ namespace spz {
 			fieldLe.flexibleHeight = 0f;
 			
 			var fieldBg = fieldObj.AddComponent<Image>();
-			fieldBg.sprite = UiRuntimeSprites.RoundedRectSliced;
-			fieldBg.type = Image.Type.Sliced;
+			SpzUiThemeOps.ApplyRoundedControlSprite(fieldBg, markEligible: true);
 			fieldBg.color = new Color(0.15f, 0.15f, 0.15f, 1f);
 			
 			var textObj = new GameObject("Text");

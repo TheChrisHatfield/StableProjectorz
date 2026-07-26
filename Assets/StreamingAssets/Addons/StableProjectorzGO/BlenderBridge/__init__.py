@@ -5,9 +5,7 @@
 # Headless: POST /api/v1/meshes/import, POST /api/v1/export/3d_to_path
 # The in-app add-on: Assets/StreamingAssets/Addons/StableProjectorzGO/
 #
-# SYNC: Editable source of truth for the Blender bridge. Keep in sync with the player ship copy at
-# Assets/StreamingAssets/Addons/StableProjectorzGO/BlenderBridge/ (copy __init__.py, spz_http.py,
-# blender_manifest.toml after bridge changes).
+# SHIP COPY: Player/StreamingAssets install source. Edit External/Blender_SpzBridge/ then re-copy here.
 
 bl_info = {
     "name": "SPZ GO (HTTP)",
