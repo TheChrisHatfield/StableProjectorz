@@ -267,7 +267,8 @@ namespace spz {
 		    TextMeshProUGUI refTmp = GetRibbonStripTypographyReferenceTMP(strip, null);
 		    float designBasis = kRibbonStripTabLabelDefaultPt;
 		    float basis = designBasis * SpzUiThemeOps.Active.fontScale;
-		    bool iconOnly = SpzUiThemeOps.RibbonIconOnlyActive;
+		    // Match ApplyThemeTokens: icon-only widths only while non-builtin theme chrome is active.
+		    bool iconOnly = SpzUiThemeOps.ShouldRecolorBoundChrome && SpzUiThemeOps.RibbonIconOnlyActive;
 		    foreach (var elem in strip.GetComponentsInChildren<TabsGroupElem_UI>(true))
 		    {
 			    if (elem == null || elem.transform.parent != strip) continue;
@@ -636,9 +637,10 @@ namespace spz {
 	    /// </summary>
 	    void ApplyThemeTokens() {
 	        var t = SpzUiThemeOps.Active;
-	        bool iconOnly = SpzUiThemeOps.RibbonIconOnlyActive;
 	        // Builtin: authored strip/panel colors + no Monolith line icons. Non-default themes: full chrome.
 	        bool recolorChrome = SpzUiThemeOps.ShouldRecolorBoundChrome;
+	        // Icon-only is a themed chrome mode — never hide labels on builtin (no Monolith icons to replace them).
+	        bool iconOnly = recolorChrome && SpzUiThemeOps.RibbonIconOnlyActive;
 
 	        RecolorOrRestorePanelShell(_SD_ArtList_Panel, recolorChrome);
 	        RecolorOrRestorePanelShell(_SD_ArtBgList_Panel, recolorChrome);
@@ -687,6 +689,8 @@ namespace spz {
 	                foreach (var label in cell.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	                    if (label == null) continue;
 	                    if (iconOnly) {
+	                        // Snapshot before wiping alpha so leaving icon-only / builtin can restore.
+	                        SnapshotAuthoredGraphicColor(label);
 	                        // Keep GameObject active for layout/hit targets; hide glyphs only.
 	                        label.maxVisibleCharacters = 0;
 	                        label.color = new Color(t.textPrimary.r, t.textPrimary.g, t.textPrimary.b, 0f);
@@ -754,7 +758,7 @@ namespace spz {
 	    /// </summary>
 	    static void ApplyStudioTabChromeColors(Transform cell, SpzUiThemeOps.ThemeTokens t, bool recolorChrome = true) {
 	        if (cell == null) return;
-	        bool iconOnly = SpzUiThemeOps.RibbonIconOnlyActive;
+	        bool iconOnly = recolorChrome && SpzUiThemeOps.RibbonIconOnlyActive;
 	        Transform active = cell.Find("go active");
 	        Transform bar = active != null ? active.Find("MonolithActiveBar") : null;
 	        Transform iconTransform = cell.Find("MonolithLineIcon");

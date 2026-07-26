@@ -460,6 +460,21 @@ public sealed class SpzUiThemeOpsTests {
 	}
 
 	[Test]
+	public void RibbonIconOnlyDoesNotOverrideBuiltinChromeBoundary() {
+		// Token may be present, but bound chrome / icon-only strip layout stays off on builtin.
+		Assert.That(SpzUiThemeOps.IsBuiltinDefaultActive, Is.True);
+		Assert.That(SpzUiThemeOps.ShouldRecolorBoundChrome, Is.False);
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			SpzUiThemeOps.DefaultThemeId,
+			new JObject { ["ribbon_icon_only"] = 1 },
+			"patch",
+			out string error), Is.True, error);
+		Assert.That(SpzUiThemeOps.RibbonIconOnlyActive, Is.True);
+		Assert.That(SpzUiThemeOps.ShouldRecolorBoundChrome, Is.False);
+		Assert.That(SpzUiThemeOps.IsBuiltinDefaultActive, Is.True);
+	}
+
+	[Test]
 	public void BuiltinDefaultIsActiveUntilNonDefaultApply() {
 		Assert.That(SpzUiThemeOps.IsBuiltinDefaultActive, Is.True);
 		Assert.That(SpzUiThemeOps.ShouldRecolorBoundChrome, Is.False);
