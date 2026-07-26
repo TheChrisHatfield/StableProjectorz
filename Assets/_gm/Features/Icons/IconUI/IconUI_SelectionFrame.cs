@@ -18,8 +18,44 @@ namespace spz {
    
 	    LocksHashset_OBJ _preventShowing_lock = new LocksHashset_OBJ();
 	    bool _deinit = false;//have we run deinit already. Prevents duplicate invocations.
+	    Color _authoredChosenColor;
+	    Color _authoredChosenAndMainColor;
+	    bool _authoredSelectionSnapshotted;
 
+	    void Awake() {
+	        SnapshotAuthoredSelectionColors();
+	    }
 
+	    void OnEnable() {
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        ApplyThemeTokens();
+	    }
+
+	    void OnDisable() {
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	    }
+
+	    void SnapshotAuthoredSelectionColors() {
+	        if (_authoredSelectionSnapshotted) return;
+	        _authoredChosenColor = _theChosen_color;
+	        _authoredChosenAndMainColor = _theChosen_andMainSelected_color;
+	        _authoredSelectionSnapshotted = true;
+	    }
+
+	    void ApplyThemeTokens() {
+	        SnapshotAuthoredSelectionColors();
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            _theChosen_color = _authoredChosenColor;
+	            _theChosen_andMainSelected_color = _authoredChosenAndMainColor;
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        _theChosen_color = t.accent;
+	        Color main = Color.Lerp(t.accent, t.selection.a > 0.01f ? t.selection : t.tabActive, 0.4f);
+	        main.a = 1f;
+	        _theChosen_andMainSelected_color = main;
+	    }
 
 	    public void PreventShowing(object requestor){
 	        _preventShowing_lock.Lock(requestor);
