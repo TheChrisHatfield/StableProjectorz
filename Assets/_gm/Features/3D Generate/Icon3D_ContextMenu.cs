@@ -48,6 +48,21 @@ namespace spz {
 	    void Start(){
 	        _exportMeshButton.onClick.AddListener(OnExportMeshButton);
 	        _generateButton.onClick.AddListener(OnGenerateButton);
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        ApplyThemeTokens();
+	    }
+
+	    void OnDestroy() {
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	    }
+
+	    void ApplyThemeTokens() {
+	        if (_contextMenu_go != null)
+	            SpzUiThemeOps.ApplyContextMenuChrome(_contextMenu_go);
+	        else
+	            SpzUiThemeOps.ApplyContextMenuChrome(gameObject);
+	        if (_text != null)
+	            SpzUiThemeOps.ApplyBoundChromeTmp(_text, SpzUiThemeOps.Active.textPrimary);
 	    }
 	}
 }//end namespace

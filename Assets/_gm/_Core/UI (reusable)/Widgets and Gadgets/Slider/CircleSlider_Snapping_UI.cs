@@ -165,6 +165,17 @@ namespace spz {
 	        _text.text = _prefix + inputText;
 	    }
 
+	    /// <summary>
+	    /// Themes known fill/text ownership only — does not walk child Images (dial chrome stays authored).
+	    /// Gated by <see cref="SpzUiThemeOps.ShouldRecolorBoundChrome"/> so builtin dials keep authored colors.
+	    /// </summary>
+	    public void ApplyThemeTokens(Color fillAccent, Color textPrimary) {
+	        if (_fillImage != null)
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(_fillImage, fillAccent);
+	        if (_text != null)
+	            SpzUiThemeOps.ApplyBoundChromeTmp(_text, textPrimary);
+	    }
+
 	    float SnapToIncrement(float value, float increment){
 	        return Mathf.Round(value / increment) * increment;
 	    }

@@ -194,15 +194,19 @@ namespace spz {
 
 	    void Awake(){
 	        LayoutRebuilder.ForceRebuildLayoutImmediate(transform as RectTransform);
-	        // If user doesn't want to show fade-rim around new projections,
-	        // ensure slider has value 0 instead of its default value.
-	        //  NOTICE: doing this in Awake() and NOT invoking callback. 
-	        //         Even if this icon was Loaded from disk, its value can be altered fine, after this Awake().
 	        bool isAutoSoft = Proj_AutoSoftEdges_UI_MGR.instance?.isToggleOn?? false;
 	        if(!isAutoSoft){  _slider_projCam_BlurStride.SetSliderValue( 0, invokeCallback:false );  }
 	        if(!isAutoSoft){  _slider_projCam_BlurPow.SetSliderValue(0.5f, invokeCallback:false);  }
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
 	    }
 
+	    void OnDestroy() {
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	    }
+
+	    void ApplyThemeTokens() {
+	        SpzUiThemeOps.ApplyContextMenuChrome(gameObject);
+	    }
 
 	    void Start(){
 	        InitShowSliders();
@@ -227,6 +231,7 @@ namespace spz {
 
 	        if(!_alreadyShown){ gameObject.SetActive(false); }
 	        _StartInvoked = true;
+	        ApplyThemeTokens();
 	    }
 
 	    void EnsureImportToLayerButton()
@@ -243,14 +248,14 @@ namespace spz {
 	        var le = go.AddComponent<LayoutElement>();
 	        le.preferredWidth = 28; le.preferredHeight = 28;
 	        var bg = go.AddComponent<Image>();
-	        bg.color = new Color(0.22f, 0.22f, 0.22f, 0.9f);
+	        var t = SpzUiThemeOps.Active;
+	        // Authored fallback until a non-builtin theme retints via ApplyBoundChrome*.
+	        bg.color = new Color(0.25f, 0.25f, 0.28f, 1f);
 	        bg.sprite = CreateImportToLayerSprite();
 	        bg.type = Image.Type.Simple;
 	        bg.preserveAspect = true;
 	        _button_importToLayer = go.AddComponent<Button>();
-	        var colors = _button_importToLayer.colors;
-	        colors.highlightedColor = new Color(0.35f, 0.55f, 0.7f, 1f);
-	        _button_importToLayer.colors = colors;
+	        SpzUiThemeOps.ApplyBoundChromeSelectable(_button_importToLayer, t.controlBg, t.accent);
 	    }
 
 	    static Sprite _cachedImportToLayerSprite;
