@@ -797,11 +797,7 @@ namespace spz {
 	    void ApplyThemeTokens() {
 	        if (_settingsPanel_go == null) return;
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
-	            foreach (var g in _settingsPanel_go.GetComponentsInChildren<Graphic>(true)) {
-	                if (IsUnderProductColorSurface(g.transform)) continue;
-	                SpzUiThemeOps.RestoreAuthoredGraphic(g);
-	            }
-	            SpzUiThemeOps.RestoreRoundedControlSpritesUnder(_settingsPanel_go.transform);
+	            SpzUiThemeOps.RestoreBoundChromeUnder(_settingsPanel_go.transform);
 	            SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(_settingsPanel_go.transform);
 	            return;
 	        }
@@ -856,23 +852,7 @@ namespace spz {
 	        }
 	        foreach (var slider in _settingsPanel_go.GetComponentsInChildren<Slider>(true)) {
 	            if (slider == null || IsUnderProductColorSurface(slider.transform)) continue;
-	            var bg = slider.GetComponent<Image>();
-	            if (bg != null) {
-	                SpzUiThemeOps.ApplyBoundChromeGraphic(bg, t.fieldBg);
-	                SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
-	            }
-	            if (slider.fillRect != null) {
-	                var fill = slider.fillRect.GetComponent<Image>();
-	                if (fill != null)
-	                    SpzUiThemeOps.ApplyBoundChromeGraphic(fill, t.accent);
-	            }
-	            if (slider.handleRect != null) {
-	                var handle = slider.handleRect.GetComponent<Image>();
-	                if (handle != null) {
-	                    SpzUiThemeOps.ApplyBoundChromeGraphic(handle, t.handle);
-	                    SpzUiThemeOps.ApplyRoundedControlSprite(handle, markEligible: true);
-	                }
-	            }
+	            SpzUiThemeOps.ApplyNomadSliderChrome(slider);
 	        }
 	        foreach (var lg in _settingsPanel_go.GetComponentsInChildren<LayoutGroup>(true)) {
 	            if (lg == null || IsUnderProductColorSurface(lg.transform)) continue;
@@ -895,6 +875,7 @@ namespace spz {
 	        // Image.color = chrome token; ColorBlock stays white-based so Unity does not multiply twice.
 	        if (tgl.targetGraphic != null)
 	            SpzUiThemeOps.ApplyBoundChromeGraphic(tgl.targetGraphic, t.controlBg);
+	        SpzUiThemeOps.SnapshotAuthoredColorBlock(tgl);
 	        var colors = tgl.colors;
 	        colors.normalColor = Color.white;
 	        colors.highlightedColor = Color.Lerp(Color.white, t.accent, 0.25f);
@@ -916,6 +897,7 @@ namespace spz {
 	            ? t.success
 	            : new Color(0.35f, 0.72f, 0.42f, 1f);
 	        sel.transition = Selectable.Transition.ColorTint;
+	        SpzUiThemeOps.SnapshotAuthoredColorBlock(sel);
 	        sel.colors = new ColorBlock {
 	            normalColor = Color.white,
 	            highlightedColor = Color.Lerp(Color.white, accent, 0.15f),
@@ -945,6 +927,7 @@ namespace spz {
 	        Color success = SpzUiThemeOps.ShouldRecolorBoundChrome
 	            ? t.success
 	            : new Color(0.35f, 0.72f, 0.42f, 1f);
+	        SpzUiThemeOps.SnapshotAuthoredColorBlock(sel);
 	        var block = new ColorBlock {
 	            normalColor = Color.white,
 	            highlightedColor = Color.Lerp(Color.white, accent, 0.25f),
