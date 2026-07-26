@@ -16,7 +16,7 @@ namespace spz {
 		const float FontSize = 9.5f;
 		const float DialRing = 18f;
 		const float DialHit = 22f;
-		const int UiChromeVersion = 9;
+		const int UiChromeVersion = 10;
 
 		// Match Brush options: start closed so the tool row stays usable.
 		static bool _sessionCollapsed = true;
@@ -43,7 +43,6 @@ namespace spz {
 		Toggle _hardnessToggle;
 		Toggle _liveToggle;
 		ValueDial _blendDial;
-		ValueDial _sizeDial;
 		ValueDial _opacityDial;
 		GameObject _bodyRoot;
 		GameObject _knobRow;
@@ -288,9 +287,10 @@ namespace spz {
 			if (_assist != null) {
 				bool taggedNeuralOff = _assistWhich != null
 					&& _assistWhich.IndexOf("neural off", System.StringComparison.Ordinal) >= 0;
-				bool taggedMlp = _assistWhich != null
-					&& _assistWhich.IndexOf("MlpValuePaintAssist", System.StringComparison.Ordinal) >= 0;
-				bool mismatch = preferNeural ? taggedNeuralOff : (taggedMlp || !taggedNeuralOff);
+				bool taggedNeural = _assistWhich != null
+					&& (_assistWhich.IndexOf("MlpDecimaconPaintAssist", System.StringComparison.Ordinal) >= 0
+					    || _assistWhich.IndexOf("Decimacon", System.StringComparison.Ordinal) >= 0);
+				bool mismatch = preferNeural ? taggedNeuralOff : (taggedNeural || !taggedNeuralOff);
 				if (mismatch) {
 					_assist = null;
 					_assistWhich = "";
@@ -351,7 +351,6 @@ namespace spz {
 			_hardnessToggle = null;
 			_liveToggle = null;
 			_blendDial = null;
-			_sizeDial = null;
 			_opacityDial = null;
 			_bodyRoot = null;
 			_knobRow = null;
@@ -402,9 +401,7 @@ namespace spz {
 			_blendDial = MakeValueDial(_knobRow.transform, "Blend", PaintTab_ValueAssistOptions.Blend01,
 				v => PaintTab_ValueAssistOptions.SetBlend01(v),
 				"Blend\nHow strongly to pull brush color toward the predicted value step.\n0% = keep yours · 100% = full prediction.");
-			_sizeDial = MakeValueDial(_knobRow.transform, "Size", PaintTab_ValueAssistOptions.SizeInfluence01,
-				v => PaintTab_ValueAssistOptions.SetSizeInfluence01(v),
-				"Size\nHow much predicted brush size overrides yours.\n0% = keep yours · 100% = use prediction.");
+			// Width hint is computed in Value Assist and applied into BrushRibbon_UI_Size (no Size dial here).
 			_opacityDial = MakeValueDial(_knobRow.transform, "Opacity", PaintTab_ValueAssistOptions.OpacityInfluence01,
 				v => PaintTab_ValueAssistOptions.SetOpacityInfluence01(v),
 				"Opacity\nHow much predicted opacity applies on Accept.\n0% = keep yours · 100% = use prediction.");
@@ -645,7 +642,6 @@ namespace spz {
 			if (_hardnessToggle != null)
 				_hardnessToggle.SetIsOnWithoutNotify(PaintTab_ValueAssistOptions.ApplyHardness);
 			_blendDial?.SetValueWithoutNotify(PaintTab_ValueAssistOptions.Blend01);
-			_sizeDial?.SetValueWithoutNotify(PaintTab_ValueAssistOptions.SizeInfluence01);
 			_opacityDial?.SetValueWithoutNotify(PaintTab_ValueAssistOptions.OpacityInfluence01);
 			_suppressToggleSync = false;
 			TintBoolDial(_enabledToggle, PaintTab_ValueAssistOptions.Enabled);
@@ -672,13 +668,17 @@ namespace spz {
 				return;
 			}
 			ValuePaintProposalApplier.ClearLiveSoftArmSuppress();
+			var lavd = spz.MlpDecimacon.DecimaconProductGate.BeginPropose();
 			EnsureAssist();
 			// While Live soft-arms the ribbon, CurrentBrushColor() is already value-remapped.
 			// Propose/Accept must start from the artist's locked chroma or Accept double-shifts.
 			Color sample = CurrentBrushColor();
 			if (ValuePaintProposalApplier.TryGetUserChromaBase(out Color chromaBase))
 				sample = chromaBase;
+			var sw = spz.MlpDecimacon.DecimaconProductGate.StartTimer();
 			_proposal = _assist.ProposeFromColor(sample, default);
+			spz.MlpDecimacon.DecimaconProductGate.EndInference(
+				lavd, spz.MlpDecimacon.DecimaconProductGate.ElapsedMs(sw), ranForward: true, accuracyProxy: 0.99f);
 			_proposalBaseColor = sample;
 			_hasProposal = true;
 			_proposalFromNeural = PaintTab_ValueAssistOptions.UseNeural;
@@ -687,7 +687,8 @@ namespace spz {
 			if (_swatchImg != null)
 				_swatchImg.color = ValuePaintProposalApplier.ColorAtDesiredValue(sample, _proposal.DesiredBin);
 			if (_summaryTmp != null) _summaryTmp.text = FormatProposal(_proposal);
-			SetStatus("Proposed (" + _assistWhich + ") — Accept to arm brush.");
+			var narr = spz.MlpDecimacon.ExtraLavdArmMap.NarrativeForBandit(lavd.SelectedArm);
+			SetStatus("Proposed (" + _assistWhich + " · LAVD " + narr + ") — Accept to arm brush.");
 			ShowFeedback("Value Assist: proposal ready");
 		}
 
@@ -708,8 +709,8 @@ namespace spz {
 				if (_swatchImg != null)
 					_swatchImg.color = ValuePaintProposalApplier.ColorAtDesiredValue(_proposalBaseColor, _proposal.DesiredBin);
 				SetStatus(PaintTab_ValueAssistOptions.ApplyHardness
-					? "Armed — color/size/opacity/hardness."
-					: "Armed — color/size/opacity (hardness unchanged).");
+					? "Armed — color/opacity/hardness · size→SPZ ribbon."
+					: "Armed — color/opacity · size→SPZ ribbon (hardness unchanged).");
 				ShowFeedback("Value Assist: accepted");
 			} else {
 				SetStatus("Accept refused — " + reason);

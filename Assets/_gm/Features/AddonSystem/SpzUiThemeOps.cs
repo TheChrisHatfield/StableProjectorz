@@ -316,6 +316,17 @@ namespace spz {
 				}
 			}
 
+			foreach (var toggle in root.GetComponentsInChildren<Toggle>(true)) {
+				if (toggle == null || toggle.targetGraphic == null)
+					continue;
+				Color normal = toggle.isOn
+					? Color.Lerp(tokens.tabActive, tokens.accent, 0.45f)
+					: tokens.controlBg;
+				ApplySelectableToken(toggle, normal, tokens.accent);
+				if (toggle.graphic is Image check)
+					check.color = tokens.accent;
+			}
+
 			foreach (var text in root.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 				if (text == null)
 					continue;
@@ -366,6 +377,44 @@ namespace spz {
 			colors.pressedColor = Color.Lerp(Color.white, accent, 0.55f);
 			colors.selectedColor = colors.highlightedColor;
 			selectable.colors = colors;
+		}
+
+		/// <summary>
+		/// Sets TMP color and scaled font size using a once-captured design base (no compound resize).
+		/// </summary>
+		public static void ApplyTmpScaledCaptured(TMP_Text text, Color token, float fallbackBasePt = 14f) {
+			if (text == null)
+				return;
+			ApplyTmpScaled(text, token, ResolveOrCaptureDesignFontPt(text, fallbackBasePt));
+		}
+
+		/// <summary>
+		/// Scales an existing layout group's spacing/padding from design bases stored on first apply.
+		/// </summary>
+		public static void ApplyScaledLayoutGroup(LayoutGroup group) {
+			if (group == null)
+				return;
+			var hv = group as HorizontalOrVerticalLayoutGroup;
+			var tag = group.gameObject.GetComponent<SpzUiThemeDesignLayoutGroup>();
+			if (tag == null) {
+				tag = group.gameObject.AddComponent<SpzUiThemeDesignLayoutGroup>();
+				float s0 = _active.spacingScale;
+				bool unscale = s0 > 0.05f && Mathf.Abs(s0 - 1f) > 0.001f;
+				float spacing0 = hv != null ? hv.spacing : 0f;
+				tag.spacing = unscale ? spacing0 / s0 : spacing0;
+				tag.padL = unscale ? Mathf.RoundToInt(group.padding.left / s0) : group.padding.left;
+				tag.padR = unscale ? Mathf.RoundToInt(group.padding.right / s0) : group.padding.right;
+				tag.padT = unscale ? Mathf.RoundToInt(group.padding.top / s0) : group.padding.top;
+				tag.padB = unscale ? Mathf.RoundToInt(group.padding.bottom / s0) : group.padding.bottom;
+			}
+			float s = _active.spacingScale;
+			if (hv != null)
+				hv.spacing = tag.spacing * s;
+			group.padding = new RectOffset(
+				Mathf.RoundToInt(tag.padL * s),
+				Mathf.RoundToInt(tag.padR * s),
+				Mathf.RoundToInt(tag.padT * s),
+				Mathf.RoundToInt(tag.padB * s));
 		}
 
 		public static void ApplyTmpColor(TMP_Text text, Color token) {
@@ -460,17 +509,19 @@ namespace spz {
 
 		static JArray BuildSurfaces() {
 			return new JArray {
-				Surface("addon_panels", true, "AddonUI_MGR AddonPanel_* roots"),
-				Surface("command_ribbon", true, "CommandRibbon_UI strip/panels/tabs"),
-				Surface("paint_tab", true, "PaintTab Collect/Krita/Layers ownership roots"),
-				Surface("addon_manager", true, "AddonManager_UI; REF roles → tokens"),
-				Surface("settings", true, "Settings_UI chrome; product prefs untouched"),
-				Surface("viewport_statusline", true, "Viewport_StatusText RGB; sticky caller-owned"),
-				Surface("viewport_ribbons", true, "LeftRibbon_UI + WorkflowRibbon_UI + GenerateButtons_Main"),
-				Surface("sd_input_panel", true, "SD_InputPanel_UI column (models/VAE/dials/fields)"),
-				Surface("export_save_menu", true, "ExportSave_UI_MGR save/load/export slide-out"),
-				Surface("scene_resolution", true, "SceneResolution_MGR SAVE Nx / filter toggles"),
-				Surface("connection_panels", true, "ConnectionPanel_UI SD SERV / 3D SERV chrome"),
+				Surface("addon_panels", true, "AddonUI_MGR AddonPanel_* roots; colors + font_scale"),
+				Surface("command_ribbon", true, "CommandRibbon_UI strip/panels/tabs; colors + font_scale"),
+				Surface("paint_tab", true, "PaintTab Collect/Krita/Layers; colors + font_scale + spacing where VLG"),
+				Surface("addon_manager", true, "AddonManager_UI; REF roles → tokens; font_scale + spacing_scale"),
+				Surface("settings", true, "Settings_UI chrome; font_scale + spacing; product prefs untouched"),
+				Surface("viewport_statusline", true, "Viewport_StatusText RGB + font_scale; sticky caller-owned"),
+				Surface("viewport_ribbons", true, "LeftRibbon + WorkflowRibbon + GenButtons; colors + font_scale"),
+				Surface("sd_input_panel", true, "SD_InputPanel_UI column; colors + font_scale"),
+				Surface("export_save_menu", true, "ExportSave_UI_MGR buttons; colors + font_scale"),
+				Surface("scene_resolution", true, "SceneResolution_MGR SAVE Nx / filters; colors + font_scale"),
+				Surface("connection_panels", true, "ConnectionPanel_UI SD SERV / 3D SERV chrome; colors + font_scale"),
+				Surface("right_panel_lists", true, "Art/BG IconsUI_List header+scroll; Mesh ModelsHandler_3D_UI; Art3D + ControlNet thumbs chrome only"),
+				Surface("multiview_pins", true, "MultiView_Ribbon_UI + CamerasMGR_PinsZone_UI pin/TMP chrome"),
 			};
 		}
 
@@ -653,5 +704,11 @@ namespace spz {
 	/// <summary>Stores design-time TMP point size for theme <c>font_scale</c> without compounding.</summary>
 	public sealed class SpzUiThemeDesignFontPt : MonoBehaviour {
 		public float designPt = 14f;
+	}
+
+	/// <summary>Stores design-time layout group spacing/padding for theme <c>spacing_scale</c>.</summary>
+	public sealed class SpzUiThemeDesignLayoutGroup : MonoBehaviour {
+		public float spacing;
+		public int padL, padR, padT, padB;
 	}
 }
