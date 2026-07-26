@@ -563,9 +563,9 @@ class SPZ_OT_go_export(Operator):
         ok = (r.get("success") is True) if isinstance(r, dict) else False
         if ok:
             self.report({"INFO"}, f"Export → SPZ: {out}")
-        else:
-            self.report({"WARNING"}, f"File written; SPZ import: {r!r}")
-        return {"FINISHED"}
+            return {"FINISHED"}
+        self.report({"WARNING"}, f"File written; SPZ import failed: {r!r}")
+        return {"CANCELLED"}
 
 
 class SPZ_OT_go_import(Operator):
