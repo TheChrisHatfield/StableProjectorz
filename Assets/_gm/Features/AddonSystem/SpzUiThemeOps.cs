@@ -175,13 +175,28 @@ namespace spz {
 			if (text == null) return;
 			if (!ShouldRecolorBoundChrome) {
 				RestoreAuthoredGraphic(text);
-				RestoreNomadTypography(text);
+				RestoreDesignFontSize(text, fallbackBasePt);
 				return;
 			}
 			SnapshotAuthoredGraphic(text);
 			SnapshotNomadTypography(text);
 			ApplyTmpScaledCaptured(text, token, fallbackBasePt);
 			ApplyNomadTypographyMetrics(text);
+		}
+
+		/// <summary>
+		/// Unwinds <c>font_scale</c> by restoring the once-captured design point size.
+		/// Leave paths that only restored color left TMP stuck at the scaled size.
+		/// </summary>
+		static void RestoreDesignFontSize(TMP_Text text, float fallbackBasePt) {
+			if (text == null) return;
+			var tag = text.GetComponent<SpzUiThemeDesignFontPt>();
+			if (tag != null && tag.designPt > 0.05f) {
+				text.fontSize = tag.designPt;
+				return;
+			}
+			if (fallbackBasePt > 0.05f && Mathf.Abs(_active.fontScale - 1f) < 0.001f)
+				text.fontSize = fallbackBasePt;
 		}
 
 		const string ControlLineIconChildName = "MonolithLineIcon";

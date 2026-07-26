@@ -567,6 +567,30 @@ public sealed class SpzUiThemeOpsTests {
 	}
 
 	[Test]
+	public void BoundChromeTmpRestoresDesignFontSizeWhenLeavingTheme() {
+		var go = new GameObject("NomadFontScaleRestore");
+		var tmp = go.AddComponent<TextMeshProUGUI>();
+		tmp.fontSize = 20f;
+		try {
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				Tokens(("text_primary", "#E3E2E7FF"), ("font_scale", "1.25")),
+				"replace",
+				out string error), Is.True, error);
+			SpzUiThemeOps.ApplyBoundChromeTmp(tmp, SpzUiThemeOps.Active.textPrimary, 20f);
+			Assert.That(tmp.fontSize, Is.EqualTo(25f).Within(0.05f));
+
+			SpzUiThemeOps.ResetTheme();
+			SpzUiThemeOps.ApplyBoundChromeTmp(tmp, Color.white, 20f);
+			Assert.That(tmp.fontSize, Is.EqualTo(20f).Within(0.05f));
+			Assert.That(tmp.characterSpacing, Is.EqualTo(0f).Within(0.01f));
+		} finally {
+			UnityEngine.Object.DestroyImmediate(go);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
 	public void BoundChromeTmpAppliesNomadTrackingAndControlLineIconRestores() {
 		var go = new GameObject("NomadChromeTmp");
 		var owner = new GameObject("ToolOwner", typeof(RectTransform));
