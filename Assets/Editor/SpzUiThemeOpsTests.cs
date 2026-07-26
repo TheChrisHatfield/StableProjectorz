@@ -516,6 +516,39 @@ public sealed class SpzUiThemeOpsTests {
 	}
 
 	[Test]
+	public void PatchWithRegisteredPresetPreservesPriorPatchedTokens() {
+		var tokens = new JObject {
+			["accent"] = "#F2CA50FF",
+			["font_scale"] = 1.05,
+			["ribbon_icon_only"] = 1,
+		};
+		Assert.That(SpzUiThemeOps.TryRegisterTheme(
+			"nomad-inspired", "Nomad inspired", tokens, "NomadThemeSPZ", out string error), Is.True, error);
+		Assert.That(SpzUiThemeOps.TryApplyTheme("nomad-inspired", null, "replace", out error), Is.True, error);
+		Assert.That(SpzUiThemeOps.RibbonIconOnlyActive, Is.True);
+
+		// Runtime override while preset stays registered.
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"nomad-inspired",
+			new JObject { ["ribbon_icon_only"] = 0, ["accent"] = "#AABBCCFF" },
+			"patch",
+			out error), Is.True, error);
+		Assert.That(SpzUiThemeOps.RibbonIconOnlyActive, Is.False);
+		Assert.That((string)SpzUiThemeOps.GetThemeResult()["tokens"]["accent"], Is.EqualTo("#AABBCCFF"));
+
+		// Scale patch must keep prior overrides (patch = active base), not rebuild from preset.
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"nomad-inspired",
+			new JObject { ["font_scale"] = 1.2 },
+			"patch",
+			out error), Is.True, error);
+		var after = SpzUiThemeOps.GetThemeResult()["tokens"];
+		Assert.That((float)after["font_scale"], Is.EqualTo(1.2f).Within(0.001f));
+		Assert.That((string)after["accent"], Is.EqualTo("#AABBCCFF"));
+		Assert.That(SpzUiThemeOps.RibbonIconOnlyActive, Is.False);
+	}
+
+	[Test]
 	public void ScaleTokensApplyAndScaledSpaceRespectsSpacing() {
 		Assert.That(SpzUiThemeOps.TryApplyTheme(
 			"p1-experiment",
