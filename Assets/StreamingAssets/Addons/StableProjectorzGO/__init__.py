@@ -124,19 +124,25 @@ def run_blender_bridge_install(blender_exe: str, ship_dir: str, force: bool = Fa
     return ok, marker, out
 
 
-def do_install_blender_addon(force=False):
-    """Install/update Blender SPZ GO bridge. force=True from the Install button."""
+def do_install_blender_addon(force=False, report_status=True):
+    """Install/update Blender SPZ GO bridge. force=True from the Install button.
+
+    report_status=False for background auto-install — ui_chrome must not be
+    touched off the Unity/Python host main thread.
+    """
     ship = bridge_ship_dir()
     blender = _panel_blender_exe()
     if not blender:
         msg = "Install: set Blender.exe path first"
         print(ADDON_ID + ": " + msg)
-        _status(msg, 5.0)
+        if report_status:
+            _status(msg, 5.0)
         return False
     if not os.path.isdir(ship):
         msg = "Install: BlenderBridge ship folder missing"
         print(ADDON_ID + ": " + msg + " — " + ship)
-        _status(msg, 5.0)
+        if report_status:
+            _status(msg, 5.0)
         return False
 
     print(ADDON_ID + " blender install start:")
@@ -147,7 +153,9 @@ def do_install_blender_addon(force=False):
     print(ADDON_ID + " blender install:", marker)
     if not ok:
         print(out[-2000:] if out else "")
-    # Short UI line
+    if not report_status:
+        return ok
+    # Short UI line (button / main-thread callers only)
     if marker.startswith("SPZ_GO_INSTALL_OK"):
         _status("Blender add-on installed", 4.0)
     elif marker.startswith("SPZ_GO_INSTALL_SKIP"):
@@ -159,7 +167,7 @@ def do_install_blender_addon(force=False):
 
 def do_install_blender_addon_force():
     """Button callback: always reinstall/update."""
-    do_install_blender_addon(force=True)
+    do_install_blender_addon(force=True, report_status=True)
 
 
 def _status(message: str, duration: float = 4.0):
@@ -429,10 +437,11 @@ def register():
     _panel.add_button("Print data_dir", "do_show_data_dir")
     print(ADDON_ID + " registered")
     # Best-effort auto-install when Blender is present — background so register() is not blocked (up to 180s).
+    # Log-only status: do not call ui_chrome from this daemon thread.
     if b_default:
         def _auto_install():
             try:
-                do_install_blender_addon(force=False)
+                do_install_blender_addon(force=False, report_status=False)
             except Exception as e:
                 print(ADDON_ID + " auto-install Blender bridge skipped:", e)
 
