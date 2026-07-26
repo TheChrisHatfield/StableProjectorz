@@ -667,6 +667,10 @@ namespace spz {
 	        // Leaving icon-only must re-run label-based strip widths (ThemeChanged alone used to wipe LE to -1).
 	        if (!iconOnly)
 	            HarmonizeStripTabTypography();
+
+	        // Icon-only preferredWidth (and Harmonize mins) must rebuild this frame — Refresh used to rebuild before ApplyThemeTokens.
+	        if (strip != null && strip is RectTransform stripRt)
+	            UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(stripRt);
 	    }
 
 	    /// <summary>Prefer the authored pill graphic; never retint Monolith chrome overlays.</summary>
@@ -784,6 +788,8 @@ namespace spz {
 	        for (int i = 0; i < strip.childCount; i++) {
 	            Transform cell = strip.GetChild(i);
 	            if (cell == null) continue;
+	            if (cell.GetComponent<TabsGroupElem_UI>() == null)
+	                continue;
 	            string n = cell.name ?? "";
 	            if (n.StartsWith("StripDivider_", StringComparison.Ordinal)
 	                || n.StartsWith("AddonDivider_", StringComparison.Ordinal))
@@ -1608,11 +1614,9 @@ namespace spz {
 		    if (tabStrip == null) return;
 		    PatchTabStripResponsiveLayout();
 		    HarmonizeStripTabTypography();
-		    var stripRect = tabStrip as RectTransform;
-		    if (stripRect != null)
-			    UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(stripRect);
-		    QueueTabStripRebuildNextFrame(tabStrip);
+		    // Theme/icon-only widths + ForceRebuild live inside ApplyThemeTokens (must run before any prior rebuild).
 		    ApplyThemeTokens();
+		    QueueTabStripRebuildNextFrame(tabStrip);
 	    }
 
 	    /// <summary>Public hook to reflow the ribbon tab row (e.g. after external hierarchy changes). Uses <see cref="ResolveEffectiveTabStripTransform"/>.</summary>
