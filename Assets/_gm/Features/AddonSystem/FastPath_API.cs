@@ -1,7 +1,10 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Text;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
 
@@ -1113,6 +1116,154 @@ namespace spz {
 			}
 			return sm.Export3D_with_textures_ToPath(norm);
 		}
+
+		const string SpzGoBridgeShipSubpath = "Addons/StableProjectorzGO/BlenderBridge";
+		const int SpzGoBlenderInstallTimeoutMs = 180_000;
+
+		/// <summary>
+		/// Shipped Blender bridge folder under StreamingAssets (player builds include it).
+		/// </summary>
+		public static string GetSpzGoBlenderBridgeShipDir() {
+			try {
+				return Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, SpzGoBridgeShipSubpath));
+			} catch {
+				return null;
+			}
+		}
+
+		/// <summary>
+		/// Best-effort locate blender.exe (Windows Program Files / LocalAppData / Steam; else PATH "blender").
+		/// </summary>
+		public static string FindBlenderExecutable() {
+			try {
+				if (Application.platform == RuntimePlatform.WindowsPlayer
+				    || Application.platform == RuntimePlatform.WindowsEditor) {
+					var candidates = new List<string>();
+					void AddGlobs(string root) {
+						if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) return;
+						string foundation = Path.Combine(root, "Blender Foundation");
+						if (!Directory.Exists(foundation)) return;
+						foreach (var dir in Directory.GetDirectories(foundation, "Blender *")) {
+							string ex = Path.Combine(dir, "blender.exe");
+							if (File.Exists(ex)) candidates.Add(ex);
+						}
+					}
+					AddGlobs(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles));
+					AddGlobs(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86));
+					string localProgs = Path.Combine(
+						Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs");
+					if (Directory.Exists(localProgs)) {
+						foreach (var dir in Directory.GetDirectories(localProgs)) {
+							if (Path.GetFileName(dir).IndexOf("Blender", StringComparison.OrdinalIgnoreCase) < 0)
+								continue;
+							string ex = Path.Combine(dir, "blender.exe");
+							if (File.Exists(ex)) candidates.Add(ex);
+						}
+					}
+					string steam = Path.Combine(
+						Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+						"Steam", "steamapps", "common");
+					if (Directory.Exists(steam)) {
+						foreach (var dir in Directory.GetDirectories(steam, "Blender *")) {
+							string ex = Path.Combine(dir, "blender.exe");
+							if (File.Exists(ex)) candidates.Add(ex);
+						}
+					}
+					if (candidates.Count == 0) return null;
+					return candidates
+						.Distinct(StringComparer.OrdinalIgnoreCase)
+						.OrderByDescending(p => {
+							var m = System.Text.RegularExpressions.Regex.Match(p, @"Blender (\d+)\.(\d+)",
+								System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+							if (!m.Success) return (0, 0);
+							return (int.Parse(m.Groups[1].Value), int.Parse(m.Groups[2].Value));
+						})
+						.First();
+				}
+				// Non-Windows: PATH
+				string pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
+				foreach (var part in pathEnv.Split(Path.PathSeparator)) {
+					if (string.IsNullOrEmpty(part)) continue;
+					string cand = Path.Combine(part, "blender");
+					if (File.Exists(cand)) return cand;
+				}
+			} catch (Exception ex) {
+				UnityEngine.Debug.LogWarning("[FastPath_API] FindBlenderExecutable: " + ex.Message);
+			}
+			return null;
+		}
+
+		/// <summary>
+		/// Install/update SPZ GO into the user's Blender via <c>blender --background --python install_into_blender.py</c>.
+		/// </summary>
+		public bool TryInstallSpzGoBlenderBridge(string blenderExe, bool force, out string message) {
+			message = null;
+			string ship = GetSpzGoBlenderBridgeShipDir();
+			if (string.IsNullOrEmpty(ship) || !Directory.Exists(ship)) {
+				message = "BlenderBridge ship folder missing under StreamingAssets";
+				return false;
+			}
+			string script = Path.Combine(ship, "install_into_blender.py");
+			if (!File.Exists(script)) {
+				message = "install_into_blender.py missing";
+				return false;
+			}
+			if (string.IsNullOrWhiteSpace(blenderExe) || !File.Exists(blenderExe)) {
+				blenderExe = FindBlenderExecutable();
+			}
+			if (string.IsNullOrWhiteSpace(blenderExe) || !File.Exists(blenderExe)) {
+				message = "blender.exe not found — set Blender path";
+				return false;
+			}
+			var args = new StringBuilder();
+			args.Append("--background --python \"").Append(script).Append("\" -- --src \"").Append(ship).Append("\"");
+			if (force)
+				args.Append(" --force");
+
+			try {
+				var psi = new ProcessStartInfo {
+					FileName = blenderExe,
+					Arguments = args.ToString(),
+					UseShellExecute = false,
+					RedirectStandardOutput = true,
+					RedirectStandardError = true,
+					CreateNoWindow = true,
+				};
+				using (var proc = Process.Start(psi)) {
+					if (proc == null) {
+						message = "failed to start blender";
+						return false;
+					}
+					string stdout = proc.StandardOutput.ReadToEnd();
+					string stderr = proc.StandardError.ReadToEnd();
+					if (!proc.WaitForExit(SpzGoBlenderInstallTimeoutMs)) {
+						try { proc.Kill(); } catch { }
+						message = "blender install timed out";
+						return false;
+					}
+					string combined = (stdout ?? "") + "\n" + (stderr ?? "");
+					string marker = null;
+					foreach (var line in combined.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)) {
+						string s = line.Trim();
+						if (s.StartsWith("SPZ_GO_INSTALL_OK", StringComparison.Ordinal)
+						    || s.StartsWith("SPZ_GO_INSTALL_SKIP", StringComparison.Ordinal)
+						    || s.StartsWith("SPZ_GO_INSTALL_FAIL", StringComparison.Ordinal)) {
+							marker = s;
+						}
+					}
+					if (string.IsNullOrEmpty(marker)) {
+						message = "no status marker from blender (exit " + proc.ExitCode + ")";
+						return false;
+					}
+					message = marker;
+					return marker.StartsWith("SPZ_GO_INSTALL_OK", StringComparison.Ordinal)
+					       || marker.StartsWith("SPZ_GO_INSTALL_SKIP", StringComparison.Ordinal);
+				}
+			} catch (Exception ex) {
+				message = ex.Message;
+				return false;
+			}
+		}
 		
 		/// <summary>
 		/// Export projection textures
@@ -1179,6 +1330,13 @@ namespace spz {
 		// --- SD / Forge-facing generation options (workflow ribbon → WebUI) ---
 
 		public void PopulateSdWorkflowOptions(JObject result) {
+			// Settings-backed flags are useful even when the SD ribbon host is not yet resolved (load order / toolchest).
+			var setMgr = Settings_MGR.instance;
+			if (setMgr != null) {
+				result["strict_mask_isolation"] = setMgr.get_sd_strictMaskIsolation();
+				result["strict_mask_isolation_flip"] = setMgr.get_sd_strictIsolationFlipMask();
+				result["inpainting_mask_invert"] = setMgr.get_sd_inpaintingMaskInvert();
+			}
 			var sd = SD_WorkflowOptionsRibbon_UI.instance;
 			if (sd == null) {
 				result["success"] = false;
@@ -1197,6 +1355,19 @@ namespace spz {
 			if (wf != null)
 				result["workflow_mode"] = wf.currentMode().ToString();
 			result["sd_connected"] = Connection_MGR.is_sd_connected;
+		}
+
+		/// <summary>Inverts post-SD strict isolation clamp vs screen mask (same as Paint tab / Settings). Persists in PlayerPrefs.</summary>
+		public bool SetSdStrictIsolationFlip(bool on) {
+			PaintTab_StrictIsolationBrushOptions.SetFlipInvertIsolationMask(on);
+			return true;
+		}
+
+		/// <summary>WebUI <c>inpainting_mask_invert</c>: when true, SD inpaints outside the brush mask (see Settings).</summary>
+		public bool SetSdInpaintingMaskInvert(bool on) {
+			if (Settings_MGR.instance == null) return false;
+			Settings_MGR.instance.set_sd_inpaintingMaskInvert_from_api(on);
+			return true;
 		}
 
 		public bool SetSdDenoisingStrength(float value) {

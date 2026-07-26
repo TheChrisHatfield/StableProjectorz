@@ -1,6 +1,7 @@
 """
 SPZ GO (in-app): exchange FBX/UV with Blender, headless import/export, optional Blender.exe path.
 Same HTTP API as the external Blender add-on: import mesh path, export mesh path.
+Ships BlenderBridge/ and can auto-install it into the user's Blender.
 """
 
 import os
@@ -8,6 +9,7 @@ import re
 import glob
 import sys
 import traceback
+import subprocess
 
 addon_system_dir = os.path.join(os.path.dirname(__file__), "..", "..", "AddonSystem")
 if os.path.exists(addon_system_dir):
@@ -25,11 +27,147 @@ ADDON_ID = "StableProjectorzGO"
 EXCHANGE_DIRNAME = "StableProjectorzGO_exchange"
 DEFAULT_EXCHANGE_IMPORT = "from_blender.fbx"  # Blender → disk → SPZ import
 DEFAULT_EXCHANGE_EXPORT = "from_spz.fbx"  # SPZ → disk (Blender can import)
+BLENDER_BRIDGE_MODULE = "spz_blender_bridge"
+BLENDER_INSTALL_TIMEOUT_S = 180
 
 _panel = None
 _eid_blender = None
 _eid_import = None
 _eid_export = None
+
+
+def bridge_ship_dir():
+    """Shipped Blender bridge folder next to this add-on (player StreamingAssets)."""
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "BlenderBridge")
+
+
+def parse_bl_info_version(init_path: str):
+    """Return (major, minor, patch) from bl_info version tuple, or None."""
+    try:
+        with open(init_path, "r", encoding="utf-8", errors="replace") as f:
+            text = f.read()
+    except OSError:
+        return None
+    m = re.search(r'"version"\s*:\s*\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)\)', text)
+    if not m:
+        return None
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+
+
+def _panel_blender_exe():
+    global _panel, _eid_blender
+    if _panel is not None and _eid_blender is not None:
+        try:
+            raw = _panel.get_value(_eid_blender)
+            if raw and str(raw).strip():
+                p = os.path.normpath(str(raw).strip().strip('"'))
+                if os.path.isfile(p):
+                    return p
+        except Exception:
+            pass
+    return find_blender_executable() or ""
+
+
+def run_blender_bridge_install(blender_exe: str, ship_dir: str, force: bool = False):
+    """
+    Run blender --background --python install_into_blender.py.
+    Returns (ok: bool, marker_line: str, full_stdout: str).
+    """
+    if not blender_exe or not os.path.isfile(blender_exe):
+        return False, "SPZ_GO_INSTALL_FAIL: blender.exe not found", ""
+    if not ship_dir or not os.path.isdir(ship_dir):
+        return False, "SPZ_GO_INSTALL_FAIL: ship dir missing", ""
+    script = os.path.join(ship_dir, "install_into_blender.py")
+    if not os.path.isfile(script):
+        return False, "SPZ_GO_INSTALL_FAIL: install_into_blender.py missing", ""
+
+    cmd = [
+        blender_exe,
+        "--background",
+        "--python",
+        script,
+        "--",
+        "--src",
+        ship_dir,
+    ]
+    if force:
+        cmd.append("--force")
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=BLENDER_INSTALL_TIMEOUT_S,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return False, "SPZ_GO_INSTALL_FAIL: blender install timed out", ""
+    except OSError as e:
+        return False, "SPZ_GO_INSTALL_FAIL: " + str(e), ""
+
+    out = (proc.stdout or "") + "\n" + (proc.stderr or "")
+    marker = ""
+    for line in out.splitlines():
+        s = line.strip()
+        if s.startswith("SPZ_GO_INSTALL_OK") or s.startswith("SPZ_GO_INSTALL_SKIP") or s.startswith(
+            "SPZ_GO_INSTALL_FAIL"
+        ):
+            marker = s
+    if not marker:
+        if proc.returncode == 0:
+            marker = "SPZ_GO_INSTALL_FAIL: no status marker from blender"
+        else:
+            marker = "SPZ_GO_INSTALL_FAIL: blender exit " + str(proc.returncode)
+    ok = marker.startswith("SPZ_GO_INSTALL_OK") or marker.startswith("SPZ_GO_INSTALL_SKIP")
+    return ok, marker, out
+
+
+def do_install_blender_addon(force=False):
+    """Install/update Blender SPZ GO bridge. force=True from the Install button."""
+    ship = bridge_ship_dir()
+    blender = _panel_blender_exe()
+    if not blender:
+        msg = "Install: set Blender.exe path first"
+        print(ADDON_ID + ": " + msg)
+        _status(msg, 5.0)
+        return False
+    if not os.path.isdir(ship):
+        msg = "Install: BlenderBridge ship folder missing"
+        print(ADDON_ID + ": " + msg + " — " + ship)
+        _status(msg, 5.0)
+        return False
+
+    print(ADDON_ID + " blender install start:")
+    print("  blender:", blender)
+    print("  ship:", ship)
+    print("  force:", force)
+    ok, marker, out = run_blender_bridge_install(blender, ship, force=force)
+    print(ADDON_ID + " blender install:", marker)
+    if not ok:
+        print(out[-2000:] if out else "")
+    # Short UI line
+    if marker.startswith("SPZ_GO_INSTALL_OK"):
+        _status("Blender add-on installed", 4.0)
+    elif marker.startswith("SPZ_GO_INSTALL_SKIP"):
+        _status("Blender add-on up to date", 3.5)
+    else:
+        _status("Blender install failed (see log)", 5.0)
+    return ok
+
+
+def do_install_blender_addon_force():
+    """Button callback: always reinstall/update."""
+    do_install_blender_addon(force=True)
+
+
+def _status(message: str, duration: float = 4.0):
+    if not _SPZ_OK:
+        return
+    try:
+        spz.get_api().ui_chrome.show_status_text(message, duration)
+    except Exception as ex:
+        print(ADDON_ID + " show_status_text:", ex)
 
 
 def find_blender_executable():
@@ -283,11 +421,18 @@ def register():
 
     _panel.add_button("Import", "do_import_from_path")
     _panel.add_button("Export", "do_export_to_path")
+    _panel.add_button("Install into Blender", "do_install_blender_addon_force")
     _panel.add_button("Autofill paths", "do_autofill_mesh_paths")
     _panel.add_button("Refresh Blender", "do_refresh_blender_path")
     _panel.add_button("Export with dialogs…", "do_export_interactive")
     _panel.add_button("Print data_dir", "do_show_data_dir")
     print(ADDON_ID + " registered")
+    # Best-effort auto-install when Blender is present; never fail register().
+    try:
+        if b_default:
+            do_install_blender_addon(force=False)
+    except Exception as e:
+        print(ADDON_ID + " auto-install Blender bridge skipped:", e)
 
 
 def unregister():
