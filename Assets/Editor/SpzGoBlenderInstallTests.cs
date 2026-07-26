@@ -29,6 +29,10 @@ public sealed class SpzGoBlenderInstallTests {
 			"SpzGoNativeInstallBlenderBridge",
 			BindingFlags.Instance | BindingFlags.NonPublic);
 		Assert.That(method, Is.Not.Null, "Native Install into Blender must call SpzGoNativeInstallBlenderBridge.");
+		var co = typeof(AddonUI_MGR).GetMethod(
+			"CoSpzGoNativeInstallBlenderBridge",
+			BindingFlags.Instance | BindingFlags.NonPublic);
+		Assert.That(co, Is.Not.Null, "Install must run off the UI thread via CoSpzGoNativeInstallBlenderBridge.");
 	}
 
 	[Test]
