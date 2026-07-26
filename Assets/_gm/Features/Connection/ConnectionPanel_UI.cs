@@ -30,7 +30,7 @@ namespace spz {
 	    [SerializeField] string PORT_PlayerPrefs_KEY = "StableDiffusionPort";
 	    [Space(10)]
 	    [SerializeField] string _default_ip = "127.0.0.1";
-	    [SerializeField] string _default_port = "8188";
+	    [SerializeField] string _default_port = "7860";
 	    enum ConnectionPanel_Kind{
 	        StableDiffusion, /*for 2D generation*/
 	        Trellis,/*for 3d generation*/
@@ -174,7 +174,7 @@ namespace spz {
 	        // So, I suspect these values are incorrect until the panel, opens. Let's manually set them here, just in case:
 	        // Feb 2024
 	        if (string.IsNullOrEmpty(_ip_text.text)){ _ip_text.text = "127.0.0.1"; }
-	        if(_port_text.recentVal==0){ _port_text.SetValue( _panelKind==ConnectionPanel_Kind.StableDiffusion?"8188":"7960"); }
+	        if(_port_text.recentVal==0){ _port_text.SetValue( _panelKind==ConnectionPanel_Kind.StableDiffusion?"7860":"7960"); }
 	        PlayerPrefs_LoadConnDetails();
 
 	        // Add listeners for changes in the IP and port input fields:
@@ -195,9 +195,9 @@ namespace spz {
 	        }
 	        if (PlayerPrefs.HasKey(PORT_PlayerPrefs_KEY)){
 	            string savedPort = PlayerPrefs.GetString(PORT_PlayerPrefs_KEY);
-	            // Forge was moved off :7860 (left for Comfy). Old/wrong prefs look like "Forge never loads".
+	            // Revert experimental :8188/:7878 prefs back to classic Forge/WebUI :7860.
 	            if (_panelKind == ConnectionPanel_Kind.StableDiffusion
-	                && (string.Equals(savedPort, "7860", StringComparison.Ordinal)
+	                && (string.Equals(savedPort, "8188", StringComparison.Ordinal)
 	                    || string.Equals(savedPort, "7878", StringComparison.Ordinal))) {
 	                UnityEngine.Debug.Log(
 	                    $"[ConnectionPanel] Migrating Stable Diffusion port prefs {savedPort} → {_default_port} (Forge listens on {_default_port}).");
@@ -256,24 +256,51 @@ namespace spz {
 	    /// Leaves <see cref="_dim_text"/> and <see cref="_connectionIcon"/> to connectivity logic (green/red/orange).
 	    /// </summary>
 	    void ApplyThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            if (_openPanel_button != null)
+	                SpzUiThemeOps.RestoreAuthoredGraphic(_openPanel_button.targetGraphic);
+	            if (_panel != null)
+	                SpzUiThemeOps.RestoreAuthoredGraphic(_panel.GetComponent<Image>());
+	            if (_ip_text != null) {
+	                SpzUiThemeOps.RestoreAuthoredGraphic(_ip_text.GetComponent<Image>());
+	                if (_ip_text.textComponent != null)
+	                    SpzUiThemeOps.RestoreAuthoredGraphic(_ip_text.textComponent);
+	                if (_ip_text.placeholder is TMPro.TMP_Text ph)
+	                    SpzUiThemeOps.RestoreAuthoredGraphic(ph);
+	            }
+	            if (_resetToDefault_button != null)
+	                SpzUiThemeOps.RestoreAuthoredGraphic(_resetToDefault_button.targetGraphic);
+	            return;
+	        }
 	        var t = SpzUiThemeOps.Active;
 	        if (_openPanel_button != null && _openPanel_button.targetGraphic != null)
-	            SpzUiThemeOps.ApplySelectableToken(_openPanel_button, t.controlBg, t.accent);
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(_openPanel_button, t.controlBg, t.accent);
 	        // Do not theme _dim_text — CheckConnection owns its color as live connection status.
 	        if (_panel != null) {
 	            var panelImg = _panel.GetComponent<Image>();
 	            if (panelImg != null)
-	                SpzUiThemeOps.ApplyGraphicColor(panelImg, t.panelBg);
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(panelImg, t.panelBg);
 	        }
 	        if (_ip_text != null) {
 	            var bg = _ip_text.GetComponent<Image>();
 	            if (bg != null)
-	                SpzUiThemeOps.ApplyGraphicColor(bg, t.fieldBg);
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(bg, t.fieldBg);
 	            if (_ip_text.textComponent != null)
-	                SpzUiThemeOps.ApplyTmpColor(_ip_text.textComponent, t.textPrimary);
+	                SpzUiThemeOps.ApplyBoundChromeTmp(_ip_text.textComponent, t.textPrimary);
+	            if (_ip_text.placeholder is TMPro.TMP_Text ph)
+	                SpzUiThemeOps.ApplyBoundChromeTmp(ph, t.textMuted);
 	        }
-	        if (_resetToDefault_button != null && _resetToDefault_button.targetGraphic != null)
-	            SpzUiThemeOps.ApplySelectableToken(_resetToDefault_button, t.controlBg, t.accent);
+	        if (_resetToDefault_button != null && _resetToDefault_button.targetGraphic != null) {
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(_resetToDefault_button, t.controlBg, t.accent);
+	            var resetLabel = _resetToDefault_button.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+	            if (resetLabel != null)
+	                SpzUiThemeOps.ApplyBoundChromeTmp(resetLabel, t.textPrimary);
+	        }
+	        if (_openPanel_button != null) {
+	            var openLabel = _openPanel_button.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+	            if (openLabel != null)
+	                SpzUiThemeOps.ApplyBoundChromeTmp(openLabel, t.textPrimary);
+	        }
 	    }
 
 	    void Start(){

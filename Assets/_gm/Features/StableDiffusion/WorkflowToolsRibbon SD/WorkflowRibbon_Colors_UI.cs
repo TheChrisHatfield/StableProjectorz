@@ -84,15 +84,51 @@ namespace spz {
 	    void Awake(){
 	        _toggle.onValueChanged.AddListener( OnValueChanged );
 	        _bakeColors_button.onClick.AddListener( OnButton_BakeColors );
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
 	    }
 
 	    void Start(){
 	        Settings_MGR._Act_verticalRibbonsSwapped += OnSettings_ToolRibbonSwapped;
 	        OnSettings_ToolRibbonSwapped(Settings_MGR.instance.get_viewport_isSwapVerticalRibbons());
+	        ApplyThemeTokens();
 	    }
 
 	    void OnDestroy(){
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 	        Settings_MGR._Act_verticalRibbonsSwapped -= OnSettings_ToolRibbonSwapped;
+	    }
+
+	    void ApplyThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            if (_options_slideOut != null) {
+	                foreach (var g in _options_slideOut.GetComponentsInChildren<Graphic>(true))
+	                    SpzUiThemeOps.RestoreAuthoredGraphic(g);
+	            }
+	            if (_bakeColors_button != null)
+	                SpzUiThemeOps.RestoreAuthoredGraphic(_bakeColors_button.targetGraphic);
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        if (_options_slideOut != null) {
+	            var root = _options_slideOut.transform;
+	            var panelImg = root.GetComponent<Image>();
+	            if (panelImg != null)
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(panelImg, t.panelBg);
+	            foreach (var img in root.GetComponentsInChildren<Image>(true)) {
+	                if (img == null || img == panelImg) continue;
+	                string n = img.gameObject.name ?? "";
+	                if (n.IndexOf("Slide", System.StringComparison.OrdinalIgnoreCase) >= 0
+	                    || n.IndexOf("Panel", System.StringComparison.OrdinalIgnoreCase) >= 0
+	                    || n.IndexOf("Background", System.StringComparison.OrdinalIgnoreCase) >= 0)
+	                    SpzUiThemeOps.ApplyBoundChromeGraphic(img, t.panelBg);
+	            }
+	            foreach (var tmp in root.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
+	                if (tmp != null)
+	                    SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	            }
+	        }
+	        if (_bakeColors_button != null)
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(_bakeColors_button, t.controlBg, t.accent);
 	    }
 	}
 }//end namespace

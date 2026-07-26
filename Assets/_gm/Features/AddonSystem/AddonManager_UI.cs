@@ -407,8 +407,7 @@ namespace spz {
 			bgR.anchorMax = Vector2.one;
 			bgR.sizeDelta = Vector2.zero;
 			var bgI = bg.AddComponent<UnityEngine.UI.Image>();
-			bgI.sprite = UiRuntimeSprites.RoundedRectSliced;
-			bgI.type = Image.Type.Sliced;
+			SpzUiThemeOps.ApplyRoundedControlSprite(bgI, markEligible: true);
 			bgI.color = new Color(0.3f, 0.3f, 0.3f, 1f);
 			bgI.raycastTarget = true;
 			var ck = new GameObject("Checkmark");
@@ -418,8 +417,7 @@ namespace spz {
 			ckR.anchorMax = Vector2.one;
 			ckR.sizeDelta = Vector2.zero;
 			var ckI = ck.AddComponent<UnityEngine.UI.Image>();
-			ckI.sprite = UiRuntimeSprites.RoundedRectSliced;
-			ckI.type = Image.Type.Sliced;
+			SpzUiThemeOps.ApplyRoundedControlSprite(ckI, markEligible: true);
 			ckI.color = new Color(0.2f, 0.8f, 0.2f, 1f);
 			ckI.raycastTarget = false;
 			var tgl = toggleContainer.AddComponent<Toggle>();
@@ -544,8 +542,7 @@ namespace spz {
 		rectTransform.anchoredPosition = Vector2.zero;
 		
 		var image = panelObj.AddComponent<UnityEngine.UI.Image>();
-		image.sprite = UiRuntimeSprites.RoundedRectSliced;
-		image.type = Image.Type.Sliced;
+		SpzUiThemeOps.ApplyRoundedControlSprite(image, markEligible: true);
 		image.color = new Color(21f / 255f, 21f / 255f, 21f / 255f, 0.985f);
 		image.raycastTarget = true;
 		
@@ -612,8 +609,7 @@ namespace spz {
 			le.flexibleWidth = 0f;
 			le.preferredHeight = size.y;
 			var img = go.AddComponent<UnityEngine.UI.Image>();
-			img.sprite = UiRuntimeSprites.RoundedRectSliced;
-			img.type = Image.Type.Sliced;
+			SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
 			img.color = bg;
 			img.raycastTarget = true;
 			var btn = go.AddComponent<UnityEngine.UI.Button>();
@@ -699,8 +695,7 @@ namespace spz {
 		pillsLE.preferredHeight = 34f;
 		pillsLE.minHeight = 34f;
 		var pillsBg = filterPillsObj.AddComponent<Image>();
-		pillsBg.sprite = UiRuntimeSprites.RoundedRectSliced;
-		pillsBg.type = Image.Type.Sliced;
+		SpzUiThemeOps.ApplyRoundedControlSprite(pillsBg, markEligible: true);
 		pillsBg.color = new Color(39f / 255f, 39f / 255f, 42f / 255f, 0.55f);
 		pillsBg.raycastTarget = false;
 		var pillsLayout = filterPillsObj.AddComponent<HorizontalLayoutGroup>();
@@ -1178,8 +1173,7 @@ namespace spz {
 			le.minWidth = width;
 			le.preferredHeight = 28f;
 			var toggleBg = toggleObj.AddComponent<UnityEngine.UI.Image>();
-			toggleBg.sprite = UiRuntimeSprites.RoundedRectSliced;
-			toggleBg.type = Image.Type.Sliced;
+			SpzUiThemeOps.ApplyRoundedControlSprite(toggleBg, markEligible: true);
 			toggleBg.color = new Color(0f, 0f, 0f, 0f);
 			toggleBg.raycastTarget = true;
 			var toggle = toggleObj.AddComponent<Toggle>();
@@ -1278,6 +1272,15 @@ namespace spz {
 		/// Re-run after list rebuilds; does not touch animation or layout.
 		/// </summary>
 		void ApplyThemeTokens() {
+			if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+				if (_panel != null) {
+					foreach (var g in _panel.GetComponentsInChildren<Graphic>(true))
+						SpzUiThemeOps.RestoreAuthoredGraphic(g);
+				}
+				if (_closePanel_button != null)
+					SpzUiThemeOps.RestoreAuthoredGraphic(_closePanel_button.targetGraphic);
+				return;
+			}
 			var t = SpzUiThemeOps.Active;
 			_statusOk = t.success;
 			_statusFail = t.danger;
@@ -1394,7 +1397,9 @@ namespace spz {
 			}
 			var icon = button.transform.Find("LineIcon")?.GetComponent<Image>();
 			if (icon != null)
-				SpzUiThemeOps.ApplyGraphicColor(icon, foreground);
+				SpzUiThemeOps.ApplyLineIconTint(icon);
+			if (button.targetGraphic is Image btnImg)
+				SpzUiThemeOps.ApplyRoundedControlSprite(btnImg);
 		}
 
 		static void ThemeFilterToggle(Toggle toggle, SpzUiThemeOps.ThemeTokens t) {
@@ -1662,8 +1667,7 @@ namespace spz {
 			removeBtnLE.preferredHeight = 28f;
 			removeBtnLE.minHeight = 28f;
 			var removeBtnImage = removeBtnObj.AddComponent<Image>();
-			removeBtnImage.sprite = UiRuntimeSprites.RoundedRectSliced;
-			removeBtnImage.type = Image.Type.Sliced;
+			SpzUiThemeOps.ApplyRoundedControlSprite(removeBtnImage, markEligible: true);
 			removeBtnImage.color = new Color(45f / 255f, 26f / 255f, 26f / 255f, 0.85f);
 			removeBtnImage.raycastTarget = true;
 			var removeBtn = removeBtnObj.AddComponent<Button>();

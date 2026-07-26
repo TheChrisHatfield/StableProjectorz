@@ -25,6 +25,36 @@ namespace spz {
 	            if(icon == null){ continue; }
 	            icon.DestroySelf(); 
 	        }
+	        SpzUiThemeOps.ThemeChanged += ApplyArt3dListChromeThemeTokens;
+	        ApplyArt3dListChromeThemeTokens();
+	    }
+
+	    void OnDestroy() {
+	        SpzUiThemeOps.ThemeChanged -= ApplyArt3dListChromeThemeTokens;
+	    }
+
+	    /// <summary>Themes 3D icon list shell only — not per-icon domain colors.</summary>
+	    void ApplyArt3dListChromeThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            foreach (var g in GetComponentsInChildren<UnityEngine.UI.Graphic>(true)) {
+	                if (g.GetComponentInParent<Icon3D_UI>() != null) continue;
+	                SpzUiThemeOps.RestoreAuthoredGraphic(g);
+	            }
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        if (_draggableItemsGrid != null) {
+	            var gridImg = _draggableItemsGrid.GetComponent<UnityEngine.UI.Image>();
+	            if (gridImg != null)
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(gridImg, t.panelBg);
+	            foreach (var lg in _draggableItemsGrid.GetComponentsInChildren<UnityEngine.UI.LayoutGroup>(true)) {
+	                if (lg.GetComponentInParent<Icon3D_UI>() != null) continue;
+	                SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
+	            }
+	        }
+	        var rootImg = GetComponent<UnityEngine.UI.Image>();
+	        if (rootImg != null)
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.panelBg);
 	    }
 
 	    void Update(){

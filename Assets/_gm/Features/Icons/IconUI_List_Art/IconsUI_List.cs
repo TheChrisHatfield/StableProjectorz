@@ -487,11 +487,74 @@ namespace spz {
 
 	        var entries = _container.GetComponentsInChildren<IconUI>().ToList();
 	        for(int i=0; i<entries.Count; ++i){  Destroy(entries[i].gameObject); }
+
+	        SpzUiThemeOps.ThemeChanged += ApplyListChromeThemeTokens;
+	        ApplyListChromeThemeTokens();
 	    }
 
 	    protected virtual void Start() { }
 
+	    /// <summary>
+	    /// Themes list chrome only (header, scroll bg) — not icon selection / green chosen state.
+	    /// </summary>
+	    protected virtual void ApplyListChromeThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            foreach (var g in GetComponentsInChildren<Graphic>(true)) {
+	                if (g.GetComponentInParent<IconUI>() != null) continue;
+	                SpzUiThemeOps.RestoreAuthoredGraphic(g);
+	            }
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        if (_header != null) {
+	            var headerImg = _header.GetComponent<Image>();
+	            if (headerImg != null)
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(headerImg, t.controlBg);
+	            foreach (var btn in _header.GetComponentsInChildren<Button>(true)) {
+	                if (btn == null || btn.targetGraphic == null) continue;
+	                SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+	                var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+	                if (label != null)
+	                    SpzUiThemeOps.ApplyBoundChromeTmp(label, t.textPrimary);
+	            }
+	            foreach (var tmp in _header.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
+	                if (tmp == null) continue;
+	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	            }
+	            foreach (var lg in _header.GetComponentsInChildren<LayoutGroup>(true))
+	                SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
+	        }
+	        if (_sr_itemFocuser != null) {
+	            var sr = _sr_itemFocuser.GetComponent<ScrollRect>();
+	            if (sr == null)
+	                sr = _sr_itemFocuser.GetComponentInChildren<ScrollRect>(true);
+	            if (sr != null) {
+	                if (sr.viewport != null) {
+	                    var vpImg = sr.viewport.GetComponent<Image>();
+	                    if (vpImg != null)
+	                        SpzUiThemeOps.ApplyBoundChromeGraphic(vpImg, t.panelBg);
+	                }
+	                var srImg = sr.GetComponent<Image>();
+	                if (srImg != null)
+	                    SpzUiThemeOps.ApplyBoundChromeGraphic(srImg, t.panelBg);
+	            }
+	        }
+	        if (_container != null) {
+	            var containerImg = _container.GetComponent<Image>();
+	            if (containerImg != null)
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(containerImg, t.panelBg);
+	            foreach (var lg in _container.GetComponentsInChildren<LayoutGroup>(true)) {
+	                if (lg.GetComponentInParent<IconUI>() != null) continue;
+	                SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
+	            }
+	        }
+	        var rootImg = GetComponent<Image>();
+	        if (rootImg != null)
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.panelBg);
+	    }
+
 	    protected virtual void OnDestroy(){
+	        SpzUiThemeOps.ThemeChanged -= ApplyListChromeThemeTokens;
 	        GenData2D_Archive.OnWillGenerate -= OnWillGenerate;
 	        GenData2D_Archive.OnWillDispose_GenerationData -= Destroy_IconsGroup_ofGeneration;
 	        IconUI.Act_OnSomeIconClicked -= onIconUI_Selected;

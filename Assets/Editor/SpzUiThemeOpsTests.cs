@@ -462,14 +462,47 @@ public sealed class SpzUiThemeOpsTests {
 	[Test]
 	public void BuiltinDefaultIsActiveUntilNonDefaultApply() {
 		Assert.That(SpzUiThemeOps.IsBuiltinDefaultActive, Is.True);
+		Assert.That(SpzUiThemeOps.ShouldRecolorBoundChrome, Is.False);
 		Assert.That(SpzUiThemeOps.TryApplyTheme(
 			"p1-experiment",
 			new JObject { ["accent"] = "#112233FF" },
 			"replace",
 			out string error), Is.True, error);
 		Assert.That(SpzUiThemeOps.IsBuiltinDefaultActive, Is.False);
+		Assert.That(SpzUiThemeOps.ShouldRecolorBoundChrome, Is.True);
 		SpzUiThemeOps.ResetTheme();
 		Assert.That(SpzUiThemeOps.IsBuiltinDefaultActive, Is.True);
+		Assert.That(SpzUiThemeOps.ShouldRecolorBoundChrome, Is.False);
+	}
+
+	[Test]
+	public void BoundChromeHelpersRestoreAuthoredOnBuiltin() {
+		var go = new GameObject("theme-bound-chrome-test", typeof(RectTransform), typeof(Image));
+		try {
+			var img = go.GetComponent<Image>();
+			Color authored = new Color(0.2f, 0.3f, 0.4f, 1f);
+			img.color = authored;
+
+			Assert.That(SpzUiThemeOps.ShouldRecolorBoundChrome, Is.False);
+			SpzUiThemeOps.ApplyBoundChromeGraphic(img, Color.magenta);
+			Assert.That(img.color, Is.EqualTo(authored));
+
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				new JObject { ["accent"] = "#112233FF" },
+				"replace",
+				out string error), Is.True, error);
+			Assert.That(SpzUiThemeOps.ShouldRecolorBoundChrome, Is.True);
+			SpzUiThemeOps.ApplyBoundChromeGraphic(img, Color.red);
+			Assert.That(img.color, Is.EqualTo(Color.red));
+
+			SpzUiThemeOps.ResetTheme();
+			SpzUiThemeOps.ApplyBoundChromeGraphic(img, Color.green);
+			Assert.That(img.color, Is.EqualTo(authored));
+		}
+		finally {
+			UnityEngine.Object.DestroyImmediate(go);
+		}
 	}
 
 	[Test]

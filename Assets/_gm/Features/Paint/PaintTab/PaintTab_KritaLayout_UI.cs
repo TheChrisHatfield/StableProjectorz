@@ -52,6 +52,86 @@ namespace spz {
 			if (_headerBrushPresets != null) _headerBrushPresets.text = "Brush Presets";
 			if (_headerToolOptions != null) _headerToolOptions.text = "Tool Options";
 			if (_headerColorPalette != null) _headerColorPalette.text = "Color / Palette";
+			SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+			ApplyThemeTokens();
+		}
+
+		void OnDestroy()
+		{
+			SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+		}
+
+		/// <summary>Themes section headers and Content mask shells owned by this layout root.</summary>
+		public void ApplyThemeTokens()
+		{
+			if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+				RestoreHeader(_headerLayers);
+				RestoreHeader(_headerBrushPresets);
+				RestoreHeader(_headerToolOptions);
+				RestoreHeader(_headerColorPalette);
+				RestoreSectionShell(_layersSection);
+				RestoreSectionShell(_brushPresetsSection);
+				RestoreSectionShell(_toolOptionsSection);
+				RestoreSectionShell(_colorPaletteSection);
+				return;
+			}
+			var t = SpzUiThemeOps.Active;
+			const float headerBasePt = 14f;
+			ApplyHeaderScaled(_headerLayers, t.textMuted, headerBasePt);
+			ApplyHeaderScaled(_headerBrushPresets, t.textMuted, headerBasePt);
+			ApplyHeaderScaled(_headerToolOptions, t.textMuted, headerBasePt);
+			ApplyHeaderScaled(_headerColorPalette, t.textMuted, headerBasePt);
+			ThemeSectionShell(_layersSection, t);
+			ThemeSectionShell(_brushPresetsSection, t);
+			ThemeSectionShell(_toolOptionsSection, t);
+			ThemeSectionShell(_colorPaletteSection, t);
+		}
+
+		static void RestoreHeader(TextMeshProUGUI header) {
+			if (header != null)
+				SpzUiThemeOps.RestoreAuthoredGraphic(header);
+		}
+
+		static void RestoreSectionShell(RectTransform section) {
+			if (section == null) return;
+			foreach (var g in section.GetComponentsInChildren<Graphic>(true))
+				SpzUiThemeOps.RestoreAuthoredGraphic(g);
+		}
+
+		static void ApplyHeaderScaled(TextMeshProUGUI header, Color color, float basePt)
+		{
+			if (header != null)
+				SpzUiThemeOps.ApplyBoundChromeTmp(header, color, basePt);
+		}
+
+		static void ThemeSectionShell(RectTransform section, SpzUiThemeOps.ThemeTokens t)
+		{
+			if (section == null) return;
+			Transform content = section;
+			// Prefab: section root with child Content; runtime CreateSection returns ScrollContent.
+			if (section.parent != null && section.parent.name == "Content")
+				content = section.parent;
+			else
+			{
+				var child = section.Find("Content");
+				if (child != null) content = child;
+			}
+			var maskImg = content.GetComponent<Image>();
+			if (maskImg != null)
+				SpzUiThemeOps.ApplyBoundChromeGraphic(maskImg, t.fieldBg);
+			Transform header = null;
+			if (content != section)
+				header = section.Find("Header");
+			else if (section.parent != null)
+				header = section.parent.Find("Header");
+			if (header == null)
+				header = section.Find("Header");
+			if (header != null)
+			{
+				var tmp = header.GetComponent<TextMeshProUGUI>();
+				if (tmp != null)
+					SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textMuted, 14f);
+			}
 		}
 
 		void OnValidate()

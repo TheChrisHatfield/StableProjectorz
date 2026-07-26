@@ -57,6 +57,57 @@ namespace spz {
 	        _save_project_button.onClick.AddListener( ()=>OnSaveProject_Button?.Invoke() );
 	        _load_project_button.onClick.AddListener( ()=>OnLoadProject_Button?.Invoke() );
 	        _optionSlideOut_hoverAreas.ForEach( h=> h.onSurfaceEnter += OnOptionsHoverStart );
+
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        ApplyThemeTokens();
+	    }
+
+	    void OnDestroy() {
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	        if (instance == this)
+	            instance = null;
+	    }
+
+	    /// <summary>Colors save/export/load menu buttons from the active palette (ownership refs only).</summary>
+	    void ApplyThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            RestoreMenuButton(_save_button);
+	            RestoreMenuButton(_export_finalTex_dilate_button);
+	            RestoreMenuButton(_export_finalTex_NoDilate_button);
+	            RestoreMenuButton(_export_views_button);
+	            RestoreMenuButton(_export_all_art_icons);
+	            RestoreMenuButton(_export_all_artBG_icons);
+	            RestoreMenuButton(_export_3d_button);
+	            RestoreMenuButton(_save_project_button);
+	            RestoreMenuButton(_load_project_button);
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        ThemeMenuButton(_save_button, t);
+	        ThemeMenuButton(_export_finalTex_dilate_button, t);
+	        ThemeMenuButton(_export_finalTex_NoDilate_button, t);
+	        ThemeMenuButton(_export_views_button, t);
+	        ThemeMenuButton(_export_all_art_icons, t);
+	        ThemeMenuButton(_export_all_artBG_icons, t);
+	        ThemeMenuButton(_export_3d_button, t);
+	        ThemeMenuButton(_save_project_button, t);
+	        ThemeMenuButton(_load_project_button, t);
+	    }
+
+	    static void RestoreMenuButton(Button btn) {
+	        if (btn == null) return;
+	        SpzUiThemeOps.RestoreAuthoredGraphic(btn.targetGraphic);
+	        var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+	        if (label != null)
+	            SpzUiThemeOps.RestoreAuthoredGraphic(label);
+	    }
+
+	    static void ThemeMenuButton(Button btn, SpzUiThemeOps.ThemeTokens t) {
+	        if (btn == null || btn.targetGraphic == null) return;
+	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+	        var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+	        if (label != null)
+	            SpzUiThemeOps.ApplyBoundChromeTmp(label, t.textPrimary);
 	    }
 	}
 }//end namespace

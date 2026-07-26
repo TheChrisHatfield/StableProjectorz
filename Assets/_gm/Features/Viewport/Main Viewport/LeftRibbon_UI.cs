@@ -124,6 +124,12 @@ namespace spz {
 
 	    /// <summary>Themes known prefab-owned left-ribbon controls only (no hierarchy scan).</summary>
 	    void ApplyThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            // Leaving Nomad: restore fills/labels snapped during theme apply.
+	            RestoreLeftRibbonAuthoredChrome();
+	            SnapshotNomadChromeSelection();
+	            return;
+	        }
 	        var t = SpzUiThemeOps.Active;
 	        _themeAccent = t.accent;
 	        ThemeToggle(_toggleDepthMode_button, t);
@@ -142,9 +148,21 @@ namespace spz {
 	        if (_depth_slideOut_panel != null) {
 	            var panelImg = _depth_slideOut_panel.GetComponent<Image>();
 	            if (panelImg != null)
-	                SpzUiThemeOps.ApplyGraphicColor(panelImg, t.panelBg);
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(panelImg, t.panelBg);
+	            foreach (var lg in _depth_slideOut_panel.GetComponentsInChildren<LayoutGroup>(true))
+	                SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
 	        }
 	        SnapshotNomadChromeSelection();
+	    }
+
+	    void RestoreLeftRibbonAuthoredChrome() {
+	        foreach (var g in GetComponentsInChildren<Graphic>(true))
+	            SpzUiThemeOps.RestoreAuthoredGraphic(g);
+	        // Hide Monolith bars created for Nomad selection chrome.
+	        foreach (Transform t in GetComponentsInChildren<Transform>(true)) {
+	            if (t != null && t.name == "MonolithActiveBar")
+	                t.gameObject.SetActive(false);
+	        }
 	    }
 
 	    /// <summary>
@@ -197,29 +215,27 @@ namespace spz {
 	            : t.controlBg;
 	        var btn = _toggleWireframe.GetComponent<Button>();
 	        if (btn != null)
-	            SpzUiThemeOps.ApplySelectableToken(btn, wireNormal, t.accent);
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, wireNormal, t.accent);
 	        else {
 	            var img = _toggleWireframe.GetComponent<Image>();
 	            if (img != null)
-	                SpzUiThemeOps.ApplyGraphicColor(img, wireNormal);
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(img, wireNormal);
 	        }
-	        ApplyNomadActiveBar(_toggleWireframe.transform, _toggleWireframe.isPressed, t.accent);
+	        ApplyActiveBar(_toggleWireframe.transform, _toggleWireframe.isPressed, t.accent);
 	    }
 
 	    static void ThemeToggle(Toggle toggle, SpzUiThemeOps.ThemeTokens t) {
 	        if (toggle == null) return;
 	        // Selected state leans on accent so Nomad gold (vs SPZ blue) is visible on left ribbon.
 	        Color normal = toggle.isOn ? Color.Lerp(t.tabActive, t.accent, 0.55f) : t.controlBg;
-	        SpzUiThemeOps.ApplySelectableToken(toggle, normal, t.accent);
-	        ApplyNomadActiveBar(toggle.transform, toggle.isOn, t.accent);
+	        SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, normal, t.accent);
+	        ApplyActiveBar(toggle.transform, toggle.isOn, t.accent);
 	    }
 
-	    static void ApplyNomadActiveBar(Transform owner, bool selected, Color accent) {
+	    static void ApplyActiveBar(Transform owner, bool selected, Color accent) {
 	        if (owner == null) return;
 	        Transform bar = owner.Find("MonolithActiveBar");
-	        bool show = selected
-	            && string.Equals(SpzUiThemeOps.ActiveThemeId, "nomad-inspired", System.StringComparison.Ordinal);
-	        if (!show) {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome || !selected) {
 	            if (bar != null) bar.gameObject.SetActive(false);
 	            return;
 	        }
@@ -250,7 +266,7 @@ namespace spz {
 
 	    static void ThemeTmp(TextMeshProUGUI tmp, Color color) {
 	        if (tmp != null)
-	            SpzUiThemeOps.ApplyTmpColor(tmp, color);
+	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, color);
 	    }
 
 	    static void ThemeCircleSlider(CircleSlider_Snapping_UI slider, SpzUiThemeOps.ThemeTokens t) {

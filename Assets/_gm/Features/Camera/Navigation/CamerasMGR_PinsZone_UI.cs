@@ -647,13 +647,58 @@ namespace spz {
 	        }
 	        CameraFocus._Act_onFocused += OnWillFocus;
 	        FullView_OuterPanel_Chrome_Binder.SyncChromeToDriver();
+
+	        SpzUiThemeOps.ThemeChanged += ApplyPinsChromeThemeTokens;
+	        ApplyPinsChromeThemeTokens();
 	    }//end()
 
 	    void Start(){
 	        OnStartInvoked?.Invoke();
 	    }
 
+	    /// <summary>
+	    /// Themes pin markers / labels from active palette. Does not change grab/pan behavior.
+	    /// Uses theme accent for “nearest” highlight color field when present.
+	    /// </summary>
+	    void ApplyPinsChromeThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            if (_cameraPins != null) {
+	                for (int i = 0; i < _cameraPins.Count; i++) {
+	                    var pin = _cameraPins[i];
+	                    if (pin == null) continue;
+	                    foreach (var g in pin.GetComponentsInChildren<Graphic>(true))
+	                        SpzUiThemeOps.RestoreAuthoredGraphic(g);
+	                }
+	            }
+	            if (_noEditMode_enabledGO != null)
+	                SpzUiThemeOps.RestoreAuthoredGraphic(_noEditMode_enabledGO.GetComponent<Image>());
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        _pinColor = t.controlBg;
+	        _nearestPin_color = t.accent;
+	        if (_cameraPins == null) return;
+	        for (int i = 0; i < _cameraPins.Count; i++) {
+	            var pin = _cameraPins[i];
+	            if (pin == null) continue;
+	            var rootImg = pin.GetComponent<Image>();
+	            if (rootImg != null)
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.controlBg);
+	            foreach (var tmp in pin.GetComponentsInChildren<TextMeshProUGUI>(true))
+	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	        }
+	        if (_noEditMode_enabledGO != null) {
+	            var zoneImg = _noEditMode_enabledGO.GetComponent<Image>();
+	            if (zoneImg != null) {
+	                Color c = t.panelBg;
+	                c.a = zoneImg.color.a;
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(zoneImg, c);
+	            }
+	        }
+	    }
+
 	    void OnDestroy(){
+	        SpzUiThemeOps.ThemeChanged -= ApplyPinsChromeThemeTokens;
 	        if (instance == this) { instance = null; }
 	        UserCameras_MGR._Act_OnTogledViewCamera -= OnToggledViewCamera;
 	        UserCameras_MGR._Act_OnRestoreCameraPlacements -= OnCameraPlacements_Restored;
