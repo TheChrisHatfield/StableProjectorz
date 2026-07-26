@@ -251,8 +251,14 @@ namespace spz {
 			}
 
 			ThemeTokens candidate;
-			if (hasPreset && hasTokens)
-				candidate = presetTokens.Clone();
+			if (hasPreset && hasTokens) {
+				// First apply / replace: preset + overrides. Patch while that preset is already
+				// active: keep runtime overrides (e.g. ribbon_icon_only) instead of rebuilding
+				// from the registered snapshot.
+				bool patchWhileActive = mode == "patch"
+					&& string.Equals(_activeThemeId, themeId, StringComparison.Ordinal);
+				candidate = patchWhileActive ? _active.Clone() : presetTokens.Clone();
+			}
 			else if (hasPreset)
 				candidate = mode == "patch" ? _active.Clone() : presetTokens.Clone();
 			else
@@ -1026,11 +1032,12 @@ namespace spz {
 			error = null;
 			if (!TryParseStudioLineIcon(iconName, out StudioLineIcon icon, out error))
 				return false;
-			if (CommandRibbon_UI.instance == null) {
+			var ribbon = AddonRibbonIntegration.ResolveCommandRibbon();
+			if (ribbon == null) {
 				error = "CommandRibbon_UI not available";
 				return false;
 			}
-			if (!CommandRibbon_UI.instance.TrySetStripTabLineIcon(tabMatch, icon, out error))
+			if (!ribbon.TrySetStripTabLineIcon(tabMatch, icon, out error))
 				return false;
 			return true;
 		}
