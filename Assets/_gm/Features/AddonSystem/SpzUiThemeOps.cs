@@ -106,6 +106,10 @@ namespace spz {
 		public static string ActiveThemeId => _activeThemeId;
 		public static ThemeTokens Active => _active.Clone();
 
+		/// <summary>True when the builtin SPZ palette is active (OG prefab aesthetics; no Monolith studio chrome).</summary>
+		public static bool IsBuiltinDefaultActive =>
+			string.Equals(_activeThemeId, DefaultThemeId, StringComparison.Ordinal);
+
 		/// <summary>True when <c>ribbon_icon_only</c> ≥ 0.5 (CommandRibbon strip hides labels, enlarges line icons).</summary>
 		public static bool RibbonIconOnlyActive =>
 			_active.ribbonIconOnly >= 0.5f;
