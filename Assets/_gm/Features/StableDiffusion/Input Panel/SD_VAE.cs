@@ -45,7 +45,7 @@ namespace spz {
 	        foreach(var o in options){
 	            if (string.IsNullOrEmpty(o.text)){ continue; }
 	            string txtLower = o.text.ToLower();
-	            if (txtLower.Contains("not connected")){ continue; }
+	            if (SdDisconnectPlaceholder.IsPlaceholder(txtLower)){ continue; }
 	            //btw, 'None' is a valid VAE.
 	            return true;
 	        }

@@ -232,7 +232,7 @@ namespace spz {
 	    {
 	        if (string.IsNullOrEmpty(_currentSelectedName)) { return ""; }
 	        string chosen = _currentSelectedName;
-	        if (chosen.ToLower().Contains("not connected")) { return ""; }
+	        if (SdDisconnectPlaceholder.IsPlaceholder(chosen)) { return ""; }
 	        return chosen.ToLower().Contains("none") ? "" : chosen;//because sometimes None or none conflict or don't get recognized.
 	    }
 
@@ -240,7 +240,7 @@ namespace spz {
 	    {
 	        if (string.IsNullOrEmpty(_currentSelectedName)) { return false; }
 	        string chosen = _currentSelectedName;
-	        if (chosen.ToLower().Contains("not connected")) { return false; }
+	        if (SdDisconnectPlaceholder.IsPlaceholder(chosen)) { return false; }
 	        return chosen.ToLower().Contains("none") == false;//because sometimes None or none conflict or don't get recognized.
 	    }
 

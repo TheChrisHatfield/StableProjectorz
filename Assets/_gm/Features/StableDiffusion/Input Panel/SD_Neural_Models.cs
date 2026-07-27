@@ -84,7 +84,7 @@ namespace spz {
 	            if (string.IsNullOrEmpty(o.text)) { continue; }
 	            string txtLower = o.text.ToLower();
 	            if (txtLower=="none") { continue; }
-	            if (txtLower.Contains("not connected")){ continue; }
+	            if (SdDisconnectPlaceholder.IsPlaceholder(txtLower)){ continue; }
 	            return true;
 	        }
 	        return false;
