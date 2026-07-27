@@ -25,4 +25,11 @@ public sealed class SdDisconnectPlaceholderTests {
 		Assert.That(SdDisconnectPlaceholder.IsPlaceholder("flux1-schnell-fp8.safetensors"), Is.False);
 		Assert.That(SdDisconnectPlaceholder.IsPlaceholder("Automatic"), Is.False);
 	}
+
+	[Test]
+	public void DisplayText_IsSdSpecificNotGenericGen3DCopy() {
+		// Gen3D Dropdown Holder must keep neutral legacy wording; SD panels use DisplayText.
+		Assert.That(SdDisconnectPlaceholder.DisplayText, Does.Contain("Diffusion Neural Network"));
+		Assert.That(SdDisconnectPlaceholder.DisplayText, Does.Not.Contain("Check Black Window"));
+	}
 }
