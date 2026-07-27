@@ -619,10 +619,23 @@ namespace spz {
 	        bool isPressed = KeyMousePenInput.isLMBpressed();
 	        bool isClicked = KeyMousePenInput.isLMBpressedThisFrame() || KeyMousePenInput.isRMBpressedThisFrame() || KeyMousePenInput.isMMBpressedThisFrame();
 
-	        // Click-outside close must not depend on ColorPicker binding (null picker previously left Settings stuck open).
-	        if (settingsPanel != null && settingsPanel.gameObject.activeInHierarchy && !isPressed) {
-	            bool isInsidePanel = RectTransformUtility.RectangleContainsScreenPoint(settingsPanel, cursorPos);
-	            if (!isInsidePanel) settingsPanel.gameObject.SetActive(false);
+	        // Click-outside / Escape close must not depend on ColorPicker binding.
+	        // Hit rect must stay host-sized (see Settings_UI.ClampSettingsPanelHitRect) — Nomad CSF Preferred
+	        // previously grew the panel over the whole screen so outside never registered.
+	        if (settingsPanel != null && settingsPanel.gameObject.activeInHierarchy) {
+	            bool escape = UnityEngine.InputSystem.Keyboard.current != null
+	                && UnityEngine.InputSystem.Keyboard.current.escapeKey.wasPressedThisFrame;
+	            if (escape) {
+	                settingsPanel.gameObject.SetActive(false);
+	            }
+	            else if (!isPressed) {
+	                Canvas canvas = settingsPanel.GetComponentInParent<Canvas>();
+	                Camera cam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
+	                    ? canvas.worldCamera
+	                    : null;
+	                bool isInsidePanel = RectTransformUtility.RectangleContainsScreenPoint(settingsPanel, cursorPos, cam);
+	                if (!isInsidePanel) settingsPanel.gameObject.SetActive(false);
+	            }
 	        }
 
 	        if (colorPicker != null && colorPicker._isShowing && isClicked && !isPressed) {
