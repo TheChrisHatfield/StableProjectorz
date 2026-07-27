@@ -1,20 +1,21 @@
 namespace spz {
 
 	/// <summary>
-	/// Shared disconnect-placeholder copy for SD dropdowns, plus detection used when
-	/// deciding whether a dropdown option is a real model/VAE/upscaler vs. "not connected".
+	/// Shared disconnect copy for SD dropdown placeholders, viewport notifications, and tooltips,
+	/// plus detection used when deciding whether a dropdown option is real vs. disconnected.
 	/// </summary>
 	public static class SdDisconnectPlaceholder {
-		public const string DisplayText = "Diffusion Neural Network\nNot yet connected.";
+		public const string DisplayText = "Diffusion Model Not Yet Connected";
 
 		/// <summary>
-		/// True for legacy ("Not Connected yet") and current ("Not yet connected") placeholder copy.
+		/// True for legacy ("Not Connected yet") and current ("Not Yet Connected") placeholder copy.
 		/// </summary>
 		public static bool IsPlaceholder(string text) {
 			if (string.IsNullOrEmpty(text)) { return false; }
 			string t = text.ToLowerInvariant();
-			// Old copy: "Not Connected yet.\nCheck Black Window"
-			// New copy: "Diffusion Neural Network\nNot yet connected."
+			// Old: "Not Connected yet.\nCheck Black Window"
+			// Prior: "Diffusion Neural Network\nNot yet connected."
+			// Current: "Diffusion Model Not Yet Connected"
 			return t.Contains("not connected") || t.Contains("not yet connected");
 		}
 	}
