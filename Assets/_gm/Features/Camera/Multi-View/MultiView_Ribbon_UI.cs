@@ -270,8 +270,7 @@ namespace spz {
 	    /// <summary>Themes Multiview ribbon chrome — not POV edit semantics.</summary>
 	    void ApplyMultiviewChromeThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
-	            foreach (var g in GetComponentsInChildren<Graphic>(true))
-	                SpzUiThemeOps.RestoreAuthoredGraphic(g);
+	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
 	            SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(transform);
 	            return;
 	        }
@@ -296,16 +295,19 @@ namespace spz {
 	        }
 	        if (_numCams_numberText != null)
 	            SpzUiThemeOps.ApplyBoundChromeTmp(_numCams_numberText, t.textPrimary);
+	        if (_numCameras_slider != null && _numCameras_slider.UnitySlider != null)
+	            SpzUiThemeOps.ApplyNomadSliderChrome(_numCameras_slider.UnitySlider);
 	        if (_editPOV_toggles != null) {
 	            foreach (var pov in _editPOV_toggles) {
 	                if (pov == null) continue;
 	                Color normal = pov.isOn
-	                    ? Color.Lerp(t.tabActive, t.accent, 0.55f)
+	                    ? Color.Lerp(t.controlBg, t.accent, 0.14f)
 	                    : t.controlBg;
 	                SpzUiThemeOps.ApplyBoundChromeSelectable(pov, normal, t.accent);
+	                // BoundChromeSelectable flattens 9-slice faces; keep labels reverse-out on dark cells.
 	                var povLabel = pov.GetComponentInChildren<TextMeshProUGUI>(true);
 	                if (povLabel != null)
-	                    SpzUiThemeOps.ApplyBoundChromeTmp(povLabel, t.textPrimary);
+	                    SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(povLabel, t.textPrimary, 12f);
 	            }
 	        }
 	        if (_sortPins_Button != null) {

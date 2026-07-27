@@ -180,6 +180,7 @@ namespace spz {
 		/// <summary>
 		/// Applies a chrome token color only when <see cref="ShouldRecolorBoundChrome"/>;
 		/// otherwise restores the authored snapshot (if any).
+		/// Under Nomad, 9-slice faces are flattened — small Sliced cells read as four corner arrows.
 		/// </summary>
 		public static void ApplyBoundChromeGraphic(Graphic graphic, Color token) {
 			if (graphic == null) return;
@@ -189,10 +190,13 @@ namespace spz {
 			}
 			SnapshotAuthoredGraphic(graphic);
 			graphic.color = token;
+			if (graphic is Image img)
+				FlattenSlicedChromeFace(img);
 		}
 
 		/// <summary>
 		/// Selectable chrome apply gated by <see cref="ShouldRecolorBoundChrome"/>.
+		/// Replaces beveled 9-slice faces with flat Simple fills so Multiview / tool slots lose corner arrows.
 		/// </summary>
 		public static void ApplyBoundChromeSelectable(Selectable selectable, Color normal, Color accent) {
 			if (selectable == null || selectable.targetGraphic == null)
@@ -205,6 +209,35 @@ namespace spz {
 			SnapshotAuthoredGraphic(selectable.targetGraphic);
 			SnapshotAuthoredColorBlock(selectable);
 			ApplySelectableToken(selectable, normal, accent);
+			if (selectable.targetGraphic is Image face) {
+				ApplyRoundedControlSprite(face, markEligible: true);
+				face.type = Image.Type.Simple;
+				face.preserveAspect = false;
+			}
+			// Authored checkmark / tick plates are often the same 9-slice bevel — hide under Nomad.
+			if (selectable is Toggle toggle && toggle.graphic is Image tick && tick != selectable.targetGraphic) {
+				string n = tick.gameObject.name ?? "";
+				if (tick.type == Image.Type.Sliced
+				    || n.IndexOf("Check", StringComparison.OrdinalIgnoreCase) >= 0
+				    || n.Equals("tick", StringComparison.OrdinalIgnoreCase))
+					HideAuthoredGraphicForTheme(tick);
+			}
+		}
+
+		/// <summary>
+		/// Converts authored <see cref="Image.Type.Sliced"/> chrome to a flat Simple soft fill.
+		/// Skips Nomad slider segment tiles (intentionally Tiled).
+		/// </summary>
+		public static void FlattenSlicedChromeFace(Image image) {
+			if (image == null || !ShouldRecolorBoundChrome)
+				return;
+			if (UiRuntimeSprites.IsNomadSliderSegmentTile(image.sprite))
+				return;
+			if (image.type != Image.Type.Sliced)
+				return;
+			ApplyRoundedControlSprite(image, markEligible: true);
+			image.type = Image.Type.Simple;
+			image.preserveAspect = false;
 		}
 
 		/// <summary>
@@ -225,6 +258,23 @@ namespace spz {
 		}
 
 		/// <summary>
+		/// Compact vertical strip labels (workflow modes: PROJ MASK, COLOR, …).
+		/// Uppercase + open tracking + eased line stack + soft fringe — not SPZ lowercase crush.
+		/// </summary>
+		public static void ApplyBoundChromeStripLabelTmp(TMP_Text text, Color token, float fallbackBasePt = 12f) {
+			if (text == null) return;
+			if (!ShouldRecolorBoundChrome) {
+				RestoreAuthoredGraphic(text);
+				RestoreDesignFontSize(text, fallbackBasePt);
+				return;
+			}
+			SnapshotAuthoredGraphic(text);
+			SnapshotNomadTypography(text);
+			ApplyTmpScaledCaptured(text, token, fallbackBasePt);
+			ApplyNomadStripLabelMetrics(text);
+		}
+
+		/// <summary>
 		/// Unwinds <c>font_scale</c> by restoring the once-captured design point size.
 		/// Leave paths that only restored color left TMP stuck at the scaled size.
 		/// </summary>
@@ -241,6 +291,8 @@ namespace spz {
 
 		const string ControlLineIconChildName = "MonolithLineIcon";
 		const float NomadLabelCharacterSpacing = 10f;
+		const float NomadStripLabelCharacterSpacing = 18f;
+		const float NomadStripLabelLineSpacing = -8f;
 
 		static void SnapshotNomadTypography(TMP_Text text) {
 			if (text == null) return;
@@ -248,12 +300,18 @@ namespace spz {
 			if (tag == null) {
 				tag = text.gameObject.AddComponent<SpzUiThemeDesignTypography>();
 				tag.characterSpacing = text.characterSpacing;
+				tag.lineSpacing = text.lineSpacing;
 				tag.fontStyle = text.fontStyle;
+				tag.outlineWidth = text.outlineWidth;
+				tag.outlineColor = text.outlineColor;
 				tag.hasSnapshot = true;
 			}
 			else if (!tag.hasSnapshot) {
 				tag.characterSpacing = text.characterSpacing;
+				tag.lineSpacing = text.lineSpacing;
 				tag.fontStyle = text.fontStyle;
+				tag.outlineWidth = text.outlineWidth;
+				tag.outlineColor = text.outlineColor;
 				tag.hasSnapshot = true;
 			}
 		}
@@ -263,13 +321,31 @@ namespace spz {
 			var tag = text.GetComponent<SpzUiThemeDesignTypography>();
 			if (tag == null || !tag.hasSnapshot) return;
 			text.characterSpacing = tag.characterSpacing;
+			text.lineSpacing = tag.lineSpacing;
 			text.fontStyle = tag.fontStyle;
+			text.outlineWidth = tag.outlineWidth;
+			text.outlineColor = tag.outlineColor;
 		}
 
 		/// <summary>Open tracking for sculpt-chrome labels (no font-asset swap — LiberationSans SDF).</summary>
 		static void ApplyNomadTypographyMetrics(TMP_Text text) {
-			if (text == null) return;
+			if (text == null || text.font == null) return;
 			text.characterSpacing = NomadLabelCharacterSpacing;
+			// Soft dark fringe so reverse-out type (DEP, etc.) stays legible on flat cells.
+			text.outlineWidth = 0.18f;
+			text.outlineColor = new Color(0.05f, 0.05f, 0.07f, 0.72f);
+		}
+
+		/// <summary>Workflow / compact vertical strip: uppercase stack with open tracking.</summary>
+		static void ApplyNomadStripLabelMetrics(TMP_Text text) {
+			if (text == null || text.font == null) return;
+			text.fontStyle = FontStyles.UpperCase;
+			text.characterSpacing = NomadStripLabelCharacterSpacing;
+			// Authored SPZ stacks use ~-17…-30; ease so letters breathe without overflowing the cell.
+			if (text.lineSpacing < NomadStripLabelLineSpacing)
+				text.lineSpacing = NomadStripLabelLineSpacing;
+			text.outlineWidth = 0.22f;
+			text.outlineColor = new Color(0.04f, 0.04f, 0.06f, 0.78f);
 		}
 
 		/// <summary>
@@ -383,10 +459,33 @@ namespace spz {
 			if (string.IsNullOrEmpty(name)) return false;
 			if (name.IndexOf("Monolith", StringComparison.OrdinalIgnoreCase) >= 0)
 				return false;
+			if (name.Equals("tick", StringComparison.OrdinalIgnoreCase)
+				|| name.Equals("Checkmark", StringComparison.OrdinalIgnoreCase))
+				return true;
 			return name.Equals("icon", StringComparison.OrdinalIgnoreCase)
 				|| name.StartsWith("icon_", StringComparison.OrdinalIgnoreCase)
 				|| name.EndsWith("_icon", StringComparison.OrdinalIgnoreCase)
 				|| name.IndexOf("Icon", StringComparison.OrdinalIgnoreCase) >= 0;
+		}
+
+		/// <summary>
+		/// Hides an authored Graphic under Nomad (tick / secondary chrome) and snapshots for Restore SPZ.
+		/// </summary>
+		public static void HideAuthoredGraphicForTheme(Graphic graphic) {
+			if (graphic == null) return;
+			if (graphic is Image img) {
+				var tag = img.GetComponent<SpzUiThemeHiddenGraphic>();
+				if (tag == null) {
+					tag = img.gameObject.AddComponent<SpzUiThemeHiddenGraphic>();
+					tag.wasEnabled = img.enabled;
+					tag.hasSnapshot = true;
+				}
+				else if (!tag.hasSnapshot) {
+					tag.wasEnabled = img.enabled;
+					tag.hasSnapshot = true;
+				}
+				img.enabled = false;
+			}
 		}
 
 		/// <summary>
@@ -423,7 +522,7 @@ namespace spz {
 					else {
 						fill.sprite = UiRuntimeSprites.GetRoundedRectSliced(
 							Mathf.RoundToInt(Mathf.Clamp(t.cornerRadius, CornerRadiusMin, CornerRadiusMax)));
-						fill.type = Image.Type.Sliced;
+						fill.type = Image.Type.Simple;
 						ApplyBoundChromeGraphic(fill, t.accent);
 					}
 				}
@@ -852,8 +951,9 @@ namespace spz {
 		}
 
 		/// <summary>
-		/// Assigns the active <c>corner_radius</c> 9-slice to eligible control Images only
+		/// Assigns the active <c>corner_radius</c> soft-rounded fill to eligible control Images only
 		/// (tagged or already using a runtime rounded sprite). Never retargets RawImage art.
+		/// Uses <see cref="Image.Type.Simple"/> — 9-slice borders on small cells read as four corner “anchors”.
 		/// Snapshots the authored sprite once so <see cref="RestoreRoundedControlSpritesUnder"/> can unwind.
 		/// </summary>
 		public static void ApplyRoundedControlSprite(Image image, bool markEligible = false) {
@@ -871,7 +971,8 @@ namespace spz {
 			}
 			int radius = Mathf.RoundToInt(Mathf.Clamp(_active.cornerRadius, CornerRadiusMin, CornerRadiusMax));
 			image.sprite = UiRuntimeSprites.GetRoundedRectSliced(radius);
-			image.type = Image.Type.Sliced;
+			image.type = Image.Type.Simple;
+			image.preserveAspect = false;
 		}
 
 		/// <summary>
@@ -1607,7 +1708,10 @@ namespace spz {
 	/// <summary>Snapshots authored TMP tracking/style so Nomad typography can unwind on builtin restore.</summary>
 	public sealed class SpzUiThemeDesignTypography : MonoBehaviour {
 		public float characterSpacing;
+		public float lineSpacing;
 		public FontStyles fontStyle;
+		public float outlineWidth;
+		public Color outlineColor = Color.clear;
 		public bool hasSnapshot;
 	}
 

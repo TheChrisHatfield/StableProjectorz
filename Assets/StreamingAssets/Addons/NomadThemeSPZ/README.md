@@ -10,6 +10,7 @@ through theme tokens + compose hooks:
 - RibbonOnlyFullscreen FULL/SRN + OPEN/HIDE RIGHT: under Nomad, **flat grey face + FULL/SRN text** (not icon-only / not beveled peach)
 - Left / brush strips: Nomad applies **studio line icons** (wireframe, cursor, camera FOV handle, brush tools) and **open letter-spacing** on BoundChrome labels (`font_scale` still drives size)
 - Paint / Smudge / Erase direction cells: **flat square control_bg** + line icons (not beveled 9-slice plates, corner chevrons, or +/− tick overlays)
+- BoundChrome Selectable/Graphic: **auto-flatten 9-slice** faces (Multiview POV slots, pins, etc.) so four corner arrows disappear
 - Vertical sliders (FOV, etc.): **pill track + segmented coral fill + bullseye thumb** (not gold disc / red camera chip)
 - Dimension mode SD/3D/UV: **flat discs + reverse-out** light type (not glossy spheres)
 - Addon Manager fullscreen: header icons share a left gutter; with `ribbon_icon_only`, compact icon-only header actions
