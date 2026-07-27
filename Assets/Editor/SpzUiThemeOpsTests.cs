@@ -360,7 +360,7 @@ public sealed class SpzUiThemeOpsTests {
 			img.sprite = authored;
 			img.type = Image.Type.Simple;
 			SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
-			Assert.That(img.type, Is.EqualTo(Image.Type.Sliced));
+			Assert.That(img.type, Is.EqualTo(Image.Type.Simple));
 			Assert.That(ReferenceEquals(img.sprite, b), Is.True);
 			Assert.That(go.GetComponent<SpzUiThemeRoundedControl>(), Is.Not.Null);
 
@@ -452,10 +452,13 @@ public sealed class SpzUiThemeOpsTests {
 		Assert.That(icon, Is.EqualTo(StudioLineIcon.Smudge));
 		Assert.That(SpzUiThemeOps.TryParseStudioLineIcon("Bullseye", out icon, out error), Is.True, error);
 		Assert.That(icon, Is.EqualTo(StudioLineIcon.Bullseye));
+		Assert.That(SpzUiThemeOps.TryParseStudioLineIcon("Globe", out icon, out error), Is.True, error);
+		Assert.That(icon, Is.EqualTo(StudioLineIcon.Globe));
 		Assert.That(SpzUiThemeOps.ListLineIconNames().ToString(), Does.Contain("Mesh"));
 		Assert.That(SpzUiThemeOps.ListLineIconNames().ToString(), Does.Contain("Bucket"));
 		Assert.That(SpzUiThemeOps.ListLineIconNames().ToString(), Does.Contain("Cursor"));
 		Assert.That(SpzUiThemeOps.ListLineIconNames().ToString(), Does.Contain("Bullseye"));
+		Assert.That(SpzUiThemeOps.ListLineIconNames().ToString(), Does.Contain("Globe"));
 		Assert.That(SpzUiThemeOps.ListLineIconNames().ToString(), Does.Contain("Expand"));
 		Assert.That(RibbonViewportFullViewOnScreen_Toggle_UI.ResolveFullViewDockIcon(), Is.EqualTo(StudioLineIcon.Expand));
 		Assert.That(RibbonViewportFullViewOnScreen_Toggle_UI.ResolveOpenRightDockIcon(false), Is.EqualTo(StudioLineIcon.ChevronRight));
@@ -522,6 +525,69 @@ public sealed class SpzUiThemeOpsTests {
 			Assert.That(btn.colors.highlightedColor, Is.EqualTo(Color.red));
 			Assert.That(handleRt.sizeDelta.x, Is.EqualTo(40f).Within(0.01f));
 		} finally {
+			UnityEngine.Object.DestroyImmediate(root);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
+	public void ApplyBoundChromeSelectableFlattensSlicedCornerAnchors() {
+		var root = new GameObject("SlicedCornerFlatten");
+		root.SetActive(false);
+		try {
+			var go = new GameObject("PovSlot", typeof(RectTransform), typeof(Image), typeof(Toggle));
+			go.transform.SetParent(root.transform, false);
+			var face = go.GetComponent<Image>();
+			face.type = Image.Type.Sliced;
+			face.color = Color.gray;
+			var tickGo = new GameObject("Checkmark", typeof(RectTransform), typeof(Image));
+			tickGo.transform.SetParent(go.transform, false);
+			var tick = tickGo.GetComponent<Image>();
+			tick.type = Image.Type.Sliced;
+			tick.enabled = true;
+			var toggle = go.GetComponent<Toggle>();
+			toggle.targetGraphic = face;
+			toggle.graphic = tick;
+
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				Tokens(("control_bg", "#292A2EFF"), ("accent", "#F2CA50FF"), ("corner_radius", "5")),
+				"replace",
+				out string error), Is.True, error);
+
+			SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, SpzUiThemeOps.Active.controlBg, SpzUiThemeOps.Active.accent);
+
+			Assert.That(face.type, Is.EqualTo(Image.Type.Simple), "9-slice corner arrows must become Simple fill");
+			Assert.That(UiRuntimeSprites.IsCachedRoundedRect(face.sprite), Is.True);
+			Assert.That(tick.enabled, Is.False, "bevel Checkmark overlay must hide under Nomad");
+		}
+		finally {
+			UnityEngine.Object.DestroyImmediate(root);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
+	public void ApplyBoundChromeGraphicFlattensSlicedFaces() {
+		var root = new GameObject("SlicedGraphicFlatten");
+		root.SetActive(false);
+		try {
+			var go = new GameObject("PinFace", typeof(RectTransform), typeof(Image));
+			go.transform.SetParent(root.transform, false);
+			var face = go.GetComponent<Image>();
+			face.type = Image.Type.Sliced;
+
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				Tokens(("control_bg", "#292A2EFF"), ("corner_radius", "5")),
+				"replace",
+				out string error), Is.True, error);
+
+			SpzUiThemeOps.ApplyBoundChromeGraphic(face, SpzUiThemeOps.Active.controlBg);
+			Assert.That(face.type, Is.EqualTo(Image.Type.Simple));
+			Assert.That(UiRuntimeSprites.IsCachedRoundedRect(face.sprite), Is.True);
+		}
+		finally {
 			UnityEngine.Object.DestroyImmediate(root);
 			SpzUiThemeOps.ResetTheme();
 		}

@@ -693,8 +693,22 @@ namespace spz {
 	            var pin = _cameraPins[i];
 	            if (pin == null) continue;
 	            var rootImg = pin.GetComponent<Image>();
-	            if (rootImg != null)
+	            if (rootImg != null) {
 	                SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.controlBg);
+	                // Pins may use Simple bevel sprites — force flat soft fill (not only Sliced).
+	                SpzUiThemeOps.ApplyRoundedControlSprite(rootImg, markEligible: true);
+	                rootImg.type = Image.Type.Simple;
+	                rootImg.preserveAspect = false;
+	            }
+	            foreach (var img in pin.GetComponentsInChildren<Image>(true)) {
+	                if (img == null || img == rootImg) continue;
+	                string n = img.gameObject.name ?? "";
+	                if (n.IndexOf("triangle", System.StringComparison.OrdinalIgnoreCase) >= 0
+	                    || n.IndexOf("Check", System.StringComparison.OrdinalIgnoreCase) >= 0)
+	                    SpzUiThemeOps.HideAuthoredGraphicForTheme(img);
+	                else if (img.type == Image.Type.Sliced)
+	                    SpzUiThemeOps.FlattenSlicedChromeFace(img);
+	            }
 	            foreach (var tmp in pin.GetComponentsInChildren<TextMeshProUGUI>(true))
 	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
 	        }
