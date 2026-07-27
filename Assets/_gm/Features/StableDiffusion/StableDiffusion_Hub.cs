@@ -51,7 +51,7 @@ namespace spz {
 	            return true;
 	        }
 	        if (Connection_MGR.is_sd_connected == false){ 
-	            Viewport_StatusText.instance.ShowStatusText("Can't Generate images\nnot yet connected to the black window. Please wait", false, 2, true);
+	            Viewport_StatusText.instance.ShowStatusText(SdDisconnectPlaceholder.DisplayText, false, 2, true);
 	            return true;
 	        }
 	        if(allow_without_controlnets==false &&  ControlNetUnit_UI.hasAtLeastSomeModel == false){

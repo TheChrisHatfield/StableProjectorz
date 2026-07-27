@@ -281,7 +281,7 @@ namespace spz {
 	            msg_genBG = "To generate projections, enable one\nControlNetUnit with Depth or Normals model.\n(See <b>CTRL NETS</b> tab)";
 	        }
 	        if (!Connection_MGR.is_sd_connected){
-	            msg_genBG = msg_genArt = "Not connected to the StableDiffusion (SD) black window yet.\nPlease wait or see bottom right corner.";
+	            msg_genBG = msg_genArt = SdDisconnectPlaceholder.DisplayText;
 	        }
 
 	        if(!Connection_MGR.is_3d_connected){

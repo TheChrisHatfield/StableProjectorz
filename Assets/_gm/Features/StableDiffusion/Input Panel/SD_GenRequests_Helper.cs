@@ -248,10 +248,14 @@ namespace spz {
 
 	        var inp = SD_InputPanel_UI.instance;
 
-	        if (inp.models.selectedModel_name == null){
+	        // GetSelectedModel_name returns "" for disconnect placeholders (never null).
+	        if (string.IsNullOrEmpty(inp.models.selectedModel_name)){
 	            _isGeneratingWhat = Generate_RequestingWhat.nothing;
 	            _finalPreparations_beforeGen = false;
-	            Viewport_StatusText.instance.ShowStatusText("No Models detected in the Input panel. Enter PlayMode only after WebUI was launched", false, 10, progressVisibility:false);
+	            string msg = !Connection_MGR.is_sd_connected
+	                ? SdDisconnectPlaceholder.DisplayText
+	                : "No Models detected in the Input panel. Enter PlayMode only after WebUI was launched";
+	            Viewport_StatusText.instance.ShowStatusText(msg, false, 10, progressVisibility:false);
 	            return false;//no models available. User should try clicking the refresh button next to dropdown.
 	        }
 	        if(inp.samplers?.value == null){

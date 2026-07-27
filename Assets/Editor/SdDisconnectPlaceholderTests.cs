@@ -14,6 +14,8 @@ public sealed class SdDisconnectPlaceholderTests {
 		Assert.That(SdDisconnectPlaceholder.IsPlaceholder(
 			SdDisconnectPlaceholder.DisplayText), Is.True);
 		Assert.That(SdDisconnectPlaceholder.IsPlaceholder(
+			"Diffusion Model Not Yet Connected"), Is.True);
+		Assert.That(SdDisconnectPlaceholder.IsPlaceholder(
 			"Diffusion Neural Network\nNot yet connected."), Is.True);
 	}
 
@@ -28,9 +30,10 @@ public sealed class SdDisconnectPlaceholderTests {
 
 	[Test]
 	public void DisplayText_IsSdSpecificNotGenericGen3DCopy() {
-		// Gen3D Dropdown Holder must keep neutral legacy wording; SD panels use DisplayText.
-		Assert.That(SdDisconnectPlaceholder.DisplayText, Does.Contain("Diffusion Neural Network"));
+		// Gen3D Dropdown Holder must keep neutral legacy wording; SD panels + viewport notifications use DisplayText.
+		Assert.That(SdDisconnectPlaceholder.DisplayText, Is.EqualTo("Diffusion Model Not Yet Connected"));
 		Assert.That(SdDisconnectPlaceholder.DisplayText, Does.Not.Contain("Check Black Window"));
+		Assert.That(SdDisconnectPlaceholder.DisplayText, Does.Not.Contain("black window"));
 	}
 
 	[Test]
@@ -40,5 +43,7 @@ public sealed class SdDisconnectPlaceholderTests {
 		Assert.That(SdDisconnectPlaceholder.IsPlaceholder(chosen), Is.True);
 		string selectedName = SdDisconnectPlaceholder.IsPlaceholder(chosen) ? "" : chosen;
 		Assert.That(selectedName, Is.EqualTo(""));
+		// Start_GenerationRequest must use IsNullOrEmpty — getters return "" not null.
+		Assert.That(string.IsNullOrEmpty(selectedName), Is.True);
 	}
 }
