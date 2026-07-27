@@ -31,8 +31,8 @@ namespace spz {
 		const string NomadThemeAddonId = "NomadThemeSPZ";
 		const string NomadThemeId = "nomad-inspired";
 		const string NomadThemeLabel = "Nomad inspired";
-		const float NomadDefaultFontScale = 1.05f;
-		const float NomadDefaultSpacingScale = 1.0f;
+		const float NomadDefaultFontScale = 0.84f;
+		const float NomadDefaultSpacingScale = 0.94f;
 		/// <summary>Charcoal skybox RGB from Nomad panel_bg / field_bg.</summary>
 		static readonly Color NomadSkyboxTop = new Color(0x1E / 255f, 0x1F / 255f, 0x23 / 255f, 1f);
 		static readonly Color NomadSkyboxBottom = new Color(0x12 / 255f, 0x13 / 255f, 0x17 / 255f, 1f);
@@ -112,7 +112,7 @@ namespace spz {
 			}
 			UnityEngine.Debug.Log($"[AddonUI_MGR] Theme restore: {detail}");
 			if (string.Equals(SpzUiThemeOps.ActiveThemeId, NomadThemeId, StringComparison.Ordinal)) {
-				ComposeNomadSkyboxNative();
+				// Do not compose charcoal skybox — SPZ background stays with Nomad chrome.
 				ComposeNomadStripIconsNative();
 			}
 		}
@@ -1048,19 +1048,22 @@ namespace spz {
 				ShowAddonButtonStatus($"Nomad theme apply failed: {error}", false);
 				return;
 			}
-			ComposeNomadSkyboxNative();
+			// Keep SPZ viewport/skybox gradient — Nomad is chrome only (do not paint charcoal over SPZ BG).
 			ComposeNomadStripIconsNative();
-			UnityEngine.Debug.Log($"[AddonUI_MGR] Applied native Nomad theme '{NomadThemeId}' (font={fontScale:F2}, spacing={spacingScale:F2}) + skybox + strip icons");
+			UnityEngine.Debug.Log($"[AddonUI_MGR] Applied native Nomad theme '{NomadThemeId}' (font={fontScale:F2}, spacing={spacingScale:F2}) + strip icons (SPZ skybox kept)");
 			ShowAddonButtonStatus("Pro-Studio Nomad palette applied", true);
 		}
 
 		void ComposeNomadStripIconsNative() {
+			// Specific needles first — bare "Art" would also hit "art bg list".
 			var pairs = new (string tab, string icon)[] {
 				("Paint", "Brush"),
-				("Art", "Eye"),
-				("BG", "Eye"),
+				("art bg", "Layers"),
+				("Art BG", "Layers"),
+				("art list", "Image"),
 				("Control", "Grid"),
 				("CTRL", "Grid"),
+				("controlnet", "Grid"),
 				("Mesh", "Mesh"),
 				("3D", "Mesh"),
 				("Obj", "Mesh"),
@@ -1532,15 +1535,26 @@ namespace spz {
 			var fieldBg = fieldObj.AddComponent<Image>();
 			SpzUiThemeOps.ApplyRoundedControlSprite(fieldBg, markEligible: true);
 			fieldBg.color = new Color(0.15f, 0.15f, 0.15f, 1f);
-			
+
+			// Viewport + RectMask2D clips long paths inside the dark field (Overflow without a mask paints past the panel).
+			var textAreaObj = new GameObject("Text Area");
+			textAreaObj.transform.SetParent(fieldObj.transform, false);
+			var textAreaRect = textAreaObj.AddComponent<RectTransform>();
+			textAreaRect.anchorMin = Vector2.zero;
+			textAreaRect.anchorMax = Vector2.one;
+			textAreaRect.sizeDelta = Vector2.zero;
+			textAreaRect.offsetMin = new Vector2(ProjectUiScale.Space(1), 2);
+			textAreaRect.offsetMax = new Vector2(-ProjectUiScale.Space(1), -2);
+			textAreaObj.AddComponent<RectMask2D>();
+
 			var textObj = new GameObject("Text");
-			textObj.transform.SetParent(fieldObj.transform, false);
+			textObj.transform.SetParent(textAreaObj.transform, false);
 			var textRect = textObj.AddComponent<RectTransform>();
 			textRect.anchorMin = Vector2.zero;
 			textRect.anchorMax = Vector2.one;
 			textRect.sizeDelta = Vector2.zero;
-			textRect.offsetMin = new Vector2(ProjectUiScale.Space(1), 2);
-			textRect.offsetMax = new Vector2(-ProjectUiScale.Space(1), -2);
+			textRect.offsetMin = Vector2.zero;
+			textRect.offsetMax = Vector2.zero;
 			var text = textObj.AddComponent<TextMeshProUGUI>();
 			text.text = defaultValue;
 			text.fontSize = 12;
@@ -1548,26 +1562,30 @@ namespace spz {
 			// Do not use Ellipsis on the editable component — long paths must remain fully editable/selectable.
 			text.overflowMode = TextOverflowModes.Overflow;
 			text.enableWordWrapping = false;
+			text.maskable = true;
 			ApplyRuntimeTmpFont(text);
-			
+
 			var placeholderObj = new GameObject("Placeholder");
-			placeholderObj.transform.SetParent(fieldObj.transform, false);
+			placeholderObj.transform.SetParent(textAreaObj.transform, false);
 			var placeholderRect = placeholderObj.AddComponent<RectTransform>();
 			placeholderRect.anchorMin = Vector2.zero;
 			placeholderRect.anchorMax = Vector2.one;
 			placeholderRect.sizeDelta = Vector2.zero;
-			placeholderRect.offsetMin = new Vector2(ProjectUiScale.Space(1), 2);
-			placeholderRect.offsetMax = new Vector2(-ProjectUiScale.Space(1), -2);
+			placeholderRect.offsetMin = Vector2.zero;
+			placeholderRect.offsetMax = Vector2.zero;
 			var placeholder = placeholderObj.AddComponent<TextMeshProUGUI>();
 			placeholder.text = "Path…";
 			placeholder.fontSize = 12;
 			placeholder.color = new Color(0.5f, 0.5f, 0.5f, 1f);
+			placeholder.maskable = true;
 			placeholder.gameObject.SetActive(string.IsNullOrEmpty(defaultValue));
 			ApplyRuntimeTmpFont(placeholder);
-			
+
 			var inputField = fieldObj.AddComponent<TMP_InputField>();
+			inputField.textViewport = textAreaRect;
 			inputField.textComponent = text;
 			inputField.placeholder = placeholder;
+			inputField.lineType = TMP_InputField.LineType.SingleLine;
 			inputField.text = defaultValue;
 			
 			// Update value when text changes

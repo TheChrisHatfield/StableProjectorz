@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 namespace spz {
 
@@ -24,7 +25,23 @@ namespace spz {
 	    [SerializeField] Toggle _both_toggle;
 	    [SerializeField] Toggle _none_toggle;
 
+	    public Toggle SizeToggle => _size_toggle;
+	    public Toggle OpacityToggle => _opacity_toggle;
+	    public Toggle BothToggle => _both_toggle;
+	    public Toggle NoneToggle => _none_toggle;
+
 	    public TabletPressureMode _mode { get; private set; } = TabletPressureMode.AffectBoth;
+
+	    /// <summary>True when <paramref name="tmp"/> is a pressure-mode letter label (N/B/S/O).</summary>
+	    public bool OwnsLabel(TMP_Text tmp) {
+	        if (tmp == null) return false;
+	        return IsUnder(tmp, _size_toggle) || IsUnder(tmp, _opacity_toggle)
+	            || IsUnder(tmp, _both_toggle) || IsUnder(tmp, _none_toggle);
+	    }
+
+	    static bool IsUnder(TMP_Text tmp, Toggle toggle) {
+	        return toggle != null && tmp.transform.IsChildOf(toggle.transform);
+	    }
 
 
 	    void OnHardnessHovered()
@@ -37,6 +54,7 @@ namespace spz {
 	        if(tog == _opacity_toggle){ _mode = TabletPressureMode.AffectOpacity; }
 	        if(tog == _both_toggle){ _mode = TabletPressureMode.AffectBoth; }
 	        if(tog == _none_toggle){ _mode = TabletPressureMode.AffectNone; }
+	        BrushRibbon_UI.instance?.NotifyPressureModeChromeChanged();
 	    }
 
 

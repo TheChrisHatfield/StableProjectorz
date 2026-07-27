@@ -18,11 +18,11 @@ public sealed class NomadThemeComposeTests {
 			"BuildNomadThemeTokens",
 			BindingFlags.Static | BindingFlags.NonPublic);
 		Assert.That(method, Is.Not.Null);
-		var tokens = (JObject)method.Invoke(null, new object[] { 1.05f, 1.0f });
+		var tokens = (JObject)method.Invoke(null, new object[] { 0.84f, 0.94f });
 		Assert.That((string)tokens["accent"], Is.EqualTo("#F2CA50FF"));
 		Assert.That((string)tokens["panel_bg"], Is.EqualTo("#1E1F23F2"));
-		Assert.That((float)tokens["font_scale"], Is.EqualTo(1.05f).Within(0.001f));
-		Assert.That((float)tokens["spacing_scale"], Is.EqualTo(1.0f).Within(0.001f));
+		Assert.That((float)tokens["font_scale"], Is.EqualTo(0.84f).Within(0.001f));
+		Assert.That((float)tokens["spacing_scale"], Is.EqualTo(0.94f).Within(0.001f));
 		Assert.That((float)tokens["corner_radius"], Is.EqualTo(5f).Within(0.001f));
 		Assert.That((string)tokens["icon_tint"], Is.EqualTo("#D0C5AFFF"));
 		Assert.That((float)tokens["panel_width"], Is.EqualTo(220f).Within(0.001f));
@@ -33,7 +33,8 @@ public sealed class NomadThemeComposeTests {
 			"nomad-inspired", "Nomad inspired", tokens, "NomadThemeSPZ", out string error), Is.True, error);
 		Assert.That(SpzUiThemeOps.TryApplyTheme("nomad-inspired", null, "replace", out error), Is.True, error);
 		Assert.That(SpzUiThemeOps.ActiveThemeId, Is.EqualTo("nomad-inspired"));
-		Assert.That(SpzUiThemeOps.Active.fontScale, Is.EqualTo(1.05f).Within(0.001f));
+		Assert.That(SpzUiThemeOps.Active.fontScale, Is.EqualTo(0.84f).Within(0.001f));
+		Assert.That(SpzUiThemeOps.Active.spacingScale, Is.EqualTo(0.94f).Within(0.001f));
 		Assert.That(SpzUiThemeOps.Active.cornerRadius, Is.EqualTo(5f).Within(0.001f));
 		Assert.That(SpzUiThemeOps.Active.panelWidth, Is.EqualTo(220f).Within(0.001f));
 		Assert.That(SpzUiThemeOps.Active.panelAlpha, Is.EqualTo(0.92f).Within(0.001f));

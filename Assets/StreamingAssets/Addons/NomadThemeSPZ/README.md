@@ -5,8 +5,14 @@ through theme tokens + compose hooks:
 
 - `spz.ui.register_theme` / `apply_theme` / `reset_theme` / scale **patch**
 - Tokens: colors + scales + `corner_radius` / `icon_tint` / `panel_width` / `panel_alpha` / **`ribbon_icon_only`**
-- Compose: charcoal skybox + strip `set_line_icon`
+- Compose: strip `set_line_icon` (SPZ viewport/skybox background is **kept**)
 - CommandRibbon: when `ribbon_icon_only` is on, **hides tab labels** and centers larger line icons (Nomad-like); Restore SPZ shows labels again
+- RibbonOnlyFullscreen FULL/SRN + OPEN/HIDE RIGHT: under Nomad, **flat grey face + FULL/SRN text** (not icon-only / not beveled peach)
+- Left / brush strips: Nomad applies **studio line icons** (wireframe, cursor, camera FOV handle, brush tools) and **open letter-spacing** on BoundChrome labels (`font_scale` still drives size)
+- Paint / Smudge / Erase direction cells: **flat square control_bg** + line icons (not beveled 9-slice plates, corner chevrons, or +/− tick overlays)
+- Vertical sliders (FOV, etc.): **pill track + segmented coral fill + bullseye thumb** (not gold disc / red camera chip)
+- Dimension mode SD/3D/UV: **flat discs + reverse-out** light type (not glossy spheres)
+- Addon Manager fullscreen: header icons share a left gutter; with `ribbon_icon_only`, compact icon-only header actions
 - Persistence: host PlayerPrefs remembers last applied theme
 - Does **not** call `set_ui_scale` or hide chrome via `set_ui_target_active`
 
@@ -18,8 +24,8 @@ is active, restores the pre-Apply skybox when captured, then unregisters the pre
 
 | Control | Effect |
 |---------|--------|
-| Apply Nomad Palette | register + `apply_theme` + charcoal skybox + strip line icons |
-| Restore SPZ Palette | `reset_theme` + restore captured skybox |
+| Apply Nomad Palette | register + `apply_theme` + strip line icons (SPZ skybox/BG kept) |
+| Restore SPZ Palette | `reset_theme` (+ restore skybox if an older session painted charcoal) |
 | Font scale / Spacing scale | sliders (0.75–1.5) |
 | Apply Scales | `apply_theme` patch while Nomad is active (fail closed otherwise) |
 | Refresh Theme Status | logs `get_theme` / `list_themes` bound-surface honesty |
@@ -28,15 +34,18 @@ is active, restores the pre-Apply skybox when captured, then unregisters the pre
 
 | Tab match | Icon |
 |-----------|------|
-| Paint | Brush |
-| Art / BG | Eye |
-| Control / CTRL | Grid |
+| Paint | Brush (paintbrush) |
+| art list | Image (picture frame) |
+| art bg | Layers |
+| Control / CTRL / controlnet | Grid |
 | Mesh / 3D / Obj | Mesh |
 | Nomad | Settings |
 
+Hovering a strip tab shows its name (useful in icon-only mode). Auto-resolve uses the same mapping from tab title + label.
+
 ## Palette (defaults)
 
-Colors as Pro-Studio Monolith; `corner_radius` 5; `icon_tint` muted; `panel_width` 220; `panel_alpha` 0.92; `font_scale` 1.05.
+Colors as Pro-Studio Monolith; `corner_radius` 5; `icon_tint` muted; `panel_width` 220; `panel_alpha` 0.92; `font_scale` 0.84; `spacing_scale` 0.94.
 
 Native Unity fallback (`AddonUI_MGR`) mirrors the same path when Python HTTP is down.
 

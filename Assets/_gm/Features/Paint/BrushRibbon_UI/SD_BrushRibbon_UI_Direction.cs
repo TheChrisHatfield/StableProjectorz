@@ -217,6 +217,10 @@ namespace spz {
 	    public bool isPositive => _brushAdd_Toggle.isOn;
 	    public bool isSmudge => _brushSmudge_Toggle != null && _brushSmudge_Toggle.isOn;
 
+	    public Toggle PaintToggle => _brushAdd_Toggle;
+	    public Toggle EraseToggle => _brushErase_Toggle;
+	    public Toggle SmudgeToggle => _brushSmudge_Toggle;
+
 	    public BrushToolMode toolMode {
 	        get {
 	            if (_brushSmudge_Toggle != null && _brushSmudge_Toggle.isOn) return BrushToolMode.Smudge;
