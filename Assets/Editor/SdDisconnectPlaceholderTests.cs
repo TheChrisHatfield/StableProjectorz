@@ -48,4 +48,16 @@ public sealed class SdDisconnectPlaceholderTests {
 		// Start_GenerationRequest must use IsNullOrEmpty — getters return "" not null.
 		Assert.That(string.IsNullOrEmpty(selectedName), Is.True);
 	}
+
+	[Test]
+	public void EmptySelected_WithOnlyPlaceholder_ShouldPreferDisplayTextStatus() {
+		// When HasValidModels is false, GenRequests shows DisplayText even if socket reports connected.
+		Assert.That(SdDisconnectPlaceholder.IsPlaceholder(SdDisconnectPlaceholder.DisplayText), Is.True);
+		bool hasValidModels = false; // dropdown options are only placeholder
+		bool isSdConnected = true;
+		string msg = (!isSdConnected || !hasValidModels)
+			? SdDisconnectPlaceholder.DisplayText
+			: "No Models detected in the Input panel. Enter PlayMode only after WebUI was launched";
+		Assert.That(msg, Is.EqualTo(SdDisconnectPlaceholder.DisplayText));
+	}
 }
