@@ -32,4 +32,13 @@ public sealed class SdDisconnectPlaceholderTests {
 		Assert.That(SdDisconnectPlaceholder.DisplayText, Does.Contain("Diffusion Neural Network"));
 		Assert.That(SdDisconnectPlaceholder.DisplayText, Does.Not.Contain("Check Black Window"));
 	}
+
+	[Test]
+	public void IsPlaceholder_MeansSelectedNameShouldBeEmpty() {
+		// Mirrors GetSelectedModel_name / GetSelectedVAE_name: placeholder must not be treated as a checkpoint/VAE id.
+		string chosen = SdDisconnectPlaceholder.DisplayText;
+		Assert.That(SdDisconnectPlaceholder.IsPlaceholder(chosen), Is.True);
+		string selectedName = SdDisconnectPlaceholder.IsPlaceholder(chosen) ? "" : chosen;
+		Assert.That(selectedName, Is.EqualTo(""));
+	}
 }
