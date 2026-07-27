@@ -14,6 +14,8 @@ namespace spz {
 
 	    public static Action onClicked { get; set; }
 
+	    public Button Button => _button;
+
 	    void OnButtonPressed() =>  onClicked?.Invoke();
 
 	    void Awake(){

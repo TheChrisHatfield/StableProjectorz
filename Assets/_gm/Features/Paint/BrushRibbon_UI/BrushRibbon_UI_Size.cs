@@ -274,6 +274,21 @@ namespace spz {
 	        RefreshSpacingText();
 	    }
 
+	    /// <summary>Nomad size dial + labels (BoundChrome).</summary>
+	    public void ApplyThemeTokens(SpzUiThemeOps.ThemeTokens t) {
+	        if (_maskBrushSize_slider != null)
+	            _maskBrushSize_slider.ApplyThemeTokens(t.accent, t.textPrimary);
+	        if (_brushSize_text != null)
+	            SpzUiThemeOps.ApplyBoundChromeTmp(_brushSize_text, t.textPrimary);
+	        if (_brushSpacing_text != null)
+	            SpzUiThemeOps.ApplyBoundChromeTmp(_brushSpacing_text, t.textMuted);
+	        // "size" caption labels under this control
+	        foreach (var tmp in GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (tmp == null || tmp == _brushSize_text || tmp == _brushSpacing_text) continue;
+	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	        }
+	    }
+
 	    public void Save(BrushRibbon_UI_SL trSL){
 	        trSL.maskBrush_size01 = _maskBrushSize_slider.value;
 	        trSL.maskBrush_spacing01 = _brushSpacing01;

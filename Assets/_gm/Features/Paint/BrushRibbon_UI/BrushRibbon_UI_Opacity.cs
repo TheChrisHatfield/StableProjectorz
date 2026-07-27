@@ -14,6 +14,9 @@ namespace spz {
 	    [SerializeField] BrushRibbon_UI_Colors _colors;
 	    public float _maskBrushOpacity {get; private set;}
 
+	    /// <summary>Center value readout (Nomad contrast theming).</summary>
+	    public TextMeshProUGUI OpacityText => _brushOpacityText;
+
 	    /// <summary> Current brush strength 0–1 (JSON-RPC / scripts; same backing field as UI). </summary>
 	    public float Opacity01 => _maskBrushOpacity;
 
@@ -28,9 +31,16 @@ namespace spz {
 	    float _nonOverridenOpacity;
 
 
-	    void OnUpdateTextColor(Color col)
-	        => _brushOpacityText.color =  SD_WorkflowOptionsRibbon_UI.instance.isPositive?  
-	                                            new Color(0.2f, 0.2f, 0.2f, 1)  : new Color(0.8f, 0.8f, 0.8f, 1);
+	    void OnUpdateTextColor(Color col) {
+	        if (_brushOpacityText == null) return;
+	        if (SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            // Nomad: keep dark ink on the luminous circular face.
+	            _brushOpacityText.color = new Color(0.10f, 0.09f, 0.10f, 1f);
+	            return;
+	        }
+	        _brushOpacityText.color = SD_WorkflowOptionsRibbon_UI.instance.isPositive?
+	            new Color(0.2f, 0.2f, 0.2f, 1) : new Color(0.8f, 0.8f, 0.8f, 1);
+	    }
 
 
 	    void SetBrushOpacity(float brushOpacity, bool quiet=false){

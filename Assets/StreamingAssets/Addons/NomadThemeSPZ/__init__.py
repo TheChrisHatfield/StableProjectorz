@@ -39,8 +39,8 @@ TOKENS: Dict[str, Any] = {
     "border": "#99907C66",
     "tab_active": "#343539FF",
     "selection": "#F2CA5033",
-    "font_scale": 1.05,
-    "spacing_scale": 1.0,
+    "font_scale": 0.84,
+    "spacing_scale": 0.94,
     "corner_radius": 5,
     "icon_tint": "#D0C5AFFF",
     "panel_width": 220,
@@ -48,13 +48,16 @@ TOKENS: Dict[str, Any] = {
     "ribbon_icon_only": 1,
 }
 
-# CommandRibbon strip glyphs (icon pack v1) — tab name substring → StudioLineIcon.
+# CommandRibbon strip glyphs (icon pack) — tab name substring → StudioLineIcon.
+# More specific matches first; avoid bare "Art"/"BG" (would rematch Art BG).
 _STRIP_LINE_ICONS: Tuple[Tuple[str, str], ...] = (
     ("Paint", "Brush"),
-    ("Art", "Eye"),
-    ("BG", "Eye"),
+    ("art bg", "Layers"),
+    ("Art BG", "Layers"),
+    ("art list", "Image"),
     ("Control", "Grid"),
     ("CTRL", "Grid"),
+    ("controlnet", "Grid"),
     ("Mesh", "Mesh"),
     ("3D", "Mesh"),
     ("Obj", "Mesh"),
@@ -200,7 +203,7 @@ def _compose_nomad_strip_icons(api: Any) -> None:
 
 
 def apply_nomad_palette() -> None:
-    """Apply registered palette + scales via theme API, then compose charcoal skybox + strip icons."""
+    """Apply registered palette + scales via theme API, then strip icons. Keeps SPZ skybox/background."""
     api = _get_api()
     tokens = dict(TOKENS)
     if _panel is not None:
@@ -215,9 +218,9 @@ def apply_nomad_palette() -> None:
     except Exception:
         _best_effort_cleanup(api)
         raise
-    _compose_nomad_skybox(api)
+    # SPZ viewport/skybox gradient stays — Nomad is chrome only.
     _compose_nomad_strip_icons(api)
-    print(f"[{ADDON_ID}] Applied '{THEME_ID}' via apply_theme + skybox + strip icons")
+    print(f"[{ADDON_ID}] Applied '{THEME_ID}' via apply_theme + strip icons (SPZ skybox kept)")
 
 
 def restore_stableprojectorz_palette() -> None:
@@ -292,8 +295,8 @@ def register() -> None:
     _panel.add_button("Apply Scales", "apply_nomad_scales")
     _panel.add_button("Refresh Theme Status", "refresh_nomad_theme_status")
     print(
-        f"[{ADDON_ID}] Registered. Use Apply Nomad Palette for theme + skybox + strip icons; "
-        "Apply Scales patches font_scale/spacing_scale while Nomad is active."
+        f"[{ADDON_ID}] Registered. Use Apply Nomad Palette for theme + strip icons "
+        "(SPZ skybox/background kept); Apply Scales patches font_scale/spacing_scale while Nomad is active."
     )
 
 
