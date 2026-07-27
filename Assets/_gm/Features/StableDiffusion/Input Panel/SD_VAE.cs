@@ -224,7 +224,9 @@ namespace spz {
     
 	    string GetSelectedVAE_name(){
 	        if (_vaeDropdown.options.Count == 0){ return ""; }
-	        return _vaeDropdown.options[_vaeDropdown.value].text;
+	        string chosen = _vaeDropdown.options[_vaeDropdown.value].text;
+	        if (SdDisconnectPlaceholder.IsPlaceholder(chosen)){ return ""; }
+	        return chosen;
 	    }
 
 	    void OnDropdown_EntryPicked(int ix){

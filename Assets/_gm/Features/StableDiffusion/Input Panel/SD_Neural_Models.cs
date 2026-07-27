@@ -260,7 +260,9 @@ namespace spz {
 
 	    string GetSelectedModel_name(){
 	        if (_modelsDropdown.options.Count == 0){ return ""; }
-	        return _modelsDropdown.options[_modelsDropdown.value].text;
+	        string chosen = _modelsDropdown.options[_modelsDropdown.value].text;
+	        if (SdDisconnectPlaceholder.IsPlaceholder(chosen)){ return ""; }
+	        return chosen;
 	    }
 
 
