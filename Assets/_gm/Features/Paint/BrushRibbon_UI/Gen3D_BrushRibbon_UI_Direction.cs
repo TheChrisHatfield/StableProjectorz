@@ -34,6 +34,7 @@ namespace spz {
 
 	        bool isPositive =  toggle == _brushAdd_Toggle;
 	        Cursor_UI.instance.SetCursorColor( isPositive? Color.white : Color.black );
+	        BrushRibbon_UI_Direction.RaiseDirectionToggleChanged();
 	    }
 
 
