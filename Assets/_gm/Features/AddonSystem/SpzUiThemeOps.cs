@@ -186,23 +186,25 @@ namespace spz {
 			if (toggle == null || toggle.targetGraphic == null)
 				return;
 			ApplyBoundChromeSelectable(toggle, face, accent);
-			if (toggle.targetGraphic is Image bg) {
+			if (toggle.targetGraphic is Image bg)
 				ApplyRoundedControlSprite(bg, markEligible: true);
-				bg.type = Image.Type.Simple;
-				bg.preserveAspect = false;
-			}
 			if (toggle.graphic != null)
 				ApplyBoundChromeGraphic(toggle.graphic, checkSuccess);
 		}
 
 		/// <summary>
-		/// Soft Simple fill stretched edge-to-edge; snapshots RectTransform for Restore SPZ.
+		/// Soft fill stretched edge-to-edge; snapshots RectTransform for Restore SPZ.
+		/// Does not force <see cref="Image.Type.Simple"/> — that stretches soft corner AA into whiskers;
+		/// pair with <see cref="ApplyRoundedControlSprite"/> which picks Sliced vs Simple.
 		/// </summary>
 		public static void FlattenToolFaceImage(Image img) {
 			if (img == null) return;
-			img.type = Image.Type.Simple;
 			img.preserveAspect = false;
 			img.pixelsPerUnitMultiplier = 1f;
+			if (UiRuntimeSprites.IsCachedRoundedRect(img.sprite))
+				img.type = Image.Type.Sliced;
+			else if (UiRuntimeSprites.IsSolidRect(img.sprite))
+				img.type = Image.Type.Simple;
 			var rt = img.rectTransform;
 			if (rt == null || !(rt.parent is RectTransform)) return;
 			SnapshotToolFaceLayout(rt);
@@ -300,8 +302,6 @@ namespace spz {
 			ApplySelectableToken(selectable, normal, accent);
 			if (selectable.targetGraphic is Image face && !IsToggleCheckmarkGraphic(face)) {
 				ApplyRoundedControlSprite(face, markEligible: true);
-				face.type = Image.Type.Simple;
-				face.preserveAspect = false;
 			}
 		}
 
@@ -327,8 +327,6 @@ namespace spz {
 			if (image.type != Image.Type.Sliced)
 				return;
 			ApplyRoundedControlSprite(image, markEligible: true);
-			image.type = Image.Type.Simple;
-			image.preserveAspect = false;
 		}
 
 		/// <summary>
@@ -1045,7 +1043,9 @@ namespace spz {
 		/// <summary>
 		/// Assigns the active <c>corner_radius</c> soft-rounded fill to eligible control Images only
 		/// (tagged or already using a runtime rounded sprite). Never retargets RawImage art.
-		/// Uses <see cref="Image.Type.Simple"/> — 9-slice borders on small cells read as four corner “anchors”.
+		/// Uses <see cref="Image.Type.Sliced"/> when radius &gt; 0 so soft AA stays in the border
+		/// patches — <see cref="Image.Type.Simple"/> stretch turns those corners into horizontal whiskers
+		/// on wide Settings / ribbon buttons. Radius 0 uses an opaque solid Simple fill.
 		/// Snapshots the authored sprite once so <see cref="RestoreRoundedControlSpritesUnder"/> can unwind.
 		/// </summary>
 		public static void ApplyRoundedControlSprite(Image image, bool markEligible = false) {
@@ -1053,7 +1053,8 @@ namespace spz {
 				return;
 			var tag = image.GetComponent<SpzUiThemeRoundedControl>();
 			if (tag == null) {
-				bool eligible = markEligible || UiRuntimeSprites.IsCachedRoundedRect(image.sprite);
+				bool eligible = markEligible || UiRuntimeSprites.IsCachedRoundedRect(image.sprite)
+					|| UiRuntimeSprites.IsSolidRect(image.sprite);
 				if (!eligible)
 					return;
 				tag = image.gameObject.AddComponent<SpzUiThemeRoundedControl>();
@@ -1062,9 +1063,18 @@ namespace spz {
 				tag.hasAuthoredSnapshot = true;
 			}
 			int radius = Mathf.RoundToInt(Mathf.Clamp(_active.cornerRadius, CornerRadiusMin, CornerRadiusMax));
-			image.sprite = UiRuntimeSprites.GetRoundedRectSliced(radius);
-			image.type = Image.Type.Simple;
+			image.pixelsPerUnitMultiplier = 1f;
 			image.preserveAspect = false;
+			image.fillCenter = true;
+			if (radius <= 0) {
+				image.sprite = UiRuntimeSprites.SolidRect;
+				image.type = Image.Type.Simple;
+			}
+			else {
+				image.sprite = UiRuntimeSprites.GetRoundedRectSliced(radius);
+				// Sliced keeps AA in corner borders; Simple stretch = whisker spikes on wide cells.
+				image.type = Image.Type.Sliced;
+			}
 		}
 
 		/// <summary>

@@ -133,7 +133,7 @@ namespace spz {
 	    void ApplyThemeTokens() {
 	        if (_frame == null) return;
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
-	            SpzUiThemeOps.RestoreAuthoredGraphic(_frame);
+	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
@@ -141,6 +141,7 @@ namespace spz {
 	        SpzUiThemeOps.ApplyBoundChromeGraphic(_frame, selected
 	            ? Color.Lerp(t.tabActive, t.accent, 0.65f)
 	            : t.controlBg);
+	        SpzUiThemeOps.ApplyRoundedControlSprite(_frame, markEligible: true);
 	    }
 
 	    void Start(){

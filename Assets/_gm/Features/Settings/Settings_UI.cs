@@ -853,11 +853,9 @@ namespace spz {
 	            bool primary = ReferenceEquals(btn, _restoreDefaults_button)
 	                           || ReferenceEquals(btn, _openAddonManager_button);
 	            Color normal = primary ? Color.Lerp(t.controlBg, t.accent, 0.55f) : t.controlBg;
-	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, normal, t.accent);
-	            if (btn.targetGraphic is Image btnImg) {
-	                SpzUiThemeOps.ApplyRoundedControlSprite(btnImg, markEligible: true);
-	                btnImg.type = Image.Type.Simple;
-	            }
+			SpzUiThemeOps.ApplyBoundChromeSelectable(btn, normal, t.accent);
+			if (btn.targetGraphic is Image btnImg)
+				SpzUiThemeOps.ApplyRoundedControlSprite(btnImg, markEligible: true);
 	        }
 	        foreach (var toggle in _settingsPanel_go.GetComponentsInChildren<Toggle>(true)) {
 	            if (toggle == null || IsUnderProductColorSurface(toggle.transform)) continue;
@@ -915,11 +913,8 @@ namespace spz {
 	    static void ThemeFlatLauncherButton(Button btn, StudioLineIcon glyph, SpzUiThemeOps.ThemeTokens t) {
 	        if (btn == null || btn.targetGraphic == null) return;
 	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
-	        if (btn.targetGraphic is Image img) {
+	        if (btn.targetGraphic is Image img)
 	            SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
-	            img.type = Image.Type.Simple;
-	            img.preserveAspect = false;
-	        }
 	        SpzUiThemeOps.ApplyControlLineIcon(btn.transform, glyph, 18f);
 	        foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp != null)

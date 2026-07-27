@@ -264,9 +264,20 @@ namespace spz {
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
-	        if (_openPanel_button != null && _openPanel_button.targetGraphic != null)
+	        if (_openPanel_button != null && _openPanel_button.targetGraphic != null) {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_openPanel_button, t.controlBg, t.accent);
-	        // Do not theme _dim_text — CheckConnection owns its color as live connection status.
+	            if (_openPanel_button.targetGraphic is Image face) {
+	                SpzUiThemeOps.ApplyRoundedControlSprite(face, markEligible: true);
+	                face.preserveAspect = false;
+	            }
+	        }
+	        // Do not recolor _dim_text / _connectionIcon — CheckConnection owns live status green/red.
+	        // Apply Nomad tracking/outline without replacing status RGB.
+	        if (_dim_text != null && SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            Color status = _dim_text.color;
+	            SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(_dim_text, status, 11f);
+	            _dim_text.color = status;
+	        }
 	        if (_panel != null) {
 	            var panelImg = _panel.GetComponent<Image>();
 	            if (panelImg != null)
@@ -283,14 +294,12 @@ namespace spz {
 	        }
 	        if (_resetToDefault_button != null && _resetToDefault_button.targetGraphic != null) {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_resetToDefault_button, t.controlBg, t.accent);
+	            if (_resetToDefault_button.targetGraphic is Image resetImg) {
+	                SpzUiThemeOps.ApplyRoundedControlSprite(resetImg, markEligible: true);
+	            }
 	            var resetLabel = _resetToDefault_button.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	            if (resetLabel != null)
 	                SpzUiThemeOps.ApplyBoundChromeTmp(resetLabel, t.textPrimary);
-	        }
-	        if (_openPanel_button != null) {
-	            var openLabel = _openPanel_button.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
-	            if (openLabel != null)
-	                SpzUiThemeOps.ApplyBoundChromeTmp(openLabel, t.textPrimary);
 	        }
 	    }
 

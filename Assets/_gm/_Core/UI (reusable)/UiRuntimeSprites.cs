@@ -14,6 +14,34 @@ namespace spz {
 		Settings,
 		Eye,
 		Mesh,
+		/// <summary>Fullscreen / expand affordance (viewport FULL/SRN dock).</summary>
+		Expand,
+		/// <summary>Open / point left (HIDE RIGHT ↔ return, or open left column).</summary>
+		ChevronLeft,
+		/// <summary>Open / point right (OPEN RIGHT dock).</summary>
+		ChevronRight,
+		/// <summary>Art / image list (picture frame).</summary>
+		Image,
+		/// <summary>Art BG / layered backgrounds.</summary>
+		Layers,
+		/// <summary>Wireframe / mesh edges (left ribbon).</summary>
+		Wireframe,
+		/// <summary>Object selection cursor (click-select toggle).</summary>
+		Cursor,
+		/// <summary>Camera / FOV affordance.</summary>
+		Camera,
+		/// <summary>Bucket fill tool.</summary>
+		Bucket,
+		/// <summary>Drop / invert / blend teardrop.</summary>
+		Drop,
+		/// <summary>Eraser tool.</summary>
+		Eraser,
+		/// <summary>Smudge / smear blob.</summary>
+		Smudge,
+		/// <summary>Nomad vertical-slider thumb (circle + center dot).</summary>
+		Bullseye,
+		/// <summary>Web-find / globe (prompt header image search).</summary>
+		Globe,
 	}
 
 	/// <summary>
@@ -22,22 +50,57 @@ namespace spz {
 	/// Soft-edge AA at higher resolution. 9-slice borders stay small so short buttons (≈32px) do not explode into corner blobs.
 	/// </summary>
 	public static class UiRuntimeSprites {
-		static Sprite _roundedSliced;
+		static Sprite _solidRect;
 		static Sprite _circleFilled;
 		static Sprite _circleRing;
+		static Sprite _nomadSliderSegmentTile;
+		static readonly Dictionary<int, Sprite> RoundedByRadius = new Dictionary<int, Sprite>();
 		static readonly Dictionary<StudioLineIcon, Sprite> LineIcons =
 			new Dictionary<StudioLineIcon, Sprite>();
 
 		/// <summary>
-		/// 9-slice rounded rect. Border is intentionally small (6px) so Image.Type.Sliced
-		/// works on controls as short as ~28–34px without giant quarter-circle corners.
+		/// Opaque white 4×4 fill (no AA, no 9-slice border). Use with <see cref="Image.Type.Simple"/> for hard rectangles.
 		/// </summary>
-		public static Sprite RoundedRectSliced {
+		public static Sprite SolidRect {
 			get {
-				if (_roundedSliced == null)
-					_roundedSliced = CreateRoundedRectSliced(64, 6);
-				return _roundedSliced;
+				if (_solidRect == null)
+					_solidRect = CreateSolidRect(4);
+				return _solidRect;
 			}
+		}
+
+		/// <summary>True when <paramref name="sprite"/> is the opaque solid fill.</summary>
+		public static bool IsSolidRect(Sprite sprite) =>
+			sprite != null && ReferenceEquals(sprite, _solidRect);
+
+		/// <summary>
+		/// Default 9-slice rounded rect (radius 6). Prefer <see cref="GetRoundedRectSliced"/> for theme-driven radius.
+		/// </summary>
+		public static Sprite RoundedRectSliced => GetRoundedRectSliced(6);
+
+		/// <summary>
+		/// 9-slice rounded rect for the given corner radius (clamped 0–12). Cached per radius.
+		/// Soft AA lives in the border patches — pair with <see cref="Image.Type.Sliced"/> (not Simple)
+		/// or wide buttons stretch corner AA into horizontal whiskers.
+		/// </summary>
+		public static Sprite GetRoundedRectSliced(int cornerRadius) {
+			int r = Mathf.Clamp(cornerRadius, 0, 12);
+			if (!RoundedByRadius.TryGetValue(r, out Sprite sprite) || sprite == null) {
+				sprite = CreateRoundedRectSliced(64, r);
+				RoundedByRadius[r] = sprite;
+			}
+			return sprite;
+		}
+
+		/// <summary>True when <paramref name="sprite"/> is one of our cached runtime rounded rects.</summary>
+		public static bool IsCachedRoundedRect(Sprite sprite) {
+			if (sprite == null)
+				return false;
+			foreach (var pair in RoundedByRadius) {
+				if (ReferenceEquals(pair.Value, sprite))
+					return true;
+			}
+			return false;
 		}
 
 		public static Sprite CircleFilled {
@@ -55,6 +118,21 @@ namespace spz {
 				return _circleRing;
 			}
 		}
+
+		/// <summary>
+		/// White tile for Nomad vertical slider fill (rounded block + gap). Tint with Image.color; use <see cref="Image.Type.Tiled"/>.
+		/// </summary>
+		public static Sprite NomadSliderSegmentTile {
+			get {
+				if (_nomadSliderSegmentTile == null)
+					_nomadSliderSegmentTile = CreateNomadSliderSegmentTile(28, 18);
+				return _nomadSliderSegmentTile;
+			}
+		}
+
+		/// <summary>True when <paramref name="sprite"/> is the Nomad segmented fill tile.</summary>
+		public static bool IsNomadSliderSegmentTile(Sprite sprite) =>
+			sprite != null && ReferenceEquals(sprite, _nomadSliderSegmentTile);
 
 		/// <summary>Thin 1.5px-style line glyphs for runtime-created professional chrome.</summary>
 		public static Sprite GetLineIcon(StudioLineIcon icon) {
@@ -84,14 +162,28 @@ namespace spz {
 			return outside;
 		}
 
+		static Sprite CreateSolidRect(int size) {
+			size = Mathf.Max(2, size);
+			var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+			tex.wrapMode = TextureWrapMode.Clamp;
+			tex.filterMode = FilterMode.Point;
+			var white = Color.white;
+			for (int y = 0; y < size; y++) {
+				for (int x = 0; x < size; x++)
+					tex.SetPixel(x, y, white);
+			}
+			tex.Apply(false, true);
+			return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
+		}
+
 		static Sprite CreateRoundedRectSliced(int size, int cornerRadius) {
 			var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
 			tex.wrapMode = TextureWrapMode.Clamp;
 			tex.filterMode = FilterMode.Bilinear;
 			float w = size;
 			float h = size;
-			// Keep corner radius <= ~1/8 of size so 9-slice borders fit short buttons.
-			float r = Mathf.Clamp(cornerRadius, 2f, size / 8f);
+			// Keep corner radius <= ~1/8 of size so 9-slice borders fit short buttons. Allow 0 (square).
+			float r = Mathf.Clamp(cornerRadius, 0f, size / 8f);
 			for (int y = 0; y < size; y++) {
 				for (int x = 0; x < size; x++) {
 					float sd = DistToRoundedRect(x + 0.5f, y + 0.5f, w, h, r);
@@ -101,7 +193,7 @@ namespace spz {
 			}
 			tex.Apply(false, true);
 			// Border must be < half the shortest control that uses this sprite (header buttons ≈34px tall).
-			float br = Mathf.Clamp(r + 1f, 2f, 8f);
+			float br = r <= 0.01f ? 1f : Mathf.Clamp(r + 1f, 2f, 8f);
 			var border = new Vector4(br, br, br, br);
 			return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, border);
 		}
@@ -149,6 +241,32 @@ namespace spz {
 			return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
 		}
 
+		/// <summary>
+		/// One vertical tile: transparent gap on top + soft white rounded block (tint via Image.color).
+		/// </summary>
+		static Sprite CreateNomadSliderSegmentTile(int width, int height) {
+			var tex = new Texture2D(width, height, TextureFormat.RGBA32, false);
+			tex.wrapMode = TextureWrapMode.Clamp;
+			tex.filterMode = FilterMode.Bilinear;
+			int gap = Mathf.Max(3, height / 5);
+			float blockH = height - gap;
+			float r = Mathf.Min(width, blockH) * 0.28f;
+			for (int y = 0; y < height; y++) {
+				for (int x = 0; x < width; x++) {
+					if (y >= blockH) {
+						tex.SetPixel(x, y, new Color(1f, 1f, 1f, 0f));
+						continue;
+					}
+					float sd = DistToRoundedRect(x + 0.5f, y + 0.5f, width, blockH, r);
+					float a = SoftAlpha(sd);
+					tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+				}
+			}
+			tex.Apply(false, true);
+			// pixelsPerUnit ≈ height so each tile is ~1 world unit tall at default canvas scale.
+			return Sprite.Create(tex, new Rect(0, 0, width, height), new Vector2(0.5f, 0.5f), height);
+		}
+
 		static Sprite CreateLineIcon(StudioLineIcon icon, int size) {
 			var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
 			tex.wrapMode = TextureWrapMode.Clamp;
@@ -192,10 +310,13 @@ namespace spz {
 					Line(tex, 17, 20, 47, 20, stroke);
 					break;
 				case StudioLineIcon.Brush:
-					Line(tex, 19, 45, 43, 21, stroke + 1f);
-					Line(tex, 40, 18, 47, 25, stroke);
-					Line(tex, 16, 48, 25, 46, stroke);
-					Arc(tex, 19, 44, 7, 185, 350, stroke);
+					// Paintbrush: handle + ferrule + angled bristle tip.
+					Line(tex, 14, 50, 28, 36, stroke + 0.8f);
+					Line(tex, 28, 36, 34, 30, stroke);
+					Line(tex, 30, 34, 38, 26, stroke + 0.4f);
+					Line(tex, 36, 28, 48, 16, stroke + 1.2f);
+					Line(tex, 46, 14, 52, 20, stroke);
+					Line(tex, 48, 18, 42, 24, stroke);
 					break;
 				case StudioLineIcon.Grid:
 					for (int i = 0; i < 3; i++) {
@@ -219,8 +340,31 @@ namespace spz {
 					Arc(tex, 32, 31, 21, 20, 160, stroke);
 					Circle(tex, 32, 32, 6, stroke);
 					break;
+				case StudioLineIcon.Image:
+					Line(tex, 12, 16, 52, 16, stroke);
+					Line(tex, 52, 16, 52, 48, stroke);
+					Line(tex, 52, 48, 12, 48, stroke);
+					Line(tex, 12, 48, 12, 16, stroke);
+					Line(tex, 12, 36, 24, 28, stroke);
+					Line(tex, 24, 28, 34, 38, stroke);
+					Line(tex, 34, 38, 52, 22, stroke);
+					Circle(tex, 22, 24, 4, stroke);
+					break;
+				case StudioLineIcon.Layers:
+					Line(tex, 16, 40, 32, 48, stroke);
+					Line(tex, 32, 48, 48, 40, stroke);
+					Line(tex, 48, 40, 32, 32, stroke);
+					Line(tex, 32, 32, 16, 40, stroke);
+					Line(tex, 16, 32, 32, 40, stroke);
+					Line(tex, 32, 40, 48, 32, stroke);
+					Line(tex, 48, 32, 32, 24, stroke);
+					Line(tex, 32, 24, 16, 32, stroke);
+					Line(tex, 16, 24, 32, 32, stroke);
+					Line(tex, 32, 32, 48, 24, stroke);
+					Line(tex, 48, 24, 32, 16, stroke);
+					Line(tex, 32, 16, 16, 24, stroke);
+					break;
 				case StudioLineIcon.Mesh:
-				default:
 					Line(tex, 32, 10, 51, 21, stroke);
 					Line(tex, 51, 21, 51, 43, stroke);
 					Line(tex, 51, 43, 32, 54, stroke);
@@ -230,6 +374,103 @@ namespace spz {
 					Line(tex, 13, 21, 32, 32, stroke);
 					Line(tex, 32, 32, 51, 21, stroke);
 					Line(tex, 32, 32, 32, 54, stroke);
+					break;
+				case StudioLineIcon.Expand:
+					// Outer frame + inward corner ticks (fullscreen).
+					Line(tex, 14, 14, 50, 14, stroke);
+					Line(tex, 50, 14, 50, 50, stroke);
+					Line(tex, 50, 50, 14, 50, stroke);
+					Line(tex, 14, 50, 14, 14, stroke);
+					Line(tex, 14, 14, 22, 14, stroke);
+					Line(tex, 14, 14, 14, 22, stroke);
+					Line(tex, 50, 14, 42, 14, stroke);
+					Line(tex, 50, 14, 50, 22, stroke);
+					Line(tex, 50, 50, 42, 50, stroke);
+					Line(tex, 50, 50, 50, 42, stroke);
+					Line(tex, 14, 50, 22, 50, stroke);
+					Line(tex, 14, 50, 14, 42, stroke);
+					break;
+				case StudioLineIcon.ChevronLeft:
+					Line(tex, 40, 16, 22, 32, stroke + 0.6f);
+					Line(tex, 22, 32, 40, 48, stroke + 0.6f);
+					break;
+				case StudioLineIcon.ChevronRight:
+					Line(tex, 24, 16, 42, 32, stroke + 0.6f);
+					Line(tex, 42, 32, 24, 48, stroke + 0.6f);
+					break;
+				case StudioLineIcon.Wireframe:
+					// Mountain / triangle wire peek (left ribbon wireframe).
+					Line(tex, 12, 48, 32, 14, stroke);
+					Line(tex, 32, 14, 52, 48, stroke);
+					Line(tex, 52, 48, 12, 48, stroke);
+					Line(tex, 22, 48, 32, 30, stroke * 0.85f);
+					Line(tex, 32, 30, 42, 48, stroke * 0.85f);
+					break;
+				case StudioLineIcon.Cursor:
+					Line(tex, 18, 12, 18, 48, stroke + 0.4f);
+					Line(tex, 18, 12, 40, 34, stroke + 0.4f);
+					Line(tex, 18, 28, 30, 28, stroke);
+					Line(tex, 30, 28, 24, 48, stroke);
+					Line(tex, 24, 48, 18, 34, stroke);
+					break;
+				case StudioLineIcon.Camera:
+					Line(tex, 14, 24, 50, 24, stroke);
+					Line(tex, 50, 24, 50, 46, stroke);
+					Line(tex, 50, 46, 14, 46, stroke);
+					Line(tex, 14, 46, 14, 24, stroke);
+					Circle(tex, 32, 35, 8, stroke);
+					Line(tex, 22, 24, 26, 16, stroke);
+					Line(tex, 26, 16, 38, 16, stroke);
+					Line(tex, 38, 16, 42, 24, stroke);
+					break;
+				case StudioLineIcon.Bucket:
+					Line(tex, 20, 18, 44, 18, stroke);
+					Line(tex, 44, 18, 48, 36, stroke);
+					Line(tex, 48, 36, 16, 36, stroke);
+					Line(tex, 16, 36, 20, 18, stroke);
+					Line(tex, 28, 36, 34, 50, stroke + 0.6f);
+					Line(tex, 34, 50, 40, 42, stroke);
+					Circle(tex, 42, 48, 3.5f, stroke * 0.8f);
+					break;
+				case StudioLineIcon.Drop:
+					Line(tex, 32, 12, 44, 34, stroke);
+					Arc(tex, 32, 38, 12, 200, 340, stroke);
+					Line(tex, 20, 34, 32, 12, stroke);
+					Line(tex, 32, 28, 32, 48, stroke * 0.7f);
+					break;
+				case StudioLineIcon.Eraser:
+					Line(tex, 16, 40, 28, 16, stroke);
+					Line(tex, 28, 16, 48, 26, stroke);
+					Line(tex, 48, 26, 36, 50, stroke);
+					Line(tex, 36, 50, 16, 40, stroke);
+					Line(tex, 22, 36, 40, 45, stroke * 0.85f);
+					break;
+				case StudioLineIcon.Smudge:
+					Arc(tex, 28, 34, 14, 40, 280, stroke);
+					Arc(tex, 40, 28, 10, 200, 80, stroke);
+					Line(tex, 18, 42, 24, 50, stroke);
+					Line(tex, 46, 22, 52, 16, stroke);
+					break;
+				case StudioLineIcon.Bullseye:
+					Circle(tex, 32, 32, 18, stroke);
+					Circle(tex, 32, 32, 4.5f, stroke + 0.8f);
+					break;
+				case StudioLineIcon.Globe:
+					Circle(tex, 32, 32, 18, stroke);
+					// Meridians + equator (wireframe globe).
+					Arc(tex, 32, 32, 18, 250, 290, stroke * 0.9f);
+					Arc(tex, 32, 32, 18, 70, 110, stroke * 0.9f);
+					Line(tex, 14, 32, 50, 32, stroke * 0.85f);
+					Arc(tex, 32, 32, 10, 200, 340, stroke * 0.8f);
+					Arc(tex, 32, 32, 10, 20, 160, stroke * 0.8f);
+					break;
+				default:
+					Line(tex, 32, 10, 51, 21, stroke);
+					Line(tex, 51, 21, 51, 43, stroke);
+					Line(tex, 51, 43, 32, 54, stroke);
+					Line(tex, 32, 54, 13, 43, stroke);
+					Line(tex, 13, 43, 13, 21, stroke);
+					Line(tex, 13, 21, 32, 10, stroke);
 					break;
 			}
 

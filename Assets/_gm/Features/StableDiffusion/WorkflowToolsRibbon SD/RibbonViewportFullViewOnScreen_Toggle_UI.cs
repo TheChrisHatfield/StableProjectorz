@@ -1005,7 +1005,6 @@ namespace spz {
 					Color fill = on ? Color.Lerp(t.controlBg, t.accent, 0.14f) : t.controlBg;
 					SpzUiThemeOps.ApplyBoundChromeGraphic(_bgImage, fill);
 					SpzUiThemeOps.ApplyRoundedControlSprite(_bgImage, markEligible: true);
-					_bgImage.type = Image.Type.Simple;
 					_bgImage.preserveAspect = false;
 				} else {
 					_fillBase = _authoredFillBase;
@@ -1030,7 +1029,6 @@ namespace spz {
 						if (sculpt) {
 							SpzUiThemeOps.ApplyBoundChromeGraphic(openImg, t.controlBg);
 							SpzUiThemeOps.ApplyRoundedControlSprite(openImg, markEligible: true);
-							openImg.type = Image.Type.Simple;
 						} else if (_bgImage != null) {
 							SpzUiThemeOps.RestoreAuthoredGraphic(openImg);
 							openImg.color = _authoredFillBase;

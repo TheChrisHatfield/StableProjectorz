@@ -54,12 +54,10 @@ public sealed class BrushRibbonDirectionFlatChromeThemeTests {
 			Assert.That(themeToggle, Is.Not.Null);
 			themeToggle.Invoke(null, new object[] { toggle, StudioLineIcon.Brush, SpzUiThemeOps.Active, 22f });
 
-			Assert.That(face.type, Is.EqualTo(Image.Type.Simple));
+			Assert.That(face.type, Is.EqualTo(Image.Type.Sliced));
 			Assert.That(face.color, Is.EqualTo(SpzUiThemeOps.Active.controlBg));
 			Assert.That(tick.enabled, Is.False);
-			Assert.That(UiRuntimeSprites.IsCachedRoundedRect(face.sprite)
-				|| face.sprite == null
-				|| face.type == Image.Type.Simple, Is.True);
+			Assert.That(UiRuntimeSprites.IsCachedRoundedRect(face.sprite), Is.True);
 		}
 		finally {
 			Object.DestroyImmediate(root);
