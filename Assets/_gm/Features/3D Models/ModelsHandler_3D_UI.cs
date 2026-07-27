@@ -183,6 +183,7 @@ namespace spz {
 	    /// <summary>Themes mesh-panel chrome (header buttons / scroll parent) — not per-submesh selection colors.</summary>
 	    void ApplyMeshListChromeThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
 	            foreach (var g in GetComponentsInChildren<Graphic>(true)) {
 	                if (g.GetComponentInParent<SD_subMesh_IconUI>() != null) continue;
 	                SpzUiThemeOps.RestoreAuthoredGraphic(g);

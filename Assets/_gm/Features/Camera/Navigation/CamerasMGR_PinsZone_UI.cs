@@ -677,12 +677,11 @@ namespace spz {
 	                for (int i = 0; i < _cameraPins.Count; i++) {
 	                    var pin = _cameraPins[i];
 	                    if (pin == null) continue;
-	                    foreach (var g in pin.GetComponentsInChildren<Graphic>(true))
-	                        SpzUiThemeOps.RestoreAuthoredGraphic(g);
+	                    SpzUiThemeOps.RestoreBoundChromeUnder(pin.transform);
 	                }
 	            }
 	            if (_noEditMode_enabledGO != null)
-	                SpzUiThemeOps.RestoreAuthoredGraphic(_noEditMode_enabledGO.GetComponent<Image>());
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_noEditMode_enabledGO.transform);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
@@ -703,10 +702,10 @@ namespace spz {
 	            foreach (var img in pin.GetComponentsInChildren<Image>(true)) {
 	                if (img == null || img == rootImg) continue;
 	                string n = img.gameObject.name ?? "";
-	                if (n.IndexOf("triangle", System.StringComparison.OrdinalIgnoreCase) >= 0
-	                    || n.IndexOf("Check", System.StringComparison.OrdinalIgnoreCase) >= 0)
+	                // Corner bevel triangles only — never Toggle/product Check glyphs.
+	                if (n.IndexOf("triangle", System.StringComparison.OrdinalIgnoreCase) >= 0)
 	                    SpzUiThemeOps.HideAuthoredGraphicForTheme(img);
-	                else if (img.type == Image.Type.Sliced)
+	                else if (img.type == Image.Type.Sliced && !SpzUiThemeOps.IsToggleCheckmarkGraphic(img))
 	                    SpzUiThemeOps.FlattenSlicedChromeFace(img);
 	            }
 	            foreach (var tmp in pin.GetComponentsInChildren<TextMeshProUGUI>(true))

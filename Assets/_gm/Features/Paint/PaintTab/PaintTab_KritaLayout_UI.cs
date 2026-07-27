@@ -94,8 +94,7 @@ namespace spz {
 
 		static void RestoreSectionShell(RectTransform section) {
 			if (section == null) return;
-			foreach (var g in section.GetComponentsInChildren<Graphic>(true))
-				SpzUiThemeOps.RestoreAuthoredGraphic(g);
+			SpzUiThemeOps.RestoreBoundChromeUnder(section);
 		}
 
 		static void ApplyHeaderScaled(TextMeshProUGUI header, Color color, float basePt)

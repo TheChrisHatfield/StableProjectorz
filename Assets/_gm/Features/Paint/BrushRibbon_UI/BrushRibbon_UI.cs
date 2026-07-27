@@ -166,7 +166,7 @@ namespace spz {
 	        ApplyFlatToolColorBlock(toggle);
 	        if (toggle.targetGraphic is Image bg) {
 	            SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
-	            FlattenToolFace(bg);
+	            SpzUiThemeOps.FlattenToolFaceImage(bg);
 	        }
 	        HideSecondaryChromeUnder(toggle);
 	        foreach (var tmp in toggle.GetComponentsInChildren<TMP_Text>(true)) {
@@ -200,7 +200,7 @@ namespace spz {
 	        ApplyFlatToolColorBlock(toggle);
 	        if (toggle.targetGraphic is Image bg) {
 	            SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
-	            FlattenToolFace(bg);
+	            SpzUiThemeOps.FlattenToolFaceImage(bg);
 	        }
 	        HideSecondaryChromeUnder(toggle);
 	        SpzUiThemeOps.ApplyControlLineIcon(toggle.transform, glyph, iconSizePx);
@@ -213,7 +213,7 @@ namespace spz {
 	            ApplyFlatToolColorBlock(btn);
 	            if (btn.targetGraphic is Image bg) {
 	                SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
-	                FlattenToolFace(bg);
+	                SpzUiThemeOps.FlattenToolFaceImage(bg);
 	            }
 	        }
 	        HideSecondaryChromeUnder(btn);
@@ -234,24 +234,6 @@ namespace spz {
 	        sel.colors = cb;
 	    }
 
-	    /// <summary>Soft Simple fill stretched edge-to-edge (replaces 9-slice corner anchors).</summary>
-	    static void FlattenToolFace(Image img) {
-	        if (img == null) return;
-	        img.type = Image.Type.Simple;
-	        img.preserveAspect = false;
-	        img.pixelsPerUnitMultiplier = 1f;
-	        var rt = img.rectTransform;
-	        if (rt == null || !(rt.parent is RectTransform)) return;
-	        rt.anchorMin = Vector2.zero;
-	        rt.anchorMax = Vector2.one;
-	        rt.pivot = new Vector2(0.5f, 0.5f);
-	        rt.anchoredPosition = Vector2.zero;
-	        rt.sizeDelta = Vector2.zero;
-	        rt.offsetMin = Vector2.zero;
-	        rt.offsetMax = Vector2.zero;
-	        rt.localScale = Vector3.one;
-	    }
-
 	    /// <summary>Hide tick / check / corner-triangle chrome; keep Monolith overlays.</summary>
 	    static void HideSecondaryChromeUnder(Selectable sel) {
 	        if (sel == null) return;
@@ -263,7 +245,7 @@ namespace spz {
 	            if (n == "MonolithActiveBar" || n == "MonolithLineIcon" || n == "LineIcon")
 	                continue;
 	            if (n.IndexOf("triangle", StringComparison.OrdinalIgnoreCase) >= 0
-	                || n.IndexOf("Check", StringComparison.OrdinalIgnoreCase) >= 0
+	                || n.Equals("Checkmark", StringComparison.OrdinalIgnoreCase)
 	                || n.IndexOf("pressed", StringComparison.OrdinalIgnoreCase) >= 0
 	                || n.Equals("tick", StringComparison.OrdinalIgnoreCase))
 	                SpzUiThemeOps.HideAuthoredGraphicForTheme(img);

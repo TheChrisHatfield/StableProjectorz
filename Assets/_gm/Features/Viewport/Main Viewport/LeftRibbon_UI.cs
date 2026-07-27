@@ -157,9 +157,7 @@ namespace spz {
 	    }
 
 	    void RestoreLeftRibbonAuthoredChrome() {
-	        SpzUiThemeOps.RestoreControlLineIconsUnder(transform);
-	        foreach (var g in GetComponentsInChildren<Graphic>(true))
-	            SpzUiThemeOps.RestoreAuthoredGraphic(g);
+	        SpzUiThemeOps.RestoreBoundChromeUnder(transform);
 	        // Hide Monolith bars created for Nomad selection chrome.
 	        foreach (Transform t in GetComponentsInChildren<Transform>(true)) {
 	            if (t != null && t.name == "MonolithActiveBar")
@@ -212,27 +210,80 @@ namespace spz {
 
 	    void ThemeWireframe(SpzUiThemeOps.ThemeTokens t) {
 	        if (_toggleWireframe == null) return;
-	        Color wireNormal = _toggleWireframe.isPressed
-	            ? Color.Lerp(t.tabActive, t.accent, 0.55f)
-	            : t.controlBg;
+	        Color wireNormal = FlatToolFill(_toggleWireframe.isPressed, t);
 	        var btn = _toggleWireframe.GetComponent<Button>();
-	        if (btn != null)
+	        if (btn != null) {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, wireNormal, t.accent);
+	            ApplyFlatToolColorBlock(btn);
+	            if (btn.targetGraphic is Image btnImg) {
+	                SpzUiThemeOps.ApplyRoundedControlSprite(btnImg, markEligible: true);
+	                SpzUiThemeOps.FlattenToolFaceImage(btnImg);
+	            }
+	        }
 	        else {
 	            var img = _toggleWireframe.GetComponent<Image>();
-	            if (img != null)
+	            if (img != null) {
 	                SpzUiThemeOps.ApplyBoundChromeGraphic(img, wireNormal);
+	                SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
+	                SpzUiThemeOps.FlattenToolFaceImage(img);
+	            }
 	        }
 	        SpzUiThemeOps.ApplyControlLineIcon(_toggleWireframe.transform, StudioLineIcon.Wireframe, 20f);
 	        ApplyActiveBar(_toggleWireframe.transform, _toggleWireframe.isPressed, t.accent);
 	    }
 
+	    /// <summary>
+	    /// Flat tool cell: dark fill always (no chrome/gold plate). Selected = subtle accent mix + side bar.
+	    /// </summary>
+	    static Color FlatToolFill(bool selected, SpzUiThemeOps.ThemeTokens t) {
+	        return selected
+	            ? Color.Lerp(t.controlBg, t.accent, 0.14f)
+	            : t.controlBg;
+	    }
+
+	    /// <summary>
+	    /// DEP / inside: flat face fills the slot (no gold bevel plate, no background peeking).
+	    /// Selection = FlatToolFill + thin accent bar — never gold checkmark overlay.
+	    /// </summary>
 	    static void ThemeToggle(Toggle toggle, SpzUiThemeOps.ThemeTokens t) {
 	        if (toggle == null) return;
-	        // Selected state leans on accent so Nomad gold (vs SPZ blue) is visible on left ribbon.
-	        Color normal = toggle.isOn ? Color.Lerp(t.tabActive, t.accent, 0.55f) : t.controlBg;
+	        Color normal = FlatToolFill(toggle.isOn, t);
 	        SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, normal, t.accent);
+	        ApplyFlatToolColorBlock(toggle);
+	        if (toggle.targetGraphic is Image bg) {
+	            SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
+	            SpzUiThemeOps.FlattenToolFaceImage(bg);
+	        }
+	        // Authored checkmark is the gold beveled plate when ON — hide it under Nomad.
+	        if (toggle.graphic is Image check && check != toggle.targetGraphic)
+	            SpzUiThemeOps.HideAuthoredGraphicForTheme(check);
+	        foreach (var img in toggle.GetComponentsInChildren<Image>(true)) {
+	            if (img == null || img == toggle.targetGraphic) continue;
+	            string n = img.gameObject.name ?? "";
+	            if (n == "MonolithActiveBar" || n == "MonolithLineIcon") continue;
+	            if (n.Equals("Checkmark", System.StringComparison.OrdinalIgnoreCase)
+	                || n.IndexOf("pressed", System.StringComparison.OrdinalIgnoreCase) >= 0
+	                || n.Equals("tick", System.StringComparison.OrdinalIgnoreCase))
+	                SpzUiThemeOps.HideAuthoredGraphicForTheme(img);
+	        }
+	        foreach (var tmp in toggle.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (tmp == null) continue;
+	            SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(tmp, t.textPrimary, 13f);
+	        }
 	        ApplyActiveBar(toggle.transform, toggle.isOn, t.accent);
+	    }
+
+	    /// <summary>ColorTint must not gold-multiply the face when selected (reads as beveled chrome).</summary>
+	    static void ApplyFlatToolColorBlock(Selectable sel) {
+	        if (sel == null) return;
+	        var cb = sel.colors;
+	        cb.normalColor = Color.white;
+	        cb.highlightedColor = Color.white;
+	        cb.pressedColor = new Color(0.92f, 0.92f, 0.92f, 1f);
+	        cb.selectedColor = Color.white;
+	        cb.disabledColor = new Color(1f, 1f, 1f, 0.4f);
+	        cb.colorMultiplier = 1f;
+	        sel.colors = cb;
 	    }
 
 	    static void ApplyActiveBar(Transform owner, bool selected, Color accent) {

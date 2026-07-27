@@ -499,6 +499,8 @@ namespace spz {
 	    /// </summary>
 	    protected virtual void ApplyListChromeThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            if (_header != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_header.transform);
 	            foreach (var g in GetComponentsInChildren<Graphic>(true)) {
 	                if (g.GetComponentInParent<IconUI>() != null) continue;
 	                SpzUiThemeOps.RestoreAuthoredGraphic(g);

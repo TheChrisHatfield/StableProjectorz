@@ -198,13 +198,13 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Retints the SD input column ownership root (dropdowns, dials, fields, presets) — colors + font_scale.
+	    /// Retints the SD input column: flat Nomad cells on prompt presets / web-find / fields (no chrome anchors).
 	    /// </summary>
 	    void ApplyThemeTokens() {
 	        // Bound chrome: authored SPZ colors until a non-default theme is applied.
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
-	            RestoreInputPanelAuthoredChrome();
 	            Transform rootRestore = _movableRectTransform != null ? _movableRectTransform : transform;
+	            SpzUiThemeOps.RestoreBoundChromeUnder(rootRestore);
 	            SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(rootRestore);
 	            return;
 	        }
@@ -222,19 +222,41 @@ namespace spz {
 	                continue;
 	            bool isField = btn.GetComponent<TMP_Dropdown>() != null
 	                || string.Equals(btn.gameObject.name, "Dropdown", System.StringComparison.Ordinal);
-	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, isField ? t.fieldBg : t.controlBg, t.accent);
+	            Color fill = isField ? t.fieldBg : FlatCellFill(false, t);
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, fill, t.accent);
+	            if (btn.targetGraphic is Image btnImg) {
+	                SpzUiThemeOps.ApplyRoundedControlSprite(btnImg, markEligible: true);
+	                btnImg.type = Image.Type.Simple;
+	            }
+	            // Prompt web-find globe button.
+	            if (IsWebFindButton(btn))
+	                SpzUiThemeOps.ApplyControlLineIcon(btn.transform, StudioLineIcon.Globe, 16f);
+	        }
+	        foreach (var toggle in root.GetComponentsInChildren<Toggle>(true)) {
+	            if (toggle == null || toggle.targetGraphic == null) continue;
+	            if (IsPromptPresetToggle(toggle))
+	                ThemePromptPresetToggle(toggle, t);
+	            else
+	                SpzUiThemeOps.ThemeCheckboxToggle(toggle, t.controlBg, t.accent, t.success);
 	        }
 	        foreach (var dd in root.GetComponentsInChildren<TMP_Dropdown>(true)) {
 	            if (dd == null || dd.targetGraphic == null) continue;
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(dd, t.fieldBg, t.accent);
+	            if (dd.targetGraphic is Image ddImg) {
+	                SpzUiThemeOps.ApplyRoundedControlSprite(ddImg, markEligible: true);
+	                ddImg.type = Image.Type.Simple;
+	            }
 	            if (dd.captionText != null)
 	                SpzUiThemeOps.ApplyBoundChromeTmp(dd.captionText, t.textPrimary);
 	        }
 	        foreach (var input in root.GetComponentsInChildren<TMP_InputField>(true)) {
 	            if (input == null) continue;
 	            var bg = input.GetComponent<Image>();
-	            if (bg != null)
+	            if (bg != null) {
 	                SpzUiThemeOps.ApplyBoundChromeGraphic(bg, t.fieldBg);
+	                SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
+	                bg.type = Image.Type.Simple;
+	            }
 	            if (input.textComponent != null)
 	                SpzUiThemeOps.ApplyBoundChromeTmp(input.textComponent, t.textPrimary);
 	            if (input.placeholder is TMP_Text ph)
@@ -243,7 +265,11 @@ namespace spz {
 	        foreach (var tmp in root.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp == null) continue;
 	            if (tmp.gameObject.name == "Placeholder") continue;
-	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	            // Prompt +/- headers: Nomad strip metrics; body fields stay regular BoundChrome.
+	            if (IsPromptHeaderLabel(tmp))
+	                SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(tmp, t.textPrimary, 13f);
+	            else
+	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
 	        }
 	        if (_sampleSteps_slider != null)
 	            _sampleSteps_slider.ApplyThemeTokens(t.accent, t.textPrimary);
@@ -258,16 +284,79 @@ namespace spz {
 	            SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
 	    }
 
-	    void RestoreInputPanelAuthoredChrome() {
+	    /// <summary>Re-sync preset cell fills after a slot is selected (selection can change without ThemeChanged).</summary>
+	    public void RefreshPromptPresetChrome() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) return;
 	        Transform root = _movableRectTransform != null ? _movableRectTransform : transform;
 	        if (root == null) return;
-	        foreach (var g in root.GetComponentsInChildren<Graphic>(true))
-	            SpzUiThemeOps.RestoreAuthoredGraphic(g);
+	        var t = SpzUiThemeOps.Active;
+	        foreach (var toggle in root.GetComponentsInChildren<Toggle>(true)) {
+	            if (toggle == null || toggle.targetGraphic == null) continue;
+	            if (!IsPromptPresetToggle(toggle)) continue;
+	            ThemePromptPresetToggle(toggle, t);
+	        }
+	    }
+
+	    static void ThemePromptPresetToggle(Toggle toggle, SpzUiThemeOps.ThemeTokens t) {
+	        if (toggle == null || toggle.targetGraphic == null) return;
+	        Color fill = FlatCellFill(toggle.isOn, t);
+	        SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, fill, t.accent);
+	        if (toggle.targetGraphic is Image bg) {
+	            SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
+	            bg.type = Image.Type.Simple;
+	        }
+	        // Hide SPZ embossed "pressed icon" overlays — flat fill + ColorBlock carry selection.
+	        if (toggle.graphic is Image press && press != toggle.targetGraphic)
+	            SpzUiThemeOps.HideAuthoredGraphicForTheme(press);
+	        foreach (var img in toggle.GetComponentsInChildren<Image>(true)) {
+	            if (img == null || img == toggle.targetGraphic) continue;
+	            string n = img.gameObject.name ?? "";
+	            if (n.IndexOf("pressed", System.StringComparison.OrdinalIgnoreCase) >= 0
+	                || n.Equals("tick", System.StringComparison.OrdinalIgnoreCase)
+	                || n.Equals("Checkmark", System.StringComparison.OrdinalIgnoreCase))
+	                SpzUiThemeOps.HideAuthoredGraphicForTheme(img);
+	        }
+	    }
+
+	    static Color FlatCellFill(bool selected, SpzUiThemeOps.ThemeTokens t) {
+	        return selected
+	            ? Color.Lerp(t.controlBg, t.accent, 0.35f)
+	            : t.controlBg;
+	    }
+
+	    static bool IsPromptPresetToggle(Toggle toggle) {
+	        if (toggle == null) return false;
+	        string n = toggle.gameObject.name ?? "";
+	        return n.IndexOf("preset", System.StringComparison.OrdinalIgnoreCase) >= 0;
+	    }
+
+	    static bool IsWebFindButton(Button btn) {
+	        if (btn == null) return false;
+	        string n = btn.gameObject.name ?? "";
+	        return n.IndexOf("internet", System.StringComparison.OrdinalIgnoreCase) >= 0
+	            || n.IndexOf("globe", System.StringComparison.OrdinalIgnoreCase) >= 0
+	            || n.IndexOf("WebFind", System.StringComparison.OrdinalIgnoreCase) >= 0
+	            || btn.GetComponentInParent<SD_PromptWord_WebFind>(true) != null;
+	    }
+
+	    static bool IsPromptHeaderLabel(TextMeshProUGUI tmp) {
+	        if (tmp == null) return false;
+	        string t = tmp.text ?? "";
+	        if (t.IndexOf("prompt", System.StringComparison.OrdinalIgnoreCase) < 0)
+	            return false;
+	        string n = tmp.gameObject.name ?? "";
+	        return n.IndexOf("header", System.StringComparison.OrdinalIgnoreCase) >= 0
+	            || string.Equals(n, "header", System.StringComparison.OrdinalIgnoreCase)
+	            || t.TrimStart().StartsWith("prompt", System.StringComparison.OrdinalIgnoreCase);
 	    }
 
 	    static void ThemeResolutionPreset(Button btn, SpzUiThemeOps.ThemeTokens t) {
 	        if (btn == null || btn.targetGraphic == null) return;
-	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, FlatCellFill(false, t), t.accent);
+	        if (btn.targetGraphic is Image img) {
+	            SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
+	            img.type = Image.Type.Simple;
+	        }
 	        var label = btn.GetComponentInChildren<TextMeshProUGUI>(true);
 	        if (label != null)
 	            SpzUiThemeOps.ApplyBoundChromeTmp(label, t.textPrimary);
