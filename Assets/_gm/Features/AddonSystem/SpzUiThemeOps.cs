@@ -180,7 +180,8 @@ namespace spz {
 		/// <summary>
 		/// Applies a chrome token color only when <see cref="ShouldRecolorBoundChrome"/>;
 		/// otherwise restores the authored snapshot (if any).
-		/// Under Nomad, 9-slice faces are flattened — small Sliced cells read as four corner arrows.
+		/// Under Nomad, 9-slice chrome faces are flattened — but never Toggle checkmark faces
+		/// (Settings ON/OFF success sprites must keep their authored glyph).
 		/// </summary>
 		public static void ApplyBoundChromeGraphic(Graphic graphic, Color token) {
 			if (graphic == null) return;
@@ -190,13 +191,14 @@ namespace spz {
 			}
 			SnapshotAuthoredGraphic(graphic);
 			graphic.color = token;
-			if (graphic is Image img)
+			if (graphic is Image img && !IsToggleCheckmarkGraphic(img))
 				FlattenSlicedChromeFace(img);
 		}
 
 		/// <summary>
 		/// Selectable chrome apply gated by <see cref="ShouldRecolorBoundChrome"/>.
-		/// Replaces beveled 9-slice faces with flat Simple fills so Multiview / tool slots lose corner arrows.
+		/// Replaces beveled 9-slice <b>faces</b> with flat Simple fills.
+		/// Does not hide Toggle.graphic checkmarks — callers that need that (Multiview POV) hide explicitly.
 		/// </summary>
 		public static void ApplyBoundChromeSelectable(Selectable selectable, Color normal, Color accent) {
 			if (selectable == null || selectable.targetGraphic == null)
@@ -209,27 +211,29 @@ namespace spz {
 			SnapshotAuthoredGraphic(selectable.targetGraphic);
 			SnapshotAuthoredColorBlock(selectable);
 			ApplySelectableToken(selectable, normal, accent);
-			if (selectable.targetGraphic is Image face) {
+			if (selectable.targetGraphic is Image face && !IsToggleCheckmarkGraphic(face)) {
 				ApplyRoundedControlSprite(face, markEligible: true);
 				face.type = Image.Type.Simple;
 				face.preserveAspect = false;
 			}
-			// Authored checkmark / tick plates are often the same 9-slice bevel — hide under Nomad.
-			if (selectable is Toggle toggle && toggle.graphic is Image tick && tick != selectable.targetGraphic) {
-				string n = tick.gameObject.name ?? "";
-				if (tick.type == Image.Type.Sliced
-				    || n.IndexOf("Check", StringComparison.OrdinalIgnoreCase) >= 0
-				    || n.Equals("tick", StringComparison.OrdinalIgnoreCase))
-					HideAuthoredGraphicForTheme(tick);
-			}
+		}
+
+		/// <summary>True when <paramref name="img"/> is a Toggle's ON-state graphic (checkmark / tick plate).</summary>
+		public static bool IsToggleCheckmarkGraphic(Image img) {
+			if (img == null) return false;
+			// includeInactive: theme apply often runs while panels/prefabs are inactive.
+			var toggle = img.GetComponentInParent<Toggle>(true);
+			return toggle != null && ReferenceEquals(toggle.graphic, img);
 		}
 
 		/// <summary>
 		/// Converts authored <see cref="Image.Type.Sliced"/> chrome to a flat Simple soft fill.
-		/// Skips Nomad slider segment tiles (intentionally Tiled).
+		/// Skips Nomad slider segment tiles (intentionally Tiled) and Toggle checkmark faces.
 		/// </summary>
 		public static void FlattenSlicedChromeFace(Image image) {
 			if (image == null || !ShouldRecolorBoundChrome)
+				return;
+			if (IsToggleCheckmarkGraphic(image))
 				return;
 			if (UiRuntimeSprites.IsNomadSliderSegmentTile(image.sprite))
 				return;
@@ -1094,13 +1098,12 @@ namespace spz {
 			var tag = text.gameObject.GetComponent<SpzUiThemeDesignFontPt>();
 			if (tag == null) {
 				tag = text.gameObject.AddComponent<SpzUiThemeDesignFontPt>();
-				float scale = _active.fontScale;
+				// Capture authored size as-is. Do not divide by Active.fontScale — first theme
+				// apply runs while TMP still holds design points (dividing cancelled the scale).
 				float current = text.fontSize > 0.05f ? text.fontSize : fallbackBasePt;
-				tag.designPt = (scale > 0.05f && Mathf.Abs(scale - 1f) > 0.001f)
-					? current / scale
+				tag.designPt = current < 0.05f
+					? (fallbackBasePt > 0.05f ? fallbackBasePt : 14f)
 					: current;
-				if (tag.designPt < 0.05f)
-					tag.designPt = fallbackBasePt > 0.05f ? fallbackBasePt : 14f;
 			}
 			return tag.designPt;
 		}
@@ -1146,14 +1149,13 @@ namespace spz {
 			var tag = group.gameObject.GetComponent<SpzUiThemeDesignLayoutGroup>();
 			if (tag == null) {
 				tag = group.gameObject.AddComponent<SpzUiThemeDesignLayoutGroup>();
-				float s0 = _active.spacingScale;
-				bool unscale = s0 > 0.05f && Mathf.Abs(s0 - 1f) > 0.001f;
+				// Capture authored spacing/padding as-is (same reason as font design capture).
 				float spacing0 = hv != null ? hv.spacing : 0f;
-				tag.spacing = unscale ? spacing0 / s0 : spacing0;
-				tag.padL = unscale ? Mathf.RoundToInt(group.padding.left / s0) : group.padding.left;
-				tag.padR = unscale ? Mathf.RoundToInt(group.padding.right / s0) : group.padding.right;
-				tag.padT = unscale ? Mathf.RoundToInt(group.padding.top / s0) : group.padding.top;
-				tag.padB = unscale ? Mathf.RoundToInt(group.padding.bottom / s0) : group.padding.bottom;
+				tag.spacing = spacing0;
+				tag.padL = group.padding.left;
+				tag.padR = group.padding.right;
+				tag.padT = group.padding.top;
+				tag.padB = group.padding.bottom;
 			}
 			float s = _active.spacingScale;
 			if (hv != null)

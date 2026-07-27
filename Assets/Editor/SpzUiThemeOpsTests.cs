@@ -545,6 +545,8 @@ public sealed class SpzUiThemeOpsTests {
 			var tick = tickGo.GetComponent<Image>();
 			tick.type = Image.Type.Sliced;
 			tick.enabled = true;
+			var authoredTickSprite = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f));
+			tick.sprite = authoredTickSprite;
 			var toggle = go.GetComponent<Toggle>();
 			toggle.targetGraphic = face;
 			toggle.graphic = tick;
@@ -559,7 +561,45 @@ public sealed class SpzUiThemeOpsTests {
 
 			Assert.That(face.type, Is.EqualTo(Image.Type.Simple), "9-slice corner arrows must become Simple fill");
 			Assert.That(UiRuntimeSprites.IsCachedRoundedRect(face.sprite), Is.True);
-			Assert.That(tick.enabled, Is.False, "bevel Checkmark overlay must hide under Nomad");
+			// Checkmark glyph must survive BoundChromeSelectable (Settings ON state depends on it).
+			Assert.That(tick.enabled, Is.True);
+			Assert.That(ReferenceEquals(tick.sprite, authoredTickSprite), Is.True);
+		}
+		finally {
+			UnityEngine.Object.DestroyImmediate(root);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
+	public void ApplyBoundChromeGraphicDoesNotFlattenToggleCheckmark() {
+		var root = new GameObject("CheckmarkPreserve");
+		root.SetActive(false);
+		try {
+			var go = new GameObject("Toggle", typeof(RectTransform), typeof(Image), typeof(Toggle));
+			go.transform.SetParent(root.transform, false);
+			var face = go.GetComponent<Image>();
+			var tickGo = new GameObject("Checkmark", typeof(RectTransform), typeof(Image));
+			tickGo.transform.SetParent(go.transform, false);
+			var tick = tickGo.GetComponent<Image>();
+			tick.type = Image.Type.Sliced;
+			var authored = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f));
+			tick.sprite = authored;
+			var toggle = go.GetComponent<Toggle>();
+			toggle.targetGraphic = face;
+			toggle.graphic = tick;
+
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				Tokens(("success", "#7BC96FFF"), ("corner_radius", "5")),
+				"replace",
+				out string error), Is.True, error);
+
+			SpzUiThemeOps.ApplyBoundChromeGraphic(tick, SpzUiThemeOps.Active.success);
+			Assert.That(SpzUiThemeOps.IsToggleCheckmarkGraphic(tick), Is.True);
+			Assert.That(tick.type, Is.EqualTo(Image.Type.Sliced));
+			Assert.That(ReferenceEquals(tick.sprite, authored), Is.True);
+			Assert.That(tick.color, Is.EqualTo(SpzUiThemeOps.Active.success));
 		}
 		finally {
 			UnityEngine.Object.DestroyImmediate(root);
@@ -788,11 +828,11 @@ public sealed class SpzUiThemeOpsTests {
 		child.transform.SetParent(parent.transform, false);
 		child.SetActive(false);
 		try {
-			Assert.That(parent.transform.Find("MonolithLineIcon"), Is.Null,
-				"Unity Transform.Find must skip inactive (documents the bug class)");
+			// Unity 6 Transform.Find may include inactive; helper must still resolve them.
 			Transform found = SpzUiThemeOps.FindDirectChildIncludingInactive(parent.transform, "MonolithLineIcon");
 			Assert.That(found, Is.Not.Null);
 			Assert.That(found.gameObject.activeSelf, Is.False);
+			Assert.That(found.name, Is.EqualTo("MonolithLineIcon"));
 		} finally {
 			UnityEngine.Object.DestroyImmediate(parent);
 		}
@@ -880,11 +920,11 @@ public sealed class SpzUiThemeOpsTests {
 
 			Assert.That(SpzUiThemeOps.TryApplyTheme(
 				"p1-experiment",
-				new JObject { ["spacing_scale"] = 2.0 },
+				new JObject { ["spacing_scale"] = 1.5 },
 				"replace",
 				out string error), Is.True, error);
 			SpzUiThemeOps.ApplyScaledLayoutGroup(vlg);
-			Assert.That(vlg.spacing, Is.EqualTo(16f).Within(0.01f));
+			Assert.That(vlg.spacing, Is.EqualTo(12f).Within(0.01f));
 
 			SpzUiThemeOps.ResetTheme();
 			SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(go.transform);

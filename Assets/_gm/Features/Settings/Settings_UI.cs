@@ -101,6 +101,9 @@ namespace spz {
 	        EnsurePaintUndoSettingsRowsExist();
 	        FixSettingsScrollReadability();
 	        ApplyThemeTokens();
+	        // Prefab ships active for edit-time preview; play mode must start closed (open via gear).
+	        if (_settingsPanel_go != null)
+	            _settingsPanel_go.SetActive(false);
 	        // Buttons (guard null so binding is safe when reference not assigned in scene)
 	        if (_openHelpSettingsPanel_button != null)
 	            EventsBinder.Bind_Clickable_to_event("Settings:OpenHelpSettingsPanel", _openHelpSettingsPanel_button);
@@ -792,9 +795,11 @@ namespace spz {
 
 	    /// <summary>
 	    /// Themes panel shell, fields, controls, and ON-state success on known Settings_UI widgets.
+	    /// Also themes launcher buttons (gear / help) that live outside the panel hierarchy.
 	    /// Wireframe/noise/product colors stay in Settings_MGR and are not touched.
 	    /// </summary>
 	    void ApplyThemeTokens() {
+	        ThemeSettingsLauncherButtons();
 	        if (_settingsPanel_go == null) return;
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(_settingsPanel_go.transform);
@@ -820,8 +825,10 @@ namespace spz {
 	                           || ReferenceEquals(btn, _openAddonManager_button);
 	            Color normal = primary ? Color.Lerp(t.controlBg, t.accent, 0.55f) : t.controlBg;
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, normal, t.accent);
-	            if (btn.targetGraphic is Image btnImg)
+	            if (btn.targetGraphic is Image btnImg) {
 	                SpzUiThemeOps.ApplyRoundedControlSprite(btnImg, markEligible: true);
+	                btnImg.type = Image.Type.Simple;
+	            }
 	        }
 	        foreach (var toggle in _settingsPanel_go.GetComponentsInChildren<Toggle>(true)) {
 	            if (toggle == null || IsUnderProductColorSurface(toggle.transform)) continue;
@@ -857,6 +864,37 @@ namespace spz {
 	        foreach (var lg in _settingsPanel_go.GetComponentsInChildren<LayoutGroup>(true)) {
 	            if (lg == null || IsUnderProductColorSurface(lg.transform)) continue;
 	            SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
+	        }
+	    }
+
+	    /// <summary>
+	    /// Gear / help launchers sit outside the settings panel — theme them even when the panel is closed.
+	    /// </summary>
+	    void ThemeSettingsLauncherButtons() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            if (_openSettingsPanel_button != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_openSettingsPanel_button.transform);
+	            if (_openHelpSettingsPanel_button != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_openHelpSettingsPanel_button.transform);
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        ThemeFlatLauncherButton(_openSettingsPanel_button, StudioLineIcon.Settings, t);
+	        ThemeFlatLauncherButton(_openHelpSettingsPanel_button, StudioLineIcon.Eye, t);
+	    }
+
+	    static void ThemeFlatLauncherButton(Button btn, StudioLineIcon glyph, SpzUiThemeOps.ThemeTokens t) {
+	        if (btn == null || btn.targetGraphic == null) return;
+	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+	        if (btn.targetGraphic is Image img) {
+	            SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
+	            img.type = Image.Type.Simple;
+	            img.preserveAspect = false;
+	        }
+	        SpzUiThemeOps.ApplyControlLineIcon(btn.transform, glyph, 18f);
+	        foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (tmp != null)
+	                SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(tmp, t.textPrimary, 11f);
 	        }
 	    }
 
