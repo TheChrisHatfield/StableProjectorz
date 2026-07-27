@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 namespace spz {
 
@@ -50,6 +51,236 @@ namespace spz {
 	        EventsBinder.Bind_Clickable_to_event("BrushRibbon_UI:InvertMaskButton", _invertMask);
 	        EventsBinder.Bind_Clickable_to_event("BrushRibbon_UI:DeleteColorsButton", _deleteColorsButton);
 	        EventsBinder.Bind_Clickable_to_event("BrushRibbon_UI:EyeDropperToggle", _eyeDropperToggle);
+
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        BrushRibbon_UI_Direction.OnDirectionToggleChanged += ApplyThemeTokens;
+	    }
+
+	    void Start(){
+	        ApplyThemeTokens();
+	    }
+
+	    void OnDestroy(){
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	        BrushRibbon_UI_Direction.OnDirectionToggleChanged -= ApplyThemeTokens;
+	        if (instance == this)
+	            instance = null;
+	    }
+
+	    /// <summary>Nomad: flat tool cells + line icons on the brush strip (gated BoundChrome).</summary>
+	    void ApplyThemeTokens() {
+	        var dir = ResolveDirection();
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            // MGR host is childless; restore each wired tool root (Direction lives on the workflow strip).
+	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
+	            if (dir != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(dir.transform);
+	            RestoreSelectableChrome(_bucketFill != null ? _bucketFill.Button : null);
+	            RestoreSelectableChrome(_invertMask != null ? _invertMask.Button : null);
+	            RestoreSelectableChrome(_eyeDropperToggle);
+	            if (_pressureTabletMode != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_pressureTabletMode.transform);
+	            if (_size != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_size.transform);
+	            if (_opacity != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_opacity.transform);
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        if (_size != null)
+	            _size.ApplyThemeTokens(t);
+	        ThemeToolButton(_bucketFill != null ? _bucketFill.Button : null, StudioLineIcon.Bucket, t, applyIcon: false);
+	        if (_bucketFill != null && _bucketFill.IconRoot != null)
+	            SpzUiThemeOps.ApplyControlLineIcon(_bucketFill.IconRoot, StudioLineIcon.Bucket, 22f);
+	        ThemeToolButton(_invertMask != null ? _invertMask.Button : null, StudioLineIcon.Drop, t, applyIcon: true);
+	        if (_eyeDropperToggle != null)
+	            ThemeToolToggle(_eyeDropperToggle, StudioLineIcon.Eye, t, iconSizePx: 20f);
+	        if (dir != null)
+	            ThemeDirectionTools(dir, t);
+	        if (_pressureTabletMode != null)
+	            ThemePressureMode(_pressureTabletMode, t);
+	        if (_opacity != null)
+	            ThemeOpacityReadout(_opacity, t);
+	        // Labels live on cross-wired tool roots, not under this empty MGR transform.
+	        ThemeTmpUnder(_size != null ? _size.transform : null, t, excludeOpacityPressure: true);
+	        ThemeTmpUnder(dir != null ? dir.transform : null, t, excludeOpacityPressure: true);
+	        ThemeTmpUnder(_pressureTabletMode != null ? _pressureTabletMode.transform : null, t, excludeOpacityPressure: true);
+	        ThemeTmpUnder(_opacity != null ? _opacity.transform : null, t, excludeOpacityPressure: true);
+	    }
+
+	    /// <summary>
+	    /// BrushRibbon_UI_MGR is an empty host with cross-hierarchy refs — Direction is not a child.
+	    /// Prefer SD workflow direction over Gen3D (both derive from <see cref="BrushRibbon_UI_Direction"/>).
+	    /// </summary>
+	    public static BrushRibbon_UI_Direction ResolveDirection(Transform host) {
+	        if (host != null) {
+	            var local = host.GetComponentInChildren<BrushRibbon_UI_Direction>(true);
+	            if (local != null)
+	                return local;
+	        }
+	        var sd = UnityEngine.Object.FindFirstObjectByType<SD_BrushRibbon_UI_Direction>(FindObjectsInactive.Include);
+	        if (sd != null)
+	            return sd;
+	        var gen3d = UnityEngine.Object.FindFirstObjectByType<Gen3D_BrushRibbon_UI_Direction>(FindObjectsInactive.Include);
+	        if (gen3d != null)
+	            return gen3d;
+	        return UnityEngine.Object.FindFirstObjectByType<BrushRibbon_UI_Direction>(FindObjectsInactive.Include);
+	    }
+
+	    BrushRibbon_UI_Direction ResolveDirection() => ResolveDirection(transform);
+
+	    static void RestoreSelectableChrome(Selectable sel) {
+	        if (sel == null) return;
+	        SpzUiThemeOps.RestoreBoundChromeUnder(sel.transform);
+	    }
+
+	    void ThemeTmpUnder(Transform root, SpzUiThemeOps.ThemeTokens t, bool excludeOpacityPressure) {
+	        if (root == null) return;
+	        foreach (var tmp in root.GetComponentsInChildren<TMP_Text>(true)) {
+	            if (tmp == null) continue;
+	            if (excludeOpacityPressure) {
+	                if (_opacity != null && ReferenceEquals(tmp, _opacity.OpacityText))
+	                    continue;
+	                if (_pressureTabletMode != null && _pressureTabletMode.OwnsLabel(tmp))
+	                    continue;
+	            }
+	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	        }
+	    }
+
+	    static void ThemePressureMode(BrushRibbon_UI_PressureMode pressure, SpzUiThemeOps.ThemeTokens t) {
+	        if (pressure == null) return;
+	        ThemePressureToggle(pressure.NoneToggle, t);
+	        ThemePressureToggle(pressure.BothToggle, t);
+	        ThemePressureToggle(pressure.SizeToggle, t);
+	        ThemePressureToggle(pressure.OpacityToggle, t);
+	    }
+
+	    /// <summary>
+	    /// N/B/S/O cells: keep dark flat fill when selected (never white plate) so letter stays reverse-out.
+	    /// </summary>
+	    static void ThemePressureToggle(Toggle toggle, SpzUiThemeOps.ThemeTokens t) {
+	        if (toggle == null) return;
+	        Color fill = FlatToolFill(toggle.isOn, t);
+	        SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, fill, t.accent);
+	        ApplyFlatToolColorBlock(toggle);
+	        if (toggle.targetGraphic is Image bg) {
+	            SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
+	            FlattenToolFace(bg);
+	        }
+	        HideSecondaryChromeUnder(toggle);
+	        foreach (var tmp in toggle.GetComponentsInChildren<TMP_Text>(true)) {
+	            if (tmp == null) continue;
+	            // Always light type on dark cell — selected used to go white-on-white.
+	            SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(tmp, t.textPrimary, 14f);
+	        }
+	    }
+
+	    static void ThemeOpacityReadout(BrushRibbon_UI_Opacity opacity, SpzUiThemeOps.ThemeTokens t) {
+	        if (opacity == null || opacity.OpacityText == null) return;
+	        // Opacity sits on a luminous circular face — dark ink for contrast (matches dial fix).
+	        Color ink = new Color(0.10f, 0.09f, 0.10f, 1f);
+	        SpzUiThemeOps.ApplyBoundChromeTmp(opacity.OpacityText, ink, 16f);
+	    }
+
+	    static void ThemeDirectionTools(BrushRibbon_UI_Direction dir, SpzUiThemeOps.ThemeTokens t) {
+	        ThemeToolToggle(dir.PaintToggle, StudioLineIcon.Brush, t);
+	        ThemeToolToggle(dir.SmudgeToggle, StudioLineIcon.Smudge, t);
+	        ThemeToolToggle(dir.EraseToggle, StudioLineIcon.Eraser, t);
+	    }
+
+	    /// <summary>
+	    /// Flat square cell (no beveled plate / 9-slice corner chevrons) + centered Monolith line glyph.
+	    /// Hides authored tick (+/−) plates; line icon replaces SPZ silhouettes.
+	    /// </summary>
+	    static void ThemeToolToggle(Toggle toggle, StudioLineIcon glyph, SpzUiThemeOps.ThemeTokens t, float iconSizePx = 22f) {
+	        if (toggle == null) return;
+	        Color normal = FlatToolFill(toggle.isOn, t);
+	        SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, normal, t.accent);
+	        ApplyFlatToolColorBlock(toggle);
+	        if (toggle.targetGraphic is Image bg) {
+	            SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
+	            FlattenToolFace(bg);
+	        }
+	        HideSecondaryChromeUnder(toggle);
+	        SpzUiThemeOps.ApplyControlLineIcon(toggle.transform, glyph, iconSizePx);
+	    }
+
+	    static void ThemeToolButton(Button btn, StudioLineIcon glyph, SpzUiThemeOps.ThemeTokens t, bool applyIcon = true) {
+	        if (btn == null) return;
+	        if (btn.targetGraphic != null) {
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, FlatToolFill(false, t), t.accent);
+	            ApplyFlatToolColorBlock(btn);
+	            if (btn.targetGraphic is Image bg) {
+	                SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
+	                FlattenToolFace(bg);
+	            }
+	        }
+	        HideSecondaryChromeUnder(btn);
+	        if (applyIcon)
+	            SpzUiThemeOps.ApplyControlLineIcon(btn.transform, glyph, 22f);
+	    }
+
+	    /// <summary>ColorTint must not multiply the sliced bevel when selected.</summary>
+	    static void ApplyFlatToolColorBlock(Selectable sel) {
+	        if (sel == null) return;
+	        var cb = sel.colors;
+	        cb.normalColor = Color.white;
+	        cb.highlightedColor = Color.white;
+	        cb.pressedColor = new Color(0.92f, 0.92f, 0.92f, 1f);
+	        cb.selectedColor = Color.white;
+	        cb.disabledColor = new Color(1f, 1f, 1f, 0.4f);
+	        cb.colorMultiplier = 1f;
+	        sel.colors = cb;
+	    }
+
+	    /// <summary>Soft Simple fill stretched edge-to-edge (replaces 9-slice corner anchors).</summary>
+	    static void FlattenToolFace(Image img) {
+	        if (img == null) return;
+	        img.type = Image.Type.Simple;
+	        img.preserveAspect = false;
+	        img.pixelsPerUnitMultiplier = 1f;
+	        var rt = img.rectTransform;
+	        if (rt == null || !(rt.parent is RectTransform)) return;
+	        rt.anchorMin = Vector2.zero;
+	        rt.anchorMax = Vector2.one;
+	        rt.pivot = new Vector2(0.5f, 0.5f);
+	        rt.anchoredPosition = Vector2.zero;
+	        rt.sizeDelta = Vector2.zero;
+	        rt.offsetMin = Vector2.zero;
+	        rt.offsetMax = Vector2.zero;
+	        rt.localScale = Vector3.one;
+	    }
+
+	    /// <summary>Hide tick / check / corner-triangle chrome; keep Monolith overlays.</summary>
+	    static void HideSecondaryChromeUnder(Selectable sel) {
+	        if (sel == null) return;
+	        if (sel is Toggle toggle && toggle.graphic is Image tick && tick != sel.targetGraphic)
+	            SpzUiThemeOps.HideAuthoredGraphicForTheme(tick);
+	        foreach (var img in sel.GetComponentsInChildren<Image>(true)) {
+	            if (img == null || img == sel.targetGraphic) continue;
+	            string n = img.gameObject.name ?? "";
+	            if (n == "MonolithActiveBar" || n == "MonolithLineIcon" || n == "LineIcon")
+	                continue;
+	            if (n.IndexOf("triangle", StringComparison.OrdinalIgnoreCase) >= 0
+	                || n.IndexOf("Check", StringComparison.OrdinalIgnoreCase) >= 0
+	                || n.IndexOf("pressed", StringComparison.OrdinalIgnoreCase) >= 0
+	                || n.Equals("tick", StringComparison.OrdinalIgnoreCase))
+	                SpzUiThemeOps.HideAuthoredGraphicForTheme(img);
+	        }
+	    }
+
+	    static Color FlatToolFill(bool selected, SpzUiThemeOps.ThemeTokens t) {
+	        return selected
+	            ? Color.Lerp(t.controlBg, t.accent, 0.14f)
+	            : t.controlBg;
+	    }
+
+	    /// <summary>Re-apply pressure N/B/S/O cell fills after selection changes.</summary>
+	    public void NotifyPressureModeChromeChanged() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) return;
+	        if (_pressureTabletMode == null) return;
+	        ThemePressureMode(_pressureTabletMode, SpzUiThemeOps.Active);
 	    }
 
 	    public void Save( StableProjectorz_SL spz){
