@@ -121,12 +121,12 @@ namespace spz {
 	    }
 
 	    void OnButton_GenArt_if_allowed(){
-	        if(_genArt_button_interactable == false){ return; }
+	        // Soft "_genArt_button_interactable" only drives face alpha / tooltips.
+	        // Always invoke Hub so DenyWithMessage matches Ctrl+G (OG comment: still capture presses when inactive).
 	        OnGenerateArtButton?.Invoke();
 	    }
 
 	    void OnButton_GenBG_if_allowed(){
-	        if(_genBG_button_interactable == false){ return; }
 	        OnGenerateBG_Button?.Invoke();
 	    }
 
@@ -163,14 +163,21 @@ namespace spz {
 	    void Refresh_is_interactable(){
 	        if(StableDiffusion_Hub.instance == null){ return; }
 	        if(DimensionMode_MGR.instance == null){ return; }
-	        if(Gen3D_MGR.instance == null) { return; }//scenes are still loading probably.
 
+	        // GEN ART / BG must not wait on Gen3D_MGR — OG early-return left soft-interactable stuck false
+	        // (and clicks silent) whenever the 3D generate scene/manager was not yet awake.
 	        StableDiffusion_Hub.instance.isCanGenerate(out _genArt_button_interactable, out _genBG_button_interactable);
 	        _genArt_button_interactable &= DimensionMode_MGR.instance._dimensionMode == DimensionMode.dim_sd  &&
 	                                       isGenerating==false  &&  isGeneratingPaused == false;
         
 	        _genBG_button_interactable  &= DimensionMode_MGR.instance._dimensionMode == DimensionMode.dim_sd  &&
 	                                       isGenerating==false  &&  isGeneratingPaused==false;
+
+	        if(Gen3D_MGR.instance == null) {
+	            _gen3D_button_interactable = false;
+	            _gen3D_retex_button_interactable = false;
+	            return;
+	        }
 
 	        _gen3D_button_interactable  = Gen3D_MGR.isCanStart_make_meshes_and_tex() && Gen3D_MGR.isSupports_make_meshes_and_tex() && 
 	                                      DimensionMode_MGR.instance._dimensionMode == DimensionMode.dim_gen_3d  &&//3d
@@ -188,34 +195,31 @@ namespace spz {
 	        ApplyGenButtonFace(_generate3D_retexture_button, _gen3D_retex_button_interactable);
 	    }
 
-	    void ApplyGenButtonFace(Button btn, bool interactable) {
+	    static void ApplyGenButtonFace(Button btn, bool interactable) {
 	        if (btn == null || btn.image == null) return;
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            SpzUiThemeOps.RestoreAuthoredGraphic(btn.image);
-	            if (btn.image != null) {
-	                var restored = btn.image.color;
-	                restored.a = interactable ? 1f : 0.5f;
-	                btn.image.color = restored;
-	            }
+	            var restored = btn.image.color;
+	            restored.a = interactable ? 1f : 0.5f;
+	            btn.image.color = restored;
 	            return;
 	        }
-	        var c = _genButtonThemeBase;
-	        c.a = interactable ? 1f : 0.5f;
-	        btn.image.color = c;
+	        // Soft-disable alpha only — do not rewrite RGB every Update (that kills ColorTint hover/press).
+	        var c = btn.image.color;
+	        float targetA = interactable ? 1f : 0.5f;
+	        if (Mathf.Abs(c.a - targetA) > 0.001f) {
+	            c.a = targetA;
+	            btn.image.color = c;
+	        }
 	    }
-
-	    Color _genButtonThemeBase = new Color(0.55f, 0.45f, 0.35f, 1f);
 
 	    void ApplyThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
-	            foreach (var g in GetComponentsInChildren<Graphic>(true))
-	                SpzUiThemeOps.RestoreAuthoredGraphic(g);
-	            _genButtonThemeBase = new Color(0.55f, 0.45f, 0.35f, 1f);
+	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
 	            RefreshColors_of_GenArt_buttons();
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
-	        _genButtonThemeBase = t.controlBg;
 	        ThemeGenButton(_generateART_button, t);
 	        ThemeGenButton(_generateBG_button, t);
 	        ThemeGenButton(_generate3D_button, t);
@@ -239,10 +243,26 @@ namespace spz {
 
 	    static void ThemeGenButton(Button btn, SpzUiThemeOps.ThemeTokens t) {
 	        if (btn == null || btn.targetGraphic == null) return;
-	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+	        Color fill = t.controlBg;
+	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, fill, t.accent);
+	        if (btn.targetGraphic is Image face) {
+	            // Flat grey Simple fill — replaces beveled/gradient 9-slice brick shading.
+	            SpzUiThemeOps.ApplyRoundedControlSprite(face, markEligible: true);
+	            face.type = Image.Type.Simple;
+	            face.preserveAspect = false;
+	            face.raycastTarget = true;
+	        }
+	        foreach (var img in btn.GetComponentsInChildren<Image>(true)) {
+	            if (img == null || img == btn.targetGraphic) continue;
+	            string n = img.gameObject.name ?? "";
+	            if (n.IndexOf("triangle", System.StringComparison.OrdinalIgnoreCase) >= 0)
+	                SpzUiThemeOps.HideAuthoredGraphicForTheme(img);
+	        }
 	        var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
-	        if (label != null)
-	            SpzUiThemeOps.ApplyBoundChromeTmp(label, t.textPrimary);
+	        if (label != null) {
+	            label.raycastTarget = false;
+	            SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(label, t.textPrimary, 14f);
+	        }
 	    }
 
 	    void UpdateTooltips_GenButtons(Button genArt, Button genBG, Button gen3D, Button gen3D_retex){
