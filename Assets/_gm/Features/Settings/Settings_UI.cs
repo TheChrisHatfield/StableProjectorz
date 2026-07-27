@@ -84,6 +84,9 @@ namespace spz {
 
 	    void Awake(){
 	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        // Prefab ships active for edit preview — hide before first frame paints under Nomad.
+	        if (_settingsPanel_go != null)
+	            _settingsPanel_go.SetActive(false);
 	    }
 
 	    void OnDestroy(){
@@ -99,6 +102,7 @@ namespace spz {
 	        EnsureSDInpaintingMaskInvertRowExists();
 	        EnsureSDGpuRowExists();
 	        EnsurePaintUndoSettingsRowsExist();
+	        ClampSettingsPanelHitRect();
 	        FixSettingsScrollReadability();
 	        ApplyThemeTokens();
 	        // Prefab ships active for edit-time preview; play mode must start closed (open via gear).
@@ -721,11 +725,35 @@ namespace spz {
 	    }
 
 	    /// <summary>
+	    /// Outer panel used ContentSizeFitter PreferredSize. Nomad taller rows / spacing made preferred
+	    /// height cover the screen so click-outside never fired. Keep host size; ScrollRect scrolls.
+	    /// </summary>
+	    public void ClampSettingsPanelHitRect() {
+	        if (_settingsPanel_go == null) return;
+	        var csf = _settingsPanel_go.GetComponent<ContentSizeFitter>();
+	        if (csf != null) {
+	            csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+	            csf.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
+	        }
+	        var rt = _settingsPanel_go.transform as RectTransform;
+	        if (rt == null) return;
+	        // Stretch fill of Settings_UI host (authored ~480×970, bottom-right).
+	        rt.anchorMin = Vector2.zero;
+	        rt.anchorMax = Vector2.one;
+	        rt.pivot = new Vector2(1f, 0f);
+	        rt.anchoredPosition = Vector2.zero;
+	        rt.sizeDelta = Vector2.zero;
+	        rt.offsetMin = Vector2.zero;
+	        rt.offsetMax = Vector2.zero;
+	    }
+
+	    /// <summary>
 	    /// Runtime option rows were ~28px with long labels and parent spacing 0 → text overlapped.
 	    /// Enforce readable row height, label wrap, and vertical gaps; kill negative TMP lineSpacing.
 	    /// </summary>
 	    public void FixSettingsScrollReadability() {
 	        if (_settingsPanel_go == null) return;
+	        ClampSettingsPanelHitRect();
 	        var scrollRect = _settingsPanel_go.GetComponentInChildren<ScrollRect>(true);
 	        RectTransform content = scrollRect != null ? scrollRect.content : null;
 	        if (content == null) return;
@@ -801,6 +829,7 @@ namespace spz {
 	    void ApplyThemeTokens() {
 	        ThemeSettingsLauncherButtons();
 	        if (_settingsPanel_go == null) return;
+	        ClampSettingsPanelHitRect();
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(_settingsPanel_go.transform);
 	            SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(_settingsPanel_go.transform);
