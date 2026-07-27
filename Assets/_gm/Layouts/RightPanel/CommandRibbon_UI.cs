@@ -529,6 +529,7 @@ namespace spz {
 			    } else {
 				    _lastRibbonStripWidth = -1f;
 			    }
+			    SyncStripTabSelectionChromeIfChanged();
 		    }
 	        if(KeyMousePenInput.isSomeInputFieldActive()){ return;} //maybe typing some exclamation mark etc.
 	        if (KeyMousePenInput.isKey_Shift_pressed() == false){ return; }
@@ -599,47 +600,28 @@ namespace spz {
 	            instance = null;
 	    }
 
-	    /// <summary>
-	    /// Authored Image colors captured before the first non-default recolor, restored on builtin.
-	    /// </summary>
-	    static readonly Dictionary<int, Color> _authoredGraphicColorSnapshot = new Dictionary<int, Color>();
-
-	    static void SnapshotAuthoredGraphicColor(Graphic graphic) {
-	        if (graphic == null) return;
-	        int id = graphic.GetInstanceID();
-	        if (!_authoredGraphicColorSnapshot.ContainsKey(id))
-	            _authoredGraphicColorSnapshot[id] = graphic.color;
-	    }
-
-	    static void RestoreAuthoredGraphicColor(Graphic graphic) {
-	        if (graphic == null) return;
-	        if (_authoredGraphicColorSnapshot.TryGetValue(graphic.GetInstanceID(), out Color c))
-	            graphic.color = c;
-	    }
+	    string _lastStripSelectionKey = "";
+	    bool _lastStripNomadChrome;
 
 	    static void RecolorOrRestorePanelShell(RectTransform panel, bool recolorChrome) {
 	        if (panel == null) return;
+	        if (!recolorChrome) {
+	            SpzUiThemeOps.RestoreBoundChromeUnder(panel);
+	            return;
+	        }
 	        var img = panel.GetComponent<Image>();
 	        if (img == null) return;
-	        if (recolorChrome) {
-	            SnapshotAuthoredGraphicColor(img);
-	            ApplyPanelShellColor(panel, SpzUiThemeOps.Active.panelBg);
-	        } else {
-	            RestoreAuthoredGraphicColor(img);
-	        }
+	        ApplyPanelShellColor(panel, SpzUiThemeOps.Active.panelBg);
 	    }
 
 	    /// <summary>
 	    /// Ownership-root theme apply for ribbon strip cells, active pills, panel shells, and dividers.
-	    /// Always runs for P2 binding. On builtin default, keep authored SPZ strip/panel colors
-	    /// (no accent-lerp / border wash); non-default themes get full token colors.
-	    /// Does not scan the global UI skeleton.
+	    /// Nomad: flat dark cells + subtle selected fill (no gold 0.72 pill) + strip label typography.
+	    /// Builtin: full RestoreBoundChromeUnder + hide Monolith overlays.
 	    /// </summary>
 	    void ApplyThemeTokens() {
 	        var t = SpzUiThemeOps.Active;
-	        // Builtin: authored strip/panel colors + no Monolith line icons. Non-default themes: full chrome.
 	        bool recolorChrome = SpzUiThemeOps.ShouldRecolorBoundChrome;
-	        // Icon-only is a themed chrome mode — never hide labels on builtin (no Monolith icons to replace them).
 	        bool iconOnly = recolorChrome && SpzUiThemeOps.RibbonIconOnlyActive;
 
 	        RecolorOrRestorePanelShell(_SD_ArtList_Panel, recolorChrome);
@@ -650,6 +632,9 @@ namespace spz {
 
 	        Transform strip = ResolveEffectiveTabStripTransform();
 	        if (strip != null) {
+	            if (!recolorChrome)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(strip);
+
 	            for (int i = 0; i < strip.childCount; i++) {
 	                Transform cell = strip.GetChild(i);
 	                if (cell == null) continue;
@@ -658,63 +643,16 @@ namespace spz {
 	                    var divImg = cell.GetComponent<Image>();
 	                    if (divImg != null) {
 	                        if (recolorChrome) {
-	                            SnapshotAuthoredGraphicColor(divImg);
 	                            Color c = t.border;
 	                            c.a = Mathf.Max(c.a, 0.55f);
-	                            divImg.color = c;
-	                        } else {
-	                            RestoreAuthoredGraphicColor(divImg);
+	                            SpzUiThemeOps.ApplyBoundChromeGraphic(divImg, c);
 	                        }
 	                    }
 	                    continue;
 	                }
-	                // Only real strip tabs — never invent chrome on spacer/scroll scaffolding.
 	                if (cell.GetComponent<TabsGroupElem_UI>() == null)
 	                    continue;
-	                var active = cell.Find("go active");
-	                if (active != null) {
-	                    var activeImg = FindActivePillImage(active);
-	                    if (activeImg != null) {
-	                        if (recolorChrome) {
-	                            SnapshotAuthoredGraphicColor(activeImg);
-	                            // Accent lerp is the Nomad/custom cue (gold vs cool blue).
-	                            activeImg.color = Color.Lerp(t.tabActive, t.accent, 0.72f);
-	                        } else {
-	                            // Builtin: restore prefab pill gray (do not lean toward default accent blue).
-	                            RestoreAuthoredGraphicColor(activeImg);
-	                        }
-	                    }
-	                }
-	                // Hide every strip-cell TMP (prefabs may have more than one label).
-	                foreach (var label in cell.GetComponentsInChildren<TextMeshProUGUI>(true)) {
-	                    if (label == null) continue;
-	                    if (iconOnly) {
-	                        // Snapshot before wiping alpha so leaving icon-only / builtin can restore.
-	                        SnapshotAuthoredGraphicColor(label);
-	                        // Keep GameObject active for layout/hit targets; hide glyphs only.
-	                        label.maxVisibleCharacters = 0;
-	                        label.color = new Color(t.textPrimary.r, t.textPrimary.g, t.textPrimary.b, 0f);
-	                    } else {
-	                        label.maxVisibleCharacters = int.MaxValue;
-	                        if (recolorChrome) {
-	                            SnapshotAuthoredGraphicColor(label);
-	                            SpzUiThemeOps.ApplyTmpScaled(label, t.textPrimary, kRibbonStripTabLabelDefaultPt);
-	                        } else {
-	                            RestoreAuthoredGraphicColor(label);
-	                        }
-	                    }
-	                }
-	                // Structure/icons always; accent bar / icon tint only when recoloring.
-	                ApplyStudioTabChromeColors(cell, t, recolorChrome);
-	                var cellImg = cell.GetComponent<Image>();
-	                if (cellImg != null && cell.name.StartsWith("AddonTab_", StringComparison.Ordinal)) {
-	                    if (recolorChrome) {
-	                        SnapshotAuthoredGraphicColor(cellImg);
-	                        SpzUiThemeOps.ApplyGraphicColor(cellImg, t.controlBg);
-	                    } else {
-	                        RestoreAuthoredGraphicColor(cellImg);
-	                    }
-	                }
+	                ThemeStripTabCell(cell, t, recolorChrome, iconOnly);
 	            }
 	        }
 
@@ -725,13 +663,128 @@ namespace spz {
 	            }
 	        }
 
-	        // Leaving icon-only must re-run label-based strip widths (ThemeChanged alone used to wipe LE to -1).
 	        if (!iconOnly)
 	            HarmonizeStripTabTypography();
 
-	        // Icon-only preferredWidth (and Harmonize mins) must rebuild this frame — Refresh used to rebuild before ApplyThemeTokens.
 	        if (strip != null && strip is RectTransform stripRt)
 	            UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(stripRt);
+
+	        SnapshotStripTabSelectionChrome();
+	    }
+
+	    /// <summary>Flat tool fill: selected = subtle accent mix (never gold plate).</summary>
+	    static Color FlatStripTabFill(bool selected, SpzUiThemeOps.ThemeTokens t) {
+	        return selected
+	            ? Color.Lerp(t.controlBg, t.accent, 0.14f)
+	            : t.controlBg;
+	    }
+
+	    static Image FindStripTabFaceImage(Transform cell) {
+	        if (cell == null) return null;
+	        var tabBg = cell.Find("TabBg")?.GetComponent<Image>();
+	        if (tabBg != null) return tabBg;
+	        var btn = cell.GetComponent<Button>();
+	        if (btn != null && btn.targetGraphic is Image btnImg)
+	            return btnImg;
+	        return cell.GetComponent<Image>();
+	    }
+
+	    static void FlattenStripTabFace(Image img) {
+	        if (img == null) return;
+	        SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
+	        img.preserveAspect = false;
+	    }
+
+	    /// <summary>Themes one strip menu item (Art / BG / Mesh / Control / Paint / add-on).</summary>
+	    void ThemeStripTabCell(Transform cell, SpzUiThemeOps.ThemeTokens t, bool recolorChrome, bool iconOnly) {
+	        if (cell == null) return;
+	        var elem = cell.GetComponent<TabsGroupElem_UI>();
+	        bool selected = elem != null && elem.IsVisuallySelectedAsActiveTab();
+
+	        if (!recolorChrome) {
+	            foreach (var label in cell.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	                if (label == null) continue;
+	                label.maxVisibleCharacters = int.MaxValue;
+	            }
+	            ApplyStudioTabChromeColors(cell, t, recolorChrome: false);
+	            return;
+	        }
+
+	        Color fill = FlatStripTabFill(selected, t);
+	        Image face = FindStripTabFaceImage(cell);
+	        if (face != null) {
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(face, fill);
+	            FlattenStripTabFace(face);
+	        }
+
+	        var active = cell.Find("go active");
+	        if (active != null) {
+	            var pill = FindActivePillImage(active);
+	            if (pill != null) {
+	                // Flatten authored flared/gold slice into the same flat selected fill.
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(pill, fill);
+	                FlattenStripTabFace(pill);
+	            }
+	        }
+
+	        foreach (var label in cell.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (label == null) continue;
+	            if (iconOnly) {
+	                label.maxVisibleCharacters = 0;
+	                SpzUiThemeOps.ApplyBoundChromeTmp(label,
+	                    new Color(t.textPrimary.r, t.textPrimary.g, t.textPrimary.b, 0f),
+	                    kRibbonStripTabLabelDefaultPt);
+	            } else {
+	                label.maxVisibleCharacters = int.MaxValue;
+	                SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(label, t.textPrimary, kRibbonStripTabLabelDefaultPt);
+	            }
+	        }
+
+	        ApplyStudioTabChromeColors(cell, t, recolorChrome: true);
+	    }
+
+	    string BuildStripSelectionKey() {
+	        Transform strip = ResolveEffectiveTabStripTransform();
+	        if (strip == null) return "";
+	        var sb = new System.Text.StringBuilder(64);
+	        for (int i = 0; i < strip.childCount; i++) {
+	            Transform cell = strip.GetChild(i);
+	            if (cell == null) continue;
+	            var elem = cell.GetComponent<TabsGroupElem_UI>();
+	            if (elem == null) continue;
+	            sb.Append(elem.IsVisuallySelectedAsActiveTab() ? '1' : '0');
+	            sb.Append(cell.GetInstanceID());
+	            sb.Append(';');
+	        }
+	        return sb.ToString();
+	    }
+
+	    void SnapshotStripTabSelectionChrome() {
+	        _lastStripNomadChrome = SpzUiThemeOps.ShouldRecolorBoundChrome;
+	        _lastStripSelectionKey = BuildStripSelectionKey();
+	    }
+
+	    /// <summary>Tab clicks toggle go-active without ThemeChanged — re-tint flat fills when selection moves.</summary>
+	    void SyncStripTabSelectionChromeIfChanged() {
+	        bool nomad = SpzUiThemeOps.ShouldRecolorBoundChrome;
+	        if (!nomad) {
+	            if (_lastStripNomadChrome)
+	                ApplyThemeTokens();
+	            return;
+	        }
+	        string key = BuildStripSelectionKey();
+	        if (key == _lastStripSelectionKey && _lastStripNomadChrome)
+	            return;
+	        var t = SpzUiThemeOps.Active;
+	        bool iconOnly = SpzUiThemeOps.RibbonIconOnlyActive;
+	        Transform strip = ResolveEffectiveTabStripTransform();
+	        if (strip == null) return;
+	        for (int i = 0; i < strip.childCount; i++) {
+	            Transform cell = strip.GetChild(i);
+	            if (cell == null || cell.GetComponent<TabsGroupElem_UI>() == null) continue;
+	            ThemeStripTabCell(cell, t, recolorChrome: true, iconOnly);
+	        }
+	        SnapshotStripTabSelectionChrome();
 	    }
 
 	    /// <summary>Prefer the authored pill graphic; never retint Monolith chrome overlays.</summary>
@@ -1032,7 +1085,7 @@ namespace spz {
 	        if (panel == null) return;
 	        var img = panel.GetComponent<Image>();
 	        if (img != null)
-	            SpzUiThemeOps.ApplyGraphicColor(img, SpzUiThemeOps.ResolvePanelShellColor());
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(img, SpzUiThemeOps.ResolvePanelShellColor());
 	    }
 
 	    IEnumerator PaintCollect_WaitForSingletons_crtn(PaintTab_CollectPaintUI collector)

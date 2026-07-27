@@ -226,7 +226,6 @@ namespace spz {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, fill, t.accent);
 	            if (btn.targetGraphic is Image btnImg) {
 	                SpzUiThemeOps.ApplyRoundedControlSprite(btnImg, markEligible: true);
-	                btnImg.type = Image.Type.Simple;
 	            }
 	            // Prompt web-find globe button.
 	            if (IsWebFindButton(btn))
@@ -244,7 +243,6 @@ namespace spz {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(dd, t.fieldBg, t.accent);
 	            if (dd.targetGraphic is Image ddImg) {
 	                SpzUiThemeOps.ApplyRoundedControlSprite(ddImg, markEligible: true);
-	                ddImg.type = Image.Type.Simple;
 	            }
 	            if (dd.captionText != null)
 	                SpzUiThemeOps.ApplyBoundChromeTmp(dd.captionText, t.textPrimary);
@@ -255,7 +253,6 @@ namespace spz {
 	            if (bg != null) {
 	                SpzUiThemeOps.ApplyBoundChromeGraphic(bg, t.fieldBg);
 	                SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
-	                bg.type = Image.Type.Simple;
 	            }
 	            if (input.textComponent != null)
 	                SpzUiThemeOps.ApplyBoundChromeTmp(input.textComponent, t.textPrimary);
@@ -303,7 +300,6 @@ namespace spz {
 	        SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, fill, t.accent);
 	        if (toggle.targetGraphic is Image bg) {
 	            SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
-	            bg.type = Image.Type.Simple;
 	        }
 	        // Hide SPZ embossed "pressed icon" overlays — flat fill + ColorBlock carry selection.
 	        if (toggle.graphic is Image press && press != toggle.targetGraphic)
@@ -355,7 +351,6 @@ namespace spz {
 	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, FlatCellFill(false, t), t.accent);
 	        if (btn.targetGraphic is Image img) {
 	            SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
-	            img.type = Image.Type.Simple;
 	        }
 	        var label = btn.GetComponentInChildren<TextMeshProUGUI>(true);
 	        if (label != null)

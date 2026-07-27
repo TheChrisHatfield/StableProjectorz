@@ -43,7 +43,7 @@ public sealed class GenerateButtonsFlatGreyThemeTests {
 			themeGen.Invoke(null, new object[] { btn, SpzUiThemeOps.Active });
 
 			Assert.That(face.color, Is.EqualTo(SpzUiThemeOps.Active.controlBg));
-			Assert.That(face.type, Is.EqualTo(Image.Type.Simple));
+			Assert.That(face.type, Is.EqualTo(Image.Type.Sliced));
 			Assert.That(ColorDistance(face.color, peach), Is.GreaterThan(0.2f));
 		}
 		finally {

@@ -309,6 +309,7 @@ namespace spz {
 	            RestoreWorkflowModeAuthored(_entireObj as MonoBehaviour);
 	            RestoreWorkflowModeAuthored(_WhereEmpty_UI as MonoBehaviour);
 	            RestoreWorkflowModeAuthored(_AntiShade_UI as MonoBehaviour);
+	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
@@ -327,8 +328,7 @@ namespace spz {
 
 	    static void RestoreWorkflowModeAuthored(MonoBehaviour modeUi) {
 	        if (modeUi == null) return;
-	        foreach (var g in modeUi.GetComponentsInChildren<Graphic>(true))
-	            SpzUiThemeOps.RestoreAuthoredGraphic(g);
+	        SpzUiThemeOps.RestoreBoundChromeUnder(modeUi.transform);
 	    }
 
 	    static void ThemeModeToggle(MonoBehaviour modeUi, bool selected, SpzUiThemeOps.ThemeTokens t) {
@@ -337,26 +337,40 @@ namespace spz {
 	        if (toggle != null) {
 	            Color normal = selected ? t.tabActive : t.controlBg;
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, normal, t.accent);
+	            if (SpzUiThemeOps.ShouldRecolorBoundChrome
+	                && toggle.targetGraphic is Image tgImg) {
+	                SpzUiThemeOps.ApplyRoundedControlSprite(tgImg, markEligible: true);
+	            }
 	        }
 	        else {
 	            var img = modeUi.GetComponent<Image>();
-	            if (img != null)
+	            if (img != null) {
 	                SpzUiThemeOps.ApplyBoundChromeGraphic(img, selected ? t.tabActive : t.controlBg);
+	                if (SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	                    SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
+	                }
+	            }
 	        }
-	        var rootTmp = modeUi.GetComponent<TMPro.TextMeshProUGUI>();
-	        if (rootTmp != null)
-	            SpzUiThemeOps.ApplyBoundChromeTmp(rootTmp, t.textPrimary);
-	        for (int i = 0; i < modeUi.transform.childCount; i++) {
-	            var child = modeUi.transform.GetChild(i);
-	            if (child == null) continue;
-	            string cn = child.name ?? "";
+	        // Nomad strip type: uppercase + open tracking (not SPZ lowercase crush).
+	        foreach (var tmp in modeUi.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
+	            if (tmp == null) continue;
+	            if (IsExcludedWorkflowLabel(tmp.transform, modeUi.transform))
+	                continue;
+	            SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(tmp, t.textPrimary, 12f);
+	        }
+	    }
+
+	    static bool IsExcludedWorkflowLabel(Transform label, Transform modeRoot) {
+	        if (label == null || modeRoot == null) return true;
+	        Transform t = label;
+	        while (t != null && t != modeRoot) {
+	            string cn = t.name ?? "";
 	            if (StartsWithToken(cn, "Option") || StartsWithToken(cn, "Hover")
 	                || StartsWithToken(cn, "Panel") || StartsWithToken(cn, "Slide"))
-	                continue;
-	            var tmp = child.GetComponent<TMPro.TextMeshProUGUI>();
-	            if (tmp != null)
-	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	                return true;
+	            t = t.parent;
 	        }
+	        return false;
 	    }
 
 	    static bool StartsWithToken(string name, string token) {

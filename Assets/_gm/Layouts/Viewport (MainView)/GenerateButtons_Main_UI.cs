@@ -248,7 +248,6 @@ namespace spz {
 	        if (btn.targetGraphic is Image face) {
 	            // Flat grey Simple fill — replaces beveled/gradient 9-slice brick shading.
 	            SpzUiThemeOps.ApplyRoundedControlSprite(face, markEligible: true);
-	            face.type = Image.Type.Simple;
 	            face.preserveAspect = false;
 	            face.raycastTarget = true;
 	        }
@@ -281,7 +280,8 @@ namespace spz {
 	            msg_genBG = "To generate projections, enable one\nControlNetUnit with Depth or Normals model.\n(See <b>CTRL NETS</b> tab)";
 	        }
 	        if (!Connection_MGR.is_sd_connected){
-	            msg_genBG = msg_genArt = SdDisconnectPlaceholder.DisplayText;
+	            // OG health: black-window tip (not the short dropdown DisplayText).
+	            msg_genBG = msg_genArt = SdDisconnectPlaceholder.TooltipText;
 	        }
 
 	        if(!Connection_MGR.is_3d_connected){

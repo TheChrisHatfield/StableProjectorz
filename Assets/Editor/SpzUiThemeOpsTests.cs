@@ -360,7 +360,7 @@ public sealed class SpzUiThemeOpsTests {
 			img.sprite = authored;
 			img.type = Image.Type.Simple;
 			SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
-			Assert.That(img.type, Is.EqualTo(Image.Type.Simple));
+			Assert.That(img.type, Is.EqualTo(Image.Type.Sliced), "radius>0 uses Sliced so corner AA does not whisker");
 			Assert.That(ReferenceEquals(img.sprite, b), Is.True);
 			Assert.That(go.GetComponent<SpzUiThemeRoundedControl>(), Is.Not.Null);
 
@@ -559,7 +559,7 @@ public sealed class SpzUiThemeOpsTests {
 
 			SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, SpzUiThemeOps.Active.controlBg, SpzUiThemeOps.Active.accent);
 
-			Assert.That(face.type, Is.EqualTo(Image.Type.Simple), "9-slice corner arrows must become Simple fill");
+			Assert.That(face.type, Is.EqualTo(Image.Type.Sliced), "soft rounded fill must stay Sliced (Simple stretches AA into whiskers)");
 			Assert.That(UiRuntimeSprites.IsCachedRoundedRect(face.sprite), Is.True);
 			// Checkmark glyph must survive BoundChromeSelectable (Settings ON state depends on it).
 			Assert.That(tick.enabled, Is.True);
@@ -624,7 +624,7 @@ public sealed class SpzUiThemeOpsTests {
 				out string error), Is.True, error);
 
 			SpzUiThemeOps.ApplyBoundChromeGraphic(face, SpzUiThemeOps.Active.controlBg);
-			Assert.That(face.type, Is.EqualTo(Image.Type.Simple));
+			Assert.That(face.type, Is.EqualTo(Image.Type.Sliced));
 			Assert.That(UiRuntimeSprites.IsCachedRoundedRect(face.sprite), Is.True);
 		}
 		finally {

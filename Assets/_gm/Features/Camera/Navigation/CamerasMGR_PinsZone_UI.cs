@@ -696,7 +696,6 @@ namespace spz {
 	                SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.controlBg);
 	                // Pins may use Simple bevel sprites — force flat soft fill (not only Sliced).
 	                SpzUiThemeOps.ApplyRoundedControlSprite(rootImg, markEligible: true);
-	                rootImg.type = Image.Type.Simple;
 	                rootImg.preserveAspect = false;
 	            }
 	            foreach (var img in pin.GetComponentsInChildren<Image>(true)) {

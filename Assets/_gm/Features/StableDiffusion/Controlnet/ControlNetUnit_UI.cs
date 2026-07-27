@@ -320,7 +320,6 @@ namespace spz {
 	        if (_mainHeaderImage != null) {
 	            SpzUiThemeOps.ApplyBoundChromeGraphic(_mainHeaderImage, t.tabActive);
 	            SpzUiThemeOps.ApplyRoundedControlSprite(_mainHeaderImage, markEligible: true);
-	            _mainHeaderImage.type = Image.Type.Simple;
 	            _mainHeaderImage.preserveAspect = false;
 	        }
 	        if (_mainHeader != null)
@@ -330,7 +329,6 @@ namespace spz {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_headerRibbon_button, t.tabActive, t.accent);
 	            if (_headerRibbon_button.targetGraphic is Image hdrFace) {
 	                SpzUiThemeOps.ApplyRoundedControlSprite(hdrFace, markEligible: true);
-	                hdrFace.type = Image.Type.Simple;
 	            }
 	        }
 
@@ -350,7 +348,6 @@ namespace spz {
 	            if (dd.targetGraphic is Image fieldImg) {
 	                SpzUiThemeOps.ApplyBoundChromeGraphic(fieldImg, t.fieldBg);
 	                SpzUiThemeOps.ApplyRoundedControlSprite(fieldImg, markEligible: true);
-	                fieldImg.type = Image.Type.Simple;
 	            }
 	            if (dd.captionText != null)
 	                SpzUiThemeOps.ApplyBoundChromeTmp(dd.captionText, t.textPrimary, 12f);
@@ -372,7 +369,6 @@ namespace spz {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
 	            if (btn.targetGraphic is Image btnImg) {
 	                SpzUiThemeOps.ApplyRoundedControlSprite(btnImg, markEligible: true);
-	                btnImg.type = Image.Type.Simple;
 	            }
 	            foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	                if (tmp != null)
@@ -445,7 +441,6 @@ namespace spz {
 	        toggle.colors = cb;
 	        if (toggle.targetGraphic is Image bg) {
 	            SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
-	            bg.type = Image.Type.Simple;
 	            bg.preserveAspect = false;
 	        }
 	        if (toggle.graphic is Image check && check != toggle.targetGraphic)
