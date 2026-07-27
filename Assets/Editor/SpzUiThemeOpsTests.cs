@@ -634,6 +634,114 @@ public sealed class SpzUiThemeOpsTests {
 	}
 
 	[Test]
+	public void FlattenToolFaceImageSnapshotsAndRestoreBoundChromeUnwindsLayout() {
+		var root = new GameObject("ToolFaceLayout", typeof(RectTransform));
+		root.SetActive(false);
+		try {
+			var parent = new GameObject("Cell", typeof(RectTransform));
+			parent.transform.SetParent(root.transform, false);
+			var faceGo = new GameObject("Face", typeof(RectTransform), typeof(Image));
+			faceGo.transform.SetParent(parent.transform, false);
+			var rt = faceGo.GetComponent<RectTransform>();
+			rt.anchorMin = new Vector2(0.1f, 0.2f);
+			rt.anchorMax = new Vector2(0.9f, 0.8f);
+			rt.sizeDelta = new Vector2(12f, 8f);
+			rt.anchoredPosition = new Vector2(3f, -2f);
+			var face = faceGo.GetComponent<Image>();
+
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				Tokens(("control_bg", "#292A2EFF"), ("corner_radius", "5")),
+				"replace",
+				out string error), Is.True, error);
+
+			SpzUiThemeOps.FlattenToolFaceImage(face);
+			Assert.That(rt.anchorMin, Is.EqualTo(Vector2.zero));
+			Assert.That(rt.anchorMax, Is.EqualTo(Vector2.one));
+			Assert.That(rt.sizeDelta, Is.EqualTo(Vector2.zero));
+
+			SpzUiThemeOps.ResetTheme();
+			SpzUiThemeOps.RestoreBoundChromeUnder(root.transform);
+			Assert.That(rt.anchorMin, Is.EqualTo(new Vector2(0.1f, 0.2f)));
+			Assert.That(rt.anchorMax, Is.EqualTo(new Vector2(0.9f, 0.8f)));
+			Assert.That(rt.sizeDelta, Is.EqualTo(new Vector2(12f, 8f)));
+			Assert.That(rt.anchoredPosition, Is.EqualTo(new Vector2(3f, -2f)));
+		}
+		finally {
+			UnityEngine.Object.DestroyImmediate(root);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
+	public void ThemeCheckboxToggleKeepsCheckmarkEnabledAndTinted() {
+		var root = new GameObject("CheckboxTheme", typeof(RectTransform));
+		root.SetActive(false);
+		try {
+			var go = new GameObject("Row", typeof(RectTransform), typeof(Image), typeof(Toggle));
+			go.transform.SetParent(root.transform, false);
+			var face = go.GetComponent<Image>();
+			var tickGo = new GameObject("Checkmark", typeof(RectTransform), typeof(Image));
+			tickGo.transform.SetParent(go.transform, false);
+			var tick = tickGo.GetComponent<Image>();
+			tick.enabled = true;
+			var authored = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f));
+			tick.sprite = authored;
+			var toggle = go.GetComponent<Toggle>();
+			toggle.targetGraphic = face;
+			toggle.graphic = tick;
+
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				Tokens(("control_bg", "#292A2EFF"), ("accent", "#F2CA50FF"), ("success", "#7BC96FFF")),
+				"replace",
+				out string error), Is.True, error);
+
+			SpzUiThemeOps.ThemeCheckboxToggle(
+				toggle, SpzUiThemeOps.Active.controlBg, SpzUiThemeOps.Active.accent, SpzUiThemeOps.Active.success);
+
+			Assert.That(tick.enabled, Is.True);
+			Assert.That(ReferenceEquals(tick.sprite, authored), Is.True);
+			Assert.That(tick.color, Is.EqualTo(SpzUiThemeOps.Active.success));
+		}
+		finally {
+			UnityEngine.Object.DestroyImmediate(root);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
+	public void ApplyControlLineIconDoesNotHideToggleCheckmark() {
+		var root = new GameObject("LineIconCheckPreserve", typeof(RectTransform));
+		root.SetActive(false);
+		try {
+			var go = new GameObject("Toggle", typeof(RectTransform), typeof(Image), typeof(Toggle));
+			go.transform.SetParent(root.transform, false);
+			var face = go.GetComponent<Image>();
+			var tickGo = new GameObject("Checkmark", typeof(RectTransform), typeof(Image));
+			tickGo.transform.SetParent(go.transform, false);
+			var tick = tickGo.GetComponent<Image>();
+			tick.enabled = true;
+			var toggle = go.GetComponent<Toggle>();
+			toggle.targetGraphic = face;
+			toggle.graphic = tick;
+
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				Tokens(("icon_tint", "#D0C5AFFF")),
+				"replace",
+				out string error), Is.True, error);
+
+			SpzUiThemeOps.ApplyControlLineIcon(go.transform, StudioLineIcon.Cursor, 18f);
+			Assert.That(tick.enabled, Is.True, "line-icon path must not disable Toggle.graphic Checkmark");
+		}
+		finally {
+			UnityEngine.Object.DestroyImmediate(root);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
 	public void StripLineIconResolveDefaultsDoNotRequireOverwriteOnRefresh() {
 		// Regression: ApplyStudioTabChromeColors must keep compose/set_line_icon sprites
 		// (only assign ResolveStripTabLineIcon when Image.sprite is null).

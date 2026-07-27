@@ -251,11 +251,15 @@ namespace spz {
 	    void OnControlModeToggle(bool isOn, ControlMode mode){
 	        if(!isOn){ return; }
 	        _controlMode = mode;
+	        RefreshBoundChromeSelection();
 	    }
 
 
 	    void OnOpenCloseSelf(bool isOpen){
-	        _headerMenu_go.SetActive(isOpen);
+	        if (_headerMenu_go != null)
+	            _headerMenu_go.SetActive(isOpen);
+	        if (isOpen)
+	            RefreshBoundChromeSelection();
 	    }
     
 	    void OnHeaderButton(){
@@ -265,15 +269,209 @@ namespace spz {
      
 
 	    void OnDestroy(){
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	        if (_lowVRAM_toggle != null)
+	            _lowVRAM_toggle.onValueChanged.RemoveListener(OnLowVramChromeChanged);
 	    }
 
 
 	    void Awake(){
 	        if(!_wasCreatedViaLoad){ InitCollapsableSection(isFromAwake:true); }
 
-	        _balanced_toggle.onValueChanged.AddListener( (isOn)=>OnControlModeToggle(isOn,ControlMode.Balanced) );
-	        _promptImportant_toggle.onValueChanged.AddListener( (isOn)=>OnControlModeToggle(isOn,ControlMode.MyPromptMoreImportant) );
-	        _ctrlNetImportant_toggle.onValueChanged.AddListener( (isOn)=>OnControlModeToggle(isOn,ControlMode.CtrlNetMoreImportant) );
+	        if (_balanced_toggle != null)
+	            _balanced_toggle.onValueChanged.AddListener( (isOn)=>OnControlModeToggle(isOn,ControlMode.Balanced) );
+	        if (_promptImportant_toggle != null)
+	            _promptImportant_toggle.onValueChanged.AddListener( (isOn)=>OnControlModeToggle(isOn,ControlMode.MyPromptMoreImportant) );
+	        if (_ctrlNetImportant_toggle != null)
+	            _ctrlNetImportant_toggle.onValueChanged.AddListener( (isOn)=>OnControlModeToggle(isOn,ControlMode.CtrlNetMoreImportant) );
+	        if (_lowVRAM_toggle != null)
+	            _lowVRAM_toggle.onValueChanged.AddListener(OnLowVramChromeChanged);
+
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        ApplyThemeTokens();
+	    }
+
+	    void OnLowVramChromeChanged(bool _) {
+	        RefreshBoundChromeSelection();
+	    }
+
+	    /// <summary>Re-tint flat toggle cells after P/B/C/LOW/res/image selection changes.</summary>
+	    public void RefreshBoundChromeSelection() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) return;
+	        var t = SpzUiThemeOps.Active;
+	        ThemeHeaderModeToggles(t);
+	        foreach (var toggle in GetComponentsInChildren<Toggle>(true)) {
+	            if (toggle == null || IsHeaderModeToggle(toggle)) continue;
+	            ThemeFlatToggleCell(toggle, t);
+	        }
+	    }
+
+	    /// <summary>
+	    /// Nomad flat chrome for ControlNet unit shell: header, P/B/C/LOW, fields, labels, dials.
+	    /// Leaves preview RawImage content untouched (domain texture, not chrome).
+	    /// </summary>
+	    void ApplyThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+
+	        if (_mainHeaderImage != null) {
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(_mainHeaderImage, t.tabActive);
+	            SpzUiThemeOps.ApplyRoundedControlSprite(_mainHeaderImage, markEligible: true);
+	            _mainHeaderImage.type = Image.Type.Simple;
+	            _mainHeaderImage.preserveAspect = false;
+	        }
+	        if (_mainHeader != null)
+	            SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(_mainHeader, t.textPrimary, 13f);
+
+	        if (_headerRibbon_button != null && _headerRibbon_button.targetGraphic != null) {
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(_headerRibbon_button, t.tabActive, t.accent);
+	            if (_headerRibbon_button.targetGraphic is Image hdrFace) {
+	                SpzUiThemeOps.ApplyRoundedControlSprite(hdrFace, markEligible: true);
+	                hdrFace.type = Image.Type.Simple;
+	            }
+	        }
+
+	        ThemeHeaderModeToggles(t);
+
+	        if (_contents != null) {
+	            var contentsImg = _contents.GetComponent<Image>();
+	            if (contentsImg != null)
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(contentsImg, t.panelBg);
+	        }
+	        var rootImg = GetComponent<Image>();
+	        if (rootImg != null)
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.panelBg);
+
+	        foreach (var dd in GetComponentsInChildren<TMP_Dropdown>(true)) {
+	            if (dd == null) continue;
+	            if (dd.targetGraphic is Image fieldImg) {
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(fieldImg, t.fieldBg);
+	                SpzUiThemeOps.ApplyRoundedControlSprite(fieldImg, markEligible: true);
+	                fieldImg.type = Image.Type.Simple;
+	            }
+	            if (dd.captionText != null)
+	                SpzUiThemeOps.ApplyBoundChromeTmp(dd.captionText, t.textPrimary, 12f);
+	            if (dd.itemText != null)
+	                SpzUiThemeOps.ApplyBoundChromeTmp(dd.itemText, t.textPrimary, 12f);
+	        }
+
+	        foreach (var toggle in GetComponentsInChildren<Toggle>(true)) {
+	            if (toggle == null) continue;
+	            if (IsHeaderModeToggle(toggle)) continue; // already themed above (bevel hide OK for P/B/C/LOW)
+	            // Context menus / resize modes need real Checkmark glyphs — not flat-cell hide.
+	            ThemeCheckboxToggle(toggle, t);
+	        }
+
+	        foreach (var btn in GetComponentsInChildren<Button>(true)) {
+	            if (btn == null || btn.targetGraphic == null) continue;
+	            if (ReferenceEquals(btn, _headerRibbon_button)) continue;
+	            if (btn.GetComponent<TMP_Dropdown>() != null) continue;
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+	            if (btn.targetGraphic is Image btnImg) {
+	                SpzUiThemeOps.ApplyRoundedControlSprite(btnImg, markEligible: true);
+	                btnImg.type = Image.Type.Simple;
+	            }
+	            foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	                if (tmp != null)
+	                    SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, 11f);
+	            }
+	        }
+
+	        foreach (var tmp in GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (tmp == null) continue;
+	            if (ReferenceEquals(tmp, _mainHeader)) continue;
+	            if (tmp.GetComponentInParent<CircleSlider_Snapping_UI>() != null) continue;
+	            if (tmp.GetComponentInParent<TMP_Dropdown>() != null) continue;
+	            if (tmp.GetComponentInParent<Toggle>() != null) continue;
+	            if (tmp.GetComponentInParent<Button>() != null) continue;
+	            // Field labels (preprocess / model / start / end / weight) — lift contrast off muted authored grey.
+	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, 11f);
+	        }
+
+	        ThemeCircleDial(_startingControl_step, t);
+	        ThemeCircleDial(_endingControl_step, t);
+	        ThemeCircleDial(_controlWeight_slider, t);
+	        // Dropdowns helper may hold a duplicate starting-step ref; theme all under unit.
+	        foreach (var dial in GetComponentsInChildren<CircleSlider_Snapping_UI>(true)) {
+	            if (dial != null)
+	                dial.ApplyThemeTokens(t.accent, t.textPrimary);
+	        }
+
+	        foreach (var lg in GetComponentsInChildren<LayoutGroup>(true)) {
+	            if (lg != null)
+	                SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
+	        }
+	    }
+
+	    void ThemeHeaderModeToggles(SpzUiThemeOps.ThemeTokens t) {
+	        ThemeFlatToggleCell(_promptImportant_toggle, t); // P
+	        ThemeFlatToggleCell(_balanced_toggle, t);         // B
+	        ThemeFlatToggleCell(_ctrlNetImportant_toggle, t); // C
+	        ThemeFlatToggleCell(_lowVRAM_toggle, t);          // LOW
+	    }
+
+	    bool IsHeaderModeToggle(Toggle toggle) {
+	        return ReferenceEquals(toggle, _balanced_toggle)
+	            || ReferenceEquals(toggle, _promptImportant_toggle)
+	            || ReferenceEquals(toggle, _ctrlNetImportant_toggle)
+	            || ReferenceEquals(toggle, _lowVRAM_toggle);
+	    }
+
+	    static void ThemeCircleDial(CircleSlider_Snapping_UI dial, SpzUiThemeOps.ThemeTokens t) {
+	        if (dial == null) return;
+	        dial.ApplyThemeTokens(t.accent, t.textPrimary);
+	    }
+
+	    /// <summary>
+	    /// Flat dark cell (no lime/cyan bevel plate). Selected = subtle accent mix; letter stays reverse-out.
+	    /// Header P/B/C/LOW only — hides bevel Checkmark plate (selection = fill).
+	    /// </summary>
+	    static void ThemeFlatToggleCell(Toggle toggle, SpzUiThemeOps.ThemeTokens t) {
+	        if (toggle == null) return;
+	        Color fill = toggle.isOn
+	            ? Color.Lerp(t.controlBg, t.accent, 0.14f)
+	            : t.controlBg;
+	        SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, fill, t.accent);
+	        var cb = toggle.colors;
+	        cb.normalColor = Color.white;
+	        cb.highlightedColor = Color.white;
+	        cb.pressedColor = new Color(0.92f, 0.92f, 0.92f, 1f);
+	        cb.selectedColor = Color.white;
+	        cb.disabledColor = new Color(1f, 1f, 1f, 0.4f);
+	        cb.colorMultiplier = 1f;
+	        toggle.colors = cb;
+	        if (toggle.targetGraphic is Image bg) {
+	            SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
+	            bg.type = Image.Type.Simple;
+	            bg.preserveAspect = false;
+	        }
+	        if (toggle.graphic is Image check && check != toggle.targetGraphic)
+	            SpzUiThemeOps.HideAuthoredGraphicForTheme(check);
+	        foreach (var img in toggle.GetComponentsInChildren<Image>(true)) {
+	            if (img == null || img == toggle.targetGraphic) continue;
+	            string n = img.gameObject.name ?? "";
+	            if (n.Equals("Checkmark", System.StringComparison.OrdinalIgnoreCase)
+	                || n.IndexOf("pressed", System.StringComparison.OrdinalIgnoreCase) >= 0
+	                || n.Equals("tick", System.StringComparison.OrdinalIgnoreCase))
+	                SpzUiThemeOps.HideAuthoredGraphicForTheme(img);
+	        }
+	        foreach (var tmp in toggle.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (tmp == null) continue;
+	            SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(tmp, t.textPrimary, 12f);
+	        }
+	    }
+
+	    /// <summary>Context-menu / resize checkboxes — keep ON glyph; tint success.</summary>
+	    static void ThemeCheckboxToggle(Toggle toggle, SpzUiThemeOps.ThemeTokens t) {
+	        if (toggle == null) return;
+	        SpzUiThemeOps.ThemeCheckboxToggle(toggle, t.controlBg, t.accent, t.success);
+	        foreach (var tmp in toggle.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (tmp == null) continue;
+	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, 12f);
+	        }
 	    }
 
 
@@ -340,6 +538,7 @@ namespace spz {
 
 	        _dropdowns.Load(unit_sl);
 	        _imgsDisplay.Load(unit_sl, dataDir);
+	        ApplyThemeTokens();
 	    }
 
 

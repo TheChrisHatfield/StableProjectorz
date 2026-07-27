@@ -165,6 +165,7 @@ namespace spz {
 			RestoreControlLineIconsUnder(root);
 			RestoreRoundedControlSpritesUnder(root);
 			RestoreSliderHandleLayoutsUnder(root);
+			RestoreToolFaceLayoutsUnder(root);
 			foreach (var g in root.GetComponentsInChildren<Graphic>(true))
 				RestoreAuthoredGraphic(g);
 			foreach (var s in root.GetComponentsInChildren<Selectable>(true))
@@ -174,6 +175,92 @@ namespace spz {
 				var fontTag = tmp.GetComponent<SpzUiThemeDesignFontPt>();
 				if (fontTag != null && fontTag.designPt > 0.05f)
 					tmp.fontSize = fontTag.designPt;
+			}
+		}
+
+		/// <summary>
+		/// Settings-style checkbox: flat face + keep Toggle.graphic glyph (tinted success).
+		/// Use for menus / ON-OFF rows. Tool cells that use bevel plates as selection should hide separately.
+		/// </summary>
+		public static void ThemeCheckboxToggle(Toggle toggle, Color face, Color accent, Color checkSuccess) {
+			if (toggle == null || toggle.targetGraphic == null)
+				return;
+			ApplyBoundChromeSelectable(toggle, face, accent);
+			if (toggle.targetGraphic is Image bg) {
+				ApplyRoundedControlSprite(bg, markEligible: true);
+				bg.type = Image.Type.Simple;
+				bg.preserveAspect = false;
+			}
+			if (toggle.graphic != null)
+				ApplyBoundChromeGraphic(toggle.graphic, checkSuccess);
+		}
+
+		/// <summary>
+		/// Soft Simple fill stretched edge-to-edge; snapshots RectTransform for Restore SPZ.
+		/// </summary>
+		public static void FlattenToolFaceImage(Image img) {
+			if (img == null) return;
+			img.type = Image.Type.Simple;
+			img.preserveAspect = false;
+			img.pixelsPerUnitMultiplier = 1f;
+			var rt = img.rectTransform;
+			if (rt == null || !(rt.parent is RectTransform)) return;
+			SnapshotToolFaceLayout(rt);
+			rt.anchorMin = Vector2.zero;
+			rt.anchorMax = Vector2.one;
+			rt.pivot = new Vector2(0.5f, 0.5f);
+			rt.anchoredPosition = Vector2.zero;
+			rt.sizeDelta = Vector2.zero;
+			rt.offsetMin = Vector2.zero;
+			rt.offsetMax = Vector2.zero;
+			rt.localScale = Vector3.one;
+		}
+
+		static void SnapshotToolFaceLayout(RectTransform rt) {
+			if (rt == null) return;
+			var tag = rt.GetComponent<SpzUiThemeDesignRectTransform>();
+			if (tag == null) {
+				tag = rt.gameObject.AddComponent<SpzUiThemeDesignRectTransform>();
+				CaptureRectTransform(tag, rt);
+			}
+			else if (!tag.hasSnapshot) {
+				CaptureRectTransform(tag, rt);
+			}
+		}
+
+		static void CaptureRectTransform(SpzUiThemeDesignRectTransform tag, RectTransform rt) {
+			tag.anchorMin = rt.anchorMin;
+			tag.anchorMax = rt.anchorMax;
+			tag.pivot = rt.pivot;
+			tag.anchoredPosition = rt.anchoredPosition;
+			tag.sizeDelta = rt.sizeDelta;
+			tag.offsetMin = rt.offsetMin;
+			tag.offsetMax = rt.offsetMax;
+			tag.localScale = rt.localScale;
+			tag.hasSnapshot = true;
+		}
+
+		static void RestoreToolFaceLayoutsUnder(Transform root) {
+			if (root == null) return;
+			var tags = root.GetComponentsInChildren<SpzUiThemeDesignRectTransform>(true);
+			for (int i = 0; i < tags.Length; i++) {
+				var tag = tags[i];
+				if (tag == null) continue;
+				var rt = tag.transform as RectTransform;
+				if (rt != null && tag.hasSnapshot) {
+					rt.anchorMin = tag.anchorMin;
+					rt.anchorMax = tag.anchorMax;
+					rt.pivot = tag.pivot;
+					rt.anchoredPosition = tag.anchoredPosition;
+					rt.sizeDelta = tag.sizeDelta;
+					rt.offsetMin = tag.offsetMin;
+					rt.offsetMax = tag.offsetMax;
+					rt.localScale = tag.localScale;
+				}
+				if (Application.isPlaying)
+					UnityEngine.Object.Destroy(tag);
+				else
+					UnityEngine.Object.DestroyImmediate(tag);
 			}
 		}
 
@@ -427,6 +514,9 @@ namespace spz {
 				string n = img.gameObject.name ?? "";
 				if (n == ControlLineIconChildName || n == "MonolithActiveBar")
 					continue;
+				// Real Toggle ON glyphs must stay (Settings / context menus); tool cells hide those explicitly.
+				if (IsToggleCheckmarkGraphic(img))
+					continue;
 				if (!IsAuthoredIconImageName(n))
 					continue;
 				var tag = img.GetComponent<SpzUiThemeHiddenGraphic>();
@@ -463,9 +553,7 @@ namespace spz {
 			if (string.IsNullOrEmpty(name)) return false;
 			if (name.IndexOf("Monolith", StringComparison.OrdinalIgnoreCase) >= 0)
 				return false;
-			if (name.Equals("tick", StringComparison.OrdinalIgnoreCase)
-				|| name.Equals("Checkmark", StringComparison.OrdinalIgnoreCase))
-				return true;
+			// Checkmark / tick are Toggle ON glyphs — not silhouette icons to replace with Monolith.
 			return name.Equals("icon", StringComparison.OrdinalIgnoreCase)
 				|| name.StartsWith("icon_", StringComparison.OrdinalIgnoreCase)
 				|| name.EndsWith("_icon", StringComparison.OrdinalIgnoreCase)
@@ -1726,6 +1814,19 @@ namespace spz {
 	/// <summary>Snapshots vertical slider handle sizeDelta so bullseye thumbs unwind on Restore SPZ.</summary>
 	public sealed class SpzUiThemeSliderHandleLayout : MonoBehaviour {
 		public Vector2 authoredSizeDelta;
+		public bool hasSnapshot;
+	}
+
+	/// <summary>Snapshots tool-face RectTransform before Nomad edge-to-edge flatten; unwound by RestoreBoundChromeUnder.</summary>
+	public sealed class SpzUiThemeDesignRectTransform : MonoBehaviour {
+		public Vector2 anchorMin;
+		public Vector2 anchorMax;
+		public Vector2 pivot;
+		public Vector2 anchoredPosition;
+		public Vector2 sizeDelta;
+		public Vector2 offsetMin;
+		public Vector2 offsetMax;
+		public Vector3 localScale = Vector3.one;
 		public bool hasSnapshot;
 	}
 }

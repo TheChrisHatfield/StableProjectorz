@@ -219,8 +219,7 @@ namespace spz {
 			if (_layout == null) _layout = GetComponent<PaintTab_KritaLayout_UI>();
 			if (_layout == null) return;
 			if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
-				foreach (var g in GetComponentsInChildren<Graphic>(true))
-					SpzUiThemeOps.RestoreAuthoredGraphic(g);
+				SpzUiThemeOps.RestoreBoundChromeUnder(transform);
 				_layout.ApplyThemeTokens();
 				PaintTab_LayersPanel_UI layersRestore = null;
 				if (_layout.LayersSection != null)
