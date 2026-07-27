@@ -944,10 +944,10 @@ namespace spz {
 		}
 
 		/// <summary>Nomad sculpt: Expand glyph for FULL/SRN dock face.</summary>
-		internal static StudioLineIcon ResolveFullViewDockIcon() => StudioLineIcon.Expand;
+		public static StudioLineIcon ResolveFullViewDockIcon() => StudioLineIcon.Expand;
 
 		/// <summary>OPEN RIGHT → ChevronRight; HIDE RIGHT (right open) → ChevronLeft.</summary>
-		internal static StudioLineIcon ResolveOpenRightDockIcon(bool rightPanelOpen) =>
+		public static StudioLineIcon ResolveOpenRightDockIcon(bool rightPanelOpen) =>
 			rightPanelOpen ? StudioLineIcon.ChevronLeft : StudioLineIcon.ChevronRight;
 
 		static void EnsureDockLineIcon(RectTransform parent, StudioLineIcon glyph, out Image iconImg) {
@@ -991,11 +991,22 @@ namespace spz {
 			bool sculpt = SpzUiThemeOps.ShouldRecolorBoundChrome;
 			var t = SpzUiThemeOps.Active;
 
+			if (!sculpt) {
+				if (_builtRowRt != null)
+					SpzUiThemeOps.RestoreBoundChromeUnder(_builtRowRt);
+				if (_fullViewMenuRt != null)
+					SpzUiThemeOps.RestoreBoundChromeUnder(_fullViewMenuRt);
+			}
+
 			if (_bgImage != null) {
 				bool on = IsInOnScreenFullViewSession();
 				if (sculpt) {
 					_fillBase = t.controlBg;
-					_bgImage.color = on ? Color.Lerp(t.controlBg, t.accent, 0.35f) : t.controlBg;
+					Color fill = on ? Color.Lerp(t.controlBg, t.accent, 0.14f) : t.controlBg;
+					SpzUiThemeOps.ApplyBoundChromeGraphic(_bgImage, fill);
+					SpzUiThemeOps.ApplyRoundedControlSprite(_bgImage, markEligible: true);
+					_bgImage.type = Image.Type.Simple;
+					_bgImage.preserveAspect = false;
 				} else {
 					_fillBase = _authoredFillBase;
 					_bgImage.color = on ? Color.Lerp(_fillBase, Color.black, 0.14f) : _fillBase;
@@ -1003,7 +1014,7 @@ namespace spz {
 			}
 
 			ApplyDockFaceChrome(_dockButton != null ? _dockButton.transform as RectTransform : null,
-				ref _fullSrnLineIcon, ResolveFullViewDockIcon(), sculpt, t);
+				ref _fullSrnLineIcon, ResolveFullViewDockIcon(), sculpt, t, forceFullSrnLabel: true);
 
 			bool rightOpen = false;
 			var sk = Global_Skeleton_UI.instance;
@@ -1016,12 +1027,16 @@ namespace spz {
 				if (openRt != null) {
 					var openImg = openRt.GetComponent<Image>();
 					if (openImg != null) {
-						if (sculpt)
-							openImg.color = t.controlBg;
-						else if (_bgImage != null)
+						if (sculpt) {
+							SpzUiThemeOps.ApplyBoundChromeGraphic(openImg, t.controlBg);
+							SpzUiThemeOps.ApplyRoundedControlSprite(openImg, markEligible: true);
+							openImg.type = Image.Type.Simple;
+						} else if (_bgImage != null) {
+							SpzUiThemeOps.RestoreAuthoredGraphic(openImg);
 							openImg.color = _authoredFillBase;
+						}
 					}
-					ApplyDockFaceChrome(openRt, ref _openRightLineIcon, openGlyph, sculpt, t);
+					ApplyDockFaceChrome(openRt, ref _openRightLineIcon, openGlyph, sculpt, t, forceFullSrnLabel: false);
 					if (_openRightDockLabel == null)
 						_openRightDockLabel = openRt.GetComponentInChildren<TextMeshProUGUI>(true);
 				}
@@ -1030,27 +1045,24 @@ namespace spz {
 			RefreshOpenRightSecondaryLabel();
 		}
 
-		static void ApplyDockFaceChrome(RectTransform face, ref Image iconImg, StudioLineIcon glyph, bool sculpt, SpzUiThemeOps.ThemeTokens t) {
+		static void ApplyDockFaceChrome(RectTransform face, ref Image iconImg, StudioLineIcon glyph, bool sculpt, SpzUiThemeOps.ThemeTokens t, bool forceFullSrnLabel) {
 			if (face == null) return;
 			if (iconImg == null)
 				EnsureDockLineIcon(face, glyph, out iconImg);
 			var label = face.GetComponentInChildren<TextMeshProUGUI>(true);
+			HideCornerTrianglesUnder(face, hide: sculpt);
 			if (sculpt) {
+				// Flat grey + text (not icon-only, not beveled peach brick).
 				if (label != null) {
-					label.maxVisibleCharacters = 0;
-					label.color = new Color(t.textPrimary.r, t.textPrimary.g, t.textPrimary.b, 0f);
+					label.maxVisibleCharacters = int.MaxValue;
+					if (forceFullSrnLabel
+					    && (string.IsNullOrWhiteSpace(label.text)
+					        || label.text.IndexOf("FULL", System.StringComparison.OrdinalIgnoreCase) < 0))
+						label.text = "FULL\nSRN";
+					SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(label, t.textPrimary, 14f);
 				}
-				if (iconImg != null) {
-					iconImg.sprite = UiRuntimeSprites.GetLineIcon(glyph);
-					iconImg.gameObject.SetActive(true);
-					SpzUiThemeOps.ApplyLineIconTint(iconImg);
-					var iconRt = iconImg.rectTransform;
-					iconRt.anchorMin = new Vector2(0.5f, 0.5f);
-					iconRt.anchorMax = new Vector2(0.5f, 0.5f);
-					iconRt.pivot = new Vector2(0.5f, 0.5f);
-					iconRt.anchoredPosition = Vector2.zero;
-					iconRt.sizeDelta = new Vector2(22f, 22f);
-				}
+				if (iconImg != null)
+					iconImg.gameObject.SetActive(false);
 			} else {
 				if (label != null) {
 					label.maxVisibleCharacters = int.MaxValue;
@@ -1058,6 +1070,20 @@ namespace spz {
 				}
 				if (iconImg != null)
 					iconImg.gameObject.SetActive(false);
+			}
+		}
+
+		static void HideCornerTrianglesUnder(Transform root, bool hide) {
+			if (root == null) return;
+			foreach (var img in root.GetComponentsInChildren<Image>(true)) {
+				if (img == null) continue;
+				string n = img.gameObject.name ?? "";
+				if (n.IndexOf("triangle", System.StringComparison.OrdinalIgnoreCase) < 0)
+					continue;
+				if (hide)
+					SpzUiThemeOps.HideAuthoredGraphicForTheme(img);
+				else
+					SpzUiThemeOps.RestoreAuthoredGraphic(img);
 			}
 		}
 
@@ -1190,15 +1216,12 @@ namespace spz {
 			// "On" while the left column is hidden: center-only fullscreen, or right-only (paint) — same session.
 			bool on = IsInOnScreenFullViewSession();
 			if (SpzUiThemeOps.ShouldRecolorBoundChrome) {
-				var t = SpzUiThemeOps.Active;
-				_bgImage.color = on ? Color.Lerp(t.controlBg, t.accent, 0.35f) : t.controlBg;
+				ApplyThemeTokens();
 			} else {
 				_bgImage.color = on ? Color.Lerp(_fillBase, Color.black, 0.14f) : _fillBase;
 			}
 			SetSecondaryButtonVisible(on);
 			RefreshOpenRightSecondaryLabel();
-			if (SpzUiThemeOps.ShouldRecolorBoundChrome)
-				ApplyThemeTokens();
 		}
 
 		void RefreshOpenRightSecondaryLabel() {
@@ -1220,11 +1243,10 @@ namespace spz {
 			}
 			if (_openRightDockLabel != null)
 				_openRightDockLabel.text = label;
-			if (_openRightLineIcon != null && SpzUiThemeOps.ShouldRecolorBoundChrome) {
-				_openRightLineIcon.sprite = UiRuntimeSprites.GetLineIcon(ResolveOpenRightDockIcon(rightOpen));
-				SpzUiThemeOps.ApplyLineIconTint(_openRightLineIcon);
-				_openRightLineIcon.gameObject.SetActive(true);
-			}
+			// Under Nomad, ApplyDockFaceChrome keeps the line glyph hidden (text-only OPEN/HIDE RIGHT).
+			// Do not re-activate the icon here — that undoes flat dock chrome.
+			if (_openRightLineIcon != null && SpzUiThemeOps.ShouldRecolorBoundChrome)
+				_openRightLineIcon.gameObject.SetActive(false);
 		}
 
 		bool IsViewportFullviewCommand() {
