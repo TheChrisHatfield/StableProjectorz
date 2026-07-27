@@ -48,7 +48,7 @@ namespace spz {
 	    public string currModelName(){
 	        if(_model_dropdown.options.Count == 0){ return "None"; }
 	        string chosen = _model_dropdown.options[_model_dropdown.value].text;
-	        if(chosen.ToLower().Contains("not connected")){  return "None"; }
+	        if(SdDisconnectPlaceholder.IsPlaceholder(chosen)){  return "None"; }
 	        return chosen.ToLower().Contains("none") ? "None" : chosen;//because sometimes None or none conflict or don't get recognized.
 	    }
 
