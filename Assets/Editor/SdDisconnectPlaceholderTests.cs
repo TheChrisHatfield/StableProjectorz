@@ -34,6 +34,8 @@ public sealed class SdDisconnectPlaceholderTests {
 		Assert.That(SdDisconnectPlaceholder.DisplayText, Is.EqualTo("Diffusion Model Not Yet Connected"));
 		Assert.That(SdDisconnectPlaceholder.DisplayText, Does.Not.Contain("Check Black Window"));
 		Assert.That(SdDisconnectPlaceholder.DisplayText, Does.Not.Contain("black window"));
+		// Prefab captions use Ellipsis so this longer single-line copy stays inside the control.
+		Assert.That(SdDisconnectPlaceholder.DisplayText.Length, Is.GreaterThan(20));
 	}
 
 	[Test]
