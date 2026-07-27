@@ -304,7 +304,9 @@ namespace spz {
 	                    ? Color.Lerp(t.controlBg, t.accent, 0.14f)
 	                    : t.controlBg;
 	                SpzUiThemeOps.ApplyBoundChromeSelectable(pov, normal, t.accent);
-	                // BoundChromeSelectable flattens 9-slice faces; keep labels reverse-out on dark cells.
+	                // POV Checkmark is a 9-slice bevel plate — hide; selection = flat fill above.
+	                if (pov.graphic is Image tick && tick != pov.targetGraphic)
+	                    SpzUiThemeOps.HideAuthoredGraphicForTheme(tick);
 	                var povLabel = pov.GetComponentInChildren<TextMeshProUGUI>(true);
 	                if (povLabel != null)
 	                    SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(povLabel, t.textPrimary, 12f);

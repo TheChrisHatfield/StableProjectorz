@@ -614,18 +614,18 @@ namespace spz {
 
 	        var settingsPanel = EventsBinder.FindComponent<RectTransform>("Settings:SettingsPanel");
 	        var colorPicker = EventsBinder.FindComponent<ColorPalette_Panel_UI>("Settings:ColorPicker");
-	        if (settingsPanel == null || colorPicker == null) return;
 
 	        Vector2 cursorPos = KeyMousePenInput.cursorScreenPos();
 	        bool isPressed = KeyMousePenInput.isLMBpressed();
 	        bool isClicked = KeyMousePenInput.isLMBpressedThisFrame() || KeyMousePenInput.isRMBpressedThisFrame() || KeyMousePenInput.isMMBpressedThisFrame();
 
-	        if (settingsPanel.gameObject.activeInHierarchy && !isPressed) {
+	        // Click-outside close must not depend on ColorPicker binding (null picker previously left Settings stuck open).
+	        if (settingsPanel != null && settingsPanel.gameObject.activeInHierarchy && !isPressed) {
 	            bool isInsidePanel = RectTransformUtility.RectangleContainsScreenPoint(settingsPanel, cursorPos);
 	            if (!isInsidePanel) settingsPanel.gameObject.SetActive(false);
 	        }
 
-	        if (colorPicker._isShowing && isClicked && !isPressed) {
+	        if (colorPicker != null && colorPicker._isShowing && isClicked && !isPressed) {
 	            var rtf = colorPicker.transform as RectTransform;
 	            if (RectTransformUtility.RectangleContainsScreenPoint(rtf, cursorPos) == false) {
 	                colorPicker.Hide();
