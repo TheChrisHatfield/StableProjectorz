@@ -78,6 +78,8 @@ namespace spz {
 
 
 	    bool _isFetchingModels = false;
+	    /// <summary>True when dropdown has a real checkpoint (not empty/none/disconnect placeholder).</summary>
+	    public bool HasValidModels => knowsValidModels();
 	    bool knowsValidModels(){
 	        var options = _modelsDropdown.options;
 	        foreach(var o in options){
