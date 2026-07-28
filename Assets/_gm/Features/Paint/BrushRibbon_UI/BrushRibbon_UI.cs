@@ -77,7 +77,12 @@ namespace spz {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            // MGR host is childless; restore each wired tool root (Direction lives on the workflow strip).
 	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
-	            ForEachDirectionHost(d => SpzUiThemeOps.RestoreBoundChromeUnder(d.transform));
+	            ForEachDirectionHost(d => {
+	                SpzUiThemeOps.RestoreBoundChromeUnder(d.transform);
+	                // Re-assert default gaps after restore (smudge inject already used them; Gen3D uses snapshot).
+	                if (d.SmudgeToggle != null)
+	                    BrushRibbon_UI_Direction.ApplyPaintSmudgeEraseGaps(d, nomadGaps: false);
+	            });
 	            RestoreSelectableChrome(_bucketFill != null ? _bucketFill.Button : null);
 	            RestoreSelectableChrome(_invertMask != null ? _invertMask.Button : null);
 	            RestoreSelectableChrome(_deleteColorsButton != null ? _deleteColorsButton.Button : null);
@@ -222,6 +227,9 @@ namespace spz {
 	    }
 
 	    static void ThemeDirectionTools(BrushRibbon_UI_Direction dir, SpzUiThemeOps.ThemeTokens t) {
+	        if (dir == null) return;
+	        // Visible break between flat Paint / Smudge / Eraser squares (Nomad fills read as one block otherwise).
+	        BrushRibbon_UI_Direction.ApplyPaintSmudgeEraseGaps(dir, nomadGaps: true);
 	        ThemeToolToggle(dir.PaintToggle, StudioLineIcon.Brush, t);
 	        ThemeToolToggle(dir.SmudgeToggle, StudioLineIcon.Smudge, t);
 	        ThemeToolToggle(dir.EraseToggle, StudioLineIcon.Eraser, t);
@@ -239,10 +247,18 @@ namespace spz {
 	        if (toggle.targetGraphic is Image bg) {
 	            SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
 	            SpzUiThemeOps.FlattenToolFaceImage(bg);
+	            bg.raycastTarget = true;
 	        }
 	        HideSecondaryChromeUnder(toggle);
+	        // Slightly smaller glyph so icon+label breathe inside the gapped cell.
+	        float glyphPx = Mathf.Min(iconSizePx, 20f);
 	        SpzUiThemeOps.ApplyNomadStackedToolCell(
-	            toggle.transform, glyph, t.textPrimary, iconSizePx, _ => true, stripUppercase: false);
+	            toggle.transform, glyph, t.textPrimary, glyphPx, _ => true, stripUppercase: false);
+	        // Labels / secondary images must not steal hits or sit off-center after flatten.
+	        foreach (var g in toggle.GetComponentsInChildren<Graphic>(true)) {
+	            if (g == null || ReferenceEquals(g, toggle.targetGraphic)) continue;
+	            g.raycastTarget = false;
+	        }
 	    }
 
 	    static void ThemeToolButton(Button btn, StudioLineIcon glyph, SpzUiThemeOps.ThemeTokens t, bool applyIcon = true) {

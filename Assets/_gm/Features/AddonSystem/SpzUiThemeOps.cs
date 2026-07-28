@@ -289,7 +289,8 @@ namespace spz {
 			rt.localScale = Vector3.one;
 		}
 
-		static void SnapshotToolFaceLayout(RectTransform rt) {
+		/// <summary>First-call snapshot of a tool-face RectTransform for <see cref="RestoreBoundChromeUnder"/>.</summary>
+		public static void SnapshotToolFaceLayout(RectTransform rt) {
 			if (rt == null) return;
 			var tag = rt.GetComponent<SpzUiThemeDesignRectTransform>();
 			if (tag == null) {
@@ -698,7 +699,11 @@ namespace spz {
 				}
 				return;
 			}
-			float yLift = Mathf.Max(4f, iconPx * 0.28f);
+			// Compact title-case cells (Paint/Smudge/Erase): shorter label band so icon sits centered above.
+			float labelMaxY = stripUppercase ? 0.40f : 0.36f;
+			float yLift = stripUppercase
+				? Mathf.Max(4f, iconPx * 0.28f)
+				: Mathf.Max(3f, iconPx * 0.18f);
 			ApplyControlLineIconAt(cell, glyph, iconPx, new Vector2(0f, yLift));
 			foreach (var tmp in cell.GetComponentsInChildren<TMP_Text>(true)) {
 				if (tmp == null) continue;
@@ -708,7 +713,7 @@ namespace spz {
 				if (lrt != null) {
 					SnapshotToolFaceLayout(lrt);
 					lrt.anchorMin = new Vector2(0.06f, 0.02f);
-					lrt.anchorMax = new Vector2(0.94f, 0.40f);
+					lrt.anchorMax = new Vector2(0.94f, labelMaxY);
 					lrt.pivot = new Vector2(0.5f, 0.5f);
 					lrt.anchoredPosition = Vector2.zero;
 					lrt.offsetMin = Vector2.zero;
@@ -718,12 +723,13 @@ namespace spz {
 				// Snapshot authored alignment BEFORE forcing Center (otherwise restore keeps Nomad align).
 				SnapshotNomadTypography(tmp);
 				tmp.alignment = TextAlignmentOptions.Center;
+				tmp.enableAutoSizing = false;
 				// Labels stretch over the face under Nomad — must not steal EventSystem hits from the Selectable.
 				tmp.raycastTarget = false;
 				if (stripUppercase)
 					ApplyBoundChromeStripLabelTmp(tmp, labelColor, 11f);
 				else
-					ApplyBoundChromeTmp(tmp, labelColor, 12f);
+					ApplyBoundChromeTmp(tmp, labelColor, 11f);
 			}
 		}
 

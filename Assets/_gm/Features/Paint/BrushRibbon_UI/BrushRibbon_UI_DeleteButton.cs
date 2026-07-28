@@ -19,6 +19,9 @@ namespace spz {
 	    float _confirmBy_time;
 	    public static Action onClicked { get; set; }
 
+	    public Button Button => _button;
+	    public Transform IconRoot => _icon_go != null ? _icon_go.transform : (_button != null ? _button.transform : transform);
+
 
 	    public void DeleteFromCode(){
 	        onClicked?.Invoke();

@@ -124,38 +124,11 @@ namespace spz {
 	        if (grp != null) _brushSmudge_Toggle.group = grp;
 	        _brushSmudge_Toggle.SetIsOnWithoutNotify(false);
 
-	        // Adjust anchor positions: brush=top third, smudge=middle third, eraser=bottom third
-	        RectTransform addRect = _brushAdd_Toggle.GetComponent<RectTransform>();
-	        RectTransform smudgeRect = smudgeGO.GetComponent<RectTransform>();
-	        RectTransform eraseRect = _brushErase_Toggle.GetComponent<RectTransform>();
+	        if (_brushSmudge_Toggle != null)
+	            _brushSmudge_Toggle.transform.SetSiblingIndex(_brushAdd_Toggle.transform.GetSiblingIndex() + 1);
 
-	        const float third = 1f / 3f;
-	        const float pad = 0.015f;
-	        float baseLeft = addRect != null ? addRect.anchorMin.x : 0f;
-	        float baseRight = addRect != null ? addRect.anchorMax.x : 1f;
-
-	        if (addRect != null){
-	            addRect.anchorMin = new Vector2(addRect.anchorMin.x, 2 * third + pad);
-	            addRect.anchorMax = new Vector2(addRect.anchorMax.x, 1f);
-	            baseLeft = addRect.anchorMin.x;
-	            baseRight = addRect.anchorMax.x;
-	        }
-	        if (smudgeRect != null){
-	            smudgeRect.anchorMin = new Vector2(baseLeft, third + pad);
-	            smudgeRect.anchorMax = new Vector2(baseRight, 2 * third - pad);
-	            smudgeRect.offsetMin = Vector2.zero;
-	            smudgeRect.offsetMax = Vector2.zero;
-	            smudgeRect.SetSiblingIndex(_brushAdd_Toggle.transform.GetSiblingIndex() + 1);
-	        }
-	        if (eraseRect != null){
-	            eraseRect.anchorMin = new Vector2(eraseRect.anchorMin.x, 0f);
-	            eraseRect.anchorMax = new Vector2(eraseRect.anchorMax.x, third - pad);
-	        }
-
-	        // Increase parent layout element height to fit 3 toggles
-	        var rootLayout = GetComponent<LayoutElement>();
-	        if (rootLayout != null && rootLayout.minHeight < 200f)
-	            rootLayout.minHeight = 210f;
+	        // Default gaps; Nomad ThemeDirectionTools widens them for flat squares.
+	        ApplyPaintSmudgeEraseGaps(this, nomadGaps: false);
 
 	        TrySetSmudgeIcon(smudgeGO);
 	    }
@@ -220,6 +193,75 @@ namespace spz {
 	    public Toggle PaintToggle => _brushAdd_Toggle;
 	    public Toggle EraseToggle => _brushErase_Toggle;
 	    public Toggle SmudgeToggle => _brushSmudge_Toggle;
+
+	    /// <summary>
+	    /// Stack Paint / Smudge / Erase with a clear gap between cells.
+	    /// Nomad flat squares need a larger gap or they read as one fused column.
+	    /// Equal cell heights; gap is shared between neighbors (not subtracted from one side only).
+	    /// </summary>
+	    public static void ApplyPaintSmudgeEraseGaps(BrushRibbon_UI_Direction dir, bool nomadGaps) {
+	        if (dir == null) return;
+	        var paint = dir.PaintToggle;
+	        var erase = dir.EraseToggle;
+	        var smudge = dir.SmudgeToggle;
+	        if (paint == null || erase == null) return;
+
+	        var addRect = paint.transform as RectTransform;
+	        var eraseRect = erase.transform as RectTransform;
+	        var smudgeRect = smudge != null ? smudge.transform as RectTransform : null;
+	        if (addRect == null || eraseRect == null) return;
+
+	        // Snapshot only on Nomad apply so leave restores the default (post-smudge-inject) gaps.
+	        if (nomadGaps) {
+	            SpzUiThemeOps.SnapshotToolFaceLayout(addRect);
+	            SpzUiThemeOps.SnapshotToolFaceLayout(eraseRect);
+	            if (smudgeRect != null)
+	                SpzUiThemeOps.SnapshotToolFaceLayout(smudgeRect);
+	        }
+
+	        float gap = nomadGaps ? 0.045f : (smudgeRect != null ? 0.028f : 0.02f);
+	        float left = addRect.anchorMin.x;
+	        float right = addRect.anchorMax.x;
+
+	        if (smudgeRect != null) {
+	            // Three equal bands + two equal breaks between them.
+	            float cell = (1f - 2f * gap) / 3f;
+	            eraseRect.anchorMin = new Vector2(left, 0f);
+	            eraseRect.anchorMax = new Vector2(right, cell);
+	            eraseRect.offsetMin = Vector2.zero;
+	            eraseRect.offsetMax = Vector2.zero;
+
+	            smudgeRect.anchorMin = new Vector2(left, cell + gap);
+	            smudgeRect.anchorMax = new Vector2(right, 2f * cell + gap);
+	            smudgeRect.offsetMin = Vector2.zero;
+	            smudgeRect.offsetMax = Vector2.zero;
+
+	            addRect.anchorMin = new Vector2(left, 2f * cell + 2f * gap);
+	            addRect.anchorMax = new Vector2(right, 1f);
+	            addRect.offsetMin = Vector2.zero;
+	            addRect.offsetMax = Vector2.zero;
+	        }
+	        else {
+	            // Paint / Erase only (Gen3D): equal halves with a visible break.
+	            float cell = (1f - gap) * 0.5f;
+	            eraseRect.anchorMin = new Vector2(left, 0f);
+	            eraseRect.anchorMax = new Vector2(right, cell);
+	            eraseRect.offsetMin = Vector2.zero;
+	            eraseRect.offsetMax = Vector2.zero;
+	            addRect.anchorMin = new Vector2(left, cell + gap);
+	            addRect.anchorMax = new Vector2(right, 1f);
+	            addRect.offsetMin = Vector2.zero;
+	            addRect.offsetMax = Vector2.zero;
+	        }
+
+	        var rootLayout = dir.GetComponent<LayoutElement>();
+	        if (rootLayout != null) {
+	            if (smudgeRect != null)
+	                rootLayout.minHeight = nomadGaps ? 256f : 210f;
+	            else if (nomadGaps)
+	                rootLayout.minHeight = Mathf.Max(rootLayout.minHeight, 168f);
+	        }
+	    }
 
 	    public BrushToolMode toolMode {
 	        get {
