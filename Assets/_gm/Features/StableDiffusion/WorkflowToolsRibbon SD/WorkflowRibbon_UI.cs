@@ -313,12 +313,12 @@ namespace spz {
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
-	        ThemeModeToggle(_projMasking as MonoBehaviour, _projMasking != null && _projMasking.isOn, t);
-	        ThemeModeToggle(_coloring as MonoBehaviour, _coloring != null && _coloring.isOn, t);
-	        ThemeModeToggle(_colorless as MonoBehaviour, _colorless != null && _colorless.isOn, t);
-	        ThemeModeToggle(_entireObj as MonoBehaviour, _entireObj != null && _entireObj.isOn, t);
-	        ThemeModeToggle(_WhereEmpty_UI as MonoBehaviour, _WhereEmpty_UI != null && _WhereEmpty_UI.isOn, t);
-	        ThemeModeToggle(_AntiShade_UI as MonoBehaviour, _AntiShade_UI != null && _AntiShade_UI.isOn, t);
+	        ThemeModeToggle(_projMasking as MonoBehaviour, _projMasking != null && _projMasking.isOn, StudioLineIcon.Camera, t);
+	        ThemeModeToggle(_coloring as MonoBehaviour, _coloring != null && _coloring.isOn, StudioLineIcon.Brush, t);
+	        ThemeModeToggle(_colorless as MonoBehaviour, _colorless != null && _colorless.isOn, StudioLineIcon.Drop, t);
+	        ThemeModeToggle(_entireObj as MonoBehaviour, _entireObj != null && _entireObj.isOn, StudioLineIcon.Mesh, t);
+	        ThemeModeToggle(_WhereEmpty_UI as MonoBehaviour, _WhereEmpty_UI != null && _WhereEmpty_UI.isOn, StudioLineIcon.Expand, t);
+	        ThemeModeToggle(_AntiShade_UI as MonoBehaviour, _AntiShade_UI != null && _AntiShade_UI.isOn, StudioLineIcon.Layers, t);
 	        if (_holderGO_turnMeOnOff != null) {
 	            var holderImg = _holderGO_turnMeOnOff.GetComponent<Image>();
 	            if (holderImg != null)
@@ -331,33 +331,48 @@ namespace spz {
 	        SpzUiThemeOps.RestoreBoundChromeUnder(modeUi.transform);
 	    }
 
-	    static void ThemeModeToggle(MonoBehaviour modeUi, bool selected, SpzUiThemeOps.ThemeTokens t) {
+	    /// <summary>Nomad sculpt strip: solid cell + line icon above Roboto label (BoundChrome only).</summary>
+	    static void ThemeModeToggle(MonoBehaviour modeUi, bool selected, StudioLineIcon glyph, SpzUiThemeOps.ThemeTokens t) {
 	        if (modeUi == null) return;
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome)
+	            return;
 	        var toggle = modeUi.GetComponentInChildren<Toggle>(true);
 	        if (toggle != null) {
 	            Color normal = selected ? t.tabActive : t.controlBg;
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, normal, t.accent);
-	            if (SpzUiThemeOps.ShouldRecolorBoundChrome
-	                && toggle.targetGraphic is Image tgImg) {
+	            if (toggle.targetGraphic is Image tgImg)
 	                SpzUiThemeOps.ApplyRoundedControlSprite(tgImg, markEligible: true);
+	            // Authored checkmark is a beveled ON plate — selection = flat fill only (Brush/Multiview parity).
+	            if (toggle.graphic is Image check && check != toggle.targetGraphic)
+	                SpzUiThemeOps.HideAuthoredGraphicForTheme(check);
+	            foreach (var img in toggle.GetComponentsInChildren<Image>(true)) {
+	                if (img == null || img == toggle.targetGraphic) continue;
+	                if (SpzUiThemeOps.IsToggleCheckmarkGraphic(img)) {
+	                    SpzUiThemeOps.HideAuthoredGraphicForTheme(img);
+	                    continue;
+	                }
+	                string n = img.gameObject.name ?? "";
+	                if (n == "MonolithActiveBar" || n == "MonolithLineIcon") continue;
+	                if (n.Equals("Checkmark", StringComparison.OrdinalIgnoreCase)
+	                    || n.IndexOf("pressed", StringComparison.OrdinalIgnoreCase) >= 0
+	                    || n.Equals("tick", StringComparison.OrdinalIgnoreCase))
+	                    SpzUiThemeOps.HideAuthoredGraphicForTheme(img);
 	            }
 	        }
 	        else {
 	            var img = modeUi.GetComponent<Image>();
 	            if (img != null) {
 	                SpzUiThemeOps.ApplyBoundChromeGraphic(img, selected ? t.tabActive : t.controlBg);
-	                if (SpzUiThemeOps.ShouldRecolorBoundChrome) {
-	                    SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
-	                }
+	                SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
 	            }
 	        }
-	        // Nomad strip type: uppercase + open tracking (not SPZ lowercase crush).
-	        foreach (var tmp in modeUi.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
-	            if (tmp == null) continue;
-	            if (IsExcludedWorkflowLabel(tmp.transform, modeUi.transform))
-	                continue;
-	            SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(tmp, t.textPrimary, 12f);
-	        }
+	        Transform iconOwner = toggle != null ? toggle.transform : modeUi.transform;
+	        SpzUiThemeOps.ApplyNomadStackedToolCell(
+	            iconOwner,
+	            glyph,
+	            t.textPrimary,
+	            20f,
+	            tmp => !IsExcludedWorkflowLabel(tmp.transform, modeUi.transform));
 	    }
 
 	    static bool IsExcludedWorkflowLabel(Transform label, Transform modeRoot) {
