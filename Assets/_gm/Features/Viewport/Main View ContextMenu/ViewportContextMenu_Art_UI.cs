@@ -142,6 +142,19 @@ namespace spz {
 	    protected virtual void Awake(){
 	        _canvGrp.alpha = 0;
 	        gameObject.SetActive(false);
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	    }
+
+	    protected virtual void OnDestroy() {
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	    }
+
+	    void ApplyThemeTokens() {
+	        SpzUiThemeOps.ApplyContextMenuChrome(gameObject);
+	    }
+
+	    protected virtual void OnEnable() {
+	        ApplyThemeTokens();
 	    }
 	}
 }//end namespace
