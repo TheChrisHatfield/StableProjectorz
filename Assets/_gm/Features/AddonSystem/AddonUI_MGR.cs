@@ -841,10 +841,11 @@ namespace spz {
 			checkRt.offsetMin = Vector2.zero;
 			checkRt.offsetMax = Vector2.zero;
 			var checkImg = checkGo.AddComponent<Image>();
-			SpzUiThemeOps.ApplyRoundedControlSprite(checkImg, markEligible: true);
 			checkImg.color = new Color(0.3f, 0.6f, 1f, 1f);
 			checkImg.raycastTarget = false;
+			// Assign graphic before BoundChrome rounded/solid so IsToggleCheckmarkGraphic protects the ON glyph.
 			toggle.graphic = checkImg;
+			SpzUiThemeOps.ApplyRoundedControlSprite(checkImg, markEligible: true);
 
 			var labelGo = new GameObject("Label");
 			labelGo.transform.SetParent(toggleObj.transform, false);
@@ -874,6 +875,8 @@ namespace spz {
 					else
 						SendCallbackToPython(addonId, callbackName);
 				}
+				// BoundChrome selection fill is ThemeChanged-only without this retint.
+				SpzUiThemeOps.ApplyToAddonUiRoot(toggleObj);
 			});
 
 			if (_addonUIElements.ContainsKey(addonId))
