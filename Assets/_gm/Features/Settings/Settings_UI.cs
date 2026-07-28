@@ -910,16 +910,39 @@ namespace spz {
 	        ThemeFlatLauncherButton(_openHelpSettingsPanel_button, StudioLineIcon.Eye, t);
 	    }
 
+	    /// <summary>
+	    /// Gear / help launchers: solid square + line icon only.
+	    /// Strip-label "SETTINGS" + gear over the adjacent "thank" cell read as an overlay soup.
+	    /// </summary>
 	    static void ThemeFlatLauncherButton(Button btn, StudioLineIcon glyph, SpzUiThemeOps.ThemeTokens t) {
 	        if (btn == null || btn.targetGraphic == null) return;
-	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
-	        if (btn.targetGraphic is Image img)
-	            SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
+	        SpzUiThemeOps.ApplySolidSquareChrome(btn, t.controlBg, t.accent);
+	        if (btn.targetGraphic != null)
+	            btn.targetGraphic.raycastTarget = true;
 	        SpzUiThemeOps.ApplyControlLineIcon(btn.transform, glyph, 18f);
 	        foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) {
-	            if (tmp != null)
-	                SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(tmp, t.textPrimary, 11f);
+	            if (tmp == null) continue;
+	            tmp.raycastTarget = false;
+	            SpzUiThemeOps.HideAuthoredGraphicForTheme(tmp);
 	        }
+	        // Authored child Images / Monolith overlays must not steal the gear hit.
+	        foreach (var g in btn.GetComponentsInChildren<Graphic>(true)) {
+	            if (g == null || ReferenceEquals(g, btn.targetGraphic)) continue;
+	            g.raycastTarget = false;
+	        }
+	    }
+
+	    /// <summary>True when screen point hits the gear or help launcher (outside the panel rect).</summary>
+	    public bool IsPointerOverLauncher(Vector2 screenPos, Camera cam) {
+	        if (IsOverButton(_openSettingsPanel_button, screenPos, cam)) return true;
+	        if (IsOverButton(_openHelpSettingsPanel_button, screenPos, cam)) return true;
+	        return false;
+	    }
+
+	    static bool IsOverButton(Button btn, Vector2 screenPos, Camera cam) {
+	        if (btn == null || !btn.isActiveAndEnabled) return false;
+	        var rt = btn.transform as RectTransform;
+	        return rt != null && RectTransformUtility.RectangleContainsScreenPoint(rt, screenPos, cam);
 	    }
 
 	    /// <summary>
