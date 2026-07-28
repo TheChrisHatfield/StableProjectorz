@@ -17,6 +17,64 @@ public sealed class BrushRibbonDirectionFlatChromeThemeTests {
 	}
 
 	[Test]
+	public void ApplyPaintSmudgeEraseGaps_NomadLeavesVisibleBreakBetweenEqualCells() {
+		var root = new GameObject("DirGaps", typeof(RectTransform), typeof(LayoutElement));
+		root.SetActive(false);
+		try {
+			var le = root.GetComponent<LayoutElement>();
+			le.minHeight = 140f;
+
+			Toggle MakeToggle(string name) {
+				var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Toggle));
+				go.transform.SetParent(root.transform, false);
+				var rt = go.GetComponent<RectTransform>();
+				rt.anchorMin = Vector2.zero;
+				rt.anchorMax = Vector2.one;
+				rt.offsetMin = Vector2.zero;
+				rt.offsetMax = Vector2.zero;
+				return go.GetComponent<Toggle>();
+			}
+
+			var paint = MakeToggle("Paint");
+			var smudge = MakeToggle("Smudge");
+			var erase = MakeToggle("Erase");
+
+			var dir = root.AddComponent<BrushRibbon_UI_Direction>();
+			typeof(BrushRibbon_UI_Direction)
+				.GetField("_brushAdd_Toggle", BindingFlags.Instance | BindingFlags.NonPublic)
+				.SetValue(dir, paint);
+			typeof(BrushRibbon_UI_Direction)
+				.GetField("_brushErase_Toggle", BindingFlags.Instance | BindingFlags.NonPublic)
+				.SetValue(dir, erase);
+			typeof(BrushRibbon_UI_Direction)
+				.GetField("_brushSmudge_Toggle", BindingFlags.Instance | BindingFlags.NonPublic)
+				.SetValue(dir, smudge);
+
+			BrushRibbon_UI_Direction.ApplyPaintSmudgeEraseGaps(dir, nomadGaps: false);
+			BrushRibbon_UI_Direction.ApplyPaintSmudgeEraseGaps(dir, nomadGaps: true);
+
+			var paintRt = paint.transform as RectTransform;
+			var smudgeRt = smudge.transform as RectTransform;
+			var eraseRt = erase.transform as RectTransform;
+
+			float gapPaintSmudge = paintRt.anchorMin.y - smudgeRt.anchorMax.y;
+			float gapSmudgeErase = smudgeRt.anchorMin.y - eraseRt.anchorMax.y;
+			Assert.That(gapPaintSmudge, Is.EqualTo(0.045f).Within(0.0001f));
+			Assert.That(gapSmudgeErase, Is.EqualTo(0.045f).Within(0.0001f));
+
+			float paintH = paintRt.anchorMax.y - paintRt.anchorMin.y;
+			float smudgeH = smudgeRt.anchorMax.y - smudgeRt.anchorMin.y;
+			float eraseH = eraseRt.anchorMax.y - eraseRt.anchorMin.y;
+			Assert.That(paintH, Is.EqualTo(smudgeH).Within(0.0001f));
+			Assert.That(smudgeH, Is.EqualTo(eraseH).Within(0.0001f));
+			Assert.That(le.minHeight, Is.EqualTo(256f));
+		}
+		finally {
+			Object.DestroyImmediate(root);
+		}
+	}
+
+	[Test]
 	public void ThemeToolToggleReplacesSlicedBevelWithFlatSimpleAndHidesTick() {
 		var root = new GameObject("BrushDirFlatChrome");
 		root.SetActive(false);
@@ -54,10 +112,10 @@ public sealed class BrushRibbonDirectionFlatChromeThemeTests {
 			Assert.That(themeToggle, Is.Not.Null);
 			themeToggle.Invoke(null, new object[] { toggle, StudioLineIcon.Brush, SpzUiThemeOps.Active, 22f });
 
-			Assert.That(face.type, Is.EqualTo(Image.Type.Sliced));
+			Assert.That(face.type, Is.EqualTo(Image.Type.Simple), "Nomad litmus: solid square tool face");
 			Assert.That(face.color, Is.EqualTo(SpzUiThemeOps.Active.controlBg));
 			Assert.That(tick.enabled, Is.False);
-			Assert.That(UiRuntimeSprites.IsCachedRoundedRect(face.sprite), Is.True);
+			Assert.That(UiRuntimeSprites.IsSolidRect(face.sprite), Is.True);
 		}
 		finally {
 			Object.DestroyImmediate(root);
