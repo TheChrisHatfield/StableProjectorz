@@ -68,7 +68,7 @@ namespace spz {
 	    }
 
 	    /// <summary>Nomad: flat tool cells + line icons on the brush strip (gated BoundChrome).</summary>
-	    void ApplyThemeTokens() {
+	    public void ApplyThemeTokens() {
 	        var dir = ResolveDirection();
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            // MGR host is childless; restore each wired tool root (Direction lives on the workflow strip).
@@ -77,6 +77,7 @@ namespace spz {
 	                SpzUiThemeOps.RestoreBoundChromeUnder(dir.transform);
 	            RestoreSelectableChrome(_bucketFill != null ? _bucketFill.Button : null);
 	            RestoreSelectableChrome(_invertMask != null ? _invertMask.Button : null);
+	            RestoreSelectableChrome(_deleteColorsButton != null ? _deleteColorsButton.Button : null);
 	            RestoreSelectableChrome(_eyeDropperToggle);
 	            if (_pressureTabletMode != null)
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_pressureTabletMode.transform);
@@ -93,6 +94,9 @@ namespace spz {
 	        if (_bucketFill != null && _bucketFill.IconRoot != null)
 	            SpzUiThemeOps.ApplyControlLineIcon(_bucketFill.IconRoot, StudioLineIcon.Bucket, 22f);
 	        ThemeToolButton(_invertMask != null ? _invertMask.Button : null, StudioLineIcon.Drop, t, applyIcon: true);
+	        ThemeToolButton(_deleteColorsButton != null ? _deleteColorsButton.Button : null, StudioLineIcon.Trash, t, applyIcon: false);
+	        if (_deleteColorsButton != null && _deleteColorsButton.IconRoot != null)
+	            SpzUiThemeOps.ApplyControlLineIcon(_deleteColorsButton.IconRoot, StudioLineIcon.Trash, 22f);
 	        if (_eyeDropperToggle != null)
 	            ThemeToolToggle(_eyeDropperToggle, StudioLineIcon.Eye, t, iconSizePx: 20f);
 	        if (dir != null)
@@ -136,6 +140,7 @@ namespace spz {
 
 	    void ThemeTmpUnder(Transform root, SpzUiThemeOps.ThemeTokens t, bool excludeOpacityPressure) {
 	        if (root == null) return;
+	        var dir = ResolveDirection();
 	        foreach (var tmp in root.GetComponentsInChildren<TMP_Text>(true)) {
 	            if (tmp == null) continue;
 	            if (excludeOpacityPressure) {
@@ -144,8 +149,23 @@ namespace spz {
 	                if (_pressureTabletMode != null && _pressureTabletMode.OwnsLabel(tmp))
 	                    continue;
 	            }
+	            // Direction tool cells: stacked icon+label already applied Roboto metrics.
+	            if (dir != null && IsUnderDirectionToolToggle(tmp.transform, dir))
+	                continue;
 	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
 	        }
+	    }
+
+	    static bool IsUnderDirectionToolToggle(Transform label, BrushRibbon_UI_Direction dir) {
+	        if (label == null || dir == null) return false;
+	        Transform t = label;
+	        while (t != null) {
+	            if (dir.PaintToggle != null && t == dir.PaintToggle.transform) return true;
+	            if (dir.SmudgeToggle != null && t == dir.SmudgeToggle.transform) return true;
+	            if (dir.EraseToggle != null && t == dir.EraseToggle.transform) return true;
+	            t = t.parent;
+	        }
+	        return false;
 	    }
 
 	    static void ThemePressureMode(BrushRibbon_UI_PressureMode pressure, SpzUiThemeOps.ThemeTokens t) {
@@ -190,11 +210,11 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Flat square cell (no beveled plate / 9-slice corner chevrons) + centered Monolith line glyph.
+	    /// Flat square cell (no beveled plate / 9-slice corner chevrons) + Nomad icon-above-label.
 	    /// Hides authored tick (+/−) plates; line icon replaces SPZ silhouettes.
 	    /// </summary>
 	    static void ThemeToolToggle(Toggle toggle, StudioLineIcon glyph, SpzUiThemeOps.ThemeTokens t, float iconSizePx = 22f) {
-	        if (toggle == null) return;
+	        if (toggle == null || !SpzUiThemeOps.ShouldRecolorBoundChrome) return;
 	        Color normal = FlatToolFill(toggle.isOn, t);
 	        SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, normal, t.accent);
 	        ApplyFlatToolColorBlock(toggle);
@@ -203,11 +223,12 @@ namespace spz {
 	            SpzUiThemeOps.FlattenToolFaceImage(bg);
 	        }
 	        HideSecondaryChromeUnder(toggle);
-	        SpzUiThemeOps.ApplyControlLineIcon(toggle.transform, glyph, iconSizePx);
+	        SpzUiThemeOps.ApplyNomadStackedToolCell(
+	            toggle.transform, glyph, t.textPrimary, iconSizePx, _ => true, stripUppercase: false);
 	    }
 
 	    static void ThemeToolButton(Button btn, StudioLineIcon glyph, SpzUiThemeOps.ThemeTokens t, bool applyIcon = true) {
-	        if (btn == null) return;
+	        if (btn == null || !SpzUiThemeOps.ShouldRecolorBoundChrome) return;
 	        if (btn.targetGraphic != null) {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, FlatToolFill(false, t), t.accent);
 	            ApplyFlatToolColorBlock(btn);
