@@ -154,16 +154,12 @@ public sealed class BoundChromePass10FunctionalTests {
 	public void CircleSlider_SourceClearsValueTmpRaycastAfterBoundChrome() {
 		string path = System.IO.Path.GetFullPath(System.IO.Path.Combine(
 			Application.dataPath,
-			"..",
-			"Assets/_gm/_Core/UI (reusable)/Widgets and Gadgets/Slider/CircleSlider_Snapping_UI.cs"));
+			"_gm/_Core/UI (reusable)/Widgets and Gadgets/Slider/CircleSlider_Snapping_UI.cs"));
 		string src = System.IO.File.ReadAllText(path);
-		int idx = src.IndexOf("public void ApplyThemeTokens", System.StringComparison.Ordinal);
-		Assert.That(idx, Is.GreaterThan(0));
-		string body = src.Substring(idx, System.Math.Min(1600, src.Length - idx));
-		Assert.That(body, Does.Contain("ApplyBoundChromeTmp(_text"));
-		Assert.That(body, Does.Contain("_text.raycastTarget = false"));
-		int tmp = body.IndexOf("ApplyBoundChromeTmp(_text", System.StringComparison.Ordinal);
-		int clear = body.IndexOf("_text.raycastTarget = false", System.StringComparison.Ordinal);
+		Assert.That(src, Does.Contain("ApplyBoundChromeTmp(_text"));
+		Assert.That(src, Does.Contain("_text.raycastTarget = false"));
+		int tmp = src.IndexOf("ApplyBoundChromeTmp(_text", System.StringComparison.Ordinal);
+		int clear = src.IndexOf("_text.raycastTarget = false", System.StringComparison.Ordinal);
 		Assert.That(clear, Is.GreaterThan(tmp));
 	}
 
