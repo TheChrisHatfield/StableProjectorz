@@ -63,6 +63,30 @@ public sealed class BoundChromePass9FunctionalTests {
 	}
 
 	[Test]
+	public void BrushRibbonAndGenButtons_SourceUseClearNonFaceRaycasts() {
+		string brush = System.IO.File.ReadAllText(System.IO.Path.GetFullPath(System.IO.Path.Combine(
+			Application.dataPath, "..", "Assets/_gm/Features/Paint/BrushRibbon_UI/BrushRibbon_UI.cs")));
+		Assert.That(brush, Does.Contain("ClearNonFaceRaycastsForTheme(toggle)"));
+		Assert.That(brush, Does.Contain("ClearNonFaceRaycastsForTheme(btn)"));
+
+		string click = System.IO.File.ReadAllText(System.IO.Path.GetFullPath(System.IO.Path.Combine(
+			Application.dataPath, "..", "Assets/_gm/Features/3D Clicking/ClickSelectMeshes_Toggle_UI.cs")));
+		Assert.That(click, Does.Contain("ClearNonFaceRaycastsForTheme"));
+
+		string gen = System.IO.File.ReadAllText(System.IO.Path.GetFullPath(System.IO.Path.Combine(
+			Application.dataPath, "..", "Assets/_gm/Layouts/Viewport (MainView)/GenerateButtons_Main_UI.cs")));
+		int themeGen = gen.IndexOf("static void ThemeGenButton", System.StringComparison.Ordinal);
+		Assert.That(themeGen, Is.GreaterThan(0));
+		string themeBody = gen.Substring(themeGen, System.Math.Min(1400, gen.Length - themeGen));
+		Assert.That(themeBody, Does.Contain("ClearNonFaceRaycastsForTheme"));
+		Assert.That(themeBody, Does.Contain("ApplyBoundChromeStripLabelTmp"));
+		// Must not poison typography snapshot by clearing raycast before StripLabel.
+		int poison = themeBody.IndexOf("label.raycastTarget = false", System.StringComparison.Ordinal);
+		int strip = themeBody.IndexOf("ApplyBoundChromeStripLabelTmp", System.StringComparison.Ordinal);
+		Assert.That(poison < 0 || poison > strip, Is.True);
+	}
+
+	[Test]
 	public void MultiViewRefreshPov_SourceUsesClearNonFaceRaycasts() {
 		string path = System.IO.Path.GetFullPath(System.IO.Path.Combine(
 			Application.dataPath,

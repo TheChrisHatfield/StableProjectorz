@@ -217,6 +217,7 @@ namespace spz {
 	            // Always light type on dark cell — selected used to go white-on-white.
 	            SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(tmp, t.textPrimary, 14f);
 	        }
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(toggle);
 	    }
 
 	    static void ThemeOpacityReadout(BrushRibbon_UI_Opacity opacity, SpzUiThemeOps.ThemeTokens t) {
@@ -270,10 +271,7 @@ namespace spz {
 	                SpzUiThemeOps.ApplyLineIconTint(iconImg);
 	            }
 	        }
-	        foreach (var g in toggle.GetComponentsInChildren<Graphic>(true)) {
-	            if (g == null || ReferenceEquals(g, toggle.targetGraphic)) continue;
-	            g.raycastTarget = false;
-	        }
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(toggle);
 	    }
 
 	    static bool PreferDirectionToolLabel(TMP_Text tmp) {
@@ -296,6 +294,7 @@ namespace spz {
 	        HideSecondaryChromeUnder(btn);
 	        if (applyIcon)
 	            SpzUiThemeOps.ApplyControlLineIcon(btn.transform, glyph, 22f);
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }
 
 	    /// <summary>ColorTint must not multiply the sliced bevel when selected.</summary>

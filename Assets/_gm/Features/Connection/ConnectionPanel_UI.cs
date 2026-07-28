@@ -261,9 +261,7 @@ namespace spz {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
 	            if (_panel != null)
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_panel.transform);
-	            // Prefab icon is raycastTarget; Nomad clears it so status glyph does not steal open-panel clicks.
-	            if (_connectionIcon != null)
-	                _connectionIcon.raycastTarget = true;
+	            // Icon raycast restored via SnapshotAuthoredGraphicForTheme + RestoreBoundChromeUnder.
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
@@ -273,6 +271,7 @@ namespace spz {
 	                SpzUiThemeOps.ApplyRoundedControlSprite(face, markEligible: true);
 	                face.preserveAspect = false;
 	            }
+	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_openPanel_button);
 	        }
 	        // Do not recolor _dim_text / _connectionIcon — CheckConnection owns live status green/red.
 	        // Apply Nomad tracking/outline without replacing status RGB.
@@ -281,8 +280,10 @@ namespace spz {
 	            SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(_dim_text, status, 11f);
 	            _dim_text.color = status;
 	        }
-	        if (_connectionIcon != null)
+	        if (_connectionIcon != null) {
+	            SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(_connectionIcon);
 	            _connectionIcon.raycastTarget = false;
+	        }
 	        if (_panel != null) {
 	            var panelImg = _panel.GetComponent<Image>();
 	            if (panelImg != null)

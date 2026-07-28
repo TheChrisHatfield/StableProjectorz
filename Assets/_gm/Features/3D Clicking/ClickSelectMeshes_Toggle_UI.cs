@@ -67,6 +67,7 @@ namespace spz {
 	                SpzUiThemeOps.HideAuthoredGraphicForTheme(img);
 	        }
 	        SpzUiThemeOps.ApplyControlLineIcon(_selectMode_toggle.transform, StudioLineIcon.Cursor, 20f);
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_selectMode_toggle);
 	    }
 	}
 }//end namespace
