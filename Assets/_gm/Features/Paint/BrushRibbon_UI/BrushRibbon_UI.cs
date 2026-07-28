@@ -54,6 +54,7 @@ namespace spz {
 
 	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
 	        BrushRibbon_UI_Direction.OnDirectionToggleChanged += ApplyThemeTokens;
+	        DimensionMode_MGR._Act_OnDimensionChanged += OnDimensionChanged_Retheme;
 	    }
 
 	    void Start(){
@@ -63,9 +64,12 @@ namespace spz {
 	    void OnDestroy(){
 	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 	        BrushRibbon_UI_Direction.OnDirectionToggleChanged -= ApplyThemeTokens;
+	        DimensionMode_MGR._Act_OnDimensionChanged -= OnDimensionChanged_Retheme;
 	        if (instance == this)
 	            instance = null;
 	    }
+
+	    void OnDimensionChanged_Retheme(DimensionMode _) => ApplyThemeTokens();
 
 	    /// <summary>Nomad: flat tool cells + line icons on the brush strip (gated BoundChrome).</summary>
 	    public void ApplyThemeTokens() {
@@ -73,8 +77,7 @@ namespace spz {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            // MGR host is childless; restore each wired tool root (Direction lives on the workflow strip).
 	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
-	            if (dir != null)
-	                SpzUiThemeOps.RestoreBoundChromeUnder(dir.transform);
+	            ForEachDirectionHost(d => SpzUiThemeOps.RestoreBoundChromeUnder(d.transform));
 	            RestoreSelectableChrome(_bucketFill != null ? _bucketFill.Button : null);
 	            RestoreSelectableChrome(_invertMask != null ? _invertMask.Button : null);
 	            RestoreSelectableChrome(_deleteColorsButton != null ? _deleteColorsButton.Button : null);
@@ -99,22 +102,22 @@ namespace spz {
 	            SpzUiThemeOps.ApplyControlLineIcon(_deleteColorsButton.IconRoot, StudioLineIcon.Trash, 22f);
 	        if (_eyeDropperToggle != null)
 	            ThemeToolToggle(_eyeDropperToggle, StudioLineIcon.Eye, t, iconSizePx: 20f);
-	        if (dir != null)
-	            ThemeDirectionTools(dir, t);
+	        // Theme SD and Gen3D direction strips — ResolveDirection alone would leave the inactive mode SPZ.
+	        ForEachDirectionHost(d => ThemeDirectionTools(d, t));
 	        if (_pressureTabletMode != null)
 	            ThemePressureMode(_pressureTabletMode, t);
 	        if (_opacity != null)
 	            ThemeOpacityReadout(_opacity, t);
 	        // Labels live on cross-wired tool roots, not under this empty MGR transform.
 	        ThemeTmpUnder(_size != null ? _size.transform : null, t, excludeOpacityPressure: true);
-	        ThemeTmpUnder(dir != null ? dir.transform : null, t, excludeOpacityPressure: true);
+	        ForEachDirectionHost(d => ThemeTmpUnder(d.transform, t, excludeOpacityPressure: true));
 	        ThemeTmpUnder(_pressureTabletMode != null ? _pressureTabletMode.transform : null, t, excludeOpacityPressure: true);
 	        ThemeTmpUnder(_opacity != null ? _opacity.transform : null, t, excludeOpacityPressure: true);
 	    }
 
 	    /// <summary>
 	    /// BrushRibbon_UI_MGR is an empty host with cross-hierarchy refs — Direction is not a child.
-	    /// Prefer SD workflow direction over Gen3D (both derive from <see cref="BrushRibbon_UI_Direction"/>).
+	    /// Prefer the direction strip that matches the current dimension mode (Gen3D vs SD).
 	    /// </summary>
 	    public static BrushRibbon_UI_Direction ResolveDirection(Transform host) {
 	        if (host != null) {
@@ -122,13 +125,28 @@ namespace spz {
 	            if (local != null)
 	                return local;
 	        }
+	        bool preferGen3d = DimensionMode_MGR.instance != null
+	            && DimensionMode_MGR.instance._dimensionMode == DimensionMode.dim_gen_3d;
 	        var sd = UnityEngine.Object.FindFirstObjectByType<SD_BrushRibbon_UI_Direction>(FindObjectsInactive.Include);
-	        if (sd != null)
-	            return sd;
 	        var gen3d = UnityEngine.Object.FindFirstObjectByType<Gen3D_BrushRibbon_UI_Direction>(FindObjectsInactive.Include);
-	        if (gen3d != null)
-	            return gen3d;
+	        if (preferGen3d) {
+	            if (gen3d != null) return gen3d;
+	            if (sd != null) return sd;
+	        }
+	        else {
+	            if (sd != null) return sd;
+	            if (gen3d != null) return gen3d;
+	        }
 	        return UnityEngine.Object.FindFirstObjectByType<BrushRibbon_UI_Direction>(FindObjectsInactive.Include);
+	    }
+
+	    /// <summary>Both SD and Gen3D direction hosts must be themed — ResolveDirection alone leaves the other strip SPZ.</summary>
+	    static void ForEachDirectionHost(Action<BrushRibbon_UI_Direction> apply) {
+	        if (apply == null) return;
+	        var sd = UnityEngine.Object.FindFirstObjectByType<SD_BrushRibbon_UI_Direction>(FindObjectsInactive.Include);
+	        var gen3d = UnityEngine.Object.FindFirstObjectByType<Gen3D_BrushRibbon_UI_Direction>(FindObjectsInactive.Include);
+	        if (sd != null) apply(sd);
+	        if (gen3d != null) apply(gen3d);
 	    }
 
 	    BrushRibbon_UI_Direction ResolveDirection() => ResolveDirection(transform);
