@@ -843,9 +843,8 @@ namespace spz {
 			var checkImg = checkGo.AddComponent<Image>();
 			checkImg.color = new Color(0.3f, 0.6f, 1f, 1f);
 			checkImg.raycastTarget = false;
-			// Assign graphic before BoundChrome rounded/solid so IsToggleCheckmarkGraphic protects the ON glyph.
+			// Assign graphic before BoundChrome; never solid-square the ON glyph (IsToggleCheckmarkGraphic).
 			toggle.graphic = checkImg;
-			SpzUiThemeOps.ApplyRoundedControlSprite(checkImg, markEligible: true);
 
 			var labelGo = new GameObject("Label");
 			labelGo.transform.SetParent(toggleObj.transform, false);
