@@ -1055,7 +1055,7 @@ namespace spz {
 	            string hay = BuildStripTabMatchHaystack(cell);
 	            if (hay.IndexOf(needle, StringComparison.OrdinalIgnoreCase) < 0)
 	                continue;
-	            ApplyStudioTabChromeColors(cell, SpzUiThemeOps.Active);
+	            ApplyStudioTabChromeColors(cell, SpzUiThemeOps.Active, SpzUiThemeOps.ShouldRecolorBoundChrome);
 	            Transform iconTransform = SpzUiThemeOps.FindDirectChildIncludingInactive(cell, "MonolithLineIcon");
 	            if (iconTransform == null) {
 	                error = $"line icon missing after ensure on '{n}'";
