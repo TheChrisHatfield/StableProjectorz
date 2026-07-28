@@ -290,6 +290,10 @@ namespace spz {
 			foreach (var g in selectable.GetComponentsInChildren<Graphic>(true)) {
 				if (g == null) continue;
 				if (face != null && ReferenceEquals(g, face)) continue;
+				// Nested Button/Toggle/Dropdown faces must stay hittable when parent is themed.
+				var owner = g.GetComponentInParent<Selectable>(true);
+				if (owner != null && !ReferenceEquals(owner, selectable))
+					continue;
 				SnapshotAuthoredGraphic(g);
 				g.raycastTarget = false;
 			}
@@ -514,6 +518,8 @@ namespace spz {
 		/// Selectable chrome apply gated by <see cref="ShouldRecolorBoundChrome"/>.
 		/// Litmus expanded: hard opaque solid squares (SAVE 2K pattern) — no soft 9-slice / whiskers.
 		/// Does not hide Toggle.graphic checkmarks — Multiview POV bevel plates hide via name match.
+		/// Ends with <see cref="ClearNonFaceRaycastsForTheme"/> so TMP/icon children cannot steal hits
+		/// (ControlNet header/body, Paint tab, Settings, Art list, connection reset, etc.).
 		/// </summary>
 		public static void ApplyBoundChromeSelectable(Selectable selectable, Color normal, Color accent) {
 			if (selectable == null || selectable.targetGraphic == null)
@@ -524,6 +530,7 @@ namespace spz {
 				return;
 			}
 			ApplySolidSquareChrome(selectable, normal, accent);
+			ClearNonFaceRaycastsForTheme(selectable);
 		}
 
 		/// <summary>True when <paramref name="img"/> is a Toggle's ON-state graphic (checkmark / tick plate).</summary>
@@ -666,6 +673,13 @@ namespace spz {
 		static void SnapshotNomadTypography(TMP_Text text) {
 			if (text == null) return;
 			var tag = text.GetComponent<SpzUiThemeDesignTypography>();
+			bool PreferAuthoredRay(out bool ray) {
+				int gid = text.GetInstanceID();
+				if (AuthoredGraphicRaycasts.TryGetValue(gid, out ray))
+					return true;
+				ray = text.raycastTarget;
+				return false;
+			}
 			if (tag == null) {
 				tag = text.gameObject.AddComponent<SpzUiThemeDesignTypography>();
 				tag.characterSpacing = text.characterSpacing;
@@ -678,7 +692,8 @@ namespace spz {
 				tag.authoredFont = text.font;
 				tag.authoredFontSharedMaterial = text.fontSharedMaterial;
 				tag.hasFontSnapshot = true;
-				tag.authoredRaycastTarget = text.raycastTarget;
+				PreferAuthoredRay(out bool authoredRay);
+				tag.authoredRaycastTarget = authoredRay;
 				tag.hasRaycastSnapshot = true;
 				tag.hasSnapshot = true;
 			}
@@ -700,7 +715,10 @@ namespace spz {
 				tag.hasFontSnapshot = true;
 			}
 			if (!tag.hasRaycastSnapshot) {
-				tag.authoredRaycastTarget = text.raycastTarget;
+				// Prefer AuthoredGraphicRaycasts when ClearNonFace / ClearLabel already flipped current
+				// (otherwise leave-theme restores poisoned false).
+				PreferAuthoredRay(out bool authoredRay2);
+				tag.authoredRaycastTarget = authoredRay2;
 				tag.hasRaycastSnapshot = true;
 			}
 		}
