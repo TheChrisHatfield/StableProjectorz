@@ -172,4 +172,20 @@ public sealed class BoundChromePass10FunctionalTests {
 		string src = System.IO.File.ReadAllText(path);
 		Assert.That(src, Does.Contain("_numCams_numberText.raycastTarget = false"));
 	}
+
+	[Test]
+	public void StatusAndBrushDial_SourcesClearOverlayTmpRaycasts() {
+		string status = System.IO.File.ReadAllText(System.IO.Path.GetFullPath(System.IO.Path.Combine(
+			Application.dataPath, "Features/Viewport/Main Viewport/Viewport_StatusText.cs")));
+		Assert.That(status, Does.Contain("_statusText.raycastTarget = false"));
+
+		string opacity = System.IO.File.ReadAllText(System.IO.Path.GetFullPath(System.IO.Path.Combine(
+			Application.dataPath, "Features/Paint/BrushRibbon_UI/BrushRibbon_UI_Opacity.cs")));
+		Assert.That(opacity, Does.Contain("_brushOpacityText.raycastTarget = false"));
+
+		string size = System.IO.File.ReadAllText(System.IO.Path.GetFullPath(System.IO.Path.Combine(
+			Application.dataPath, "Features/Paint/BrushRibbon_UI/BrushRibbon_UI_Size.cs")));
+		Assert.That(size, Does.Contain("_brushSize_text.raycastTarget = false"));
+		Assert.That(size, Does.Contain("_brushSpacing_text.raycastTarget = false"));
+	}
 }
