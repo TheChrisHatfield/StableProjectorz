@@ -420,12 +420,12 @@ namespace spz {
 			ckR.anchorMax = Vector2.one;
 			ckR.sizeDelta = Vector2.zero;
 			var ckI = ck.AddComponent<UnityEngine.UI.Image>();
-			SpzUiThemeOps.ApplyRoundedControlSprite(ckI, markEligible: true);
 			ckI.color = new Color(0.2f, 0.8f, 0.2f, 1f);
 			ckI.raycastTarget = false;
 			var tgl = toggleContainer.AddComponent<Toggle>();
 			tgl.isOn = Addon_MGR.GetRememberEnabledAddonsPreference();
 			tgl.targetGraphic = bgI;
+			// Assign graphic before BoundChrome; never solid-square the ON glyph (IsToggleCheckmarkGraphic).
 			tgl.graphic = ckI;
 			tgl.onValueChanged.AddListener(OnRememberEnabledAddonsToggleChanged);
 			_rememberEnabledAddonToggle = tgl;
