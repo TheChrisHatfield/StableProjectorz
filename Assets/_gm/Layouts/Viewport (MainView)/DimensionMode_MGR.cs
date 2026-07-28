@@ -157,6 +157,9 @@ namespace spz {
 
 	    static void ApplyFlatDisc(Image img, bool selected, SpzUiThemeOps.ThemeTokens t) {
 	        if (img == null) return;
+	        // Mask / radial Filled dials must keep authored sprites (same litmus as ApplyRoundedControlSprite).
+	        if (SpzUiThemeOps.IsUiMaskGraphic(img) || img.type == Image.Type.Filled)
+	            return;
 	        Color fill = selected
 	            ? Color.Lerp(t.controlBg, t.accent, 0.22f)
 	            : t.controlBg;
@@ -166,6 +169,7 @@ namespace spz {
 	            tag = img.gameObject.AddComponent<SpzUiThemeRoundedControl>();
 	            tag.authoredSprite = img.sprite;
 	            tag.authoredType = img.type;
+	            tag.authoredPixelsPerUnitMultiplier = img.pixelsPerUnitMultiplier;
 	            tag.hasAuthoredSnapshot = true;
 	        }
 	        img.sprite = UiRuntimeSprites.CircleFilled;

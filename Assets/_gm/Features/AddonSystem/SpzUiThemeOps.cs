@@ -223,6 +223,7 @@ namespace spz {
 		public static void FlattenToolFaceImage(Image img) {
 			if (img == null || !ShouldRecolorBoundChrome) return;
 			if (IsUiMaskGraphic(img)) return;
+			if (img.type == Image.Type.Filled) return;
 			img.preserveAspect = false;
 			img.pixelsPerUnitMultiplier = 1f;
 			if (UiRuntimeSprites.IsCachedRoundedRect(img.sprite))
