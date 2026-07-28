@@ -226,12 +226,15 @@ namespace spz {
 	                || string.Equals(btn.gameObject.name, "Dropdown", System.StringComparison.Ordinal);
 	            Color fill = isField ? t.fieldBg : FlatCellFill(false, t);
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, fill, t.accent);
+	            if (IsWebFindButton(btn)) {
+	                // Globe: same hard square as prompt preset chips.
+	                SpzUiThemeOps.ThemePromptPresetSquareCell(btn, FlatCellFill(false, t), t.accent);
+	                SpzUiThemeOps.ApplyControlLineIcon(btn.transform, StudioLineIcon.Globe, 16f);
+	                continue;
+	            }
 	            if (btn.targetGraphic is Image btnImg) {
 	                SpzUiThemeOps.ApplyRoundedControlSprite(btnImg, markEligible: true);
 	            }
-	            // Prompt web-find globe button.
-	            if (IsWebFindButton(btn))
-	                SpzUiThemeOps.ApplyControlLineIcon(btn.transform, StudioLineIcon.Globe, 16f);
 	        }
 	        foreach (var toggle in root.GetComponentsInChildren<Toggle>(true)) {
 	            if (toggle == null || toggle.targetGraphic == null) continue;
@@ -281,6 +284,11 @@ namespace spz {
 	        ThemeResolutionPreset(_resolutionPreset_2048, 2048, t);
 	        foreach (var lg in root.GetComponentsInChildren<LayoutGroup>(true))
 	            SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
+	        // Re-assert preset chip gaps after layout scale (authored spacing 0 → scale still 0).
+	        foreach (var toggle in root.GetComponentsInChildren<Toggle>(true)) {
+	            if (toggle != null && IsPromptPresetToggle(toggle))
+	                SpzUiThemeOps.EnsurePromptPresetRowGaps(toggle.transform);
+	        }
 	    }
 
 	    /// <summary>Re-sync preset cell fills after a slot is selected (selection can change without ThemeChanged).</summary>
@@ -310,21 +318,7 @@ namespace spz {
 	    static void ThemePromptPresetToggle(Toggle toggle, SpzUiThemeOps.ThemeTokens t) {
 	        if (toggle == null || toggle.targetGraphic == null) return;
 	        Color fill = FlatCellFill(toggle.isOn, t);
-	        SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, fill, t.accent);
-	        if (toggle.targetGraphic is Image bg) {
-	            SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
-	        }
-	        // Hide SPZ embossed "pressed icon" overlays — flat fill + ColorBlock carry selection.
-	        if (toggle.graphic is Image press && press != toggle.targetGraphic)
-	            SpzUiThemeOps.HideAuthoredGraphicForTheme(press);
-	        foreach (var img in toggle.GetComponentsInChildren<Image>(true)) {
-	            if (img == null || img == toggle.targetGraphic) continue;
-	            string n = img.gameObject.name ?? "";
-	            if (n.IndexOf("pressed", System.StringComparison.OrdinalIgnoreCase) >= 0
-	                || n.Equals("tick", System.StringComparison.OrdinalIgnoreCase)
-	                || n.Equals("Checkmark", System.StringComparison.OrdinalIgnoreCase))
-	                SpzUiThemeOps.HideAuthoredGraphicForTheme(img);
-	        }
+	        SpzUiThemeOps.ThemePromptPresetSquareCell(toggle, fill, t.accent);
 	    }
 
 	    static Color FlatCellFill(bool selected, SpzUiThemeOps.ThemeTokens t) {

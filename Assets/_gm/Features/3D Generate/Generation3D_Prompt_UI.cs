@@ -93,11 +93,7 @@ namespace spz {
 	            Color fill = toggle.isOn
 	                ? Color.Lerp(t.controlBg, t.accent, 0.35f)
 	                : t.controlBg;
-	            SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, fill, t.accent);
-	            if (toggle.targetGraphic is Image bg)
-	                SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
-	            if (toggle.graphic is Image press && press != toggle.targetGraphic)
-	                SpzUiThemeOps.HideAuthoredGraphicForTheme(press);
+	            SpzUiThemeOps.ThemePromptPresetSquareCell(toggle, fill, t.accent);
 	            foreach (var tmp in toggle.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	                if (tmp != null)
 	                    SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, 11f);
