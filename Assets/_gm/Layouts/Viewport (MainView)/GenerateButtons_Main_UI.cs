@@ -226,14 +226,17 @@ namespace spz {
 	        ThemeGenButton(_generate3D_retexture_button, t);
 	        if (_cancelGeneration_button != null && _cancelGeneration_button.targetGraphic != null) {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_cancelGeneration_button, t.danger, t.accent);
+	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_cancelGeneration_button);
 	            var cancelLabel = _cancelGeneration_button.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	            if (cancelLabel != null)
 	                SpzUiThemeOps.ApplyBoundChromeTmp(cancelLabel, t.textPrimary);
 	        }
 	        if (_deleteLast_button != null) {
 	            var delBtn = _deleteLast_button.GetComponent<Button>();
-	            if (delBtn != null && delBtn.targetGraphic != null)
+	            if (delBtn != null && delBtn.targetGraphic != null) {
 	                SpzUiThemeOps.ApplyBoundChromeSelectable(delBtn, t.controlBg, t.accent);
+	                SpzUiThemeOps.ClearNonFaceRaycastsForTheme(delBtn);
+	            }
 	            var delLabel = _deleteLast_button.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	            if (delLabel != null)
 	                SpzUiThemeOps.ApplyBoundChromeTmp(delLabel, t.textPrimary);
@@ -258,10 +261,9 @@ namespace spz {
 	                SpzUiThemeOps.HideAuthoredGraphicForTheme(img);
 	        }
 	        var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
-	        if (label != null) {
-	            label.raycastTarget = false;
+	        if (label != null)
 	            SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(label, t.textPrimary, 14f);
-	        }
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }
 
 	    void UpdateTooltips_GenButtons(Button genArt, Button genBG, Button gen3D, Button gen3D_retex){
