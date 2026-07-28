@@ -40,6 +40,8 @@ namespace spz {
 	            GlobalClickBlocker.Unlock_if_can(who_is_requesting:this);
 	        }
 	        _isFirstToggleActivation = isOn;
+	        // BoundChrome selection fill is ColorTint-white — must retint face from isOn (Paint/Smudge parity).
+	        BrushRibbon_UI.instance?.ApplyThemeTokens();
 	    }
 
 	    // Core eyedropper functionality
