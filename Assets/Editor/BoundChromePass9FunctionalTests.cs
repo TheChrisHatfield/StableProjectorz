@@ -63,6 +63,20 @@ public sealed class BoundChromePass9FunctionalTests {
 	}
 
 	[Test]
+	public void FullSrnDock_SourceUsesBoundChromeSelectableAndClearNonFace() {
+		string path = System.IO.Path.GetFullPath(System.IO.Path.Combine(
+			Application.dataPath,
+			"..",
+			"Assets/_gm/Features/StableDiffusion/WorkflowToolsRibbon SD/RibbonViewportFullViewOnScreen_Toggle_UI.cs"));
+		string src = System.IO.File.ReadAllText(path);
+		int idx = src.IndexOf("void ApplyThemeTokens()", System.StringComparison.Ordinal);
+		Assert.That(idx, Is.GreaterThan(0));
+		string body = src.Substring(idx, System.Math.Min(2800, src.Length - idx));
+		Assert.That(body, Does.Contain("ApplyBoundChromeSelectable(_dockButton"));
+		Assert.That(body, Does.Contain("ClearNonFaceRaycastsForTheme(_dockButton)"));
+	}
+
+	[Test]
 	public void BrushRibbonAndGenButtons_SourceUseClearNonFaceRaycasts() {
 		string brush = System.IO.File.ReadAllText(System.IO.Path.GetFullPath(System.IO.Path.Combine(
 			Application.dataPath, "..", "Assets/_gm/Features/Paint/BrushRibbon_UI/BrushRibbon_UI.cs")));
