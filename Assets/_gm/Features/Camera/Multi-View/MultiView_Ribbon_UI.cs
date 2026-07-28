@@ -302,6 +302,7 @@ namespace spz {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_showGrid_toggle, normal, t.accent);
 	            if (_showGrid_toggle.graphic is Image gTick && gTick != _showGrid_toggle.targetGraphic)
 	                SpzUiThemeOps.HideAuthoredGraphicForTheme(gTick);
+	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_showGrid_toggle);
 	        }
 	        if (_editPOV_toggles == null) return;
 	        for (int i = 0; i < _editPOV_toggles.Count; i++) {
@@ -313,6 +314,7 @@ namespace spz {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(pov, normal, t.accent);
 	            if (pov.graphic is Image tick && tick != pov.targetGraphic)
 	                SpzUiThemeOps.HideAuthoredGraphicForTheme(tick);
+	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(pov);
 	        }
 	    }
 
