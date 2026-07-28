@@ -127,12 +127,21 @@ namespace spz {
 			new Dictionary<int, Color>();
 		static readonly Dictionary<int, ColorBlock> AuthoredColorBlocks =
 			new Dictionary<int, ColorBlock>();
+		static readonly Dictionary<int, float> AuthoredPixelsPerUnit =
+			new Dictionary<int, float>();
 
 		static void SnapshotAuthoredGraphic(Graphic graphic) {
 			if (graphic == null) return;
 			int id = graphic.GetInstanceID();
 			if (!AuthoredGraphicColors.ContainsKey(id))
 				AuthoredGraphicColors[id] = graphic.color;
+		}
+
+		static void SnapshotAuthoredPixelsPerUnit(Image image) {
+			if (image == null) return;
+			int id = image.GetInstanceID();
+			if (!AuthoredPixelsPerUnit.ContainsKey(id))
+				AuthoredPixelsPerUnit[id] = image.pixelsPerUnitMultiplier;
 		}
 
 		/// <summary>Snapshots Selectable ColorBlock once so Restore SPZ can unwind accent hover/press tints.</summary>
@@ -148,6 +157,8 @@ namespace spz {
 			if (graphic == null) return;
 			if (AuthoredGraphicColors.TryGetValue(graphic.GetInstanceID(), out Color c))
 				graphic.color = c;
+			if (graphic is Image img && AuthoredPixelsPerUnit.TryGetValue(img.GetInstanceID(), out float ppu))
+				img.pixelsPerUnitMultiplier = ppu;
 			if (graphic is TMP_Text tmp)
 				RestoreNomadTypography(tmp);
 		}
@@ -211,6 +222,7 @@ namespace spz {
 		/// </summary>
 		public static void FlattenToolFaceImage(Image img) {
 			if (img == null || !ShouldRecolorBoundChrome) return;
+			if (IsUiMaskGraphic(img)) return;
 			img.preserveAspect = false;
 			img.pixelsPerUnitMultiplier = 1f;
 			if (UiRuntimeSprites.IsCachedRoundedRect(img.sprite))
@@ -290,6 +302,9 @@ namespace spz {
 				RestoreAuthoredGraphic(graphic);
 				return;
 			}
+			// Mask sprites define clip shape (and often showMaskGraphic) — tint/flatten breaks Restore SPZ.
+			if (graphic is Image maskImg && IsUiMaskGraphic(maskImg))
+				return;
 			SnapshotAuthoredGraphic(graphic);
 			graphic.color = token;
 			if (graphic is Image img && !IsToggleCheckmarkGraphic(img))
@@ -321,14 +336,25 @@ namespace spz {
 		}
 
 		/// <summary>
+		/// True when <paramref name="img"/> drives a <see cref="Mask"/> (often with <c>showMaskGraphic</c>).
+		/// Solid-square / PPU rewrites turn soft mask sprites into white capsule artifacts after Restore SPZ
+		/// (workflow mode strip, hardness dial).
+		/// </summary>
+		public static bool IsUiMaskGraphic(Image img) {
+			return img != null && img.GetComponent<Mask>() != null;
+		}
+
+		/// <summary>
 		/// Converts authored <see cref="Image.Type.Sliced"/> chrome to a flat solid square.
-		/// Skips Nomad slider segment tiles, Toggle checkmarks, and <see cref="Image.Type.Filled"/>
+		/// Skips Nomad slider segment tiles, Toggle checkmarks, UI Mask sprites, and <see cref="Image.Type.Filled"/>
 		/// radial dials (CircleSlider) — flattening those into SolidRect causes overlay soup.
 		/// </summary>
 		public static void FlattenSlicedChromeFace(Image image) {
 			if (image == null || !ShouldRecolorBoundChrome)
 				return;
 			if (IsToggleCheckmarkGraphic(image))
+				return;
+			if (IsUiMaskGraphic(image))
 				return;
 			if (image.type == Image.Type.Filled)
 				return;
@@ -1231,17 +1257,22 @@ namespace spz {
 			SnapshotAuthoredGraphic(selectable.targetGraphic);
 			SnapshotAuthoredColorBlock(selectable);
 			ApplySelectableToken(selectable, fill, accent);
-			if (selectable.targetGraphic is Image face && !IsToggleCheckmarkGraphic(face)) {
+			if (selectable.targetGraphic is Image face
+			    && !IsToggleCheckmarkGraphic(face)
+			    && !IsUiMaskGraphic(face)) {
+				SnapshotAuthoredPixelsPerUnit(face);
 				var tag = face.GetComponent<SpzUiThemeRoundedControl>();
 				if (tag == null) {
 					tag = face.gameObject.AddComponent<SpzUiThemeRoundedControl>();
 					tag.authoredSprite = face.sprite;
 					tag.authoredType = face.type;
+					tag.authoredPixelsPerUnitMultiplier = face.pixelsPerUnitMultiplier;
 					tag.hasAuthoredSnapshot = true;
 				}
 				else if (!tag.hasAuthoredSnapshot) {
 					tag.authoredSprite = face.sprite;
 					tag.authoredType = face.type;
+					tag.authoredPixelsPerUnitMultiplier = face.pixelsPerUnitMultiplier;
 					tag.hasAuthoredSnapshot = true;
 				}
 				face.sprite = UiRuntimeSprites.SolidRect;
@@ -1275,6 +1306,8 @@ namespace spz {
 				return;
 			if (IsToggleCheckmarkGraphic(image))
 				return;
+			if (IsUiMaskGraphic(image))
+				return;
 			// Radial/filled dials must keep authored sprites (CircleSlider fillAmount).
 			if (image.type == Image.Type.Filled)
 				return;
@@ -1287,8 +1320,10 @@ namespace spz {
 				tag = image.gameObject.AddComponent<SpzUiThemeRoundedControl>();
 				tag.authoredSprite = image.sprite;
 				tag.authoredType = image.type;
+				tag.authoredPixelsPerUnitMultiplier = image.pixelsPerUnitMultiplier;
 				tag.hasAuthoredSnapshot = true;
 			}
+			SnapshotAuthoredPixelsPerUnit(image);
 			image.pixelsPerUnitMultiplier = 1f;
 			image.preserveAspect = false;
 			image.fillCenter = true;
@@ -1310,6 +1345,11 @@ namespace spz {
 				if (img != null && tag.hasAuthoredSnapshot) {
 					img.sprite = tag.authoredSprite;
 					img.type = tag.authoredType;
+					// Soft 9-slice Mask/chrome used high PPU (e.g. hardness 11); leaving 1 makes white capsule blobs.
+					if (AuthoredPixelsPerUnit.TryGetValue(img.GetInstanceID(), out float ppu))
+						img.pixelsPerUnitMultiplier = ppu;
+					else if (tag.authoredPixelsPerUnitMultiplier > 0.01f)
+						img.pixelsPerUnitMultiplier = tag.authoredPixelsPerUnitMultiplier;
 				}
 				if (Application.isPlaying)
 					UnityEngine.Object.Destroy(tag);
@@ -2056,6 +2096,7 @@ namespace spz {
 	public sealed class SpzUiThemeRoundedControl : MonoBehaviour {
 		public Sprite authoredSprite;
 		public Image.Type authoredType = Image.Type.Simple;
+		public float authoredPixelsPerUnitMultiplier = 1f;
 		public bool hasAuthoredSnapshot;
 	}
 

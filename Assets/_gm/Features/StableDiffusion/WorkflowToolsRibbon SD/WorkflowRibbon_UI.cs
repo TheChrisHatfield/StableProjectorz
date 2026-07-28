@@ -302,7 +302,7 @@ namespace spz {
 	    void ApplyThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            if (_holderGO_turnMeOnOff != null)
-	                SpzUiThemeOps.RestoreAuthoredGraphic(_holderGO_turnMeOnOff.GetComponent<Image>());
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_holderGO_turnMeOnOff.transform);
 	            RestoreWorkflowModeAuthored(_projMasking as MonoBehaviour);
 	            RestoreWorkflowModeAuthored(_coloring as MonoBehaviour);
 	            RestoreWorkflowModeAuthored(_colorless as MonoBehaviour);
