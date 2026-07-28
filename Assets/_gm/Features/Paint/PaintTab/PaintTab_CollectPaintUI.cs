@@ -536,13 +536,26 @@ namespace spz {
 			return flipToggle != null && strictIsoRoot != null;
 		}
 
+		/// <summary>
+		/// Tool-row / checkbox face: BoundChrome tokens when active, else authored SPZ on/off colors.
+		/// </summary>
+		static Color PaintToolFaceColor(bool on, Color authoredOn, Color authoredOff)
+		{
+			if (!SpzUiThemeOps.ShouldRecolorBoundChrome)
+				return on ? authoredOn : authoredOff;
+			var t = SpzUiThemeOps.Active;
+			return on
+				? Color.Lerp(t.controlBg, t.accent, 0.14f)
+				: t.controlBg;
+		}
+
 		static void RegisterStrictIsolationBrushOptsHandlersForUi(Toggle flipToggle, GameObject strictIsoRoot)
 		{
 			if (flipToggle == null || strictIsoRoot == null) return;
 			UnregisterStrictIsolationBrushOptsHandlers();
 
-			Color offCol = new Color(0.34f, 0.36f, 0.4f, 1f);
-			Color onCol = new Color(0.22f, 0.45f, 0.55f, 1f);
+			Color authoredOff = new Color(0.34f, 0.36f, 0.4f, 1f);
+			Color authoredOn = new Color(0.22f, 0.45f, 0.55f, 1f);
 
 			void SyncFlipToggleFromStore()
 			{
@@ -550,7 +563,7 @@ namespace spz {
 				bool on = PaintTab_StrictIsolationBrushOptions.FlipInvertIsolationMask;
 				flipToggle.SetIsOnWithoutNotify(on);
 				if (flipToggle.targetGraphic is Image img)
-					img.color = on ? onCol : offCol;
+					img.color = PaintToolFaceColor(on, authoredOn, authoredOff);
 			}
 
 			void SyncVisibility() => SyncStrictIsolationBrushOptsVisibilityForRoot(strictIsoRoot);
@@ -1595,14 +1608,14 @@ namespace spz {
 
 		static void MakeDepthLimitToggle(Transform parent)
 		{
-			Color offCol = new Color(0.3f, 0.3f, 0.3f, 1f);
-			Color onCol = new Color(0.2f, 0.55f, 0.35f, 1f);
+			Color authoredOff = new Color(0.3f, 0.3f, 0.3f, 1f);
+			Color authoredOn = new Color(0.2f, 0.55f, 0.35f, 1f);
 
 			var go = new GameObject("Btn_DepthLimit");
 			go.transform.SetParent(parent, false);
 			go.AddComponent<RectTransform>();
 			var img = go.AddComponent<Image>();
-			img.color = offCol;
+			img.color = PaintToolFaceColor(false, authoredOn, authoredOff);
 			img.raycastTarget = true;
 			var btn = go.AddComponent<Button>();
 
@@ -1621,7 +1634,7 @@ namespace spz {
 			{
 				var ribbon = SD_WorkflowOptionsRibbon_UI.instance;
 				bool isOn = ribbon != null && ribbon.brushDepthLimit01 > 0f;
-				img.color = isOn ? onCol : offCol;
+				img.color = PaintToolFaceColor(isOn, authoredOn, authoredOff);
 				txt.text = isOn ? "Depth Limit\n<size=8>ON</size>" : "Depth Limit\n<size=8>OFF</size>";
 			};
 			refreshButtonState();
@@ -1868,8 +1881,8 @@ namespace spz {
 		static Toggle MakeBrushOptsCheckboxRow(Transform parent, string rowName, string labelText, bool initialOn,
 			UnityEngine.Events.UnityAction<bool> onChanged)
 		{
-			Color offCol = new Color(0.34f, 0.36f, 0.4f, 1f);
-			Color onCol = new Color(0.22f, 0.45f, 0.55f, 1f);
+			Color authoredOff = new Color(0.34f, 0.36f, 0.4f, 1f);
+			Color authoredOn = new Color(0.22f, 0.45f, 0.55f, 1f);
 			var row = new GameObject(rowName);
 			row.transform.SetParent(parent, false);
 			row.AddComponent<RectTransform>();
@@ -1892,7 +1905,7 @@ namespace spz {
 			boxLe.minWidth = 36;
 			boxLe.preferredWidth = 36;
 			var img = boxGo.AddComponent<Image>();
-			img.color = initialOn ? onCol : offCol;
+			img.color = PaintToolFaceColor(initialOn, authoredOn, authoredOff);
 			var toggle = boxGo.AddComponent<Toggle>();
 			toggle.targetGraphic = img;
 			toggle.graphic = null;
@@ -1905,7 +1918,7 @@ namespace spz {
 			toggle.isOn = initialOn;
 			toggle.onValueChanged.AddListener(isOn =>
 			{
-				img.color = isOn ? onCol : offCol;
+				img.color = PaintToolFaceColor(isOn, authoredOn, authoredOff);
 				onChanged?.Invoke(isOn);
 			});
 
@@ -2430,7 +2443,7 @@ namespace spz {
 			le.minHeight = 28;
 			le.preferredHeight = 28;
 			var img = go.AddComponent<Image>();
-			img.color = offCol;
+			img.color = PaintToolFaceColor(false, onCol, offCol);
 			var toggle = go.AddComponent<Toggle>();
 			toggle.targetGraphic = img;
 			toggle.group = group;
@@ -2443,7 +2456,7 @@ namespace spz {
 			toggle.colors = cb;
 			toggle.onValueChanged.AddListener(isOn =>
 			{
-				img.color = isOn ? onCol : offCol;
+				img.color = PaintToolFaceColor(isOn, onCol, offCol);
 				if (isOn && onChosenWhenOn != null) onChosenWhenOn();
 			});
 
@@ -2463,14 +2476,14 @@ namespace spz {
 		/// <summary>Vertical mirror: duplicate brush at x&apos; = 1−x in viewport UV (inpaint, projection, background mask).</summary>
 		static void MakePaintSymmetryToggle(Transform parent)
 		{
-			Color offCol = new Color(0.3f, 0.3f, 0.3f, 1f);
-			Color onCol = new Color(0.38f, 0.26f, 0.52f, 1f);
+			Color authoredOff = new Color(0.3f, 0.3f, 0.3f, 1f);
+			Color authoredOn = new Color(0.38f, 0.26f, 0.52f, 1f);
 
 			var go = new GameObject("Btn_PaintSymmetry");
 			go.transform.SetParent(parent, false);
 			go.AddComponent<RectTransform>();
 			var img = go.AddComponent<Image>();
-			img.color = offCol;
+			img.color = PaintToolFaceColor(false, authoredOn, authoredOff);
 			img.raycastTarget = true;
 			var btn = go.AddComponent<Button>();
 
@@ -2488,7 +2501,7 @@ namespace spz {
 			void RefreshSymmetryButton()
 			{
 				bool on = BrushRibbon_UI_Size.GetPaintSymmetryXOn();
-				img.color = on ? onCol : offCol;
+				img.color = PaintToolFaceColor(on, authoredOn, authoredOff);
 				int szLine = kSymmetryOnOffSublineTmpSize;
 				txt.text = on
 					? $"Symmetry\n<size={szLine}>On</size>"
