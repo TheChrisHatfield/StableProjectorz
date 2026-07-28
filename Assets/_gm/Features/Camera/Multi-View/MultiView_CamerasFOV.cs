@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace spz {
 
@@ -63,11 +64,40 @@ namespace spz {
 
 	        _camera_FOV_slider.GetComponent<EventTrigger>().triggers.Add(entryDown);
 	        _camera_FOV_slider.GetComponent<EventTrigger>().triggers.Add(entryUp);
+
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	    }
+
+	    void Start(){
+	        ApplyThemeTokens();
 	    }
 
 	    void OnDestroy(){
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 	        UserCameras_MGR._Act_OnRestoreCameraPlacements -= OnCameraPlacements_Restored;
 	        UserCameras_MGR._Act_OnFovChanged -= OnCameraMGR_FovChanged;
+	    }
+
+	    void ApplyThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
+	            if (_camera_FOV_slider != null && _camera_FOV_slider.UnitySlider != null)
+	                SpzUiThemeOps.ApplyNomadSliderChrome(_camera_FOV_slider.UnitySlider);
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        if (_cam_FOV_numberText != null) {
+	            // Snapshot first — FOV overlay must not steal slider drag (num-cams litmus).
+	            SpzUiThemeOps.ApplyBoundChromeTmp(_cam_FOV_numberText, t.textPrimary);
+	            _cam_FOV_numberText.raycastTarget = false;
+	        }
+	        foreach (var tmp in GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (tmp == null || tmp == _cam_FOV_numberText) continue;
+	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	        }
+	        // Pill + segmented coral fill + bullseye (SliderUI_Snapping also applies; keep explicit for FOV).
+	        if (_camera_FOV_slider != null && _camera_FOV_slider.UnitySlider != null)
+	            SpzUiThemeOps.ApplyNomadSliderChrome(_camera_FOV_slider.UnitySlider);
 	    }
 
 	}
