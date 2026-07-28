@@ -253,7 +253,7 @@ namespace spz {
 
 	    /// <summary>
 	    /// Colors SD SERV / 3D SERV chrome and the IP panel.
-	    /// Leaves <see cref="_dim_text"/> and <see cref="_connectionIcon"/> to connectivity logic (green/red/orange).
+	    /// Leaves <see cref="_dim_text"/> / <see cref="_connectionIcon"/> RGB to connectivity logic (green/red/orange).
 	    /// </summary>
 	    void ApplyThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
@@ -261,6 +261,9 @@ namespace spz {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
 	            if (_panel != null)
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_panel.transform);
+	            // Prefab icon is raycastTarget; Nomad clears it so status glyph does not steal open-panel clicks.
+	            if (_connectionIcon != null)
+	                _connectionIcon.raycastTarget = true;
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
@@ -278,6 +281,8 @@ namespace spz {
 	            SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(_dim_text, status, 11f);
 	            _dim_text.color = status;
 	        }
+	        if (_connectionIcon != null)
+	            _connectionIcon.raycastTarget = false;
 	        if (_panel != null) {
 	            var panelImg = _panel.GetComponent<Image>();
 	            if (panelImg != null)
