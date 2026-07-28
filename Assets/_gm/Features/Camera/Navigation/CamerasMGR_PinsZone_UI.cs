@@ -707,8 +707,12 @@ namespace spz {
 	                else if (img.type == Image.Type.Sliced && !SpzUiThemeOps.IsToggleCheckmarkGraphic(img))
 	                    SpzUiThemeOps.FlattenSlicedChromeFace(img);
 	            }
-	            foreach (var tmp in pin.GetComponentsInChildren<TextMeshProUGUI>(true))
+	            foreach (var tmp in pin.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	                if (tmp == null) continue;
+	                // Snapshot first via ApplyBoundChromeTmp, then clear — POV digit labels must not steal pin grab.
 	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	                tmp.raycastTarget = false;
+	            }
 	        }
 	        if (_noEditMode_enabledGO != null) {
 	            var zoneImg = _noEditMode_enabledGO.GetComponent<Image>();
