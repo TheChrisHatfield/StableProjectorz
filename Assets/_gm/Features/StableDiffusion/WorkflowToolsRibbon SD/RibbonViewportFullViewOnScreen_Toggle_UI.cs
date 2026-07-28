@@ -1064,7 +1064,8 @@ namespace spz {
 			} else {
 				if (label != null) {
 					label.maxVisibleCharacters = int.MaxValue;
-					label.color = Color.black;
+					// Restore authored TMP — do not force Color.black after RestoreBoundChromeUnder (kills leave litmus).
+					SpzUiThemeOps.RestoreAuthoredGraphic(label);
 				}
 				if (iconImg != null)
 					iconImg.gameObject.SetActive(false);
