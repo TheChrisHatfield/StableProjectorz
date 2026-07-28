@@ -174,6 +174,20 @@ public sealed class BoundChromePass10FunctionalTests {
 	}
 
 	[Test]
+	public void MultiviewFov_SourceClearsNumberTextRaycastAfterBoundChromeTmp() {
+		string path = System.IO.Path.GetFullPath(System.IO.Path.Combine(
+			Application.dataPath,
+			"..",
+			"Assets/_gm/Features/Camera/Multi-View/MultiView_CamerasFOV.cs"));
+		string src = System.IO.File.ReadAllText(path);
+		Assert.That(src, Does.Contain("ApplyBoundChromeTmp(_cam_FOV_numberText"));
+		Assert.That(src, Does.Contain("_cam_FOV_numberText.raycastTarget = false"));
+		int tmp = src.IndexOf("ApplyBoundChromeTmp(_cam_FOV_numberText", System.StringComparison.Ordinal);
+		int clear = src.IndexOf("_cam_FOV_numberText.raycastTarget = false", System.StringComparison.Ordinal);
+		Assert.That(clear, Is.GreaterThan(tmp));
+	}
+
+	[Test]
 	public void StatusAndBrushDial_SourcesClearOverlayTmpRaycasts() {
 		string status = System.IO.File.ReadAllText(System.IO.Path.GetFullPath(System.IO.Path.Combine(
 			Application.dataPath, "_gm/Features/Viewport/Main Viewport/Viewport_StatusText.cs")));
