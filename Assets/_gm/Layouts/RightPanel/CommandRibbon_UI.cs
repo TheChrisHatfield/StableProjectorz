@@ -647,6 +647,8 @@ namespace spz {
 	                            c.a = Mathf.Max(c.a, 0.55f);
 	                            SpzUiThemeOps.ApplyBoundChromeGraphic(divImg, c);
 	                        }
+	                        // Dividers are visual only — never steal adjacent tab clicks.
+	                        divImg.raycastTarget = false;
 	                    }
 	                    continue;
 	                }
@@ -707,6 +709,8 @@ namespace spz {
 	                label.maxVisibleCharacters = int.MaxValue;
 	            }
 	            ApplyStudioTabChromeColors(cell, t, recolorChrome: false);
+	            // Dividers / go-active / labels still steal hits if left raycastable after Nomad leave.
+	            ClearStripTabNonFaceRaycasts(cell);
 	            return;
 	        }
 
@@ -715,6 +719,7 @@ namespace spz {
 	        if (face != null) {
 	            SpzUiThemeOps.ApplyBoundChromeGraphic(face, fill);
 	            FlattenStripTabFace(face);
+	            face.raycastTarget = true;
 	        }
 
 	        var active = cell.Find("go active");
@@ -741,6 +746,25 @@ namespace spz {
 	        }
 
 	        ApplyStudioTabChromeColors(cell, t, recolorChrome: true);
+	        ClearStripTabNonFaceRaycasts(cell);
+	    }
+
+	    /// <summary>
+	    /// Prefab divider left/right, go-active pill, and TMP labels ship with raycastTarget=1 and
+	    /// steal clicks from the tab Button under Nomad icon-only (tight cells). Only the Button face hits.
+	    /// </summary>
+	    static void ClearStripTabNonFaceRaycasts(Transform cell) {
+	        if (cell == null) return;
+	        var btn = cell.GetComponent<Button>();
+	        Graphic face = btn != null ? btn.targetGraphic : FindStripTabFaceImage(cell);
+	        foreach (var g in cell.GetComponentsInChildren<Graphic>(true)) {
+	            if (g == null) continue;
+	            if (face != null && ReferenceEquals(g, face)) {
+	                g.raycastTarget = true;
+	                continue;
+	            }
+	            g.raycastTarget = false;
+	        }
 	    }
 
 	    string BuildStripSelectionKey() {
