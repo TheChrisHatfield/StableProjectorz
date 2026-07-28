@@ -140,6 +140,69 @@ public sealed class CommandRibbonStripRaycastThemeTests {
 	}
 
 	[Test]
+	public void ClearStripTabNonFaceRaycasts_NullFace_DoesNotMassClear() {
+		var cell = new GameObject("orphan tab", typeof(RectTransform), typeof(Button));
+		cell.SetActive(false);
+		try {
+			var btn = cell.GetComponent<Button>();
+			btn.targetGraphic = null;
+			// No TabBg — FindStripTabFaceImage returns null.
+			var labelGo = new GameObject("Label", typeof(RectTransform));
+			labelGo.transform.SetParent(cell.transform, false);
+			var label = labelGo.AddComponent<TextMeshProUGUI>();
+			label.raycastTarget = true;
+
+			var clear = typeof(CommandRibbon_UI).GetMethod(
+				"ClearStripTabNonFaceRaycasts",
+				BindingFlags.Static | BindingFlags.NonPublic);
+			Assert.That(clear, Is.Not.Null);
+			clear.Invoke(null, new object[] { cell.transform });
+
+			Assert.That(label.raycastTarget, Is.True, "must not clear when face unresolved");
+		}
+		finally {
+			Object.DestroyImmediate(cell);
+		}
+	}
+
+	[Test]
+	public void ClearStripTabNonFaceRaycasts_SnapshotsRaycastForLeaveRestore() {
+		var cell = new GameObject("art list", typeof(RectTransform), typeof(Button));
+		cell.SetActive(false);
+		try {
+			var tabBgGo = new GameObject("TabBg", typeof(RectTransform), typeof(Image));
+			tabBgGo.transform.SetParent(cell.transform, false);
+			var tabBg = tabBgGo.GetComponent<Image>();
+			tabBg.raycastTarget = true;
+			cell.GetComponent<Button>().targetGraphic = tabBg;
+
+			var labelGo = new GameObject("Label", typeof(RectTransform));
+			labelGo.transform.SetParent(cell.transform, false);
+			var label = labelGo.AddComponent<TextMeshProUGUI>();
+			label.raycastTarget = true;
+
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				new JObject { ["control_bg"] = "#292A2EFF", ["accent"] = "#F2CA50FF" },
+				"replace",
+				out string error), Is.True, error);
+
+			var clear = typeof(CommandRibbon_UI).GetMethod(
+				"ClearStripTabNonFaceRaycasts",
+				BindingFlags.Static | BindingFlags.NonPublic);
+			clear.Invoke(null, new object[] { cell.transform });
+			Assert.That(label.raycastTarget, Is.False);
+
+			SpzUiThemeOps.RestoreBoundChromeUnder(cell.transform);
+			Assert.That(label.raycastTarget, Is.True, "Restore SPZ must unwind ClearStrip raycast clears");
+		}
+		finally {
+			Object.DestroyImmediate(cell);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
 	public void SettingsLauncher_SourceClearsChildGraphicRaycasts() {
 		string path = Path.GetFullPath(Path.Combine(
 			Application.dataPath,

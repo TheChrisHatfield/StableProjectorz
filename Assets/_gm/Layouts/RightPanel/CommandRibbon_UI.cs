@@ -767,12 +767,17 @@ namespace spz {
 	        // Prefab tabs ship with null targetGraphic; wire TabBg so ColorTint + hits stay on the face.
 	        if (btn != null && btn.targetGraphic == null && face != null)
 	            btn.targetGraphic = face;
+	        // No resolvable face → do not mass-clear (would make the whole tab unclickable under Nomad).
+	        if (face == null)
+	            return;
 	        foreach (var g in cell.GetComponentsInChildren<Graphic>(true)) {
 	            if (g == null) continue;
-	            if (face != null && ReferenceEquals(g, face)) {
+	            if (ReferenceEquals(g, face)) {
+	                SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(g);
 	                g.raycastTarget = true;
 	                continue;
 	            }
+	            SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(g);
 	            g.raycastTarget = false;
 	        }
 	    }

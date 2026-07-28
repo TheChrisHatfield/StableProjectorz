@@ -141,6 +141,9 @@ namespace spz {
 				AuthoredGraphicRaycasts[id] = graphic.raycastTarget;
 		}
 
+		/// <summary>Public snapshot so ClearStrip / launcher paths can unwind Image raycasts on Restore SPZ.</summary>
+		public static void SnapshotAuthoredGraphicForTheme(Graphic graphic) => SnapshotAuthoredGraphic(graphic);
+
 		static void SnapshotAuthoredPixelsPerUnit(Image image) {
 			if (image == null) return;
 			int id = image.GetInstanceID();
