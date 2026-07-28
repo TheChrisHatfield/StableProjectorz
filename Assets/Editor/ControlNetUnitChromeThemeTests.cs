@@ -201,6 +201,56 @@ public sealed class ControlNetUnitChromeThemeTests {
 		}
 	}
 
+	[Test]
+	public void RefreshBoundChromeSelection_KeepsContextCheckmarkEnabled() {
+		var root = new GameObject("ControlNetRefreshCheck");
+		root.SetActive(false);
+		try {
+			var unit = root.AddComponent<ControlNetUnit_UI>();
+			Toggle MakeMode(string name) {
+				var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Toggle));
+				go.transform.SetParent(root.transform, false);
+				var tog = go.GetComponent<Toggle>();
+				tog.targetGraphic = go.GetComponent<Image>();
+				return tog;
+			}
+			SetPrivate(unit, "_balanced_toggle", MakeMode("B"));
+			SetPrivate(unit, "_promptImportant_toggle", MakeMode("P"));
+			SetPrivate(unit, "_ctrlNetImportant_toggle", MakeMode("C"));
+			SetPrivate(unit, "_lowVRAM_toggle", MakeMode("LOW"));
+
+			var menuTogGo = new GameObject("PixelPerfect", typeof(RectTransform), typeof(Image), typeof(Toggle));
+			menuTogGo.transform.SetParent(root.transform, false);
+			var menuTog = menuTogGo.GetComponent<Toggle>();
+			menuTog.targetGraphic = menuTogGo.GetComponent<Image>();
+			var checkGo = new GameObject("Checkmark", typeof(RectTransform), typeof(Image));
+			checkGo.transform.SetParent(menuTogGo.transform, false);
+			var check = checkGo.GetComponent<Image>();
+			check.enabled = true;
+			menuTog.graphic = check;
+
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				new JObject {
+					["control_bg"] = "#25262AFF",
+					["accent"] = "#F2CA50FF",
+					["success"] = "#7BC96FFF",
+				},
+				"replace",
+				out string error), Is.True, error);
+
+			InvokePrivate(unit, "ApplyThemeTokens");
+			Assert.That(check.enabled, Is.True);
+			unit.RefreshBoundChromeSelection();
+			Assert.That(check.enabled, Is.True, "P/B/C refresh must not flatten context Checkmarks");
+			Assert.That(check.color, Is.EqualTo(SpzUiThemeOps.Active.success));
+		}
+		finally {
+			Object.DestroyImmediate(root);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
 	static void SetPrivate(object target, string fieldName, object value) {
 		var f = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
 		Assert.That(f, Is.Not.Null, fieldName);

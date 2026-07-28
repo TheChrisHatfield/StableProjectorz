@@ -295,14 +295,16 @@ namespace spz {
 	        RefreshBoundChromeSelection();
 	    }
 
-	    /// <summary>Re-tint flat toggle cells after P/B/C/LOW/res/image selection changes.</summary>
+	    /// <summary>Re-tint flat toggle cells after P/B/C/LOW selection changes.</summary>
 	    public void RefreshBoundChromeSelection() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) return;
 	        var t = SpzUiThemeOps.Active;
 	        ThemeHeaderModeToggles(t);
+	        // Non-header toggles are real checkboxes (resize/context) — never ThemeFlatToggleCell
+	        // (that hides Checkmark glyphs and undoes ApplyThemeTokens checkbox silo).
 	        foreach (var toggle in GetComponentsInChildren<Toggle>(true)) {
 	            if (toggle == null || IsHeaderModeToggle(toggle)) continue;
-	            ThemeFlatToggleCell(toggle, t);
+	            ThemeCheckboxToggle(toggle, t);
 	        }
 	    }
 
