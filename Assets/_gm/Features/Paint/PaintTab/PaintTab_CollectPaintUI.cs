@@ -670,7 +670,7 @@ namespace spz {
 					bool on = PaintTab_SmudgeBrushOptions.IncludeUvMeshInLayerSmudge;
 					smudgeMeshUnderToggle.SetIsOnWithoutNotify(on);
 					if (smudgeMeshUnderToggle.targetGraphic is Image img)
-						img.color = on ? meshUvUnderOn : meshUvUnderOff;
+						img.color = PaintToolFaceColor(on, meshUvUnderOn, meshUvUnderOff);
 				}
 			}
 
@@ -2288,7 +2288,7 @@ namespace spz {
 				{
 					if (t == null) continue;
 					var img = t.targetGraphic as Image;
-					if (img != null) img.color = t.isOn ? radioOn : radioOff;
+					if (img != null) img.color = PaintToolFaceColor(t.isOn, radioOn, radioOff);
 				}
 			}
 
