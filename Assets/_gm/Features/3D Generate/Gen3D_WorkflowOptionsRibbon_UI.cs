@@ -282,7 +282,8 @@ namespace spz {
 	        Color face = toggle.isOn
 	            ? Color.Lerp(tokens.tabActive, tokens.accent, 0.45f)
 	            : tokens.controlBg;
-	        SpzUiThemeOps.ThemeCheckboxToggle(toggle, face, tokens.accent, tokens.success);
+	        // Alpha/Screenshots are bevel tool radios — flat fill + hide Checkmark plate (not checkbox silo).
+	        SpzUiThemeOps.ThemeFlatToolToggle(toggle, face, tokens.accent, tokens.textPrimary);
 	    }
 
 	}
