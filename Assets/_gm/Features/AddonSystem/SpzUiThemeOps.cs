@@ -1155,20 +1155,7 @@ namespace spz {
 				bool isField = button.GetComponent<TMP_Dropdown>() != null
 					|| string.Equals(button.gameObject.name, "Dropdown", StringComparison.Ordinal);
 				Color normal = isField ? tokens.fieldBg : tokens.controlBg;
-				// Image.color is the token; ColorBlock stays a white-based multiplier so Unity does
-				// not darken tokens by multiplying the same color twice.
-				button.targetGraphic.color = normal;
-				if (button.targetGraphic is Image btnImg)
-					ApplyRoundedControlSprite(btnImg);
-				SnapshotAuthoredColorBlock(button);
-				var colors = button.colors;
-				colors.normalColor = Color.white;
-				colors.highlightedColor = Color.Lerp(Color.white, tokens.accent, 0.25f);
-				colors.pressedColor = Color.Lerp(Color.white, tokens.accent, 0.55f);
-				colors.selectedColor = colors.highlightedColor;
-				colors.disabledColor = new Color(1f, 1f, 1f, 0.4f);
-				colors.colorMultiplier = 1f;
-				button.colors = colors;
+				ApplyBoundChromeSelectable(button, normal, tokens.accent);
 			}
 
 			foreach (var input in root.GetComponentsInChildren<TMP_InputField>(true)) {
@@ -1176,7 +1163,7 @@ namespace spz {
 					continue;
 				var bg = input.GetComponent<Image>();
 				if (bg != null) {
-					bg.color = tokens.fieldBg;
+					ApplyBoundChromeGraphic(bg, tokens.fieldBg);
 					ApplyRoundedControlSprite(bg);
 				}
 			}
@@ -1186,33 +1173,28 @@ namespace spz {
 					continue;
 				var bg = slider.GetComponent<Image>();
 				if (bg != null) {
-					bg.color = tokens.fieldBg;
+					ApplyBoundChromeGraphic(bg, tokens.fieldBg);
 					ApplyRoundedControlSprite(bg);
 				}
 				if (slider.fillRect != null) {
 					var fill = slider.fillRect.GetComponent<Image>();
 					if (fill != null)
-						fill.color = tokens.accent;
+						ApplyBoundChromeGraphic(fill, tokens.accent);
 				}
 				if (slider.handleRect != null) {
 					var handleImage = slider.handleRect.GetComponent<Image>();
 					if (handleImage != null)
-						handleImage.color = tokens.handle;
+						ApplyBoundChromeGraphic(handleImage, tokens.handle);
 				}
 			}
 
 			foreach (var toggle in root.GetComponentsInChildren<Toggle>(true)) {
 				if (toggle == null || toggle.targetGraphic == null)
 					continue;
-				Color normal = toggle.isOn
+				Color face = toggle.isOn
 					? Color.Lerp(tokens.tabActive, tokens.accent, 0.45f)
 					: tokens.controlBg;
-				SnapshotAuthoredColorBlock(toggle);
-				ApplySelectableToken(toggle, normal, tokens.accent);
-				if (toggle.targetGraphic is Image toggleBg)
-					ApplyRoundedControlSprite(toggleBg);
-				if (toggle.graphic is Image check)
-					check.color = tokens.accent;
+				ThemeCheckboxToggle(toggle, face, tokens.accent, tokens.success);
 			}
 
 			foreach (var text in root.GetComponentsInChildren<TextMeshProUGUI>(true)) {
@@ -1221,8 +1203,7 @@ namespace spz {
 				Color c = string.Equals(text.gameObject.name, "Placeholder", StringComparison.Ordinal)
 					? tokens.textMuted
 					: tokens.textPrimary;
-				float basePt = ResolveOrCaptureDesignFontPt(text, 14f);
-				ApplyTmpScaled(text, c, basePt);
+				ApplyBoundChromeTmp(text, c, 14f);
 			}
 
 			foreach (var img in root.GetComponentsInChildren<Image>(true)) {
@@ -1419,18 +1400,13 @@ namespace spz {
 			foreach (var button in root.GetComponentsInChildren<Button>(true)) {
 				if (button == null || button.targetGraphic == null)
 					continue;
-				SnapshotAuthoredGraphic(button.targetGraphic);
-				SnapshotAuthoredColorBlock(button);
-				ApplySelectableToken(button, tokens.controlBg, tokens.accent);
-				if (button.targetGraphic is Image btnImg)
-					ApplyRoundedControlSprite(btnImg);
+				ApplyBoundChromeSelectable(button, tokens.controlBg, tokens.accent);
 			}
 
 			foreach (var text in root.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 				if (text == null)
 					continue;
-				SnapshotAuthoredGraphic(text);
-				ApplyTmpScaledCaptured(text, tokens.textPrimary);
+				ApplyBoundChromeTmp(text, tokens.textPrimary);
 			}
 
 			foreach (var slider in root.GetComponentsInChildren<Slider>(true)) {
