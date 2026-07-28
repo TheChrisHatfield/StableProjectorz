@@ -373,6 +373,14 @@ namespace spz {
 	            t.textPrimary,
 	            20f,
 	            tmp => !IsExcludedWorkflowLabel(tmp.transform, modeUi.transform));
+	        // Labels / plates / Monolith overlays must not steal mode clicks (gen path depends on workflow mode).
+	        if (toggle != null) {
+	            foreach (var g in toggle.GetComponentsInChildren<Graphic>(true)) {
+	                if (g == null || ReferenceEquals(g, toggle.targetGraphic)) continue;
+	                SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(g);
+	                g.raycastTarget = false;
+	            }
+	        }
 	    }
 
 	    static bool IsExcludedWorkflowLabel(Transform label, Transform modeRoot) {
