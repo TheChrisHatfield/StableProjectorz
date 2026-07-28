@@ -276,6 +276,25 @@ namespace spz {
 		}
 
 		/// <summary>
+		/// After BoundChrome hide-Checkmark / flat fill: only <see cref="Selectable.targetGraphic"/> receives hits.
+		/// Snapshots authored raycasts so <see cref="RestoreBoundChromeUnder"/> can unwind (Pass9 litmus).
+		/// </summary>
+		public static void ClearNonFaceRaycastsForTheme(Selectable selectable) {
+			if (selectable == null || !ShouldRecolorBoundChrome) return;
+			Graphic face = selectable.targetGraphic;
+			if (face != null) {
+				SnapshotAuthoredGraphic(face);
+				face.raycastTarget = true;
+			}
+			foreach (var g in selectable.GetComponentsInChildren<Graphic>(true)) {
+				if (g == null) continue;
+				if (face != null && ReferenceEquals(g, face)) continue;
+				SnapshotAuthoredGraphic(g);
+				g.raycastTarget = false;
+			}
+		}
+
+		/// <summary>
 		/// Prompt-header preset / web-find cells: hard Nomad square (not SPZ sliced round chip),
 		/// equal W×H layout, emboss plates hidden. Selection = fill color only.
 		/// </summary>
@@ -313,13 +332,14 @@ namespace spz {
 					if (n.IndexOf("pressed", StringComparison.OrdinalIgnoreCase) >= 0
 					    || n.Equals("tick", StringComparison.OrdinalIgnoreCase)
 					    || n.Equals("Checkmark", StringComparison.OrdinalIgnoreCase)) {
+						SnapshotAuthoredGraphic(img);
 						img.raycastTarget = false;
 						HideAuthoredGraphicForTheme(img);
 					}
 				}
 			}
-			// Visible break between glued preset chips (authored HLG spacing is 0).
 			EnsurePromptPresetRowGaps(selectable.transform);
+			ClearNonFaceRaycastsForTheme(selectable);
 		}
 
 		/// <summary>Force LayoutElement preferred/min height to match width so chips read as squares.</summary>
