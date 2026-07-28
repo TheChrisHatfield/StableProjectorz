@@ -586,8 +586,10 @@ namespace spz {
 	    }
 
 	    static void ThemeTmp(TextMeshProUGUI tmp, SpzUiThemeOps.ThemeTokens t) {
-	        if (tmp != null)
-	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	        if (tmp == null) return;
+	        // Snapshot first — rethink/blur readouts sit beside GenArt and must not steal hits.
+	        SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	        tmp.raycastTarget = false;
 	    }
 
 	    static void ThemeCircle(CircleSlider_Snapping_UI slider, SpzUiThemeOps.ThemeTokens t) {
