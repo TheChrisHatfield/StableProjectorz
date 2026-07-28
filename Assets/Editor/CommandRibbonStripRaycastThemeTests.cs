@@ -16,12 +16,17 @@ public sealed class CommandRibbonStripRaycastThemeTests {
 		Assert.That(File.Exists(path), Is.True, path);
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("ClearStripTabNonFaceRaycasts"));
-		Assert.That(src, Does.Contain("Dividers are visual only"));
-		int clear = src.IndexOf("static void ClearStripTabNonFaceRaycasts", System.StringComparison.Ordinal);
-		Assert.That(clear, Is.GreaterThan(0));
-		string body = src.Substring(clear, System.Math.Min(700, src.Length - clear));
-		Assert.That(body, Does.Contain("g.raycastTarget = false"));
-		Assert.That(body, Does.Contain("raycastTarget = true"));
+		Assert.That(src, Does.Contain("HideMonolithOverlaysUnder"));
+		Assert.That(src, Does.Contain("never on Restore SPZ leave"));
+		int theme = src.IndexOf("void ThemeStripTabCell", System.StringComparison.Ordinal);
+		Assert.That(theme, Is.GreaterThan(0));
+		int leave = src.IndexOf("if (!recolorChrome)", theme, System.StringComparison.Ordinal);
+		int nomad = src.IndexOf("Color fill = FlatStripTabFill", theme, System.StringComparison.Ordinal);
+		Assert.That(leave, Is.GreaterThan(0));
+		Assert.That(nomad, Is.GreaterThan(leave));
+		string leaveBody = src.Substring(leave, nomad - leave);
+		Assert.That(leaveBody, Does.Not.Contain("ClearStripTabNonFaceRaycasts"));
+		Assert.That(src.IndexOf("ClearStripTabNonFaceRaycasts(cell)", nomad, System.StringComparison.Ordinal), Is.GreaterThan(0));
 	}
 
 	[Test]
