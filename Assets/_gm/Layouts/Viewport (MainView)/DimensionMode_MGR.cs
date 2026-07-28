@@ -132,10 +132,17 @@ namespace spz {
 	            _dimensionMode == DimensionMode.dim_uv, t);
 	        ApplyFlatDiscsUnder(_bg_choice_button != null ? _bg_choice_button.transform : null, selected: false, t);
 	        ApplyReverseOutLabel(_mainChoice_text, t, 22f);
+	        if (_mainChoice_text != null)
+	            _mainChoice_text.raycastTarget = false;
 	        ApplyReverseOutLabelsUnder(_3d_choice_button, t);
 	        ApplyReverseOutLabelsUnder(_sd_choice_button, t);
 	        ApplyReverseOutLabelsUnder(_uv_choice_button, t);
 	        ApplyReverseOutLabelsUnder(_bg_choice_button, t);
+	        // Flat Checkmark overlays keep authored raycasts — silo hits to each Button face (gen mode litmus).
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_3d_choice_button);
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_sd_choice_button);
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_uv_choice_button);
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_bg_choice_button);
 	    }
 
 	    static void ApplyFlatDiscsUnder(Transform root, bool selected, SpzUiThemeOps.ThemeTokens t) {
