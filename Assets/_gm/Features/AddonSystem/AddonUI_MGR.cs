@@ -61,7 +61,7 @@ namespace spz {
 				["icon_tint"] = "#D0C5AFFF",
 				["font_scale"] = fontScale,
 				["spacing_scale"] = spacingScale,
-				["corner_radius"] = 5,
+				["corner_radius"] = 0,
 				["panel_width"] = 220,
 				["panel_alpha"] = 0.92,
 				["ribbon_icon_only"] = 1,
@@ -111,8 +111,8 @@ namespace spz {
 				yield break;
 			}
 			UnityEngine.Debug.Log($"[AddonUI_MGR] Theme restore: {detail}");
-			if (string.Equals(SpzUiThemeOps.ActiveThemeId, NomadThemeId, StringComparison.Ordinal)) {
-				// Do not compose charcoal skybox — SPZ background stays with Nomad chrome.
+			if (SpzUiThemeOps.ShouldRecolorBoundChrome) {
+				// Do not compose charcoal skybox — SPZ background stays with BoundChrome.
 				ComposeNomadStripIconsNative();
 			}
 		}
