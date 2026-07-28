@@ -1398,9 +1398,8 @@ namespace spz {
 				ThemeFilterToggle(_filterDisabledToggle, t);
 			}
 			if (_rememberEnabledAddonToggle != null) {
-				SpzUiThemeOps.ApplyBoundChromeSelectable(_rememberEnabledAddonToggle, t.controlBg, t.accent);
-				if (_rememberEnabledAddonToggle.graphic != null)
-					SpzUiThemeOps.ApplyBoundChromeGraphic(_rememberEnabledAddonToggle.graphic, t.success);
+				SpzUiThemeOps.ThemeCheckboxToggle(
+					_rememberEnabledAddonToggle, t.controlBg, t.accent, t.success);
 			}
 		}
 

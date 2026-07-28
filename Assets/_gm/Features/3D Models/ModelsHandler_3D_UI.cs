@@ -198,12 +198,12 @@ namespace spz {
 	        ThemeChromeButton(_selectAll_button, t);
 	        ThemeChromeButton(_deleteAllNonSelected_button, t);
 	        if (_showVertexColors_toggle != null) {
+	            ThemeVertexColorsToggle(t);
 	            var btn = _showVertexColors_toggle.GetComponent<Button>();
-	            if (btn != null && btn.targetGraphic != null)
-	                SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
-	            var label = _showVertexColors_toggle.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
-	            if (label != null)
-	                SpzUiThemeOps.ApplyBoundChromeTmp(label, t.textPrimary);
+	            if (btn != null) {
+	                btn.onClick.RemoveListener(OnVertexColorsChromeChanged);
+	                btn.onClick.AddListener(OnVertexColorsChromeChanged);
+	            }
 	        }
 	        if (_contentParent != null) {
 	            var img = _contentParent.GetComponent<Image>();
@@ -217,6 +217,21 @@ namespace spz {
 	        var rootImg = GetComponent<Image>();
 	        if (rootImg != null)
 	            SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.panelBg);
+	    }
+
+	    void OnVertexColorsChromeChanged() => ThemeVertexColorsToggle(SpzUiThemeOps.Active);
+
+	    void ThemeVertexColorsToggle(SpzUiThemeOps.ThemeTokens t) {
+	        if (_showVertexColors_toggle == null || !SpzUiThemeOps.ShouldRecolorBoundChrome) return;
+	        var btn = _showVertexColors_toggle.GetComponent<Button>();
+	        Color fill = _showVertexColors_toggle.isPressed
+	            ? Color.Lerp(t.controlBg, t.accent, 0.14f)
+	            : t.controlBg;
+	        if (btn != null && btn.targetGraphic != null)
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, fill, t.accent);
+	        var label = _showVertexColors_toggle.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+	        if (label != null)
+	            SpzUiThemeOps.ApplyBoundChromeTmp(label, t.textPrimary);
 	    }
 
 	    static void ThemeChromeButton(Button btn, SpzUiThemeOps.ThemeTokens t) {
