@@ -245,8 +245,9 @@ namespace spz {
 	        var t = SpzUiThemeOps.Active;
 	        if (_save_texResQuality_text != null) {
 	            var saveBtn = _save_texResQuality_text.GetComponentInParent<Button>();
-	            if (saveBtn != null && saveBtn.targetGraphic != null)
-	                SpzUiThemeOps.ApplyBoundChromeSelectable(saveBtn, t.success, t.accent);
+	            // Litmus: SAVE Nx is a hard solid square — no bevel corners / 9-slice chevrons.
+	            if (saveBtn != null)
+	                SpzUiThemeOps.ApplySolidSquareChrome(saveBtn, t.success, t.accent);
 	            SpzUiThemeOps.ApplyBoundChromeTmp(_save_texResQuality_text, t.textPrimary);
 	        }
 	        if (_sub_texResolutionQuality != null && _sub_texResolutionQuality.targetGraphic != null)
