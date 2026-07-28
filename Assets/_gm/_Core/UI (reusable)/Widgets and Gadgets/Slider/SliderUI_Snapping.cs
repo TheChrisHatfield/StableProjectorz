@@ -30,12 +30,18 @@ namespace spz {
 	    bool _floatInputFieldActive = false;
 	    public float value{ get =>_slider.value; }
 
+	    public Slider UnitySlider => _slider;
+
 	    public void AdjustMinMax(Vector2 newMinMax, float newValueAndDefault, bool invokeCallback){
 	        _slider.minValue = _min = newMinMax.x;
 	        _slider.maxValue = _max = newMinMax.y;
 	        _slider.SetValueWithoutNotify(newValueAndDefault);
 	        _default = newValueAndDefault;
 	        if(invokeCallback){ _slider.onValueChanged?.Invoke(_slider.value); }
+	    }
+
+	    void Awake(){
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
 	    }
 
 	    void Start(){
@@ -51,6 +57,25 @@ namespace spz {
 	            SetSliderValue(_default, false);
 	        }
 	        GetComponent<RightMouseClickListener_UI>().OnRightClick +=  ()=>{ _slider.value = _default; };
+	        ApplyThemeTokens();
+	    }
+
+	    void OnDestroy(){
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	    }
+
+	    /// <summary>Nomad pill / segmented fill / bullseye (vertical) when BoundChrome is active.</summary>
+	    void ApplyThemeTokens() {
+	        SpzUiThemeOps.ApplyNomadSliderChrome(_slider);
+	        if (_text != null) {
+	            if (SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	                SpzUiThemeOps.ApplyBoundChromeTmp(_text, SpzUiThemeOps.Active.textPrimary);
+	                // Value overlay is usually not under a Selectable face — keep track/handle hittable.
+	                _text.raycastTarget = false;
+	            }
+	            else
+	                SpzUiThemeOps.ApplyBoundChromeTmp(_text, Color.white);
+	        }
 	    }
 
 	    void OnSliderValChanged(float val){
