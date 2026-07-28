@@ -190,8 +190,18 @@ namespace spz {
 			if (toggle == null || toggle.targetGraphic == null)
 				return;
 			ApplyBoundChromeSelectable(toggle, face, accent);
-			if (toggle.graphic != null)
+			if (toggle.graphic != null) {
+				// Solid-square name-hide can disable a Checkmark child before we tint it — force ON glyph back.
+				toggle.graphic.enabled = true;
+				var hidden = toggle.graphic.GetComponent<SpzUiThemeHiddenGraphic>();
+				if (hidden != null) {
+					if (Application.isPlaying)
+						UnityEngine.Object.Destroy(hidden);
+					else
+						UnityEngine.Object.DestroyImmediate(hidden);
+				}
 				ApplyBoundChromeGraphic(toggle.graphic, checkSuccess);
+			}
 		}
 
 		/// <summary>
