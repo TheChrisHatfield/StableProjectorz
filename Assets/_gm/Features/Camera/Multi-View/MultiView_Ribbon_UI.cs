@@ -340,8 +340,10 @@ namespace spz {
 	            if (gLabel != null)
 	                SpzUiThemeOps.ApplyBoundChromeTmp(gLabel, t.textPrimary);
 	        }
-	        if (_numCams_numberText != null)
+	        if (_numCams_numberText != null) {
 	            SpzUiThemeOps.ApplyBoundChromeTmp(_numCams_numberText, t.textPrimary);
+	            _numCams_numberText.raycastTarget = false;
+	        }
 	        if (_numCameras_slider != null && _numCameras_slider.UnitySlider != null)
 	            SpzUiThemeOps.ApplyNomadSliderChrome(_numCameras_slider.UnitySlider);
 	        if (_editPOV_toggles != null) {
