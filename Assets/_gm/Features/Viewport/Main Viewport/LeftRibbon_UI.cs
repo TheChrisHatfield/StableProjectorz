@@ -1,3 +1,4 @@
+using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -170,8 +171,8 @@ namespace spz {
 	    /// Avoids SetAsLastSibling / full retheme every frame.
 	    /// </summary>
 	    void SyncNomadChromeSelectionIfChanged() {
-	        bool nomad = string.Equals(SpzUiThemeOps.ActiveThemeId, "nomad-inspired", System.StringComparison.Ordinal);
-	        if (!nomad) {
+	        bool bound = SpzUiThemeOps.ShouldRecolorBoundChrome;
+	        if (!bound) {
 	            if (_lastNomadChrome) {
 	                // Full retheme restores fill colors + hides bars. Hiding bars alone left gold
 	                // selectable fills if ThemeChanged aborted before SnapshotNomadChromeSelection.
@@ -202,7 +203,7 @@ namespace spz {
 	    }
 
 	    void SnapshotNomadChromeSelection() {
-	        _lastNomadChrome = string.Equals(SpzUiThemeOps.ActiveThemeId, "nomad-inspired", System.StringComparison.Ordinal);
+	        _lastNomadChrome = SpzUiThemeOps.ShouldRecolorBoundChrome;
 	        _lastDepthModeOn = _toggleDepthMode_button != null && _toggleDepthMode_button.isOn;
 	        _lastFinalBlurInsideOn = _depthFinalBlur_Inside_toggle != null && _depthFinalBlur_Inside_toggle.isOn;
 	        _lastWireframePressed = _toggleWireframe != null && _toggleWireframe.isPressed;
@@ -367,17 +368,38 @@ namespace spz {
 
 	    public void Load( StableProjectorz_SL spz ){
 	        MainViewWindow_ToolsRibbon_SL trSL = spz.mainViewWindow_ToolsRibbon;
-	        if (trSL == null) return;
-	        _toggleWireframe.ForceSameValueAs( trSL.isShowWireframe );
-        
-	        _depthContrast_slider.SetSliderValue( trSL.depthContrast, true);
-	        _depthBrightness_slider.SetSliderValue( trSL.depthBrightness, true);
+	        if (trSL != null) {
+	            _toggleWireframe.ForceSameValueAs( trSL.isShowWireframe );
 
-	        _depthBlur_StepSize_slider.SetSliderValue(trSL.depthBlur_stepSize, true);
-	        _depthSharpBlur_slider.SetSliderValue( trSL.depth_sharpBlur, true );
+	            _depthContrast_slider.SetSliderValue( trSL.depthContrast, true);
+	            _depthBrightness_slider.SetSliderValue( trSL.depthBrightness, true);
 
-	        _depthBlurFinal_StepSize_slider.SetSliderValue(trSL.depthBlurFinal_stepSize, true);
-	        _depthFinalBlur_Inside_toggle.isOn = trSL.depth_finalBlur_inside;
+	            _depthBlur_StepSize_slider.SetSliderValue(trSL.depthBlur_stepSize, true);
+	            _depthSharpBlur_slider.SetSliderValue( trSL.depth_sharpBlur, true );
+
+	            _depthBlurFinal_StepSize_slider.SetSliderValue(trSL.depthBlurFinal_stepSize, true);
+	            _depthFinalBlur_Inside_toggle.isOn = trSL.depth_finalBlur_inside;
+	        }
+
+	        // Project load must return to textured viewport. Nomad DEP chrome + FileBrowser click-through
+	        // can leave "Black Background (SD Depth)" on — reads as black silhouette / "backwards" mesh.
+	        EnsureDepthPreviewOff();
+	        if (isActiveAndEnabled)
+	            StartCoroutine(CoEnsureDepthPreviewOffNextFrame());
+	    }
+
+	    /// <summary>Force DEP off and UsualView (safe if already off).</summary>
+	    public void EnsureDepthPreviewOff() {
+	        if (_toggleDepthMode_button != null)
+	            _toggleDepthMode_button.SetIsOnWithoutNotify(false);
+	        if (MainViewport_UI.instance != null)
+	            MainViewport_UI.instance.ToggleShowDepth(false);
+	        SnapshotNomadChromeSelection();
+	    }
+
+	    IEnumerator CoEnsureDepthPreviewOffNextFrame() {
+	        yield return null;
+	        EnsureDepthPreviewOff();
 	    }
 
 	}
