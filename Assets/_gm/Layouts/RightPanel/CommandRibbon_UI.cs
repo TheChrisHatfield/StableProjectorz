@@ -632,8 +632,11 @@ namespace spz {
 
 	        Transform strip = ResolveEffectiveTabStripTransform();
 	        if (strip != null) {
-	            if (!recolorChrome)
+	            if (!recolorChrome) {
 	                SpzUiThemeOps.RestoreBoundChromeUnder(strip);
+	                // Belt-and-suspenders: Nomad Monolith overlays must not remain blended over OG tabs.
+	                HideMonolithOverlaysUnder(strip);
+	            }
 
 	            for (int i = 0; i < strip.childCount; i++) {
 	                Transform cell = strip.GetChild(i);
@@ -709,8 +712,6 @@ namespace spz {
 	                label.maxVisibleCharacters = int.MaxValue;
 	            }
 	            ApplyStudioTabChromeColors(cell, t, recolorChrome: false);
-	            // Dividers / go-active / labels still steal hits if left raycastable after Nomad leave.
-	            ClearStripTabNonFaceRaycasts(cell);
 	            return;
 	        }
 
@@ -752,6 +753,7 @@ namespace spz {
 	    /// <summary>
 	    /// Prefab divider left/right, go-active pill, and TMP labels ship with raycastTarget=1 and
 	    /// steal clicks from the tab Button under Nomad icon-only (tight cells). Only the Button face hits.
+	    /// Call only while BoundChrome is active — never on Restore SPZ leave (that undoes authored raycasts).
 	    /// </summary>
 	    static void ClearStripTabNonFaceRaycasts(Transform cell) {
 	        if (cell == null) return;
@@ -764,6 +766,17 @@ namespace spz {
 	                continue;
 	            }
 	            g.raycastTarget = false;
+	        }
+	    }
+
+	    /// <summary>Force-hide Nomad MonolithLineIcon / MonolithActiveBar under a strip root (Restore SPZ).</summary>
+	    static void HideMonolithOverlaysUnder(Transform root) {
+	        if (root == null) return;
+	        foreach (var tr in root.GetComponentsInChildren<Transform>(true)) {
+	            if (tr == null) continue;
+	            string n = tr.name ?? "";
+	            if (n == "MonolithLineIcon" || n == "MonolithActiveBar")
+	                tr.gameObject.SetActive(false);
 	        }
 	    }
 

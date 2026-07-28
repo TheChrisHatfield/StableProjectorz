@@ -899,15 +899,29 @@ namespace spz {
 	    /// </summary>
 	    void ThemeSettingsLauncherButtons() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
-	            if (_openSettingsPanel_button != null)
+	            if (_openSettingsPanel_button != null) {
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_openSettingsPanel_button.transform);
-	            if (_openHelpSettingsPanel_button != null)
+	                HideMonolithUnder(_openSettingsPanel_button.transform);
+	            }
+	            if (_openHelpSettingsPanel_button != null) {
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_openHelpSettingsPanel_button.transform);
+	                HideMonolithUnder(_openHelpSettingsPanel_button.transform);
+	            }
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
 	        ThemeFlatLauncherButton(_openSettingsPanel_button, StudioLineIcon.Settings, t);
 	        ThemeFlatLauncherButton(_openHelpSettingsPanel_button, StudioLineIcon.Eye, t);
+	    }
+
+	    static void HideMonolithUnder(Transform root) {
+	        if (root == null) return;
+	        foreach (var tr in root.GetComponentsInChildren<Transform>(true)) {
+	            if (tr == null) continue;
+	            string n = tr.name ?? "";
+	            if (n == "MonolithLineIcon" || n == "MonolithActiveBar")
+	                tr.gameObject.SetActive(false);
+	        }
 	    }
 
 	    /// <summary>
