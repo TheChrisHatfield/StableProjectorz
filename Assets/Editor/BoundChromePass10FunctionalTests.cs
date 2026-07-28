@@ -87,4 +87,66 @@ public sealed class BoundChromePass10FunctionalTests {
 		string src = System.IO.File.ReadAllText(path);
 		Assert.That(src, Does.Contain("ClearNonFaceRaycastsForTheme(_rembg_button)"));
 	}
+
+	[Test]
+	public void ApplyBoundChromeSelectable_ClearsNonFaceAndSkipsNestedSelectable() {
+		var parent = new GameObject("ParentBtn", typeof(RectTransform), typeof(Image), typeof(Button));
+		var child = new GameObject("ChildBtn", typeof(RectTransform), typeof(Image), typeof(Button));
+		parent.SetActive(false);
+		child.SetActive(false);
+		try {
+			child.transform.SetParent(parent.transform, false);
+			var pFace = parent.GetComponent<Image>();
+			pFace.raycastTarget = true;
+			var pBtn = parent.GetComponent<Button>();
+			pBtn.targetGraphic = pFace;
+			var labelGo = new GameObject("Label", typeof(RectTransform));
+			labelGo.transform.SetParent(parent.transform, false);
+			var label = labelGo.AddComponent<TextMeshProUGUI>();
+			label.raycastTarget = true;
+
+			var cFace = child.GetComponent<Image>();
+			cFace.raycastTarget = true;
+			var cBtn = child.GetComponent<Button>();
+			cBtn.targetGraphic = cFace;
+
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				new JObject {
+					["control_bg"] = "#292A2EFF",
+					["accent"] = "#F2CA50FF",
+					["text_primary"] = "#E3E2E7FF",
+				},
+				"replace",
+				out string error), Is.True, error);
+
+			var t = SpzUiThemeOps.Active;
+			SpzUiThemeOps.ApplyBoundChromeSelectable(pBtn, t.controlBg, t.accent);
+
+			Assert.That(pFace.raycastTarget, Is.True);
+			Assert.That(label.raycastTarget, Is.False);
+			Assert.That(cFace.raycastTarget, Is.True, "nested Selectable face must stay hittable");
+		}
+		finally {
+			Object.DestroyImmediate(parent);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
+	public void PinsZone_SourceClearsTmpRaycastAfterBoundChromeTmp() {
+		string path = System.IO.Path.GetFullPath(System.IO.Path.Combine(
+			Application.dataPath,
+			"..",
+			"Assets/_gm/Features/Camera/Navigation/CamerasMGR_PinsZone_UI.cs"));
+		string src = System.IO.File.ReadAllText(path);
+		int idx = src.IndexOf("void ApplyPinsChromeThemeTokens()", System.StringComparison.Ordinal);
+		Assert.That(idx, Is.GreaterThan(0));
+		string body = src.Substring(idx, System.Math.Min(2800, src.Length - idx));
+		Assert.That(body, Does.Contain("ApplyBoundChromeTmp"));
+		Assert.That(body, Does.Contain("tmp.raycastTarget = false"));
+		int tmp = body.IndexOf("ApplyBoundChromeTmp(tmp", System.StringComparison.Ordinal);
+		int clear = body.IndexOf("tmp.raycastTarget = false", System.StringComparison.Ordinal);
+		Assert.That(clear, Is.GreaterThan(tmp));
+	}
 }
