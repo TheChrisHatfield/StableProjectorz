@@ -183,6 +183,27 @@ namespace spz {
 	        _makeScreenshots_toggle.isOn = false;
         
 	        _rgba_to_a_mat = new Material(_rgba_to_a_shader);
+
+	        WireOptionToggleChromeRefresh(_showAlphaOnly_toggle);
+	        WireOptionToggleChromeRefresh(_makeScreenshots_toggle);
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        ApplyThemeTokens();
+	    }
+
+	    void WireOptionToggleChromeRefresh(Toggle toggle) {
+	        if (toggle == null) return;
+	        toggle.onValueChanged.RemoveListener(OnOptionToggleChromeChanged);
+	        toggle.onValueChanged.AddListener(OnOptionToggleChromeChanged);
+	    }
+
+	    void OnOptionToggleChromeChanged(bool _) => RefreshOptionToggleChrome();
+
+	    /// <summary>Re-tint Alpha/Screenshots fills from current isOn (BoundChrome only).</summary>
+	    public void RefreshOptionToggleChrome() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) return;
+	        var t = SpzUiThemeOps.Active;
+	        ThemeToggle(_showAlphaOnly_toggle, t);
+	        ThemeToggle(_makeScreenshots_toggle, t);
 	    }
 
 	    void Start(){
@@ -190,8 +211,67 @@ namespace spz {
 	    }
 
 	    void OnDestroy(){
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	        if (_showAlphaOnly_toggle != null)
+	            _showAlphaOnly_toggle.onValueChanged.RemoveListener(OnOptionToggleChromeChanged);
+	        if (_makeScreenshots_toggle != null)
+	            _makeScreenshots_toggle.onValueChanged.RemoveListener(OnOptionToggleChromeChanged);
 	        Screenshot_MGR._Act_OnScreenshot -= OnSomeScreenshotTaken;
 	        DestroyImmediate(_rgba_to_a_mat);
+	        if (instance == this)
+	            instance = null;
+	    }
+
+	    void ApplyThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            if (_wholePanel_canvGrp != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_wholePanel_canvGrp.transform);
+	            RestoreSelectable(_showAlphaOnly_toggle);
+	            RestoreSelectable(_makeScreenshots_toggle);
+	            RestoreSelectable(_rembg_button);
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        if (_wholePanel_canvGrp != null) {
+	            var panelImg = _wholePanel_canvGrp.GetComponent<Image>();
+	            if (panelImg != null)
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(panelImg, t.panelBg);
+	            foreach (var tmp in _wholePanel_canvGrp.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	                if (tmp != null)
+	                    SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	            }
+	        }
+	        ThemeTmp(_rembg_backgroundTxt, t);
+	        ThemeTmp(_rembg_foregroundTxt, t);
+	        ThemeCircle(_rembg_backgroundThresh, t);
+	        ThemeCircle(_rembg_foregroundThresh, t);
+	        ThemeToggle(_showAlphaOnly_toggle, t);
+	        ThemeToggle(_makeScreenshots_toggle, t);
+	        if (_rembg_button != null && _rembg_button.targetGraphic != null)
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(_rembg_button, t.controlBg, t.accent);
+	    }
+
+	    static void RestoreSelectable(Selectable s) {
+	        if (s != null)
+	            SpzUiThemeOps.RestoreBoundChromeUnder(s.transform);
+	    }
+
+	    static void ThemeTmp(TextMeshProUGUI tmp, SpzUiThemeOps.ThemeTokens t) {
+	        if (tmp != null)
+	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	    }
+
+	    static void ThemeCircle(CircleSlider_Snapping_UI slider, SpzUiThemeOps.ThemeTokens t) {
+	        if (slider != null)
+	            slider.ApplyThemeTokens(t.accent, t.textPrimary);
+	    }
+
+	    static void ThemeToggle(Toggle toggle, SpzUiThemeOps.ThemeTokens tokens) {
+	        if (toggle == null) return;
+	        Color face = toggle.isOn
+	            ? Color.Lerp(tokens.tabActive, tokens.accent, 0.45f)
+	            : tokens.controlBg;
+	        SpzUiThemeOps.ThemeCheckboxToggle(toggle, face, tokens.accent, tokens.success);
 	    }
 
 	}
