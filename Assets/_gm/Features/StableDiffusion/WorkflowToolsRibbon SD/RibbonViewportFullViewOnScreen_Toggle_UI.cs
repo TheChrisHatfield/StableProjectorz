@@ -1102,7 +1102,11 @@ namespace spz {
 			}
 			string raw = "FULL\nSRN";
 			tmp.text = raw.ToUpperInvariant();
-			tmp.color = Color.black;
+			// Never hardcode black before BoundChrome snapshot — that sticks after Restore SPZ.
+			if (SpzUiThemeOps.ShouldRecolorBoundChrome)
+				SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(tmp, SpzUiThemeOps.Active.textPrimary, 14f);
+			else
+				SpzUiThemeOps.RestoreAuthoredGraphic(tmp);
 			tmp.fontStyle = FontStyles.Bold;
 			tmp.alignment = TextAlignmentOptions.Center;
 			tmp.horizontalAlignment = HorizontalAlignmentOptions.Center;
