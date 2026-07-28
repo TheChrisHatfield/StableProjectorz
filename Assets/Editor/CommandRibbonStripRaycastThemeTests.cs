@@ -1,11 +1,22 @@
 using System.IO;
+using System.Reflection;
+using Newtonsoft.Json.Linq;
 using NUnit.Framework;
+using spz;
+using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
 /// Command ribbon strip tabs: only the Button face may raycast — dividers/labels steal clicks under Nomad.
+/// Prefab tabs often ship with null targetGraphic; clearing must still keep TabBg hittable.
 /// </summary>
 public sealed class CommandRibbonStripRaycastThemeTests {
+
+	[TearDown]
+	public void TearDown() {
+		SpzUiThemeOps.ResetTheme();
+	}
 
 	[Test]
 	public void ThemeStripTabCell_SourceClearsNonFaceRaycasts() {
@@ -17,7 +28,7 @@ public sealed class CommandRibbonStripRaycastThemeTests {
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("ClearStripTabNonFaceRaycasts"));
 		Assert.That(src, Does.Contain("HideMonolithOverlaysUnder"));
-		Assert.That(src, Does.Contain("never on Restore SPZ leave"));
+		Assert.That(src, Does.Contain("Button.targetGraphic == null"));
 		int theme = src.IndexOf("void ThemeStripTabCell", System.StringComparison.Ordinal);
 		Assert.That(theme, Is.GreaterThan(0));
 		int leave = src.IndexOf("if (!recolorChrome)", theme, System.StringComparison.Ordinal);
@@ -27,6 +38,105 @@ public sealed class CommandRibbonStripRaycastThemeTests {
 		string leaveBody = src.Substring(leave, nomad - leave);
 		Assert.That(leaveBody, Does.Not.Contain("ClearStripTabNonFaceRaycasts"));
 		Assert.That(src.IndexOf("ClearStripTabNonFaceRaycasts(cell)", nomad, System.StringComparison.Ordinal), Is.GreaterThan(0));
+	}
+
+	[Test]
+	public void ClearStripTabNonFaceRaycasts_NullTargetGraphic_KeepsTabBgHittable() {
+		var cell = new GameObject("art list", typeof(RectTransform), typeof(Button));
+		cell.SetActive(false);
+		try {
+			var btn = cell.GetComponent<Button>();
+			btn.targetGraphic = null; // prefab Art/BG/Mesh/Control pattern
+
+			var tabBgGo = new GameObject("TabBg", typeof(RectTransform), typeof(Image));
+			tabBgGo.transform.SetParent(cell.transform, false);
+			var tabBg = tabBgGo.GetComponent<Image>();
+			tabBg.raycastTarget = true;
+
+			var labelGo = new GameObject("Label", typeof(RectTransform));
+			labelGo.transform.SetParent(cell.transform, false);
+			var label = labelGo.AddComponent<TextMeshProUGUI>();
+			label.raycastTarget = true;
+
+			var pillGo = new GameObject("go active", typeof(RectTransform));
+			pillGo.transform.SetParent(cell.transform, false);
+			var pillImgGo = new GameObject("image", typeof(RectTransform), typeof(Image));
+			pillImgGo.transform.SetParent(pillGo.transform, false);
+			var pill = pillImgGo.GetComponent<Image>();
+			pill.raycastTarget = true;
+
+			var clear = typeof(CommandRibbon_UI).GetMethod(
+				"ClearStripTabNonFaceRaycasts",
+				BindingFlags.Static | BindingFlags.NonPublic);
+			Assert.That(clear, Is.Not.Null);
+			clear.Invoke(null, new object[] { cell.transform });
+
+			Assert.That(btn.targetGraphic, Is.SameAs(tabBg), "null targetGraphic must wire TabBg");
+			Assert.That(tabBg.raycastTarget, Is.True, "TabBg must remain the hit face");
+			Assert.That(label.raycastTarget, Is.False);
+			Assert.That(pill.raycastTarget, Is.False);
+		}
+		finally {
+			Object.DestroyImmediate(cell);
+		}
+	}
+
+	[Test]
+	public void ThemeStripTabCell_Nomad_PrefabNullTargetStillClickableFace() {
+		var cell = new GameObject("mesh", typeof(RectTransform), typeof(Button), typeof(TabsGroupElem_UI));
+		cell.SetActive(false);
+		try {
+			var btn = cell.GetComponent<Button>();
+			btn.targetGraphic = null;
+
+			var tabBgGo = new GameObject("TabBg", typeof(RectTransform), typeof(Image));
+			tabBgGo.transform.SetParent(cell.transform, false);
+			var tabBg = tabBgGo.GetComponent<Image>();
+			tabBg.type = Image.Type.Sliced;
+			tabBg.raycastTarget = true;
+
+			var labelGo = new GameObject("Label", typeof(RectTransform));
+			labelGo.transform.SetParent(cell.transform, false);
+			var label = labelGo.AddComponent<TextMeshProUGUI>();
+			label.text = "MESH";
+			label.raycastTarget = true;
+
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				new JObject {
+					["control_bg"] = "#292A2EFF",
+					["accent"] = "#F2CA50FF",
+					["text_primary"] = "#E3E2E7FF",
+					["ribbon_icon_only"] = 1,
+				},
+				"replace",
+				out string error), Is.True, error);
+
+			var theme = typeof(CommandRibbon_UI).GetMethod(
+				"ThemeStripTabCell",
+				BindingFlags.Instance | BindingFlags.NonPublic);
+			Assert.That(theme, Is.Not.Null);
+			var host = new GameObject("RibbonHost").AddComponent<CommandRibbon_UI>();
+			try {
+				theme.Invoke(host, new object[] {
+					cell.transform,
+					SpzUiThemeOps.Active,
+					true,
+					true,
+				});
+			}
+			finally {
+				Object.DestroyImmediate(host.gameObject);
+			}
+
+			Assert.That(btn.targetGraphic, Is.SameAs(tabBg));
+			Assert.That(tabBg.raycastTarget, Is.True);
+			Assert.That(label.raycastTarget, Is.False);
+		}
+		finally {
+			Object.DestroyImmediate(cell);
+			SpzUiThemeOps.ResetTheme();
+		}
 	}
 
 	[Test]

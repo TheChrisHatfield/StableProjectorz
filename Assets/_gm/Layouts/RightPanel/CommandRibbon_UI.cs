@@ -753,12 +753,20 @@ namespace spz {
 	    /// <summary>
 	    /// Prefab divider left/right, go-active pill, and TMP labels ship with raycastTarget=1 and
 	    /// steal clicks from the tab Button under Nomad icon-only (tight cells). Only the Button face hits.
-	    /// Call only while BoundChrome is active — never on Restore SPZ leave (that undoes authored raycasts).
+	    /// Prefab Art/BG/Mesh/Control tabs often have <c>Button.targetGraphic == null</c> — fall back to TabBg
+	    /// (runtime Paint/add-on tabs already wire TabBg). Call only while BoundChrome is active.
 	    /// </summary>
 	    static void ClearStripTabNonFaceRaycasts(Transform cell) {
 	        if (cell == null) return;
 	        var btn = cell.GetComponent<Button>();
-	        Graphic face = btn != null ? btn.targetGraphic : FindStripTabFaceImage(cell);
+	        Graphic face = null;
+	        if (btn != null && btn.targetGraphic != null)
+	            face = btn.targetGraphic;
+	        else
+	            face = FindStripTabFaceImage(cell);
+	        // Prefab tabs ship with null targetGraphic; wire TabBg so ColorTint + hits stay on the face.
+	        if (btn != null && btn.targetGraphic == null && face != null)
+	            btn.targetGraphic = face;
 	        foreach (var g in cell.GetComponentsInChildren<Graphic>(true)) {
 	            if (g == null) continue;
 	            if (face != null && ReferenceEquals(g, face)) {
