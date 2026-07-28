@@ -219,6 +219,49 @@ namespace spz {
 		}
 
 		/// <summary>
+		/// Tool-radio / Soft-Tileable / Point-Bilinear cells: flat fill + hide bevel Checkmark plate.
+		/// Selection = face color only (Brush/Multiview parity). Do not use for real ✓ checkboxes.
+		/// </summary>
+		public static void ThemeFlatToolToggle(Toggle toggle, Color face, Color accent, Color labelColor) {
+			if (toggle == null || toggle.targetGraphic == null)
+				return;
+			if (!ShouldRecolorBoundChrome)
+				return;
+			ApplyBoundChromeSelectable(toggle, face, accent);
+			var cb = toggle.colors;
+			cb.normalColor = Color.white;
+			cb.highlightedColor = Color.white;
+			cb.pressedColor = new Color(0.92f, 0.92f, 0.92f, 1f);
+			cb.selectedColor = Color.white;
+			cb.disabledColor = new Color(1f, 1f, 1f, 0.4f);
+			cb.colorMultiplier = 1f;
+			toggle.colors = cb;
+			if (toggle.targetGraphic is Image bg) {
+				ApplyRoundedControlSprite(bg, markEligible: true);
+				bg.preserveAspect = false;
+				bg.raycastTarget = true;
+			}
+			if (toggle.graphic is Image check && check != toggle.targetGraphic) {
+				check.raycastTarget = false;
+				HideAuthoredGraphicForTheme(check);
+			}
+			foreach (var img in toggle.GetComponentsInChildren<Image>(true)) {
+				if (img == null || img == toggle.targetGraphic) continue;
+				string n = img.gameObject.name ?? "";
+				if (n.Equals("Checkmark", StringComparison.OrdinalIgnoreCase)
+				    || n.IndexOf("pressed", StringComparison.OrdinalIgnoreCase) >= 0
+				    || n.Equals("tick", StringComparison.OrdinalIgnoreCase)) {
+					img.raycastTarget = false;
+					HideAuthoredGraphicForTheme(img);
+				}
+			}
+			foreach (var tmp in toggle.GetComponentsInChildren<TMP_Text>(true)) {
+				if (tmp == null) continue;
+				ApplyBoundChromeStripLabelTmp(tmp, labelColor, 12f);
+			}
+		}
+
+		/// <summary>
 		/// Soft/solid fill stretched edge-to-edge; snapshots RectTransform for Restore SPZ.
 		/// Pair with solid-square chrome (<see cref="ApplySolidSquareChrome"/> /
 		/// <see cref="ApplyRoundedControlSprite"/>).
