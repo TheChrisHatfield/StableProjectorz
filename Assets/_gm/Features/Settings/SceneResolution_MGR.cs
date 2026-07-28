@@ -103,7 +103,7 @@ namespace spz {
 	        if(allToggles_off){//disallow the total disabling. One toggle must remain on:
 	            toggle.SetIsOnWithoutNotify(toggle.isOn);
 	        }
-	        if(!isOn){ return; }
+	        if(!isOn){ RefreshFilterToggleChrome(); return; }
 	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
 	        // Toggle-group doesn't work on these toggles because some might be hidden (slide out panel is concealed).
 	        // So, untoggling them manually:
@@ -115,6 +115,7 @@ namespace spz {
 	            _textureFilterPoint_toggle.isOn = false; 
 	            resultTexFilterMode=FilterMode.Bilinear; 
 	        }
+	        RefreshFilterToggleChrome();
 	    }
 
 
@@ -245,9 +246,9 @@ namespace spz {
 	        var t = SpzUiThemeOps.Active;
 	        if (_save_texResQuality_text != null) {
 	            var saveBtn = _save_texResQuality_text.GetComponentInParent<Button>();
-	            // Litmus: SAVE Nx is a hard solid square — no bevel corners / 9-slice chevrons.
+	            // Solid-square litmus (same path as all Nomad BoundChrome selectables).
 	            if (saveBtn != null)
-	                SpzUiThemeOps.ApplySolidSquareChrome(saveBtn, t.success, t.accent);
+	                SpzUiThemeOps.ApplyBoundChromeSelectable(saveBtn, t.success, t.accent);
 	            SpzUiThemeOps.ApplyBoundChromeTmp(_save_texResQuality_text, t.textPrimary);
 	        }
 	        if (_sub_texResolutionQuality != null && _sub_texResolutionQuality.targetGraphic != null)
@@ -263,10 +264,23 @@ namespace spz {
 	        SpzUiThemeOps.RestoreBoundChromeUnder(sel.transform);
 	    }
 
+	    /// <summary>Re-tint Point/Bilinear fills from current isOn (BoundChrome only).</summary>
+	    public void RefreshFilterToggleChrome() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) return;
+	        var t = SpzUiThemeOps.Active;
+	        ThemeFilterToggle(_textureFilterPoint_toggle, t);
+	        ThemeFilterToggle(_textureFilterBilinear_toggle, t);
+	    }
+
 	    static void ThemeFilterToggle(Toggle tgl, SpzUiThemeOps.ThemeTokens t) {
 	        if (tgl == null) return;
-	        if (tgl.targetGraphic != null)
-	            SpzUiThemeOps.ApplyBoundChromeSelectable(tgl, t.controlBg, t.accent);
+	        Color fill = tgl.isOn
+	            ? Color.Lerp(t.controlBg, t.accent, 0.14f)
+	            : t.controlBg;
+	        if (tgl.graphic != null)
+	            SpzUiThemeOps.ThemeCheckboxToggle(tgl, fill, t.accent, t.success);
+	        else if (tgl.targetGraphic != null)
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(tgl, fill, t.accent);
 	        var label = tgl.GetComponentInChildren<TextMeshProUGUI>(true);
 	        if (label != null)
 	            SpzUiThemeOps.ApplyBoundChromeTmp(label, t.textPrimary);
