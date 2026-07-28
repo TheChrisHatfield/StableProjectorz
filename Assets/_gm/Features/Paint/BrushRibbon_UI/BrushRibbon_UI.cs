@@ -233,32 +233,54 @@ namespace spz {
 	        ThemeToolToggle(dir.PaintToggle, StudioLineIcon.Brush, t);
 	        ThemeToolToggle(dir.SmudgeToggle, StudioLineIcon.Smudge, t);
 	        ThemeToolToggle(dir.EraseToggle, StudioLineIcon.Eraser, t);
+	        // Re-assert gaps after theming — Flatten used to stretch root faces and wipe anchors.
+	        BrushRibbon_UI_Direction.ApplyPaintSmudgeEraseGaps(dir, nomadGaps: true);
 	    }
 
 	    /// <summary>
-	    /// Flat square cell (no beveled plate / 9-slice corner chevrons) + Nomad icon-above-label.
-	    /// Hides authored tick (+/−) plates; line icon replaces SPZ silhouettes.
+	    /// Flat square cell (no beveled plate / 9-slice corner chevrons) + centered Nomad line icon.
+	    /// Hides authored tick (+/−) plates and SPZ silhouettes; label kept under icon when present.
 	    /// </summary>
-	    static void ThemeToolToggle(Toggle toggle, StudioLineIcon glyph, SpzUiThemeOps.ThemeTokens t, float iconSizePx = 22f) {
+	    static void ThemeToolToggle(Toggle toggle, StudioLineIcon glyph, SpzUiThemeOps.ThemeTokens t, float iconSizePx = 24f) {
 	        if (toggle == null || !SpzUiThemeOps.ShouldRecolorBoundChrome) return;
 	        Color normal = FlatToolFill(toggle.isOn, t);
 	        SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, normal, t.accent);
 	        ApplyFlatToolColorBlock(toggle);
 	        if (toggle.targetGraphic is Image bg) {
 	            SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
+	            // Root-face Images share the Toggle RT — FlattenToolFaceImage skips RT rewrite for Selectables.
 	            SpzUiThemeOps.FlattenToolFaceImage(bg);
 	            bg.raycastTarget = true;
 	        }
 	        HideSecondaryChromeUnder(toggle);
-	        // Slightly smaller glyph so icon+label breathe inside the gapped cell.
-	        float glyphPx = Mathf.Min(iconSizePx, 20f);
+	        // Stacked icon + short label so Brush / Smudge / Eraser stay identifiable in the column.
 	        SpzUiThemeOps.ApplyNomadStackedToolCell(
-	            toggle.transform, glyph, t.textPrimary, glyphPx, _ => true, stripUppercase: false);
-	        // Labels / secondary images must not steal hits or sit off-center after flatten.
+	            toggle.transform, glyph, t.textPrimary, iconSizePx, PreferDirectionToolLabel, stripUppercase: false);
+	        // Ensure the Monolith glyph is on top and tinted (authored "icon" children stay hidden).
+	        var iconT = SpzUiThemeOps.FindDirectChildIncludingInactive(toggle.transform, "MonolithLineIcon");
+	        if (iconT != null) {
+	            iconT.gameObject.SetActive(true);
+	            iconT.SetAsLastSibling();
+	            var iconImg = iconT.GetComponent<Image>();
+	            if (iconImg != null) {
+	                iconImg.enabled = true;
+	                iconImg.sprite = UiRuntimeSprites.GetLineIcon(glyph);
+	                iconImg.preserveAspect = true;
+	                iconImg.raycastTarget = false;
+	                SpzUiThemeOps.ApplyLineIconTint(iconImg);
+	            }
+	        }
 	        foreach (var g in toggle.GetComponentsInChildren<Graphic>(true)) {
 	            if (g == null || ReferenceEquals(g, toggle.targetGraphic)) continue;
 	            g.raycastTarget = false;
 	        }
+	    }
+
+	    static bool PreferDirectionToolLabel(TMP_Text tmp) {
+	        if (tmp == null) return false;
+	        string n = tmp.gameObject.name ?? "";
+	        return n.IndexOf("text", StringComparison.OrdinalIgnoreCase) >= 0
+	            || n.IndexOf("label", StringComparison.OrdinalIgnoreCase) >= 0;
 	    }
 
 	    static void ThemeToolButton(Button btn, StudioLineIcon glyph, SpzUiThemeOps.ThemeTokens t, bool applyIcon = true) {

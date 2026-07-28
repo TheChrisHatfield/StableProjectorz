@@ -219,7 +219,7 @@ namespace spz {
 	                SpzUiThemeOps.SnapshotToolFaceLayout(smudgeRect);
 	        }
 
-	        float gap = nomadGaps ? 0.045f : (smudgeRect != null ? 0.028f : 0.02f);
+	        float gap = nomadGaps ? 0.08f : (smudgeRect != null ? 0.028f : 0.02f);
 	        float left = addRect.anchorMin.x;
 	        float right = addRect.anchorMax.x;
 
@@ -257,7 +257,7 @@ namespace spz {
 	        var rootLayout = dir.GetComponent<LayoutElement>();
 	        if (rootLayout != null) {
 	            if (smudgeRect != null)
-	                rootLayout.minHeight = nomadGaps ? 256f : 210f;
+	                rootLayout.minHeight = nomadGaps ? 280f : 210f;
 	            else if (nomadGaps)
 	                rootLayout.minHeight = Mathf.Max(rootLayout.minHeight, 168f);
 	        }
