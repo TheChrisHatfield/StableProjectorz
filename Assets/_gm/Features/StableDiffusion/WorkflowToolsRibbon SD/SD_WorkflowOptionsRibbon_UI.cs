@@ -600,8 +600,8 @@ namespace spz {
 	        Color face = toggle.isOn
 	            ? Color.Lerp(tokens.tabActive, tokens.accent, 0.45f)
 	            : tokens.controlBg;
-	        // Keep real checkbox glyphs (Settings parity) — not solid-square tool cells.
-	        SpzUiThemeOps.ThemeCheckboxToggle(toggle, face, tokens.accent, tokens.success);
+	        // Soft/Tileable/Ignore are bevel tool radios (Checkmark plate raycasts) — flat fill, hide plate.
+	        SpzUiThemeOps.ThemeFlatToolToggle(toggle, face, tokens.accent, tokens.textPrimary);
 	    }
 
 	}
