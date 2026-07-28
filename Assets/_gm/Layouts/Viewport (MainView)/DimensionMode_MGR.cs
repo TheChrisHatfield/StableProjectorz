@@ -142,14 +142,11 @@ namespace spz {
 	        if (root == null) return;
 	        foreach (var img in root.GetComponentsInChildren<Image>(true)) {
 	            if (img == null) continue;
-	            // Checkmark overlays are selection glyphs — do not replace with CircleFilled discs.
+	            // Real Toggle ON glyphs only — MainChoice face is often named Checkmark and must get flat discs.
 	            if (SpzUiThemeOps.IsToggleCheckmarkGraphic(img))
 	                continue;
 	            string n = img.gameObject.name ?? "";
 	            if (n == "MonolithLineIcon" || n == "MonolithActiveBar")
-	                continue;
-	            if (n.Equals("Checkmark", System.StringComparison.OrdinalIgnoreCase)
-	                || n.Equals("tick", System.StringComparison.OrdinalIgnoreCase))
 	                continue;
 	            ApplyFlatDisc(img, selected, t);
 	        }
