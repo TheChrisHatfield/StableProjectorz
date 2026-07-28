@@ -72,4 +72,26 @@ public sealed class BoundChromePass11FunctionalTests {
 			SpzUiThemeOps.ResetTheme();
 		}
 	}
+
+	[Test]
+	public void WorkflowOptionsThemeTmp_SourcesClearRaycastAfterBoundChrome() {
+		string sd = System.IO.File.ReadAllText(System.IO.Path.GetFullPath(System.IO.Path.Combine(
+			Application.dataPath,
+			"_gm/Features/StableDiffusion/WorkflowToolsRibbon SD/SD_WorkflowOptionsRibbon_UI.cs")));
+		int sdTheme = sd.IndexOf("static void ThemeTmp(", System.StringComparison.Ordinal);
+		Assert.That(sdTheme, Is.GreaterThan(0));
+		string sdBody = sd.Substring(sdTheme, System.Math.Min(350, sd.Length - sdTheme));
+		Assert.That(sdBody, Does.Contain("ApplyBoundChromeTmp"));
+		Assert.That(sdBody, Does.Contain("tmp.raycastTarget = false"));
+		Assert.That(sdBody.IndexOf("tmp.raycastTarget = false", System.StringComparison.Ordinal),
+			Is.GreaterThan(sdBody.IndexOf("ApplyBoundChromeTmp", System.StringComparison.Ordinal)));
+
+		string g3 = System.IO.File.ReadAllText(System.IO.Path.GetFullPath(System.IO.Path.Combine(
+			Application.dataPath,
+			"_gm/Features/3D Generate/Gen3D_WorkflowOptionsRibbon_UI.cs")));
+		int gTheme = g3.IndexOf("static void ThemeTmp(", System.StringComparison.Ordinal);
+		Assert.That(gTheme, Is.GreaterThan(0));
+		string gBody = g3.Substring(gTheme, System.Math.Min(350, g3.Length - gTheme));
+		Assert.That(gBody, Does.Contain("tmp.raycastTarget = false"));
+	}
 }
