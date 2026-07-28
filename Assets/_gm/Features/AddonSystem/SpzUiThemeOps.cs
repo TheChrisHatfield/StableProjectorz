@@ -262,6 +262,117 @@ namespace spz {
 		}
 
 		/// <summary>
+		/// Prompt-header preset / web-find cells: hard Nomad square (not SPZ sliced round chip),
+		/// equal W×H layout, emboss plates hidden. Selection = fill color only.
+		/// </summary>
+		public static void ThemePromptPresetSquareCell(Selectable selectable, Color fill, Color accent) {
+			if (selectable == null || selectable.targetGraphic == null)
+				return;
+			if (!ShouldRecolorBoundChrome)
+				return;
+			ApplySolidSquareChrome(selectable, fill, accent);
+			var cb = selectable.colors;
+			cb.normalColor = Color.white;
+			cb.highlightedColor = Color.white;
+			cb.pressedColor = new Color(0.92f, 0.92f, 0.92f, 1f);
+			cb.selectedColor = Color.white;
+			cb.disabledColor = new Color(1f, 1f, 1f, 0.4f);
+			cb.colorMultiplier = 1f;
+			selectable.colors = cb;
+			if (selectable.targetGraphic is Image face
+			    && !IsToggleCheckmarkGraphic(face)
+			    && !IsUiMaskGraphic(face)) {
+				face.sprite = UiRuntimeSprites.SolidRect;
+				face.type = Image.Type.Simple;
+				face.preserveAspect = false;
+				face.pixelsPerUnitMultiplier = 1f;
+				face.fillCenter = true;
+				face.raycastTarget = true;
+			}
+			EnsureSquareLayoutElement(selectable.GetComponent<LayoutElement>());
+			if (selectable is Toggle toggle) {
+				if (toggle.graphic is Image press && press != toggle.targetGraphic)
+					HideAuthoredGraphicForTheme(press);
+				foreach (var img in toggle.GetComponentsInChildren<Image>(true)) {
+					if (img == null || img == toggle.targetGraphic) continue;
+					string n = img.gameObject.name ?? "";
+					if (n.IndexOf("pressed", StringComparison.OrdinalIgnoreCase) >= 0
+					    || n.Equals("tick", StringComparison.OrdinalIgnoreCase)
+					    || n.Equals("Checkmark", StringComparison.OrdinalIgnoreCase)) {
+						img.raycastTarget = false;
+						HideAuthoredGraphicForTheme(img);
+					}
+				}
+			}
+			// Visible break between glued preset chips (authored HLG spacing is 0).
+			EnsurePromptPresetRowGaps(selectable.transform);
+		}
+
+		/// <summary>Force LayoutElement preferred/min height to match width so chips read as squares.</summary>
+		public static void EnsureSquareLayoutElement(LayoutElement le) {
+			if (le == null || !ShouldRecolorBoundChrome) return;
+			SnapshotLayoutElementSizes(le);
+			float side = le.preferredWidth > 0.5f ? le.preferredWidth
+				: (le.minWidth > 0.5f ? le.minWidth : 30f);
+			le.preferredWidth = side;
+			le.preferredHeight = side;
+			if (le.minWidth < 0.5f)
+				le.minWidth = side;
+			le.minHeight = side;
+		}
+
+		/// <summary>
+		/// Visible break between glued prompt preset chips (authored HLG spacing is often 0).
+		/// Call after <see cref="ApplyScaledLayoutGroup"/> so spacing is not wiped back to 0.
+		/// </summary>
+		public static void EnsurePromptPresetRowGaps(Transform cell) {
+			if (cell == null || !ShouldRecolorBoundChrome) return;
+			var hlg = cell.GetComponentInParent<HorizontalLayoutGroup>(true);
+			if (hlg == null) return;
+			bool hasPreset = false;
+			foreach (var t in hlg.GetComponentsInChildren<Toggle>(true)) {
+				if (t == null) continue;
+				string n = t.gameObject.name ?? "";
+				if (n.IndexOf("preset", StringComparison.OrdinalIgnoreCase) >= 0) {
+					hasPreset = true;
+					break;
+				}
+			}
+			if (!hasPreset) return;
+			var tag = hlg.GetComponent<SpzUiThemeDesignLayoutGroup>();
+			if (tag == null) {
+				tag = hlg.gameObject.AddComponent<SpzUiThemeDesignLayoutGroup>();
+				tag.spacing = hlg.spacing;
+				tag.padL = hlg.padding.left;
+				tag.padR = hlg.padding.right;
+				tag.padT = hlg.padding.top;
+				tag.padB = hlg.padding.bottom;
+			}
+			float scaled = tag.spacing * _active.spacingScale;
+			hlg.spacing = Mathf.Max(scaled, 3f);
+		}
+
+		static void SnapshotLayoutElementSizes(LayoutElement layout) {
+			if (layout == null) return;
+			var tag = layout.GetComponent<SpzUiThemeDesignLayoutElement>();
+			if (tag == null) {
+				tag = layout.gameObject.AddComponent<SpzUiThemeDesignLayoutElement>();
+				tag.preferredWidth = layout.preferredWidth;
+				tag.minWidth = layout.minWidth;
+				tag.preferredHeight = layout.preferredHeight;
+				tag.minHeight = layout.minHeight;
+				tag.hasSnapshot = true;
+			}
+			else if (!tag.hasSnapshot) {
+				tag.preferredWidth = layout.preferredWidth;
+				tag.minWidth = layout.minWidth;
+				tag.preferredHeight = layout.preferredHeight;
+				tag.minHeight = layout.minHeight;
+				tag.hasSnapshot = true;
+			}
+		}
+
+		/// <summary>
 		/// Soft/solid fill stretched edge-to-edge; snapshots RectTransform for Restore SPZ.
 		/// Pair with solid-square chrome (<see cref="ApplySolidSquareChrome"/> /
 		/// <see cref="ApplyRoundedControlSprite"/>).
@@ -1451,11 +1562,15 @@ namespace spz {
 				tag = layout.gameObject.AddComponent<SpzUiThemeDesignLayoutElement>();
 				tag.preferredWidth = layout.preferredWidth;
 				tag.minWidth = layout.minWidth;
+				tag.preferredHeight = layout.preferredHeight;
+				tag.minHeight = layout.minHeight;
 				tag.hasSnapshot = true;
 			}
 			else if (!tag.hasSnapshot) {
 				tag.preferredWidth = layout.preferredWidth;
 				tag.minWidth = layout.minWidth;
+				tag.preferredHeight = layout.preferredHeight;
+				tag.minHeight = layout.minHeight;
 				tag.hasSnapshot = true;
 			}
 		}
@@ -1470,6 +1585,8 @@ namespace spz {
 				if (le != null) {
 					le.preferredWidth = tag.preferredWidth;
 					le.minWidth = tag.minWidth;
+					le.preferredHeight = tag.preferredHeight;
+					le.minHeight = tag.minHeight;
 				}
 				if (Application.isPlaying)
 					UnityEngine.Object.Destroy(tag);
@@ -2143,10 +2260,12 @@ namespace spz {
 		public int padL, padR, padT, padB;
 	}
 
-	/// <summary>Snapshots LayoutElement widths so panel_width can unwind on Restore SPZ.</summary>
+	/// <summary>Snapshots LayoutElement sizes so panel_width / square chips can unwind on Restore SPZ.</summary>
 	public sealed class SpzUiThemeDesignLayoutElement : MonoBehaviour {
 		public float preferredWidth = -1f;
 		public float minWidth = -1f;
+		public float preferredHeight = -1f;
+		public float minHeight = -1f;
 		public bool hasSnapshot;
 	}
 
