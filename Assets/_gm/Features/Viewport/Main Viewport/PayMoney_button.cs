@@ -27,7 +27,10 @@ namespace spz {
 	        Application.OpenURL("https://stableprojectorz.com/thanks/");
 	    }
 
-	    /// <summary>Nomad: flat control cell + strip label (not magenta chrome plate).</summary>
+	    /// <summary>
+	    /// Nomad: flat cell + compact label. Do not use strip UpperCase/tracking — it overflows
+	    /// into the Settings gear and reads as "SETTINGS / THAN" overlay soup.
+	    /// </summary>
 	    void ApplyThemeTokens() {
 	        if (_button == null) return;
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
@@ -35,15 +38,13 @@ namespace spz {
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
-	        SpzUiThemeOps.ApplyBoundChromeSelectable(_button, t.controlBg, t.accent);
-	        if (_button.targetGraphic is Image img) {
-	            SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
-	            img.preserveAspect = false;
-	        }
+	        SpzUiThemeOps.ApplySolidSquareChrome(_button, t.controlBg, t.accent);
 	        foreach (var tmp in _button.GetComponentsInChildren<TextMeshProUGUI>(true)) {
-	            if (tmp != null)
-	                SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(tmp, t.textPrimary, 12f);
+	            if (tmp == null) continue;
+	            // Snapshot via ApplyBoundChromeTmp first — never clear raycast before snapshot (leave poison).
+	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
 	        }
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_button);
 	    }
 	}
 }//end namespace
