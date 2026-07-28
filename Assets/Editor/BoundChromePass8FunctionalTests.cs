@@ -58,6 +58,48 @@ public sealed class BoundChromePass8FunctionalTests {
 	}
 
 	[Test]
+	public void ApplyToAddonUiRoot_SkipsNearTransparentHitPadButtons() {
+		var root = new GameObject("AddonPanel_Test", typeof(RectTransform), typeof(Image));
+		root.SetActive(false);
+		try {
+			var padGo = new GameObject("HitPad", typeof(RectTransform), typeof(Image), typeof(Button));
+			padGo.transform.SetParent(root.transform, false);
+			var padImg = padGo.GetComponent<Image>();
+			padImg.color = new Color(1f, 1f, 1f, 0.01f);
+			padImg.sprite = null;
+			var padBtn = padGo.GetComponent<Button>();
+			padBtn.targetGraphic = padImg;
+
+			var realGo = new GameObject("Button_Apply", typeof(RectTransform), typeof(Image), typeof(Button));
+			realGo.transform.SetParent(root.transform, false);
+			var realImg = realGo.GetComponent<Image>();
+			realImg.color = new Color(0.5f, 0.5f, 0.5f, 1f);
+			var realBtn = realGo.GetComponent<Button>();
+			realBtn.targetGraphic = realImg;
+
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				new JObject {
+					["control_bg"] = "#292A2EFF",
+					["accent"] = "#F2CA50FF",
+				},
+				"replace",
+				out string error), Is.True, error);
+
+			SpzUiThemeOps.ApplyToAddonUiRoot(root);
+
+			Assert.That(UiRuntimeSprites.IsSolidRect(padImg.sprite), Is.False,
+				"transparent hit pad must not become solid square");
+			Assert.That(UiRuntimeSprites.IsSolidRect(realImg.sprite), Is.True);
+			Assert.That(realImg.raycastTarget, Is.True);
+		}
+		finally {
+			Object.DestroyImmediate(root);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
 	public void ThemeFlatToolToggle_FaceStaysHittable() {
 		var go = new GameObject("SoftCell", typeof(RectTransform), typeof(Image), typeof(Toggle));
 		go.SetActive(false);

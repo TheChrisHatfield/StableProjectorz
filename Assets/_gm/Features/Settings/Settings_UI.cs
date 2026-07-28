@@ -942,6 +942,7 @@ namespace spz {
 	        // Authored child Images / Monolith overlays must not steal the gear hit.
 	        foreach (var g in btn.GetComponentsInChildren<Graphic>(true)) {
 	            if (g == null || ReferenceEquals(g, btn.targetGraphic)) continue;
+	            SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(g);
 	            g.raycastTarget = false;
 	        }
 	    }
