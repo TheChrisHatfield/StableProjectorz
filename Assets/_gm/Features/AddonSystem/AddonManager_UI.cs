@@ -1297,7 +1297,7 @@ namespace spz {
 			_statusOk = t.success;
 			_statusFail = t.danger;
 			_statusMuted = t.textMuted;
-			bool nomad = string.Equals(SpzUiThemeOps.ActiveThemeId, "nomad-inspired", System.StringComparison.Ordinal);
+			bool boundChrome = SpzUiThemeOps.ShouldRecolorBoundChrome;
 			if (_panel != null) {
 				var panelImg = _panel.GetComponent<Image>();
 				if (panelImg != null) {
@@ -1308,17 +1308,17 @@ namespace spz {
 				}
 				var panelVlg = _panel.GetComponent<UnityEngine.UI.VerticalLayoutGroup>();
 				if (panelVlg != null) {
-					int pad = Mathf.RoundToInt(SpzUiThemeOps.ScaledSpace(nomad ? 3 : 4));
-					panelVlg.spacing = SpzUiThemeOps.ScaledSpace(nomad ? 2 : 1);
+					int pad = Mathf.RoundToInt(SpzUiThemeOps.ScaledSpace(boundChrome ? 3 : 4));
+					panelVlg.spacing = SpzUiThemeOps.ScaledSpace(boundChrome ? 2 : 1);
 					panelVlg.padding = new RectOffset(pad, pad, pad, pad);
 				}
 				var header = _panel.transform.Find("Header");
 				if (header != null) {
 					var headerHlg = header.GetComponent<HorizontalLayoutGroup>();
 					if (headerHlg != null) {
-						headerHlg.spacing = SpzUiThemeOps.ScaledSpace(nomad ? 6 : 8);
+						headerHlg.spacing = SpzUiThemeOps.ScaledSpace(boundChrome ? 6 : 8);
 						headerHlg.childAlignment = TextAnchor.MiddleLeft;
-						int hPad = Mathf.RoundToInt(SpzUiThemeOps.ScaledSpace(nomad ? 2 : 0));
+						int hPad = Mathf.RoundToInt(SpzUiThemeOps.ScaledSpace(boundChrome ? 2 : 0));
 						headerHlg.padding = new RectOffset(hPad, hPad, 0, 0);
 					}
 				}
@@ -1326,7 +1326,7 @@ namespace spz {
 				if (title != null) {
 					CaptureBasePt(ref _themeTitleBasePt, title, 22f);
 					SpzUiThemeOps.ApplyBoundChromeTmp(title, t.textPrimary, _themeTitleBasePt);
-					if (nomad && SpzUiThemeOps.RibbonIconOnlyActive) {
+					if (boundChrome && SpzUiThemeOps.RibbonIconOnlyActive) {
 						// Use design base — never title.fontSize * 0.92 (would compound if capture raced).
 						float basePt = _themeTitleBasePt > 0.05f ? _themeTitleBasePt : 22f;
 						title.fontSize = Mathf.Max(16f, basePt * t.fontScale * 0.92f);
@@ -1354,18 +1354,18 @@ namespace spz {
 				ThemeHeaderButton(_refresh_button, t.controlBg, t.accent, t.textPrimary);
 			if (_loadAddonsNow_button != null)
 				ThemeHeaderButton(_loadAddonsNow_button,
-					nomad ? t.controlBg : t.success,
+					boundChrome ? t.controlBg : t.success,
 					t.accent,
 					t.textPrimary);
 			if (_saveAddonSettings_button != null) {
-				Color saveFg = nomad
+				Color saveFg = boundChrome
 					? new Color(0.235f, 0.184f, 0f, 1f)
 					: new Color(0.12f, 0.12f, 0.14f, 1f);
 				ThemeHeaderButton(_saveAddonSettings_button, t.accent, t.selection, saveFg);
 			}
 			if (_restartWithAddons_button != null) {
-				// Nomad primary action: metallic gold fill + dark on-primary text. Default SPZ keeps light label on accent.
-				Color restartFg = nomad
+				// BoundChrome primary action: metallic gold fill + dark on-primary text. Default SPZ keeps light label on accent.
+				Color restartFg = boundChrome
 					? new Color(0.235f, 0.184f, 0f, 1f)
 					: t.textPrimary;
 				ThemeHeaderButton(_restartWithAddons_button, t.accent, t.selection, restartFg);
@@ -1419,8 +1419,8 @@ namespace spz {
 			SpzUiThemeOps.ApplyBoundChromeSelectable(button, normal, highlighted);
 			var label = button.transform.Find("Text")?.GetComponent<TextMeshProUGUI>();
 			var icon = button.transform.Find("LineIcon")?.GetComponent<Image>();
-			bool nomad = string.Equals(SpzUiThemeOps.ActiveThemeId, "nomad-inspired", System.StringComparison.Ordinal);
-			bool iconOnly = nomad && SpzUiThemeOps.RibbonIconOnlyActive;
+			bool boundChrome = SpzUiThemeOps.ShouldRecolorBoundChrome;
+			bool iconOnly = boundChrome && SpzUiThemeOps.RibbonIconOnlyActive;
 			if (icon != null && SpzUiThemeOps.ShouldRecolorBoundChrome) {
 				var iconRt = icon.rectTransform;
 				iconRt.anchorMin = new Vector2(iconOnly ? 0.5f : 0f, 0.5f);
@@ -1443,7 +1443,7 @@ namespace spz {
 					SpzUiThemeOps.ApplyBoundChromeTmp(label, foreground, basePt);
 					var labelRt = label.rectTransform;
 					// Leave a fixed gutter after the left-aligned line icon so labels share one column.
-					labelRt.offsetMin = new Vector2(nomad ? 30f : 25f, 0f);
+					labelRt.offsetMin = new Vector2(boundChrome ? 30f : 25f, 0f);
 					labelRt.offsetMax = new Vector2(-5f, 0f);
 				}
 			}
