@@ -71,6 +71,7 @@ namespace spz {
 	        }
 	        _width_input.SetValue(Mathf.Max(64, widthPx).ToString());
 	        _height_input.SetValue(Mathf.Max(64, heightPx).ToString());
+	        RefreshResolutionPresetChrome();
 	    }
 
 	    /// <summary>Deferred adaptive viewport-mode apply (FULL SRN vs OPEN RIGHT) after layout settles.</summary>
@@ -120,6 +121,7 @@ namespace spz {
 	    void OnResolutionPresetButton(int res){
 	        _width_input.SetValue(res.ToString());
 	        _height_input.SetValue(res.ToString());
+	        RefreshResolutionPresetChrome();
 	        if(res > 1024){
 	            string msg = "Careful!  SD 1.5 is made for generating 512,  SDXL for 1024.  Might be slow + give weird results."
 	                        + "\nEven if 512, it's only for one of the sides!  So the total texture will end up at least 2k anyway.";
@@ -272,11 +274,11 @@ namespace spz {
 	            _sampleSteps_slider.ApplyThemeTokens(t.accent, t.textPrimary);
 	        if (_CFG_scale_slider != null)
 	            _CFG_scale_slider.ApplyThemeTokens(t.accent, t.textPrimary);
-	        ThemeResolutionPreset(_resolutionPreset_512, t);
-	        ThemeResolutionPreset(_resolutionPreset_768, t);
-	        ThemeResolutionPreset(_resolutionPreset_1024, t);
-	        ThemeResolutionPreset(_resolutionPreset_1536, t);
-	        ThemeResolutionPreset(_resolutionPreset_2048, t);
+	        ThemeResolutionPreset(_resolutionPreset_512, 512, t);
+	        ThemeResolutionPreset(_resolutionPreset_768, 768, t);
+	        ThemeResolutionPreset(_resolutionPreset_1024, 1024, t);
+	        ThemeResolutionPreset(_resolutionPreset_1536, 1536, t);
+	        ThemeResolutionPreset(_resolutionPreset_2048, 2048, t);
 	        foreach (var lg in root.GetComponentsInChildren<LayoutGroup>(true))
 	            SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
 	    }
@@ -292,6 +294,17 @@ namespace spz {
 	            if (!IsPromptPresetToggle(toggle)) continue;
 	            ThemePromptPresetToggle(toggle, t);
 	        }
+	    }
+
+	    /// <summary>Re-tint 512…2048 resolution chips from current W×H (BoundChrome only).</summary>
+	    public void RefreshResolutionPresetChrome() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) return;
+	        var t = SpzUiThemeOps.Active;
+	        ThemeResolutionPreset(_resolutionPreset_512, 512, t);
+	        ThemeResolutionPreset(_resolutionPreset_768, 768, t);
+	        ThemeResolutionPreset(_resolutionPreset_1024, 1024, t);
+	        ThemeResolutionPreset(_resolutionPreset_1536, 1536, t);
+	        ThemeResolutionPreset(_resolutionPreset_2048, 2048, t);
 	    }
 
 	    static void ThemePromptPresetToggle(Toggle toggle, SpzUiThemeOps.ThemeTokens t) {
@@ -346,9 +359,10 @@ namespace spz {
 	            || t.TrimStart().StartsWith("prompt", System.StringComparison.OrdinalIgnoreCase);
 	    }
 
-	    static void ThemeResolutionPreset(Button btn, SpzUiThemeOps.ThemeTokens t) {
+	    void ThemeResolutionPreset(Button btn, int presetPx, SpzUiThemeOps.ThemeTokens t) {
 	        if (btn == null || btn.targetGraphic == null) return;
-	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, FlatCellFill(false, t), t.accent);
+	        bool selected = width == presetPx && height == presetPx;
+	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, FlatCellFill(selected, t), t.accent);
 	        if (btn.targetGraphic is Image img) {
 	            SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
 	        }
