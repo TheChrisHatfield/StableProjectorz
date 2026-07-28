@@ -169,6 +169,7 @@ namespace spz {
 			RestoreRoundedControlSpritesUnder(root);
 			RestoreSliderHandleLayoutsUnder(root);
 			RestoreToolFaceLayoutsUnder(root);
+			RestorePanelWidthsUnder(root);
 			foreach (var g in root.GetComponentsInChildren<Graphic>(true))
 				RestoreAuthoredGraphic(g);
 			foreach (var s in root.GetComponentsInChildren<Selectable>(true))
@@ -343,6 +344,7 @@ namespace spz {
 			SnapshotNomadTypography(text);
 			ApplyTmpScaledCaptured(text, token, fallbackBasePt);
 			ApplyNomadTypographyMetrics(text);
+			ClearLabelRaycastIfUnderSelectable(text);
 		}
 
 		/// <summary>
@@ -360,6 +362,20 @@ namespace spz {
 			SnapshotNomadTypography(text);
 			ApplyTmpScaledCaptured(text, token, fallbackBasePt);
 			ApplyNomadStripLabelMetrics(text);
+			ClearLabelRaycastIfUnderSelectable(text);
+		}
+
+		/// <summary>
+		/// Tool/mode labels must not steal EventSystem hits from their parent Button/Toggle.
+		/// Skips TMP_InputField text (needs raycasts for caret/selection).
+		/// </summary>
+		static void ClearLabelRaycastIfUnderSelectable(TMP_Text text) {
+			if (text == null) return;
+			if (text.GetComponentInParent<TMP_InputField>(true) != null)
+				return;
+			if (text.GetComponentInParent<Selectable>(true) == null)
+				return;
+			text.raycastTarget = false;
 		}
 
 		/// <summary>
@@ -427,6 +443,8 @@ namespace spz {
 				tag.authoredFont = text.font;
 				tag.authoredFontSharedMaterial = text.fontSharedMaterial;
 				tag.hasFontSnapshot = true;
+				tag.authoredRaycastTarget = text.raycastTarget;
+				tag.hasRaycastSnapshot = true;
 				tag.hasSnapshot = true;
 			}
 			else if (!tag.hasSnapshot) {
@@ -445,6 +463,10 @@ namespace spz {
 				tag.authoredFont = text.font;
 				tag.authoredFontSharedMaterial = text.fontSharedMaterial;
 				tag.hasFontSnapshot = true;
+			}
+			if (!tag.hasRaycastSnapshot) {
+				tag.authoredRaycastTarget = text.raycastTarget;
+				tag.hasRaycastSnapshot = true;
 			}
 		}
 
@@ -465,6 +487,8 @@ namespace spz {
 				if (tag.authoredFontSharedMaterial != null)
 					text.fontSharedMaterial = tag.authoredFontSharedMaterial;
 			}
+			if (tag.hasRaycastSnapshot)
+				text.raycastTarget = tag.authoredRaycastTarget;
 		}
 
 		/// <summary>Swap BoundChrome TMP to Roboto Regular when Nomad theme is active.</summary>
@@ -611,6 +635,8 @@ namespace spz {
 				// Snapshot authored alignment BEFORE forcing Center (otherwise restore keeps Nomad align).
 				SnapshotNomadTypography(tmp);
 				tmp.alignment = TextAlignmentOptions.Center;
+				// Labels stretch over the face under Nomad — must not steal EventSystem hits from the Selectable.
+				tmp.raycastTarget = false;
 				if (stripUppercase)
 					ApplyBoundChromeStripLabelTmp(tmp, labelColor, 11f);
 				else
@@ -722,6 +748,9 @@ namespace spz {
 		/// </summary>
 		public static void HideAuthoredGraphicForTheme(Graphic graphic) {
 			if (graphic == null || !ShouldRecolorBoundChrome) return;
+			// Never disable a Selectable click/raycast face (dead UI under Nomad).
+			if (graphic is Image img && IsSelectableTargetGraphic(img))
+				return;
 			var tag = graphic.GetComponent<SpzUiThemeHiddenGraphic>();
 			if (tag == null) {
 				tag = graphic.gameObject.AddComponent<SpzUiThemeHiddenGraphic>();
@@ -1103,6 +1132,10 @@ namespace spz {
 			if (rootImage != null && root.name.StartsWith("AddonPanel_", StringComparison.Ordinal))
 				rootImage.color = ResolvePanelShellColor();
 
+			// panel_width applies to the addon shell only — never every child control (blows up compact rows).
+			if (root.name.StartsWith("AddonPanel_", StringComparison.Ordinal))
+				ApplyPanelWidth(root.GetComponent<LayoutElement>());
+
 			foreach (var button in root.GetComponentsInChildren<Button>(true)) {
 				if (button == null || button.targetGraphic == null)
 					continue;
@@ -1117,13 +1150,14 @@ namespace spz {
 				button.targetGraphic.color = normal;
 				if (button.targetGraphic is Image btnImg)
 					ApplyRoundedControlSprite(btnImg);
-				ApplyPanelWidth(button.GetComponent<LayoutElement>());
 				SnapshotAuthoredColorBlock(button);
 				var colors = button.colors;
 				colors.normalColor = Color.white;
 				colors.highlightedColor = Color.Lerp(Color.white, tokens.accent, 0.25f);
 				colors.pressedColor = Color.Lerp(Color.white, tokens.accent, 0.55f);
 				colors.selectedColor = colors.highlightedColor;
+				colors.disabledColor = new Color(1f, 1f, 1f, 0.4f);
+				colors.colorMultiplier = 1f;
 				button.colors = colors;
 			}
 
@@ -1135,11 +1169,6 @@ namespace spz {
 					bg.color = tokens.fieldBg;
 					ApplyRoundedControlSprite(bg);
 				}
-				ApplyPanelWidth(input.GetComponent<LayoutElement>());
-				var parentLe = input.transform.parent != null
-					? input.transform.parent.GetComponent<LayoutElement>()
-					: null;
-				ApplyPanelWidth(parentLe);
 			}
 
 			foreach (var slider in root.GetComponentsInChildren<Slider>(true)) {
@@ -1172,7 +1201,6 @@ namespace spz {
 				ApplySelectableToken(toggle, normal, tokens.accent);
 				if (toggle.targetGraphic is Image toggleBg)
 					ApplyRoundedControlSprite(toggleBg);
-				ApplyPanelWidth(toggle.GetComponent<LayoutElement>());
 				if (toggle.graphic is Image check)
 					check.color = tokens.accent;
 			}
@@ -1320,10 +1348,45 @@ namespace spz {
 		public static void ApplyPanelWidth(LayoutElement layout) {
 			if (layout == null || !ShouldRecolorBoundChrome)
 				return;
+			SnapshotPanelWidth(layout);
 			float w = Mathf.Clamp(_active.panelWidth, PanelWidthMin, PanelWidthMax);
 			layout.preferredWidth = w;
 			if (layout.minWidth > 0.5f)
 				layout.minWidth = Mathf.Min(layout.minWidth, w);
+		}
+
+		static void SnapshotPanelWidth(LayoutElement layout) {
+			if (layout == null) return;
+			var tag = layout.GetComponent<SpzUiThemeDesignLayoutElement>();
+			if (tag == null) {
+				tag = layout.gameObject.AddComponent<SpzUiThemeDesignLayoutElement>();
+				tag.preferredWidth = layout.preferredWidth;
+				tag.minWidth = layout.minWidth;
+				tag.hasSnapshot = true;
+			}
+			else if (!tag.hasSnapshot) {
+				tag.preferredWidth = layout.preferredWidth;
+				tag.minWidth = layout.minWidth;
+				tag.hasSnapshot = true;
+			}
+		}
+
+		static void RestorePanelWidthsUnder(Transform root) {
+			if (root == null) return;
+			var tags = root.GetComponentsInChildren<SpzUiThemeDesignLayoutElement>(true);
+			for (int i = 0; i < tags.Length; i++) {
+				var tag = tags[i];
+				if (tag == null || !tag.hasSnapshot) continue;
+				var le = tag.GetComponent<LayoutElement>();
+				if (le != null) {
+					le.preferredWidth = tag.preferredWidth;
+					le.minWidth = tag.minWidth;
+				}
+				if (Application.isPlaying)
+					UnityEngine.Object.Destroy(tag);
+				else
+					UnityEngine.Object.DestroyImmediate(tag);
+			}
 		}
 
 		/// <summary>
@@ -1427,6 +1490,9 @@ namespace spz {
 			colors.highlightedColor = Color.Lerp(Color.white, accent, 0.25f);
 			colors.pressedColor = Color.Lerp(Color.white, accent, 0.55f);
 			colors.selectedColor = colors.highlightedColor;
+			// Keep hard-disabled faces readable (Brush flat block / GEN cancel parity).
+			colors.disabledColor = new Color(1f, 1f, 1f, 0.4f);
+			colors.colorMultiplier = 1f;
 			selectable.colors = colors;
 		}
 
@@ -1993,6 +2059,13 @@ namespace spz {
 		public int padL, padR, padT, padB;
 	}
 
+	/// <summary>Snapshots LayoutElement widths so panel_width can unwind on Restore SPZ.</summary>
+	public sealed class SpzUiThemeDesignLayoutElement : MonoBehaviour {
+		public float preferredWidth = -1f;
+		public float minWidth = -1f;
+		public bool hasSnapshot;
+	}
+
 	/// <summary>Marks an Image as eligible for theme <c>corner_radius</c> 9-slice updates.</summary>
 	public sealed class SpzUiThemeRoundedControl : MonoBehaviour {
 		public Sprite authoredSprite;
@@ -2020,6 +2093,8 @@ namespace spz {
 			public TMP_FontAsset authoredFont;
 			public Material authoredFontSharedMaterial;
 			public bool hasFontSnapshot;
+			public bool authoredRaycastTarget = true;
+			public bool hasRaycastSnapshot;
 			public bool hasSnapshot;
 		}
 
