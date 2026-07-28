@@ -113,6 +113,9 @@ namespace spz {
 		/// <summary>
 		/// Bound core chrome may retint only when a non-builtin theme is active.
 		/// Authored SPZ colors stay until Nomad/custom Apply — addon theme vs permanent UI boundary.
+		/// <para><b>Silo contract:</b> every chrome mutator must no-op or restore when this is false;
+		/// snapshot authored fields <i>before</i> first Nomad write; leave via <see cref="RestoreBoundChromeUnder"/>.
+		/// Regression: <c>NomadThemeSiloContractTests</c> + <c>.cursor/rules/nomad-theme-silo.mdc</c>.</para>
 		/// </summary>
 		public static bool ShouldRecolorBoundChrome => !IsBuiltinDefaultActive;
 
@@ -186,19 +189,17 @@ namespace spz {
 			if (toggle == null || toggle.targetGraphic == null)
 				return;
 			ApplyBoundChromeSelectable(toggle, face, accent);
-			if (toggle.targetGraphic is Image bg)
-				ApplyRoundedControlSprite(bg, markEligible: true);
 			if (toggle.graphic != null)
 				ApplyBoundChromeGraphic(toggle.graphic, checkSuccess);
 		}
 
 		/// <summary>
-		/// Soft fill stretched edge-to-edge; snapshots RectTransform for Restore SPZ.
-		/// Does not force <see cref="Image.Type.Simple"/> — that stretches soft corner AA into whiskers;
-		/// pair with <see cref="ApplyRoundedControlSprite"/> which picks Sliced vs Simple.
+		/// Soft/solid fill stretched edge-to-edge; snapshots RectTransform for Restore SPZ.
+		/// Pair with solid-square chrome (<see cref="ApplySolidSquareChrome"/> /
+		/// <see cref="ApplyRoundedControlSprite"/>).
 		/// </summary>
 		public static void FlattenToolFaceImage(Image img) {
-			if (img == null) return;
+			if (img == null || !ShouldRecolorBoundChrome) return;
 			img.preserveAspect = false;
 			img.pixelsPerUnitMultiplier = 1f;
 			if (UiRuntimeSprites.IsCachedRoundedRect(img.sprite))
@@ -286,8 +287,8 @@ namespace spz {
 
 		/// <summary>
 		/// Selectable chrome apply gated by <see cref="ShouldRecolorBoundChrome"/>.
-		/// Replaces beveled 9-slice <b>faces</b> with flat Simple fills.
-		/// Does not hide Toggle.graphic checkmarks — callers that need that (Multiview POV) hide explicitly.
+		/// Litmus expanded: hard opaque solid squares (SAVE 2K pattern) — no soft 9-slice / whiskers.
+		/// Does not hide Toggle.graphic checkmarks — Multiview POV bevel plates hide via name match.
 		/// </summary>
 		public static void ApplyBoundChromeSelectable(Selectable selectable, Color normal, Color accent) {
 			if (selectable == null || selectable.targetGraphic == null)
@@ -297,12 +298,7 @@ namespace spz {
 				RestoreAuthoredColorBlock(selectable);
 				return;
 			}
-			SnapshotAuthoredGraphic(selectable.targetGraphic);
-			SnapshotAuthoredColorBlock(selectable);
-			ApplySelectableToken(selectable, normal, accent);
-			if (selectable.targetGraphic is Image face && !IsToggleCheckmarkGraphic(face)) {
-				ApplyRoundedControlSprite(face, markEligible: true);
-			}
+			ApplySolidSquareChrome(selectable, normal, accent);
 		}
 
 		/// <summary>True when <paramref name="img"/> is a Toggle's ON-state graphic (checkmark / tick plate).</summary>
@@ -314,13 +310,16 @@ namespace spz {
 		}
 
 		/// <summary>
-		/// Converts authored <see cref="Image.Type.Sliced"/> chrome to a flat Simple soft fill.
-		/// Skips Nomad slider segment tiles (intentionally Tiled) and Toggle checkmark faces.
+		/// Converts authored <see cref="Image.Type.Sliced"/> chrome to a flat solid square.
+		/// Skips Nomad slider segment tiles, Toggle checkmarks, and <see cref="Image.Type.Filled"/>
+		/// radial dials (CircleSlider) — flattening those into SolidRect causes overlay soup.
 		/// </summary>
 		public static void FlattenSlicedChromeFace(Image image) {
 			if (image == null || !ShouldRecolorBoundChrome)
 				return;
 			if (IsToggleCheckmarkGraphic(image))
+				return;
+			if (image.type == Image.Type.Filled)
 				return;
 			if (UiRuntimeSprites.IsNomadSliderSegmentTile(image.sprite))
 				return;
@@ -383,6 +382,36 @@ namespace spz {
 		const float NomadStripLabelCharacterSpacing = 18f;
 		const float NomadStripLabelLineSpacing = -8f;
 
+		const string RobotoRegularSdfAssetPath = "Assets/_gm/Art/Fonts/ENG - Roboto-Regular SDF.asset";
+		static TMP_FontAsset _cachedNomadUiFont;
+
+		/// <summary>Roboto Regular SDF when present (Nomad theme type); else TMP default.</summary>
+		public static TMP_FontAsset ResolveNomadUiFont() {
+			if (_cachedNomadUiFont != null)
+				return _cachedNomadUiFont;
+#if UNITY_EDITOR
+			_cachedNomadUiFont = UnityEditor.AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(RobotoRegularSdfAssetPath);
+#endif
+			if (_cachedNomadUiFont == null) {
+				var loaded = Resources.FindObjectsOfTypeAll<TMP_FontAsset>();
+				for (int i = 0; i < loaded.Length; i++) {
+					var f = loaded[i];
+					if (f == null || string.IsNullOrEmpty(f.name)) continue;
+					string n = f.name;
+					if (n.IndexOf("Roboto", StringComparison.OrdinalIgnoreCase) < 0) continue;
+					if (n.IndexOf("Regular", StringComparison.OrdinalIgnoreCase) < 0) continue;
+					_cachedNomadUiFont = f;
+					break;
+				}
+			}
+			if (_cachedNomadUiFont == null)
+				_cachedNomadUiFont = TMP_Settings.defaultFontAsset;
+			return _cachedNomadUiFont;
+		}
+
+		/// <summary>Editor/tests: drop cached Roboto resolve so AssetDatabase path can be re-probed.</summary>
+		public static void ClearNomadUiFontCache() => _cachedNomadUiFont = null;
+
 		static void SnapshotNomadTypography(TMP_Text text) {
 			if (text == null) return;
 			var tag = text.GetComponent<SpzUiThemeDesignTypography>();
@@ -393,6 +422,11 @@ namespace spz {
 				tag.fontStyle = text.fontStyle;
 				tag.outlineWidth = text.outlineWidth;
 				tag.outlineColor = text.outlineColor;
+				tag.alignment = text.alignment;
+				tag.hasAlignmentSnapshot = true;
+				tag.authoredFont = text.font;
+				tag.authoredFontSharedMaterial = text.fontSharedMaterial;
+				tag.hasFontSnapshot = true;
 				tag.hasSnapshot = true;
 			}
 			else if (!tag.hasSnapshot) {
@@ -403,38 +437,83 @@ namespace spz {
 				tag.outlineColor = text.outlineColor;
 				tag.hasSnapshot = true;
 			}
+			if (!tag.hasAlignmentSnapshot) {
+				tag.alignment = text.alignment;
+				tag.hasAlignmentSnapshot = true;
+			}
+			if (!tag.hasFontSnapshot) {
+				tag.authoredFont = text.font;
+				tag.authoredFontSharedMaterial = text.fontSharedMaterial;
+				tag.hasFontSnapshot = true;
+			}
 		}
 
 		static void RestoreNomadTypography(TMP_Text text) {
 			if (text == null) return;
 			var tag = text.GetComponent<SpzUiThemeDesignTypography>();
-			if (tag == null || !tag.hasSnapshot) return;
-			text.characterSpacing = tag.characterSpacing;
-			text.lineSpacing = tag.lineSpacing;
-			text.fontStyle = tag.fontStyle;
-			text.outlineWidth = tag.outlineWidth;
-			text.outlineColor = tag.outlineColor;
+			if (tag == null) return;
+			if (tag.hasSnapshot) {
+				text.characterSpacing = tag.characterSpacing;
+				text.lineSpacing = tag.lineSpacing;
+				text.fontStyle = tag.fontStyle;
+				TrySetNomadOutline(text, tag.outlineWidth, tag.outlineColor);
+			}
+			if (tag.hasAlignmentSnapshot)
+				text.alignment = tag.alignment;
+			if (tag.hasFontSnapshot) {
+				text.font = tag.authoredFont;
+				if (tag.authoredFontSharedMaterial != null)
+					text.fontSharedMaterial = tag.authoredFontSharedMaterial;
+			}
 		}
 
-		/// <summary>Open tracking for sculpt-chrome labels (no font-asset swap — LiberationSans SDF).</summary>
+		/// <summary>Swap BoundChrome TMP to Roboto Regular when Nomad theme is active.</summary>
+		static void ApplyNomadUiFont(TMP_Text text) {
+			if (text == null) return;
+			var font = ResolveNomadUiFont();
+			if (font == null) return;
+			text.font = font;
+			if (font.material != null)
+				text.fontSharedMaterial = font.material;
+		}
+
+		/// <summary>Open tracking for sculpt-chrome labels + Roboto.</summary>
 		static void ApplyNomadTypographyMetrics(TMP_Text text) {
-			if (text == null || text.font == null) return;
+			if (text == null) return;
+			ApplyNomadUiFont(text);
+			if (text.font == null) return;
 			text.characterSpacing = NomadLabelCharacterSpacing;
 			// Soft dark fringe so reverse-out type (DEP, etc.) stays legible on flat cells.
-			text.outlineWidth = 0.18f;
-			text.outlineColor = new Color(0.05f, 0.05f, 0.07f, 0.72f);
+			TrySetNomadOutline(text, 0.18f, new Color(0.05f, 0.05f, 0.07f, 0.72f));
 		}
 
-		/// <summary>Workflow / compact vertical strip: uppercase stack with open tracking.</summary>
+		/// <summary>Workflow / compact vertical strip: Roboto + uppercase stack with open tracking.</summary>
 		static void ApplyNomadStripLabelMetrics(TMP_Text text) {
-			if (text == null || text.font == null) return;
+			if (text == null) return;
+			ApplyNomadUiFont(text);
+			if (text.font == null) return;
 			text.fontStyle = FontStyles.UpperCase;
 			text.characterSpacing = NomadStripLabelCharacterSpacing;
 			// Authored SPZ stacks use ~-17…-30; ease so letters breathe without overflowing the cell.
 			if (text.lineSpacing < NomadStripLabelLineSpacing)
 				text.lineSpacing = NomadStripLabelLineSpacing;
-			text.outlineWidth = 0.22f;
-			text.outlineColor = new Color(0.04f, 0.04f, 0.06f, 0.78f);
+			TrySetNomadOutline(text, 0.22f, new Color(0.04f, 0.04f, 0.06f, 0.78f));
+		}
+
+		/// <summary>
+		/// TMP outline needs a live font material; EditMode / freshly-created TMP can NRE in SetOutlineThickness.
+		/// </summary>
+		static void TrySetNomadOutline(TMP_Text text, float width, Color color) {
+			if (text == null) return;
+			if (text.fontSharedMaterial == null && (text.font == null || text.font.material == null))
+				return;
+			try {
+				text.outlineWidth = width;
+				text.outlineColor = color;
+			}
+			catch (Exception) {
+				// Headless / incomplete TMP material — skip fringe; color+font still applied.
+			}
 		}
 
 		/// <summary>
@@ -442,6 +521,11 @@ namespace spz {
 		/// icon Images named icon/Icon. Restores when builtin default is active.
 		/// </summary>
 		public static void ApplyControlLineIcon(Transform owner, StudioLineIcon glyph, float sizePx = 22f) {
+			ApplyControlLineIconAt(owner, glyph, sizePx, Vector2.zero);
+		}
+
+		/// <summary>Same as <see cref="ApplyControlLineIcon"/> with an explicit anchored position (icon-above-label cells).</summary>
+		public static void ApplyControlLineIconAt(Transform owner, StudioLineIcon glyph, float sizePx, Vector2 anchoredPosition) {
 			if (owner == null) return;
 			// Transform.Find skips inactive children — must scan manually or leave→re-Apply duplicates icons.
 			Transform iconT = FindDirectChildIncludingInactive(owner, ControlLineIconChildName);
@@ -468,7 +552,7 @@ namespace spz {
 				rt.anchorMin = new Vector2(0.5f, 0.5f);
 				rt.anchorMax = new Vector2(0.5f, 0.5f);
 				rt.pivot = new Vector2(0.5f, 0.5f);
-				rt.anchoredPosition = Vector2.zero;
+				rt.anchoredPosition = anchoredPosition;
 				rt.sizeDelta = new Vector2(sizePx, sizePx);
 			}
 			var icon = iconT.GetComponent<Image>();
@@ -479,6 +563,59 @@ namespace spz {
 			}
 			if (created)
 				iconT.SetAsLastSibling();
+		}
+
+		/// <summary>
+		/// Nomad sculpt strip cell: thin line icon upper-center, label band underneath (Roboto).
+		/// Label RectTransforms are snapshotted for <see cref="RestoreBoundChromeUnder"/>.
+		/// </summary>
+		/// <param name="stripUppercase">True = workflow PROJ MASK style (uppercase stack); false = title-case tool names (Paint/Smudge).</param>
+		public static void ApplyNomadStackedToolCell(
+			Transform cell,
+			StudioLineIcon glyph,
+			Color labelColor,
+			float iconPx = 20f,
+			Func<TMP_Text, bool> includeLabel = null,
+			bool stripUppercase = true) {
+			if (cell == null) return;
+			if (!ShouldRecolorBoundChrome) {
+				// Leave path: hide Monolith icon, restore label rects + authored TMP (font/align).
+				ApplyControlLineIcon(cell, glyph, iconPx);
+				RestoreToolFaceLayoutsUnder(cell);
+				foreach (var tmp in cell.GetComponentsInChildren<TMP_Text>(true)) {
+					if (tmp == null) continue;
+					if (includeLabel != null && !includeLabel(tmp))
+						continue;
+					RestoreAuthoredGraphic(tmp);
+					RestoreDesignFontSize(tmp, stripUppercase ? 11f : 12f);
+				}
+				return;
+			}
+			float yLift = Mathf.Max(4f, iconPx * 0.28f);
+			ApplyControlLineIconAt(cell, glyph, iconPx, new Vector2(0f, yLift));
+			foreach (var tmp in cell.GetComponentsInChildren<TMP_Text>(true)) {
+				if (tmp == null) continue;
+				if (includeLabel != null && !includeLabel(tmp))
+					continue;
+				var lrt = tmp.rectTransform;
+				if (lrt != null) {
+					SnapshotToolFaceLayout(lrt);
+					lrt.anchorMin = new Vector2(0.06f, 0.02f);
+					lrt.anchorMax = new Vector2(0.94f, 0.40f);
+					lrt.pivot = new Vector2(0.5f, 0.5f);
+					lrt.anchoredPosition = Vector2.zero;
+					lrt.offsetMin = Vector2.zero;
+					lrt.offsetMax = Vector2.zero;
+					lrt.sizeDelta = Vector2.zero;
+				}
+				// Snapshot authored alignment BEFORE forcing Center (otherwise restore keeps Nomad align).
+				SnapshotNomadTypography(tmp);
+				tmp.alignment = TextAlignmentOptions.Center;
+				if (stripUppercase)
+					ApplyBoundChromeStripLabelTmp(tmp, labelColor, 11f);
+				else
+					ApplyBoundChromeTmp(tmp, labelColor, 12f);
+			}
 		}
 
 		/// <summary>
@@ -515,6 +652,9 @@ namespace spz {
 				// Real Toggle ON glyphs must stay (Settings / context menus); tool cells hide those explicitly.
 				if (IsToggleCheckmarkGraphic(img))
 					continue;
+				// Never disable a Selectable's targetGraphic — dead clicks under Nomad (name may contain "Icon").
+				if (IsSelectableTargetGraphic(img))
+					continue;
 				if (!IsAuthoredIconImageName(n))
 					continue;
 				var tag = img.GetComponent<SpzUiThemeHiddenGraphic>();
@@ -531,15 +671,22 @@ namespace spz {
 			}
 		}
 
+		/// <summary>True when <paramref name="img"/> is any ancestor Selectable's click/raycast face.</summary>
+		public static bool IsSelectableTargetGraphic(Image img) {
+			if (img == null) return false;
+			var sel = img.GetComponentInParent<Selectable>(true);
+			return sel != null && ReferenceEquals(sel.targetGraphic, img);
+		}
+
 		static void RestoreHiddenAuthoredIconsUnder(Transform root) {
 			if (root == null) return;
 			var tags = root.GetComponentsInChildren<SpzUiThemeHiddenGraphic>(true);
 			for (int i = 0; i < tags.Length; i++) {
 				var tag = tags[i];
 				if (tag == null) continue;
-				var img = tag.GetComponent<Image>();
-				if (img != null && tag.hasSnapshot)
-					img.enabled = tag.wasEnabled;
+				var g = tag.GetComponent<Graphic>();
+				if (g != null && tag.hasSnapshot)
+					g.enabled = tag.wasEnabled;
 				if (Application.isPlaying)
 					UnityEngine.Object.Destroy(tag);
 				else
@@ -551,31 +698,41 @@ namespace spz {
 			if (string.IsNullOrEmpty(name)) return false;
 			if (name.IndexOf("Monolith", StringComparison.OrdinalIgnoreCase) >= 0)
 				return false;
-			// Checkmark / tick are Toggle ON glyphs — not silhouette icons to replace with Monolith.
-			return name.Equals("icon", StringComparison.OrdinalIgnoreCase)
+			// Prefer explicit icon object names. Avoid bare IndexOf("Icon") alone for *Button faces —
+			// those are gated out via IsSelectableTargetGraphic; still tighten matching.
+			if (name.Equals("icon", StringComparison.OrdinalIgnoreCase)
+				|| name.Equals("Icon", StringComparison.Ordinal)
 				|| name.StartsWith("icon_", StringComparison.OrdinalIgnoreCase)
 				|| name.EndsWith("_icon", StringComparison.OrdinalIgnoreCase)
-				|| name.IndexOf("Icon", StringComparison.OrdinalIgnoreCase) >= 0;
+				|| name.EndsWith("Icon", StringComparison.Ordinal))
+				return true;
+			// Compound child labels like "BrushIcon" / "Smudge Icon" — not "...IconButton" root faces.
+			if (name.IndexOf("Icon", StringComparison.OrdinalIgnoreCase) < 0)
+				return false;
+			if (name.EndsWith("Button", StringComparison.OrdinalIgnoreCase)
+				|| name.EndsWith("Toggle", StringComparison.OrdinalIgnoreCase)
+				|| name.EndsWith("Selectable", StringComparison.OrdinalIgnoreCase))
+				return false;
+			return true;
 		}
 
 		/// <summary>
-		/// Hides an authored Graphic under Nomad (tick / secondary chrome) and snapshots for Restore SPZ.
+		/// Hides an authored Graphic under Nomad (tick / secondary chrome / launcher TMP) and snapshots for Restore SPZ.
+		/// No-op on builtin default (silo).
 		/// </summary>
 		public static void HideAuthoredGraphicForTheme(Graphic graphic) {
-			if (graphic == null) return;
-			if (graphic is Image img) {
-				var tag = img.GetComponent<SpzUiThemeHiddenGraphic>();
-				if (tag == null) {
-					tag = img.gameObject.AddComponent<SpzUiThemeHiddenGraphic>();
-					tag.wasEnabled = img.enabled;
-					tag.hasSnapshot = true;
-				}
-				else if (!tag.hasSnapshot) {
-					tag.wasEnabled = img.enabled;
-					tag.hasSnapshot = true;
-				}
-				img.enabled = false;
+			if (graphic == null || !ShouldRecolorBoundChrome) return;
+			var tag = graphic.GetComponent<SpzUiThemeHiddenGraphic>();
+			if (tag == null) {
+				tag = graphic.gameObject.AddComponent<SpzUiThemeHiddenGraphic>();
+				tag.wasEnabled = graphic.enabled;
+				tag.hasSnapshot = true;
 			}
+			else if (!tag.hasSnapshot) {
+				tag.wasEnabled = graphic.enabled;
+				tag.hasSnapshot = true;
+			}
+			graphic.enabled = false;
 		}
 
 		/// <summary>
@@ -610,8 +767,7 @@ namespace spz {
 						ApplyBoundChromeGraphic(fill, ResolveNomadSliderFillColor(t));
 					}
 					else {
-						fill.sprite = UiRuntimeSprites.GetRoundedRectSliced(
-							Mathf.RoundToInt(Mathf.Clamp(t.cornerRadius, CornerRadiusMin, CornerRadiusMax)));
+						fill.sprite = UiRuntimeSprites.SolidRect;
 						fill.type = Image.Type.Simple;
 						ApplyBoundChromeGraphic(fill, t.accent);
 					}
@@ -1041,9 +1197,9 @@ namespace spz {
 		}
 
 		/// <summary>
-		/// Hard opaque rectangle face — litmus pattern for Nomad chrome.
+		/// Hard opaque rectangle face — litmus pattern for Nomad chrome (expanded beyond SAVE 2K).
 		/// No 9-slice borders, no soft-AA rounded sprite, no SPZ bevel plate.
-		/// Restore via <see cref="RestoreBoundChromeUnder"/>.
+		/// Preserves real <see cref="Toggle.graphic"/> checkmarks. Restore via <see cref="RestoreBoundChromeUnder"/>.
 		/// </summary>
 		public static void ApplySolidSquareChrome(Selectable selectable, Color fill, Color accent) {
 			if (selectable == null || selectable.targetGraphic == null)
@@ -1056,7 +1212,7 @@ namespace spz {
 			SnapshotAuthoredGraphic(selectable.targetGraphic);
 			SnapshotAuthoredColorBlock(selectable);
 			ApplySelectableToken(selectable, fill, accent);
-			if (selectable.targetGraphic is Image face) {
+			if (selectable.targetGraphic is Image face && !IsToggleCheckmarkGraphic(face)) {
 				var tag = face.GetComponent<SpzUiThemeRoundedControl>();
 				if (tag == null) {
 					tag = face.gameObject.AddComponent<SpzUiThemeRoundedControl>();
@@ -1075,10 +1231,13 @@ namespace spz {
 				face.pixelsPerUnitMultiplier = 1f;
 				face.fillCenter = true;
 			}
-			// Drop authored corner-chevron / tick plates under this control only.
+			// Drop authored corner-chevron / fake tick plates under this control only.
 			foreach (var img in selectable.GetComponentsInChildren<Image>(true)) {
 				if (img == null || img == selectable.targetGraphic) continue;
+				if (IsToggleCheckmarkGraphic(img)) continue;
 				string n = img.gameObject.name ?? "";
+				if (n == ControlLineIconChildName || n == "MonolithActiveBar")
+					continue;
 				if (n.IndexOf("triangle", StringComparison.OrdinalIgnoreCase) >= 0
 					|| n.Equals("Checkmark", StringComparison.OrdinalIgnoreCase)
 					|| n.Equals("tick", StringComparison.OrdinalIgnoreCase))
@@ -1087,15 +1246,18 @@ namespace spz {
 		}
 
 		/// <summary>
-		/// Assigns the active <c>corner_radius</c> soft-rounded fill to eligible control Images only
-		/// (tagged or already using a runtime rounded sprite). Never retargets RawImage art.
-		/// Uses <see cref="Image.Type.Sliced"/> when radius &gt; 0 so soft AA stays in the border
-		/// patches — <see cref="Image.Type.Simple"/> stretch turns those corners into horizontal whiskers
-		/// on wide Settings / ribbon buttons. Radius 0 uses an opaque solid Simple fill.
+		/// Assigns a solid-square fill to eligible control Images (Nomad litmus expanded).
+		/// Soft <c>corner_radius</c> sliced sprites caused horizontal whiskers on wide buttons —
+		/// always use opaque <see cref="UiRuntimeSprites.SolidRect"/> + <see cref="Image.Type.Simple"/>.
 		/// Snapshots the authored sprite once so <see cref="RestoreRoundedControlSpritesUnder"/> can unwind.
 		/// </summary>
 		public static void ApplyRoundedControlSprite(Image image, bool markEligible = false) {
-			if (image == null)
+			if (image == null || !ShouldRecolorBoundChrome)
+				return;
+			if (IsToggleCheckmarkGraphic(image))
+				return;
+			// Radial/filled dials must keep authored sprites (CircleSlider fillAmount).
+			if (image.type == Image.Type.Filled)
 				return;
 			var tag = image.GetComponent<SpzUiThemeRoundedControl>();
 			if (tag == null) {
@@ -1108,19 +1270,11 @@ namespace spz {
 				tag.authoredType = image.type;
 				tag.hasAuthoredSnapshot = true;
 			}
-			int radius = Mathf.RoundToInt(Mathf.Clamp(_active.cornerRadius, CornerRadiusMin, CornerRadiusMax));
 			image.pixelsPerUnitMultiplier = 1f;
 			image.preserveAspect = false;
 			image.fillCenter = true;
-			if (radius <= 0) {
-				image.sprite = UiRuntimeSprites.SolidRect;
-				image.type = Image.Type.Simple;
-			}
-			else {
-				image.sprite = UiRuntimeSprites.GetRoundedRectSliced(radius);
-				// Sliced keeps AA in corner borders; Simple stretch = whisker spikes on wide cells.
-				image.type = Image.Type.Sliced;
-			}
+			image.sprite = UiRuntimeSprites.SolidRect;
+			image.type = Image.Type.Simple;
 		}
 
 		/// <summary>
@@ -1152,16 +1306,19 @@ namespace spz {
 			return c;
 		}
 
-		/// <summary>Tints a line-icon Image with the active <c>icon_tint</c> token.</summary>
+		/// <summary>Tints a line-icon Image with the active <c>icon_tint</c> token. No-op on builtin.</summary>
 		public static void ApplyLineIconTint(Image image) {
-			if (image == null)
+			if (image == null || !ShouldRecolorBoundChrome)
 				return;
 			image.color = _active.iconTint;
 		}
 
-		/// <summary>Applies active <c>panel_width</c> to a control LayoutElement (preferred + min width).</summary>
+		/// <summary>
+		/// Applies active <c>panel_width</c> to a control LayoutElement (preferred + min width).
+		/// No-op on builtin so addon panel widths do not stick after Restore SPZ.
+		/// </summary>
 		public static void ApplyPanelWidth(LayoutElement layout) {
-			if (layout == null)
+			if (layout == null || !ShouldRecolorBoundChrome)
 				return;
 			float w = Mathf.Clamp(_active.panelWidth, PanelWidthMin, PanelWidthMax);
 			layout.preferredWidth = w;
@@ -1851,15 +2008,20 @@ namespace spz {
 		public StudioLineIcon Icon;
 	}
 
-	/// <summary>Snapshots authored TMP tracking/style so Nomad typography can unwind on builtin restore.</summary>
-	public sealed class SpzUiThemeDesignTypography : MonoBehaviour {
-		public float characterSpacing;
-		public float lineSpacing;
-		public FontStyles fontStyle;
-		public float outlineWidth;
-		public Color outlineColor = Color.clear;
-		public bool hasSnapshot;
-	}
+		/// <summary>Snapshots authored TMP tracking/style/font so Nomad typography can unwind on builtin restore.</summary>
+		public sealed class SpzUiThemeDesignTypography : MonoBehaviour {
+			public float characterSpacing;
+			public float lineSpacing;
+			public FontStyles fontStyle;
+			public float outlineWidth;
+			public Color outlineColor = Color.clear;
+			public TextAlignmentOptions alignment = TextAlignmentOptions.TopLeft;
+			public bool hasAlignmentSnapshot;
+			public TMP_FontAsset authoredFont;
+			public Material authoredFontSharedMaterial;
+			public bool hasFontSnapshot;
+			public bool hasSnapshot;
+		}
 
 	/// <summary>Marks an authored icon Image hidden while a MonolithLineIcon overlay is shown.</summary>
 	public sealed class SpzUiThemeHiddenGraphic : MonoBehaviour {
