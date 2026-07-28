@@ -486,6 +486,9 @@ namespace spz {
 	        SD_Options_Fetcher.Act_onWillSendOptions_AmmendPlz += OnWillSendOptions_AmmendPlz;
 
 	        _tileableInpaint.onValueChanged.AddListener( OnTileableToggle );
+	        WireOptionToggleChromeRefresh(_softInpaint);
+	        WireOptionToggleChromeRefresh(_tileableInpaint);
+	        WireOptionToggleChromeRefresh(_ignoreDepthOrNormals);
 
 	        StableDiffusion_Hub._Act_img2img_requested += On_img2img_requested;
 
@@ -500,8 +503,31 @@ namespace spz {
 	        ApplyThemeTokens();
 	    }
 
+	    void WireOptionToggleChromeRefresh(Toggle toggle) {
+	        if (toggle == null) return;
+	        toggle.onValueChanged.RemoveListener(OnOptionToggleChromeChanged);
+	        toggle.onValueChanged.AddListener(OnOptionToggleChromeChanged);
+	    }
+
+	    void OnOptionToggleChromeChanged(bool _) => RefreshOptionToggleChrome();
+
+	    /// <summary>Re-tint Soft/Tileable/Ignore fills from current isOn (BoundChrome only).</summary>
+	    public void RefreshOptionToggleChrome() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) return;
+	        var t = SpzUiThemeOps.Active;
+	        ThemeToggle(_softInpaint, t);
+	        ThemeToggle(_tileableInpaint, t);
+	        ThemeToggle(_ignoreDepthOrNormals, t);
+	    }
+
 	    void OnDestroy() {
 	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	        if (_softInpaint != null)
+	            _softInpaint.onValueChanged.RemoveListener(OnOptionToggleChromeChanged);
+	        if (_tileableInpaint != null)
+	            _tileableInpaint.onValueChanged.RemoveListener(OnOptionToggleChromeChanged);
+	        if (_ignoreDepthOrNormals != null)
+	            _ignoreDepthOrNormals.onValueChanged.RemoveListener(OnOptionToggleChromeChanged);
 	        if (instance == this)
 	            instance = null;
 	    }
@@ -560,10 +586,11 @@ namespace spz {
 
 	    static void ThemeToggle(Toggle toggle, SpzUiThemeOps.ThemeTokens tokens) {
 	        if (toggle == null) return;
-	        Color normal = toggle.isOn
+	        Color face = toggle.isOn
 	            ? Color.Lerp(tokens.tabActive, tokens.accent, 0.45f)
 	            : tokens.controlBg;
-	        SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, normal, tokens.accent);
+	        // Keep real checkbox glyphs (Settings parity) — not solid-square tool cells.
+	        SpzUiThemeOps.ThemeCheckboxToggle(toggle, face, tokens.accent, tokens.success);
 	    }
 
 	}
