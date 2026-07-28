@@ -200,6 +200,9 @@ namespace spz {
 		public static void ThemeCheckboxToggle(Toggle toggle, Color face, Color accent, Color checkSuccess) {
 			if (toggle == null || toggle.targetGraphic == null)
 				return;
+			// Apply-only under BoundChrome; leave paths use RestoreBoundChromeUnder (do not unhide here).
+			if (!ShouldRecolorBoundChrome)
+				return;
 			ApplyBoundChromeSelectable(toggle, face, accent);
 			if (toggle.graphic != null) {
 				// Solid-square name-hide can disable a Checkmark child before we tint it — force ON glyph back.
