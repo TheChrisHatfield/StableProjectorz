@@ -86,17 +86,121 @@ namespace spz {
 
 	    void Start(){
 	        _Act_OnDimensionChanged?.Invoke(_dimensionMode);
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        ApplyThemeTokens();
+	    }
+
+	    void OnDestroy(){
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	        if (instance == this)
+	            instance = null;
+	    }
+
+	    /// <summary>
+	    /// Nomad: flat circle discs + reverse-out labels (light type on dark fill). Restores sphere sprites on builtin.
+	    /// MainChoice face is the child <c>Checkmark</c> (glossy pin_top_view), not only the parent Image.
+	    /// </summary>
+	    void ApplyThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
+	            ApplyAuthoredSelectionColors();
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        if (_choicesPanel_rectTransf != null) {
+	            var panelImg = _choicesPanel_rectTransf.GetComponent<Image>();
+	            if (panelImg != null)
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(panelImg, t.panelBg);
+	            // Prefab "bg" child under choice panel.
+	            var bg = _choicesPanel_rectTransf.Find("bg");
+	            if (bg != null) {
+	                var bgImg = bg.GetComponent<Image>();
+	                if (bgImg != null)
+	                    SpzUiThemeOps.ApplyBoundChromeGraphic(bgImg, t.panelBg);
+	            }
+	        }
+	        // MainChoice: parent + Checkmark overlay (glossy sphere was the Checkmark Image).
+	        Transform mainRoot = _mainChoiceHoverSurf != null
+	            ? _mainChoiceHoverSurf.transform
+	            : (_mainChoice_text != null ? _mainChoice_text.transform.parent : null);
+	        ApplyFlatDiscsUnder(mainRoot, selected: true, t);
+	        ApplyFlatDiscsUnder(_3d_choice_button != null ? _3d_choice_button.transform : null,
+	            _dimensionMode == DimensionMode.dim_gen_3d, t);
+	        ApplyFlatDiscsUnder(_sd_choice_button != null ? _sd_choice_button.transform : null,
+	            _dimensionMode == DimensionMode.dim_sd, t);
+	        ApplyFlatDiscsUnder(_uv_choice_button != null ? _uv_choice_button.transform : null,
+	            _dimensionMode == DimensionMode.dim_uv, t);
+	        ApplyFlatDiscsUnder(_bg_choice_button != null ? _bg_choice_button.transform : null, selected: false, t);
+	        ApplyReverseOutLabel(_mainChoice_text, t, 22f);
+	        ApplyReverseOutLabelsUnder(_3d_choice_button, t);
+	        ApplyReverseOutLabelsUnder(_sd_choice_button, t);
+	        ApplyReverseOutLabelsUnder(_uv_choice_button, t);
+	        ApplyReverseOutLabelsUnder(_bg_choice_button, t);
+	    }
+
+	    static void ApplyFlatDiscsUnder(Transform root, bool selected, SpzUiThemeOps.ThemeTokens t) {
+	        if (root == null) return;
+	        foreach (var img in root.GetComponentsInChildren<Image>(true)) {
+	            if (img == null) continue;
+	            // Checkmark overlays are selection glyphs — do not replace with CircleFilled discs.
+	            if (SpzUiThemeOps.IsToggleCheckmarkGraphic(img))
+	                continue;
+	            string n = img.gameObject.name ?? "";
+	            if (n == "MonolithLineIcon" || n == "MonolithActiveBar")
+	                continue;
+	            if (n.Equals("Checkmark", System.StringComparison.OrdinalIgnoreCase)
+	                || n.Equals("tick", System.StringComparison.OrdinalIgnoreCase))
+	                continue;
+	            ApplyFlatDisc(img, selected, t);
+	        }
+	    }
+
+	    static void ApplyFlatDisc(Image img, bool selected, SpzUiThemeOps.ThemeTokens t) {
+	        if (img == null) return;
+	        Color fill = selected
+	            ? Color.Lerp(t.controlBg, t.accent, 0.22f)
+	            : t.controlBg;
+	        SpzUiThemeOps.ApplyBoundChromeGraphic(img, fill);
+	        var tag = img.GetComponent<SpzUiThemeRoundedControl>();
+	        if (tag == null) {
+	            tag = img.gameObject.AddComponent<SpzUiThemeRoundedControl>();
+	            tag.authoredSprite = img.sprite;
+	            tag.authoredType = img.type;
+	            tag.hasAuthoredSnapshot = true;
+	        }
+	        img.sprite = UiRuntimeSprites.CircleFilled;
+	        img.type = Image.Type.Simple;
+	        img.preserveAspect = true;
+	    }
+
+	    static void ApplyReverseOutLabel(TMP_Text text, SpzUiThemeOps.ThemeTokens t, float basePt = 16f) {
+	        if (text == null) return;
+	        // Reverse-out: light type on dark disc (not black-on-white sphere).
+	        SpzUiThemeOps.ApplyBoundChromeTmp(text, t.textPrimary, basePt);
+	    }
+
+	    static void ApplyReverseOutLabelsUnder(Button button, SpzUiThemeOps.ThemeTokens t) {
+	        if (button == null) return;
+	        foreach (var tmp in button.GetComponentsInChildren<TMP_Text>(true))
+	            ApplyReverseOutLabel(tmp, t, 14f);
+	    }
+
+	    void ApplyAuthoredSelectionColors() {
+	        SetAuthoredButtonColor(_3d_choice_button, _dimensionMode == DimensionMode.dim_gen_3d);
+	        SetAuthoredButtonColor(_sd_choice_button, _dimensionMode == DimensionMode.dim_sd);
+	        SetAuthoredButtonColor(_uv_choice_button, _dimensionMode == DimensionMode.dim_uv);
+	        SetAuthoredButtonColor(_bg_choice_button, false);
+	    }
+
+	    void SetAuthoredButtonColor(Button button, bool active) {
+	        if (button == null) return;
+	        var img = button.GetComponent<Image>();
+	        if (img != null)
+	            img.color = active ? _activeColor : _inactiveColor;
 	    }
 
 
 	    void OnButtonPressed(Button but){
-	        var img = but.GetComponent<Image>();
-
-	        _3d_choice_button.GetComponent<Image>().color = _inactiveColor;
-	        _sd_choice_button.GetComponent<Image>().color = _inactiveColor;
-	        _uv_choice_button.GetComponent<Image>().color = _inactiveColor;
-	        _bg_choice_button.GetComponent<Image>().color = _inactiveColor;
-
 	        string msg = "";
 	        if(but == _3d_choice_button){ 
 	            _dimensionMode = DimensionMode.dim_gen_3d; _mainChoice_text.text = "3D";
@@ -114,7 +218,18 @@ namespace spz {
 	            Viewport_StatusText.instance.ShowStatusText(msg, false, 3, false);
 	        }
 	        _mainChoice_anim.Play();
-	        img.color = Color.white;
+	        if (SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            ApplyThemeTokens();
+	        }
+	        else {
+	            _3d_choice_button.GetComponent<Image>().color = _inactiveColor;
+	            _sd_choice_button.GetComponent<Image>().color = _inactiveColor;
+	            _uv_choice_button.GetComponent<Image>().color = _inactiveColor;
+	            _bg_choice_button.GetComponent<Image>().color = _inactiveColor;
+	            var img = but.GetComponent<Image>();
+	            if (img != null)
+	                img.color = Color.white;
+	        }
 	        _Act_OnDimensionChanged?.Invoke(_dimensionMode);
 	    }
 
