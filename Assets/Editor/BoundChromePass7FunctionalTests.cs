@@ -99,6 +99,20 @@ public sealed class BoundChromePass7FunctionalTests {
 		Assert.That(src, Does.Not.Contain("ApplyRoundedControlSprite(checkImg"));
 	}
 
+	[Test]
+	public void DimensionMode_SourceThemesNamedCheckmarkFaces() {
+		string path = Path.GetFullPath(Path.Combine(
+			Application.dataPath,
+			"..",
+			"Assets/_gm/Layouts/Viewport (MainView)/DimensionMode_MGR.cs"));
+		string src = File.ReadAllText(path);
+		int idx = src.IndexOf("static void ApplyFlatDiscsUnder", System.StringComparison.Ordinal);
+		Assert.That(idx, Is.GreaterThan(0));
+		string body = src.Substring(idx, System.Math.Min(800, src.Length - idx));
+		Assert.That(body, Does.Contain("IsToggleCheckmarkGraphic"));
+		Assert.That(body, Does.Not.Contain("n.Equals(\"Checkmark\""));
+	}
+
 	static float ColorDistance(Color a, Color b) {
 		return Mathf.Abs(a.r - b.r) + Mathf.Abs(a.g - b.g) + Mathf.Abs(a.b - b.b);
 	}
