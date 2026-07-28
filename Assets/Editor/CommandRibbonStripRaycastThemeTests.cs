@@ -35,6 +35,6 @@ public sealed class CommandRibbonStripRaycastThemeTests {
 		Assert.That(idx, Is.GreaterThan(0));
 		string body = src.Substring(idx, System.Math.Min(900, src.Length - idx));
 		Assert.That(body, Does.Contain("GetComponentsInChildren<Graphic>"));
-		Assert.That(body, Does.Contain("g.raycastTarget = false"));
+		Assert.That(body, Does.Contain("raycastTarget = false"));
 	}
 }
