@@ -1362,6 +1362,9 @@ namespace spz {
 				// Dropdown_* row images are almost transparent pointer hit targets.
 				if (button.gameObject.name.StartsWith("Dropdown_", StringComparison.Ordinal))
 					continue;
+				// Other invisible hit pads — solid-square chrome would steal clicks under Nomad.
+				if (button.targetGraphic.color.a < 0.08f)
+					continue;
 				bool isField = button.GetComponent<TMP_Dropdown>() != null
 					|| string.Equals(button.gameObject.name, "Dropdown", StringComparison.Ordinal);
 				Color normal = isField ? tokens.fieldBg : tokens.controlBg;
