@@ -129,12 +129,16 @@ namespace spz {
 			new Dictionary<int, ColorBlock>();
 		static readonly Dictionary<int, float> AuthoredPixelsPerUnit =
 			new Dictionary<int, float>();
+		static readonly Dictionary<int, bool> AuthoredGraphicRaycasts =
+			new Dictionary<int, bool>();
 
 		static void SnapshotAuthoredGraphic(Graphic graphic) {
 			if (graphic == null) return;
 			int id = graphic.GetInstanceID();
 			if (!AuthoredGraphicColors.ContainsKey(id))
 				AuthoredGraphicColors[id] = graphic.color;
+			if (!AuthoredGraphicRaycasts.ContainsKey(id))
+				AuthoredGraphicRaycasts[id] = graphic.raycastTarget;
 		}
 
 		static void SnapshotAuthoredPixelsPerUnit(Image image) {
@@ -155,9 +159,12 @@ namespace spz {
 		/// <summary>Restores a graphic's pre-theme color when snapshotted; no-op otherwise.</summary>
 		public static void RestoreAuthoredGraphic(Graphic graphic) {
 			if (graphic == null) return;
-			if (AuthoredGraphicColors.TryGetValue(graphic.GetInstanceID(), out Color c))
+			int id = graphic.GetInstanceID();
+			if (AuthoredGraphicColors.TryGetValue(id, out Color c))
 				graphic.color = c;
-			if (graphic is Image img && AuthoredPixelsPerUnit.TryGetValue(img.GetInstanceID(), out float ppu))
+			if (AuthoredGraphicRaycasts.TryGetValue(id, out bool ray))
+				graphic.raycastTarget = ray;
+			if (graphic is Image img && AuthoredPixelsPerUnit.TryGetValue(id, out float ppu))
 				img.pixelsPerUnitMultiplier = ppu;
 			if (graphic is TMP_Text tmp)
 				RestoreNomadTypography(tmp);
@@ -1431,6 +1438,9 @@ namespace spz {
 			SnapshotAuthoredGraphic(selectable.targetGraphic);
 			SnapshotAuthoredColorBlock(selectable);
 			ApplySelectableToken(selectable, fill, accent);
+			// Always keep the ColorTint face hittable — hide-Checkmark paths otherwise leave dead Selectables
+			// (workflow modes, ControlNet P/B/C, Multiview POV) and gen/basics feel broken under Nomad.
+			selectable.targetGraphic.raycastTarget = true;
 			if (selectable.targetGraphic is Image face
 			    && !IsToggleCheckmarkGraphic(face)
 			    && !IsUiMaskGraphic(face)) {
