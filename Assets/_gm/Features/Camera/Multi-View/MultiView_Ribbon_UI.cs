@@ -190,6 +190,7 @@ namespace spz {
 	                _editPOV_toggles[0].isOn = true;//if num cams decreased, ensure 0th toggle is on (even if all of their gameObjs are off)
 	            }
 	        }
+	        RefreshPovAndGridChromeSelection();
 	    }
 
 	    void LateUpdate_Done(){ 
@@ -248,6 +249,7 @@ namespace spz {
 	        _turnMeON_ifEditingMode.SetActive(false);
 
 	        SpzUiThemeOps.ThemeChanged += ApplyMultiviewChromeThemeTokens;
+	        WirePovChromeSelectionRefresh();
 	        ApplyMultiviewChromeThemeTokens();
 	    }
     
@@ -260,11 +262,58 @@ namespace spz {
 
 	        _editPOV_toggles.ForEach(t=>t.SetIsOnWithoutNotify(false));
 	        _editPOV_toggles[0].isOn = true;//to invoke the OnEditPov_Toggle() callback.
+	        RefreshPovAndGridChromeSelection();
 
 	        GenData2D_Archive.OnWillGenerate += On_SD_willGenerateArt;
         
 	        Settings_MGR._Act_verticalRibbonsSwapped += OnSettings_ToolRibbonSwapped;
 	        OnSettings_ToolRibbonSwapped( Settings_MGR.instance.get_viewport_isSwapVerticalRibbons() );
+	    }
+
+	    /// <summary>
+	    /// Nomad hides POV Checkmark bevel plates — selection is flat fill only.
+	    /// Re-tint fills whenever POV/grid selection changes (ThemeChanged alone is not enough).
+	    /// </summary>
+	    void WirePovChromeSelectionRefresh() {
+	        if (_editPOV_toggles != null) {
+	            for (int i = 0; i < _editPOV_toggles.Count; i++) {
+	                var pov = _editPOV_toggles[i];
+	                if (pov == null) continue;
+	                pov.onValueChanged.RemoveListener(OnPovOrGridChromeChanged);
+	                pov.onValueChanged.AddListener(OnPovOrGridChromeChanged);
+	            }
+	        }
+	        if (_showGrid_toggle != null) {
+	            _showGrid_toggle.onValueChanged.RemoveListener(OnPovOrGridChromeChanged);
+	            _showGrid_toggle.onValueChanged.AddListener(OnPovOrGridChromeChanged);
+	        }
+	    }
+
+	    void OnPovOrGridChromeChanged(bool _) => RefreshPovAndGridChromeSelection();
+
+	    /// <summary>Re-apply flat selected fills from current isOn (BoundChrome only).</summary>
+	    public void RefreshPovAndGridChromeSelection() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) return;
+	        var t = SpzUiThemeOps.Active;
+	        if (_showGrid_toggle != null) {
+	            Color normal = _showGrid_toggle.isOn
+	                ? Color.Lerp(t.tabActive, t.accent, 0.45f)
+	                : t.controlBg;
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(_showGrid_toggle, normal, t.accent);
+	            if (_showGrid_toggle.graphic is Image gTick && gTick != _showGrid_toggle.targetGraphic)
+	                SpzUiThemeOps.HideAuthoredGraphicForTheme(gTick);
+	        }
+	        if (_editPOV_toggles == null) return;
+	        for (int i = 0; i < _editPOV_toggles.Count; i++) {
+	            var pov = _editPOV_toggles[i];
+	            if (pov == null) continue;
+	            Color normal = pov.isOn
+	                ? Color.Lerp(t.controlBg, t.accent, 0.14f)
+	                : t.controlBg;
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(pov, normal, t.accent);
+	            if (pov.graphic is Image tick && tick != pov.targetGraphic)
+	                SpzUiThemeOps.HideAuthoredGraphicForTheme(tick);
+	        }
 	    }
 
 	    /// <summary>Themes Multiview ribbon chrome — not POV edit semantics.</summary>
@@ -285,10 +334,6 @@ namespace spz {
 	                SpzUiThemeOps.ApplyBoundChromeTmp(label, t.textPrimary);
 	        }
 	        if (_showGrid_toggle != null) {
-	            Color normal = _showGrid_toggle.isOn
-	                ? Color.Lerp(t.tabActive, t.accent, 0.45f)
-	                : t.controlBg;
-	            SpzUiThemeOps.ApplyBoundChromeSelectable(_showGrid_toggle, normal, t.accent);
 	            var gLabel = _showGrid_toggle.GetComponentInChildren<TextMeshProUGUI>(true);
 	            if (gLabel != null)
 	                SpzUiThemeOps.ApplyBoundChromeTmp(gLabel, t.textPrimary);
@@ -300,18 +345,12 @@ namespace spz {
 	        if (_editPOV_toggles != null) {
 	            foreach (var pov in _editPOV_toggles) {
 	                if (pov == null) continue;
-	                Color normal = pov.isOn
-	                    ? Color.Lerp(t.controlBg, t.accent, 0.14f)
-	                    : t.controlBg;
-	                SpzUiThemeOps.ApplyBoundChromeSelectable(pov, normal, t.accent);
-	                // POV Checkmark is a 9-slice bevel plate — hide; selection = flat fill above.
-	                if (pov.graphic is Image tick && tick != pov.targetGraphic)
-	                    SpzUiThemeOps.HideAuthoredGraphicForTheme(tick);
 	                var povLabel = pov.GetComponentInChildren<TextMeshProUGUI>(true);
 	                if (povLabel != null)
 	                    SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(povLabel, t.textPrimary, 12f);
 	            }
 	        }
+	        RefreshPovAndGridChromeSelection();
 	        if (_sortPins_Button != null) {
 	            var sortBtn = _sortPins_Button.GetComponent<Button>();
 	            if (sortBtn != null && sortBtn.targetGraphic != null)
@@ -325,6 +364,15 @@ namespace spz {
 
 	    void OnDestroy(){
 	        SpzUiThemeOps.ThemeChanged -= ApplyMultiviewChromeThemeTokens;
+	        if (_editPOV_toggles != null) {
+	            for (int i = 0; i < _editPOV_toggles.Count; i++) {
+	                var pov = _editPOV_toggles[i];
+	                if (pov != null)
+	                    pov.onValueChanged.RemoveListener(OnPovOrGridChromeChanged);
+	            }
+	        }
+	        if (_showGrid_toggle != null)
+	            _showGrid_toggle.onValueChanged.RemoveListener(OnPovOrGridChromeChanged);
 	        UserCameras_MGR._Act_OnRestoreCameraPlacements -= OnCameraPlacements_Restored;
 	        UserCameras_MGR._Act_OnTogledViewCamera -= OnViewCamera_Toggled;
 	        Settings_MGR._Act_verticalRibbonsSwapped -= OnSettings_ToolRibbonSwapped;
