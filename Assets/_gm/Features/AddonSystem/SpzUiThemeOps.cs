@@ -1103,9 +1103,14 @@ namespace spz {
 			}
 			_suppressPersist = true;
 			try {
-				// Re-register common add-on presets so list_themes stays honest after boot.
-				if (string.Equals(themeId, "nomad-inspired", StringComparison.Ordinal))
-					TryRegisterTheme(themeId, "Nomad inspired", tokens, "NomadThemeSPZ", out _);
+				// Re-register persisted theme so list_themes stays honest after boot (any non-default id).
+				string display = string.Equals(themeId, "nomad-inspired", StringComparison.Ordinal)
+					? "Nomad inspired"
+					: themeId;
+				string owner = string.Equals(themeId, "nomad-inspired", StringComparison.Ordinal)
+					? "NomadThemeSPZ"
+					: "persisted";
+				TryRegisterTheme(themeId, display, tokens, owner, out _);
 				if (!TryApplyTheme(themeId, tokens, "replace", out string error)) {
 					detail = error ?? "apply failed";
 					return false;
