@@ -166,14 +166,43 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Themes known fill/text ownership only — does not walk child Images (dial chrome stays authored).
-	    /// Gated by <see cref="SpzUiThemeOps.ShouldRecolorBoundChrome"/> so builtin dials keep authored colors.
+	    /// Nomad: solid-square outer cell (OG square plate) + color-only radial fill (keep Filled sprite).
+	    /// Never flatten the fill into SolidRect — that caused circular/bullseye overlay soup.
 	    /// </summary>
 	    public void ApplyThemeTokens(Color fillAccent, Color textPrimary) {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
+	            return;
+	        }
+	        var tokens = SpzUiThemeOps.Active;
+	        // Outer chrome faces → solid squares (skip the radial fill Image).
+	        foreach (var img in GetComponentsInChildren<Image>(true)) {
+	            if (img == null || img == _fillImage) continue;
+	            if (img.type == Image.Type.Filled) continue;
+	            string n = img.gameObject.name ?? "";
+	            if (n == "MonolithLineIcon" || n == "MonolithActiveBar") continue;
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(img, tokens.controlBg);
+	            SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
+	        }
+	        // Mute accent so the radial fill is not a near-white glare under the value.
+	        Color fill = Color.Lerp(fillAccent, tokens.controlBg, 0.28f);
+	        fill.a = 1f;
 	        if (_fillImage != null)
-	            SpzUiThemeOps.ApplyBoundChromeGraphic(_fillImage, fillAccent);
-	        if (_text != null)
-	            SpzUiThemeOps.ApplyBoundChromeTmp(_text, textPrimary);
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(_fillImage, fill); // Filled type: color only (no flatten)
+	        if (_text != null) {
+	            Color ink = RelativeLuminance(fill) > 0.36f
+	                ? new Color(0.10f, 0.09f, 0.10f, 1f)
+	                : textPrimary;
+	            // Snapshot via ApplyBoundChromeTmp first — dial is not a Selectable parent, so
+	            // ClearLabelRaycastIfUnderSelectable would leave the value TMP stealing drag hits.
+	            SpzUiThemeOps.ApplyBoundChromeTmp(_text, ink, 16f);
+	            _text.raycastTarget = false;
+	        }
+	    }
+
+	    static float RelativeLuminance(Color c) {
+	        // Rec. 709 luma on gamma-ish UI colors — enough to pick ink vs reverse-out.
+	        return 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
 	    }
 
 	    float SnapToIncrement(float value, float increment){
