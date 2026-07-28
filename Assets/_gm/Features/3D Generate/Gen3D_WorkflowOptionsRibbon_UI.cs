@@ -270,8 +270,9 @@ namespace spz {
 	    }
 
 	    static void ThemeTmp(TextMeshProUGUI tmp, SpzUiThemeOps.ThemeTokens t) {
-	        if (tmp != null)
-	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	        if (tmp == null) return;
+	        SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	        tmp.raycastTarget = false;
 	    }
 
 	    static void ThemeCircle(CircleSlider_Snapping_UI slider, SpzUiThemeOps.ThemeTokens t) {
