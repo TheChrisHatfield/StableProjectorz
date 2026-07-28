@@ -50,11 +50,59 @@ namespace spz {
 	            _prompts.Add("");
 	        }
 	        _recentToggle_ix = _presetToggles.FindIndex(t=>t.isOn);
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        ApplyThemeTokens();
 	    }
 
 	    void Start(){
 	        Settings_MGR._Act_onTextSize += OnChanged_textSize;
 	        OnChanged_textSize( Settings_MGR.instance.get_getPromptTextSize() );
+	    }
+
+	    void OnDestroy() {
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	        Settings_MGR._Act_onTextSize -= OnChanged_textSize;
+	    }
+
+	    void ApplyThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        var rootImg = GetComponent<Image>();
+	        if (rootImg != null)
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.panelBg);
+	        if (_txt_input != null) {
+	            var fieldBg = _txt_input.GetComponent<Image>();
+	            if (fieldBg != null)
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(fieldBg, t.fieldBg);
+	            if (_txt_input.textComponent != null)
+	                SpzUiThemeOps.ApplyBoundChromeTmp(_txt_input.textComponent, t.textPrimary);
+	        }
+	        RefreshPresetChrome();
+	    }
+
+	    /// <summary>Re-tint preset cells from isOn (BoundChrome). Call after WithoutNotify loads too.</summary>
+	    public void RefreshPresetChrome() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome || _presetToggles == null) return;
+	        var t = SpzUiThemeOps.Active;
+	        for (int i = 0; i < _presetToggles.Count; i++) {
+	            var toggle = _presetToggles[i];
+	            if (toggle == null || toggle.targetGraphic == null) continue;
+	            Color fill = toggle.isOn
+	                ? Color.Lerp(t.controlBg, t.accent, 0.35f)
+	                : t.controlBg;
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, fill, t.accent);
+	            if (toggle.targetGraphic is Image bg)
+	                SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
+	            if (toggle.graphic is Image press && press != toggle.targetGraphic)
+	                SpzUiThemeOps.HideAuthoredGraphicForTheme(press);
+	            foreach (var tmp in toggle.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	                if (tmp != null)
+	                    SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, 11f);
+	            }
+	        }
 	    }
 
 	    void OnChanged_textSize(int textSize){
@@ -173,12 +221,14 @@ namespace spz {
 	        if (KeyMousePenInput.isKey_CtrlOrCommand_pressed()==false || _isLoading){
 	            _txt_input.SetTextWithoutNotify(_prompts[ix]);
 	            _recentToggle_ix = ix; 
+	            RefreshPresetChrome();
 	            return;
 	        }//otherwise, append inside the prompt, where the cursor is:
 
 	        // Make sure the previous toggle remains enabled, despite that we clicked the ix:
 	        _presetToggles[_recentToggle_ix].SetIsOnWithoutNotify(true);
 	        _presetToggles[ix].SetIsOnWithoutNotify(false);
+	        RefreshPresetChrome();
 
 	        string currText   = StripColorTags(_txt_input.text);
 	        int caretPosition = _txt_input.caretPosition;
