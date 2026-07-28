@@ -152,6 +152,8 @@ namespace spz {
 	            Color c = _statusText.color;
 	            c.a = a;
 	            _statusText.color = c;
+	            // Status is display-only — keep viewport/gen chrome hittable under Nomad.
+	            _statusText.raycastTarget = false;
 	        }
 	        if (_progressTotal != null)
 	            SpzUiThemeOps.ApplyBoundChromeGraphic(_progressTotal, t.accent);
