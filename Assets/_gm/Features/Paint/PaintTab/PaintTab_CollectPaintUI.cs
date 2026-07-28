@@ -282,6 +282,19 @@ namespace spz {
 				// Tool-on accent must come from explicit tool-state refresh — never color heuristics.
 				SpzUiThemeOps.ApplyBoundChromeSelectable(btn, normal, t.accent);
 			}
+			foreach (var toggle in section.GetComponentsInChildren<Toggle>(true))
+			{
+				if (toggle == null || toggle.targetGraphic == null) continue;
+				if (toggle.targetGraphic is RawImage) continue;
+				Color fill = toggle.isOn
+					? Color.Lerp(t.controlBg, t.accent, 0.14f)
+					: t.controlBg;
+				if (toggle.graphic != null)
+					SpzUiThemeOps.ThemeCheckboxToggle(toggle, fill, t.accent, t.success);
+				else
+					SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, fill, t.accent);
+				EnsurePaintToggleChromeHook(toggle);
+			}
 			foreach (var tmp in section.GetComponentsInChildren<TextMeshProUGUI>(true))
 			{
 				if (tmp == null) continue;
@@ -298,6 +311,26 @@ namespace spz {
 				else
 					SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, basePt);
 			}
+		}
+
+		static UnityEngine.Events.UnityAction<bool> s_paintToggleChromeHook;
+
+		/// <summary>Selection fill is BoundChrome face color — retint when radios flip without ThemeChanged.</summary>
+		static void EnsurePaintToggleChromeHook(Toggle toggle)
+		{
+			if (toggle == null) return;
+			if (s_paintToggleChromeHook == null) {
+				s_paintToggleChromeHook = _ => {
+					var all = UnityEngine.Object.FindObjectsByType<PaintTab_CollectPaintUI>(
+						FindObjectsInactive.Include, FindObjectsSortMode.None);
+					for (int i = 0; i < all.Length; i++) {
+						if (all[i] != null)
+							all[i].ApplyThemeTokens();
+					}
+				};
+			}
+			toggle.onValueChanged.RemoveListener(s_paintToggleChromeHook);
+			toggle.onValueChanged.AddListener(s_paintToggleChromeHook);
 		}
 
 		const float kPaintLabelDesignBasePt = 12f;
