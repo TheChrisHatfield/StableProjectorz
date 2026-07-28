@@ -36,10 +36,7 @@ namespace spz {
 	    /// <summary>Themes 3D icon list shell only — not per-icon domain colors.</summary>
 	    void ApplyArt3dListChromeThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
-	            foreach (var g in GetComponentsInChildren<UnityEngine.UI.Graphic>(true)) {
-	                if (g.GetComponentInParent<Icon3D_UI>() != null) continue;
-	                SpzUiThemeOps.RestoreAuthoredGraphic(g);
-	            }
+	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
 	            SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(transform);
 	            return;
 	        }

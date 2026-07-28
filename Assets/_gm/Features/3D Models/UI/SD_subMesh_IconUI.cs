@@ -59,7 +59,7 @@ namespace spz {
 	            if (_name != null)
 	                SpzUiThemeOps.RestoreAuthoredGraphic(_name);
 	            if (_rmvButton != null)
-	                SpzUiThemeOps.RestoreAuthoredGraphic(_rmvButton.targetGraphic);
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_rmvButton.transform);
 	            if (_background != null && myMesh != null)
 	                ToggleBG(myMesh._isSelected);
 	            return;
