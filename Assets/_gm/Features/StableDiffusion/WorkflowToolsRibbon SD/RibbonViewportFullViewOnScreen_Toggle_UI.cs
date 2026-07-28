@@ -1003,9 +1003,18 @@ namespace spz {
 				if (sculpt) {
 					_fillBase = t.controlBg;
 					Color fill = on ? Color.Lerp(t.controlBg, t.accent, 0.14f) : t.controlBg;
-					SpzUiThemeOps.ApplyBoundChromeGraphic(_bgImage, fill);
-					SpzUiThemeOps.ApplyRoundedControlSprite(_bgImage, markEligible: true);
-					_bgImage.preserveAspect = false;
+					if (_dockButton != null) {
+						SpzUiThemeOps.ApplyBoundChromeSelectable(_dockButton, fill, t.accent);
+						if (_dockButton.targetGraphic is Image face) {
+							SpzUiThemeOps.ApplyRoundedControlSprite(face, markEligible: true);
+							face.preserveAspect = false;
+						}
+						SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_dockButton);
+					} else {
+						SpzUiThemeOps.ApplyBoundChromeGraphic(_bgImage, fill);
+						SpzUiThemeOps.ApplyRoundedControlSprite(_bgImage, markEligible: true);
+						_bgImage.preserveAspect = false;
+					}
 				} else {
 					_fillBase = _authoredFillBase;
 					_bgImage.color = on ? Color.Lerp(_fillBase, Color.black, 0.14f) : _fillBase;
@@ -1024,15 +1033,23 @@ namespace spz {
 			if (_fullViewMenuRt != null) {
 				var openRt = _fullViewMenuRt.Find("OpenRightDock") as RectTransform;
 				if (openRt != null) {
+					var openBtn = openRt.GetComponent<Button>();
 					var openImg = openRt.GetComponent<Image>();
-					if (openImg != null) {
-						if (sculpt) {
+					if (sculpt) {
+						if (openBtn != null && openBtn.targetGraphic != null) {
+							SpzUiThemeOps.ApplyBoundChromeSelectable(openBtn, t.controlBg, t.accent);
+							if (openBtn.targetGraphic is Image of) {
+								SpzUiThemeOps.ApplyRoundedControlSprite(of, markEligible: true);
+								of.preserveAspect = false;
+							}
+							SpzUiThemeOps.ClearNonFaceRaycastsForTheme(openBtn);
+						} else if (openImg != null) {
 							SpzUiThemeOps.ApplyBoundChromeGraphic(openImg, t.controlBg);
 							SpzUiThemeOps.ApplyRoundedControlSprite(openImg, markEligible: true);
-						} else if (_bgImage != null) {
-							SpzUiThemeOps.RestoreAuthoredGraphic(openImg);
-							openImg.color = _authoredFillBase;
 						}
+					} else if (openImg != null && _bgImage != null) {
+						SpzUiThemeOps.RestoreAuthoredGraphic(openImg);
+						openImg.color = _authoredFillBase;
 					}
 					ApplyDockFaceChrome(openRt, ref _openRightLineIcon, openGlyph, sculpt, t, forceFullSrnLabel: false);
 					if (_openRightDockLabel == null)
