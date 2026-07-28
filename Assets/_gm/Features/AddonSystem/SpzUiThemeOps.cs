@@ -252,15 +252,19 @@ namespace spz {
 				bg.raycastTarget = true;
 			}
 			if (toggle.graphic is Image check && check != toggle.targetGraphic) {
+				SnapshotAuthoredGraphic(check);
 				check.raycastTarget = false;
 				HideAuthoredGraphicForTheme(check);
 			}
 			foreach (var img in toggle.GetComponentsInChildren<Image>(true)) {
 				if (img == null || img == toggle.targetGraphic) continue;
 				string n = img.gameObject.name ?? "";
+				if (n == ControlLineIconChildName || n == "MonolithActiveBar")
+					continue;
 				if (n.Equals("Checkmark", StringComparison.OrdinalIgnoreCase)
 				    || n.IndexOf("pressed", StringComparison.OrdinalIgnoreCase) >= 0
 				    || n.Equals("tick", StringComparison.OrdinalIgnoreCase)) {
+					SnapshotAuthoredGraphic(img);
 					img.raycastTarget = false;
 					HideAuthoredGraphicForTheme(img);
 				}

@@ -100,6 +100,19 @@ public sealed class BoundChromePass8FunctionalTests {
 	}
 
 	[Test]
+	public void ControlNetThemeFlatToggleCell_RoutesToThemeFlatToolToggle_Source() {
+		string path = System.IO.Path.GetFullPath(System.IO.Path.Combine(
+			Application.dataPath,
+			"..",
+			"Assets/_gm/Features/StableDiffusion/Controlnet/ControlNetUnit_UI.cs"));
+		string src = System.IO.File.ReadAllText(path);
+		int idx = src.IndexOf("static void ThemeFlatToggleCell", System.StringComparison.Ordinal);
+		Assert.That(idx, Is.GreaterThan(0));
+		string body = src.Substring(idx, System.Math.Min(500, src.Length - idx));
+		Assert.That(body, Does.Contain("ThemeFlatToolToggle"));
+	}
+
+	[Test]
 	public void ThemeFlatToolToggle_FaceStaysHittable() {
 		var go = new GameObject("SoftCell", typeof(RectTransform), typeof(Image), typeof(Toggle));
 		go.SetActive(false);

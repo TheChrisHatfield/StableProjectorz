@@ -425,40 +425,14 @@ namespace spz {
 
 	    /// <summary>
 	    /// Flat dark cell (no lime/cyan bevel plate). Selected = subtle accent mix; letter stays reverse-out.
-	    /// Header P/B/C/LOW only — hides bevel Checkmark plate (selection = fill).
+	    /// Header P/B/C/LOW only — routes through <see cref="SpzUiThemeOps.ThemeFlatToolToggle"/> (face raycast litmus).
 	    /// </summary>
 	    static void ThemeFlatToggleCell(Toggle toggle, SpzUiThemeOps.ThemeTokens t) {
 	        if (toggle == null) return;
 	        Color fill = toggle.isOn
 	            ? Color.Lerp(t.controlBg, t.accent, 0.14f)
 	            : t.controlBg;
-	        SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, fill, t.accent);
-	        var cb = toggle.colors;
-	        cb.normalColor = Color.white;
-	        cb.highlightedColor = Color.white;
-	        cb.pressedColor = new Color(0.92f, 0.92f, 0.92f, 1f);
-	        cb.selectedColor = Color.white;
-	        cb.disabledColor = new Color(1f, 1f, 1f, 0.4f);
-	        cb.colorMultiplier = 1f;
-	        toggle.colors = cb;
-	        if (toggle.targetGraphic is Image bg) {
-	            SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
-	            bg.preserveAspect = false;
-	        }
-	        if (toggle.graphic is Image check && check != toggle.targetGraphic)
-	            SpzUiThemeOps.HideAuthoredGraphicForTheme(check);
-	        foreach (var img in toggle.GetComponentsInChildren<Image>(true)) {
-	            if (img == null || img == toggle.targetGraphic) continue;
-	            string n = img.gameObject.name ?? "";
-	            if (n.Equals("Checkmark", System.StringComparison.OrdinalIgnoreCase)
-	                || n.IndexOf("pressed", System.StringComparison.OrdinalIgnoreCase) >= 0
-	                || n.Equals("tick", System.StringComparison.OrdinalIgnoreCase))
-	                SpzUiThemeOps.HideAuthoredGraphicForTheme(img);
-	        }
-	        foreach (var tmp in toggle.GetComponentsInChildren<TextMeshProUGUI>(true)) {
-	            if (tmp == null) continue;
-	            SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(tmp, t.textPrimary, 12f);
-	        }
+	        SpzUiThemeOps.ThemeFlatToolToggle(toggle, fill, t.accent, t.textPrimary);
 	    }
 
 	    /// <summary>Context-menu / resize checkboxes — keep ON glyph; tint success.</summary>
