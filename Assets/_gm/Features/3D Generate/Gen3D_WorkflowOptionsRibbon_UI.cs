@@ -226,6 +226,8 @@ namespace spz {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            if (_wholePanel_canvGrp != null)
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_wholePanel_canvGrp.transform);
+	            RestoreCircle(_rembg_backgroundThresh);
+	            RestoreCircle(_rembg_foregroundThresh);
 	            RestoreSelectable(_showAlphaOnly_toggle);
 	            RestoreSelectable(_makeScreenshots_toggle);
 	            RestoreSelectable(_rembg_button);
@@ -254,6 +256,11 @@ namespace spz {
 	    static void RestoreSelectable(Selectable s) {
 	        if (s != null)
 	            SpzUiThemeOps.RestoreBoundChromeUnder(s.transform);
+	    }
+
+	    static void RestoreCircle(CircleSlider_Snapping_UI slider) {
+	        if (slider != null)
+	            SpzUiThemeOps.RestoreBoundChromeUnder(slider.transform);
 	    }
 
 	    static void ThemeTmp(TextMeshProUGUI tmp, SpzUiThemeOps.ThemeTokens t) {
