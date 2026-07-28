@@ -273,6 +273,7 @@ namespace spz {
 				if (tmp == null) continue;
 				ApplyBoundChromeStripLabelTmp(tmp, labelColor, 12f);
 			}
+			ClearNonFaceRaycastsForTheme(toggle);
 		}
 
 		/// <summary>
