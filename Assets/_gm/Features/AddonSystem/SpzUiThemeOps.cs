@@ -1041,6 +1041,52 @@ namespace spz {
 		}
 
 		/// <summary>
+		/// Hard opaque rectangle face — litmus pattern for Nomad chrome.
+		/// No 9-slice borders, no soft-AA rounded sprite, no SPZ bevel plate.
+		/// Restore via <see cref="RestoreBoundChromeUnder"/>.
+		/// </summary>
+		public static void ApplySolidSquareChrome(Selectable selectable, Color fill, Color accent) {
+			if (selectable == null || selectable.targetGraphic == null)
+				return;
+			if (!ShouldRecolorBoundChrome) {
+				RestoreAuthoredGraphic(selectable.targetGraphic);
+				RestoreAuthoredColorBlock(selectable);
+				return;
+			}
+			SnapshotAuthoredGraphic(selectable.targetGraphic);
+			SnapshotAuthoredColorBlock(selectable);
+			ApplySelectableToken(selectable, fill, accent);
+			if (selectable.targetGraphic is Image face) {
+				var tag = face.GetComponent<SpzUiThemeRoundedControl>();
+				if (tag == null) {
+					tag = face.gameObject.AddComponent<SpzUiThemeRoundedControl>();
+					tag.authoredSprite = face.sprite;
+					tag.authoredType = face.type;
+					tag.hasAuthoredSnapshot = true;
+				}
+				else if (!tag.hasAuthoredSnapshot) {
+					tag.authoredSprite = face.sprite;
+					tag.authoredType = face.type;
+					tag.hasAuthoredSnapshot = true;
+				}
+				face.sprite = UiRuntimeSprites.SolidRect;
+				face.type = Image.Type.Simple;
+				face.preserveAspect = false;
+				face.pixelsPerUnitMultiplier = 1f;
+				face.fillCenter = true;
+			}
+			// Drop authored corner-chevron / tick plates under this control only.
+			foreach (var img in selectable.GetComponentsInChildren<Image>(true)) {
+				if (img == null || img == selectable.targetGraphic) continue;
+				string n = img.gameObject.name ?? "";
+				if (n.IndexOf("triangle", StringComparison.OrdinalIgnoreCase) >= 0
+					|| n.Equals("Checkmark", StringComparison.OrdinalIgnoreCase)
+					|| n.Equals("tick", StringComparison.OrdinalIgnoreCase))
+					HideAuthoredGraphicForTheme(img);
+			}
+		}
+
+		/// <summary>
 		/// Assigns the active <c>corner_radius</c> soft-rounded fill to eligible control Images only
 		/// (tagged or already using a runtime rounded sprite). Never retargets RawImage art.
 		/// Uses <see cref="Image.Type.Sliced"/> when radius &gt; 0 so soft AA stays in the border
