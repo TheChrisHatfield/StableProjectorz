@@ -536,6 +536,12 @@ namespace spz {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            if (_wholePanel_canvGrp != null)
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_wholePanel_canvGrp.transform);
+	            // Mini rethink dial sits next to GenArt — often outside _wholePanel_canvGrp.
+	            RestoreCircle(_reThink_slider);
+	            RestoreCircle(_reThink_slider_mini);
+	            RestoreCircle(_blur_slider);
+	            RestoreCircle(_edgeThresh_slider);
+	            RestoreCircle(_edgeThick_slider);
 	            RestoreGraphic(_reThink_text);
 	            RestoreGraphic(_reThink_text_mini);
 	            RestoreGraphic(_mask_blur_text);
@@ -568,6 +574,11 @@ namespace spz {
 	    }
 
 	    static void RestoreGraphic(Graphic g) => SpzUiThemeOps.RestoreAuthoredGraphic(g);
+
+	    static void RestoreCircle(CircleSlider_Snapping_UI slider) {
+	        if (slider != null)
+	            SpzUiThemeOps.RestoreBoundChromeUnder(slider.transform);
+	    }
 
 	    static void RestoreSelectable(Selectable s) {
 	        if (s != null)
