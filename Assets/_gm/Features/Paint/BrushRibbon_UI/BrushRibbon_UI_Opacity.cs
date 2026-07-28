@@ -34,8 +34,9 @@ namespace spz {
 	    void OnUpdateTextColor(Color col) {
 	        if (_brushOpacityText == null) return;
 	        if (SpzUiThemeOps.ShouldRecolorBoundChrome) {
-	            // Nomad: keep dark ink on the luminous circular face.
-	            _brushOpacityText.color = new Color(0.10f, 0.09f, 0.10f, 1f);
+	            // Nomad: dark ink on luminous circular face — snapshot via BoundChrome so leave unwinds.
+	            Color ink = new Color(0.10f, 0.09f, 0.10f, 1f);
+	            SpzUiThemeOps.ApplyBoundChromeTmp(_brushOpacityText, ink, 16f);
 	            return;
 	        }
 	        _brushOpacityText.color = SD_WorkflowOptionsRibbon_UI.instance.isPositive?
