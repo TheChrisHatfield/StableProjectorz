@@ -100,6 +100,21 @@ public sealed class BoundChromePass8FunctionalTests {
 	}
 
 	[Test]
+	public void WorkflowThemeModeToggle_ClearsNonFaceRaycasts_Source() {
+		string path = System.IO.Path.GetFullPath(System.IO.Path.Combine(
+			Application.dataPath,
+			"..",
+			"Assets/_gm/Features/StableDiffusion/WorkflowToolsRibbon SD/WorkflowRibbon_UI.cs"));
+		string src = System.IO.File.ReadAllText(path);
+		int idx = src.IndexOf("static void ThemeModeToggle", System.StringComparison.Ordinal);
+		Assert.That(idx, Is.GreaterThan(0));
+		string body = src.Substring(idx, System.Math.Min(3500, src.Length - idx));
+		Assert.That(body, Does.Contain("SnapshotAuthoredGraphicForTheme"));
+		Assert.That(body, Does.Contain("raycastTarget = false"));
+		Assert.That(body, Does.Contain("ApplyBoundChromeSelectable"));
+	}
+
+	[Test]
 	public void ControlNetThemeFlatToggleCell_RoutesToThemeFlatToolToggle_Source() {
 		string path = System.IO.Path.GetFullPath(System.IO.Path.Combine(
 			Application.dataPath,
