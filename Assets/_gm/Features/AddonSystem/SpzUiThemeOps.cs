@@ -376,6 +376,8 @@ namespace spz {
 		/// Soft/solid fill stretched edge-to-edge; snapshots RectTransform for Restore SPZ.
 		/// Pair with solid-square chrome (<see cref="ApplySolidSquareChrome"/> /
 		/// <see cref="ApplyRoundedControlSprite"/>).
+		/// Skips RectTransform rewrite when the Image lives on a <see cref="Selectable"/> root —
+		/// flattening that RT would stretch Paint/Smudge/Erase cells over their parent and erase gap anchors.
 		/// </summary>
 		public static void FlattenToolFaceImage(Image img) {
 			if (img == null || !ShouldRecolorBoundChrome) return;
@@ -389,6 +391,9 @@ namespace spz {
 				img.type = Image.Type.Simple;
 			var rt = img.rectTransform;
 			if (rt == null || !(rt.parent is RectTransform)) return;
+			// Root-face Selectables (Brush Direction toggles): keep cell anchors; only solidify sprite.
+			if (img.GetComponent<Selectable>() != null)
+				return;
 			SnapshotToolFaceLayout(rt);
 			rt.anchorMin = Vector2.zero;
 			rt.anchorMax = Vector2.one;
