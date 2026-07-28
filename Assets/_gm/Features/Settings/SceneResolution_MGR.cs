@@ -277,13 +277,8 @@ namespace spz {
 	        Color fill = tgl.isOn
 	            ? Color.Lerp(t.controlBg, t.accent, 0.14f)
 	            : t.controlBg;
-	        if (tgl.graphic != null)
-	            SpzUiThemeOps.ThemeCheckboxToggle(tgl, fill, t.accent, t.success);
-	        else if (tgl.targetGraphic != null)
-	            SpzUiThemeOps.ApplyBoundChromeSelectable(tgl, fill, t.accent);
-	        var label = tgl.GetComponentInChildren<TextMeshProUGUI>(true);
-	        if (label != null)
-	            SpzUiThemeOps.ApplyBoundChromeTmp(label, t.textPrimary);
+	        // Point/Bilinear are tool radios with bevel Checkmark plates (raycastTarget=1) — flat path.
+	        SpzUiThemeOps.ThemeFlatToolToggle(tgl, fill, t.accent, t.textPrimary);
 	    }
 	}
 }//end namespace
