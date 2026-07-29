@@ -1231,7 +1231,7 @@ namespace spz {
 					bat.Append(" --force");
 				bat.Append(" > \"").Append(logPath).Append("\" 2>&1");
 				bat.AppendLine();
-				File.WriteAllText(batPath, bat.ToString());
+				File.WriteAllText(batPath, bat.ToString(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
 				string workDir = Path.GetDirectoryName(blenderExe);
 				if (string.IsNullOrEmpty(workDir) || !Directory.Exists(workDir))
