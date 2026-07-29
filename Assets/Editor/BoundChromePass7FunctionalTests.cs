@@ -109,6 +109,11 @@ public sealed class BoundChromePass7FunctionalTests {
 		Assert.That(src, Does.Contain("EnsureAdaptiveFaceBorder"));
 		Assert.That(src, Does.Contain("DockFaceBorder"));
 		Assert.That(src, Does.Contain("FindDirectChildIncludingInactive(face, FaceBorderName)"));
+		int onDestroy = src.IndexOf("void OnDestroy()", System.StringComparison.Ordinal);
+		Assert.That(onDestroy, Is.GreaterThan(0));
+		string destroyBody = src.Substring(onDestroy, System.Math.Min(500, src.Length - onDestroy));
+		Assert.That(destroyBody, Does.Contain("TearDownBuiltDock()"),
+			"OnDestroy must TearDown so GenerateButtons column frame is restored");
 	}
 
 	[Test]
