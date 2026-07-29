@@ -251,6 +251,77 @@ public sealed class ControlNetUnitChromeThemeTests {
 		}
 	}
 
+	[Test]
+	public void ApplyThemeTokens_KeepsControlNetTitleVisibleAboveTransparentHitSurface() {
+		var root = new GameObject("ControlNetTitleVis", typeof(RectTransform));
+		root.SetActive(false);
+		try {
+			// Prefab sibling order: title first, then full-stretch hit surface (would cover title if opaque).
+			var titleGo = new GameObject("header (text)", typeof(RectTransform));
+			titleGo.transform.SetParent(root.transform, false);
+			var title = titleGo.AddComponent<TextMeshProUGUI>();
+			title.text = "ControlNet 1";
+			title.color = Color.white;
+			title.fontSize = 23f;
+
+			var hitGo = new GameObject("invis surface (button)", typeof(RectTransform), typeof(Image), typeof(Button));
+			hitGo.transform.SetParent(root.transform, false);
+			var hitFace = hitGo.GetComponent<Image>();
+			hitFace.color = new Color(1f, 1f, 1f, 0f);
+			var hitBtn = hitGo.GetComponent<Button>();
+			hitBtn.targetGraphic = hitFace;
+			var hitRt = hitGo.GetComponent<RectTransform>();
+			hitRt.anchorMin = Vector2.zero;
+			hitRt.anchorMax = Vector2.one;
+			hitRt.offsetMin = Vector2.zero;
+			hitRt.offsetMax = Vector2.zero;
+
+			Assert.That(titleGo.transform.GetSiblingIndex(), Is.LessThan(hitGo.transform.GetSiblingIndex()));
+
+			var headerImgGo = new GameObject("HeaderImg", typeof(RectTransform), typeof(Image));
+			headerImgGo.transform.SetParent(root.transform, false);
+			var headerImg = headerImgGo.GetComponent<Image>();
+
+			var unit = root.AddComponent<ControlNetUnit_UI>();
+			SetPrivate(unit, "_mainHeader", title);
+			SetPrivate(unit, "_mainHeaderImage", headerImg);
+			SetPrivate(unit, "_headerRibbon_button", hitBtn);
+			SetPrivate(unit, "_balanced_toggle", null);
+			SetPrivate(unit, "_promptImportant_toggle", null);
+			SetPrivate(unit, "_ctrlNetImportant_toggle", null);
+			SetPrivate(unit, "_lowVRAM_toggle", null);
+
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				new JObject {
+					["tab_active"] = "#2A2B30FF",
+					["control_bg"] = "#25262AFF",
+					["accent"] = "#F2CA50FF",
+					["text_primary"] = "#E8E2D6FF",
+				},
+				"replace",
+				out string error), Is.True, error);
+
+			InvokePrivate(unit, "ApplyThemeTokens");
+
+			Assert.That(title.enabled, Is.True);
+			Assert.That(title.gameObject.activeSelf, Is.True);
+			Assert.That(title.text, Does.Contain("ControlNet"));
+			Assert.That(title.color, Is.EqualTo(SpzUiThemeOps.Active.textPrimary));
+			Assert.That(hitFace.color.a, Is.EqualTo(0f).Within(0.001f),
+				"Header hit surface must stay transparent so title is not covered");
+			Assert.That(title.transform.GetSiblingIndex(),
+				Is.GreaterThanOrEqualTo(hitGo.transform.GetSiblingIndex()),
+				"Title must draw after the hit surface");
+			Assert.That(title.fontSize, Is.LessThanOrEqualTo(15f),
+				"Compact design pt so title fits the header band");
+		}
+		finally {
+			Object.DestroyImmediate(root);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
 	static void SetPrivate(object target, string fieldName, object value) {
 		var f = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
 		Assert.That(f, Is.Not.Null, fieldName);
