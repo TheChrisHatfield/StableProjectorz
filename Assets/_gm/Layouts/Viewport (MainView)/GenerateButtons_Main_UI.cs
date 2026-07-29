@@ -284,7 +284,6 @@ namespace spz {
 	            msg_genBG = "To generate projections, enable one\nControlNetUnit with Depth or Normals model.\n(See <b>CTRL NETS</b> tab)";
 	        }
 	        if (!Connection_MGR.is_sd_connected){
-	            // OG health: black-window tip (not the short dropdown DisplayText).
 	            msg_genBG = msg_genArt = SdDisconnectPlaceholder.TooltipText;
 	        }
 

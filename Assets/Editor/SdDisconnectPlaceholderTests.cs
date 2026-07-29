@@ -20,6 +20,12 @@ public sealed class SdDisconnectPlaceholderTests {
 	}
 
 	[Test]
+	public void IsPlaceholder_RecognizesOgStatusAndTooltip() {
+		Assert.That(SdDisconnectPlaceholder.IsPlaceholder(SdDisconnectPlaceholder.StatusText), Is.True);
+		Assert.That(SdDisconnectPlaceholder.IsPlaceholder(SdDisconnectPlaceholder.TooltipText), Is.True);
+	}
+
+	[Test]
 	public void IsPlaceholder_RejectsRealModelNames() {
 		Assert.That(SdDisconnectPlaceholder.IsPlaceholder(null), Is.False);
 		Assert.That(SdDisconnectPlaceholder.IsPlaceholder(""), Is.False);
@@ -30,12 +36,25 @@ public sealed class SdDisconnectPlaceholderTests {
 
 	[Test]
 	public void DisplayText_IsSdSpecificNotGenericGen3DCopy() {
-		// Gen3D Dropdown Holder must keep neutral legacy wording; SD panels + viewport notifications use DisplayText.
+		// Gen3D Dropdown Holder must keep neutral legacy wording; SD dropdown captions use DisplayText.
 		Assert.That(SdDisconnectPlaceholder.DisplayText, Is.EqualTo("Diffusion Model Not Yet Connected"));
 		Assert.That(SdDisconnectPlaceholder.DisplayText, Does.Not.Contain("Check Black Window"));
 		Assert.That(SdDisconnectPlaceholder.DisplayText, Does.Not.Contain("black window"));
 		// Prefab captions use Ellipsis so this longer single-line copy stays inside the control.
 		Assert.That(SdDisconnectPlaceholder.DisplayText.Length, Is.GreaterThan(20));
+	}
+
+	[Test]
+	public void StatusAndTooltip_GuideUserOnDisconnect() {
+		Assert.That(SdDisconnectPlaceholder.StatusText, Does.Contain("Can't Generate images"));
+		Assert.That(SdDisconnectPlaceholder.StatusText, Does.Contain("Not yet connected to the Diffusion Model"));
+		Assert.That(SdDisconnectPlaceholder.StatusText, Does.Not.Contain("black window"));
+		Assert.That(SdDisconnectPlaceholder.TooltipText, Does.Contain("Not yet connected to the Diffusion Model"));
+		Assert.That(SdDisconnectPlaceholder.TooltipText, Does.Contain("Settings"));
+		Assert.That(SdDisconnectPlaceholder.TooltipText, Does.Contain("Show external process windows"));
+		Assert.That(SdDisconnectPlaceholder.TooltipText, Does.Contain("black box"));
+		Assert.That(SdDisconnectPlaceholder.StatusText, Is.Not.EqualTo(SdDisconnectPlaceholder.DisplayText));
+		Assert.That(SdDisconnectPlaceholder.TooltipText, Is.Not.EqualTo(SdDisconnectPlaceholder.DisplayText));
 	}
 
 	[Test]
@@ -50,14 +69,23 @@ public sealed class SdDisconnectPlaceholderTests {
 	}
 
 	[Test]
-	public void EmptySelected_WithOnlyPlaceholder_ShouldPreferDisplayTextStatus() {
-		// When HasValidModels is false, GenRequests shows DisplayText even if socket reports connected.
-		Assert.That(SdDisconnectPlaceholder.IsPlaceholder(SdDisconnectPlaceholder.DisplayText), Is.True);
-		bool hasValidModels = false; // dropdown options are only placeholder
-		bool isSdConnected = true;
-		string msg = (!isSdConnected || !hasValidModels)
-			? SdDisconnectPlaceholder.DisplayText
-			: "No Models detected in the Input panel. Enter PlayMode only after WebUI was launched";
-		Assert.That(msg, Is.EqualTo(SdDisconnectPlaceholder.DisplayText));
+	public void EmptySelected_SplitsDisconnectVsNoModelsStatus() {
+		// When socket is down → OG StatusText. When socket up but only placeholder → DisplayText.
+		bool hasValidModels = false;
+		bool isSdConnected = false;
+		string msgDisconnected = !isSdConnected
+			? SdDisconnectPlaceholder.StatusText
+			: !hasValidModels
+				? SdDisconnectPlaceholder.DisplayText
+				: "No Models detected in the Input panel. Enter PlayMode only after WebUI was launched";
+		Assert.That(msgDisconnected, Is.EqualTo(SdDisconnectPlaceholder.StatusText));
+
+		isSdConnected = true;
+		string msgConnectedNoModels = !isSdConnected
+			? SdDisconnectPlaceholder.StatusText
+			: !hasValidModels
+				? SdDisconnectPlaceholder.DisplayText
+				: "No Models detected in the Input panel. Enter PlayMode only after WebUI was launched";
+		Assert.That(msgConnectedNoModels, Is.EqualTo(SdDisconnectPlaceholder.DisplayText));
 	}
 }

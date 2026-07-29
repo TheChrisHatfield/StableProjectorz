@@ -88,7 +88,7 @@ namespace spz {
 	        _lastLaunchedWebUiPid = pid;
 	    }
 
-	    const string SdLoadingStickyMsg = "Stable Diffusion is loading...";
+	    const string SdLoadingStickyMsg = "Diffusion Model is loading";
 
 	    /// <summary>Show "loading" status and then "ready" when Connection_MGR reports SD connected.</summary>
 	    public static void NotifyWebUiLaunchStarted() {
