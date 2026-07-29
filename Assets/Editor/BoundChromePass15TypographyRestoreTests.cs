@@ -1,4 +1,5 @@
 using System.IO;
+using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using spz;
 using TMPro;
@@ -45,8 +46,15 @@ public sealed class BoundChromePass15TypographyRestoreTests {
 
 			Assert.That(SpzUiThemeOps.TryApplyTheme(
 				"pass15-typo",
-				"{\"accent\":\"#F2CA50FF\",\"panel_bg\":\"#1E1F23F2\",\"control_bg\":\"#2A2B30FF\",\"text_primary\":\"#FFFFFFFF\",\"font_scale\":1.05}",
-				out _), Is.True);
+				new JObject {
+					["accent"] = "#F2CA50FF",
+					["panel_bg"] = "#1E1F23F2",
+					["control_bg"] = "#2A2B30FF",
+					["text_primary"] = "#FFFFFFFF",
+					["font_scale"] = 1.05f,
+				},
+				"replace",
+				out string error), Is.True, error);
 			Assert.That(SpzUiThemeOps.ShouldRecolorBoundChrome, Is.True);
 
 			SpzUiThemeOps.ApplyBoundChromeTmp(tmp, SpzUiThemeOps.Active.textPrimary, 14f);
