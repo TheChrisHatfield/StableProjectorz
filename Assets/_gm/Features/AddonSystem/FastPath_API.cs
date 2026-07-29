@@ -1248,10 +1248,24 @@ namespace spz {
 					message = "blender install timed out";
 					return false;
 				}
+				// Brief settle — redirected log may still flush after cmd.exe exits.
+				System.Threading.Thread.Sleep(100);
 
 				string combined = "";
 				if (File.Exists(logPath)) {
 					try { combined = File.ReadAllText(logPath); } catch { combined = ""; }
+				}
+				// If log still empty but child somehow lingering, poll briefly for markers.
+				if (string.IsNullOrEmpty(combined)) {
+					for (int i = 0; i < 20; i++) {
+						System.Threading.Thread.Sleep(100);
+						if (File.Exists(logPath)) {
+							try { combined = File.ReadAllText(logPath); } catch { combined = ""; }
+							if (!string.IsNullOrEmpty(combined)) break;
+						}
+						if (!Lavender.Systems.StartExternalProcess.IsProcessRunning(pid) && File.Exists(logPath))
+							break;
+					}
 				}
 				string marker = null;
 				foreach (var line in combined.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)) {
