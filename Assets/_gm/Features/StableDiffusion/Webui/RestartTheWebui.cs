@@ -143,12 +143,59 @@ namespace spz {
 	        FileBrowser.PickMode.Files, false, null, null, _openFile_os_window_headerMsg, "Select");
 	    }
 
+	    protected virtual void Awake(){
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        ApplyThemeTokens();
+	    }
+
+	    protected virtual void OnDestroy() {
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	    }
+
+	    /// <summary>
+	    /// Nomad flat SD SERV / 3D SERV + folder picker (top strip) — not Unity default light bricks.
+	    /// Ensure hit faces so label ClearNonFace cannot kill launch / pick-path (gen litmus).
+	    /// </summary>
+	    protected virtual void ApplyThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            if (_launchButton != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_launchButton.transform);
+	            if (_fileButton != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_fileButton.transform);
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        ThemeTopStripButton(_launchButton, t, applyFolderIcon: false);
+	        ThemeTopStripButton(_fileButton, t, applyFolderIcon: true);
+	    }
+
+	    static void ThemeTopStripButton(Button btn, SpzUiThemeOps.ThemeTokens t, bool applyFolderIcon) {
+	        if (btn == null) return;
+	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+	        if (btn.targetGraphic is Image face) {
+	            SpzUiThemeOps.ApplyRoundedControlSprite(face, markEligible: true);
+	            SpzUiThemeOps.FlattenToolFaceImage(face);
+	            face.preserveAspect = false;
+	            face.raycastTarget = true;
+	        }
+	        if (applyFolderIcon)
+	            SpzUiThemeOps.ApplyControlLineIcon(btn.transform, StudioLineIcon.Folder, 16f);
+	        foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (tmp == null) continue;
+	            // Compact strip caps (SD SERV / 3D SERV) — match SAVE / workflow top chrome.
+	            SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(tmp, t.textPrimary, 11f);
+	        }
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
+	    }
+
 	    protected virtual void Start(){
 	        _launchButton.onClick.AddListener(OnStartWebuiButton);
 	        _fileButton.onClick.AddListener(OnSpecifyFileButton);
 
 	        _filepath = PlayerPrefs.GetString(_playerPrefs_filepathID, _defaultRelativePath);
 	        _filepath = _filepath.Length<2048? _filepath : _defaultRelativePath;//helps if glitched
+	        // Prefab often inactive under ThemeChanged — re-assert after Start wiring.
+	        ApplyThemeTokens();
 	    }
     
 
