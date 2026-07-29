@@ -1244,7 +1244,7 @@ namespace spz {
 					return false;
 				}
 				if (!Lavender.Systems.StartExternalProcess.WaitForProcessExit(pid, SpzGoBlenderInstallTimeoutMs)) {
-					try { Lavender.Systems.StartExternalProcess.KillProcess(pid); } catch { }
+					try { Lavender.Systems.StartExternalProcess.KillProcessTree(pid); } catch { }
 					message = "blender install timed out";
 					return false;
 				}
