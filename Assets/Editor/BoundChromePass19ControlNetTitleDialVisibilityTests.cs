@@ -20,16 +20,16 @@ public sealed class BoundChromePass19ControlNetTitleDialVisibilityTests {
 	}
 
 	[Test]
-	public void CircleSlider_SourcePicksInkFromControlBgNotFillRing() {
+	public void CircleSlider_SourceHidesOuterBoxAndUsesTextPrimary() {
 		string path = Path.GetFullPath(Path.Combine(
 			Application.dataPath,
 			"_gm/_Core/UI (reusable)/Widgets and Gadgets/Slider/CircleSlider_Snapping_UI.cs"));
 		string src = File.ReadAllText(path);
 		int apply = src.IndexOf("public void ApplyThemeTokens", System.StringComparison.Ordinal);
 		Assert.That(apply, Is.GreaterThan(0));
-		string body = src.Substring(apply, System.Math.Min(1600, src.Length - apply));
-		Assert.That(body, Does.Contain("tokens.controlBg"));
-		Assert.That(body, Does.Contain("RelativeLuminance(cell)"));
-		Assert.That(body, Does.Not.Contain("RelativeLuminance(fill)"));
+		string body = src.Substring(apply, System.Math.Min(1800, src.Length - apply));
+		Assert.That(body, Does.Contain("HideAuthoredGraphicForTheme(img)"));
+		Assert.That(body, Does.Contain("ApplyBoundChromeTmp(_text, textPrimary"));
+		Assert.That(body, Does.Not.Contain("ApplyRoundedControlSprite(img"));
 	}
 }
