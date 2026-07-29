@@ -1405,7 +1405,9 @@ namespace spz {
 			if (face == null)
 				return;
 			CacheFaceBorderSpriteFromColumnIfNeeded();
-			Transform existing = face.Find(FaceBorderName);
+			// Transform.Find skips inactive children — OPEN RIGHT is often inactive while menu is hidden,
+			// which previously spawned duplicate DockFaceBorder every EnsureFullViewMenu pass.
+			Transform existing = SpzUiThemeOps.FindDirectChildIncludingInactive(face, FaceBorderName);
 			RectTransform borderRt;
 			Image borderImg;
 			if (existing == null) {

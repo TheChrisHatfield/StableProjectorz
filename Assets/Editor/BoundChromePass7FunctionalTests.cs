@@ -108,6 +108,7 @@ public sealed class BoundChromePass7FunctionalTests {
 		Assert.That(src, Does.Contain("SuppressGenerateButtonsColumnFrame"));
 		Assert.That(src, Does.Contain("EnsureAdaptiveFaceBorder"));
 		Assert.That(src, Does.Contain("DockFaceBorder"));
+		Assert.That(src, Does.Contain("FindDirectChildIncludingInactive(face, FaceBorderName)"));
 	}
 
 	[Test]
