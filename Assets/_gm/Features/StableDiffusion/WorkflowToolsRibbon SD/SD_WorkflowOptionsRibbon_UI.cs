@@ -232,25 +232,12 @@ namespace spz {
 
     
 	    void FadeWholePanel(){
-	        float targAlpha = 0;
-	        DimensionMode currMode = DimensionMode_MGR.instance._dimensionMode;
-	        switch(currMode){
-	            case DimensionMode.dim_sd:
-	                targAlpha = 1;
-	                break;
-	            default: 
-	                targAlpha = 0; 
-	                break;
-	        }
-	        _wholePanel_canvGrp.alpha = Mathf.MoveTowards(_wholePanel_canvGrp.alpha, targAlpha, Time.deltaTime*7);
-	        _wholePanel_canvGrp.gameObject.SetActive(_wholePanel_canvGrp.alpha!=0);
-	        //also adjust the visibility of elements on the other ui side:
-	        if (_reThink_slider_mini_canvGrp != null) {
-		        _reThink_slider_mini_canvGrp.alpha = _wholePanel_canvGrp.alpha;
-		        if (_wholePanel_canvGrp.alpha == 0) {
-			        _reThink_slider_mini_canvGrp.gameObject.SetActive(false);
-		        }
-	        }
+	        bool show = DimensionMode_MGR.instance != null
+	            && DimensionMode_MGR.instance._dimensionMode == DimensionMode.dim_sd;
+	        UiCanvasGroupModeStrip.Tick(_wholePanel_canvGrp, show, 7f);
+	        // Mini rethink dial sits beside Gen Art — same mode ownership as the workflow strip.
+	        if (_reThink_slider_mini_canvGrp != null)
+	            UiCanvasGroupModeStrip.Tick(_reThink_slider_mini_canvGrp, show, 7f);
 	    }
     
 
