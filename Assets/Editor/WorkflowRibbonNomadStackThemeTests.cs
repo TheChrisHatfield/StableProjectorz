@@ -54,8 +54,8 @@ public sealed class WorkflowRibbonNomadStackThemeTests {
 			SpzUiThemeOps.ApplyNomadStackedToolCell(
 				faceGo.transform, StudioLineIcon.Brush, SpzUiThemeOps.Active.textPrimary, 20f);
 			Assert.That(labelRt.anchorMax.y, Is.LessThan(0.55f));
-			Assert.That(labelRt.anchorMax.y, Is.GreaterThan(0.45f),
-				"Workflow strip label band needs ~half cell for 2-line caps (Grid-like)");
+			Assert.That(labelRt.anchorMax.y, Is.GreaterThan(0.42f),
+				"Workflow strip label band for 2-line caps");
 			Assert.That(tmp.alignment, Is.EqualTo(TextAlignmentOptions.Center));
 
 			SpzUiThemeOps.ResetTheme();
@@ -134,25 +134,30 @@ public sealed class WorkflowRibbonNomadStackThemeTests {
 			tmp.font = TMP_Settings.defaultFontAsset;
 
 			SpzUiThemeOps.ApplyNomadStackedToolCell(
-				faceGo.transform, StudioLineIcon.Drop, SpzUiThemeOps.Active.textPrimary, 20f);
+				faceGo.transform, StudioLineIcon.Drop, SpzUiThemeOps.Active.textPrimary, 14f);
 
 			Transform iconT = SpzUiThemeOps.FindDirectChildIncludingInactive(faceGo.transform, "MonolithLineIcon");
 			Assert.That(iconT, Is.Not.Null);
 			var iconRt = iconT as RectTransform;
 			Assert.That(iconRt, Is.Not.Null);
 			Assert.That(iconRt.anchoredPosition.y, Is.GreaterThan(0f), "Icon sits above center");
-			Assert.That(iconRt.anchoredPosition.y, Is.GreaterThanOrEqualTo(8f),
-				"Grid-like leading: icon lifted clear of the label band");
+			Assert.That(iconRt.anchoredPosition.y, Is.LessThan(6f),
+				"Tight icon→label leading (was Grid 8px+ lift that left a sparse gap)");
 			Assert.That(iconT.GetComponent<Image>().sprite,
 				Is.EqualTo(UiRuntimeSprites.GetLineIcon(StudioLineIcon.Drop)));
 
-			Assert.That(labelRt.anchorMax.y, Is.GreaterThanOrEqualTo(0.45f),
-				"Label band ~half cell so PROJ MASK / NO COLOR second line is not clipped");
-			Assert.That(labelRt.anchorMax.y, Is.LessThanOrEqualTo(0.55f),
-				"Label band stays below icon (Grid-like leading)");
-			Assert.That(tmp.characterSpacing, Is.LessThan(12f),
-				"Stacked workflow tracking must be milder than full strip 18 (Grid-readable)");
-			Assert.That(tmp.overflowMode, Is.EqualTo(TextOverflowModes.Overflow));
+			Assert.That(labelRt.anchorMax.y, Is.GreaterThanOrEqualTo(0.42f),
+				"Label band for PROJ MASK / NO COLOR second line");
+			Assert.That(labelRt.anchorMax.y, Is.LessThanOrEqualTo(0.52f),
+				"Label band stays below icon");
+			Assert.That(tmp.characterSpacing, Is.LessThanOrEqualTo(3f),
+				"Compact tracking so narrow cells do not wrap/overflow");
+			Assert.That(tmp.lineSpacing, Is.LessThanOrEqualTo(-10f),
+				"Tight leading so 2-line caps fit inside the cell");
+			Assert.That(tmp.fontSize, Is.LessThanOrEqualTo(9f),
+				"Reduced point size so labels stay inside rounded shell");
+			Assert.That(tmp.overflowMode, Is.EqualTo(TextOverflowModes.Truncate),
+				"Truncate — Overflow painted WHERE EMPTY past the box");
 			var nomadFont = SpzUiThemeOps.ResolveNomadUiFont();
 			Assert.That(tmp.font, Is.EqualTo(nomadFont));
 			Assert.That((tmp.fontStyle & FontStyles.UpperCase) != 0, Is.True);

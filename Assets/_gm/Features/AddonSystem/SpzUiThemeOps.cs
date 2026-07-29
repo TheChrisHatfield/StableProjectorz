@@ -1015,8 +1015,8 @@ namespace spz {
 		/// <summary>
 		/// Nomad sculpt strip cell: thin line icon upper-center, label band underneath (Roboto).
 		/// Label RectTransforms are snapshotted for <see cref="RestoreBoundChromeUnder"/>.
-		/// Workflow strip (PROJ MASK / NO COLOR / …): Grid-like icon→type leading + room for 2-line caps
-		/// without clipping the second line.
+		/// Workflow strip (PROJ MASK / NO COLOR / …): compact type + tight icon→label leading;
+		/// 2-line caps stay inside the cell (no overflow past the rounded shell).
 		/// </summary>
 		/// <param name="stripUppercase">True = workflow PROJ MASK style (uppercase stack); false = title-case tool names (Paint/Smudge).</param>
 		public static void ApplyNomadStackedToolCell(
@@ -1040,11 +1040,10 @@ namespace spz {
 				}
 				return;
 			}
-			// Grid litmus (Multiview "Grid"): icon above type with a clear gap; type readable, not crushed.
-			// stripUppercase workflow cells need ~half the cell for 2-line caps (PROJ\nMASK).
-			float labelMaxY = stripUppercase ? 0.50f : 0.36f;
+			// Compact strip: small icon lift + lower label band so type sits close under the glyph.
+			float labelMaxY = stripUppercase ? 0.48f : 0.36f;
 			float yLift = stripUppercase
-				? Mathf.Max(8f, iconPx * 0.48f)
+				? Mathf.Max(2.5f, iconPx * 0.18f)
 				: Mathf.Max(3f, iconPx * 0.18f);
 			ApplyControlLineIconAt(cell, glyph, iconPx, new Vector2(0f, yLift));
 			foreach (var tmp in cell.GetComponentsInChildren<TMP_Text>(true)) {
@@ -1054,8 +1053,8 @@ namespace spz {
 				var lrt = tmp.rectTransform;
 				if (lrt != null) {
 					SnapshotToolFaceLayout(lrt);
-					lrt.anchorMin = new Vector2(0.06f, 0.02f);
-					lrt.anchorMax = new Vector2(0.94f, labelMaxY);
+					lrt.anchorMin = new Vector2(0.08f, 0.04f);
+					lrt.anchorMax = new Vector2(0.92f, labelMaxY);
 					lrt.pivot = new Vector2(0.5f, 0.5f);
 					lrt.anchoredPosition = Vector2.zero;
 					lrt.offsetMin = Vector2.zero;
@@ -1069,8 +1068,14 @@ namespace spz {
 				// Labels stretch over the face under Nomad — must not steal EventSystem hits from the Selectable.
 				tmp.raycastTarget = false;
 				if (stripUppercase) {
-					// Slightly smaller base so 2-line caps fit; then ease tracking vs full strip crush.
-					ApplyBoundChromeStripLabelTmp(tmp, labelColor, 10f);
+					// Force compact design pt — authored/default TMP (often 36) was captured and blew out the cell.
+					const float stackDesignPt = 8f;
+					var designTag = tmp.GetComponent<SpzUiThemeDesignFontPt>();
+					if (designTag != null)
+						designTag.designPt = stackDesignPt;
+					else
+						tmp.fontSize = stackDesignPt;
+					ApplyBoundChromeStripLabelTmp(tmp, labelColor, stackDesignPt);
 					ApplyWorkflowStackedLabelMetrics(tmp);
 				}
 				else
@@ -1079,16 +1084,18 @@ namespace spz {
 		}
 
 		/// <summary>
-		/// After strip uppercase metrics: Grid-like readable type + leading so PROJ MASK / WHERE EMPTY
-		/// second lines are not clipped by the next cell.
+		/// After strip uppercase metrics: compact type + tight leading so PROJ MASK / WHERE EMPTY
+		/// stay inside the cell (no glyph spill past the shell).
 		/// </summary>
 		static void ApplyWorkflowStackedLabelMetrics(TMP_Text text) {
 			if (text == null) return;
-			// Strip defaults use 18 tracking — too wide for a narrow ribbon cell (forces wrap/clip).
-			text.characterSpacing = 6f;
-			// Authored stacks are very tight; keep mild negative leading so 2 lines fit the label band.
-			text.lineSpacing = -2f;
-			text.overflowMode = TextOverflowModes.Overflow;
+			// Narrow ribbon: keep tracking mild; strip default 18 forces wrap/overflow.
+			text.characterSpacing = 2f;
+			// Tight leading — Pass17's -2 left tall stacks that spilled out of short cells.
+			text.lineSpacing = -12f;
+			text.enableWordWrapping = true;
+			text.overflowMode = TextOverflowModes.Truncate;
+			text.margin = new Vector4(1f, 0f, 1f, 1f);
 			try {
 				text.UpdateMeshPadding();
 				text.ForceMeshUpdate(ignoreActiveState: true);
