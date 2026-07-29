@@ -953,9 +953,15 @@ namespace spz {
 			var txtRt = txtGo.AddComponent<RectTransform>();
 			txtRt.SetParent(rowRt, false);
 			var txt = txtGo.AddComponent<TextMeshProUGUI>();
+			// One point smaller than FULL/SRN; seed designPt so BoundChrome does not snap back to 13.
+			const float openRightLabelPt = DockLabelBasePt - 1f;
 			ApplyFullSrnLabelStyle(txt, genRefTmp, txtRt);
 			txt.text = label;
-			txt.fontSize = Mathf.Max(DockLabelBasePt - 1f, txt.fontSize - 1f);
+			SpzUiThemeOps.EnsureDesignFontPt(txt, openRightLabelPt);
+			if (SpzUiThemeOps.ShouldRecolorBoundChrome)
+				SpzUiThemeOps.ApplyBoundChromeNarrowDockLabelTmp(txt, SpzUiThemeOps.Active.textPrimary, openRightLabelPt);
+			else
+				txt.fontSize = openRightLabelPt;
 			EnsureAdaptiveFaceBorder(rowRt);
 			if (string.Equals(name, "OpenRightDock", StringComparison.Ordinal)) {
 				_openRightDockLabel = txt;
@@ -1095,8 +1101,9 @@ namespace spz {
 					    && (string.IsNullOrWhiteSpace(label.text)
 					        || label.text.IndexOf("FULL", System.StringComparison.OrdinalIgnoreCase) < 0))
 						label.text = "FULL\nSRN";
-					// Narrow Gen Art column — not full strip 14pt/18 tracking (clips FULL/SRN).
-					SpzUiThemeOps.ApplyBoundChromeNarrowDockLabelTmp(label, t.textPrimary, DockLabelBasePt);
+					// Narrow Gen Art column — FULL uses 13pt; OPEN/HIDE RIGHT one point smaller.
+					float labelPt = forceFullSrnLabel ? DockLabelBasePt : (DockLabelBasePt - 1f);
+					SpzUiThemeOps.ApplyBoundChromeNarrowDockLabelTmp(label, t.textPrimary, labelPt);
 				}
 				if (iconImg != null)
 					iconImg.gameObject.SetActive(false);
