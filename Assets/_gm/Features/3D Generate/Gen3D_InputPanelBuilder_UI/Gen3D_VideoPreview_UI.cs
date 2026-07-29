@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using TMPro;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.UI;
@@ -127,6 +128,8 @@ namespace spz {
 
 	    protected virtual void ShowVideos(VideoPlayer player, string fileURL){
 	        _videoPreview_go.SetActive(true);
+	        // Preview GO often inactive under ThemeChanged — re-assert decision chrome when gen pauses.
+	        ApplyThemeTokens();
 	        try {
 	            // Load and play video
 	            player.url = fileURL;
@@ -136,6 +139,42 @@ namespace spz {
 	            _videoPreview_go.SetActive(false);
 	            Debug.LogError($"Failed to save or play preview video: {e.Message}");
 	        }
+	    }
+
+	    /// <summary>
+	    /// Nomad flat OK/NO/Retry while 3D gen is paused on preview — not Unity default light bricks.
+	    /// Ensure hit faces so label ClearNonFace cannot kill resume / cancel / retry (gen litmus).
+	    /// </summary>
+	    void ApplyThemeTokens() {
+	        // Prefer full preview root so gauss/mesh/radiance toggles leave with decision buttons.
+	        Transform root = _videoPreview_go != null
+	            ? _videoPreview_go.transform
+	            : (_decisionButtons_go != null ? _decisionButtons_go.transform : transform);
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreBoundChromeUnder(root);
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        ThemeDecisionButton(_video_OK_button, t.success, t);
+	        ThemeDecisionButton(_video_NO_button, t.danger, t);
+	        ThemeDecisionButton(_video_retry_button, t.controlBg, t);
+	        SpzUiThemeOps.ThemeFlatToolToggle(_gauss_toggle, t.controlBg, t.accent, t.textPrimary);
+	        SpzUiThemeOps.ThemeFlatToolToggle(_mesh_toggle, t.controlBg, t.accent, t.textPrimary);
+	        SpzUiThemeOps.ThemeFlatToolToggle(_radiance_toggle, t.controlBg, t.accent, t.textPrimary);
+	    }
+
+	    static void ThemeDecisionButton(Button btn, Color fill, SpzUiThemeOps.ThemeTokens t) {
+	        if (btn == null) return;
+	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, fill, t.accent);
+	        if (btn.targetGraphic is Image face) {
+	            SpzUiThemeOps.ApplyRoundedControlSprite(face, markEligible: true);
+	            face.preserveAspect = false;
+	            face.raycastTarget = true;
+	        }
+	        var label = btn.GetComponentInChildren<TextMeshProUGUI>(true);
+	        if (label != null)
+	            SpzUiThemeOps.ApplyBoundChromeTmp(label, t.textPrimary, 15f);
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }
 
 	    protected void CleanupPreviewVideos(){
@@ -153,6 +192,8 @@ namespace spz {
 	        _mesh_toggle.onValueChanged.AddListener( isOn => OnVideoTypeToggle(_mesh_toggle, isOn) );
 	        _radiance_toggle.onValueChanged.AddListener( isOn => OnVideoTypeToggle(_radiance_toggle, isOn) );
 	        _gauss_toggle.isOn = true;
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        ApplyThemeTokens();
 	    }
 
 	    protected virtual void Start(){
@@ -181,6 +222,7 @@ namespace spz {
 	    }
 
 	    void OnDestroy(){
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 	        TextureTools_SPZ.Dispose_RT(ref _video_renderTex_gauss, false);
 	        TextureTools_SPZ.Dispose_RT(ref _video_renderTex_mesh, false);
 	        TextureTools_SPZ.Dispose_RT(ref _video_renderTex_radiance, false);
