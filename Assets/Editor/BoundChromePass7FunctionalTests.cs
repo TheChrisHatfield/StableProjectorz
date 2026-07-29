@@ -116,6 +116,8 @@ public sealed class BoundChromePass7FunctionalTests {
 			"OnDestroy must TearDown so GenerateButtons column frame is restored");
 		Assert.That(src, Does.Contain("FindDirectChildIncludingInactive(parent, \"LineIcon\")"),
 			"LineIcon ensure must not use Transform.Find (inactive OPEN RIGHT duplicates)");
+		Assert.That(src, Does.Contain("float labelPt = forceFullSrnLabel ? DockLabelBasePt : (DockLabelBasePt - 1f)"));
+		Assert.That(src, Does.Contain("const float openRightLabelPt = DockLabelBasePt - 1f"));
 	}
 
 	[Test]
