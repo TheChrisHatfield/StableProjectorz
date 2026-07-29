@@ -55,7 +55,10 @@ namespace spz {
 		Image _openRightLineIcon;
 		/// <summary>GenerateButtons root cream <c>frame</c> — stretch-fills the whole column; suppressed while dock is up.</summary>
 		GameObject _suppressedGenButtonsColumnFrame;
-		bool _suppressedGenButtonsColumnFrameWasActive;
+		bool _ownsColumnFrameSuppress;
+		static int s_columnFrameSuppressCount;
+		static GameObject s_columnFrameGo;
+		static bool s_columnFrameWasActive;
 		Sprite _cachedFaceBorderSprite;
 		Color _cachedFaceBorderColor = new Color(1f, 0.959f, 0.881f, 0.922f);
 		float _cachedFaceBorderPpu = 6f;
@@ -1366,9 +1369,10 @@ namespace spz {
 		/// <summary>
 		/// GenerateButtons root <c>frame</c> stretch-fills the CSF-grown column (FULL + re-do + DEL LAST).
 		/// Hide it while the dock is up; each dock face gets its own adaptive stroke instead.
+		/// Ref-counted across dock instances so one TearDown cannot re-enable while another still owns suppress.
 		/// </summary>
 		void SuppressGenerateButtonsColumnFrame() {
-			if (_suppressedGenButtonsColumnFrame != null)
+			if (_ownsColumnFrameSuppress)
 				return;
 			var gbm = ResolveGenerateButtonsMain();
 			if (gbm == null)
@@ -1392,17 +1396,27 @@ namespace spz {
 					? frameImg.pixelsPerUnitMultiplier
 					: 6f;
 			}
+			if (s_columnFrameSuppressCount == 0) {
+				s_columnFrameGo = frameT.gameObject;
+				s_columnFrameWasActive = frameT.gameObject.activeSelf;
+				frameT.gameObject.SetActive(false);
+			}
+			s_columnFrameSuppressCount++;
+			_ownsColumnFrameSuppress = true;
 			_suppressedGenButtonsColumnFrame = frameT.gameObject;
-			_suppressedGenButtonsColumnFrameWasActive = frameT.gameObject.activeSelf;
-			frameT.gameObject.SetActive(false);
 		}
 
 		void RestoreGenerateButtonsColumnFrame() {
-			if (_suppressedGenButtonsColumnFrame == null)
+			if (!_ownsColumnFrameSuppress)
 				return;
-			_suppressedGenButtonsColumnFrame.SetActive(_suppressedGenButtonsColumnFrameWasActive);
+			_ownsColumnFrameSuppress = false;
 			_suppressedGenButtonsColumnFrame = null;
-			_suppressedGenButtonsColumnFrameWasActive = false;
+			if (s_columnFrameSuppressCount > 0)
+				s_columnFrameSuppressCount--;
+			if (s_columnFrameSuppressCount == 0 && s_columnFrameGo != null) {
+				s_columnFrameGo.SetActive(s_columnFrameWasActive);
+				s_columnFrameGo = null;
+			}
 		}
 
 		/// <summary>
