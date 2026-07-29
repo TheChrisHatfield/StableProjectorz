@@ -241,8 +241,10 @@ namespace spz {
 
     
 	    void Awake(){
-	        _resetToDefault_button.onClick.AddListener( OnResetToDefault_button );
-	        _openPanel_button.onClick.AddListener( OnOpenPanel_Button );
+	        if (_resetToDefault_button != null)
+	            _resetToDefault_button.onClick.AddListener( OnResetToDefault_button );
+	        if (_openPanel_button != null)
+	            _openPanel_button.onClick.AddListener( OnOpenPanel_Button );
 	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
 	        ApplyThemeTokens();
 	    }
@@ -261,11 +263,15 @@ namespace spz {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
 	            if (_panel != null)
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_panel.transform);
-	            // Icon raycast restored via SnapshotAuthoredGraphicForTheme + RestoreBoundChromeUnder.
+	            // Explicit leave: status icon must not stay raycast-off after Nomad→builtin
+	            // (gen path: open SD SERV panel → connect → is_sd_connected → isCanGenerate).
+	            if (_connectionIcon != null)
+	                _connectionIcon.raycastTarget = true;
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
 	        if (_openPanel_button != null) {
+	            SpzUiThemeOps.EnsureSelectableHitFace(_openPanel_button);
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_openPanel_button, t.controlBg, t.accent);
 	            if (_openPanel_button.targetGraphic is Image face) {
 	                SpzUiThemeOps.ApplyRoundedControlSprite(face, markEligible: true);
@@ -281,6 +287,7 @@ namespace spz {
 	            _dim_text.color = status;
 	        }
 	        if (_connectionIcon != null) {
+	            // Snapshot BEFORE clear so Restore SPZ can unwind (never snapshot after = false).
 	            SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(_connectionIcon);
 	            _connectionIcon.raycastTarget = false;
 	        }
@@ -299,10 +306,12 @@ namespace spz {
 	                SpzUiThemeOps.ApplyBoundChromeTmp(ph, t.textMuted);
 	        }
 	        if (_resetToDefault_button != null) {
+	            SpzUiThemeOps.EnsureSelectableHitFace(_resetToDefault_button);
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_resetToDefault_button, t.controlBg, t.accent);
 	            if (_resetToDefault_button.targetGraphic is Image resetImg) {
 	                SpzUiThemeOps.ApplyRoundedControlSprite(resetImg, markEligible: true);
 	            }
+	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_resetToDefault_button);
 	            var resetLabel = _resetToDefault_button.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	            if (resetLabel != null)
 	                SpzUiThemeOps.ApplyBoundChromeTmp(resetLabel, t.textPrimary);
