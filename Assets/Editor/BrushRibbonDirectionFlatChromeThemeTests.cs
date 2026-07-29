@@ -17,7 +17,7 @@ public sealed class BrushRibbonDirectionFlatChromeThemeTests {
 	}
 
 	[Test]
-	public void ApplyPaintSmudgeEraseGaps_NomadLeavesVisibleBreakBetweenEqualCells() {
+	public void ApplyPaintSmudgeEraseGaps_NomadPacksSquaresTightWithHairlineBreak() {
 		var root = new GameObject("DirGaps", typeof(RectTransform), typeof(LayoutElement));
 		root.SetActive(false);
 		try {
@@ -57,19 +57,23 @@ public sealed class BrushRibbonDirectionFlatChromeThemeTests {
 			var smudgeRt = smudge.transform as RectTransform;
 			var eraseRt = erase.transform as RectTransform;
 
+			const float nomadGap = 0.015f;
 			float gapPaintSmudge = paintRt.anchorMin.y - smudgeRt.anchorMax.y;
 			float gapSmudgeErase = smudgeRt.anchorMin.y - eraseRt.anchorMax.y;
-			Assert.That(gapPaintSmudge, Is.EqualTo(0.08f).Within(0.0001f));
-			Assert.That(gapSmudgeErase, Is.EqualTo(0.08f).Within(0.0001f));
+			Assert.That(gapPaintSmudge, Is.EqualTo(nomadGap).Within(0.0001f));
+			Assert.That(gapSmudgeErase, Is.EqualTo(nomadGap).Within(0.0001f));
+			// Tighter than the old 0.08 gutters and than builtin three-stack 0.028.
+			Assert.That(gapPaintSmudge, Is.LessThan(0.028f));
 
 			float paintH = paintRt.anchorMax.y - paintRt.anchorMin.y;
 			float smudgeH = smudgeRt.anchorMax.y - smudgeRt.anchorMin.y;
 			float eraseH = eraseRt.anchorMax.y - eraseRt.anchorMin.y;
 			Assert.That(paintH, Is.EqualTo(smudgeH).Within(0.0001f));
 			Assert.That(smudgeH, Is.EqualTo(eraseH).Within(0.0001f));
-			// Square stack: fallback colW 40 / cellFrac ((1-2*gap)/3) — not the old tall 280px column.
-			float gap = 0.08f;
-			float expectedH = 40f / ((1f - 2f * gap) / 3f);
+			// Square stack height = column width / cellFrac (same as ApplyPaintSmudgeEraseGaps).
+			var rootRt = root.GetComponent<RectTransform>();
+			float colW = rootRt.rect.width > 4f ? rootRt.rect.width : 40f;
+			float expectedH = colW / ((1f - 2f * nomadGap) / 3f);
 			Assert.That(le.minHeight, Is.EqualTo(expectedH).Within(0.01f));
 			Assert.That(le.preferredHeight, Is.EqualTo(expectedH).Within(0.01f));
 		}
@@ -174,7 +178,7 @@ public sealed class BrushRibbonDirectionFlatChromeThemeTests {
 
 			var paintRt = paint.transform as RectTransform;
 			var smudgeRt = smudge.transform as RectTransform;
-			Assert.That(paintRt.anchorMin.y - smudgeRt.anchorMax.y, Is.EqualTo(0.08f).Within(0.0001f));
+			Assert.That(paintRt.anchorMin.y - smudgeRt.anchorMax.y, Is.EqualTo(0.015f).Within(0.0001f));
 
 			void AssertIcon(Toggle toggle, StudioLineIcon glyph) {
 				var iconT = SpzUiThemeOps.FindDirectChildIncludingInactive(toggle.transform, "MonolithLineIcon");
