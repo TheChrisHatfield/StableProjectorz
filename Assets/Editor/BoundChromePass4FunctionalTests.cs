@@ -113,10 +113,11 @@ public sealed class BoundChromePass4FunctionalTests {
 		Assert.That(File.Exists(path), Is.True, path);
 		string src = File.ReadAllText(path);
 		int graphic = src.IndexOf("toggle.graphic = checkImg;", System.StringComparison.Ordinal);
-		int rounded = src.IndexOf("ApplyRoundedControlSprite(checkImg", System.StringComparison.Ordinal);
 		Assert.That(graphic, Is.GreaterThan(0));
-		Assert.That(rounded, Is.GreaterThan(graphic));
-		Assert.That(src, Does.Contain("ApplyToAddonUiRoot(toggleObj)"));
+		// Checkmark must stay a real ON glyph — do not ApplyRoundedControlSprite(checkImg) (Pass4 litmus).
+		Assert.That(src, Does.Not.Contain("ApplyRoundedControlSprite(checkImg"));
+		int applyRoot = src.IndexOf("ApplyToAddonUiRoot(toggleObj)", graphic, System.StringComparison.Ordinal);
+		Assert.That(applyRoot, Is.GreaterThan(graphic));
 	}
 
 	static float ColorDistance(Color a, Color b) {
