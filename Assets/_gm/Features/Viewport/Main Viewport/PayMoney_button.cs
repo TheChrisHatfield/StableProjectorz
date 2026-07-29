@@ -38,7 +38,9 @@ namespace spz {
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
-	        SpzUiThemeOps.ApplySolidSquareChrome(_button, t.controlBg, t.accent);
+	        // Ensure hit face first — ApplySolidSquareChrome alone no-ops when targetGraphic is null,
+	        // then ApplyBoundChromeTmp clears label raycasts → dead thank-you click under Nomad.
+	        SpzUiThemeOps.ApplyBoundChromeSelectable(_button, t.controlBg, t.accent);
 	        foreach (var tmp in _button.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp == null) continue;
 	            // Snapshot via ApplyBoundChromeTmp first — never clear raycast before snapshot (leave poison).
