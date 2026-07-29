@@ -265,7 +265,7 @@ namespace spz {
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
-	        if (_openPanel_button != null && _openPanel_button.targetGraphic != null) {
+	        if (_openPanel_button != null) {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_openPanel_button, t.controlBg, t.accent);
 	            if (_openPanel_button.targetGraphic is Image face) {
 	                SpzUiThemeOps.ApplyRoundedControlSprite(face, markEligible: true);
@@ -298,7 +298,7 @@ namespace spz {
 	            if (_ip_text.placeholder is TMPro.TMP_Text ph)
 	                SpzUiThemeOps.ApplyBoundChromeTmp(ph, t.textMuted);
 	        }
-	        if (_resetToDefault_button != null && _resetToDefault_button.targetGraphic != null) {
+	        if (_resetToDefault_button != null) {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_resetToDefault_button, t.controlBg, t.accent);
 	            if (_resetToDefault_button.targetGraphic is Image resetImg) {
 	                SpzUiThemeOps.ApplyRoundedControlSprite(resetImg, markEligible: true);

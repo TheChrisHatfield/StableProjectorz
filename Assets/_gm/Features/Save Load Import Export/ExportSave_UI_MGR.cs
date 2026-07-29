@@ -101,7 +101,7 @@ namespace spz {
 	    }
 
 	    static void ThemeMenuButton(Button btn, SpzUiThemeOps.ThemeTokens t) {
-	        if (btn == null || btn.targetGraphic == null) return;
+	        if (btn == null) return;
 	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
 	        var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	        if (label != null)

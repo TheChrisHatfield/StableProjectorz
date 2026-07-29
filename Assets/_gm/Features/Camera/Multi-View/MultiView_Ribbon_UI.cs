@@ -329,7 +329,7 @@ namespace spz {
 	        var rootImg = GetComponent<Image>();
 	        if (rootImg != null)
 	            SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.panelBg);
-	        if (_BlendCams_button != null && _BlendCams_button.targetGraphic != null) {
+	        if (_BlendCams_button != null) {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_BlendCams_button, t.controlBg, t.accent);
 	            var label = _BlendCams_button.GetComponentInChildren<TextMeshProUGUI>(true);
 	            if (label != null)
@@ -357,7 +357,7 @@ namespace spz {
 	        RefreshPovAndGridChromeSelection();
 	        if (_sortPins_Button != null) {
 	            var sortBtn = _sortPins_Button.GetComponent<Button>();
-	            if (sortBtn != null && sortBtn.targetGraphic != null)
+	            if (sortBtn != null)
 	                SpzUiThemeOps.ApplyBoundChromeSelectable(sortBtn, t.controlBg, t.accent);
 	            foreach (var tmp in _sortPins_Button.GetComponentsInChildren<TextMeshProUGUI>(true))
 	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);

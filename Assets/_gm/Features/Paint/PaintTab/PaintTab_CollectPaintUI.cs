@@ -269,7 +269,7 @@ namespace spz {
 			}
 			foreach (var btn in section.GetComponentsInChildren<Button>(true))
 			{
-				if (btn == null || btn.targetGraphic == null) continue;
+				if (btn == null) continue;
 				// Content-bearing widgets: Image/RawImage IS the payload (brush alpha, palette swatch, transparent hit).
 				if (IsContentBearingPaintButton(btn))
 					continue;
@@ -284,7 +284,7 @@ namespace spz {
 			}
 			foreach (var toggle in section.GetComponentsInChildren<Toggle>(true))
 			{
-				if (toggle == null || toggle.targetGraphic == null) continue;
+				if (toggle == null) continue;
 				if (toggle.targetGraphic is RawImage) continue;
 				Color fill = toggle.isOn
 					? Color.Lerp(t.controlBg, t.accent, 0.14f)

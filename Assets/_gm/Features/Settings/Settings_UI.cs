@@ -970,6 +970,7 @@ namespace spz {
 
 	    static void ApplyThemeToggleColors(Toggle tgl, SpzUiThemeOps.ThemeTokens t) {
 	        tgl.transition = Selectable.Transition.ColorTint;
+	        SpzUiThemeOps.EnsureSelectableHitFace(tgl);
 	        // Image.color = chrome token; ColorBlock stays white-based so Unity does not multiply twice.
 	        if (tgl.targetGraphic != null)
 	            SpzUiThemeOps.ApplyBoundChromeGraphic(tgl.targetGraphic, t.controlBg);
@@ -1017,8 +1018,11 @@ namespace spz {
 	        sel.transition = Selectable.Transition.ColorTint;
 	        var t = SpzUiThemeOps.Active;
 	        // On builtin, keep the authored targetGraphic set by CreateToggle*; only retint when themed.
-	        if (SpzUiThemeOps.ShouldRecolorBoundChrome && sel.targetGraphic != null)
-	            SpzUiThemeOps.ApplyBoundChromeGraphic(sel.targetGraphic, t.controlBg);
+	        if (SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.EnsureSelectableHitFace(sel);
+	            if (sel.targetGraphic != null)
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(sel.targetGraphic, t.controlBg);
+	        }
 	        Color accent = SpzUiThemeOps.ShouldRecolorBoundChrome
 	            ? t.accent
 	            : new Color(0.55f, 0.55f, 0.58f, 1f);

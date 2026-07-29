@@ -89,7 +89,7 @@ namespace spz {
 	        var t = SpzUiThemeOps.Active;
 	        for (int i = 0; i < _presetToggles.Count; i++) {
 	            var toggle = _presetToggles[i];
-	            if (toggle == null || toggle.targetGraphic == null) continue;
+	            if (toggle == null) continue;
 	            Color fill = toggle.isOn
 	                ? Color.Lerp(t.controlBg, t.accent, 0.35f)
 	                : t.controlBg;

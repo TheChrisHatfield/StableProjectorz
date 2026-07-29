@@ -158,13 +158,15 @@ namespace spz {
 	        if (_progressTotal != null)
 	            SpzUiThemeOps.ApplyBoundChromeGraphic(_progressTotal, t.accent);
 	        // Help button uses authored icon art — only nudge ColorBlock multipliers, do not replace Image.color.
-	        if (_help_button != null && _help_button.targetGraphic != null) {
+		if (_help_button != null) {
+	            SpzUiThemeOps.EnsureSelectableHitFace(_help_button);
 	            var colors = _help_button.colors;
 	            colors.normalColor = Color.white;
 	            colors.highlightedColor = Color.Lerp(Color.white, t.accent, 0.25f);
 	            colors.pressedColor = Color.Lerp(Color.white, t.accent, 0.55f);
 	            colors.selectedColor = colors.highlightedColor;
 	            _help_button.colors = colors;
+	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_help_button);
 	        }
 	        // Sticky message colors remain caller-owned (ShowStickyMessage).
 	    }
