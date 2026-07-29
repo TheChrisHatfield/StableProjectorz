@@ -973,7 +973,8 @@ namespace spz {
 		static void EnsureDockLineIcon(RectTransform parent, StudioLineIcon glyph, out Image iconImg) {
 			iconImg = null;
 			if (parent == null) return;
-			Transform existing = parent.Find("LineIcon");
+			// Same inactive-child pitfall as DockFaceBorder — OPEN RIGHT is often inactive.
+			Transform existing = SpzUiThemeOps.FindDirectChildIncludingInactive(parent, "LineIcon");
 			RectTransform iconRt;
 			if (existing == null) {
 				var go = new GameObject("LineIcon", typeof(RectTransform));

@@ -114,6 +114,8 @@ public sealed class BoundChromePass7FunctionalTests {
 		string destroyBody = src.Substring(onDestroy, System.Math.Min(500, src.Length - onDestroy));
 		Assert.That(destroyBody, Does.Contain("TearDownBuiltDock()"),
 			"OnDestroy must TearDown so GenerateButtons column frame is restored");
+		Assert.That(src, Does.Contain("FindDirectChildIncludingInactive(parent, \"LineIcon\")"),
+			"LineIcon ensure must not use Transform.Find (inactive OPEN RIGHT duplicates)");
 	}
 
 	[Test]
