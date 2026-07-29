@@ -100,7 +100,14 @@ namespace Lavender.Systems
 	    const uint CREATE_NEW_CONSOLE = 0x00000010;
 	    const uint STARTF_USESHOWWINDOW = 0x00000001;
 	    const uint INFINITE = 0xFFFFFFFF;
-	    const uint PROCESS_ALL_ACCESS = 0x001F0FFF;
+	    // Prefer limited rights — PROCESS_ALL_ACCESS often fails OpenProcess after CreateProcess
+	    // (Wait then falsely reports "exited" and callers read incomplete logs).
+	    const uint PROCESS_TERMINATE = 0x0001;
+	    const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+	    const uint SYNCHRONIZE = 0x00100000;
+	    const uint PROCESS_WAIT_ACCESS = SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION;
+	    const uint PROCESS_QUERY_ACCESS = PROCESS_QUERY_LIMITED_INFORMATION;
+	    const uint STILL_ACTIVE = 259;
 
 
 	    public static bool Run_Exe(string filepath, string workingDir, bool hidden=false){
@@ -191,7 +198,7 @@ namespace Lavender.Systems
 
 
 	    public static bool KillProcess(uint processId){
-	        IntPtr hProcess = OpenProcess(PROCESS_ALL_ACCESS, false, processId);
+	        IntPtr hProcess = OpenProcess(PROCESS_TERMINATE, false, processId);
 	        if (hProcess == IntPtr.Zero)
 	            return false;
 
@@ -204,7 +211,7 @@ namespace Lavender.Systems
 	    public static uint GetCurrentPid() => GetCurrentProcessId();
 
 	    public static bool IsProcessRunning(uint processId){
-	        IntPtr hProcess = OpenProcess(PROCESS_ALL_ACCESS, false, processId);
+	        IntPtr hProcess = OpenProcess(PROCESS_QUERY_ACCESS, false, processId);
 	        if (hProcess == IntPtr.Zero)
 	            return false;
 
@@ -212,13 +219,31 @@ namespace Lavender.Systems
 	        bool result = GetExitCodeProcess(hProcess, out exitCode);
 	        CloseHandle(hProcess);
 
-	        return result && exitCode == 259; // STILL_ACTIVE = 259
+	        return result && exitCode == STILL_ACTIVE;
 	    }
 
 	    public static bool WaitForProcessExit(uint processId, int timeoutMs = -1){
-	        IntPtr hProcess = OpenProcess(PROCESS_ALL_ACCESS, false, processId);
-	        if (hProcess == IntPtr.Zero)
-	            return true; // Process doesn't exist, so it's not running
+	        IntPtr hProcess = OpenProcess(PROCESS_WAIT_ACCESS, false, processId);
+	        if (hProcess == IntPtr.Zero) {
+	            // OpenProcess can fail while the process is still alive (rights/timing).
+	            // Do not treat that as "already exited" — poll IsProcessRunning instead.
+	            if (timeoutMs == 0)
+	                return !IsProcessRunning(processId);
+	            int waited = 0;
+	            const int slice = 50;
+	            while (timeoutMs < 0 || waited < timeoutMs) {
+	                if (!IsProcessRunning(processId))
+	                    return true;
+	                System.Threading.Thread.Sleep(slice);
+	                if (timeoutMs >= 0)
+	                    waited += slice;
+	                hProcess = OpenProcess(PROCESS_WAIT_ACCESS, false, processId);
+	                if (hProcess != IntPtr.Zero)
+	                    break;
+	            }
+	            if (hProcess == IntPtr.Zero)
+	                return !IsProcessRunning(processId);
+	        }
 
 	        uint waitResult = WaitForSingleObject(hProcess, timeoutMs < 0 ? INFINITE : (uint)timeoutMs);
 	        CloseHandle(hProcess);
