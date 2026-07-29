@@ -251,9 +251,10 @@ namespace spz {
 	                SpzUiThemeOps.ApplyBoundChromeSelectable(saveBtn, t.success, t.accent);
 	            SpzUiThemeOps.ApplyBoundChromeTmp(_save_texResQuality_text, t.textPrimary);
 	        }
-	        if (_sub_texResolutionQuality != null && _sub_texResolutionQuality.targetGraphic != null)
+	        // Prefab +/- may ship with null targetGraphic — Ensure inside ApplyBoundChromeSelectable.
+	        if (_sub_texResolutionQuality != null)
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_sub_texResolutionQuality, t.controlBg, t.accent);
-	        if (_add_texResolutionQuality != null && _add_texResolutionQuality.targetGraphic != null)
+	        if (_add_texResolutionQuality != null)
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_add_texResolutionQuality, t.controlBg, t.accent);
 	        ThemeFilterToggle(_textureFilterPoint_toggle, t);
 	        ThemeFilterToggle(_textureFilterBilinear_toggle, t);

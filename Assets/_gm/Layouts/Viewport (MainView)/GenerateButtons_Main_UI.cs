@@ -245,7 +245,9 @@ namespace spz {
 	    }
 
 	    static void ThemeGenButton(Button btn, SpzUiThemeOps.ThemeTokens t) {
-	        if (btn == null || btn.targetGraphic == null) return;
+	        if (btn == null) return;
+	        SpzUiThemeOps.EnsureSelectableHitFace(btn);
+	        if (btn.targetGraphic == null) return;
 	        Color fill = t.controlBg;
 	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, fill, t.accent);
 	        if (btn.targetGraphic is Image face) {
