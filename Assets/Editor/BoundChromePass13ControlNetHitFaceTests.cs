@@ -13,7 +13,9 @@ public sealed class BoundChromePass13ControlNetHitFaceTests {
 			Application.dataPath,
 			"_gm/Features/StableDiffusion/Controlnet/ControlNetUnit_UI.cs"));
 		string src = File.ReadAllText(path);
-		Assert.That(src, Does.Contain("ApplyBoundChromeSelectable(_headerRibbon_button"));
+		// Pass36: keep header hit face transparent (SolidSquare Selectable covered "ControlNet N").
+		Assert.That(src, Does.Contain("EnsureSelectableHitFace(_headerRibbon_button)"));
+		Assert.That(src, Does.Contain("ClearNonFaceRaycastsForTheme(_headerRibbon_button)"));
 		Assert.That(src, Does.Not.Contain(
 			"_headerRibbon_button != null && _headerRibbon_button.targetGraphic != null"));
 		int btnLoop = src.IndexOf("foreach (var btn in GetComponentsInChildren<Button>", System.StringComparison.Ordinal);

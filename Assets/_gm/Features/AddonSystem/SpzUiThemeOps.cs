@@ -317,15 +317,19 @@ namespace spz {
 		/// Prefab Selectables often ship with null <see cref="Selectable.targetGraphic"/>.
 		/// Wire an existing Image or create an invisible stretch <c>BoundChromeHitFace</c> so
 		/// BoundChrome label clears cannot leave the control unclickable (CommandRibbon litmus).
+		/// Snapshots authored raycast <b>before</b> forcing true so Restore SPZ can unwind
+		/// faces that shipped raycastTarget=false (workflow / ControlNet / Multiview leave litmus).
 		/// </summary>
 		public static Image EnsureSelectableHitFace(Selectable selectable) {
 			if (selectable == null) return null;
 			if (selectable.targetGraphic is Image wired) {
+				SnapshotAuthoredGraphic(wired);
 				wired.raycastTarget = true;
 				return wired;
 			}
 			var onSelf = selectable.GetComponent<Image>();
 			if (onSelf != null) {
+				SnapshotAuthoredGraphic(onSelf);
 				selectable.targetGraphic = onSelf;
 				onSelf.raycastTarget = true;
 				return onSelf;
@@ -335,6 +339,7 @@ namespace spz {
 			if (existing != null) {
 				var face = existing.GetComponent<Image>();
 				if (face != null) {
+					SnapshotAuthoredGraphic(face);
 					selectable.targetGraphic = face;
 					face.raycastTarget = true;
 					return face;
@@ -1065,8 +1070,8 @@ namespace spz {
 				SnapshotNomadTypography(tmp);
 				tmp.alignment = TextAlignmentOptions.Center;
 				tmp.enableAutoSizing = false;
-				// Labels stretch over the face under Nomad — must not steal EventSystem hits from the Selectable.
-				tmp.raycastTarget = false;
+				// Do NOT clear raycast before BoundChrome snapshot (Pass9/10 poison class).
+				// StripLabel / ApplyBoundChromeTmp → ClearLabelRaycastIfUnderSelectable owns the clear.
 				if (stripUppercase) {
 					// Force compact design pt — authored/default TMP (often 36) was captured and blew out the cell.
 					const float stackDesignPt = 8f;
