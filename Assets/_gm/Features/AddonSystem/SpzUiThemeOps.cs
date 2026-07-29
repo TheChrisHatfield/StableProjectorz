@@ -1510,13 +1510,14 @@ namespace spz {
 				ApplyPanelWidth(root.GetComponent<LayoutElement>());
 
 			foreach (var button in root.GetComponentsInChildren<Button>(true)) {
-				if (button == null || button.targetGraphic == null)
+				if (button == null)
 					continue;
 				// Dropdown_* row images are almost transparent pointer hit targets.
 				if (button.gameObject.name.StartsWith("Dropdown_", StringComparison.Ordinal))
 					continue;
-				// Other invisible hit pads — solid-square chrome would steal clicks under Nomad.
-				if (button.targetGraphic.color.a < 0.08f)
+				// Other authored invisible hit pads — solid-square chrome would steal clicks under Nomad.
+				// Check BEFORE Ensure (Ensure creates a transparent BoundChromeHitFace when null).
+				if (button.targetGraphic != null && button.targetGraphic.color.a < 0.08f)
 					continue;
 				bool isField = button.GetComponent<TMP_Dropdown>() != null
 					|| string.Equals(button.gameObject.name, "Dropdown", StringComparison.Ordinal);
@@ -1555,7 +1556,9 @@ namespace spz {
 			}
 
 			foreach (var toggle in root.GetComponentsInChildren<Toggle>(true)) {
-				if (toggle == null || toggle.targetGraphic == null)
+				if (toggle == null)
+					continue;
+				if (toggle.targetGraphic != null && toggle.targetGraphic.color.a < 0.08f)
 					continue;
 				Color face = toggle.isOn
 					? Color.Lerp(tokens.tabActive, tokens.accent, 0.45f)
@@ -1798,8 +1801,10 @@ namespace spz {
 			}
 
 			foreach (var button in root.GetComponentsInChildren<Button>(true)) {
-				if (button == null || button.targetGraphic == null)
+				if (button == null)
 					continue;
+				// Prefab SAVE/LOAD/DELETE often ship null targetGraphic — clicked via TMP until Nomad
+				// clears label raycasts. EnsureSelectableHitFace lives in ApplyBoundChromeSelectable.
 				ApplyBoundChromeSelectable(button, tokens.controlBg, tokens.accent);
 			}
 
@@ -1807,6 +1812,15 @@ namespace spz {
 				if (text == null)
 					continue;
 				ApplyBoundChromeTmp(text, tokens.textPrimary);
+			}
+
+			foreach (var toggle in root.GetComponentsInChildren<Toggle>(true)) {
+				if (toggle == null)
+					continue;
+				Color face = toggle.isOn
+					? Color.Lerp(tokens.tabActive, tokens.accent, 0.45f)
+					: tokens.controlBg;
+				ThemeCheckboxToggle(toggle, face, tokens.accent, tokens.success);
 			}
 
 			foreach (var slider in root.GetComponentsInChildren<Slider>(true)) {
