@@ -44,7 +44,7 @@ public sealed class SpzGoBlenderInstallTests {
 	}
 
 	[Test]
-	public void TryInstall_DrainsStdoutAndStderrConcurrently() {
+	public void TryInstall_UsesIl2CppSafeProcessLaunch() {
 		string path = Path.Combine(
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "AddonSystem", "FastPath_API.cs");
@@ -55,9 +55,14 @@ public sealed class SpzGoBlenderInstallTests {
 		int end = src.IndexOf("public bool ExportProjectionTextures", start, StringComparison.Ordinal);
 		Assert.That(end, Is.GreaterThan(start));
 		string body = src.Substring(start, end - start);
-		Assert.That(body, Does.Contain("new System.Threading.Thread"),
-			"Must drain stdout/stderr on background threads to avoid pipe deadlock.");
-		Assert.That(body, Does.Contain("StandardOutput.ReadToEnd"));
-		Assert.That(body, Does.Contain("StandardError.ReadToEnd"));
+		Assert.That(body, Does.Not.Contain("Process.Start"),
+			"IL2CPP asserts on System.Diagnostics.Process.Start (CreateProcess_internal).");
+		Assert.That(body, Does.Not.Contain("ProcessStartInfo"),
+			"Must not use ProcessStartInfo under IL2CPP player builds.");
+		Assert.That(body, Does.Contain("StartExternalProcess"),
+			"Must launch blender via Win32 CreateProcess (StartExternalProcess).");
+		Assert.That(body, Does.Contain(".bat"),
+			"Temp .bat + log redirect captures install markers without stdout pipes.");
+		Assert.That(body, Does.Contain("SPZ_GO_INSTALL_OK"));
 	}
 }
