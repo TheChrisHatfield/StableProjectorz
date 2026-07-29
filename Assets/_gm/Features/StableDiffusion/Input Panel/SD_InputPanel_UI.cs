@@ -218,7 +218,7 @@ namespace spz {
 	            SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.panelBg);
 
 	        foreach (var btn in root.GetComponentsInChildren<Button>(true)) {
-	            if (btn == null || btn.targetGraphic == null) continue;
+	            if (btn == null) continue;
 	            // Dropdown row hit targets stay transparent.
 	            if (btn.gameObject.name.StartsWith("Dropdown_", System.StringComparison.Ordinal))
 	                continue;
@@ -237,14 +237,14 @@ namespace spz {
 	            }
 	        }
 	        foreach (var toggle in root.GetComponentsInChildren<Toggle>(true)) {
-	            if (toggle == null || toggle.targetGraphic == null) continue;
+	            if (toggle == null) continue;
 	            if (IsPromptPresetToggle(toggle))
 	                ThemePromptPresetToggle(toggle, t);
 	            else
 	                SpzUiThemeOps.ThemeCheckboxToggle(toggle, t.controlBg, t.accent, t.success);
 	        }
 	        foreach (var dd in root.GetComponentsInChildren<TMP_Dropdown>(true)) {
-	            if (dd == null || dd.targetGraphic == null) continue;
+	            if (dd == null) continue;
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(dd, t.fieldBg, t.accent);
 	            if (dd.targetGraphic is Image ddImg) {
 	                SpzUiThemeOps.ApplyRoundedControlSprite(ddImg, markEligible: true);
@@ -298,8 +298,7 @@ namespace spz {
 	        if (root == null) return;
 	        var t = SpzUiThemeOps.Active;
 	        foreach (var toggle in root.GetComponentsInChildren<Toggle>(true)) {
-	            if (toggle == null || toggle.targetGraphic == null) continue;
-	            if (!IsPromptPresetToggle(toggle)) continue;
+	            if (toggle == null || !IsPromptPresetToggle(toggle)) continue;
 	            ThemePromptPresetToggle(toggle, t);
 	        }
 	    }
@@ -316,7 +315,7 @@ namespace spz {
 	    }
 
 	    static void ThemePromptPresetToggle(Toggle toggle, SpzUiThemeOps.ThemeTokens t) {
-	        if (toggle == null || toggle.targetGraphic == null) return;
+	        if (toggle == null) return;
 	        Color fill = FlatCellFill(toggle.isOn, t);
 	        SpzUiThemeOps.ThemePromptPresetSquareCell(toggle, fill, t.accent);
 	    }
@@ -354,7 +353,7 @@ namespace spz {
 	    }
 
 	    void ThemeResolutionPreset(Button btn, int presetPx, SpzUiThemeOps.ThemeTokens t) {
-	        if (btn == null || btn.targetGraphic == null) return;
+	        if (btn == null) return;
 	        bool selected = width == presetPx && height == presetPx;
 	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, FlatCellFill(selected, t), t.accent);
 	        if (btn.targetGraphic is Image img) {
