@@ -253,9 +253,12 @@ namespace spz {
 	            _isGeneratingWhat = Generate_RequestingWhat.nothing;
 	            _finalPreparations_beforeGen = false;
 	            // Socket may already be up while dropdown still shows only the disconnect placeholder.
-	            string msg = (!Connection_MGR.is_sd_connected || !inp.models.HasValidModels)
-	                ? SdDisconnectPlaceholder.DisplayText
-	                : "No Models detected in the Input panel. Enter PlayMode only after WebUI was launched";
+	            // OG health: black-window StatusText when truly disconnected; DisplayText when socket is up but no checkpoint yet.
+	            string msg = !Connection_MGR.is_sd_connected
+	                ? SdDisconnectPlaceholder.StatusText
+	                : !inp.models.HasValidModels
+	                    ? SdDisconnectPlaceholder.DisplayText
+	                    : "No Models detected in the Input panel. Enter PlayMode only after WebUI was launched";
 	            Viewport_StatusText.instance.ShowStatusText(msg, false, 10, progressVisibility:false);
 	            return false;//no models available. User should try clicking the refresh button next to dropdown.
 	        }

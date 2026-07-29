@@ -51,7 +51,8 @@ namespace spz {
 	            return true;
 	        }
 	        if (Connection_MGR.is_sd_connected == false){ 
-	            Viewport_StatusText.instance.ShowStatusText(SdDisconnectPlaceholder.DisplayText, false, 2, true);
+	            // OG health: actionable black-window guidance (dropdown captions stay on DisplayText).
+	            Viewport_StatusText.instance.ShowStatusText(SdDisconnectPlaceholder.StatusText, false, 2, true);
 	            return true;
 	        }
 	        if(allow_without_controlnets==false &&  ControlNetUnit_UI.hasAtLeastSomeModel == false){
