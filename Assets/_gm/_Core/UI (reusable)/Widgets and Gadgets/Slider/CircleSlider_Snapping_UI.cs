@@ -168,6 +168,7 @@ namespace spz {
 	    /// <summary>
 	    /// Nomad: radial fill color only — no solid-square outer box. Value is reverse-out (textPrimary).
 	    /// Never flatten the fill into SolidRect — that caused circular/bullseye overlay soup.
+	    /// Outer plate hide must not leave zero raycast Graphics (IPointerDown dies; CFG/steps/rethink/CN dials).
 	    /// </summary>
 	    public void ApplyThemeTokens(Color fillAccent, Color textPrimary) {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
@@ -175,26 +176,64 @@ namespace spz {
 	            return;
 	        }
 	        var tokens = SpzUiThemeOps.Active;
+	        // Invisible stretch face so EventSystem still delivers IPointer* after outer plate is hidden.
+	        Image hitFace = EnsureDialPointerHitFace();
 	        // Hide outer plate/box Images — dial + number only (user litmus: no charcoal square cell).
 	        foreach (var img in GetComponentsInChildren<Image>(true)) {
 	            if (img == null || img == _fillImage) continue;
+	            if (img == hitFace) continue;
 	            if (img.type == Image.Type.Filled) continue;
 	            string n = img.gameObject.name ?? "";
-	            if (n == "MonolithLineIcon" || n == "MonolithActiveBar") continue;
+	            if (n == "MonolithLineIcon" || n == "MonolithActiveBar" || n == "BoundChromeHitFace")
+	                continue;
 	            SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(img);
 	            SpzUiThemeOps.HideAuthoredGraphicForTheme(img);
 	        }
 	        // Mute accent so the radial fill is not a near-white glare under the value.
 	        Color fill = Color.Lerp(fillAccent, tokens.controlBg, 0.28f);
 	        fill.a = 1f;
-	        if (_fillImage != null)
+	        if (_fillImage != null) {
 	            SpzUiThemeOps.ApplyBoundChromeGraphic(_fillImage, fill); // Filled type: color only (no flatten)
+	            // Secondary hit path if authored fill already raycasted the ring.
+	            _fillImage.raycastTarget = true;
+	        }
 	        if (_text != null) {
 	            // Always reverse-out on the dark app chrome — never dark ink (boxes are gone; fill is a ring).
 	            SpzUiThemeOps.ApplyBoundChromeTmp(_text, textPrimary, 16f);
 	            _text.raycastTarget = false;
 	            _text.enabled = true;
 	        }
+	    }
+
+	    /// <summary>
+	    /// Prefab dials often raycast via the outer plate Image. Nomad hides that plate — leave a
+	    /// transparent <c>BoundChromeHitFace</c> so IPointerDown/Drag still reach this component (gen dials litmus).
+	    /// </summary>
+	    Image EnsureDialPointerHitFace() {
+	        Transform existing = SpzUiThemeOps.FindDirectChildIncludingInactive(transform, "BoundChromeHitFace");
+	        Image face = existing != null ? existing.GetComponent<Image>() : null;
+	        if (face == null) {
+	            var go = new GameObject("BoundChromeHitFace", typeof(RectTransform));
+	            go.transform.SetParent(transform, false);
+	            go.transform.SetAsFirstSibling();
+	            var rt = go.GetComponent<RectTransform>();
+	            rt.anchorMin = Vector2.zero;
+	            rt.anchorMax = Vector2.one;
+	            rt.pivot = new Vector2(0.5f, 0.5f);
+	            rt.anchoredPosition = Vector2.zero;
+	            rt.sizeDelta = Vector2.zero;
+	            rt.offsetMin = Vector2.zero;
+	            rt.offsetMax = Vector2.zero;
+	            face = go.AddComponent<Image>();
+	            face.sprite = UiRuntimeSprites.SolidRect;
+	            face.type = Image.Type.Simple;
+	            face.preserveAspect = false;
+	        }
+	        face.color = new Color(1f, 1f, 1f, 0f);
+	        face.enabled = true;
+	        face.raycastTarget = true;
+	        face.gameObject.SetActive(true);
+	        return face;
 	    }
 
 	    float SnapToIncrement(float value, float increment){
