@@ -510,7 +510,7 @@ namespace spz {
 	            if (headerImg != null)
 	                SpzUiThemeOps.ApplyBoundChromeGraphic(headerImg, t.controlBg);
 	            foreach (var btn in _header.GetComponentsInChildren<Button>(true)) {
-	                if (btn == null || btn.targetGraphic == null) continue;
+	                if (btn == null) continue;
 	                SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
 	                var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	                if (label != null)

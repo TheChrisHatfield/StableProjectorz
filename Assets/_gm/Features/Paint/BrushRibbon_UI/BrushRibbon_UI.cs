@@ -283,13 +283,11 @@ namespace spz {
 
 	    static void ThemeToolButton(Button btn, StudioLineIcon glyph, SpzUiThemeOps.ThemeTokens t, bool applyIcon = true) {
 	        if (btn == null || !SpzUiThemeOps.ShouldRecolorBoundChrome) return;
-	        if (btn.targetGraphic != null) {
-	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, FlatToolFill(false, t), t.accent);
-	            ApplyFlatToolColorBlock(btn);
-	            if (btn.targetGraphic is Image bg) {
-	                SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
-	                SpzUiThemeOps.FlattenToolFaceImage(bg);
-	            }
+	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, FlatToolFill(false, t), t.accent);
+	        ApplyFlatToolColorBlock(btn);
+	        if (btn.targetGraphic is Image bg) {
+	            SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
+	            SpzUiThemeOps.FlattenToolFaceImage(bg);
 	        }
 	        HideSecondaryChromeUnder(btn);
 	        if (applyIcon)

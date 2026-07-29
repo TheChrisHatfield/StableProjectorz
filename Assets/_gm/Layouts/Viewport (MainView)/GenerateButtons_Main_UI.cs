@@ -224,7 +224,7 @@ namespace spz {
 	        ThemeGenButton(_generateBG_button, t);
 	        ThemeGenButton(_generate3D_button, t);
 	        ThemeGenButton(_generate3D_retexture_button, t);
-	        if (_cancelGeneration_button != null && _cancelGeneration_button.targetGraphic != null) {
+	        if (_cancelGeneration_button != null) {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_cancelGeneration_button, t.danger, t.accent);
 	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_cancelGeneration_button);
 	            var cancelLabel = _cancelGeneration_button.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
@@ -233,7 +233,7 @@ namespace spz {
 	        }
 	        if (_deleteLast_button != null) {
 	            var delBtn = _deleteLast_button.GetComponent<Button>();
-	            if (delBtn != null && delBtn.targetGraphic != null) {
+	            if (delBtn != null) {
 	                SpzUiThemeOps.ApplyBoundChromeSelectable(delBtn, t.controlBg, t.accent);
 	                SpzUiThemeOps.ClearNonFaceRaycastsForTheme(delBtn);
 	            }

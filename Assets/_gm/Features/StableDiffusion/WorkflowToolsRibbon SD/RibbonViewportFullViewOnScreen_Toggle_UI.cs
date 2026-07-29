@@ -1036,7 +1036,7 @@ namespace spz {
 					var openBtn = openRt.GetComponent<Button>();
 					var openImg = openRt.GetComponent<Image>();
 					if (sculpt) {
-						if (openBtn != null && openBtn.targetGraphic != null) {
+						if (openBtn != null) {
 							SpzUiThemeOps.ApplyBoundChromeSelectable(openBtn, t.controlBg, t.accent);
 							if (openBtn.targetGraphic is Image of) {
 								SpzUiThemeOps.ApplyRoundedControlSprite(of, markEligible: true);

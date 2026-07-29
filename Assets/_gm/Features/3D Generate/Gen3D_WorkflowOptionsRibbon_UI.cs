@@ -251,7 +251,7 @@ namespace spz {
 	        ThemeCircle(_rembg_foregroundThresh, t);
 	        ThemeToggle(_showAlphaOnly_toggle, t);
 	        ThemeToggle(_makeScreenshots_toggle, t);
-	        if (_rembg_button != null && _rembg_button.targetGraphic != null) {
+	        if (_rembg_button != null) {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_rembg_button, t.controlBg, t.accent);
 	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_rembg_button);
 	        }

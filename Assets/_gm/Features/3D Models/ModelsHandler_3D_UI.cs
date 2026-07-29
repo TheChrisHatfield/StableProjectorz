@@ -227,7 +227,7 @@ namespace spz {
 	        Color fill = _showVertexColors_toggle.isPressed
 	            ? Color.Lerp(t.controlBg, t.accent, 0.14f)
 	            : t.controlBg;
-	        if (btn != null && btn.targetGraphic != null)
+	        if (btn != null)
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, fill, t.accent);
 	        var label = _showVertexColors_toggle.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	        if (label != null)
@@ -235,7 +235,7 @@ namespace spz {
 	    }
 
 	    static void ThemeChromeButton(Button btn, SpzUiThemeOps.ThemeTokens t) {
-	        if (btn == null || btn.targetGraphic == null) return;
+	        if (btn == null) return;
 	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
 	        var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	        if (label != null)
