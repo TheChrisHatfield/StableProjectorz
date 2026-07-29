@@ -441,18 +441,11 @@ namespace spz {
 
 		void OnDestroy() {
 			SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
-			ForceHideFullViewMenuInstant();
-			StopBuildCoroutineIfAny();
+			ViewportFullViewOnScreen_Driver.ActiveChanged -= OnDriverActiveChanged;
 			RegisteredInstances.Remove(this);
-			if (_builtRowRt != null) {
-				Destroy(_builtRowRt.gameObject);
-			}
-			if (_spacerRowRt != null) {
-				Destroy(_spacerRowRt.gameObject);
-			}
-			_builtRowRt = null;
-			_spacerRowRt = null;
-			RestoreGenArtAnchorsIfSaved();
+			// TearDown restores GenerateButtons cream frame + destroys injected rows. Skipping it left
+			// the column frame suppressed after host destroy / addon disable races.
+			TearDownBuiltDock();
 		}
 
 		static MonoBehaviour ResolveCoroutineRunner() {
