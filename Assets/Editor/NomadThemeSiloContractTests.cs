@@ -31,6 +31,7 @@ public sealed class NomadThemeSiloContractTests {
 		"ApplyBoundChromeSelectable",
 		"ApplySolidSquareChrome",
 		"ApplyNomadSliderChrome",
+		"ApplyNomadFillThumbSliderChrome",
 		"HideAuthoredGraphicForTheme",
 		"ApplyLineIconTint",
 		"ApplyPanelWidth",

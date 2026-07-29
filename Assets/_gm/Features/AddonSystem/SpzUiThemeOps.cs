@@ -1119,11 +1119,12 @@ namespace spz {
 			return null;
 		}
 
-		/// <summary>Deactivates MonolithLineIcon children and restores authored icon Images under <paramref name="root"/>.</summary>
+		/// <summary>Deactivates MonolithLineIcon / fill-thumb overlay children and restores authored icon Images under <paramref name="root"/>.</summary>
 		public static void RestoreControlLineIconsUnder(Transform root) {
 			if (root == null) return;
 			foreach (var t in root.GetComponentsInChildren<Transform>(true)) {
-				if (t != null && t.name == ControlLineIconChildName)
+				if (t == null) continue;
+				if (t.name == ControlLineIconChildName || t.name == FillThumbOverlayChildName)
 					t.gameObject.SetActive(false);
 			}
 			RestoreHiddenAuthoredIconsUnder(root);
@@ -1225,12 +1226,20 @@ namespace spz {
 			graphic.enabled = false;
 		}
 
+		const string FillThumbOverlayChildName = "NomadFillThumbOverlay";
+
 		/// <summary>
 		/// Nomad sculpt vertical slider: charcoal pill track, segmented coral fill, bullseye thumb.
 		/// Horizontal sliders get pill + solid accent fill + handle tint only (no segment tile).
+		/// When <see cref="SpzUiThemeNomadFillThumb"/> is present (camera FOV), routes to fill-as-thumb chrome.
 		/// </summary>
 		public static void ApplyNomadSliderChrome(Slider slider) {
 			if (slider == null) return;
+			var fillThumb = slider.GetComponent<SpzUiThemeNomadFillThumb>();
+			if (fillThumb != null) {
+				ApplyNomadFillThumbSliderChrome(slider, fillThumb.icon);
+				return;
+			}
 			if (!ShouldRecolorBoundChrome) {
 				RestoreBoundChromeUnder(slider.transform);
 				return;
@@ -1239,9 +1248,7 @@ namespace spz {
 			bool vertical = slider.direction == Slider.Direction.BottomToTop
 				|| slider.direction == Slider.Direction.TopToBottom;
 
-			Image bg = slider.targetGraphic as Image;
-			if (bg == null)
-				bg = slider.GetComponent<Image>();
+			Image bg = ResolveSliderTrackImage(slider);
 			if (bg != null) {
 				ApplyBoundChromeGraphic(bg, t.fieldBg);
 				ApplyRoundedControlSprite(bg, markEligible: true);
@@ -1288,6 +1295,126 @@ namespace spz {
 			}
 		}
 
+		/// <summary>
+		/// Nomad camera FOV style: charcoal pill track, mustard <b>fill is the slider</b>,
+		/// Camera line icon centered on the fill with a slight dark overlay (moves with fill animation).
+		/// Handle plate is transparent (hit target only). Gates on <see cref="ShouldRecolorBoundChrome"/>.
+		/// </summary>
+		public static void ApplyNomadFillThumbSliderChrome(
+			Slider slider, StudioLineIcon icon = StudioLineIcon.Camera) {
+			if (slider == null) return;
+			if (!ShouldRecolorBoundChrome) {
+				RestoreBoundChromeUnder(slider.transform);
+				return;
+			}
+			var t = _active;
+
+			Image bg = ResolveSliderTrackImage(slider);
+			if (bg != null) {
+				ApplyBoundChromeGraphic(bg, t.fieldBg);
+				ApplyRoundedControlSprite(bg, markEligible: true);
+			}
+
+			if (slider.fillRect != null) {
+				var fill = slider.fillRect.GetComponent<Image>();
+				if (fill != null) {
+					ApplyRoundedControlSprite(fill, markEligible: true);
+					fill.sprite = UiRuntimeSprites.SolidRect;
+					fill.type = Image.Type.Simple;
+					fill.preserveAspect = false;
+					ApplyBoundChromeGraphic(fill, t.accent);
+				}
+				ApplyFillThumbIconOverlay(slider, slider.fillRect, icon);
+			}
+
+			if (slider.handleRect != null) {
+				RestoreControlLineIconsUnder(slider.handleRect);
+				SnapshotSliderHandleLayout(slider.handleRect);
+				DisableSliderHandleAspectFitters(slider.handleRect);
+				var handle = slider.handleRect.GetComponent<Image>();
+				if (handle != null) {
+					ApplyRoundedControlSprite(handle, markEligible: true);
+					handle.sprite = UiRuntimeSprites.SolidRect;
+					handle.type = Image.Type.Simple;
+					handle.preserveAspect = false;
+					// Transparent plate — fill carries the Nomad color; keep raycast for drag.
+					ApplyBoundChromeGraphic(handle, new Color(t.accent.r, t.accent.g, t.accent.b, 0f));
+					handle.raycastTarget = true;
+				}
+				foreach (var tmp in slider.handleRect.GetComponentsInChildren<TMP_Text>(true)) {
+					if (tmp == null) continue;
+					HideAuthoredGraphicForTheme(tmp);
+				}
+			}
+		}
+
+		/// <summary>Track Image for slider chrome — prefer Background child; never the handle plate.</summary>
+		static Image ResolveSliderTrackImage(Slider slider) {
+			if (slider == null) return null;
+			Transform bgT = FindDirectChildIncludingInactive(slider.transform, "Background");
+			if (bgT != null) {
+				var bg = bgT.GetComponent<Image>();
+				if (bg != null) return bg;
+			}
+			var root = slider.GetComponent<Image>();
+			if (root != null
+			    && root.rectTransform != slider.fillRect
+			    && root.rectTransform != slider.handleRect)
+				return root;
+			if (slider.targetGraphic is Image tg
+			    && tg.rectTransform != slider.handleRect
+			    && tg.rectTransform != slider.fillRect)
+				return tg;
+			return null;
+		}
+
+		/// <summary>Camera (or other) glyph + soft dark disc centered on fill; counter-rotated when the slider GO is z-rotated (FOV prefab).</summary>
+		static void ApplyFillThumbIconOverlay(Slider slider, RectTransform fillRect, StudioLineIcon icon) {
+			if (fillRect == null) return;
+			float counterZ = 0f;
+			if (slider != null)
+				counterZ = -slider.transform.localEulerAngles.z;
+
+			Transform overlayT = FindDirectChildIncludingInactive(fillRect, FillThumbOverlayChildName);
+			if (overlayT == null) {
+				var go = new GameObject(FillThumbOverlayChildName, typeof(RectTransform));
+				go.transform.SetParent(fillRect, false);
+				overlayT = go.transform;
+				var imgNew = go.AddComponent<Image>();
+				imgNew.raycastTarget = false;
+				imgNew.preserveAspect = true;
+			}
+			overlayT.gameObject.SetActive(true);
+			var overlayRt = overlayT as RectTransform;
+			if (overlayRt != null) {
+				overlayRt.anchorMin = new Vector2(0.5f, 0.5f);
+				overlayRt.anchorMax = new Vector2(0.5f, 0.5f);
+				overlayRt.pivot = new Vector2(0.5f, 0.5f);
+				overlayRt.anchoredPosition = Vector2.zero;
+				overlayRt.sizeDelta = new Vector2(30f, 30f);
+				overlayRt.localEulerAngles = new Vector3(0f, 0f, counterZ);
+			}
+			var overlayImg = overlayT.GetComponent<Image>();
+			if (overlayImg != null) {
+				overlayImg.sprite = UiRuntimeSprites.CircleFilled;
+				overlayImg.type = Image.Type.Simple;
+				overlayImg.enabled = true;
+				ApplyBoundChromeGraphic(overlayImg, new Color(0.12f, 0.11f, 0.10f, 0.28f));
+			}
+
+			ApplyControlLineIcon(fillRect, icon, 22f);
+			Transform iconT = FindDirectChildIncludingInactive(fillRect, ControlLineIconChildName);
+			if (iconT != null) {
+				iconT.SetAsLastSibling();
+				var iconRt = iconT as RectTransform;
+				if (iconRt != null)
+					iconRt.localEulerAngles = new Vector3(0f, 0f, counterZ);
+				var iconImg = iconT.GetComponent<Image>();
+				if (iconImg != null)
+					ApplyBoundChromeGraphic(iconImg, new Color(0.18f, 0.15f, 0.12f, 0.92f));
+			}
+		}
+
 		static void SnapshotSliderHandleLayout(RectTransform handleRect) {
 			if (handleRect == null) return;
 			var tag = handleRect.GetComponent<SpzUiThemeSliderHandleLayout>();
@@ -1302,6 +1429,32 @@ namespace spz {
 			}
 		}
 
+		static void DisableSliderHandleAspectFitters(RectTransform handleRect) {
+			if (handleRect == null) return;
+			var tag = handleRect.GetComponent<SpzUiThemeSliderHandleLayout>();
+			if (tag == null) {
+				tag = handleRect.gameObject.AddComponent<SpzUiThemeSliderHandleLayout>();
+				tag.authoredSizeDelta = handleRect.sizeDelta;
+				tag.hasSnapshot = true;
+			}
+			var opt = handleRect.GetComponent<OptimizedAspectRatioFitter>();
+			if (opt != null) {
+				if (!tag.hasAspectFitterSnapshot) {
+					tag.authoredAspectFitterEnabled = opt.enabled;
+					tag.hasAspectFitterSnapshot = true;
+				}
+				opt.enabled = false;
+			}
+			var asp = handleRect.GetComponent<AspectRatioFitter>();
+			if (asp != null) {
+				if (!tag.hasUnityAspectFitterSnapshot) {
+					tag.authoredUnityAspectFitterEnabled = asp.enabled;
+					tag.hasUnityAspectFitterSnapshot = true;
+				}
+				asp.enabled = false;
+			}
+		}
+
 		static void RestoreSliderHandleLayoutsUnder(Transform root) {
 			if (root == null) return;
 			var tags = root.GetComponentsInChildren<SpzUiThemeSliderHandleLayout>(true);
@@ -1311,6 +1464,16 @@ namespace spz {
 				var rt = tag.transform as RectTransform;
 				if (rt != null && tag.hasSnapshot)
 					rt.sizeDelta = tag.authoredSizeDelta;
+				if (tag.hasAspectFitterSnapshot) {
+					var opt = tag.GetComponent<OptimizedAspectRatioFitter>();
+					if (opt != null)
+						opt.enabled = tag.authoredAspectFitterEnabled;
+				}
+				if (tag.hasUnityAspectFitterSnapshot) {
+					var asp = tag.GetComponent<AspectRatioFitter>();
+					if (asp != null)
+						asp.enabled = tag.authoredUnityAspectFitterEnabled;
+				}
 				if (Application.isPlaying)
 					UnityEngine.Object.Destroy(tag);
 				else
@@ -2602,10 +2765,22 @@ namespace spz {
 		public bool hasSnapshot;
 	}
 
-	/// <summary>Snapshots vertical slider handle sizeDelta so bullseye thumbs unwind on Restore SPZ.</summary>
+	/// <summary>Snapshots vertical slider handle sizeDelta / aspect fitters so thumbs unwind on Restore SPZ.</summary>
 	public sealed class SpzUiThemeSliderHandleLayout : MonoBehaviour {
 		public Vector2 authoredSizeDelta;
+		public bool authoredAspectFitterEnabled = true;
+		public bool hasAspectFitterSnapshot;
+		public bool authoredUnityAspectFitterEnabled = true;
+		public bool hasUnityAspectFitterSnapshot;
 		public bool hasSnapshot;
+	}
+
+	/// <summary>
+	/// Marks a Slider for Nomad fill-as-thumb chrome (camera FOV): accent fill is the slider body,
+	/// line icon centered on fill with slight overlay. <see cref="SpzUiThemeOps.ApplyNomadSliderChrome"/> routes here.
+	/// </summary>
+	public sealed class SpzUiThemeNomadFillThumb : MonoBehaviour {
+		public StudioLineIcon icon = StudioLineIcon.Camera;
 	}
 
 	/// <summary>Snapshots tool-face RectTransform before Nomad edge-to-edge flatten; unwound by RestoreBoundChromeUnder.</summary>

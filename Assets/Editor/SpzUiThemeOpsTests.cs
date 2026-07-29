@@ -360,8 +360,8 @@ public sealed class SpzUiThemeOpsTests {
 			img.sprite = authored;
 			img.type = Image.Type.Simple;
 			SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
-			Assert.That(img.type, Is.EqualTo(Image.Type.Sliced), "radius>0 uses Sliced so corner AA does not whisker");
-			Assert.That(ReferenceEquals(img.sprite, b), Is.True);
+			Assert.That(img.type, Is.EqualTo(Image.Type.Simple), "Nomad litmus: solid square (no soft sliced whiskers)");
+			Assert.That(UiRuntimeSprites.IsSolidRect(img.sprite), Is.True);
 			Assert.That(go.GetComponent<SpzUiThemeRoundedControl>(), Is.Not.Null);
 
 			SpzUiThemeOps.RestoreRoundedControlSpritesUnder(go.transform);
@@ -460,6 +460,8 @@ public sealed class SpzUiThemeOpsTests {
 		Assert.That(SpzUiThemeOps.ListLineIconNames().ToString(), Does.Contain("Bullseye"));
 		Assert.That(SpzUiThemeOps.ListLineIconNames().ToString(), Does.Contain("Globe"));
 		Assert.That(SpzUiThemeOps.ListLineIconNames().ToString(), Does.Contain("Expand"));
+		Assert.That(SpzUiThemeOps.ListLineIconNames().ToString(), Does.Contain("Flatten"));
+		Assert.That(SpzUiThemeOps.ListLineIconNames().ToString(), Does.Contain("Trash"));
 		Assert.That(RibbonViewportFullViewOnScreen_Toggle_UI.ResolveFullViewDockIcon(), Is.EqualTo(StudioLineIcon.Expand));
 		Assert.That(RibbonViewportFullViewOnScreen_Toggle_UI.ResolveOpenRightDockIcon(false), Is.EqualTo(StudioLineIcon.ChevronRight));
 		Assert.That(RibbonViewportFullViewOnScreen_Toggle_UI.ResolveOpenRightDockIcon(true), Is.EqualTo(StudioLineIcon.ChevronLeft));
@@ -559,8 +561,8 @@ public sealed class SpzUiThemeOpsTests {
 
 			SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, SpzUiThemeOps.Active.controlBg, SpzUiThemeOps.Active.accent);
 
-			Assert.That(face.type, Is.EqualTo(Image.Type.Sliced), "soft rounded fill must stay Sliced (Simple stretches AA into whiskers)");
-			Assert.That(UiRuntimeSprites.IsCachedRoundedRect(face.sprite), Is.True);
+			Assert.That(face.type, Is.EqualTo(Image.Type.Simple), "Nomad litmus: BoundChrome faces are solid squares");
+			Assert.That(UiRuntimeSprites.IsSolidRect(face.sprite), Is.True);
 			// Checkmark glyph must survive BoundChromeSelectable (Settings ON state depends on it).
 			Assert.That(tick.enabled, Is.True);
 			Assert.That(ReferenceEquals(tick.sprite, authoredTickSprite), Is.True);
@@ -624,8 +626,8 @@ public sealed class SpzUiThemeOpsTests {
 				out string error), Is.True, error);
 
 			SpzUiThemeOps.ApplyBoundChromeGraphic(face, SpzUiThemeOps.Active.controlBg);
-			Assert.That(face.type, Is.EqualTo(Image.Type.Sliced));
-			Assert.That(UiRuntimeSprites.IsCachedRoundedRect(face.sprite), Is.True);
+			Assert.That(face.type, Is.EqualTo(Image.Type.Simple), "Nomad litmus: sliced chrome flattens to solid square");
+			Assert.That(UiRuntimeSprites.IsSolidRect(face.sprite), Is.True);
 		}
 		finally {
 			UnityEngine.Object.DestroyImmediate(root);
@@ -982,6 +984,77 @@ public sealed class SpzUiThemeOpsTests {
 			SpzUiThemeOps.ResetTheme();
 			SpzUiThemeOps.ApplyNomadSliderChrome(slider);
 			Assert.That(UiRuntimeSprites.IsNomadSliderSegmentTile(fill.sprite), Is.False);
+		} finally {
+			UnityEngine.Object.DestroyImmediate(root);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
+	public void NomadFillThumbSliderChrome_UsesAccentFillCameraOverlayAndRestores() {
+		var root = new GameObject("NomadFillThumb", typeof(RectTransform));
+		root.transform.localEulerAngles = new Vector3(0f, 0f, 90f);
+		var bgGo = new GameObject("Background", typeof(RectTransform));
+		bgGo.transform.SetParent(root.transform, false);
+		var bg = bgGo.AddComponent<Image>();
+		Color authoredBg = new Color(0.2f, 0.2f, 0.25f, 1f);
+		bg.color = authoredBg;
+		var fillArea = new GameObject("Fill Area", typeof(RectTransform));
+		fillArea.transform.SetParent(root.transform, false);
+		var fillGo = new GameObject("Fill", typeof(RectTransform));
+		fillGo.transform.SetParent(fillArea.transform, false);
+		var fill = fillGo.AddComponent<Image>();
+		var handleSlide = new GameObject("Handle Slide Area", typeof(RectTransform));
+		handleSlide.transform.SetParent(root.transform, false);
+		var handleGo = new GameObject("Handle", typeof(RectTransform));
+		handleGo.transform.SetParent(handleSlide.transform, false);
+		var handle = handleGo.AddComponent<Image>();
+		handle.color = Color.white;
+		var slider = root.AddComponent<Slider>();
+		slider.targetGraphic = handle; // FOV prefab wires handle as targetGraphic
+		slider.fillRect = fill.rectTransform;
+		slider.handleRect = handle.rectTransform;
+		slider.direction = Slider.Direction.LeftToRight;
+		var marker = root.AddComponent<SpzUiThemeNomadFillThumb>();
+		marker.icon = StudioLineIcon.Camera;
+		try {
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				Tokens(
+					("field_bg", "#121317FF"),
+					("accent", "#F2CA50FF"),
+					("handle", "#CCCCCCFF"),
+					("icon_tint", "#D0C5AFFF")),
+				"replace",
+				out string error), Is.True, error);
+
+			SpzUiThemeOps.ApplyNomadSliderChrome(slider);
+
+			Assert.That(bg.color, Is.EqualTo(SpzUiThemeOps.Active.fieldBg));
+			Assert.That(fill.sprite, Is.EqualTo(UiRuntimeSprites.SolidRect));
+			Assert.That(fill.color, Is.EqualTo(SpzUiThemeOps.Active.accent));
+			Assert.That(UiRuntimeSprites.IsNomadSliderSegmentTile(fill.sprite), Is.False);
+			Assert.That(handle.color.a, Is.EqualTo(0f).Within(0.01f));
+
+			Transform overlay = SpzUiThemeOps.FindDirectChildIncludingInactive(fill.rectTransform, "NomadFillThumbOverlay");
+			Assert.That(overlay, Is.Not.Null);
+			Assert.That(overlay.gameObject.activeSelf, Is.True);
+			var overlayImg = overlay.GetComponent<Image>();
+			Assert.That(overlayImg, Is.Not.Null);
+			Assert.That(overlayImg.sprite, Is.EqualTo(UiRuntimeSprites.CircleFilled));
+
+			Transform icon = SpzUiThemeOps.FindDirectChildIncludingInactive(fill.rectTransform, "MonolithLineIcon");
+			Assert.That(icon, Is.Not.Null);
+			Assert.That(icon.gameObject.activeSelf, Is.True);
+			Assert.That(icon.GetComponent<Image>().sprite,
+				Is.EqualTo(UiRuntimeSprites.GetLineIcon(StudioLineIcon.Camera)));
+			Assert.That(Mathf.Abs(Mathf.DeltaAngle(icon.localEulerAngles.z, -90f)), Is.LessThan(1f));
+
+			SpzUiThemeOps.ResetTheme();
+			SpzUiThemeOps.ApplyNomadSliderChrome(slider);
+			Assert.That(overlay.gameObject.activeSelf, Is.False);
+			Assert.That(icon.gameObject.activeSelf, Is.False);
+			Assert.That(bg.color, Is.EqualTo(authoredBg));
 		} finally {
 			UnityEngine.Object.DestroyImmediate(root);
 			SpzUiThemeOps.ResetTheme();
