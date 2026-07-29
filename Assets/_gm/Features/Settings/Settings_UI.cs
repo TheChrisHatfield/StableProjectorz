@@ -844,7 +844,7 @@ namespace spz {
 	            SpzUiThemeOps.ApplyBoundChromeGraphic(panelImg, shell);
 	        }
 	        foreach (var btn in _settingsPanel_go.GetComponentsInChildren<Button>(true)) {
-	            if (btn == null || btn.targetGraphic == null) continue;
+	            if (btn == null) continue;
 	            // Skip product color swatch buttons (wireframe/noise) — those are prefs, not chrome.
 	            if (ReferenceEquals(btn, _wireframeColor_button) || ReferenceEquals(btn, _noiseColor_button))
 	                continue;
@@ -929,22 +929,20 @@ namespace spz {
 	    /// Strip-label "SETTINGS" + gear over the adjacent "thank" cell read as an overlay soup.
 	    /// </summary>
 	    static void ThemeFlatLauncherButton(Button btn, StudioLineIcon glyph, SpzUiThemeOps.ThemeTokens t) {
-	        if (btn == null || btn.targetGraphic == null) return;
+	        if (btn == null) return;
+	        SpzUiThemeOps.EnsureSelectableHitFace(btn);
+	        if (btn.targetGraphic == null) return;
 	        SpzUiThemeOps.ApplySolidSquareChrome(btn, t.controlBg, t.accent);
 	        if (btn.targetGraphic != null)
 	            btn.targetGraphic.raycastTarget = true;
 	        SpzUiThemeOps.ApplyControlLineIcon(btn.transform, glyph, 18f);
 	        foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp == null) continue;
-	            tmp.raycastTarget = false;
+	            // Snapshot via BoundChrome before hide — leave Restore SPZ must unwind.
+	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
 	            SpzUiThemeOps.HideAuthoredGraphicForTheme(tmp);
 	        }
-	        // Authored child Images / Monolith overlays must not steal the gear hit.
-	        foreach (var g in btn.GetComponentsInChildren<Graphic>(true)) {
-	            if (g == null || ReferenceEquals(g, btn.targetGraphic)) continue;
-	            SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(g);
-	            g.raycastTarget = false;
-	        }
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }
 
 	    /// <summary>True when screen point hits the gear or help launcher (outside the panel rect).</summary>
