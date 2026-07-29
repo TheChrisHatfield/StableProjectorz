@@ -3,7 +3,6 @@ using NUnit.Framework;
 using spz;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 /// <summary>
 /// Pass 15: Restore SPZ must unwind Nomad TMP font/outline without garbled glyphs.
