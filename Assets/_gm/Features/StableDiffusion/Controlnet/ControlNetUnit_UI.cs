@@ -327,7 +327,9 @@ namespace spz {
 	        if (_mainHeader != null)
 	            SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(_mainHeader, t.textPrimary, 13f);
 
-	        if (_headerRibbon_button != null && _headerRibbon_button.targetGraphic != null) {
+	        // Prefab may ship null targetGraphic — EnsureSelectableHitFace lives in ApplyBoundChromeSelectable.
+	        // Header TMP raycast is cleared by StripLabel; without a wired face the unit cannot expand (gen path).
+	        if (_headerRibbon_button != null) {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_headerRibbon_button, t.tabActive, t.accent);
 	            if (_headerRibbon_button.targetGraphic is Image hdrFace) {
 	                SpzUiThemeOps.ApplyRoundedControlSprite(hdrFace, markEligible: true);
@@ -365,7 +367,7 @@ namespace spz {
 	        }
 
 	        foreach (var btn in GetComponentsInChildren<Button>(true)) {
-	            if (btn == null || btn.targetGraphic == null) continue;
+	            if (btn == null) continue;
 	            if (ReferenceEquals(btn, _headerRibbon_button)) continue;
 	            if (btn.GetComponent<TMP_Dropdown>() != null) continue;
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
