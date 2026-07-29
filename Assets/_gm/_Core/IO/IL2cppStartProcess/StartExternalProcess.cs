@@ -241,19 +241,19 @@ namespace Lavender.Systems
 
 	    public static bool WaitForProcessExit(uint processId, int timeoutMs = -1){
 	        IntPtr hProcess = OpenProcess(PROCESS_WAIT_ACCESS, false, processId);
+	        int waitedMs = 0;
 	        if (hProcess == IntPtr.Zero) {
 	            // OpenProcess can fail while the process is still alive (rights/timing).
 	            // Do not treat that as "already exited" — poll IsProcessRunning instead.
 	            if (timeoutMs == 0)
 	                return !IsProcessRunning(processId);
-	            int waited = 0;
 	            const int slice = 50;
-	            while (timeoutMs < 0 || waited < timeoutMs) {
+	            while (timeoutMs < 0 || waitedMs < timeoutMs) {
 	                if (!IsProcessRunning(processId))
 	                    return true;
 	                System.Threading.Thread.Sleep(slice);
 	                if (timeoutMs >= 0)
-	                    waited += slice;
+	                    waitedMs += slice;
 	                hProcess = OpenProcess(PROCESS_WAIT_ACCESS, false, processId);
 	                if (hProcess != IntPtr.Zero)
 	                    break;
@@ -262,7 +262,19 @@ namespace Lavender.Systems
 	                return !IsProcessRunning(processId);
 	        }
 
-	        uint waitResult = WaitForSingleObject(hProcess, timeoutMs < 0 ? INFINITE : (uint)timeoutMs);
+	        // Use remaining budget after any OpenProcess poll — do not restart the full timeout.
+	        uint waitBudget;
+	        if (timeoutMs < 0)
+	            waitBudget = INFINITE;
+	        else {
+	            int remaining = timeoutMs - waitedMs;
+	            if (remaining <= 0) {
+	                CloseHandle(hProcess);
+	                return !IsProcessRunning(processId);
+	            }
+	            waitBudget = (uint)remaining;
+	        }
+	        uint waitResult = WaitForSingleObject(hProcess, waitBudget);
 	        CloseHandle(hProcess);
 
 	        return waitResult != 0x00000102; // WAIT_TIMEOUT = 0x00000102
