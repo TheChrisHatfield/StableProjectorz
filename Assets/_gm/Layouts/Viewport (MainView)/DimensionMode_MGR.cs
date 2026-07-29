@@ -56,6 +56,18 @@ namespace spz {
 	    //true if camera is around to fly around the 3D scene, or false if should remain at the same location.
 	    public bool is_3d_navigation_allowed => _dimensionMode != DimensionMode.dim_uv;
 
+	    /// <summary>
+	    /// Visual SD/3D/UV circle (accounts for Main Choice Holder scale). Used by FULL/SRN dock
+	    /// clearance so the Gen Art stack does not climb under this disc.
+	    /// </summary>
+	    public RectTransform MainChoiceVisualRect {
+	        get {
+	            if (_mainChoiceHoverSurf != null && _mainChoiceHoverSurf.transform is RectTransform hoverRt)
+	                return hoverRt;
+	            return transform as RectTransform;
+	        }
+	    }
+
 
 	    void Awake(){
 	        if(instance != null){ DestroyImmediate(this.gameObject); return; }

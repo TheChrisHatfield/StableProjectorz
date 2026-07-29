@@ -10,7 +10,7 @@ using UnityEngine.UI;
 namespace spz {
 
 	/// <summary>
-	/// Docks FULL/SCREEN directly <b>above</b> the GEN ART control by inserting a sibling wrapper under the <see cref="VerticalLayoutGroup"/> ancestor of GEN ART (prefab <c>GenerateButtons_Main_UI (vertGroup)</c>) and letting the VLG + <see cref="LayoutElement"/> own sizing. GEN ART's immediate parent (<c>stretch me (mask)</c>) uses anchor-based placement, so a sibling there overflows the parent rect and never shows—hence the VLG-ancestor insertion. Matches GEN ART's sliced sprite, fill, two-line bold black label and optional corner triangle. Not a right-panel command-ribbon tab.
+	/// Docks FULL/SCREEN directly <b>above</b> the GEN ART control by inserting a sibling wrapper under the <see cref="VerticalLayoutGroup"/> ancestor of GEN ART (prefab <c>GenerateButtons_Main_UI (vertGroup)</c>) and letting the VLG + <see cref="LayoutElement"/> own sizing. GEN ART's immediate parent (<c>stretch me (mask)</c>) uses anchor-based placement, so a sibling there overflows the parent rect and never shows—hence the VLG-ancestor insertion. Matches GEN ART's sliced sprite, fill, two-line bold black label and optional corner triangle. Suppresses the column-wide cream <c>frame</c> while docked and draws a face-sized adaptive border on FULL/SRN and OPEN RIGHT instead. Not a right-panel command-ribbon tab.
 	/// Uses <see cref="SD_WorkflowOptionsRibbon_UI"/> or <see cref="GenerateButtons_Main_UI"/> to host this behaviour + JSON-RPC <c>spz.ui.attach_viewport_fullview_toggle</c> / <see cref="RibbonDock_ButtonSpec"/>. Build coroutines are hosted from <see cref="Addon_MGR"/> / <see cref="MainViewport_UI"/> (not the right panel tab strip). Enable the StreamingAssets add-on <c>RibbonOnlyFullscreen</c> via <see cref="Addon_MGR"/> to attach the dock.
 	/// </summary>
 	public class RibbonViewportFullViewOnScreen_Toggle_UI : MonoBehaviour {
@@ -18,9 +18,17 @@ namespace spz {
 		const string RowName = "RibbonRow_FullViewOnScreen";
 		const string SpacerName = "RibbonRow_FullViewOnScreen_Spacer";
 		const string MenuRowName = "RibbonRow_FullViewOnScreen_Menu";
+		const string FaceBorderName = "DockFaceBorder";
+		const string GenButtonsColumnFrameName = "frame";
 		const int MaxWaitFrames = 240;
 		/// <summary>Spacer row height under FULL SRN in the VLG; pushes Gen Art and re-do down without stretching the button face.</summary>
 		const float ExtraBottomGapPx = 152f;
+		/// <summary>Floor when adaptive clearance shrinks the spacer so FULL stays below DimensionMode SD circle.</summary>
+		const float MinAdaptiveBottomGapPx = 24f;
+		/// <summary>Extra local-px gap below the DimensionMode disc after overlap is resolved.</summary>
+		const float DimModeClearancePx = 10f;
+		/// <summary>FULL/SRN + OPEN RIGHT label design size (Nomad BoundChrome seed).</summary>
+		const float DockLabelBasePt = 13f;
 
 		static readonly Color FallbackFill = new Color(217f / 255f, 144f / 255f, 88f / 255f, 1f);
 
@@ -45,6 +53,12 @@ namespace spz {
 		TextMeshProUGUI _openRightDockLabel;
 		Image _fullSrnLineIcon;
 		Image _openRightLineIcon;
+		/// <summary>GenerateButtons root cream <c>frame</c> — stretch-fills the whole column; suppressed while dock is up.</summary>
+		GameObject _suppressedGenButtonsColumnFrame;
+		bool _suppressedGenButtonsColumnFrameWasActive;
+		Sprite _cachedFaceBorderSprite;
+		Color _cachedFaceBorderColor = new Color(1f, 0.959f, 0.881f, 0.922f);
+		float _cachedFaceBorderPpu = 6f;
 
 		RectTransform _genArtAnchorRestoreTarget;
 		Vector2 _genArtSavedAnchorMin;
@@ -54,6 +68,8 @@ namespace spz {
 		bool _savedGenArtAnchors;
 		RectTransform _builtRowRt;
 		RectTransform _spacerRowRt;
+		float _appliedBottomGapPx = -1f;
+		int _adaptClearanceFrame = -1;
 
 		static bool SpecsEqual(in RibbonDock_ButtonSpec a, in RibbonDock_ButtonSpec b) {
 			return string.Equals(a.CommandId, b.CommandId, StringComparison.Ordinal)
@@ -317,6 +333,9 @@ namespace spz {
 			_fullSrnLineIcon = null;
 			_openRightLineIcon = null;
 			_built = false;
+			_appliedBottomGapPx = -1f;
+			_adaptClearanceFrame = -1;
+			RestoreGenerateButtonsColumnFrame();
 			RestoreGenArtAnchorsIfSaved();
 		}
 
@@ -826,7 +845,9 @@ namespace spz {
 			var tmp = textGo.AddComponent<TextMeshProUGUI>();
 			ApplyFullSrnLabelStyle(tmp, genRefTmp, textRt);
 			EnsureDockLineIcon(faceRt, ResolveFullViewDockIcon(), out _fullSrnLineIcon);
+			EnsureAdaptiveFaceBorder(faceRt);
 			EnsureFullViewMenu(faceRt, genRefImg, genRefTmp);
+			SuppressGenerateButtonsColumnFrame();
 			ApplyThemeTokens();
 		}
 
@@ -867,6 +888,9 @@ namespace spz {
 			if (rowRt != null && _fullViewMenuRt.parent == rowRt.parent) {
 				_fullViewMenuRt.SetSiblingIndex(rowRt.GetSiblingIndex() + 1);
 			}
+			var openRt = _fullViewMenuRt.Find("OpenRightDock") as RectTransform;
+			if (openRt != null)
+				EnsureAdaptiveFaceBorder(openRt);
 			_fullViewMenuCg = _fullViewMenuRt.GetComponent<CanvasGroup>();
 			if (_fullViewMenuCg == null) {
 				_fullViewMenuCg = _fullViewMenuRt.gameObject.AddComponent<CanvasGroup>();
@@ -892,6 +916,8 @@ namespace spz {
 			if (show && _builtRowRt != null && _fullViewMenuRt.parent == _builtRowRt.parent) {
 				_fullViewMenuRt.SetSiblingIndex(_builtRowRt.GetSiblingIndex() + 1);
 			}
+			// OPEN RIGHT adds 52px — stack climbs toward DimensionMode SD; re-fit spacer.
+			ApplyAdaptiveBottomGap(force: true);
 		}
 
 		void EnsureFullViewMenuWiringIfMissing() {
@@ -936,7 +962,8 @@ namespace spz {
 			var txt = txtGo.AddComponent<TextMeshProUGUI>();
 			ApplyFullSrnLabelStyle(txt, genRefTmp, txtRt);
 			txt.text = label;
-			txt.fontSize = Mathf.Max(11f, txt.fontSize - 1f);
+			txt.fontSize = Mathf.Max(DockLabelBasePt - 1f, txt.fontSize - 1f);
+			EnsureAdaptiveFaceBorder(rowRt);
 			if (string.Equals(name, "OpenRightDock", StringComparison.Ordinal)) {
 				_openRightDockLabel = txt;
 				EnsureDockLineIcon(rowRt, ResolveOpenRightDockIcon(rightPanelOpen: false), out _openRightLineIcon);
@@ -1074,7 +1101,8 @@ namespace spz {
 					    && (string.IsNullOrWhiteSpace(label.text)
 					        || label.text.IndexOf("FULL", System.StringComparison.OrdinalIgnoreCase) < 0))
 						label.text = "FULL\nSRN";
-					SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(label, t.textPrimary, 14f);
+					// Narrow Gen Art column — not full strip 14pt/18 tracking (clips FULL/SRN).
+					SpzUiThemeOps.ApplyBoundChromeNarrowDockLabelTmp(label, t.textPrimary, DockLabelBasePt);
 				}
 				if (iconImg != null)
 					iconImg.gameObject.SetActive(false);
@@ -1103,13 +1131,17 @@ namespace spz {
 			}
 		}
 
-		/// <summary>Thin outline and generous left/right insets so glyph bounds for "FULL" do not meet the button side edges (outline is drawn outside the fill; padding buys clearance).</summary>
+		/// <summary>
+		/// FULL/SRN on the narrow Gen Art column: modest insets + capped point size.
+		/// Do not copy Gen Art's fontSize/strip tracking after BoundChrome — fresh TMP defaults (~36)
+		/// and strip tracking (18) were overflowing the face (clipped F/L and S/N).
+		/// </summary>
 		static void ApplyFullSrnLabelStyle(TextMeshProUGUI tmp, TextMeshProUGUI genRefTmp, RectTransform textRt) {
 			if (tmp == null) {
 				return;
 			}
-			// How far the text block sits from the left/right of <see cref="DockButtonFace"/>; primary fix when "FULL" touches the sides.
-			const float padH = 12f;
+			// Modest insets — 12px/side left almost no room for "FULL" on the Gen Art column.
+			const float padH = 4f;
 			const float padV = 2.5f;
 			if (textRt != null) {
 				textRt.anchorMin = Vector2.zero;
@@ -1120,28 +1152,34 @@ namespace spz {
 			string raw = "FULL\nSRN";
 			tmp.text = raw.ToUpperInvariant();
 			// Never hardcode black before BoundChrome snapshot — that sticks after Restore SPZ.
-			if (SpzUiThemeOps.ShouldRecolorBoundChrome)
-				SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(tmp, SpzUiThemeOps.Active.textPrimary, 14f);
-			else
+			if (SpzUiThemeOps.ShouldRecolorBoundChrome) {
+				SpzUiThemeOps.ApplyBoundChromeNarrowDockLabelTmp(tmp, SpzUiThemeOps.Active.textPrimary, DockLabelBasePt);
+				// Preserve strip UpperCase; Bold alone would clear it.
+				tmp.fontStyle = FontStyles.Bold | FontStyles.UpperCase;
+			} else {
+				SpzUiThemeOps.EnsureDesignFontPt(tmp, DockLabelBasePt);
 				SpzUiThemeOps.RestoreAuthoredGraphic(tmp);
-			tmp.fontStyle = FontStyles.Bold;
+				if (genRefTmp != null) {
+					tmp.font = genRefTmp.font;
+					tmp.fontSharedMaterial = genRefTmp.fontSharedMaterial;
+					// Cap: "FULL" is wider than "GEN"; never copy an inflated Gen Art size.
+					float refSz = genRefTmp.fontSize > 0.05f ? genRefTmp.fontSize : DockLabelBasePt;
+					tmp.fontSize = Mathf.Clamp(refSz, DockLabelBasePt - 1f, DockLabelBasePt + 1f);
+					tmp.fontWeight = FontWeight.Bold;
+					tmp.lineSpacing = genRefTmp.lineSpacing;
+					tmp.characterSpacing = Mathf.Min(genRefTmp.characterSpacing, 2f);
+				} else {
+					tmp.fontSize = DockLabelBasePt;
+				}
+				tmp.outlineWidth = 0.012f;
+				tmp.outlineColor = new Color(0.12f, 0.12f, 0.12f, 0.92f);
+				tmp.fontStyle = FontStyles.Bold;
+			}
 			tmp.alignment = TextAlignmentOptions.Center;
 			tmp.horizontalAlignment = HorizontalAlignmentOptions.Center;
 			tmp.verticalAlignment = VerticalAlignmentOptions.Middle;
 			tmp.raycastTarget = false;
 			tmp.textWrappingMode = TextWrappingModes.NoWrap;
-			if (genRefTmp != null) {
-				tmp.font = genRefTmp.font;
-				tmp.fontSharedMaterial = genRefTmp.fontSharedMaterial;
-				tmp.fontSize = Mathf.Max(12f, genRefTmp.fontSize);
-				tmp.fontWeight = FontWeight.Bold;
-				tmp.lineSpacing = genRefTmp.lineSpacing;
-				tmp.characterSpacing = genRefTmp.characterSpacing;
-			} else {
-				tmp.fontSize = 18f;
-			}
-			tmp.outlineWidth = 0.012f;
-			tmp.outlineColor = new Color(0.12f, 0.12f, 0.12f, 0.92f);
 		}
 
 		/// <summary>Keep frame/fill/text under one RectTransform so vertical movement never splits the button visuals.</summary>
@@ -1226,6 +1264,205 @@ namespace spz {
 			return spacerRt;
 		}
 
+		int ResolveSpacerSiblingIndex(RectTransform vlgRoot) {
+			if (_builtRowRt == null || vlgRoot == null)
+				return 0;
+			int afterDock = _builtRowRt.GetSiblingIndex() + 1;
+			if (_fullViewMenuRt != null
+			    && _fullViewMenuRt.gameObject.activeSelf
+			    && _fullViewMenuRt.parent == vlgRoot)
+				return _fullViewMenuRt.GetSiblingIndex() + 1;
+			return afterDock;
+		}
+
+		/// <summary>
+		/// GenerateButtons VLG is bottom-anchored: a tall ExtraBottomGap climbs FULL/SRN under the
+		/// DimensionMode SD circle (and further when OPEN RIGHT is shown). Shrink the spacer until
+		/// the dock face clears the disc. Do not reset to max every tick — that caused visible thrash.
+		/// </summary>
+		void ApplyAdaptiveBottomGap(bool force = false) {
+			if (!_built || _builtRowRt == null || _builtRowRt.gameObject == null)
+				return;
+			var vlgRoot = _builtRowRt.parent as RectTransform;
+			if (vlgRoot == null)
+				return;
+			int frame = Time.frameCount;
+			if (!force && _adaptClearanceFrame == frame)
+				return;
+			_adaptClearanceFrame = frame;
+
+			// force (OPEN RIGHT / rebuild): re-fit from max once. Periodic Update keeps current gap.
+			float gap = force || _appliedBottomGapPx < 0f
+				? ExtraBottomGapPx
+				: _appliedBottomGapPx;
+			int spacerIndex = ResolveSpacerSiblingIndex(vlgRoot);
+			_spacerRowRt = EnsureSpacerRow(vlgRoot, spacerIndex, gap, _builtRowRt.gameObject.layer);
+			LayoutRebuilder.ForceRebuildLayoutImmediate(vlgRoot);
+
+			float deficit = MeasureDimModeOverlapDeficitLocalPx();
+			if (deficit > 0.5f) {
+				// Up to three shrink passes — menu/spacer sibling order can change mid-pass.
+				for (int pass = 0; pass < 3; pass++) {
+					deficit = MeasureDimModeOverlapDeficitLocalPx();
+					if (deficit <= 0.5f)
+						break;
+					float floor = pass < 2 ? MinAdaptiveBottomGapPx : 0f;
+					gap = Mathf.Max(floor, gap - deficit);
+					spacerIndex = ResolveSpacerSiblingIndex(vlgRoot);
+					_spacerRowRt = EnsureSpacerRow(vlgRoot, spacerIndex, gap, _builtRowRt.gameObject.layer);
+					LayoutRebuilder.ForceRebuildLayoutImmediate(vlgRoot);
+				}
+			} else if (gap < ExtraBottomGapPx - 0.5f) {
+				// Clearance exists: try growing back toward the authored gap without re-overlapping.
+				float tryGap = ExtraBottomGapPx;
+				spacerIndex = ResolveSpacerSiblingIndex(vlgRoot);
+				_spacerRowRt = EnsureSpacerRow(vlgRoot, spacerIndex, tryGap, _builtRowRt.gameObject.layer);
+				LayoutRebuilder.ForceRebuildLayoutImmediate(vlgRoot);
+				deficit = MeasureDimModeOverlapDeficitLocalPx();
+				if (deficit > 0.5f) {
+					gap = Mathf.Max(MinAdaptiveBottomGapPx, tryGap - deficit);
+					_spacerRowRt = EnsureSpacerRow(vlgRoot, spacerIndex, gap, _builtRowRt.gameObject.layer);
+					LayoutRebuilder.ForceRebuildLayoutImmediate(vlgRoot);
+				} else {
+					gap = tryGap;
+				}
+			}
+			_appliedBottomGapPx = gap;
+		}
+
+		float MeasureDimModeOverlapDeficitLocalPx() {
+			var face = _dockButton != null
+				? _dockButton.transform as RectTransform
+				: (_builtRowRt != null ? _builtRowRt.Find("DockButtonFace") as RectTransform : null);
+			if (face == null)
+				face = _builtRowRt;
+			var dim = DimensionMode_MGR.instance != null
+				? DimensionMode_MGR.instance.MainChoiceVisualRect
+				: null;
+			if (face == null || dim == null || !dim.gameObject.activeInHierarchy)
+				return 0f;
+			var vlgRoot = _builtRowRt != null ? _builtRowRt.parent as RectTransform : null;
+			if (vlgRoot == null)
+				return 0f;
+
+			var faceCorners = new Vector3[4];
+			var dimCorners = new Vector3[4];
+			face.GetWorldCorners(faceCorners);
+			dim.GetWorldCorners(dimCorners);
+			// Corners: 0=bottom-left, 1=top-left — convert to VLG local so gap is in layout px.
+			float faceTopLocal = vlgRoot.InverseTransformPoint(faceCorners[1]).y;
+			float dimBottomLocal = vlgRoot.InverseTransformPoint(dimCorners[0]).y;
+			return Mathf.Max(0f, faceTopLocal - dimBottomLocal + DimModeClearancePx);
+		}
+
+		/// <summary>
+		/// GenerateButtons root <c>frame</c> stretch-fills the CSF-grown column (FULL + re-do + DEL LAST).
+		/// Hide it while the dock is up; each dock face gets its own adaptive stroke instead.
+		/// </summary>
+		void SuppressGenerateButtonsColumnFrame() {
+			if (_suppressedGenButtonsColumnFrame != null)
+				return;
+			var gbm = ResolveGenerateButtonsMain();
+			if (gbm == null)
+				return;
+			Transform frameT = null;
+			for (int i = 0; i < gbm.transform.childCount; i++) {
+				var ch = gbm.transform.GetChild(i);
+				if (string.Equals(ch.name, GenButtonsColumnFrameName, StringComparison.Ordinal)) {
+					frameT = ch;
+					break;
+				}
+			}
+			if (frameT == null)
+				return;
+			var frameImg = frameT.GetComponent<Image>();
+			if (frameImg != null) {
+				if (frameImg.sprite != null)
+					_cachedFaceBorderSprite = frameImg.sprite;
+				_cachedFaceBorderColor = frameImg.color;
+				_cachedFaceBorderPpu = frameImg.pixelsPerUnitMultiplier > 0.01f
+					? frameImg.pixelsPerUnitMultiplier
+					: 6f;
+			}
+			_suppressedGenButtonsColumnFrame = frameT.gameObject;
+			_suppressedGenButtonsColumnFrameWasActive = frameT.gameObject.activeSelf;
+			frameT.gameObject.SetActive(false);
+		}
+
+		void RestoreGenerateButtonsColumnFrame() {
+			if (_suppressedGenButtonsColumnFrame == null)
+				return;
+			_suppressedGenButtonsColumnFrame.SetActive(_suppressedGenButtonsColumnFrameWasActive);
+			_suppressedGenButtonsColumnFrame = null;
+			_suppressedGenButtonsColumnFrameWasActive = false;
+		}
+
+		/// <summary>
+		/// Cream 9-slice stroke sized to the face only (stretch anchors). New buttons (OPEN RIGHT)
+		/// get their own border that follows that face's LayoutElement height/width.
+		/// </summary>
+		void EnsureAdaptiveFaceBorder(RectTransform face) {
+			if (face == null)
+				return;
+			CacheFaceBorderSpriteFromColumnIfNeeded();
+			Transform existing = face.Find(FaceBorderName);
+			RectTransform borderRt;
+			Image borderImg;
+			if (existing == null) {
+				var go = new GameObject(FaceBorderName, typeof(RectTransform));
+				go.layer = face.gameObject.layer;
+				borderRt = go.GetComponent<RectTransform>();
+				borderRt.SetParent(face, false);
+				borderImg = go.AddComponent<Image>();
+			} else {
+				borderRt = existing as RectTransform;
+				borderImg = existing.GetComponent<Image>();
+				if (borderImg == null)
+					borderImg = existing.gameObject.AddComponent<Image>();
+			}
+			if (borderRt != null) {
+				borderRt.anchorMin = Vector2.zero;
+				borderRt.anchorMax = Vector2.one;
+				borderRt.offsetMin = Vector2.zero;
+				borderRt.offsetMax = Vector2.zero;
+				borderRt.pivot = new Vector2(0.5f, 0.5f);
+				borderRt.SetAsLastSibling();
+			}
+			if (borderImg != null) {
+				borderImg.raycastTarget = false;
+				borderImg.preserveAspect = false;
+				borderImg.type = Image.Type.Sliced;
+				borderImg.fillCenter = true;
+				borderImg.color = _cachedFaceBorderColor;
+				borderImg.pixelsPerUnitMultiplier = _cachedFaceBorderPpu;
+				if (_cachedFaceBorderSprite != null)
+					borderImg.sprite = _cachedFaceBorderSprite;
+				borderImg.enabled = _cachedFaceBorderSprite != null;
+			}
+		}
+
+		void CacheFaceBorderSpriteFromColumnIfNeeded() {
+			if (_cachedFaceBorderSprite != null)
+				return;
+			var gbm = ResolveGenerateButtonsMain();
+			if (gbm == null)
+				return;
+			for (int i = 0; i < gbm.transform.childCount; i++) {
+				var ch = gbm.transform.GetChild(i);
+				if (!string.Equals(ch.name, GenButtonsColumnFrameName, StringComparison.Ordinal))
+					continue;
+				var img = ch.GetComponent<Image>();
+				if (img == null || img.sprite == null)
+					break;
+				_cachedFaceBorderSprite = img.sprite;
+				_cachedFaceBorderColor = img.color;
+				_cachedFaceBorderPpu = img.pixelsPerUnitMultiplier > 0.01f
+					? img.pixelsPerUnitMultiplier
+					: 6f;
+				break;
+			}
+		}
+
 		void RefreshActiveFill() {
 			if (_bgImage == null) {
 				return;
@@ -1288,6 +1525,11 @@ namespace spz {
 		}
 
 		void Update() {
+			if (_built && _builtRowRt != null) {
+				// Layout can settle a frame after Gen Art / DimensionMode hover scale; keep clear of SD disc.
+				if ((Time.frameCount & 7) == 0)
+					ApplyAdaptiveBottomGap(force: false);
+			}
 			if (!_fullViewMenuOpen || _fullViewMenuRt == null) {
 				return;
 			}
@@ -1386,11 +1628,14 @@ namespace spz {
 					if (!SpzUiThemeOps.ShouldRecolorBoundChrome)
 						reuseImg.color = _authoredFillBase;
 					EnsureDockLineIcon(reuseFace, ResolveFullViewDockIcon(), out _fullSrnLineIcon);
+					EnsureAdaptiveFaceBorder(reuseFace);
 					EnsureFullViewMenu(reuseFace, genRefImg, genRefTmp);
+					SuppressGenerateButtonsColumnFrame();
 					_built = true;
 					LayoutRebuilder.ForceRebuildLayoutImmediate(vlgRoot);
 					ApplyThemeTokens();
 					RefreshActiveFill();
+					ApplyAdaptiveBottomGap(force: true);
 					return true;
 				}
 				Destroy(_builtRowRt.gameObject);
@@ -1427,6 +1672,7 @@ namespace spz {
 			RefreshActiveFill();
 			_builtRowRt = wrapperRt;
 			_built = true;
+			ApplyAdaptiveBottomGap(force: true);
 			return true;
 		}
 
@@ -1437,6 +1683,7 @@ namespace spz {
 
 		void OnDriverActiveChanged(bool _) {
 			RefreshActiveFill();
+			ApplyAdaptiveBottomGap(force: true);
 		}
 
 		void OnDockedButtonClicked() {

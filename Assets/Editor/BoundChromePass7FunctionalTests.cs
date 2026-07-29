@@ -2,6 +2,7 @@ using System.IO;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using spz;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -83,9 +84,68 @@ public sealed class BoundChromePass7FunctionalTests {
 		string src = File.ReadAllText(path);
 		int idx = src.IndexOf("static void ApplyFullSrnLabelStyle", System.StringComparison.Ordinal);
 		Assert.That(idx, Is.GreaterThan(0));
-		string body = src.Substring(idx, System.Math.Min(900, src.Length - idx));
+		string body = src.Substring(idx, System.Math.Min(2200, src.Length - idx));
 		Assert.That(body, Does.Not.Contain("tmp.color = Color.black"));
 		Assert.That(body, Does.Contain("ShouldRecolorBoundChrome"));
+		Assert.That(body, Does.Contain("ApplyBoundChromeNarrowDockLabelTmp"));
+		Assert.That(body, Does.Contain("EnsureDesignFontPt"));
+		Assert.That(body, Does.Not.Contain("tmp.fontSize = 18f"));
+		Assert.That(body, Does.Not.Contain("Mathf.Max(12f, genRefTmp.fontSize)"));
+	}
+
+	[Test]
+	public void FullSrnDock_SourceUsesAdaptiveDimModeClearanceAndLargerLabel() {
+		string path = Path.GetFullPath(Path.Combine(
+			Application.dataPath,
+			"..",
+			"Assets/_gm/Features/StableDiffusion/WorkflowToolsRibbon SD/RibbonViewportFullViewOnScreen_Toggle_UI.cs"));
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("const float DockLabelBasePt = 13f"));
+		Assert.That(src, Does.Contain("ApplyAdaptiveBottomGap"));
+		Assert.That(src, Does.Contain("MeasureDimModeOverlapDeficitLocalPx"));
+		Assert.That(src, Does.Contain("MainChoiceVisualRect"));
+		Assert.That(src, Does.Contain("MinAdaptiveBottomGapPx"));
+		Assert.That(src, Does.Contain("SuppressGenerateButtonsColumnFrame"));
+		Assert.That(src, Does.Contain("EnsureAdaptiveFaceBorder"));
+		Assert.That(src, Does.Contain("DockFaceBorder"));
+	}
+
+	[Test]
+	public void NarrowDockLabel_SeedsDesignPtAndEasesTracking() {
+		var go = new GameObject("FullSrnNarrowDockLabel");
+		var tmp = go.AddComponent<TextMeshProUGUI>();
+		// Unity TMP default — previously poisoned BoundChrome design capture (~36).
+		tmp.fontSize = 36f;
+		tmp.characterSpacing = 0f;
+		try {
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				new JObject {
+					["control_bg"] = "#292A2EFF",
+					["accent"] = "#F2CA50FF",
+					["tab_active"] = "#343539FF",
+					["text_primary"] = "#E3E2E7FF",
+					["font_scale"] = 1f,
+				},
+				"replace",
+				out string error), Is.True, error);
+
+			SpzUiThemeOps.ApplyBoundChromeNarrowDockLabelTmp(tmp, SpzUiThemeOps.Active.textPrimary, 11f);
+			Assert.That(tmp.fontSize, Is.EqualTo(11f).Within(0.05f),
+				"Must not keep TMP default 36 as scaled design size");
+			Assert.That(tmp.characterSpacing, Is.LessThan(12f),
+				"Narrow dock tracking must be milder than full strip 18");
+			var tag = tmp.GetComponent<SpzUiThemeDesignFontPt>();
+			Assert.That(tag, Is.Not.Null);
+			Assert.That(tag.designPt, Is.EqualTo(11f).Within(0.05f));
+
+			SpzUiThemeOps.ResetTheme();
+			SpzUiThemeOps.ApplyBoundChromeNarrowDockLabelTmp(tmp, Color.white, 11f);
+			Assert.That(tmp.fontSize, Is.EqualTo(11f).Within(0.05f));
+		} finally {
+			Object.DestroyImmediate(go);
+			SpzUiThemeOps.ResetTheme();
+		}
 	}
 
 	[Test]
