@@ -131,17 +131,43 @@ namespace spz {
 	    }
 
 	    void ApplyThemeTokens() {
-	        if (_frame == null) return;
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
-	        bool selected = _myOwnerList != null && _myOwnerList._clickedThumb == this;
-	        SpzUiThemeOps.ApplyBoundChromeGraphic(_frame, selected
-	            ? Color.Lerp(t.tabActive, t.accent, 0.65f)
-	            : t.controlBg);
-	        SpzUiThemeOps.ApplyRoundedControlSprite(_frame, markEligible: true);
+	        if (_frame != null) {
+	            bool selected = _myOwnerList != null && _myOwnerList._clickedThumb == this;
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(_frame, selected
+	                ? Color.Lerp(t.tabActive, t.accent, 0.65f)
+	                : t.controlBg);
+	            SpzUiThemeOps.ApplyRoundedControlSprite(_frame, markEligible: true);
+	        }
+	        // Close disables the unit from the thumbs strip (gen path). Prefab may rely on label hits;
+	        // Ensure face before any label raycast clears (CommandRibbon/SAVE litmus).
+	        if (_closeButton != null) {
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(_closeButton, t.controlBg, t.danger);
+	            if (_closeButton.targetGraphic is Image closeFace) {
+	                SpzUiThemeOps.ApplyRoundedControlSprite(closeFace, markEligible: true);
+	                closeFace.preserveAspect = false;
+	            }
+	            foreach (var tmp in _closeButton.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
+	                if (tmp != null)
+	                    SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, 11f);
+	            }
+	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_closeButton);
+	        }
+	        if (_clickMe_text != null) {
+	            foreach (var tmp in _clickMe_text.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
+	                if (tmp != null)
+	                    SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textMuted, 11f);
+	            }
+	        }
+	        // Thumb-local depth dials (shown when selected) — same Pass27 hit-face path as left-ribbon dials.
+	        if (_depthContrast_slider != null)
+	            _depthContrast_slider.ApplyThemeTokens(t.accent, t.textPrimary);
+	        if (_depthBrightness_slider != null)
+	            _depthBrightness_slider.ApplyThemeTokens(t.accent, t.textPrimary);
 	    }
 
 	    void Start(){
