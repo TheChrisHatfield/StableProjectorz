@@ -929,6 +929,8 @@ namespace spz {
 		/// <summary>
 		/// Nomad sculpt strip cell: thin line icon upper-center, label band underneath (Roboto).
 		/// Label RectTransforms are snapshotted for <see cref="RestoreBoundChromeUnder"/>.
+		/// Workflow strip (PROJ MASK / NO COLOR / …): Grid-like icon→type leading + room for 2-line caps
+		/// without clipping the second line.
 		/// </summary>
 		/// <param name="stripUppercase">True = workflow PROJ MASK style (uppercase stack); false = title-case tool names (Paint/Smudge).</param>
 		public static void ApplyNomadStackedToolCell(
@@ -952,10 +954,11 @@ namespace spz {
 				}
 				return;
 			}
-			// Compact title-case cells (Paint/Smudge/Erase): shorter label band so icon sits centered above.
-			float labelMaxY = stripUppercase ? 0.40f : 0.36f;
+			// Grid litmus (Multiview "Grid"): icon above type with a clear gap; type readable, not crushed.
+			// stripUppercase workflow cells need ~half the cell for 2-line caps (PROJ\nMASK).
+			float labelMaxY = stripUppercase ? 0.50f : 0.36f;
 			float yLift = stripUppercase
-				? Mathf.Max(4f, iconPx * 0.28f)
+				? Mathf.Max(8f, iconPx * 0.48f)
 				: Mathf.Max(3f, iconPx * 0.18f);
 			ApplyControlLineIconAt(cell, glyph, iconPx, new Vector2(0f, yLift));
 			foreach (var tmp in cell.GetComponentsInChildren<TMP_Text>(true)) {
@@ -979,10 +982,33 @@ namespace spz {
 				tmp.enableAutoSizing = false;
 				// Labels stretch over the face under Nomad — must not steal EventSystem hits from the Selectable.
 				tmp.raycastTarget = false;
-				if (stripUppercase)
-					ApplyBoundChromeStripLabelTmp(tmp, labelColor, 11f);
+				if (stripUppercase) {
+					// Slightly smaller base so 2-line caps fit; then ease tracking vs full strip crush.
+					ApplyBoundChromeStripLabelTmp(tmp, labelColor, 10f);
+					ApplyWorkflowStackedLabelMetrics(tmp);
+				}
 				else
 					ApplyBoundChromeTmp(tmp, labelColor, 11f);
+			}
+		}
+
+		/// <summary>
+		/// After strip uppercase metrics: Grid-like readable type + leading so PROJ MASK / WHERE EMPTY
+		/// second lines are not clipped by the next cell.
+		/// </summary>
+		static void ApplyWorkflowStackedLabelMetrics(TMP_Text text) {
+			if (text == null) return;
+			// Strip defaults use 18 tracking — too wide for a narrow ribbon cell (forces wrap/clip).
+			text.characterSpacing = 6f;
+			// Authored stacks are very tight; keep mild negative leading so 2 lines fit the label band.
+			text.lineSpacing = -2f;
+			text.overflowMode = TextOverflowModes.Overflow;
+			try {
+				text.UpdateMeshPadding();
+				text.ForceMeshUpdate(ignoreActiveState: true);
+			}
+			catch (Exception) {
+				// Headless TMP — spacing still applied.
 			}
 		}
 

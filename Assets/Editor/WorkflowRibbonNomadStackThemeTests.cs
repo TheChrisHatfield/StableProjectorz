@@ -53,7 +53,9 @@ public sealed class WorkflowRibbonNomadStackThemeTests {
 
 			SpzUiThemeOps.ApplyNomadStackedToolCell(
 				faceGo.transform, StudioLineIcon.Brush, SpzUiThemeOps.Active.textPrimary, 20f);
-			Assert.That(labelRt.anchorMax.y, Is.LessThan(0.5f));
+			Assert.That(labelRt.anchorMax.y, Is.LessThan(0.55f));
+			Assert.That(labelRt.anchorMax.y, Is.GreaterThan(0.45f),
+				"Workflow strip label band needs ~half cell for 2-line caps (Grid-like)");
 			Assert.That(tmp.alignment, Is.EqualTo(TextAlignmentOptions.Center));
 
 			SpzUiThemeOps.ResetTheme();
@@ -139,10 +141,18 @@ public sealed class WorkflowRibbonNomadStackThemeTests {
 			var iconRt = iconT as RectTransform;
 			Assert.That(iconRt, Is.Not.Null);
 			Assert.That(iconRt.anchoredPosition.y, Is.GreaterThan(0f), "Icon sits above center");
+			Assert.That(iconRt.anchoredPosition.y, Is.GreaterThanOrEqualTo(8f),
+				"Grid-like leading: icon lifted clear of the label band");
 			Assert.That(iconT.GetComponent<Image>().sprite,
 				Is.EqualTo(UiRuntimeSprites.GetLineIcon(StudioLineIcon.Drop)));
 
-			Assert.That(labelRt.anchorMax.y, Is.LessThan(0.5f), "Label band sits in lower half");
+			Assert.That(labelRt.anchorMax.y, Is.GreaterThanOrEqualTo(0.45f),
+				"Label band ~half cell so PROJ MASK / NO COLOR second line is not clipped");
+			Assert.That(labelRt.anchorMax.y, Is.LessThanOrEqualTo(0.55f),
+				"Label band stays below icon (Grid-like leading)");
+			Assert.That(tmp.characterSpacing, Is.LessThan(12f),
+				"Stacked workflow tracking must be milder than full strip 18 (Grid-readable)");
+			Assert.That(tmp.overflowMode, Is.EqualTo(TextOverflowModes.Overflow));
 			var nomadFont = SpzUiThemeOps.ResolveNomadUiFont();
 			Assert.That(tmp.font, Is.EqualTo(nomadFont));
 			Assert.That((tmp.fontStyle & FontStyles.UpperCase) != 0, Is.True);
