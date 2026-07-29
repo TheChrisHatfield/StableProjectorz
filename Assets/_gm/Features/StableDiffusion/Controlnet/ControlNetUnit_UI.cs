@@ -327,18 +327,24 @@ namespace spz {
 	            SpzUiThemeOps.ApplyRoundedControlSprite(_mainHeaderImage, markEligible: true);
 	            _mainHeaderImage.preserveAspect = false;
 	        }
-	        // Title must stay readable on collapsed bars (ControlNet 1/2). StripLabel uppercase +
-	        // tracking 18 gets RectMask2D-culled in the CTRL scroll → empty header bars under Nomad.
-	        ThemeControlNetUnitTitle(t);
 
-	        // Prefab may ship null targetGraphic — EnsureSelectableHitFace lives in ApplyBoundChromeSelectable.
-	        // Header TMP raycast is cleared by StripLabel; without a wired face the unit cannot expand (gen path).
+	        // Prefab: "header (text)" is an earlier sibling of "invis surface (button)".
+	        // ApplyBoundChromeSelectable SolidSquare fill made that hit surface opaque and covered the title.
+	        // Keep the ribbon face transparent (raycast only); bar color comes from _mainHeaderImage.
 	        if (_headerRibbon_button != null) {
-	            SpzUiThemeOps.ApplyBoundChromeSelectable(_headerRibbon_button, t.tabActive, t.accent);
-	            if (_headerRibbon_button.targetGraphic is Image hdrFace) {
-	                SpzUiThemeOps.ApplyRoundedControlSprite(hdrFace, markEligible: true);
+	            SpzUiThemeOps.EnsureSelectableHitFace(_headerRibbon_button);
+	            if (_headerRibbon_button.targetGraphic != null) {
+	                var face = _headerRibbon_button.targetGraphic;
+	                SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(face);
+	                Color c = face.color;
+	                face.color = new Color(c.r, c.g, c.b, 0f);
+	                face.raycastTarget = true;
 	            }
+	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_headerRibbon_button);
 	        }
+
+	        // After hit-surface wiring so SetAsLastSibling keeps glyphs above the ribbon.
+	        ThemeControlNetUnitTitle(t);
 
 	        ThemeHeaderModeToggles(t);
 
@@ -417,7 +423,7 @@ namespace spz {
 
 	    /// <summary>
 	    /// Collapsed unit bars must show "ControlNet N". StripLabel metrics are for vertical workflow
-	    /// stacks — not wide CTRL headers inside a RectMask2D scroll.
+	    /// stacks — not wide CTRL headers. Title must draw above the transparent header hit surface.
 	    /// </summary>
 	    void ThemeControlNetUnitTitle(SpzUiThemeOps.ThemeTokens t) {
 	        if (_mainHeader == null) return;
@@ -430,14 +436,20 @@ namespace spz {
 	            else
 	                DestroyImmediate(hidden);
 	        }
+	        if (!_mainHeader.gameObject.activeSelf)
+	            _mainHeader.gameObject.SetActive(true);
 	        _mainHeader.enabled = true;
 	        if (string.IsNullOrWhiteSpace(_mainHeader.text))
 	            _mainHeader.text = "ControlNet " + transform.GetSiblingIndex();
-	        SpzUiThemeOps.ApplyBoundChromeTmp(_mainHeader, t.textPrimary, 13f);
+	        // Force readable design pt — do not capture oversized authored 23pt into a clipped band.
+	        SpzUiThemeOps.EnsureDesignFontPt(_mainHeader, 14f);
+	        SpzUiThemeOps.ApplyBoundChromeTmp(_mainHeader, t.textPrimary, 14f);
 	        // Mild tracking — keep title inside the masked header strip (Grid/CTRL litmus).
 	        _mainHeader.characterSpacing = 2f;
 	        _mainHeader.overflowMode = TextOverflowModes.Overflow;
 	        _mainHeader.raycastTarget = false;
+	        // Prefab sibling order: title then opaque-capable hit surface — draw title last.
+	        _mainHeader.transform.SetAsLastSibling();
 	        try {
 	            _mainHeader.UpdateMeshPadding();
 	            _mainHeader.ForceMeshUpdate(ignoreActiveState: true);
