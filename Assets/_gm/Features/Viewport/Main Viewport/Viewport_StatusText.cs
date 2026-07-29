@@ -129,6 +129,7 @@ namespace spz {
 
 	    /// <summary>
 	    /// Themes status-line RGB from tokens while preserving fade alpha and caller-owned sticky alert colors.
+	    /// Also BoundChrome the help tips overlay + bottom catalogue/updates/welcome buttons (Nomad litmus).
 	    /// </summary>
 	    void ApplyThemeTokens() {
 	        SnapshotAuthoredStatusColors();
@@ -139,8 +140,16 @@ namespace spz {
 	                SpzUiThemeOps.RestoreAuthoredGraphic(_statusText);
 	            if (_progressTotal != null)
 	                SpzUiThemeOps.RestoreAuthoredGraphic(_progressTotal);
-	            if (_help_button != null && _authoredHelpButtonSnapshotted)
-	                _help_button.colors = _authoredHelpButtonColors;
+	            if (_help_button != null) {
+	                if (_authoredHelpButtonSnapshotted)
+	                    _help_button.colors = _authoredHelpButtonColors;
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_help_button.transform);
+	            }
+	            if (_helpTipsPanel != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_helpTipsPanel.transform);
+	            RestoreFooterButton(_3dGenerators_catalogue_button);
+	            RestoreFooterButton(_openCheckForUpdates_button);
+	            RestoreFooterButton(_openWelcomeNovice_button);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
@@ -158,7 +167,7 @@ namespace spz {
 	        if (_progressTotal != null)
 	            SpzUiThemeOps.ApplyBoundChromeGraphic(_progressTotal, t.accent);
 	        // Help button uses authored icon art — only nudge ColorBlock multipliers, do not replace Image.color.
-		if (_help_button != null) {
+	        if (_help_button != null) {
 	            SpzUiThemeOps.EnsureSelectableHitFace(_help_button);
 	            var colors = _help_button.colors;
 	            colors.normalColor = Color.white;
@@ -168,7 +177,79 @@ namespace spz {
 	            _help_button.colors = colors;
 	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_help_button);
 	        }
+	        ThemeHelpTipsOverlay(t);
+	        // Footer: catalogue / updates / welcome — authored beige boxes clash under Nomad.
+	        ThemeFooterButton(_3dGenerators_catalogue_button, t.controlBg, t);
+	        ThemeFooterButton(_openCheckForUpdates_button, t.controlBg, t);
+	        ThemeFooterButton(_openWelcomeNovice_button, t.accent, t);
 	        // Sticky message colors remain caller-owned (ShowStickyMessage).
+	    }
+
+	    static void RestoreFooterButton(Button btn) {
+	        if (btn != null)
+	            SpzUiThemeOps.RestoreBoundChromeUnder(btn.transform);
+	    }
+
+	    static void ThemeFooterButton(Button btn, Color fill, SpzUiThemeOps.ThemeTokens t) {
+	        if (btn == null) return;
+	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, fill, t.accent);
+	        foreach (var tmp in btn.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
+	            if (tmp == null) continue;
+	            // Dark ink on accent fill; reverse-out on dark control cells.
+	            Color ink = RelativeLuminance(fill) > 0.36f
+	                ? new Color(0.10f, 0.09f, 0.10f, 1f)
+	                : t.textPrimary;
+	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, ink, 12f);
+	        }
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
+	    }
+
+	    /// <summary>Help tips shortcut list: primary body + accent for authored yellow tip lines.</summary>
+	    void ThemeHelpTipsOverlay(SpzUiThemeOps.ThemeTokens t) {
+	        if (_helpTipsPanel == null) return;
+	        var panelImg = _helpTipsPanel.GetComponent<Image>();
+	        if (panelImg != null) {
+	            Color shell = t.panelBg;
+	            shell.a = Mathf.Max(shell.a, panelImg.color.a);
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(panelImg, shell);
+	        }
+	        foreach (var img in _helpTipsPanel.GetComponentsInChildren<Image>(true)) {
+	            if (img == null || img == panelImg) continue;
+	            // Skip product/preview content; only chrome-like simple fills.
+	            if (img.GetComponentInParent<RawImage>() != null) continue;
+	            string n = img.gameObject.name ?? "";
+	            if (n.IndexOf("bg", System.StringComparison.OrdinalIgnoreCase) >= 0
+	                || n.IndexOf("panel", System.StringComparison.OrdinalIgnoreCase) >= 0
+	                || n.IndexOf("backdrop", System.StringComparison.OrdinalIgnoreCase) >= 0) {
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(img, t.panelBg);
+	            }
+	        }
+	        foreach (var tmp in _helpTipsPanel.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
+	            if (tmp == null) continue;
+	            // Authored tips are yellow; after first theme pass color is already tokenized — use text cues.
+	            bool tipYellow = IsHelpTipAccentLine(tmp);
+	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, tipYellow ? t.accent : t.textPrimary, 14f);
+	            tmp.raycastTarget = false;
+	        }
+	    }
+
+	    static bool IsHelpTipAccentLine(TMPro.TMP_Text tmp) {
+	        if (tmp == null) return false;
+	        Color c = tmp.color;
+	        if (c.r > 0.65f && c.g > 0.45f && c.b < 0.45f && c.a > 0.4f)
+	            return true;
+	        string s = tmp.text ?? "";
+	        if (s.IndexOf("UV-unwrap", System.StringComparison.OrdinalIgnoreCase) >= 0) return true;
+	        if (s.IndexOf("low-poly", System.StringComparison.OrdinalIgnoreCase) >= 0) return true;
+	        if (s.IndexOf(".FBX", System.StringComparison.OrdinalIgnoreCase) >= 0) return true;
+	        if (s.IndexOf("Undo", System.StringComparison.OrdinalIgnoreCase) >= 0) return true;
+	        if (s.IndexOf("Redo", System.StringComparison.OrdinalIgnoreCase) >= 0) return true;
+	        if (s.IndexOf("Right-Click any Slider", System.StringComparison.OrdinalIgnoreCase) >= 0) return true;
+	        return false;
+	    }
+
+	    static float RelativeLuminance(Color c) {
+	        return 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
 	    }
 
     
