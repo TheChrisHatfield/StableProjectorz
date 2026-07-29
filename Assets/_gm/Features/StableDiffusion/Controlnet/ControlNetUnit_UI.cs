@@ -349,8 +349,10 @@ namespace spz {
 
 	        foreach (var dd in GetComponentsInChildren<TMP_Dropdown>(true)) {
 	            if (dd == null) continue;
+	            // Caption TMP loses raycasts under BoundChrome; Ensure hit face or model/preproc picks die
+	            // (Gen Art stays gated until Depth/Normals ControlNet is enabled).
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(dd, t.fieldBg, t.accent);
 	            if (dd.targetGraphic is Image fieldImg) {
-	                SpzUiThemeOps.ApplyBoundChromeGraphic(fieldImg, t.fieldBg);
 	                SpzUiThemeOps.ApplyRoundedControlSprite(fieldImg, markEligible: true);
 	            }
 	            if (dd.captionText != null)
