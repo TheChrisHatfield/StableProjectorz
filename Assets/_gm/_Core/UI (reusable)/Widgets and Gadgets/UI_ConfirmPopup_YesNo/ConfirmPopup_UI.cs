@@ -22,6 +22,14 @@ namespace spz {
 	    private void Awake(){
 	        if(instance != null){ DestroyImmediate(this); return; }
 	        instance = this;
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        ApplyThemeTokens();
+	    }
+
+	    void OnDestroy() {
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	        if (instance == this)
+	            instance = null;
 	    }
 
 	    void Start(){
@@ -43,6 +51,59 @@ namespace spz {
 	        _yesText.text = yesText;
 	        _noText.text = noText;
 	        _alreadyShownOrHidden = true;
+	        // Re-assert chrome when shown — popup often starts inactive under ThemeChanged.
+	        ApplyThemeTokens();
+	    }
+
+	    /// <summary>
+	    /// Nomad flat dialog: panel shell + solid Yes/No cells (not Unity default light gradient bricks).
+	    /// Ensure hit faces so label raycast clears cannot kill Close / Don't Close (exit litmus).
+	    /// </summary>
+	    void ApplyThemeTokens() {
+	        Transform root = _background_button != null ? _background_button.transform : transform;
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreBoundChromeUnder(root);
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        // Dimmer / panel shells under the background button (authored Unity Default sprites).
+	        foreach (var img in root.GetComponentsInChildren<Image>(true)) {
+	            if (img == null) continue;
+	            if (_yes != null && img.transform.IsChildOf(_yes.transform)) continue;
+	            if (_no != null && img.transform.IsChildOf(_no.transform)) continue;
+	            if (_yes != null && ReferenceEquals(img, _yes.targetGraphic)) continue;
+	            if (_no != null && ReferenceEquals(img, _no.targetGraphic)) continue;
+	            // Fullscreen blocker stays near-black; dialog card uses panel_bg.
+	            string n = img.gameObject.name ?? "";
+	            bool isBlocker = ReferenceEquals(img.gameObject, _background_button.gameObject)
+	                || n.IndexOf("background", StringComparison.OrdinalIgnoreCase) >= 0
+	                || n.IndexOf("blocker", StringComparison.OrdinalIgnoreCase) >= 0
+	                || n.IndexOf("overlay", StringComparison.OrdinalIgnoreCase) >= 0;
+	            Color fill = isBlocker
+	                ? new Color(0f, 0f, 0f, Mathf.Clamp01(t.panelBg.a * 0.72f))
+	                : SpzUiThemeOps.ResolvePanelShellColor();
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(img, fill);
+	            if (!isBlocker)
+	                SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
+	        }
+	        if (_header != null)
+	            SpzUiThemeOps.ApplyBoundChromeTmp(_header, t.textPrimary, 16f);
+	        // Don't Close = neutral; Close = danger (exit confirm).
+	        ThemePopupButton(_no, t.controlBg, t.accent, _noText, t);
+	        ThemePopupButton(_yes, t.danger, t.accent, _yesText, t);
+	    }
+
+	    static void ThemePopupButton(Button btn, Color fill, Color accent, TextMeshProUGUI label, SpzUiThemeOps.ThemeTokens t) {
+	        if (btn == null) return;
+	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, fill, accent);
+	        if (btn.targetGraphic is Image face) {
+	            SpzUiThemeOps.ApplyRoundedControlSprite(face, markEligible: true);
+	            face.preserveAspect = false;
+	            face.raycastTarget = true;
+	        }
+	        if (label != null)
+	            SpzUiThemeOps.ApplyBoundChromeTmp(label, t.textPrimary, 15f);
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }
 
 	    void OnYesClicked(){
