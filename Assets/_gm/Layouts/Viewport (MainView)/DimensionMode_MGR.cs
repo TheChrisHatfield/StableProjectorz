@@ -174,6 +174,7 @@ namespace spz {
 	            tag.authoredSprite = img.sprite;
 	            tag.authoredType = img.type;
 	            tag.authoredPixelsPerUnitMultiplier = img.pixelsPerUnitMultiplier;
+	            tag.authoredPreserveAspect = img.preserveAspect;
 	            tag.hasAuthoredSnapshot = true;
 	        }
 	        img.sprite = UiRuntimeSprites.CircleFilled;
