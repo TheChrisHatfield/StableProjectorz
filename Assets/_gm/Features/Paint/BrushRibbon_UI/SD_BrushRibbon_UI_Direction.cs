@@ -256,11 +256,30 @@ namespace spz {
 
 	        var rootLayout = dir.GetComponent<LayoutElement>();
 	        if (rootLayout != null) {
-	            if (smudgeRect != null)
-	                rootLayout.minHeight = nomadGaps ? 280f : 210f;
-	            else if (nomadGaps)
-	                rootLayout.minHeight = Mathf.Max(rootLayout.minHeight, 168f);
+	            if (smudgeRect != null) {
+	                // Square cells like bucket/trash: each band height ≈ column width (not a tall 280px stack).
+	                float colW = MeasureDirectionColumnWidth(dir);
+	                float cellFrac = (1f - 2f * gap) / 3f;
+	                float squareStackH = colW / Mathf.Max(0.05f, cellFrac);
+	                rootLayout.minHeight = nomadGaps ? squareStackH : 210f;
+	                rootLayout.preferredHeight = nomadGaps ? squareStackH : -1f;
+	            }
+	            else if (nomadGaps) {
+	                float colW = MeasureDirectionColumnWidth(dir);
+	                float cellFrac = (1f - gap) * 0.5f;
+	                float squareStackH = colW / Mathf.Max(0.05f, cellFrac);
+	                rootLayout.minHeight = Mathf.Max(rootLayout.minHeight, squareStackH);
+	                rootLayout.preferredHeight = squareStackH;
+	            }
 	        }
+	    }
+
+	    static float MeasureDirectionColumnWidth(BrushRibbon_UI_Direction dir) {
+	        var rt = dir != null ? dir.transform as RectTransform : null;
+	        if (rt != null && rt.rect.width > 4f)
+	            return rt.rect.width;
+	        // Inactive / EditMode: match typical brush-strip square chrome (~bucket/trash).
+	        return 40f;
 	    }
 
 	    public BrushToolMode toolMode {

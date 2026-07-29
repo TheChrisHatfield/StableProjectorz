@@ -172,7 +172,7 @@ namespace spz {
 	                if (_pressureTabletMode != null && _pressureTabletMode.OwnsLabel(tmp))
 	                    continue;
 	            }
-	            // Direction tool cells: stacked icon+label already applied Roboto metrics.
+	            // Direction tool cells: ThemeToolToggle owns TMP (hidden under Nomad square litmus).
 	            if (dir != null && IsUnderDirectionToolToggle(tmp.transform, dir))
 	                continue;
 	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
@@ -240,7 +240,7 @@ namespace spz {
 
 	    /// <summary>
 	    /// Flat square cell (no beveled plate / 9-slice corner chevrons) + centered Nomad line icon.
-	    /// Hides authored tick (+/−) plates and SPZ silhouettes; label kept under icon when present.
+	    /// Matches bucket/trash square litmus — no stacked label/+ band that elongates Paint/Smudge/Erase.
 	    /// </summary>
 	    static void ThemeToolToggle(Toggle toggle, StudioLineIcon glyph, SpzUiThemeOps.ThemeTokens t, float iconSizePx = 24f) {
 	        if (toggle == null || !SpzUiThemeOps.ShouldRecolorBoundChrome) return;
@@ -254,9 +254,13 @@ namespace spz {
 	            bg.raycastTarget = true;
 	        }
 	        HideSecondaryChromeUnder(toggle);
-	        // Stacked icon + short label so Brush / Smudge / Eraser stay identifiable in the column.
-	        SpzUiThemeOps.ApplyNomadStackedToolCell(
-	            toggle.transform, glyph, t.textPrimary, iconSizePx, PreferDirectionToolLabel, stripUppercase: false);
+	        // Centered icon only (bucket/trash litmus). Stacked label band made cells tall rectangles.
+	        SpzUiThemeOps.ApplyControlLineIcon(toggle.transform, glyph, iconSizePx);
+	        foreach (var tmp in toggle.GetComponentsInChildren<TMP_Text>(true)) {
+	            if (tmp == null) continue;
+	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, 11f);
+	            SpzUiThemeOps.HideAuthoredGraphicForTheme(tmp);
+	        }
 	        // Ensure the Monolith glyph is on top and tinted (authored "icon" children stay hidden).
 	        var iconT = SpzUiThemeOps.FindDirectChildIncludingInactive(toggle.transform, "MonolithLineIcon");
 	        if (iconT != null) {
@@ -272,13 +276,6 @@ namespace spz {
 	            }
 	        }
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(toggle);
-	    }
-
-	    static bool PreferDirectionToolLabel(TMP_Text tmp) {
-	        if (tmp == null) return false;
-	        string n = tmp.gameObject.name ?? "";
-	        return n.IndexOf("text", StringComparison.OrdinalIgnoreCase) >= 0
-	            || n.IndexOf("label", StringComparison.OrdinalIgnoreCase) >= 0;
 	    }
 
 	    static void ThemeToolButton(Button btn, StudioLineIcon glyph, SpzUiThemeOps.ThemeTokens t, bool applyIcon = true) {
