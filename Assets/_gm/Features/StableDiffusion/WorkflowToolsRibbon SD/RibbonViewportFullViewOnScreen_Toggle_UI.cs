@@ -1482,12 +1482,15 @@ namespace spz {
 			}
 			// "On" while the left column is hidden: center-only fullscreen, or right-only (paint) — same session.
 			bool on = IsInOnScreenFullViewSession();
+			// Show secondary before theming — ApplyThemeTokens must see an active OpenRightDock
+			// (and FindDirectChild works either way, but ColorBlock/sprite apply while inactive still
+			// left OPEN RIGHT unstyled until the next ThemeChanged if Find previously returned null).
+			SetSecondaryButtonVisible(on);
 			if (SpzUiThemeOps.ShouldRecolorBoundChrome) {
 				ApplyThemeTokens();
 			} else {
 				_bgImage.color = on ? Color.Lerp(_fillBase, Color.black, 0.14f) : _fillBase;
 			}
-			SetSecondaryButtonVisible(on);
 			RefreshOpenRightSecondaryLabel();
 		}
 
