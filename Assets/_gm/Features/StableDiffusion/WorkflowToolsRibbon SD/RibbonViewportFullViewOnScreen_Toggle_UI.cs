@@ -1306,8 +1306,9 @@ namespace spz {
 					_spacerRowRt = EnsureSpacerRow(vlgRoot, spacerIndex, gap, _builtRowRt.gameObject.layer);
 					LayoutRebuilder.ForceRebuildLayoutImmediate(vlgRoot);
 				}
-			} else if (gap < ExtraBottomGapPx - 0.5f) {
-				// Clearance exists: try growing back toward the authored gap without re-overlapping.
+			} else if (force && gap < ExtraBottomGapPx - 0.5f) {
+				// Grow only on force (rebuild / OPEN RIGHT). Periodic Update trying ExtraBottomGap
+				// every 8 frames caused climb-under-SD → shrink thrash when clearance was tight.
 				float tryGap = ExtraBottomGapPx;
 				spacerIndex = ResolveSpacerSiblingIndex(vlgRoot);
 				_spacerRowRt = EnsureSpacerRow(vlgRoot, spacerIndex, tryGap, _builtRowRt.gameObject.layer);
