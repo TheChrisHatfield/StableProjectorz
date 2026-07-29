@@ -140,6 +140,68 @@ public sealed class CommandRibbonStripRaycastThemeTests {
 	}
 
 	[Test]
+	public void ThemeStripTabCell_Nomad_PrefabNoTabBg_CreatesHitFaceAfterLabelClear() {
+		// Prefab Art/Control pattern: Button + TMP only, no TabBg, null targetGraphic.
+		var cell = new GameObject("Tab: art list", typeof(RectTransform), typeof(Button), typeof(TabsGroupElem_UI));
+		cell.SetActive(false);
+		try {
+			var btn = cell.GetComponent<Button>();
+			btn.targetGraphic = null;
+
+			var labelGo = new GameObject("Input (text)", typeof(RectTransform));
+			labelGo.transform.SetParent(cell.transform, false);
+			var label = labelGo.AddComponent<TextMeshProUGUI>();
+			label.text = "ART";
+			label.raycastTarget = true;
+
+			var activeGo = new GameObject("go active", typeof(RectTransform));
+			activeGo.transform.SetParent(cell.transform, false);
+			activeGo.SetActive(false); // inactive tab — pill cannot receive hits
+			var pillGo = new GameObject("image", typeof(RectTransform), typeof(Image));
+			pillGo.transform.SetParent(activeGo.transform, false);
+			pillGo.GetComponent<Image>().raycastTarget = true;
+
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				new JObject {
+					["control_bg"] = "#292A2EFF",
+					["accent"] = "#F2CA50FF",
+					["text_primary"] = "#E3E2E7FF",
+				},
+				"replace",
+				out string error), Is.True, error);
+
+			var theme = typeof(CommandRibbon_UI).GetMethod(
+				"ThemeStripTabCell",
+				BindingFlags.Instance | BindingFlags.NonPublic);
+			var host = new GameObject("RibbonHost").AddComponent<CommandRibbon_UI>();
+			try {
+				theme.Invoke(host, new object[] {
+					cell.transform,
+					SpzUiThemeOps.Active,
+					true,
+					false,
+				});
+			}
+			finally {
+				Object.DestroyImmediate(host.gameObject);
+			}
+
+			Assert.That(btn.targetGraphic, Is.Not.Null, "must create/wire a hit face");
+			Assert.That(btn.targetGraphic.raycastTarget, Is.True);
+			Assert.That(label.raycastTarget, Is.False, "Nomad strip labels clear raycast");
+			var created = cell.transform.Find("TabBg")?.GetComponent<Image>();
+			Assert.That(created, Is.Not.Null);
+			Assert.That(created.raycastTarget, Is.True);
+			Assert.That(ReferenceEquals(btn.targetGraphic, created), Is.True);
+		}
+		finally {
+			Object.DestroyImmediate(cell);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
 	public void ClearStripTabNonFaceRaycasts_NullFace_DoesNotMassClear() {
 		var cell = new GameObject("orphan tab", typeof(RectTransform), typeof(Button));
 		cell.SetActive(false);
