@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -1195,6 +1194,7 @@ namespace spz {
 
 		/// <summary>
 		/// Install/update SPZ GO into the user's Blender via <c>blender --background --python install_into_blender.py</c>.
+		/// Uses Win32 CreateProcess (StartExternalProcess) — System.Diagnostics.Process.Start asserts under IL2CPP.
 		/// </summary>
 		public bool TryInstallSpzGoBlenderBridge(string blenderExe, bool force, out string message) {
 			message = null;
@@ -1215,63 +1215,70 @@ namespace spz {
 				message = "blender.exe not found — set Blender path";
 				return false;
 			}
-			var args = new StringBuilder();
-			args.Append("--background --python \"").Append(script).Append("\" -- --src \"").Append(ship).Append("\"");
-			if (force)
-				args.Append(" --force");
 
+#if !(UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN)
+			message = "Blender install from Unity is Windows-only in this build";
+			return false;
+#else
+			string logPath = Path.Combine(Path.GetTempPath(), "spz_go_blender_install_" + Guid.NewGuid().ToString("N") + ".log");
+			string batPath = Path.Combine(Path.GetTempPath(), "spz_go_blender_install_" + Guid.NewGuid().ToString("N") + ".bat");
 			try {
-				var psi = new ProcessStartInfo {
-					FileName = blenderExe,
-					Arguments = args.ToString(),
-					UseShellExecute = false,
-					RedirectStandardOutput = true,
-					RedirectStandardError = true,
-					CreateNoWindow = true,
-				};
-				using (var proc = Process.Start(psi)) {
-					if (proc == null) {
-						message = "failed to start blender";
-						return false;
-					}
-					// Concurrent drain — sequential ReadToEnd can deadlock when stderr/stdout buffers fill.
-					string stdout = null;
-					string stderr = null;
-					var tOut = new System.Threading.Thread(() => { try { stdout = proc.StandardOutput.ReadToEnd(); } catch { stdout = ""; } });
-					var tErr = new System.Threading.Thread(() => { try { stderr = proc.StandardError.ReadToEnd(); } catch { stderr = ""; } });
-					tOut.IsBackground = true;
-					tErr.IsBackground = true;
-					tOut.Start();
-					tErr.Start();
-					if (!proc.WaitForExit(SpzGoBlenderInstallTimeoutMs)) {
-						try { proc.Kill(); } catch { }
-						message = "blender install timed out";
-						return false;
-					}
-					tOut.Join(5000);
-					tErr.Join(5000);
-					string combined = (stdout ?? "") + "\n" + (stderr ?? "");
-					string marker = null;
-					foreach (var line in combined.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)) {
-						string s = line.Trim();
-						if (s.StartsWith("SPZ_GO_INSTALL_OK", StringComparison.Ordinal)
-						    || s.StartsWith("SPZ_GO_INSTALL_SKIP", StringComparison.Ordinal)
-						    || s.StartsWith("SPZ_GO_INSTALL_FAIL", StringComparison.Ordinal)) {
-							marker = s;
-						}
-					}
-					if (string.IsNullOrEmpty(marker)) {
-						message = "no status marker from blender (exit " + proc.ExitCode + ")";
-						return false;
-					}
-					message = marker;
-					return marker.StartsWith("SPZ_GO_INSTALL_OK", StringComparison.Ordinal)
-					       || marker.StartsWith("SPZ_GO_INSTALL_SKIP", StringComparison.Ordinal);
+				var bat = new StringBuilder();
+				bat.AppendLine("@echo off");
+				bat.Append('"').Append(blenderExe).Append('"');
+				bat.Append(" --background --python \"").Append(script).Append("\" -- --src \"").Append(ship).Append('"');
+				if (force)
+					bat.Append(" --force");
+				bat.Append(" > \"").Append(logPath).Append("\" 2>&1");
+				bat.AppendLine();
+				File.WriteAllText(batPath, bat.ToString());
+
+				string workDir = Path.GetDirectoryName(blenderExe);
+				if (string.IsNullOrEmpty(workDir) || !Directory.Exists(workDir))
+					workDir = Path.GetTempPath();
+
+				uint pid = Lavender.Systems.StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
+					batPath, isJustFile: true, workDir, keepWindow: false, hidden: true, attachToConsole: false);
+				if (pid == 0) {
+					message = "failed to start blender (CreateProcess)";
+					return false;
 				}
+				if (!Lavender.Systems.StartExternalProcess.WaitForProcessExit(pid, SpzGoBlenderInstallTimeoutMs)) {
+					try { Lavender.Systems.StartExternalProcess.KillProcess(pid); } catch { }
+					message = "blender install timed out";
+					return false;
+				}
+
+				string combined = "";
+				if (File.Exists(logPath)) {
+					try { combined = File.ReadAllText(logPath); } catch { combined = ""; }
+				}
+				string marker = null;
+				foreach (var line in combined.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)) {
+					string s = line.Trim();
+					if (s.StartsWith("SPZ_GO_INSTALL_OK", StringComparison.Ordinal)
+					    || s.StartsWith("SPZ_GO_INSTALL_SKIP", StringComparison.Ordinal)
+					    || s.StartsWith("SPZ_GO_INSTALL_FAIL", StringComparison.Ordinal)) {
+						marker = s;
+					}
+				}
+				if (string.IsNullOrEmpty(marker)) {
+					message = string.IsNullOrEmpty(combined)
+						? "no status marker from blender (empty log)"
+						: "no status marker from blender";
+					return false;
+				}
+				message = marker;
+				return marker.StartsWith("SPZ_GO_INSTALL_OK", StringComparison.Ordinal)
+				       || marker.StartsWith("SPZ_GO_INSTALL_SKIP", StringComparison.Ordinal);
 			} catch (Exception ex) {
 				message = ex.Message;
 				return false;
+			} finally {
+				try { if (File.Exists(batPath)) File.Delete(batPath); } catch { }
+				try { if (File.Exists(logPath)) File.Delete(logPath); } catch { }
 			}
+#endif
 		}
 		
 		/// <summary>
