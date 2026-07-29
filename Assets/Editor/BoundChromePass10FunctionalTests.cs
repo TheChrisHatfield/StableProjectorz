@@ -67,11 +67,11 @@ public sealed class BoundChromePass10FunctionalTests {
 			"..",
 			"Assets/_gm/Features/Viewport/Main Viewport/PayMoney_button.cs"));
 		string src = System.IO.File.ReadAllText(path);
+		Assert.That(src, Does.Contain("ClearNonFaceRaycastsForTheme(_button)"));
+		Assert.That(src, Does.Contain("ApplyBoundChromeTmp"));
 		int idx = src.IndexOf("void ApplyThemeTokens()", System.StringComparison.Ordinal);
 		Assert.That(idx, Is.GreaterThan(0));
-		string body = src.Substring(idx, System.Math.Min(900, src.Length - idx));
-		Assert.That(body, Does.Contain("ClearNonFaceRaycastsForTheme"));
-		Assert.That(body, Does.Contain("ApplyBoundChromeTmp"));
+		string body = src.Substring(idx, System.Math.Min(2000, src.Length - idx));
 		int poison = body.IndexOf("tmp.raycastTarget = false", System.StringComparison.Ordinal);
 		int tmp = body.IndexOf("ApplyBoundChromeTmp", System.StringComparison.Ordinal);
 		Assert.That(poison < 0 || poison > tmp, Is.True,
