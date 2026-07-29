@@ -335,6 +335,9 @@ namespace spz {
 	            if (label != null)
 	                SpzUiThemeOps.ApplyBoundChromeTmp(label, t.textPrimary);
 	        }
+	        // Ensure GRID/POV faces BEFORE label TMP — StripLabel/Tmp clear label raycasts under Nomad;
+	        // if Refresh ran after and face was null, POV digits / Grid stayed dead (gen path).
+	        RefreshPovAndGridChromeSelection();
 	        if (_showGrid_toggle != null) {
 	            var gLabel = _showGrid_toggle.GetComponentInChildren<TextMeshProUGUI>(true);
 	            if (gLabel != null)
@@ -354,7 +357,6 @@ namespace spz {
 	                    SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(povLabel, t.textPrimary, 12f);
 	            }
 	        }
-	        RefreshPovAndGridChromeSelection();
 	        if (_sortPins_Button != null) {
 	            var sortBtn = _sortPins_Button.GetComponent<Button>();
 	            if (sortBtn != null)
