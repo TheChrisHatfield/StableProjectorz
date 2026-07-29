@@ -65,6 +65,7 @@ namespace spz {
 	        _camera_FOV_slider.GetComponent<EventTrigger>().triggers.Add(entryDown);
 	        _camera_FOV_slider.GetComponent<EventTrigger>().triggers.Add(entryUp);
 
+	        EnsureFovFillThumbMarker();
 	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
 	    }
 
@@ -78,7 +79,16 @@ namespace spz {
 	        UserCameras_MGR._Act_OnFovChanged -= OnCameraMGR_FovChanged;
 	    }
 
+	    void EnsureFovFillThumbMarker() {
+	        if (_camera_FOV_slider == null || _camera_FOV_slider.UnitySlider == null) return;
+	        var fillThumb = _camera_FOV_slider.UnitySlider.GetComponent<SpzUiThemeNomadFillThumb>();
+	        if (fillThumb == null)
+	            fillThumb = _camera_FOV_slider.UnitySlider.gameObject.AddComponent<SpzUiThemeNomadFillThumb>();
+	        fillThumb.icon = StudioLineIcon.Camera;
+	    }
+
 	    void ApplyThemeTokens() {
+	        EnsureFovFillThumbMarker();
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
 	            if (_camera_FOV_slider != null && _camera_FOV_slider.UnitySlider != null)
@@ -95,7 +105,7 @@ namespace spz {
 	            if (tmp == null || tmp == _cam_FOV_numberText) continue;
 	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
 	        }
-	        // Pill + segmented coral fill + bullseye (SliderUI_Snapping also applies; keep explicit for FOV).
+	        // Nomad: mustard fill is the slider; Camera icon centered on fill with slight overlay.
 	        if (_camera_FOV_slider != null && _camera_FOV_slider.UnitySlider != null)
 	            SpzUiThemeOps.ApplyNomadSliderChrome(_camera_FOV_slider.UnitySlider);
 	    }
