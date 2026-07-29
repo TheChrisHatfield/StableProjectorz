@@ -138,11 +138,24 @@ namespace spz {
 	        ApplyReverseOutLabelsUnder(_sd_choice_button, t);
 	        ApplyReverseOutLabelsUnder(_uv_choice_button, t);
 	        ApplyReverseOutLabelsUnder(_bg_choice_button, t);
+	        // Labels lose raycasts under BoundChrome; Ensure a hittable face or SD↔3D mode dies (gen path).
+	        // ClearNonFace no-ops when targetGraphic is null — must Ensure first (Pass12 litmus).
+	        EnsureDimChoiceHitFace(_3d_choice_button);
+	        EnsureDimChoiceHitFace(_sd_choice_button);
+	        EnsureDimChoiceHitFace(_uv_choice_button);
+	        EnsureDimChoiceHitFace(_bg_choice_button);
 	        // Flat Checkmark overlays keep authored raycasts — silo hits to each Button face (gen mode litmus).
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_3d_choice_button);
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_sd_choice_button);
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_uv_choice_button);
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_bg_choice_button);
+	    }
+
+	    static void EnsureDimChoiceHitFace(Button btn) {
+	        if (btn == null) return;
+	        SpzUiThemeOps.EnsureSelectableHitFace(btn);
+	        if (btn.targetGraphic != null)
+	            btn.targetGraphic.raycastTarget = true;
 	    }
 
 	    static void ApplyFlatDiscsUnder(Transform root, bool selected, SpzUiThemeOps.ThemeTokens t) {
