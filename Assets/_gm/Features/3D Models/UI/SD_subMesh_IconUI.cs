@@ -56,6 +56,8 @@ namespace spz {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            _color_Selected = _authoredSelected;
 	            _color_NotSelected = _authoredNotSelected;
+	            if (_wholeIcon_button != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_wholeIcon_button.transform);
 	            if (_name != null)
 	                SpzUiThemeOps.RestoreAuthoredGraphic(_name);
 	            if (_rmvButton != null)
@@ -71,6 +73,16 @@ namespace spz {
 	        _color_NotSelected = t.controlBg;
 	        if (_background != null && myMesh != null)
 	            ToggleBG(myMesh._isSelected);
+	        // Mesh row select: name TMP loses raycasts under BoundChrome. Wire/Ensure a face on
+	        // _wholeIcon_button without ApplyBoundChromeSelectable (ToggleBG owns selection fill).
+	        if (_wholeIcon_button != null) {
+	            if (_wholeIcon_button.targetGraphic == null && _background != null)
+	                _wholeIcon_button.targetGraphic = _background;
+	            SpzUiThemeOps.EnsureSelectableHitFace(_wholeIcon_button);
+	            if (_wholeIcon_button.targetGraphic != null)
+	                _wholeIcon_button.targetGraphic.raycastTarget = true;
+	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_wholeIcon_button);
+	        }
 	        if (_name != null)
 	            SpzUiThemeOps.ApplyBoundChromeTmp(_name, t.textPrimary);
 	        if (_rmvButton != null)
