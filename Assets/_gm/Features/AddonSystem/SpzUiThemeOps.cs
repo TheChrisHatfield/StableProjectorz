@@ -197,6 +197,9 @@ namespace spz {
 				RestoreAuthoredColorBlock(s);
 			foreach (var tmp in root.GetComponentsInChildren<TMP_Text>(true)) {
 				if (tmp == null) continue;
+				// Typography unwind is also invoked via RestoreAuthoredGraphic above; call again so
+				// labels that never snapshotted Graphic color still drop Nomad tracking/font/outline.
+				RestoreNomadTypography(tmp);
 				var fontTag = tmp.GetComponent<SpzUiThemeDesignFontPt>();
 				if (fontTag != null && fontTag.designPt > 0.05f)
 					tmp.fontSize = fontTag.designPt;
@@ -792,6 +795,16 @@ namespace spz {
 			if (text == null) return;
 			var tag = text.GetComponent<SpzUiThemeDesignTypography>();
 			if (tag == null) return;
+			// Font/material MUST come before outlineWidth. Setting outline on the Nomad
+			// material instance rebinds TMP to the wrong atlas → garbled glyphs after Restore SPZ
+			// (same class of bug as TMP runtime font+outline swap).
+			if (tag.hasFontSnapshot) {
+				text.font = tag.authoredFont;
+				if (tag.authoredFontSharedMaterial != null)
+					text.fontSharedMaterial = tag.authoredFontSharedMaterial;
+				else if (tag.authoredFont != null && tag.authoredFont.material != null)
+					text.fontSharedMaterial = tag.authoredFont.material;
+			}
 			if (tag.hasSnapshot) {
 				text.characterSpacing = tag.characterSpacing;
 				text.lineSpacing = tag.lineSpacing;
@@ -800,13 +813,15 @@ namespace spz {
 			}
 			if (tag.hasAlignmentSnapshot)
 				text.alignment = tag.alignment;
-			if (tag.hasFontSnapshot) {
-				text.font = tag.authoredFont;
-				if (tag.authoredFontSharedMaterial != null)
-					text.fontSharedMaterial = tag.authoredFontSharedMaterial;
-			}
 			if (tag.hasRaycastSnapshot)
 				text.raycastTarget = tag.authoredRaycastTarget;
+			try {
+				text.UpdateMeshPadding();
+				text.ForceMeshUpdate(ignoreActiveState: true);
+			}
+			catch (Exception) {
+				// Headless / incomplete TMP — spacing/font still restored above.
+			}
 		}
 
 		/// <summary>Swap BoundChrome TMP to Roboto Regular when Nomad theme is active.</summary>
@@ -844,12 +859,16 @@ namespace spz {
 
 		/// <summary>
 		/// TMP outline needs a live font material; EditMode / freshly-created TMP can NRE in SetOutlineThickness.
+		/// Uses fontMaterial (per-text instance) so shared SDF materials are not permanently outlined —
+		/// otherwise Restore SPZ can leave polluted atlases / mismatched font+material pairs.
 		/// </summary>
 		static void TrySetNomadOutline(TMP_Text text, float width, Color color) {
 			if (text == null) return;
-			if (text.fontSharedMaterial == null && (text.font == null || text.font.material == null))
+			if (text.font == null && text.fontSharedMaterial == null)
 				return;
 			try {
+				// Touch fontMaterial so outline writes an instance, not the font asset's shared material.
+				_ = text.fontMaterial;
 				text.outlineWidth = width;
 				text.outlineColor = color;
 			}
