@@ -367,11 +367,13 @@ namespace spz {
 	            }
 	        }
 	        Transform iconOwner = toggle != null ? toggle.transform : modeUi.transform;
+	        // 18px icon + Grid-like stacked metrics (ApplyNomadStackedToolCell stripUppercase) —
+	        // leaves room for 2-line PROJ MASK / NO COLOR / TOTAL COLOR / WHERE EMPTY labels.
 	        SpzUiThemeOps.ApplyNomadStackedToolCell(
 	            iconOwner,
 	            glyph,
 	            t.textPrimary,
-	            20f,
+	            18f,
 	            tmp => !IsExcludedWorkflowLabel(tmp.transform, modeUi.transform));
 	        // Labels / plates / Monolith overlays must not steal mode clicks (gen path depends on workflow mode).
 	        if (toggle != null)
