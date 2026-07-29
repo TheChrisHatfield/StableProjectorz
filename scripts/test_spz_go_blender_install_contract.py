@@ -51,6 +51,9 @@ class SpzGoBlenderInstallContractTests(unittest.TestCase):
 		self.assertIn("SPZ_GO_INSTALL_FAIL", script)
 		self.assertIn("spz_blender_bridge", script)
 		self.assertIn("save_userpref", script)
+		self.assertIn("up-to-date but could not enable", script)
+		# SKIP path must check enable result (not ignore _enable return).
+		self.assertIn("if not _enable(MODULE_NAME):", script)
 
 
 if __name__ == "__main__":

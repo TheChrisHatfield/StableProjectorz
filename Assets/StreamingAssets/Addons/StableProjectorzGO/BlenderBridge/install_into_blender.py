@@ -79,9 +79,11 @@ def main(argv=None) -> int:
 		and ship_ver == inst_ver
 		and os.path.isfile(os.path.join(dest, "spz_http.py"))
 	):
+		# Still ensure enabled — SKIP must not hide a failed enable.
+		if not _enable(MODULE_NAME):
+			print("SPZ_GO_INSTALL_FAIL: up-to-date but could not enable " + MODULE_NAME)
+			return 1
 		print("SPZ_GO_INSTALL_SKIP: already up-to-date " + ".".join(str(x) for x in ship_ver))
-		# Still ensure enabled
-		_enable(MODULE_NAME)
 		return 0
 
 	try:
