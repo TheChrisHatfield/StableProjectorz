@@ -302,10 +302,13 @@ namespace spz {
 	        ThemeHeaderModeToggles(t);
 	        // Non-header toggles are real checkboxes (resize/context) — never ThemeFlatToggleCell
 	        // (that hides Checkmark glyphs and undoes ApplyThemeTokens checkbox silo).
+	        // Preprocessor res radios are bevel chips — owned by ControlnetPreprocessor_UI.
 	        foreach (var toggle in GetComponentsInChildren<Toggle>(true)) {
 	            if (toggle == null || IsHeaderModeToggle(toggle)) continue;
+	            if (_preprocessor != null && _preprocessor.OwnsResToggle(toggle)) continue;
 	            ThemeCheckboxToggle(toggle, t);
 	        }
+	        _preprocessor?.ApplyThemeTokens();
 	    }
 
 	    /// <summary>
@@ -365,9 +368,12 @@ namespace spz {
 	        foreach (var toggle in GetComponentsInChildren<Toggle>(true)) {
 	            if (toggle == null) continue;
 	            if (IsHeaderModeToggle(toggle)) continue; // already themed above (bevel hide OK for P/B/C/LOW)
+	            if (_preprocessor != null && _preprocessor.OwnsResToggle(toggle)) continue;
 	            // Context menus / resize modes need real Checkmark glyphs — not flat-cell hide.
 	            ThemeCheckboxToggle(toggle, t);
 	        }
+
+	        _preprocessor?.ApplyThemeTokens();
 
 	        foreach (var btn in GetComponentsInChildren<Button>(true)) {
 	            if (btn == null) continue;

@@ -46,6 +46,8 @@ namespace spz {
 	        if(!isOn){ return; }
 	        string txt = tog.GetComponentInChildren<TextMeshProUGUI>().text;
 	        _preprocessorRes_hoverMe.GetComponentInChildren<TextMeshProUGUI>().text =  "res <size=80%>x</size>" + txt;
+	        if (_unit != null)
+	            _unit.RefreshBoundChromeSelection();
 	    }
 
 
@@ -103,6 +105,79 @@ namespace spz {
 	        _preprocessorRes_1.isOn  = other._preprocessorRes_1.isOn;
 	        _preprocessorRes_15.isOn = other._preprocessorRes_15.isOn;
 	        _preprocessorRes_2.isOn  = other._preprocessorRes_2.isOn;
+	    }
+
+	    /// <summary>True when <paramref name="toggle"/> is a preprocessor resolution radio (.5 / 1 / 1.5 / 2).</summary>
+	    public bool OwnsResToggle(Toggle toggle) {
+	        if (toggle == null) return false;
+	        return ReferenceEquals(toggle, _preprocessorRes_05)
+	            || ReferenceEquals(toggle, _preprocessorRes_1)
+	            || ReferenceEquals(toggle, _preprocessorRes_15)
+	            || ReferenceEquals(toggle, _preprocessorRes_2);
+	    }
+
+	    /// <summary>
+	    /// Nomad flat chrome for the "res xN" hover chip (not a Button — unit Button scan missed it)
+	    /// and resolution slide-out radios.
+	    /// </summary>
+	    public void ApplyThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            if (_preprocessorRes_hoverMe != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_preprocessorRes_hoverMe.transform);
+	            if (_preprocessorRes_slideOut != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_preprocessorRes_slideOut.transform);
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        ThemeResTriggerChip(t);
+	        ThemeResRadio(_preprocessorRes_05, t);
+	        ThemeResRadio(_preprocessorRes_1, t);
+	        ThemeResRadio(_preprocessorRes_15, t);
+	        ThemeResRadio(_preprocessorRes_2, t);
+	    }
+
+	    void ThemeResTriggerChip(SpzUiThemeOps.ThemeTokens t) {
+	        if (_preprocessorRes_hoverMe == null) return;
+	        var face = _preprocessorRes_hoverMe.GetComponent<Image>();
+	        if (face != null) {
+	            // Peach 9-slice bevel → flat Nomad control (gen/SAVE litmus). Keep raycast for hover.
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(face, t.controlBg);
+	            SpzUiThemeOps.ApplyRoundedControlSprite(face, markEligible: true);
+	            face.preserveAspect = false;
+	            face.raycastTarget = true;
+	        }
+	        foreach (var img in _preprocessorRes_hoverMe.GetComponentsInChildren<Image>(true)) {
+	            if (img == null || img == face) continue;
+	            if (img.GetComponentInParent<Toggle>(true) != null) continue;
+	            if (_preprocessorRes_slideOut != null
+	                && img.transform.IsChildOf(_preprocessorRes_slideOut.transform))
+	                continue;
+	            string n = img.gameObject.name ?? "";
+	            if (n.IndexOf("pressed", System.StringComparison.OrdinalIgnoreCase) >= 0)
+	                SpzUiThemeOps.HideAuthoredGraphicForTheme(img);
+	        }
+	        foreach (var tmp in _preprocessorRes_hoverMe.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (tmp == null) continue;
+	            if (tmp.GetComponentInParent<Toggle>(true) != null) continue;
+	            if (_preprocessorRes_slideOut != null
+	                && tmp.transform.IsChildOf(_preprocessorRes_slideOut.transform))
+	                continue;
+	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, 12f);
+	            tmp.raycastTarget = false;
+	        }
+	    }
+
+	    static void ThemeResRadio(Toggle toggle, SpzUiThemeOps.ThemeTokens t) {
+	        if (toggle == null) return;
+	        Color fill = toggle.isOn
+	            ? Color.Lerp(t.controlBg, t.accent, 0.14f)
+	            : t.controlBg;
+	        // Bevel "pressed" plates — flat fill like Point/Bilinear, not checkbox silo.
+	        SpzUiThemeOps.ThemeFlatToolToggle(toggle, fill, t.accent, t.textPrimary);
+	        foreach (var tmp in toggle.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (tmp != null)
+	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, 12f);
+	        }
 	    }
 	}
 }//end namespace
