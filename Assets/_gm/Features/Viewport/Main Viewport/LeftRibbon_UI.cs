@@ -91,6 +91,7 @@ namespace spz {
 	    // User toggled a setting to change the arrangement of the UI panels.
 	    // We need to adjust the slide-outs, so that they still make sense:
 	    void OnSettings_ToolRibbonSwapped(bool isSwapped){
+	        if (_depth_slideOut_panel == null) return;
 	        if(_depth_slideOut_panel.isFlipped() == isSwapped){ return; }
 	        _depth_slideOut_panel.Flip_if_possible();
 	    }
@@ -123,12 +124,15 @@ namespace spz {
 	            instance = null;
 	    }
 
-	    /// <summary>Themes known prefab-owned left-ribbon controls only (no hierarchy scan).</summary>
+	    /// <summary>Themes known prefab-owned left-ribbon controls + the Depth Options slide-out menu.</summary>
 	    void ApplyThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
-	            // Leaving Nomad: restore fills/labels snapped during theme apply.
+	            // Leaving BoundChrome: restore ribbon AND Depth menu (menu is not under this transform).
 	            RestoreLeftRibbonAuthoredChrome();
+	            RestoreDepthOptionsMenuChrome();
 	            SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(transform);
+	            if (_depth_slideOut_panel != null)
+	                SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(_depth_slideOut_panel.transform);
 	            SnapshotNomadChromeSelection();
 	            return;
 	        }
@@ -147,13 +151,7 @@ namespace spz {
 	        ThemeCircleSlider(_depthBlur_StepSize_slider, t);
 	        ThemeCircleSlider(_depthSharpBlur_slider, t);
 	        ThemeCircleSlider(_depthBlurFinal_StepSize_slider, t);
-	        if (_depth_slideOut_panel != null) {
-	            var panelImg = _depth_slideOut_panel.GetComponent<Image>();
-	            if (panelImg != null)
-	                SpzUiThemeOps.ApplyBoundChromeGraphic(panelImg, t.panelBg);
-	            foreach (var lg in _depth_slideOut_panel.GetComponentsInChildren<LayoutGroup>(true))
-	                SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
-	        }
+	        ThemeDepthOptionsMenu(t);
 	        SnapshotNomadChromeSelection();
 	    }
 
@@ -164,6 +162,58 @@ namespace spz {
 	            if (t != null && t.name == "MonolithActiveBar")
 	                t.gameObject.SetActive(false);
 	        }
+	    }
+
+	    /// <summary>
+	    /// Depth Options slide-out is wired by reference but lives under the viewport hierarchy —
+	    /// not under <see cref="LeftRibbon_UI"/> — so ribbon-only Restore leaves Nomad dials/labels stuck.
+	    /// </summary>
+	    void RestoreDepthOptionsMenuChrome() {
+	        if (_depth_slideOut_panel != null)
+	            SpzUiThemeOps.RestoreBoundChromeUnder(_depth_slideOut_panel.transform);
+	        // Explicit dial leave even if panel ref is missing / hierarchy remapped.
+	        LeaveCircleSlider(_depthContrast_slider);
+	        LeaveCircleSlider(_depthBrightness_slider);
+	        LeaveCircleSlider(_depthBlur_StepSize_slider);
+	        LeaveCircleSlider(_depthSharpBlur_slider);
+	        LeaveCircleSlider(_depthBlurFinal_StepSize_slider);
+	    }
+
+	    static void LeaveCircleSlider(CircleSlider_Snapping_UI slider) {
+	        if (slider == null) return;
+	        // ApplyThemeTokens self-silos when !ShouldRecolorBoundChrome.
+	        slider.ApplyThemeTokens(Color.white, Color.white);
+	    }
+
+	    /// <summary>
+	    /// Theme Depth Options panel shell + headers on every BoundChrome apply (theme→theme token refresh).
+	    /// Skips dial Images/TMP — those go through <see cref="ThemeCircleSlider"/>.
+	    /// </summary>
+	    void ThemeDepthOptionsMenu(SpzUiThemeOps.ThemeTokens t) {
+	        if (_depth_slideOut_panel == null) return;
+	        Transform root = _depth_slideOut_panel.transform;
+	        Color shell = SpzUiThemeOps.ResolvePanelShellColor();
+	        foreach (var img in root.GetComponentsInChildren<Image>(true)) {
+	            if (img == null) continue;
+	            if (img.GetComponentInParent<CircleSlider_Snapping_UI>(true) != null) continue;
+	            if (SpzUiThemeOps.IsUiMaskGraphic(img)) continue;
+	            if (img.type == Image.Type.Filled) continue;
+	            if (SpzUiThemeOps.IsToggleCheckmarkGraphic(img)) continue;
+	            string n = img.gameObject.name ?? "";
+	            if (n.IndexOf("background", System.StringComparison.OrdinalIgnoreCase) < 0)
+	                continue;
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(img, shell);
+	            SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
+	        }
+	        foreach (var tmp in root.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (tmp == null) continue;
+	            if (tmp.GetComponentInParent<CircleSlider_Snapping_UI>(true) != null) continue;
+	            // Blur-inside toggle label is handled by ThemeToggle strip metrics.
+	            if (tmp.GetComponentInParent<Toggle>(true) != null) continue;
+	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	        }
+	        foreach (var lg in root.GetComponentsInChildren<LayoutGroup>(true))
+	            SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
 	    }
 
 	    /// <summary>
@@ -334,13 +384,15 @@ namespace spz {
 
 
 	    void EarlyUpdate(){
+	        if (_toggleDepthMode_button == null || _depth_slideOut_panel == null) return;
 	        Vector2 cursorPos = KeyMousePenInput.cursorScreenPos();
 	        RectTransform depthRect = _toggleDepthMode_button.transform as RectTransform;
 
 	        //keep showing the slide out panel if we are viewing the depth:
 	        bool isShowingDepth = MainViewport_UI.instance.showing == MainViewport_UI.Showing.Depth;
 	        _depth_slideOut_panel._dontAutoHide = isShowingDepth;
-	        _depthSlideOut_antiClick_surf.SetActive(!isShowingDepth); //else overlaps controlnet/Art panel.
+	        if (_depthSlideOut_antiClick_surf != null)
+	            _depthSlideOut_antiClick_surf.SetActive(!isShowingDepth); //else overlaps controlnet/Art panel.
 
 	        bool contains =  RectTransformUtility.RectangleContainsScreenPoint(depthRect, cursorPos);
 	             contains |= isShowingDepth;
