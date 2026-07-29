@@ -67,7 +67,11 @@ public sealed class BrushRibbonDirectionFlatChromeThemeTests {
 			float eraseH = eraseRt.anchorMax.y - eraseRt.anchorMin.y;
 			Assert.That(paintH, Is.EqualTo(smudgeH).Within(0.0001f));
 			Assert.That(smudgeH, Is.EqualTo(eraseH).Within(0.0001f));
-			Assert.That(le.minHeight, Is.EqualTo(280f));
+			// Square stack: fallback colW 40 / cellFrac ((1-2*gap)/3) — not the old tall 280px column.
+			float gap = 0.08f;
+			float expectedH = 40f / ((1f - 2f * gap) / 3f);
+			Assert.That(le.minHeight, Is.EqualTo(expectedH).Within(0.01f));
+			Assert.That(le.preferredHeight, Is.EqualTo(expectedH).Within(0.01f));
 		}
 		finally {
 			Object.DestroyImmediate(root);
@@ -185,6 +189,15 @@ public sealed class BrushRibbonDirectionFlatChromeThemeTests {
 			AssertIcon(paint, StudioLineIcon.Brush);
 			AssertIcon(smudge, StudioLineIcon.Smudge);
 			AssertIcon(erase, StudioLineIcon.Eraser);
+
+			// Square litmus: centered Monolith icon (no stacked label/+ band).
+			var iconRt = SpzUiThemeOps.FindDirectChildIncludingInactive(paint.transform, "MonolithLineIcon")
+				as RectTransform;
+			Assert.That(iconRt, Is.Not.Null);
+			Assert.That(iconRt.anchoredPosition, Is.EqualTo(Vector2.zero));
+			var paintLabel = paint.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+			Assert.That(paintLabel, Is.Not.Null);
+			Assert.That(paintLabel.enabled, Is.False);
 		}
 		finally {
 			Object.DestroyImmediate(root);
