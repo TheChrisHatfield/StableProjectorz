@@ -272,11 +272,8 @@ namespace spz {
 	            SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(tmp, t.textPrimary, 13f);
 	        }
 	        ApplyActiveBar(toggle.transform, toggle.isOn, t.accent);
-	        foreach (var g in toggle.GetComponentsInChildren<Graphic>(true)) {
-	            if (g == null || ReferenceEquals(g, toggle.targetGraphic)) continue;
-	            SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(g);
-	            g.raycastTarget = false;
-	        }
+	        // Never mass-clear when targetGraphic is null (CommandRibbon / SAVE litmus).
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(toggle);
 	    }
 
 	    /// <summary>ColorTint must not gold-multiply the face when selected (reads as beveled chrome).</summary>
