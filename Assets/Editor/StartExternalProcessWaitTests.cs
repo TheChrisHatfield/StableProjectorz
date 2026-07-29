@@ -19,5 +19,7 @@ public sealed class StartExternalProcessWaitTests {
 			"OpenProcess failure must not report immediate exit (empty install logs).");
 		Assert.That(src, Does.Contain("IsProcessRunning(processId)"),
 			"When OpenProcess fails, poll IsProcessRunning instead of assuming exit.");
+		Assert.That(src, Does.Contain("remaining"),
+			"After OpenProcess poll, WaitForSingleObject must use remaining timeout, not a fresh full budget.");
 	}
 }
