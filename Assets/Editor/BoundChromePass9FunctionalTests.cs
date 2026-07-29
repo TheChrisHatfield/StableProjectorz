@@ -71,10 +71,12 @@ public sealed class BoundChromePass9FunctionalTests {
 		string src = System.IO.File.ReadAllText(path);
 		int idx = src.IndexOf("void ApplyThemeTokens()", System.StringComparison.Ordinal);
 		Assert.That(idx, Is.GreaterThan(0));
-		string body = src.Substring(idx, System.Math.Min(3200, src.Length - idx));
+		string body = src.Substring(idx, System.Math.Min(4500, src.Length - idx));
 		Assert.That(body, Does.Contain("ApplyBoundChromeSelectable(_dockButton"));
 		Assert.That(body, Does.Contain("ClearNonFaceRaycastsForTheme(_dockButton)"));
-		Assert.That(body, Does.Contain("ApplyBoundChromeNarrowDockLabelTmp"));
+		// Narrow dock label lives on ApplyDockFaceChrome / ApplyFullSrnLabelStyle (called from theme apply).
+		Assert.That(src, Does.Contain("ApplyBoundChromeNarrowDockLabelTmp"));
+		Assert.That(body, Does.Contain("ApplyDockFaceChrome"));
 	}
 
 	[Test]

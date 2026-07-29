@@ -98,7 +98,7 @@ public sealed class BoundChromePass6FunctionalTests {
 		string src = File.ReadAllText(path);
 		int idx = src.IndexOf("static void ApplyDockFaceChrome", System.StringComparison.Ordinal);
 		Assert.That(idx, Is.GreaterThan(0));
-		string body = src.Substring(idx, System.Math.Min(1200, src.Length - idx));
+		string body = src.Substring(idx, System.Math.Min(2800, src.Length - idx));
 		Assert.That(body, Does.Contain("RestoreAuthoredGraphic(label)"));
 		Assert.That(body, Does.Not.Contain("label.color = Color.black"));
 	}

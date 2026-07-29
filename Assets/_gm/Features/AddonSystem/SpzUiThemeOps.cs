@@ -913,6 +913,10 @@ namespace spz {
 			catch (Exception) {
 				// Headless / incomplete TMP — spacing/font still restored above.
 			}
+			// ForceMeshUpdate / outline clear can leave fontMaterial as "(Instance)".
+			// Re-bind the authored shared material so Restore SPZ matches builtin litmus (CFG / strip labels).
+			if (tag.hasFontSnapshot && tag.authoredFontSharedMaterial != null)
+				text.fontSharedMaterial = tag.authoredFontSharedMaterial;
 		}
 
 		/// <summary>Swap BoundChrome TMP to Roboto Regular when Nomad theme is active.</summary>
