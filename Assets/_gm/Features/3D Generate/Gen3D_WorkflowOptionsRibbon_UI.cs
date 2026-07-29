@@ -87,20 +87,12 @@ namespace spz {
 
 
 	    void FadeWholePanel(){
-	        float targAlpha = 0;
-	        DimensionMode currMode = DimensionMode_MGR.instance._dimensionMode;
-	        switch(currMode){
-	            case DimensionMode.dim_gen_3d:
-	                targAlpha = 1;
-	                break;
-	            default: 
-	                targAlpha = 0;
-	                break;
-	        }
-	        _wholePanel_canvGrp.alpha = Mathf.MoveTowards(_wholePanel_canvGrp.alpha, targAlpha, Time.deltaTime*7);
-	        _wholePanel_canvGrp.gameObject.SetActive(_wholePanel_canvGrp.alpha!=0);
+	        bool show = DimensionMode_MGR.instance != null
+	            && DimensionMode_MGR.instance._dimensionMode == DimensionMode.dim_gen_3d;
+	        UiCanvasGroupModeStrip.Tick(_wholePanel_canvGrp, show, 7f);
         
-	        if(_showAlphaOnly_toggle.isOn && _wholePanel_canvGrp.gameObject.activeSelf == false){
+	        if(_showAlphaOnly_toggle != null && _showAlphaOnly_toggle.isOn
+	           && (_wholePanel_canvGrp == null || !_wholePanel_canvGrp.gameObject.activeSelf)){
 	            _showAlphaOnly_toggle.isOn = false;
 	        }
 	    }

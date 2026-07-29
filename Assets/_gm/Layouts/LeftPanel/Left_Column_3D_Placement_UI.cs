@@ -21,31 +21,14 @@ namespace spz {
 
 	    void Update(){
 	        if (ViewportFullViewOnScreen_Driver.ShouldHideMirroredLeftColumnContent()) {
-	            FadePanel(_canvGrp, 0f);
+	            UiCanvasGroupModeStrip.Tick(_canvGrp, show: false, _fadeSpeed);
 	            return;
 	        }
-	        Global_Skeleton_UI.instance?.Place_onto_LeftColumn( _place_me );
 	        DimensionMode currMode = DimensionMode_MGR.instance._dimensionMode;
-	        switch (currMode){
-	            case DimensionMode.dim_uv:
-	                FadePanel(_canvGrp, 0);
-	                break;
-	            case DimensionMode.dim_gen_3d:
-	                FadePanel(_canvGrp, 1);
-	                break;
-	            case DimensionMode.dim_sd:
-	            default:
-	                FadePanel(_canvGrp, 0);
-	                break;
-	        }
+	        bool show = currMode == DimensionMode.dim_gen_3d;
+	        if (show)
+	            Global_Skeleton_UI.instance?.Place_onto_LeftColumn( _place_me );
+	        UiCanvasGroupModeStrip.Tick(_canvGrp, show, _fadeSpeed);
 	    }
-
-	    void FadePanel(CanvasGroup canvGrp, float destin){
-	        canvGrp.alpha = Mathf.MoveTowards(canvGrp.alpha, destin, Time.deltaTime*_fadeSpeed);
-	        if(destin!=1 && canvGrp.alpha<=0.0001f){ canvGrp.gameObject.SetActive(false); }
-	        else{
-	            canvGrp.gameObject.SetActive(true);
-	        }
-	    }//end()
 	}
 }//end namespace
