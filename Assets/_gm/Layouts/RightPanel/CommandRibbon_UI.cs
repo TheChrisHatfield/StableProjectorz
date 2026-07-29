@@ -688,10 +688,51 @@ namespace spz {
 	        if (cell == null) return null;
 	        var tabBg = cell.Find("TabBg")?.GetComponent<Image>();
 	        if (tabBg != null) return tabBg;
+	        // Find() skips inactive children — runtime tabs may hide TabBg briefly.
+	        Transform tabBgT = SpzUiThemeOps.FindDirectChildIncludingInactive(cell, "TabBg");
+	        if (tabBgT != null) {
+	            var inactiveBg = tabBgT.GetComponent<Image>();
+	            if (inactiveBg != null) return inactiveBg;
+	        }
 	        var btn = cell.GetComponent<Button>();
 	        if (btn != null && btn.targetGraphic is Image btnImg)
 	            return btnImg;
 	        return cell.GetComponent<Image>();
+	    }
+
+	    /// <summary>
+	    /// Prefab Art/BG/Mesh/Control tabs have null <see cref="Button.targetGraphic"/> and no TabBg —
+	    /// OG clicks landed on TMP labels. Nomad <see cref="SpzUiThemeOps.ApplyBoundChromeStripLabelTmp"/>
+	    /// clears those label raycasts → dead strip. Ensure a stretch hit face + wire the Button.
+	    /// </summary>
+	    static Image EnsureStripTabHitFace(Transform cell) {
+	        if (cell == null) return null;
+	        var btn = cell.GetComponent<Button>();
+	        Image face = FindStripTabFaceImage(cell);
+	        if (face == null) {
+	            var go = new GameObject("TabBg", typeof(RectTransform));
+	            go.transform.SetParent(cell, false);
+	            go.transform.SetAsFirstSibling();
+	            var rt = go.GetComponent<RectTransform>();
+	            rt.anchorMin = Vector2.zero;
+	            rt.anchorMax = Vector2.one;
+	            rt.pivot = new Vector2(0.5f, 0.5f);
+	            rt.anchoredPosition = Vector2.zero;
+	            rt.sizeDelta = Vector2.zero;
+	            rt.offsetMin = Vector2.zero;
+	            rt.offsetMax = Vector2.zero;
+	            face = go.AddComponent<Image>();
+	            // Invisible until BoundChrome paints fill — still receives hits (label-cleared litmus).
+	            face.color = new Color(1f, 1f, 1f, 0f);
+	            face.raycastTarget = true;
+	            face.sprite = UiRuntimeSprites.SolidRect;
+	            face.type = Image.Type.Simple;
+	            face.preserveAspect = false;
+	        }
+	        if (btn != null && (btn.targetGraphic == null || !ReferenceEquals(btn.targetGraphic, face)))
+	            btn.targetGraphic = face;
+	        face.raycastTarget = true;
+	        return face;
 	    }
 
 	    static void FlattenStripTabFace(Image img) {
@@ -711,12 +752,14 @@ namespace spz {
 	                if (label == null) continue;
 	                label.maxVisibleCharacters = int.MaxValue;
 	            }
+	            // Keep a wired hit face after Restore SPZ (labels may stay non-raycast until next frame restore).
+	            EnsureStripTabHitFace(cell);
 	            ApplyStudioTabChromeColors(cell, t, recolorChrome: false);
 	            return;
 	        }
 
 	        Color fill = FlatStripTabFill(selected, t);
-	        Image face = FindStripTabFaceImage(cell);
+	        Image face = EnsureStripTabHitFace(cell);
 	        if (face != null) {
 	            SpzUiThemeOps.ApplyBoundChromeGraphic(face, fill);
 	            FlattenStripTabFace(face);
@@ -753,8 +796,8 @@ namespace spz {
 	    /// <summary>
 	    /// Prefab divider left/right, go-active pill, and TMP labels ship with raycastTarget=1 and
 	    /// steal clicks from the tab Button under Nomad icon-only (tight cells). Only the Button face hits.
-	    /// Prefab Art/BG/Mesh/Control tabs often have <c>Button.targetGraphic == null</c> — fall back to TabBg
-	    /// (runtime Paint/add-on tabs already wire TabBg). Call only while BoundChrome is active.
+	    /// Prefab Art/BG/Mesh/Control tabs often have <c>Button.targetGraphic == null</c> and no TabBg —
+	    /// <see cref="EnsureStripTabHitFace"/> creates/wires the face before this runs.
 	    /// </summary>
 	    static void ClearStripTabNonFaceRaycasts(Transform cell) {
 	        if (cell == null) return;
