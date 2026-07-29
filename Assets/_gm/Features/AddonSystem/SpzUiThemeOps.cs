@@ -201,6 +201,8 @@ namespace spz {
 				if (fontTag != null && fontTag.designPt > 0.05f)
 					tmp.fontSize = fontTag.designPt;
 			}
+			// Spacing/padding scale must unwind with Restore SPZ (shape/align litmus — not tint alone).
+			RefreshScaledLayoutGroupsUnder(root);
 		}
 
 		/// <summary>
@@ -1500,12 +1502,14 @@ namespace spz {
 					tag.authoredSprite = face.sprite;
 					tag.authoredType = face.type;
 					tag.authoredPixelsPerUnitMultiplier = face.pixelsPerUnitMultiplier;
+					tag.authoredPreserveAspect = face.preserveAspect;
 					tag.hasAuthoredSnapshot = true;
 				}
 				else if (!tag.hasAuthoredSnapshot) {
 					tag.authoredSprite = face.sprite;
 					tag.authoredType = face.type;
 					tag.authoredPixelsPerUnitMultiplier = face.pixelsPerUnitMultiplier;
+					tag.authoredPreserveAspect = face.preserveAspect;
 					tag.hasAuthoredSnapshot = true;
 				}
 				face.sprite = UiRuntimeSprites.SolidRect;
@@ -1554,6 +1558,14 @@ namespace spz {
 				tag.authoredSprite = image.sprite;
 				tag.authoredType = image.type;
 				tag.authoredPixelsPerUnitMultiplier = image.pixelsPerUnitMultiplier;
+				tag.authoredPreserveAspect = image.preserveAspect;
+				tag.hasAuthoredSnapshot = true;
+			}
+			else if (!tag.hasAuthoredSnapshot) {
+				tag.authoredSprite = image.sprite;
+				tag.authoredType = image.type;
+				tag.authoredPixelsPerUnitMultiplier = image.pixelsPerUnitMultiplier;
+				tag.authoredPreserveAspect = image.preserveAspect;
 				tag.hasAuthoredSnapshot = true;
 			}
 			SnapshotAuthoredPixelsPerUnit(image);
@@ -1578,6 +1590,7 @@ namespace spz {
 				if (img != null && tag.hasAuthoredSnapshot) {
 					img.sprite = tag.authoredSprite;
 					img.type = tag.authoredType;
+					img.preserveAspect = tag.authoredPreserveAspect;
 					// Soft 9-slice Mask/chrome used high PPU (e.g. hardness 11); leaving 1 makes white capsule blobs.
 					if (AuthoredPixelsPerUnit.TryGetValue(img.GetInstanceID(), out float ppu))
 						img.pixelsPerUnitMultiplier = ppu;
@@ -2338,6 +2351,8 @@ namespace spz {
 		public Sprite authoredSprite;
 		public Image.Type authoredType = Image.Type.Simple;
 		public float authoredPixelsPerUnitMultiplier = 1f;
+		/// <summary>Nomad SolidRect path forces preserveAspect=false — Restore SPZ must unwind or icons look shifted.</summary>
+		public bool authoredPreserveAspect = true;
 		public bool hasAuthoredSnapshot;
 	}
 
