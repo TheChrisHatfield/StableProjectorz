@@ -22,4 +22,21 @@ public sealed class BoundChromePass13ControlNetHitFaceTests {
 		Assert.That(loopBody, Does.Not.Contain("btn.targetGraphic == null) continue"));
 		Assert.That(loopBody, Does.Contain("ApplyBoundChromeSelectable(btn"));
 	}
+
+	[Test]
+	public void SettingsAndInputPanel_SourcesDropNullTargetGraphicGates() {
+		string settings = File.ReadAllText(Path.GetFullPath(Path.Combine(
+			Application.dataPath, "_gm/Features/Settings/Settings_UI.cs")));
+		Assert.That(settings, Does.Contain("EnsureSelectableHitFace(btn)"));
+		Assert.That(settings, Does.Contain("ClearNonFaceRaycastsForTheme(btn)"));
+
+		string input = File.ReadAllText(Path.GetFullPath(Path.Combine(
+			Application.dataPath, "_gm/Features/StableDiffusion/Input Panel/SD_InputPanel_UI.cs")));
+		int apply = input.IndexOf("void ApplyThemeTokens()", System.StringComparison.Ordinal);
+		Assert.That(apply, Is.GreaterThan(0));
+		string body = input.Substring(apply, System.Math.Min(2800, input.Length - apply));
+		Assert.That(body, Does.Not.Contain("btn.targetGraphic == null) continue"));
+		Assert.That(body, Does.Not.Contain("toggle.targetGraphic == null) continue"));
+		Assert.That(body, Does.Not.Contain("dd.targetGraphic == null) continue"));
+	}
 }
