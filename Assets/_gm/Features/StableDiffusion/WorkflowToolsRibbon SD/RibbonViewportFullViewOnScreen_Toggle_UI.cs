@@ -850,7 +850,13 @@ namespace spz {
 			}
 			RectTransform rowRt = faceRt.parent as RectTransform;
 			RectTransform vlgRoot = rowRt != null ? rowRt.parent as RectTransform : null;
-			_fullViewMenuRt = vlgRoot != null ? vlgRoot.Find(MenuRowName) as RectTransform : null;
+			// ForceHide leaves the menu inactive — Transform.Find misses it and spawned duplicate menus.
+			if (_fullViewMenuRt == null || _fullViewMenuRt.gameObject == null) {
+				var found = vlgRoot != null
+					? SpzUiThemeOps.FindDirectChildIncludingInactive(vlgRoot, MenuRowName)
+					: null;
+				_fullViewMenuRt = found as RectTransform;
+			}
 			if (_fullViewMenuRt == null) {
 				if (vlgRoot == null) {
 					return;
@@ -881,7 +887,7 @@ namespace spz {
 			if (rowRt != null && _fullViewMenuRt.parent == rowRt.parent) {
 				_fullViewMenuRt.SetSiblingIndex(rowRt.GetSiblingIndex() + 1);
 			}
-			var openRt = _fullViewMenuRt.Find("OpenRightDock") as RectTransform;
+			var openRt = SpzUiThemeOps.FindDirectChildIncludingInactive(_fullViewMenuRt, "OpenRightDock") as RectTransform;
 			if (openRt != null)
 				EnsureAdaptiveFaceBorder(openRt);
 			_fullViewMenuCg = _fullViewMenuRt.GetComponent<CanvasGroup>();
@@ -1058,7 +1064,7 @@ namespace spz {
 			StudioLineIcon openGlyph = ResolveOpenRightDockIcon(rightOpen);
 
 			if (_fullViewMenuRt != null) {
-				var openRt = _fullViewMenuRt.Find("OpenRightDock") as RectTransform;
+				var openRt = SpzUiThemeOps.FindDirectChildIncludingInactive(_fullViewMenuRt, "OpenRightDock") as RectTransform;
 				if (openRt != null) {
 					var openBtn = openRt.GetComponent<Button>();
 					var openImg = openRt.GetComponent<Image>();
@@ -1487,7 +1493,7 @@ namespace spz {
 
 		void RefreshOpenRightSecondaryLabel() {
 			if (_openRightDockLabel == null && _fullViewMenuRt != null) {
-				var t = _fullViewMenuRt.Find("OpenRightDock");
+				var t = SpzUiThemeOps.FindDirectChildIncludingInactive(_fullViewMenuRt, "OpenRightDock");
 				if (t != null) {
 					_openRightDockLabel = t.GetComponentInChildren<TextMeshProUGUI>(true);
 					if (_openRightLineIcon == null)
