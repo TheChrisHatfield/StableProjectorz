@@ -324,8 +324,9 @@ namespace spz {
 	            SpzUiThemeOps.ApplyRoundedControlSprite(_mainHeaderImage, markEligible: true);
 	            _mainHeaderImage.preserveAspect = false;
 	        }
-	        if (_mainHeader != null)
-	            SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(_mainHeader, t.textPrimary, 13f);
+	        // Title must stay readable on collapsed bars (ControlNet 1/2). StripLabel uppercase +
+	        // tracking 18 gets RectMask2D-culled in the CTRL scroll → empty header bars under Nomad.
+	        ThemeControlNetUnitTitle(t);
 
 	        // Prefab may ship null targetGraphic — EnsureSelectableHitFace lives in ApplyBoundChromeSelectable.
 	        // Header TMP raycast is cleared by StripLabel; without a wired face the unit cannot expand (gen path).
@@ -406,6 +407,36 @@ namespace spz {
 	            if (lg != null)
 	                SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
 	        }
+	    }
+
+	    /// <summary>
+	    /// Collapsed unit bars must show "ControlNet N". StripLabel metrics are for vertical workflow
+	    /// stacks — not wide CTRL headers inside a RectMask2D scroll.
+	    /// </summary>
+	    void ThemeControlNetUnitTitle(SpzUiThemeOps.ThemeTokens t) {
+	        if (_mainHeader == null) return;
+	        // Unhide if a prior theme path disabled the Graphic.
+	        var hidden = _mainHeader.GetComponent<SpzUiThemeHiddenGraphic>();
+	        if (hidden != null) {
+	            _mainHeader.enabled = true;
+	            if (Application.isPlaying)
+	                Destroy(hidden);
+	            else
+	                DestroyImmediate(hidden);
+	        }
+	        _mainHeader.enabled = true;
+	        if (string.IsNullOrWhiteSpace(_mainHeader.text))
+	            _mainHeader.text = "ControlNet " + transform.GetSiblingIndex();
+	        SpzUiThemeOps.ApplyBoundChromeTmp(_mainHeader, t.textPrimary, 13f);
+	        // Mild tracking — keep title inside the masked header strip (Grid/CTRL litmus).
+	        _mainHeader.characterSpacing = 2f;
+	        _mainHeader.overflowMode = TextOverflowModes.Overflow;
+	        _mainHeader.raycastTarget = false;
+	        try {
+	            _mainHeader.UpdateMeshPadding();
+	            _mainHeader.ForceMeshUpdate(ignoreActiveState: true);
+	        }
+	        catch (System.Exception) { /* headless TMP */ }
 	    }
 
 	    void ThemeHeaderModeToggles(SpzUiThemeOps.ThemeTokens t) {

@@ -190,13 +190,17 @@ namespace spz {
 	        if (_fillImage != null)
 	            SpzUiThemeOps.ApplyBoundChromeGraphic(_fillImage, fill); // Filled type: color only (no flatten)
 	        if (_text != null) {
-	            Color ink = RelativeLuminance(fill) > 0.36f
+	            // Fill is a radial RING on a dark solid cell — luma of the accent ring must not pick
+	            // dark ink or dial values (0.0 / 1.0) vanish on controlBg (CTRL tab litmus).
+	            Color cell = tokens.controlBg;
+	            Color ink = RelativeLuminance(cell) > 0.36f
 	                ? new Color(0.10f, 0.09f, 0.10f, 1f)
 	                : textPrimary;
 	            // Snapshot via ApplyBoundChromeTmp first — dial is not a Selectable parent, so
 	            // ClearLabelRaycastIfUnderSelectable would leave the value TMP stealing drag hits.
 	            SpzUiThemeOps.ApplyBoundChromeTmp(_text, ink, 16f);
 	            _text.raycastTarget = false;
+	            _text.enabled = true;
 	        }
 	    }
 
