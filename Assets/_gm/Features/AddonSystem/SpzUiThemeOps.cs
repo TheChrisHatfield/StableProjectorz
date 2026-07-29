@@ -210,7 +210,10 @@ namespace spz {
 		/// Use for menus / ON-OFF rows. Tool cells that use bevel plates as selection should hide separately.
 		/// </summary>
 		public static void ThemeCheckboxToggle(Toggle toggle, Color face, Color accent, Color checkSuccess) {
-			if (toggle == null || toggle.targetGraphic == null)
+			if (toggle == null)
+				return;
+			EnsureSelectableHitFace(toggle);
+			if (toggle.targetGraphic == null)
 				return;
 			// Apply-only under BoundChrome; leave paths use RestoreBoundChromeUnder (do not unhide here).
 			if (!ShouldRecolorBoundChrome)
@@ -235,7 +238,10 @@ namespace spz {
 		/// Selection = face color only (Brush/Multiview parity). Do not use for real ✓ checkboxes.
 		/// </summary>
 		public static void ThemeFlatToolToggle(Toggle toggle, Color face, Color accent, Color labelColor) {
-			if (toggle == null || toggle.targetGraphic == null)
+			if (toggle == null)
+				return;
+			EnsureSelectableHitFace(toggle);
+			if (toggle.targetGraphic == null)
 				return;
 			if (!ShouldRecolorBoundChrome)
 				return;
@@ -281,17 +287,20 @@ namespace spz {
 		/// <summary>
 		/// After BoundChrome hide-Checkmark / flat fill: only <see cref="Selectable.targetGraphic"/> receives hits.
 		/// Snapshots authored raycasts so <see cref="RestoreBoundChromeUnder"/> can unwind (Pass9 litmus).
+		/// No-op when face is missing — never mass-clear (that kills prefab tabs/tools that clicked via TMP).
 		/// </summary>
 		public static void ClearNonFaceRaycastsForTheme(Selectable selectable) {
 			if (selectable == null || !ShouldRecolorBoundChrome) return;
 			Graphic face = selectable.targetGraphic;
-			if (face != null) {
-				SnapshotAuthoredGraphic(face);
-				face.raycastTarget = true;
-			}
+			// Prefab CommandRibbon / SAVE+/- / tools with null targetGraphic relied on child TMP hits.
+			// Mass-clearing here leaves zero hittable graphics after Nomad label raycast clears.
+			if (face == null)
+				return;
+			SnapshotAuthoredGraphic(face);
+			face.raycastTarget = true;
 			foreach (var g in selectable.GetComponentsInChildren<Graphic>(true)) {
 				if (g == null) continue;
-				if (face != null && ReferenceEquals(g, face)) continue;
+				if (ReferenceEquals(g, face)) continue;
 				// Nested Button/Toggle/Dropdown faces must stay hittable when parent is themed.
 				var owner = g.GetComponentInParent<Selectable>(true);
 				if (owner != null && !ReferenceEquals(owner, selectable))
@@ -302,11 +311,62 @@ namespace spz {
 		}
 
 		/// <summary>
+		/// Prefab Selectables often ship with null <see cref="Selectable.targetGraphic"/>.
+		/// Wire an existing Image or create an invisible stretch <c>BoundChromeHitFace</c> so
+		/// BoundChrome label clears cannot leave the control unclickable (CommandRibbon litmus).
+		/// </summary>
+		public static Image EnsureSelectableHitFace(Selectable selectable) {
+			if (selectable == null) return null;
+			if (selectable.targetGraphic is Image wired) {
+				wired.raycastTarget = true;
+				return wired;
+			}
+			var onSelf = selectable.GetComponent<Image>();
+			if (onSelf != null) {
+				selectable.targetGraphic = onSelf;
+				onSelf.raycastTarget = true;
+				return onSelf;
+			}
+			Transform existing = FindDirectChildIncludingInactive(selectable.transform, "TabBg")
+				?? FindDirectChildIncludingInactive(selectable.transform, "BoundChromeHitFace");
+			if (existing != null) {
+				var face = existing.GetComponent<Image>();
+				if (face != null) {
+					selectable.targetGraphic = face;
+					face.raycastTarget = true;
+					return face;
+				}
+			}
+			var go = new GameObject("BoundChromeHitFace", typeof(RectTransform));
+			go.transform.SetParent(selectable.transform, false);
+			go.transform.SetAsFirstSibling();
+			var rt = go.GetComponent<RectTransform>();
+			rt.anchorMin = Vector2.zero;
+			rt.anchorMax = Vector2.one;
+			rt.pivot = new Vector2(0.5f, 0.5f);
+			rt.anchoredPosition = Vector2.zero;
+			rt.sizeDelta = Vector2.zero;
+			rt.offsetMin = Vector2.zero;
+			rt.offsetMax = Vector2.zero;
+			var created = go.AddComponent<Image>();
+			created.color = new Color(1f, 1f, 1f, 0f);
+			created.raycastTarget = true;
+			created.sprite = UiRuntimeSprites.SolidRect;
+			created.type = Image.Type.Simple;
+			created.preserveAspect = false;
+			selectable.targetGraphic = created;
+			return created;
+		}
+
+		/// <summary>
 		/// Prompt-header preset / web-find cells: hard Nomad square (not SPZ sliced round chip),
 		/// equal W×H layout, emboss plates hidden. Selection = fill color only.
 		/// </summary>
 		public static void ThemePromptPresetSquareCell(Selectable selectable, Color fill, Color accent) {
-			if (selectable == null || selectable.targetGraphic == null)
+			if (selectable == null)
+				return;
+			EnsureSelectableHitFace(selectable);
+			if (selectable.targetGraphic == null)
 				return;
 			if (!ShouldRecolorBoundChrome)
 				return;
@@ -524,7 +584,10 @@ namespace spz {
 		/// (ControlNet header/body, Paint tab, Settings, Art list, connection reset, etc.).
 		/// </summary>
 		public static void ApplyBoundChromeSelectable(Selectable selectable, Color normal, Color accent) {
-			if (selectable == null || selectable.targetGraphic == null)
+			if (selectable == null)
+				return;
+			EnsureSelectableHitFace(selectable);
+			if (selectable.targetGraphic == null)
 				return;
 			if (!ShouldRecolorBoundChrome) {
 				RestoreAuthoredGraphic(selectable.targetGraphic);
