@@ -127,7 +127,7 @@ namespace spz {
 	        if (_brushSmudge_Toggle != null)
 	            _brushSmudge_Toggle.transform.SetSiblingIndex(_brushAdd_Toggle.transform.GetSiblingIndex() + 1);
 
-	        // Default gaps; Nomad ThemeDirectionTools widens them for flat squares.
+	        // Default gaps; Nomad ThemeDirectionTools packs flat squares tightly.
 	        ApplyPaintSmudgeEraseGaps(this, nomadGaps: false);
 
 	        TrySetSmudgeIcon(smudgeGO);
@@ -195,8 +195,8 @@ namespace spz {
 	    public Toggle SmudgeToggle => _brushSmudge_Toggle;
 
 	    /// <summary>
-	    /// Stack Paint / Smudge / Erase with a clear gap between cells.
-	    /// Nomad flat squares need a larger gap or they read as one fused column.
+	    /// Stack Paint / Smudge / Erase as equal bands.
+	    /// Nomad flat squares pack tight (hairline break) — wide gaps left a sparse black column.
 	    /// Equal cell heights; gap is shared between neighbors (not subtracted from one side only).
 	    /// </summary>
 	    public static void ApplyPaintSmudgeEraseGaps(BrushRibbon_UI_Direction dir, bool nomadGaps) {
@@ -219,7 +219,8 @@ namespace spz {
 	                SpzUiThemeOps.SnapshotToolFaceLayout(smudgeRect);
 	        }
 
-	        float gap = nomadGaps ? 0.08f : (smudgeRect != null ? 0.028f : 0.02f);
+	        // Nomad: hairline between squares (was 0.08 — left large black gutters). Builtin keeps authored spacing.
+	        float gap = nomadGaps ? 0.015f : (smudgeRect != null ? 0.028f : 0.02f);
 	        float left = addRect.anchorMin.x;
 	        float right = addRect.anchorMax.x;
 

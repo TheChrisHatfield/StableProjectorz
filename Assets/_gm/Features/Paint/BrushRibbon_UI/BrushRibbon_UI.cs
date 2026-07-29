@@ -229,7 +229,7 @@ namespace spz {
 
 	    static void ThemeDirectionTools(BrushRibbon_UI_Direction dir, SpzUiThemeOps.ThemeTokens t) {
 	        if (dir == null) return;
-	        // Visible break between flat Paint / Smudge / Eraser squares (Nomad fills read as one block otherwise).
+	        // Pack flat Paint / Smudge / Eraser squares tight (Nomad hairline, not sparse gutters).
 	        BrushRibbon_UI_Direction.ApplyPaintSmudgeEraseGaps(dir, nomadGaps: true);
 	        ThemeToolToggle(dir.PaintToggle, StudioLineIcon.Brush, t);
 	        ThemeToolToggle(dir.SmudgeToggle, StudioLineIcon.Smudge, t);
