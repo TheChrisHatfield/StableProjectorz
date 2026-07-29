@@ -63,6 +63,8 @@ public sealed class SpzGoBlenderInstallTests {
 			"Must launch blender via Win32 CreateProcess (StartExternalProcess).");
 		Assert.That(body, Does.Contain(".bat"),
 			"Temp .bat + log redirect captures install markers without stdout pipes.");
+		Assert.That(body, Does.Contain("KillProcessTree"),
+			"Timeout must kill cmd+blender tree (KillProcess alone orphans blender).");
 		Assert.That(body, Does.Contain("UTF8Encoding(encoderShouldEmitUTF8Identifier: false)")
 			.Or.Contain("new UTF8Encoding(false)"),
 			"Temp .bat must be written without UTF-8 BOM (BOM breaks cmd.exe).");

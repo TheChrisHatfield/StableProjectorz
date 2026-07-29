@@ -207,6 +207,23 @@ namespace Lavender.Systems
 	        return result;
 	    }
 
+	    /// <summary>
+	    /// Kill <paramref name="processId"/> and its descendants (e.g. cmd.exe → blender.exe).
+	    /// Plain <see cref="KillProcess"/> leaves child Blender sessions running after install timeout.
+	    /// </summary>
+	    public static bool KillProcessTree(uint processId){
+	        if (processId == 0) return false;
+	        string workDir = Path.GetTempPath();
+	        string cmd = "taskkill /PID " + processId + " /T /F";
+	        uint killer = Run_Bat_or_Shortcut_or_Command(cmd, isJustFile: false, workDir, keepWindow: false, hidden: true, attachToConsole: false);
+	        if (killer != 0)
+	            WaitForProcessExit(killer, 5000);
+	        // Fallback if taskkill unavailable
+	        if (IsProcessRunning(processId))
+	            return KillProcess(processId);
+	        return true;
+	    }
+
 	    /// <summary>Current process ID (Unity/game exe). Use to avoid killing self when freeing ports.</summary>
 	    public static uint GetCurrentPid() => GetCurrentProcessId();
 
