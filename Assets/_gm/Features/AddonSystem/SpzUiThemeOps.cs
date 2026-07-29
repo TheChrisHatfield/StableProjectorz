@@ -676,6 +676,92 @@ namespace spz {
 		}
 
 		/// <summary>
+		/// SD input "PROMPT" / "PROMPT +" row headers — uppercase without strip tracking.
+		/// Strip spacing (18) widens PROMPT into the fixed right-anchored "-" glyph on the negative row.
+		/// </summary>
+		public static void ApplyBoundChromePromptHeaderTmp(TMP_Text text, Color token, float fallbackBasePt = 13f) {
+			if (text == null) return;
+			if (!ShouldRecolorBoundChrome) {
+				RestoreAuthoredGraphic(text);
+				RestoreDesignFontSize(text, fallbackBasePt);
+				return;
+			}
+			SnapshotAuthoredGraphic(text);
+			SnapshotNomadTypography(text);
+			ApplyTmpScaledCaptured(text, token, fallbackBasePt);
+			ApplyNomadUiFont(text);
+			if (text.font != null) {
+				text.fontStyle = FontStyles.UpperCase;
+				// Mild tracking only — negative header keeps a separate "-" TMP at a fixed anchor.
+				text.characterSpacing = 2f;
+				TrySetNomadOutline(text, 0.14f, new Color(0.05f, 0.05f, 0.07f, 0.65f));
+			}
+			ClearLabelRaycastIfUnderSelectable(text);
+		}
+
+		/// <summary>
+		/// Polarity glyph ("-" / "+") beside prompt headers — color only; keep authored size/align.
+		/// Nomad label tracking on a single hyphen reads as a bar stuck on the PROMPT "T".
+		/// </summary>
+		public static void ApplyBoundChromePromptPolaritySignTmp(TMP_Text text, Color token) {
+			if (text == null) return;
+			if (!ShouldRecolorBoundChrome) {
+				RestoreAuthoredGraphic(text);
+				RestoreNomadTypography(text);
+				return;
+			}
+			SnapshotAuthoredGraphic(text);
+			SnapshotNomadTypography(text);
+			// Color only — do not swap font, spacing, or outline (hyphen metrics are fragile).
+			text.color = token;
+			text.characterSpacing = 0f;
+			text.outlineWidth = 0f;
+			ClearLabelRaycastIfUnderSelectable(text);
+		}
+
+		/// <summary>
+		/// Forces <see cref="SpzUiThemeDesignFontPt"/> so BoundChrome does not capture Unity TMP's
+		/// default ~36pt as the design base (FULL/SRN overflow on the Gen Art column).
+		/// </summary>
+		public static void EnsureDesignFontPt(TMP_Text text, float designPt) {
+			if (text == null || designPt < 0.05f) return;
+			text.fontSize = designPt;
+			var tag = text.GetComponent<SpzUiThemeDesignFontPt>();
+			if (tag == null)
+				tag = text.gameObject.AddComponent<SpzUiThemeDesignFontPt>();
+			tag.designPt = designPt;
+		}
+
+		/// <summary>
+		/// Ultra-narrow Gen Art column docks (FULL/SRN): strip uppercase with eased tracking.
+		/// Full strip tracking (18) overflows four-letter caps; also seeds designPt before capture.
+		/// </summary>
+		public static void ApplyBoundChromeNarrowDockLabelTmp(TMP_Text text, Color token, float designBasePt = 11f) {
+			if (text == null) return;
+			if (designBasePt < 0.05f)
+				designBasePt = 11f;
+			EnsureDesignFontPt(text, designBasePt);
+			if (!ShouldRecolorBoundChrome) {
+				RestoreAuthoredGraphic(text);
+				RestoreDesignFontSize(text, designBasePt);
+				return;
+			}
+			ApplyBoundChromeStripLabelTmp(text, token, designBasePt);
+			// Same class of fix as ApplyWorkflowStackedLabelMetrics — strip 18 is too wide here.
+			text.characterSpacing = 4f;
+			if (text.lineSpacing < -4f)
+				text.lineSpacing = -4f;
+			text.overflowMode = TextOverflowModes.Overflow;
+			try {
+				text.UpdateMeshPadding();
+				text.ForceMeshUpdate(ignoreActiveState: true);
+			}
+			catch (Exception) {
+				// Headless / incomplete TMP — spacing still applied above.
+			}
+		}
+
+		/// <summary>
 		/// Tool/mode labels must not steal EventSystem hits from their parent Button/Toggle.
 		/// Skips TMP_InputField text (needs raycasts for caret/selection).
 		/// </summary>

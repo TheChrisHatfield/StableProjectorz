@@ -267,9 +267,11 @@ namespace spz {
 	        foreach (var tmp in root.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp == null) continue;
 	            if (tmp.gameObject.name == "Placeholder") continue;
-	            // Prompt +/- headers: Nomad strip metrics; body fields stay regular BoundChrome.
-	            if (IsPromptHeaderLabel(tmp))
-	                SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(tmp, t.textPrimary, 13f);
+	            // Prompt +/- headers: mild uppercase — not strip tracking (collides with fixed "-" glyph).
+	            if (IsPromptPolaritySignLabel(tmp))
+	                SpzUiThemeOps.ApplyBoundChromePromptPolaritySignTmp(tmp, t.textPrimary);
+	            else if (IsPromptHeaderLabel(tmp))
+	                SpzUiThemeOps.ApplyBoundChromePromptHeaderTmp(tmp, t.textPrimary, 13f);
 	            else
 	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
 	        }
@@ -343,6 +345,7 @@ namespace spz {
 
 	    static bool IsPromptHeaderLabel(TextMeshProUGUI tmp) {
 	        if (tmp == null) return false;
+	        if (IsPromptPolaritySignLabel(tmp)) return false;
 	        string t = tmp.text ?? "";
 	        if (t.IndexOf("prompt", System.StringComparison.OrdinalIgnoreCase) < 0)
 	            return false;
@@ -350,6 +353,13 @@ namespace spz {
 	        return n.IndexOf("header", System.StringComparison.OrdinalIgnoreCase) >= 0
 	            || string.Equals(n, "header", System.StringComparison.OrdinalIgnoreCase)
 	            || t.TrimStart().StartsWith("prompt", System.StringComparison.OrdinalIgnoreCase);
+	    }
+
+	    /// <summary>Negative/positive polarity glyph TMP beside the prompt header (prefab text "-" / "+").</summary>
+	    static bool IsPromptPolaritySignLabel(TextMeshProUGUI tmp) {
+	        if (tmp == null) return false;
+	        string t = (tmp.text ?? "").Trim();
+	        return t == "-" || t == "+" || t == "\u2212" || t == "\u2013" || t == "\u2014";
 	    }
 
 	    void ThemeResolutionPreset(Button btn, int presetPx, SpzUiThemeOps.ThemeTokens t) {
