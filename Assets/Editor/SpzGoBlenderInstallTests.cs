@@ -33,6 +33,12 @@ public sealed class SpzGoBlenderInstallTests {
 			"CoSpzGoNativeInstallBlenderBridge",
 			BindingFlags.Instance | BindingFlags.NonPublic);
 		Assert.That(co, Is.Not.Null, "Install must run off the UI thread via CoSpzGoNativeInstallBlenderBridge.");
+		string path = Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "AddonUI_MGR.cs");
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("_spzGoBlenderInstallBusy"),
+			"Install into Blender must reject re-entrant clicks while a run is in progress.");
 	}
 
 	[Test]

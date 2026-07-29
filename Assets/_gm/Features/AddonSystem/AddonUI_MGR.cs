@@ -901,42 +901,55 @@ namespace spz {
 		}
 
 		void SpzGoNativeInstallBlenderBridge(string panelId) {
+			if (_spzGoBlenderInstallBusy) {
+				SpzGoStatusLine("Blender install already running…", true);
+				return;
+			}
 			StartCoroutine(CoSpzGoNativeInstallBlenderBridge(panelId));
 		}
 
+		bool _spzGoBlenderInstallBusy;
+
 		IEnumerator CoSpzGoNativeInstallBlenderBridge(string panelId) {
-			string blender = SpzGoReadBlenderExeFromPanel(panelId);
-			if (string.IsNullOrEmpty(blender))
-				blender = FastPath_API.FindBlenderExecutable();
-			var fp = FastPath_API.instance;
-			if (fp == null) {
-				SpzGoStatusLine("3D / API not ready", false);
+			if (_spzGoBlenderInstallBusy)
 				yield break;
-			}
-			SpzGoStatusLine("Installing Blender add-on…", true);
-			string message = null;
-			bool ok = false;
-			string blenderCopy = blender;
-			var worker = new System.Threading.Thread(() => {
-				try {
-					ok = fp.TryInstallSpzGoBlenderBridge(blenderCopy, force: true, out message);
-				} catch (Exception ex) {
-					ok = false;
-					message = ex.Message;
+			_spzGoBlenderInstallBusy = true;
+			try {
+				string blender = SpzGoReadBlenderExeFromPanel(panelId);
+				if (string.IsNullOrEmpty(blender))
+					blender = FastPath_API.FindBlenderExecutable();
+				var fp = FastPath_API.instance;
+				if (fp == null) {
+					SpzGoStatusLine("3D / API not ready", false);
+					yield break;
 				}
-			});
-			worker.IsBackground = true;
-			worker.Name = "SpzGoBlenderInstall";
-			worker.Start();
-			while (worker.IsAlive)
-				yield return null;
-			UnityEngine.Debug.Log($"[AddonUI_MGR] SPZ GO Blender install: ok={ok} {message}");
-			if (ok && message != null && message.StartsWith("SPZ_GO_INSTALL_SKIP", StringComparison.Ordinal))
-				SpzGoStatusLine("Blender add-on up to date", true);
-			else if (ok)
-				SpzGoStatusLine("Blender add-on installed", true);
-			else
-				SpzGoStatusLine(string.IsNullOrEmpty(message) ? "Blender install failed" : TruncateStatus(message), false);
+				SpzGoStatusLine("Installing Blender add-on…", true);
+				string message = null;
+				bool ok = false;
+				string blenderCopy = blender;
+				var worker = new System.Threading.Thread(() => {
+					try {
+						ok = fp.TryInstallSpzGoBlenderBridge(blenderCopy, force: true, out message);
+					} catch (Exception ex) {
+						ok = false;
+						message = ex.Message;
+					}
+				});
+				worker.IsBackground = true;
+				worker.Name = "SpzGoBlenderInstall";
+				worker.Start();
+				while (worker.IsAlive)
+					yield return null;
+				UnityEngine.Debug.Log($"[AddonUI_MGR] SPZ GO Blender install: ok={ok} {message}");
+				if (ok && message != null && message.StartsWith("SPZ_GO_INSTALL_SKIP", StringComparison.Ordinal))
+					SpzGoStatusLine("Blender add-on up to date", true);
+				else if (ok)
+					SpzGoStatusLine("Blender add-on installed", true);
+				else
+					SpzGoStatusLine(string.IsNullOrEmpty(message) ? "Blender install failed" : TruncateStatus(message), false);
+			} finally {
+				_spzGoBlenderInstallBusy = false;
+			}
 		}
 
 		static string TruncateStatus(string message) {
