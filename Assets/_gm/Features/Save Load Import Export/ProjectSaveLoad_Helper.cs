@@ -15,6 +15,8 @@ namespace spz {
 	    public static Action _onMade_FinalCompositeImg { get; set; } = null;
 
 	    Coroutine _finalComposite_crtn;
+	    /// <summary>True while <see cref="Save_FinalCompositeTexture_crtn"/> is actually running (not a stale handle after StopAllCoroutines).</summary>
+	    bool _finalCompositeActive;
 
 	    // What user used, to save the project. 
 	    // We can re-use it for the next saving, so user doesn't have to type it again.
@@ -41,16 +43,25 @@ namespace spz {
 
 
 	    public void Save_FinalCompositeTexture(Action saveFinalTex){
-	        if(_finalComposite_crtn != null){
-		        // Stopping mid-flight orphans Export3D_with_textures_ToPath's texture encode while
+	        if(_finalComposite_crtn != null || _finalCompositeActive){
+		        // Stopping a live in-flight composite orphans Export3D_with_textures_ToPath's texture encode while
 		        // CoRespondWhenProjectSaveIdle still waits on shared _isSaving.
 		        var sm = Save_MGR.instance;
-		        if (sm != null && sm._isSaving) {
+		        if (sm != null && sm._isSaving && _finalCompositeActive) {
 			        UnityEngine.Debug.LogWarning(
 				        "[ProjectSaveLoad_Helper] Refusing to restart final-composite while a save/export is in progress.");
 			        return;
 		        }
-		        StopCoroutine(_finalComposite_crtn);
+		        // Stale handle (e.g. StopAllCoroutines left a non-null ref): clear and start so this export is not orphaned.
+		        if (_finalComposite_crtn != null) {
+			        try { StopCoroutine(_finalComposite_crtn); } catch { /* already stopped */ }
+			        _finalComposite_crtn = null;
+		        }
+		        _finalCompositeActive = false;
+		        if (sm != null && sm._isSaving) {
+			        UnityEngine.Debug.LogWarning(
+				        "[ProjectSaveLoad_Helper] Cleared stale final-composite handle so in-progress export can continue.");
+		        }
 	        }
 	        _finalComposite_crtn = StartCoroutine( Save_FinalCompositeTexture_crtn(saveFinalTex) );
 	    }
@@ -153,16 +164,21 @@ namespace spz {
 
 
 	    IEnumerator Save_FinalCompositeTexture_crtn( Action saveFinalTex ){
-	        _onWillMake_FinalCompositeImg?.Invoke();
+	        _finalCompositeActive = true;
+	        try {
+		        _onWillMake_FinalCompositeImg?.Invoke();
 
-	            yield return null;//allows any temporary resolution adjustments to occur and be noticed by cameras.
-	            yield return null;
+		            yield return null;//allows any temporary resolution adjustments to occur and be noticed by cameras.
+		            yield return null;
 
-	            saveFinalTex();
+		            saveFinalTex();
         
-	            while (Save_MGR.instance._isSaving){ yield return null; }
+		            while (Save_MGR.instance != null && Save_MGR.instance._isSaving){ yield return null; }
 
-	            _finalComposite_crtn = null;
+	        } finally {
+		        _finalComposite_crtn = null;
+		        _finalCompositeActive = false;
+	        }
 
 	        _onMade_FinalCompositeImg?.Invoke();
 	    }
