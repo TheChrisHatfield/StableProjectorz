@@ -514,11 +514,13 @@ namespace spz {
 	                SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
 	                var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	                if (label != null)
-	                    SpzUiThemeOps.ApplyBoundChromeTmp(label, t.textPrimary);
+	                    SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, t.textPrimary, 11f);
 	            }
 	            foreach (var tmp in _header.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
 	                if (tmp == null) continue;
+	                if (tmp.GetComponentInParent<Button>(true) != null) continue;
 	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	                tmp.characterSpacing = 0f;
 	            }
 	            foreach (var lg in _header.GetComponentsInChildren<LayoutGroup>(true))
 	                SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
