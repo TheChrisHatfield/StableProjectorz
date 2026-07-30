@@ -111,7 +111,8 @@ namespace spz {
 	        }
 	        var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	        if (label != null)
-	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, t.textPrimary, 11f);
+	            // Compact Truncate+UpperCase ate long Export/Save labels ("Don't Close", "Export views…").
+	            SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(label, t.textPrimary, 11f);
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }
 	}
