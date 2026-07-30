@@ -470,14 +470,21 @@ namespace spz {
 				result["success"] = false;
 				result["error"] = "export to path timed out waiting for texture write";
 				UnityEngine.Debug.LogWarning("[Addon_SocketServer] export_3d_with_textures_to_path: texture write still in progress after timeout.");
-			} else if (!string.IsNullOrEmpty(meshFilePath)) {
+			} else if (!string.IsNullOrEmpty(meshFilePath) || ModelsHandler_3D.instance != null) {
 				// Same contract as native SPZ GO: Blender auto-import / litmus needs .spz_go_ready.
+				// Prefer the FBX path actually written (SaveDefaultDoor may normalize extension).
+				string stampMeshPath = meshFilePath;
+				var mh = ModelsHandler_3D.instance;
+				if (mh != null && !string.IsNullOrEmpty(mh._path_recentlyExported))
+					stampMeshPath = mh._path_recentlyExported;
 				string stamp = null;
 				try {
-					string dir = Path.GetDirectoryName(meshFilePath);
-					string baseName = Path.GetFileNameWithoutExtension(meshFilePath);
-					if (!string.IsNullOrEmpty(dir) && !string.IsNullOrEmpty(baseName))
-						stamp = Path.Combine(dir, baseName + ".spz_go_ready");
+					if (!string.IsNullOrEmpty(stampMeshPath)) {
+						string dir = Path.GetDirectoryName(stampMeshPath);
+						string baseName = Path.GetFileNameWithoutExtension(stampMeshPath);
+						if (!string.IsNullOrEmpty(dir) && !string.IsNullOrEmpty(baseName))
+							stamp = Path.Combine(dir, baseName + ".spz_go_ready");
+					}
 				} catch (Exception ex) {
 					UnityEngine.Debug.LogWarning("[Addon_SocketServer] export stamp path: " + ex.Message);
 				}
