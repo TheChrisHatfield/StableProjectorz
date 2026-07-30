@@ -335,7 +335,7 @@ namespace spz {
 	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_resetToDefault_button);
 	            var resetLabel = _resetToDefault_button.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	            if (resetLabel != null)
-	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(resetLabel, t.textPrimary, 11f);
+	                SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(resetLabel, t.textPrimary, 11f);
 	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_resetToDefault_button);
 	        }
 	    }
