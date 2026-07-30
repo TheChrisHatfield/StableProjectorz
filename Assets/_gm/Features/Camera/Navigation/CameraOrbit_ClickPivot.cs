@@ -67,10 +67,12 @@ namespace spz {
 	        if(mag > _clickMoveThresh){ return; }//moved the mouse too much, not a click.
 	        if(Time.time - _timeStartedPress > _clickMaxPressTime){ return; }
 
+	        if (MainViewport_UI.instance == null || UserCameras_MGR.instance == null){ return; }
 	        Vector2 viewportPos = MainViewport_UI.instance.cursorMainViewportPos01;
 	        // ROLLBACK NOTE: reverted to OG (_curr_viewCamera). Multi-view disables _keepRecentering
 	        // (see RecenterOntoPivot_maybe), so the click-pivot is single-camera by design.
 	        View_UserCamera vCam = UserCameras_MGR.instance._curr_viewCamera;
+	        if (vCam == null || vCam.myCamera == null){ return; }
 	        Camera camera    = vCam.myCamera;
 
 	        // Get the depth from the depth texture
@@ -150,12 +152,13 @@ namespace spz {
              
 	        if (stop){ _keepRecentering = false; }
 	        // Cameras don't care about center on the click-pivot while in the multiview mode
-	        if(MultiView_Ribbon_UI.instance._isEditingMode == false){ _keepRecentering = false; }
+	        if(MultiView_Ribbon_UI.instance == null || MultiView_Ribbon_UI.instance._isEditingMode == false){ _keepRecentering = false; }
 	        if(!_keepRecentering){ return; }
 
 	        // ROLLBACK NOTE: OG used _curr_viewCamera. _keepRecentering only true in editing mode (single cam),
 	        // so _curr_viewCamera == active cam here.
-	        View_UserCamera viewCam = UserCameras_MGR.instance._curr_viewCamera;
+	        View_UserCamera viewCam = UserCameras_MGR.instance != null ? UserCameras_MGR.instance._curr_viewCamera : null;
+	        if (viewCam == null){ return; }
         
 	        float elapsed =  Time.time - _time_wasPressing;
 	        float speed   = _pivotRecenterSpeed * _recenterOnPivot_speedCurve.Evaluate(elapsed);
@@ -172,7 +175,9 @@ namespace spz {
 	        col.a = opacity;
 	        _pivotSphereRender.material.SetColor("_Color", col);
 	        // ROLLBACK NOTE: OG used _curr_viewCamera (cosmetic distance for sphere scale).
-	        float dist  = (transform.position - UserCameras_MGR.instance._curr_viewCamera.transform.position).magnitude;
+	        View_UserCamera scaleCam = UserCameras_MGR.instance != null ? UserCameras_MGR.instance._curr_viewCamera : null;
+	        if (scaleCam == null){ return; }
+	        float dist  = (transform.position - scaleCam.transform.position).magnitude;
 	        float scale = Mathf.InverseLerp(0, 3, dist);
 	              scale = Mathf.Clamp01(scale) * 0.2f;
 	        _pivotSphereRender.transform.localScale = new Vector3(scale, scale, scale);
