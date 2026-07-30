@@ -42,6 +42,23 @@ public sealed class AddonManagerStatusDialChromeTests {
 	}
 
 	[Test]
+	public void CloseButton_DoesNotUseCompactToolLabel() {
+		string path = Path.GetFullPath(Path.Combine(
+			Application.dataPath,
+			"..",
+			"Assets/_gm/Features/AddonSystem/AddonManager_UI.cs"));
+		string src = File.ReadAllText(path);
+		int apply = src.IndexOf("void ApplyThemeTokens()", System.StringComparison.Ordinal);
+		int close = src.IndexOf("_closePanel_button", apply, System.StringComparison.Ordinal);
+		Assert.That(close, Is.GreaterThan(apply));
+		int blockEnd = src.IndexOf("_installFromFile_button", close, System.StringComparison.Ordinal);
+		string block = src.Substring(close, blockEnd - close);
+		Assert.That(block, Does.Not.Contain("ApplyBoundChromeCompactToolLabelTmp"),
+			"Close CompactToolLabel clips under Nomad like Uninstall/Disabled.");
+		Assert.That(block, Does.Contain("ApplyBoundChromeTmp"));
+	}
+
+	[Test]
 	public void UninstallLabel_DoesNotUseCompactToolLabel() {
 		string path = Path.GetFullPath(Path.Combine(
 			Application.dataPath,
