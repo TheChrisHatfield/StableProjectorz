@@ -95,6 +95,9 @@ namespace spz {
 		static void RestoreSectionShell(RectTransform section) {
 			if (section == null) return;
 			SpzUiThemeOps.RestoreBoundChromeUnder(section);
+			// ThemeSectionShell may BoundChrome-tint parent Content when section is nested under it.
+			if (section.parent != null && section.parent.name == "Content")
+				SpzUiThemeOps.RestoreBoundChromeUnder(section.parent);
 		}
 
 		static void ApplyHeaderScaled(TextMeshProUGUI header, Color color, float basePt)
