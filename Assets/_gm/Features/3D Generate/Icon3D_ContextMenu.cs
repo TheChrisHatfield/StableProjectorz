@@ -61,7 +61,9 @@ namespace spz {
 	            SpzUiThemeOps.ApplyContextMenuChrome(_contextMenu_go);
 	        else
 	            SpzUiThemeOps.ApplyContextMenuChrome(gameObject);
-	        // GEN label may sit outside menu root — restore on leave so Compact tracking does not stick.
+	        // GEN / Export may sit outside the menu root — theme or restore each ownership control.
+	        ThemeOrRestoreGenExportButton(_exportMeshButton);
+	        ThemeOrRestoreGenExportButton(_generateButton);
 	        if (_text == null)
 	            return;
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
@@ -69,6 +71,21 @@ namespace spz {
 	            return;
 	        }
 	        SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(_text, SpzUiThemeOps.Active.textPrimary, 14f);
+	    }
+
+	    static void ThemeOrRestoreGenExportButton(Button btn) {
+	        if (btn == null) return;
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreBoundChromeUnder(btn.transform);
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+	        foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (tmp != null)
+	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 14f);
+	        }
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }
 	}
 }//end namespace

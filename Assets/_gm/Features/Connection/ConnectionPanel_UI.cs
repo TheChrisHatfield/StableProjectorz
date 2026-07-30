@@ -263,6 +263,11 @@ namespace spz {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
 	            if (_panel != null)
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_panel.transform);
+	            // Open/reset may sit outside this host (status strip vs modal panel).
+	            if (_openPanel_button != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_openPanel_button.transform);
+	            if (_resetToDefault_button != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_resetToDefault_button.transform);
 	            // Explicit leave: status icon must not stay raycast-off after Nomad→builtin
 	            // (gen path: open SD SERV panel → connect → is_sd_connected → isCanGenerate).
 	            if (_connectionIcon != null)
