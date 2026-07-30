@@ -342,6 +342,8 @@ namespace spz {
 	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, t.textPrimary, 11f);
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }
+
+	    void OnEnable() {
 	        TrySyncResolutionFromCurrentViewportMode();
 	    }
 
