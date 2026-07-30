@@ -23,18 +23,23 @@ def rotate_camera():
     """Rotate camera by 1 unit in X"""
     api = spz.get_api()
     pos = api.cameras.get_pos(0)
-    if pos:
-        api.cameras.set_pos(0, pos["x"] + 1, pos["y"], pos["z"])
-        print(f"Camera moved to: {pos['x'] + 1}, {pos['y']}, {pos['z']}")
-    else:
+    if not pos:
         print("Could not get camera position")
+        return False
+    if api.cameras.set_pos(0, pos["x"] + 1, pos["y"], pos["z"]) is False:
+        print("Could not set camera position")
+        return False
+    print(f"Camera moved to: {pos['x'] + 1}, {pos['y']}, {pos['z']}")
 
 
 def reset_camera():
     """Reset camera to origin"""
     api = spz.get_api()
-    api.cameras.set_pos(0, 0, 0, -10)
-    api.cameras.set_rot(0, 0, 0, 0, 1)
+    ok_pos = api.cameras.set_pos(0, 0, 0, -10)
+    ok_rot = api.cameras.set_rot(0, 0, 0, 0, 1)
+    if ok_pos is False or ok_rot is False:
+        print("Camera reset failed")
+        return False
     print("Camera reset to origin")
 
 
@@ -46,6 +51,7 @@ def select_first_mesh():
         print(f"Currently selected meshes: {selected}")
     else:
         print("No meshes selected. Try selecting a mesh manually first.")
+        return False
 
 
 def register():
