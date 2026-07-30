@@ -57,6 +57,8 @@ public sealed class SpzGoExportDeferTests {
 			"Export OK for auto-import must require Save_MGR idle and .spz_go_ready stamp.");
 		Assert.That(src, Does.Contain(".spz_go_ready"),
 			"Native export finish must verify Blender auto-import ready stamp.");
+		Assert.That(src, Does.Contain("_path_recentlyExported"),
+			"Stamp check must use the FBX path actually written, not only the panel path.");
 		Assert.That(src, Does.Not.Contain("sm == null || !sm._isSaving"),
 			"Do not treat null Save_MGR as successful texture write.");
 	}
