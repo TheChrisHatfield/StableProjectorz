@@ -306,10 +306,16 @@ namespace spz {
 				// Design base must be stable across applies — never derive from current fontSize/scale
 				// (that cancels font_scale changes: size/s * s == size).
 				float basePt = ResolvePaintLabelDesignBasePt(tmp);
-				if (tmp.gameObject.name == "Header" || tmp.gameObject.name == "Placeholder")
+				if (tmp.gameObject.name == "Header" || tmp.gameObject.name == "Placeholder") {
 					SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textMuted, basePt);
-				else
+					tmp.characterSpacing = 0f;
+				} else if (tmp.GetComponentInParent<Button>(true) != null
+				           || tmp.GetComponentInParent<Toggle>(true) != null) {
+					SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, basePt);
+				} else {
 					SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, basePt);
+					tmp.characterSpacing = 0f;
+				}
 			}
 		}
 
