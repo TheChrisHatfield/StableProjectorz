@@ -48,7 +48,8 @@ namespace spz {
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
-	        // Match left-ribbon wireframe/DEP: flat dark cell, not chrome/gold plate.
+	        // Match left-ribbon wireframe/DEP: flat dark cell + accent edge bar when ON
+	        // (0.14 fill alone is nearly invisible on Nomad controlBg).
 	        Color normal = _selectMode_toggle.isOn
 	            ? Color.Lerp(t.controlBg, t.accent, 0.14f)
 	            : t.controlBg;
@@ -67,7 +68,40 @@ namespace spz {
 	                SpzUiThemeOps.HideAuthoredGraphicForTheme(img);
 	        }
 	        SpzUiThemeOps.ApplyControlLineIcon(_selectMode_toggle.transform, StudioLineIcon.Cursor, 20f);
+	        ApplyActiveBar(_selectMode_toggle.transform, _selectMode_toggle.isOn, t.accent);
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_selectMode_toggle);
+	    }
+
+	    /// <summary>Same edge bar as LeftRibbon DEP/INSIDE so ON state reads under Nomad.</summary>
+	    static void ApplyActiveBar(Transform owner, bool selected, Color accent) {
+	        if (owner == null) return;
+	        Transform bar = SpzUiThemeOps.FindDirectChildIncludingInactive(owner, "MonolithActiveBar");
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome || !selected) {
+	            if (bar != null) bar.gameObject.SetActive(false);
+	            return;
+	        }
+	        bool created = false;
+	        if (bar == null) {
+	            var go = new GameObject("MonolithActiveBar", typeof(RectTransform));
+	            go.transform.SetParent(owner, false);
+	            bar = go.transform;
+	            var image = go.AddComponent<Image>();
+	            image.raycastTarget = false;
+	            created = true;
+	        }
+	        var rt = bar as RectTransform;
+	        rt.anchorMin = new Vector2(0f, 0.2f);
+	        rt.anchorMax = new Vector2(0f, 0.8f);
+	        rt.pivot = new Vector2(0f, 0.5f);
+	        rt.offsetMin = new Vector2(0f, 0f);
+	        rt.offsetMax = new Vector2(2f, 0f);
+	        var img = bar.GetComponent<Image>();
+	        img.sprite = null;
+	        img.type = Image.Type.Simple;
+	        img.color = accent;
+	        bar.gameObject.SetActive(true);
+	        if (created)
+	            bar.SetAsLastSibling();
 	    }
 	}
 }//end namespace
