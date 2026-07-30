@@ -281,10 +281,12 @@ namespace spz {
 	        }
 	        // Do not recolor _dim_text / _connectionIcon — CheckConnection owns live status green/red.
 	        // Apply Nomad tracking/outline without replacing status RGB.
+	        // Live SERV status string — ReadableBody (not Compact truncate) so "SD SERV" stays legible.
 	        if (_dim_text != null && SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            Color status = _dim_text.color;
-	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(_dim_text, status, 11f);
+	            SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(_dim_text, status, 11f);
 	            _dim_text.color = status;
+	            _dim_text.raycastTarget = false;
 	        }
 	        if (_connectionIcon != null) {
 	            // Snapshot BEFORE clear so Restore SPZ can unwind (never snapshot after = false).
