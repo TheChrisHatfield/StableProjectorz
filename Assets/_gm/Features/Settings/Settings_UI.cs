@@ -978,6 +978,12 @@ namespace spz {
 	    }
 
 	    static void ApplyThemeToggleColors(Toggle tgl, SpzUiThemeOps.ThemeTokens t) {
+	        if (tgl == null) return;
+	        // Ensure + BoundChrome graphic only under Nomad — CreateToggle* runs on builtin too.
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            ApplySettingsPrefabMatchToggleColors(tgl);
+	            return;
+	        }
 	        tgl.transition = Selectable.Transition.ColorTint;
 	        SpzUiThemeOps.EnsureSelectableHitFace(tgl);
 	        // Image.color = chrome token; ColorBlock stays white-based so Unity does not multiply twice.
