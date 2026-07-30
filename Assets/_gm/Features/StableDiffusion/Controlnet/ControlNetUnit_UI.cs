@@ -362,7 +362,7 @@ namespace spz {
 
 	        // Role matrix aligns Nomad with traditional CN chrome (dropdowns, buttons, dials, download slide).
 	        SpzUiThemeOps.ApplyBoundChromeRolesUnder(transform, new SpzUiThemeRoleMatrixOptions {
-	            CompactLooseLabels = true,
+	            CompactLooseLabels = false,
 	            Exclude = c => {
 	                if (ReferenceEquals(c, _headerRibbon_button)) return true;
 	                if (c is TextMeshProUGUI tmp && ReferenceEquals(tmp, _mainHeader)) return true;
@@ -373,6 +373,18 @@ namespace spz {
 	                return false;
 	            },
 	        });
+	        // Loose field captions (weight/start/end) — ReadableBody, not Compact truncate crowding dials.
+	        foreach (var tmp in GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (tmp == null) continue;
+	            if (ReferenceEquals(tmp, _mainHeader)) continue;
+	            if (tmp.GetComponentInParent<CircleSlider_Snapping_UI>(true) != null) continue;
+	            if (tmp.GetComponentInParent<TMP_Dropdown>(true) != null) continue;
+	            if (tmp.GetComponentInParent<Toggle>(true) != null) continue;
+	            if (tmp.GetComponentInParent<Button>(true) != null) continue;
+	            if (tmp.GetComponentInParent<SlideOut_Widget_UI>(true) != null) continue;
+	            SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, t.textPrimary, 11f);
+	            tmp.raycastTarget = false;
+	        }
 
 	        // Checkbox silo for resize/context (matrix used ThemeCheckboxToggle without ReadableBody labels —
 	        // re-assert label ReadableBody for non-header toggles owned here).
