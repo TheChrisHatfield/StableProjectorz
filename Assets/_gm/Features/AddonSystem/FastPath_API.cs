@@ -726,9 +726,11 @@ namespace spz {
 			int count = cameras.GetViewCameraCount();
 			for (int i = 0; i < count; i++) {
 				var camera = cameras.GetViewCamera(i);
-				if (camera != null && camera.gameObject.activeInHierarchy) {
+				// Keep index alignment with GetViewCameraCount / get_camera_pos(i); inactive → zero.
+				if (camera != null)
 					positions.Add(camera.transform.position);
-				}
+				else
+					positions.Add(Vector3.zero);
 			}
 			
 			return positions;
@@ -747,9 +749,10 @@ namespace spz {
 			int count = cameras.GetViewCameraCount();
 			for (int i = 0; i < count; i++) {
 				var camera = cameras.GetViewCamera(i);
-				if (camera != null && camera.gameObject.activeInHierarchy) {
+				if (camera != null)
 					rotations.Add(camera.transform.rotation);
-				}
+				else
+					rotations.Add(Quaternion.identity);
 			}
 			
 			return rotations;
@@ -768,9 +771,12 @@ namespace spz {
 			int count = cameras.GetViewCameraCount();
 			for (int i = 0; i < count; i++) {
 				var camera = cameras.GetViewCamera(i);
-				if (camera != null && camera.gameObject.activeInHierarchy && camera.myCamera != null) {
+				if (camera != null && camera.fovMgr != null && camera.fovMgr._trueCameraFov >= 1f && camera.fovMgr._trueCameraFov <= 179f)
+					fovs.Add(camera.fovMgr._trueCameraFov);
+				else if (camera != null && camera.myCamera != null)
 					fovs.Add(camera.myCamera.fieldOfView);
-				}
+				else
+					fovs.Add(0f);
 			}
 			
 			return fovs;
