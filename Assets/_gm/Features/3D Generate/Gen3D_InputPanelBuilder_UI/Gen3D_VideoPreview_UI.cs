@@ -202,12 +202,27 @@ namespace spz {
 	    }
 
 	    protected void CleanupPreviewVideos(){
-	        if (File.Exists(_videoClip_gauss_fileURL)){ File.Delete(_videoClip_gauss_fileURL); }
-	        if (File.Exists(_videoClip_mesh_fileURL)){ File.Delete(_videoClip_mesh_fileURL); }
-	        if (File.Exists(_videoClip_radiance_fileURL)){ File.Delete(_videoClip_radiance_fileURL); }
+	        TryDeletePreviewVideoFile(_videoClip_gauss_fileURL);
+	        TryDeletePreviewVideoFile(_videoClip_mesh_fileURL);
+	        TryDeletePreviewVideoFile(_videoClip_radiance_fileURL);
 	        _videoClip_gauss_fileURL = "";
 	        _videoClip_mesh_fileURL = "";
 	        _videoClip_radiance_fileURL = "";
+	    }
+
+	    static void TryDeletePreviewVideoFile(string fileUrlOrPath) {
+	        if (string.IsNullOrEmpty(fileUrlOrPath)) return;
+	        string path = fileUrlOrPath;
+	        if (path.StartsWith("file://", System.StringComparison.OrdinalIgnoreCase))
+	            path = path.Substring("file://".Length);
+	        // Unity file:// on Windows is often file:///C:/... — strip leading slash before drive.
+	        if (path.Length >= 3 && path[0] == '/' && char.IsLetter(path[1]) && path[2] == ':')
+	            path = path.Substring(1);
+	        try {
+	            if (File.Exists(path)) File.Delete(path);
+	        } catch (System.Exception e) {
+	            Debug.LogWarning($"[Gen3D_VideoPreview] temp cleanup failed: {e.Message}");
+	        }
 	    }
 
     
