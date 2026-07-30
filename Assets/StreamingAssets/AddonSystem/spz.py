@@ -94,7 +94,9 @@ class SPZClient:
                     if b"\n" in response_data:
                         break
                 
-                response_str = response_data.decode('utf-8').strip()
+                # Only the first JSON line is this response; coalesced leftovers break json.loads.
+                line, _, _rest = response_data.partition(b"\n")
+                response_str = line.decode('utf-8').strip()
                 response = json.loads(response_str)
                 
                 if "error" in response:
@@ -959,7 +961,7 @@ class BackgroundAPI:
         result = self._client._send_request("spz.cmd.is_skybox_gradient_clear", {})
         if result.get("success", False):
             return result.get("is_clear", True)
-        return True
+        return False
     
     def get_skybox_top_color(self):
         """Get skybox top gradient color
