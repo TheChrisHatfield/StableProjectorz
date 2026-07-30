@@ -99,9 +99,12 @@ namespace spz {
 	    IEnumerator ResetCtrlKey_AfterLoadSave(){
 	        yield return null;
 	        yield return null;
-	        InputSystem.QueueStateEvent(Keyboard.current, new KeyboardState());
-	        InputSystem.QueueStateEvent(Mouse.current, new MouseState());
-	        InputSystem.QueueStateEvent(Pen.current, new PenState());
+	        if( Keyboard.current != null )
+		        InputSystem.QueueStateEvent(Keyboard.current, new KeyboardState());
+	        if( Mouse.current != null )
+		        InputSystem.QueueStateEvent(Mouse.current, new MouseState());
+	        if( Pen.current != null )
+		        InputSystem.QueueStateEvent(Pen.current, new PenState());
 	        Input.ResetInputAxes();//for legacy input system (Input.GetKey etc)
 	    }
 
