@@ -96,7 +96,7 @@ namespace spz {
 	            SpzUiThemeOps.ThemePromptPresetSquareCell(toggle, fill, t.accent);
 	            foreach (var tmp in toggle.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	                if (tmp != null)
-	                    SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, 11f);
+	                    SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
 	            }
 	        }
 	    }
