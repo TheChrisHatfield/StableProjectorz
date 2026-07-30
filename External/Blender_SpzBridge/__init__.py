@@ -335,15 +335,22 @@ def _ensure_image_to_principled_basecolor(obj, image_path: str):
         pass
 
 
+def _mesh_targets_for_maps(context=None) -> list:
+    """Selected mesh objects, or active mesh if nothing selected."""
+    ctx = context if context is not None else bpy.context
+    targets = [o for o in ctx.selected_objects if o and o.type == "MESH"]
+    if not targets and ctx.active_object and ctx.active_object.type == "MESH":
+        targets = [ctx.active_object]
+    return targets
+
+
 def _auto_apply_exchange_texture_after_import(fbx_path: str) -> bool:
     """Apply best exchange texture to selected/active meshes. Returns True if at least one mesh was wired."""
     tex = _find_best_exchange_texture_for_fbx(fbx_path)
     if not tex:
         print("SPZ GO: no exchange texture found to auto-assign for", fbx_path)
         return False
-    targets = [o for o in bpy.context.selected_objects if o and o.type == "MESH"]
-    if not targets and bpy.context.active_object and bpy.context.active_object.type == "MESH":
-        targets = [bpy.context.active_object]
+    targets = _mesh_targets_for_maps()
     if not targets:
         print("SPZ GO: no target mesh object selected after import; texture not auto-assigned.")
         return False
@@ -670,6 +677,10 @@ class SPZ_OT_go_apply_maps_only(Operator):
 
     def execute(self, context):
         p = prefs()
+        targets = _mesh_targets_for_maps(context)
+        if not targets:
+            self.report({"ERROR"}, "Select a mesh object before Apply SPZ maps only.")
+            return {"CANCELLED"}
         fbx, err = _spz_headless_out_fbx()
         if fbx is None:
             self.report({"ERROR"}, err)
@@ -687,19 +698,21 @@ class SPZ_OT_go_apply_maps_only(Operator):
         if not ok:
             self.report({"WARNING"}, f"SPZ: {r!r}")
             return {"CANCELLED"}
-        # Maps may land a moment after HTTP returns on slow disks — poll briefly.
-        applied = False
+        # Poll for map files only — do not sleep 6s when the failure is "no selection".
+        tex = None
         for _ in range(30):
-            if _auto_apply_exchange_texture_after_import(fbx):
-                applied = True
+            tex = _find_best_exchange_texture_for_fbx(fbx)
+            if tex:
                 break
             time.sleep(0.2)
-        if not applied:
+        if not tex:
             self.report(
                 {"WARNING"},
-                "SPZ export OK but no texture applied — select a mesh and ensure exchange maps exist beside the FBX.",
+                "SPZ export OK but no exchange texture found beside the FBX.",
             )
             return {"CANCELLED"}
+        for o in targets:
+            _ensure_image_to_principled_basecolor(o, tex)
         self.report({"INFO"}, "SPZ maps applied to selected mesh(es).")
         return {"FINISHED"}
 
