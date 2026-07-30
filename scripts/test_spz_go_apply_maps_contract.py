@@ -8,13 +8,12 @@ HTTP = ROOT / "External" / "Blender_SpzBridge" / "spz_http.py"
 
 
 class SpzGoApplyMapsContractTests(unittest.TestCase):
-	def test_apply_maps_only_reports_failure_when_auto_apply_fails(self):
+	def test_apply_maps_only_requires_mesh_before_poll(self):
 		src = BRIDGE.read_text(encoding="utf-8")
 		self.assertIn("def _auto_apply_exchange_texture_after_import(fbx_path: str) -> bool:", src)
-		# Operator must not claim INFO success unless auto-apply returned true.
-		self.assertIn("applied = False", src)
-		self.assertIn("if not applied:", src)
-		self.assertIn('return {"CANCELLED"}', src)
+		self.assertIn("def _mesh_targets_for_maps", src)
+		self.assertIn("Select a mesh object before Apply SPZ maps only", src)
+		self.assertIn("_find_best_exchange_texture_for_fbx(fbx)", src)
 		self.assertIn('self.report({"INFO"}, "SPZ maps applied to selected mesh(es).")', src)
 
 	def test_go_import_imports_immediately_after_http_ok(self):
