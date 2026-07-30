@@ -1180,7 +1180,8 @@ namespace spz {
 				return;
 			}
 			// Compact strip: small icon lift + lower label band so type sits close under the glyph.
-			float labelMaxY = stripUppercase ? 0.48f : 0.36f;
+			// +2pt stack type needs a slightly taller label band so PROJ/MASK keep mine leading (-12).
+			float labelMaxY = stripUppercase ? 0.52f : 0.36f;
 			float yLift = stripUppercase
 				? Mathf.Max(2.5f, iconPx * 0.18f)
 				: Mathf.Max(3f, iconPx * 0.18f);
@@ -1208,11 +1209,11 @@ namespace spz {
 				// StripLabel / ApplyBoundChromeTmp → ClearLabelRaycastIfUnderSelectable owns the clear.
 				if (stripUppercase) {
 					// Capture authored design pt first — never overwrite designPt with compact display
-					// size (that left PROJ MASK / COLOR / TOTAL at 8pt after Restore SPZ → blend over OG).
+					// size (that left PROJ MASK / COLOR / TOTAL stuck after Restore SPZ → blend over OG).
 					ResolveOrCaptureDesignFontPt(tmp, 14f);
 					ApplyBoundChromeStripLabelTmp(tmp, labelColor, 14f);
 					ApplyWorkflowStackedLabelMetrics(tmp);
-					const float stackDisplayPt = 8f;
+					const float stackDisplayPt = 10f; // +2 from prior 8pt; leading stays -12
 					tmp.fontSize = stackDisplayPt * Mathf.Clamp(_active.fontScale, ScaleTokenMin, ScaleTokenMax);
 				}
 				else
@@ -1228,7 +1229,7 @@ namespace spz {
 			if (text == null) return;
 			// Narrow ribbon: keep tracking mild; strip default 18 forces wrap/overflow.
 			text.characterSpacing = 2f;
-			// Tight leading — Pass17's -2 left tall stacks that spilled out of short cells.
+			// Keep mine tight leading while stack display pt grows (do not ease toward -2).
 			text.lineSpacing = -12f;
 			text.enableWordWrapping = true;
 			text.overflowMode = TextOverflowModes.Truncate;
