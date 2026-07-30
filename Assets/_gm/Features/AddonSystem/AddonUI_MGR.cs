@@ -6,6 +6,7 @@ using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.UI;
 using TMPro;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace spz {
@@ -1377,16 +1378,22 @@ namespace spz {
 				UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO native export: texture write still in progress after timeout.");
 
 			bool stampOk = false;
-			if (saveIdle && !string.IsNullOrEmpty(exportMeshPath)) {
-				try {
-					string stamp = Path.Combine(
-						Path.GetDirectoryName(exportMeshPath) ?? "",
-						Path.GetFileNameWithoutExtension(exportMeshPath) + ".spz_go_ready");
-					stampOk = File.Exists(stamp);
-					if (!stampOk)
-						UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO native export: ready stamp missing — Blender auto-import will not fire: " + stamp);
-				} catch (Exception ex) {
-					UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO native export: stamp check failed: " + ex.Message);
+			if (saveIdle) {
+				string stampMeshPath = exportMeshPath;
+				var mhExport = ModelsHandler_3D.instance;
+				if (mhExport != null && !string.IsNullOrEmpty(mhExport._path_recentlyExported))
+					stampMeshPath = mhExport._path_recentlyExported;
+				if (!string.IsNullOrEmpty(stampMeshPath)) {
+					try {
+						string stamp = Path.Combine(
+							Path.GetDirectoryName(stampMeshPath) ?? "",
+							Path.GetFileNameWithoutExtension(stampMeshPath) + ".spz_go_ready");
+						stampOk = File.Exists(stamp);
+						if (!stampOk)
+							UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO native export: ready stamp missing — Blender auto-import will not fire: " + stamp);
+					} catch (Exception ex) {
+						UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO native export: stamp check failed: " + ex.Message);
+					}
 				}
 			}
 
@@ -1998,12 +2005,51 @@ namespace spz {
 		}
 		
 		/// <summary>
-		/// Sends value change event to Python
+		/// Builds POST body for /notify_value_change (Unity widget → Python).
+		/// </summary>
+		public static string BuildNotifyValueChangeRequestBody(string addonId, string elementId, string elementType, object value) {
+			string valueJson = JsonConvert.SerializeObject(value);
+			return $"{{\"addon_id\":\"{JsonEscape(addonId)}\",\"element_id\":\"{JsonEscape(elementId)}\",\"element_type\":\"{JsonEscape(elementType)}\",\"value\":{valueJson}}}";
+		}
+
+		/// <summary>
+		/// Sends value change event to Python via HTTP POST /notify_value_change
+		/// (optional add-on hook: on_value_change(element_id, element_type, value)).
 		/// </summary>
 		void SendValueChangeToPython(string addonId, string elementId, string elementType, object value) {
-			// This will be handled by the socket server
-			// For now, just log it
-			UnityEngine.Debug.Log($"[AddonUI_MGR] Value changed: {addonId}.{elementId} ({elementType}) = {value}");
+			if (Addon_MGR.IsAddonApiShuttingDown()) {
+				UnityEngine.Debug.Log($"[AddonUI_MGR] Skipping value change during shutdown: {addonId}.{elementId}");
+				return;
+			}
+			StartCoroutine(SendValueChangeToPythonCrtn(addonId, elementId, elementType, value));
+		}
+
+		IEnumerator SendValueChangeToPythonCrtn(string addonId, string elementId, string elementType, object value) {
+			if (Addon_MGR.IsAddonApiShuttingDown())
+				yield break;
+			int port = Addon_MGR.instance != null ? Addon_MGR.instance.GetHttpServerPort() : 5557;
+			string url = $"http://127.0.0.1:{port}/notify_value_change";
+			string body = BuildNotifyValueChangeRequestBody(addonId, elementId, elementType, value);
+			using (var req = new UnityWebRequest(url, "POST")) {
+				req.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(body));
+				req.downloadHandler = new DownloadHandlerBuffer();
+				req.SetRequestHeader("Content-Type", "application/json");
+				req.timeout = 8;
+				yield return req.SendWebRequest();
+				if (req.result != UnityWebRequest.Result.Success) {
+					UnityEngine.Debug.LogWarning($"[AddonUI_MGR] notify_value_change failed: {req.error} ({addonId}.{elementId})");
+					yield break;
+				}
+				bool ok = false;
+				try {
+					var json = JObject.Parse(req.downloadHandler?.text ?? "{}");
+					ok = json["success"]?.Value<bool>() ?? false;
+				} catch {
+					// Response not valid JSON or missing success
+				}
+				if (!ok)
+					UnityEngine.Debug.LogWarning($"[AddonUI_MGR] notify_value_change rejected: {addonId}.{elementId}");
+			}
 		}
 
 		/// <summary>
