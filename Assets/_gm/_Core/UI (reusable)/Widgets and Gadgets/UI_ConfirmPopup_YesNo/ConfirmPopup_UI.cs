@@ -63,6 +63,12 @@ namespace spz {
 	        Transform root = _background_button != null ? _background_button.transform : transform;
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(root);
+	            if (_yes != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_yes.transform);
+	            if (_no != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_no.transform);
+	            if (_header != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_header.transform);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
