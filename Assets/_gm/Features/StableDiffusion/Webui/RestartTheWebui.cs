@@ -171,6 +171,7 @@ namespace spz {
 
 	    static void ThemeTopStripButton(Button btn, SpzUiThemeOps.ThemeTokens t, bool applyFolderIcon) {
 	        if (btn == null) return;
+	        SpzUiThemeOps.EnsureSelectableHitFace(btn);
 	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
 	        if (btn.targetGraphic is Image face) {
 	            SpzUiThemeOps.ApplyRoundedControlSprite(face, markEligible: true);

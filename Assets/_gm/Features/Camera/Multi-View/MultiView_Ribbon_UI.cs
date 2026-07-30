@@ -368,8 +368,8 @@ namespace spz {
 	            SpzUiThemeOps.ApplyBoundChromeDialValueTmp(_numCams_numberText, t.textPrimary, 14f);
 	            _numCams_numberText.raycastTarget = false;
 	        }
-	        if (_numCameras_slider != null && _numCameras_slider.UnitySlider != null)
-	            SpzUiThemeOps.ApplyNomadSliderChrome(_numCameras_slider.UnitySlider);
+	        // Num-cams SliderUI_Snapping owns ApplyNomadSliderChrome via ThemeChanged —
+	        // dual Ribbon apply fought leave Restore and could leave sticky Nomad thumb chrome.
 	        if (_editPOV_toggles != null) {
 	            foreach (var pov in _editPOV_toggles) {
 	                if (pov == null) continue;
