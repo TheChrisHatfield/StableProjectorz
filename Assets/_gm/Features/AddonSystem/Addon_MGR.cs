@@ -162,15 +162,22 @@ namespace spz {
 
 		static bool s_addonApiQuitShutdownDone;
 		static bool s_appliedRememberedEnabledOnFirstDiscover;
+		static bool s_appliedAddonPrefsOnFirstDiscover;
 
 		[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
 		static void ResetAddonQuitStatics() {
 			s_addonApiQuitShutdownDone = false;
 			s_appliedRememberedEnabledOnFirstDiscover = false;
+			s_appliedAddonPrefsOnFirstDiscover = false;
 		}
 
 		const string PrefsKeyRememberEnabledAddons = "spz.addons.rememberEnabled.v2";
 		const string PrefsKeyEnabledAddonIdsJson = "spz.addons.enabledIdsJson.v2";
+		/// <summary>Sparse per-add-on prefs bag: <c>{ "AddonId": { "show_in_command_ribbon": false } }</c>.</summary>
+		const string PrefsKeyAddonPrefsByIdJson = "spz.addons.prefsByIdJson.v1";
+
+		/// <summary>Host pref: show a Command Ribbon tab while the add-on is enabled (default true).</summary>
+		public const string PrefKeyShowInCommandRibbon = "show_in_command_ribbon";
 
 		/// <summary>When true, enabled add-on ids are saved and restored on the next app launch. Default off — add-ons stay disabled until the user enables and saves.</summary>
 		public static bool GetRememberEnabledAddonsPreference() {
@@ -207,6 +214,147 @@ namespace spz {
 			}
 			PlayerPrefs.SetString(PrefsKeyEnabledAddonIdsJson, arr.ToString(Formatting.None));
 			PlayerPrefs.Save();
+		}
+
+		/// <summary>Always writes sparse per-add-on host prefs (Add-on Manager Save settings).</summary>
+		public void PersistAddonPrefsNow() {
+			if (_registeredAddons == null)
+				return;
+			var root = new JObject();
+			foreach (var kvp in _registeredAddons) {
+				if (kvp.Value == null || string.IsNullOrEmpty(kvp.Key))
+					continue;
+				JObject bag = EnsurePrefsBag(kvp.Value);
+				if (bag == null || !bag.HasValues)
+					continue;
+				// Only persist non-default host ribbon off (and any other explicit keys).
+				var sparse = new JObject();
+				foreach (var prop in bag.Properties()) {
+					if (prop == null || string.IsNullOrEmpty(prop.Name) || prop.Value == null || prop.Value.Type == JTokenType.Null)
+						continue;
+					if (string.Equals(prop.Name, PrefKeyShowInCommandRibbon, StringComparison.Ordinal)) {
+						bool show = prop.Value.Type == JTokenType.Boolean && prop.Value.Value<bool>();
+						if (show)
+							continue; // default true — omit
+						sparse[prop.Name] = false;
+						continue;
+					}
+					sparse[prop.Name] = prop.Value.DeepClone();
+				}
+				if (sparse.HasValues)
+					root[kvp.Key] = sparse;
+			}
+			PlayerPrefs.SetString(PrefsKeyAddonPrefsByIdJson, root.ToString(Formatting.None));
+			PlayerPrefs.Save();
+		}
+
+		static JObject EnsurePrefsBag(AddonInfo info) {
+			if (info == null)
+				return null;
+			if (info.prefs == null)
+				info.prefs = new JObject();
+			return info.prefs;
+		}
+
+		/// <summary>Reads a bool host/addon pref; missing key returns <paramref name="defaultValue"/>.</summary>
+		public bool GetAddonPrefBool(string addonId, string key, bool defaultValue = false) {
+			if (string.IsNullOrEmpty(addonId) || string.IsNullOrEmpty(key) || _registeredAddons == null)
+				return defaultValue;
+			if (!_registeredAddons.TryGetValue(addonId, out var info) || info == null)
+				return defaultValue;
+			JObject bag = info.prefs;
+			if (bag == null || !bag.TryGetValue(key, out var token) || token == null || token.Type == JTokenType.Null)
+				return defaultValue;
+			if (token.Type == JTokenType.Boolean)
+				return token.Value<bool>();
+			if (token.Type == JTokenType.Integer)
+				return token.Value<int>() != 0;
+			if (token.Type == JTokenType.String
+			    && bool.TryParse(token.Value<string>(), out bool parsed))
+				return parsed;
+			return defaultValue;
+		}
+
+		public static bool GetAddonPrefBoolStatic(string addonId, string key, bool defaultValue = false) {
+			return instance != null && instance.GetAddonPrefBool(addonId, key, defaultValue);
+		}
+
+		/// <summary>Writes a bool pref and runs ribbon sync when the host ribbon key changes.</summary>
+		public void SetAddonPrefBool(string addonId, string key, bool value) {
+			if (string.IsNullOrEmpty(addonId) || string.IsNullOrEmpty(key) || _registeredAddons == null)
+				return;
+			if (!_registeredAddons.TryGetValue(addonId, out var info) || info == null)
+				return;
+			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal)
+			    && string.Equals(key, PrefKeyShowInCommandRibbon, StringComparison.Ordinal)) {
+				// Viewport-dock add-on never owns a command-ribbon tab.
+				value = false;
+			}
+			JObject bag = EnsurePrefsBag(info);
+			bool prev = GetAddonPrefBool(addonId, key, string.Equals(key, PrefKeyShowInCommandRibbon, StringComparison.Ordinal));
+			bag[key] = value;
+			if (string.Equals(key, PrefKeyShowInCommandRibbon, StringComparison.Ordinal) && prev != value)
+				SyncRibbonTabWithEnabledState(addonId);
+		}
+
+		/// <summary>True when an enabled add-on should expose a Command Ribbon tab (host pref; default true).</summary>
+		public bool ShouldShowInCommandRibbon(string addonId) {
+			if (string.IsNullOrEmpty(addonId))
+				return false;
+			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal))
+				return false;
+			return GetAddonPrefBool(addonId, PrefKeyShowInCommandRibbon, true);
+		}
+
+		public static bool ShouldShowInCommandRibbonStatic(string addonId) {
+			if (string.IsNullOrEmpty(addonId))
+				return false;
+			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal))
+				return false;
+			if (instance == null)
+				return true; // default show when manager not ready
+			return instance.ShouldShowInCommandRibbon(addonId);
+		}
+
+		/// <summary>Convenience: set host ribbon visibility without unloading the add-on.</summary>
+		public void SetShowInCommandRibbon(string addonId, bool show) {
+			SetAddonPrefBool(addonId, PrefKeyShowInCommandRibbon, show);
+		}
+
+		static void ApplyAddonPrefsFromPlayerPrefsOnFirstDiscover() {
+			if (s_appliedAddonPrefsOnFirstDiscover)
+				return;
+			s_appliedAddonPrefsOnFirstDiscover = true;
+			if (instance == null || instance._registeredAddons == null)
+				return;
+			string s = PlayerPrefs.GetString(PrefsKeyAddonPrefsByIdJson, "{}");
+			JObject root;
+			try {
+				root = JObject.Parse(string.IsNullOrWhiteSpace(s) ? "{}" : s);
+			} catch {
+				return;
+			}
+			int applied = 0;
+			foreach (var prop in root.Properties()) {
+				if (prop == null || string.IsNullOrEmpty(prop.Name) || !(prop.Value is JObject bagSrc))
+					continue;
+				if (!instance._registeredAddons.TryGetValue(prop.Name, out var info) || info == null)
+					continue;
+				JObject bag = EnsurePrefsBag(info);
+				foreach (var p in bagSrc.Properties()) {
+					if (p == null || string.IsNullOrEmpty(p.Name) || p.Value == null)
+						continue;
+					bag[p.Name] = p.Value.DeepClone();
+				}
+				if (string.Equals(prop.Name, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal))
+					bag[PrefKeyShowInCommandRibbon] = false;
+				applied++;
+			}
+			UnityEngine.Debug.Log(
+				"[Addon_MGR] Restored add-on preferences from saved prefs ("
+				+ applied
+				+ " add-on(s) with stored keys)."
+			);
 		}
 
 		static void ApplyRememberedEnabledStateFromPlayerPrefsOnFirstDiscover() {
@@ -356,6 +504,8 @@ namespace spz {
 			public string displayName;
 			/// <summary>List row subtitle: e.g. <c>v1.2.0 • Advanced camera controls…</c> from <c>addon.json</c> or <c>__init__.py</c>.</summary>
 			public string listSubtitle;
+			/// <summary>Sparse host/addon preferences (Blender-like Manager prefs). Missing keys use defaults.</summary>
+			public JObject prefs;
 		}
 		
 		void Awake() {
@@ -612,12 +762,18 @@ namespace spz {
 						
 						if (File.Exists(initFile)) {
 							foundIds.Add(addonId);
-							// Update existing or add new; preserve enabled state when re-discovering. New addons default disabled (no persistence = all "new" each run; avoids auto-load storm and auto-restart loops when Python fails).
-							bool wasEnabled = _registeredAddons.ContainsKey(addonId) ? _registeredAddons[addonId].isEnabled : false;
+							// Update existing or add new; preserve enabled state + prefs when re-discovering. New addons default disabled (no persistence = all "new" each run; avoids auto-load storm and auto-restart loops when Python fails).
+							bool wasEnabled = false;
+							JObject wasPrefs = null;
+							if (_registeredAddons.TryGetValue(addonId, out var prevInfo) && prevInfo != null) {
+								wasEnabled = prevInfo.isEnabled;
+								wasPrefs = prevInfo.prefs;
+							}
 							_registeredAddons[addonId] = new AddonInfo {
 								id = addonId,
 								path = dir,
-								isEnabled = wasEnabled
+								isEnabled = wasEnabled,
+								prefs = wasPrefs ?? new JObject()
 							};
 							EnrichAddonListSubtitle(_registeredAddons[addonId]);
 							UnityEngine.Debug.Log($"[Addon_MGR] Discovered add-on: {addonId} (enabled: {wasEnabled})");
@@ -644,6 +800,7 @@ namespace spz {
 				// First discover only: restore prefs OR force default-off. Later Refresh/install rediscover
 				// must preserve in-session enables (otherwise dials/ribbon desync and tabs orphan).
 				bool firstDiscoverPass = !s_appliedRememberedEnabledOnFirstDiscover;
+				ApplyAddonPrefsFromPlayerPrefsOnFirstDiscover();
 				ApplyRememberedEnabledStateFromPlayerPrefsOnFirstDiscover();
 				if (firstDiscoverPass && !GetRememberEnabledAddonsPreference()) {
 					int forced = 0;
@@ -1291,8 +1448,10 @@ namespace spz {
 			// that erased native fallback and left users with a vanished SPZ GO after a blank wait.
 			if (SupportsNativeUiWithoutPython(addonId)) {
 				UnityEngine.Debug.LogWarning(
-					$"[Addon_MGR] Python load failed for {addonId}, but keeping enabled — seeding native ribbon UI (HTTP :{_httpServerPort} unavailable).");
-				EnsureRibbonShellForEnabledAddon(addonId);
+					$"[Addon_MGR] Python load failed for {addonId}, but keeping enabled — seeding native UI (HTTP :{_httpServerPort} unavailable).");
+				// Ribbon shell only when host pref allows; CreatePanel still parks when ribbon is hidden.
+				if (ShouldShowInCommandRibbon(addonId))
+					EnsureRibbonShellForEnabledAddon(addonId);
 				if (AddonUI_MGR.instance != null)
 					AddonUI_MGR.instance.EnsureNativeFallbackUiWhenPythonMissing(addonId, force: true);
 				return;
@@ -1499,8 +1658,9 @@ namespace spz {
 		}
 		
 		/// <summary>
-		/// Keeps command-ribbon tab presence aligned with live enable state (repair path for dial/connectivity).
-		/// Enabled → ensure tab+shell; disabled → remove tab+shell.
+		/// Keeps command-ribbon tab presence aligned with live enable + host ribbon pref.
+		/// Enabled + show → ensure tab+shell; enabled + hide → salvage UI to parking and remove tab;
+		/// disabled → remove tab+shell (and destroy UI).
 		/// </summary>
 		public void SyncRibbonTabWithEnabledState(string addonId) {
 			if (string.IsNullOrEmpty(addonId) || !_registeredAddons.ContainsKey(addonId))
@@ -1515,8 +1675,17 @@ namespace spz {
 					RibbonViewportFullViewOnScreen_Toggle_UI.TeardownAllDocksForAddonDisabled();
 				return;
 			}
-			if (IsAddonEnabled(addonId)) {
+			if (IsAddonEnabled(addonId) && ShouldShowInCommandRibbon(addonId)) {
 				EnsureRibbonShellForEnabledAddon(addonId);
+				if (AddonUI_MGR.instance != null)
+					AddonUI_MGR.instance.RequestMigrateParkedPanelsNow();
+				return;
+			}
+			if (IsAddonEnabled(addonId) && !ShouldShowInCommandRibbon(addonId)) {
+				// Still active — park panels and drop the ribbon tab only.
+				var ribbonHide = AddonRibbonIntegration.ResolveCommandRibbon();
+				if (ribbonHide != null)
+					ribbonHide.RemoveAddonPanelPreservingContent(addonId);
 				return;
 			}
 			if (AddonUI_MGR.instance != null)
@@ -1527,7 +1696,7 @@ namespace spz {
 		}
 
 		/// <summary>
-		/// Enables an add-on, creates its command-ribbon tab immediately, and requests Python to load it.
+		/// Enables an add-on, creates its command-ribbon tab when the host ribbon pref allows, and requests Python to load it.
 		/// </summary>
 		public void EnableAddon(string addonId) {
 			if (!_registeredAddons.ContainsKey(addonId)) {
@@ -1538,8 +1707,14 @@ namespace spz {
 			_registeredAddons[addonId].isEnabled = true;
 			UnityEngine.Debug.Log($"[Addon_MGR] Enabled add-on: {addonId}");
 
-			// Ribbon tab appears as soon as the manager turns the dial on (do not wait for Python).
-			EnsureRibbonShellForEnabledAddon(addonId);
+			// Ribbon tab appears as soon as the manager turns the dial on (when prefs allow).
+			if (ShouldShowInCommandRibbon(addonId))
+				EnsureRibbonShellForEnabledAddon(addonId);
+			else {
+				var ribbonHide = AddonRibbonIntegration.ResolveCommandRibbon();
+				if (ribbonHide != null)
+					ribbonHide.RemoveAddonPanelPreservingContent(addonId);
+			}
 
 			if (_enableHttpServer) {
 				StartAddonLifecycleOp(addonId, true);
@@ -1562,13 +1737,13 @@ namespace spz {
 
 		/// <summary>
 		/// Creates/repairs the command-ribbon tab+shell for an enabled add-on so manager dials stay linked to the strip.
-		/// If the ribbon is not ready yet, retries until it is (or the add-on is disabled).
+		/// If the ribbon is not ready yet, retries until it is (or the add-on is disabled / ribbon-hidden).
 		/// </summary>
 		void EnsureRibbonShellForEnabledAddon(string addonId) {
 			if (string.IsNullOrEmpty(addonId)) return;
 			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal))
 				return;
-			if (!IsAddonEnabled(addonId)) return;
+			if (!IsAddonEnabled(addonId) || !ShouldShowInCommandRibbon(addonId)) return;
 			if (TryCreateRibbonShellNow(addonId))
 				return;
 			StartEnsureRibbonShellWhenReady(addonId);
@@ -1578,11 +1753,14 @@ namespace spz {
 			if (_registeredAddons == null) return;
 			foreach (var kvp in _registeredAddons) {
 				if (kvp.Value == null || !kvp.Value.isEnabled) continue;
+				if (!ShouldShowInCommandRibbon(kvp.Key)) continue;
 				EnsureRibbonShellForEnabledAddon(kvp.Key);
 			}
 		}
 
 		bool TryCreateRibbonShellNow(string addonId) {
+			if (!IsAddonEnabled(addonId) || !ShouldShowInCommandRibbon(addonId))
+				return true; // treat as done — do not retry
 			var ribbon = AddonRibbonIntegration.ResolveCommandRibbon();
 			if (ribbon == null)
 				return false;
@@ -1615,6 +1793,7 @@ namespace spz {
 				if (this == null)
 					yield break;
 				if (!IsAddonEnabled(addonId)
+				    || !ShouldShowInCommandRibbon(addonId)
 				    || string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal)) {
 					_ribbonShellEnsureById.Remove(addonId);
 					yield break;

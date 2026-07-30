@@ -1056,15 +1056,16 @@ namespace spz {
 						Addon_MGR.instance.DisableAddon(kvp.Key);
 				}
 				Addon_MGR.instance.PersistEnabledAddonSelectionNow();
+				Addon_MGR.instance.PersistAddonPrefsNow();
 				SeedDraftFromLiveAddons();
 			} finally {
 				_suppressEnabledListRefresh = false;
 			}
 			RefreshAddonsList();
 			if (changed == 0)
-				ShowStatus("Settings saved. Ribbon already matches dials — selection persisted for next launch.", true);
+				ShowStatus("Settings saved. Selection and preferences persisted for next launch.", true);
 			else
-				ShowStatus($"Settings saved — {changed} add-on(s) applied to ribbon and persisted.", true);
+				ShowStatus($"Settings saved — {changed} add-on(s) applied; preferences persisted.", true);
 		}
 
 		bool GetDraftEnabled(string addonId, bool fallbackActual) {
@@ -1510,7 +1511,10 @@ namespace spz {
 		}
 
 		void ThemeAddonListItem(GameObject item, SpzUiThemeOps.ThemeTokens t) {
-			Transform remove = item.transform.Find("RemoveBtn");
+			Transform header = item.transform.Find("HeaderRow");
+			Transform remove = header != null ? header.Find("RemoveBtn") : null;
+			if (remove == null && header != null) remove = header.Find("RemoveButton");
+			if (remove == null) remove = item.transform.Find("RemoveBtn");
 			if (remove == null) remove = item.transform.Find("RemoveButton");
 			if (remove != null) {
 				var removeBtn = remove.GetComponent<Button>();
@@ -1526,9 +1530,24 @@ namespace spz {
 				if (removeBtn != null)
 					SpzUiThemeOps.ClearNonFaceRaycastsForTheme(removeBtn);
 			}
-			var toggle = item.transform.Find("StatusToggle")?.GetComponent<Toggle>();
+			Transform prefsBtnT = header != null ? header.Find("PreferencesButton") : item.transform.Find("PreferencesButton");
+			if (prefsBtnT != null) {
+				var prefsBtn = prefsBtnT.GetComponent<Button>();
+				if (prefsBtn != null) {
+					SpzUiThemeOps.ApplyBoundChromeSelectable(prefsBtn, t.controlBg, Color.Lerp(t.controlBg, t.accent, 0.22f));
+					SpzUiThemeOps.ClearNonFaceRaycastsForTheme(prefsBtn);
+				}
+				var prefsLabel = prefsBtnT.GetComponentInChildren<TextMeshProUGUI>(true);
+				if (prefsLabel != null) {
+					float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(prefsLabel, 11f);
+					SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(prefsLabel, t.textPrimary, basePt);
+				}
+			}
+			var toggle = (header != null ? header.Find("StatusToggle") : null)?.GetComponent<Toggle>();
 			if (toggle == null)
-				toggle = item.GetComponentInChildren<Toggle>(true);
+				toggle = item.transform.Find("StatusToggle")?.GetComponent<Toggle>();
+			if (toggle == null)
+				toggle = item.transform.Find("HeaderRow/StatusToggle")?.GetComponent<Toggle>();
 			string itemAddonId = null;
 			if (item.name != null && item.name.StartsWith("AddonItem_", StringComparison.Ordinal))
 				itemAddonId = item.name.Substring("AddonItem_".Length);
@@ -1536,7 +1555,9 @@ namespace spz {
 			if (!string.IsNullOrEmpty(itemAddonId) && Addon_MGR.instance != null
 			    && Addon_MGR.instance.GetAddons().TryGetValue(itemAddonId, out var liveInfo) && liveInfo != null)
 				enabled = GetDraftEnabled(itemAddonId, liveInfo.isEnabled);
-			var name = item.transform.Find("Name")?.GetComponent<TextMeshProUGUI>();
+			var name = (header != null ? header.Find("Name") : null)?.GetComponent<TextMeshProUGUI>();
+			if (name == null)
+				name = item.transform.Find("Name")?.GetComponent<TextMeshProUGUI>();
 			if (name != null) {
 				float nameBase = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(name, 14f);
 				SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(name, t.textPrimary, nameBase);
@@ -1556,11 +1577,35 @@ namespace spz {
 					SpzUiThemeOps.ApplyBoundChromeGraphic(fill, t.success);
 					fill.preserveAspect = true;
 					fill.gameObject.SetActive(true);
-					// Prefer Graphic.enabled over canvasRenderer.SetAlpha so Restore SPZ can unwind.
 					fill.enabled = enabled;
 					fill.canvasRenderer.SetAlpha(enabled ? 1f : 0f);
 				}
 			}
+			var ribbonToggle = FindChildRecursive(item.transform, "ShowInRibbonToggle")?.GetComponent<Toggle>();
+			if (ribbonToggle != null) {
+				Color face = ribbonToggle.isOn
+					? Color.Lerp(t.controlBg, t.success, 0.35f)
+					: t.controlBg;
+				SpzUiThemeOps.ApplyBoundChromeSelectable(ribbonToggle, face, t.accent);
+				var ribbonLabel = FindChildRecursive(item.transform, "ShowInRibbonLabel")?.GetComponent<TextMeshProUGUI>();
+				if (ribbonLabel != null) {
+					float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(ribbonLabel, 13f);
+					SpzUiThemeOps.ApplyBoundChromeTmp(ribbonLabel, t.textMuted, basePt);
+				}
+			}
+		}
+
+		static Transform FindChildRecursive(Transform root, string childName) {
+			if (root == null || string.IsNullOrEmpty(childName))
+				return null;
+			if (string.Equals(root.name, childName, StringComparison.Ordinal))
+				return root;
+			for (int i = 0; i < root.childCount; i++) {
+				var found = FindChildRecursive(root.GetChild(i), childName);
+				if (found != null)
+					return found;
+			}
+			return null;
 		}
 
 		void OnAddonEnabledStateChanged(string addonId) {
@@ -1624,13 +1669,21 @@ namespace spz {
 				return;
 			if (Addon_MGR.instance == null || !Addon_MGR.instance.GetAddons().TryGetValue(addonId, out var info))
 				return;
-			var toggle = item.transform.Find("StatusToggle")?.GetComponent<Toggle>();
+			var toggle = item.transform.Find("HeaderRow/StatusToggle")?.GetComponent<Toggle>();
+			if (toggle == null)
+				toggle = item.transform.Find("StatusToggle")?.GetComponent<Toggle>();
 			if (toggle == null) return;
 			// Live enable flag changed (save apply / load failure) — sync this id's draft entry.
 			_draftEnabledById[addonId] = info.isEnabled;
 			bool showOn = info.isEnabled;
 			toggle.SetIsOnWithoutNotify(showOn);
 			ApplyStatusDialVisual(toggle, showOn);
+			var ribbonToggle = FindChildRecursive(item.transform, "ShowInRibbonToggle")?.GetComponent<Toggle>();
+			if (ribbonToggle != null) {
+				bool ribbonOnly = string.Equals(addonId, Addon_MGR.RibbonOnlyFullscreenAddonId, StringComparison.Ordinal);
+				bool showRibbon = !ribbonOnly && Addon_MGR.instance.ShouldShowInCommandRibbon(addonId);
+				ribbonToggle.SetIsOnWithoutNotify(showRibbon);
+			}
 			bool stillVisible = _filterState == 0
 				|| (_filterState == 1 && showOn)
 				|| (_filterState == 2 && !showOn);
@@ -1673,6 +1726,10 @@ namespace spz {
 			
 			const float statusSize = 14f;
 			const float statusHitPad = 28f;
+			bool ribbonOnly = string.Equals(addonId, Addon_MGR.RibbonOnlyFullscreenAddonId, StringComparison.Ordinal);
+			bool showInRibbon = !ribbonOnly
+				&& (Addon_MGR.instance == null || Addon_MGR.instance.ShouldShowInCommandRibbon(addonId));
+
 			var itemObj = new GameObject($"AddonItem_{addonId}");
 			itemObj.transform.SetParent(_addonsListParent, false);
 			itemObj.layer = _addonsListParent.gameObject.layer;
@@ -1681,18 +1738,34 @@ namespace spz {
 			itemLayout.preferredHeight = 40f;
 			itemLayout.minHeight = 38f;
 			itemLayout.minWidth = 440f;
-			var horizontalLayout = itemObj.AddComponent<HorizontalLayoutGroup>();
+			itemLayout.flexibleWidth = 1f;
+			var verticalLayout = itemObj.AddComponent<VerticalLayoutGroup>();
+			verticalLayout.spacing = 4f;
+			verticalLayout.padding = new RectOffset(0, 0, 2, 2);
+			verticalLayout.childAlignment = TextAnchor.UpperLeft;
+			verticalLayout.childControlWidth = true;
+			verticalLayout.childControlHeight = true;
+			verticalLayout.childForceExpandWidth = true;
+			verticalLayout.childForceExpandHeight = false;
+
+			var headerObj = new GameObject("HeaderRow");
+			headerObj.transform.SetParent(itemObj.transform, false);
+			headerObj.AddComponent<RectTransform>();
+			var headerLE = headerObj.AddComponent<LayoutElement>();
+			headerLE.preferredHeight = 36f;
+			headerLE.minHeight = 34f;
+			headerLE.flexibleWidth = 1f;
+			var horizontalLayout = headerObj.AddComponent<HorizontalLayoutGroup>();
 			horizontalLayout.spacing = 10f;
 			horizontalLayout.padding = new RectOffset(0, 0, 4, 4);
 			horizontalLayout.childAlignment = TextAnchor.MiddleLeft;
 			horizontalLayout.childControlWidth = true;
-			// Keep height control off for the status disc so layout cannot stretch it into an oval.
 			horizontalLayout.childControlHeight = false;
 			horizontalLayout.childForceExpandWidth = false;
 			horizontalLayout.childForceExpandHeight = false;
 
 			var toggleObj = new GameObject("StatusToggle");
-			toggleObj.transform.SetParent(itemObj.transform, false);
+			toggleObj.transform.SetParent(headerObj.transform, false);
 			var toggleRect = toggleObj.AddComponent<RectTransform>();
 			toggleRect.sizeDelta = new Vector2(statusHitPad, statusHitPad);
 			var toggleLE = toggleObj.AddComponent<LayoutElement>();
@@ -1702,7 +1775,6 @@ namespace spz {
 			toggleLE.preferredHeight = statusHitPad;
 			toggleLE.minHeight = statusHitPad;
 			toggleLE.flexibleHeight = 0f;
-			// Invisible hit pad — full row-height target; Color.clear still raycasts when raycastTarget is true.
 			var hitPad = toggleObj.AddComponent<Image>();
 			hitPad.color = Color.clear;
 			hitPad.raycastTarget = true;
@@ -1721,7 +1793,6 @@ namespace spz {
 			var toggleCheckmarkObj = new GameObject("Checkmark");
 			toggleCheckmarkObj.transform.SetParent(ringObj.transform, false);
 			var toggleCheckmarkRect = toggleCheckmarkObj.AddComponent<RectTransform>();
-			// Inner fill ~44% of ring diameter — matches reference radio dial.
 			toggleCheckmarkRect.anchorMin = new Vector2(0.28f, 0.28f);
 			toggleCheckmarkRect.anchorMax = new Vector2(0.72f, 0.72f);
 			toggleCheckmarkRect.offsetMin = Vector2.zero;
@@ -1733,7 +1804,6 @@ namespace spz {
 			toggleCheckmark.raycastTarget = false;
 			var rowToggle = toggleObj.AddComponent<Toggle>();
 			rowToggle.targetGraphic = hitPad;
-			// Do NOT assign graphic — Unity Toggle would SetActive(false) on Checkmark when off and fight our alpha dial.
 			rowToggle.graphic = null;
 			rowToggle.transition = Selectable.Transition.None;
 			rowToggle.toggleTransition = Toggle.ToggleTransition.None;
@@ -1742,9 +1812,9 @@ namespace spz {
 			ApplyStatusDialVisual(rowToggle, draftOn);
 
 			var nameObj = new GameObject("Name");
-			nameObj.transform.SetParent(itemObj.transform, false);
+			nameObj.transform.SetParent(headerObj.transform, false);
 			var nameLE = nameObj.AddComponent<LayoutElement>();
-			nameLE.minWidth = 180f;
+			nameLE.minWidth = 140f;
 			nameLE.flexibleWidth = 1f;
 			nameLE.preferredHeight = 28f;
 			var nameText = nameObj.AddComponent<TextMeshProUGUI>();
@@ -1757,8 +1827,36 @@ namespace spz {
 			nameText.overflowMode = TMPro.TextOverflowModes.Ellipsis;
 			nameText.raycastTarget = false;
 
+			var prefsBtnObj = new GameObject("PreferencesButton");
+			prefsBtnObj.transform.SetParent(headerObj.transform, false);
+			var prefsBtnLE = prefsBtnObj.AddComponent<LayoutElement>();
+			prefsBtnLE.preferredWidth = 96f;
+			prefsBtnLE.minWidth = 88f;
+			prefsBtnLE.flexibleWidth = 0f;
+			prefsBtnLE.preferredHeight = 28f;
+			prefsBtnLE.minHeight = 28f;
+			var prefsBtnImage = prefsBtnObj.AddComponent<Image>();
+			SpzUiThemeOps.ApplyRoundedControlSprite(prefsBtnImage, markEligible: true);
+			prefsBtnImage.color = new Color(61f / 255f, 61f / 255f, 61f / 255f, 1f);
+			prefsBtnImage.raycastTarget = true;
+			var prefsBtn = prefsBtnObj.AddComponent<Button>();
+			prefsBtn.targetGraphic = prefsBtnImage;
+			prefsBtn.transition = Selectable.Transition.ColorTint;
+			var prefsBtnLabelGo = new GameObject("Text");
+			prefsBtnLabelGo.transform.SetParent(prefsBtnObj.transform, false);
+			var prefsBtnLabelRect = prefsBtnLabelGo.AddComponent<RectTransform>();
+			prefsBtnLabelRect.anchorMin = Vector2.zero;
+			prefsBtnLabelRect.anchorMax = Vector2.one;
+			prefsBtnLabelRect.sizeDelta = Vector2.zero;
+			var prefsBtnLabel = prefsBtnLabelGo.AddComponent<TextMeshProUGUI>();
+			prefsBtnLabel.text = "Preferences";
+			prefsBtnLabel.fontSize = 11f;
+			prefsBtnLabel.alignment = TextAlignmentOptions.Center;
+			prefsBtnLabel.color = new Color(0.88f, 0.88f, 0.9f, 1f);
+			prefsBtnLabel.raycastTarget = false;
+
 			var removeBtnObj = new GameObject("RemoveButton");
-			removeBtnObj.transform.SetParent(itemObj.transform, false);
+			removeBtnObj.transform.SetParent(headerObj.transform, false);
 			var removeBtnLE = removeBtnObj.AddComponent<LayoutElement>();
 			removeBtnLE.preferredWidth = 76f;
 			removeBtnLE.minWidth = 76f;
@@ -1786,6 +1884,99 @@ namespace spz {
 			removeBtnTextComp.raycastTarget = false;
 			removeBtn.onClick.AddListener(() => OnRemoveAddon(addonId));
 
+			var prefsBody = new GameObject("PreferencesBody");
+			prefsBody.transform.SetParent(itemObj.transform, false);
+			prefsBody.AddComponent<RectTransform>();
+			var prefsBodyLE = prefsBody.AddComponent<LayoutElement>();
+			prefsBodyLE.preferredHeight = 36f;
+			prefsBodyLE.minHeight = 32f;
+			prefsBodyLE.flexibleWidth = 1f;
+			var prefsBodyHLG = prefsBody.AddComponent<HorizontalLayoutGroup>();
+			prefsBodyHLG.spacing = 8f;
+			prefsBodyHLG.padding = new RectOffset(38, 8, 2, 2);
+			prefsBodyHLG.childAlignment = TextAnchor.MiddleLeft;
+			prefsBodyHLG.childControlWidth = true;
+			prefsBodyHLG.childControlHeight = false;
+			prefsBodyHLG.childForceExpandWidth = false;
+			prefsBodyHLG.childForceExpandHeight = false;
+			prefsBody.SetActive(false);
+
+			var ribbonToggleObj = new GameObject("ShowInRibbonToggle");
+			ribbonToggleObj.transform.SetParent(prefsBody.transform, false);
+			var ribbonToggleLE = ribbonToggleObj.AddComponent<LayoutElement>();
+			ribbonToggleLE.preferredWidth = 22f;
+			ribbonToggleLE.minWidth = 22f;
+			ribbonToggleLE.preferredHeight = 22f;
+			ribbonToggleLE.minHeight = 22f;
+			ribbonToggleLE.flexibleWidth = 0f;
+			var ribbonBg = ribbonToggleObj.AddComponent<Image>();
+			SpzUiThemeOps.ApplyRoundedControlSprite(ribbonBg, markEligible: true);
+			ribbonBg.color = new Color(0.22f, 0.22f, 0.24f, 1f);
+			ribbonBg.raycastTarget = true;
+			var ribbonCheckGo = new GameObject("Checkmark");
+			ribbonCheckGo.transform.SetParent(ribbonToggleObj.transform, false);
+			var ribbonCheckRt = ribbonCheckGo.AddComponent<RectTransform>();
+			ribbonCheckRt.anchorMin = new Vector2(0.2f, 0.2f);
+			ribbonCheckRt.anchorMax = new Vector2(0.8f, 0.8f);
+			ribbonCheckRt.offsetMin = Vector2.zero;
+			ribbonCheckRt.offsetMax = Vector2.zero;
+			var ribbonCheck = ribbonCheckGo.AddComponent<Image>();
+			ribbonCheck.sprite = UiRuntimeSprites.CircleFilled;
+			ribbonCheck.color = new Color(34f / 255f, 197f / 255f, 94f / 255f, 1f);
+			ribbonCheck.raycastTarget = false;
+			var ribbonToggle = ribbonToggleObj.AddComponent<Toggle>();
+			ribbonToggle.targetGraphic = ribbonBg;
+			ribbonToggle.graphic = ribbonCheck;
+			ribbonToggle.transition = Selectable.Transition.None;
+			ribbonToggle.SetIsOnWithoutNotify(showInRibbon);
+			ribbonToggle.interactable = !ribbonOnly;
+			if (ribbonOnly)
+				ribbonCheck.canvasRenderer.SetAlpha(0f);
+
+			var ribbonLabelObj = new GameObject("ShowInRibbonLabel");
+			ribbonLabelObj.transform.SetParent(prefsBody.transform, false);
+			var ribbonLabelLE = ribbonLabelObj.AddComponent<LayoutElement>();
+			ribbonLabelLE.flexibleWidth = 1f;
+			ribbonLabelLE.minWidth = 160f;
+			ribbonLabelLE.preferredHeight = 24f;
+			var ribbonLabel = ribbonLabelObj.AddComponent<TextMeshProUGUI>();
+			ribbonLabel.text = ribbonOnly
+				? "Show in Command Ribbon (viewport dock only — N/A)"
+				: "Show in Command Ribbon";
+			ribbonLabel.fontSize = 13f;
+			ribbonLabel.color = new Color(0.78f, 0.78f, 0.82f, 1f);
+			ribbonLabel.alignment = TextAlignmentOptions.MidlineLeft;
+			ribbonLabel.enableWordWrapping = false;
+			ribbonLabel.overflowMode = TextOverflowModes.Ellipsis;
+			ribbonLabel.raycastTarget = false;
+
+			void SetItemExpandedHeight(bool expanded) {
+				itemLayout.preferredHeight = expanded ? 78f : 40f;
+				itemLayout.minHeight = expanded ? 72f : 38f;
+			}
+
+			prefsBtn.onClick.AddListener(() => {
+				bool next = !prefsBody.activeSelf;
+				prefsBody.SetActive(next);
+				prefsBtnLabel.text = next ? "Preferences ▾" : "Preferences";
+				SetItemExpandedHeight(next);
+				LayoutRebuilder.ForceRebuildLayoutImmediate(itemObj.transform as RectTransform);
+				if (_addonsListParent != null)
+					LayoutRebuilder.ForceRebuildLayoutImmediate(_addonsListParent);
+			});
+
+			ribbonToggle.onValueChanged.AddListener((isOn) => {
+				if (Addon_MGR.instance == null || ribbonOnly)
+					return;
+				Addon_MGR.instance.SetShowInCommandRibbon(addonId, isOn);
+				bool enabled = GetDraftEnabled(addonId, addonInfo.isEnabled);
+				ShowStatus(enabled
+					? (isOn
+						? $"'{addonId}' — Command Ribbon tab shown. Click Save settings to keep."
+						: $"'{addonId}' — active, ribbon hidden. Click Save settings to keep.")
+					: $"'{addonId}' — ribbon preference updated (enable dial to load).", true);
+			});
+
 			rowToggle.onValueChanged.AddListener((isOn) => {
 				if (Addon_MGR.instance == null)
 					return;
@@ -1794,11 +1985,9 @@ namespace spz {
 				if (map.TryGetValue(id, out var info) && info != null && info.isEnabled == isOn) {
 					SetDraftEnabled(id, isOn);
 					ApplyStatusDialVisual(rowToggle, isOn);
-					// Connectivity repair: dial already matches live flag, but ribbon tab may be missing/orphan.
 					Addon_MGR.instance.SyncRibbonTabWithEnabledState(id);
 					return;
 				}
-				// Apply immediately so the command-ribbon tab appears/disappears with the dial.
 				_suppressEnabledListRefresh = true;
 				try {
 					SetDraftEnabled(id, isOn);
@@ -1808,14 +1997,16 @@ namespace spz {
 						Addon_MGR.instance.DisableAddon(id);
 					ApplyStatusDialVisual(rowToggle, isOn);
 					RefreshStatusCountsOnly();
-					bool ribbonOnly = string.Equals(id, Addon_MGR.RibbonOnlyFullscreenAddonId, StringComparison.Ordinal);
+					bool showRibbon = Addon_MGR.instance.ShouldShowInCommandRibbon(id);
 					ShowStatus(isOn
 						? (ribbonOnly
 							? $"Enabled '{id}' — viewport dock on. Click Save settings to keep next launch."
-							: $"Enabled '{id}' — ribbon tab on. Click Save settings to keep next launch.")
+							: showRibbon
+								? $"Enabled '{id}' — ribbon tab on. Click Save settings to keep next launch."
+								: $"Enabled '{id}' — active, ribbon hidden. Click Save settings to keep next launch.")
 						: (ribbonOnly
 							? $"Disabled '{id}' — viewport dock off. Click Save settings to keep next launch."
-							: $"Disabled '{id}' — ribbon tab off. Click Save settings to keep next launch."), true);
+							: $"Disabled '{id}' — unloaded. Click Save settings to keep next launch."), true);
 				} finally {
 					_suppressEnabledListRefresh = false;
 				}
