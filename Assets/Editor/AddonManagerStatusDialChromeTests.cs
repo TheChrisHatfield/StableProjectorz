@@ -42,6 +42,25 @@ public sealed class AddonManagerStatusDialChromeTests {
 	}
 
 	[Test]
+	public void PreferencesShowInRibbon_DoesNotUseThemeCheckboxToggle() {
+		string path = Path.GetFullPath(Path.Combine(
+			Application.dataPath,
+			"..",
+			"Assets/_gm/Features/AddonSystem/AddonManager_UI.cs"));
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("ThemeShowInRibbonCheckbox"),
+			"Show-in-Ribbon must use ThemeShowInRibbonCheckbox (no SolidSquare stretch).");
+		int themeItem = src.IndexOf("void ThemeAddonListItem(", System.StringComparison.Ordinal);
+		int next = src.IndexOf("static Transform FindChildRecursive(", themeItem, System.StringComparison.Ordinal);
+		string body = src.Substring(themeItem, next - themeItem);
+		Assert.That(body, Does.Not.Contain("ThemeCheckboxToggle(ribbonToggle"),
+			"ThemeCheckboxToggle on ShowInRibbonToggle stretches the face into a green capsule over dials/names.");
+		Assert.That(body, Does.Contain("ThemeShowInRibbonCheckbox(ribbonToggle"));
+		Assert.That(src, Does.Contain("Viewport Gen Art dock only"),
+			"RibbonOnlyFullscreen prefs must show dock-only copy without a N/A checkbox.");
+	}
+
+	[Test]
 	public void ApplyThemeTokens_SnapshotsLayoutGroupsBeforeNomadPads() {
 		string path = Path.GetFullPath(Path.Combine(
 			Application.dataPath,
