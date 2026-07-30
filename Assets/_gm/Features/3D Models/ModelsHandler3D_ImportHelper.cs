@@ -266,13 +266,17 @@ namespace spz {
         
 	        void PerformSave(string path){
 	             path = Path.ChangeExtension(path, "fbx");
-	             // Always record where the FBX was written (Export3D_with_textures* and API export-to-path rely on this).
-	             _path_recentlyExported = path;
 	            if (o3d == null || o3d.currModelRootGO == null) {
 		            UnityEngine.Debug.LogWarning("[ModelsHandler3D_ImportHelper] SaveDefaultDoor_toFile: no current model root GO; cannot re-export FBX scene.");
 		            return;
 	            }
 	            _saveFBX_helper.SaveModels(path, o3d.currModelRootGO);
+	            // Only record path after a successful write — stale _path_recentlyExported misleads headless export.
+	            if (File.Exists(path)) {
+		            _path_recentlyExported = path;
+	            } else {
+		            UnityEngine.Debug.LogWarning("[ModelsHandler3D_ImportHelper] SaveDefaultDoor_toFile: FBX not found after SaveModels: " + path);
+	            }
 	        }
 
 	        if(string.IsNullOrEmpty(pathWithExten)){//allow user to select directory manually
@@ -294,6 +298,8 @@ namespace spz {
 		    if( string.IsNullOrEmpty(absolutePath) ){
 			    return;
 		    }
+		    // Clear stale path so callers cannot treat a previous export as this request's result.
+		    _path_recentlyExported = "";
 		    // Blender 4+ rejects ASCII FBX. For any explicit .fbx target, always re-export
 		    // from the current scene through the Unity FBX writer helper (binary-preferred),
 		    // instead of writing cached imported bytes verbatim.
