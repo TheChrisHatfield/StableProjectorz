@@ -138,11 +138,59 @@ namespace spz {
 			    return false;
 		    }
 		    path_exported3D = Path.ChangeExtension( path_exported3D, null );
+		    string meshPathForStamp = mh._path_recentlyExported;
 		    _saveLoad_helper.Save_FinalCompositeTexture( OnReady1 );
 		    void OnReady1() => StartCoroutine( WaitForRenderAll_crtn( skipAO_blit:true, OnReady2 ) );
 		    void OnReady2() => Save_Mesh_Textures( onHaveAlbedo:null, path_exported3D, isDilate: true, forbid_albedoDelete:false, onComplete:OnComplete );
-		    void OnComplete() => _isSaving = false;
+		    void OnComplete() {
+			    // Stamp before clearing _isSaving so waiters (native UI / TCP) never race an absent sidecar.
+			    TryWriteSpzGoExchangeReadyStamp( meshPathForStamp );
+			    _isSaving = false;
+		    }
 		    return true;
+	    }
+
+	    /// <summary>
+	    /// Sidecar next to exchange FBX so Blender's SPZ GO watcher can auto-import after Export.
+	    /// Name: <c>{basename}.spz_go_ready</c> (e.g. from_spz.spz_go_ready).
+	    /// </summary>
+	    public static void TryWriteSpzGoExchangeReadyStamp( string meshFilePath ){
+		    if( string.IsNullOrEmpty( meshFilePath ) ) return;
+		    try {
+			    string dir = Path.GetDirectoryName( meshFilePath );
+			    string baseName = Path.GetFileNameWithoutExtension( meshFilePath );
+			    if( string.IsNullOrEmpty( dir ) || string.IsNullOrEmpty( baseName ) ) return;
+			    string stamp = Path.Combine( dir, baseName + ".spz_go_ready" );
+			    long size = 0;
+			    double mtime = 0;
+			    if( File.Exists( meshFilePath ) ) {
+				    var fi = new FileInfo( meshFilePath );
+				    size = fi.Length;
+				    mtime = fi.LastWriteTimeUtc.Subtract( new DateTime( 1970, 1, 1, 0, 0, 0, DateTimeKind.Utc ) ).TotalSeconds;
+			    }
+			    float fitScale = 1f;
+			    float userScale = 1f;
+			    var container = UnityEngine.Object.FindObjectOfType<Objs3D_Container>();
+			    if( container != null && container.currModelRootGO != null ){
+				    fitScale = container.EffectiveFitScale();
+				    userScale = container.GetUserGlobalScale();
+			    }
+			    var inv = System.Globalization.CultureInfo.InvariantCulture;
+			    File.WriteAllText( stamp,
+				    "spz_go_ready=1\n"
+				    + "mesh=" + Path.GetFileName( meshFilePath ) + "\n"
+				    + "size=" + size + "\n"
+				    + "mtime_utc=" + mtime.ToString( "R", inv ) + "\n"
+				    + "written_utc=" + DateTime.UtcNow.ToString( "o" ) + "\n"
+				    + "scale_undid_fit=1\n"
+				    + "fit_scale=" + fitScale.ToString( "R", inv ) + "\n"
+				    + "user_scale=" + userScale.ToString( "R", inv ) + "\n"
+				    + "spz_fit_target=" + Objs3D_Container.SpzFitTargetMaxDimension.ToString( "R", inv ) + "\n"
+				    + "blender_default_cube_edge=" + Objs3D_Container.BlenderDefaultCubeEdgeMeters.ToString( "R", inv ) + "\n" );
+			    UnityEngine.Debug.Log( "[Save_MGR] SPZ GO exchange ready stamp: " + stamp );
+		    } catch( Exception ex ) {
+			    UnityEngine.Debug.LogWarning( "[Save_MGR] SPZ GO ready stamp failed: " + ex.Message );
+		    }
 	    }
 
 
