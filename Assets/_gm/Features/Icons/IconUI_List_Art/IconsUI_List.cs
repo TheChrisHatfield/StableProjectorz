@@ -517,6 +517,24 @@ namespace spz {
 	                SpzUiThemeOps.ApplyBoundChromeGraphic(headerImg, t.controlBg);
 	            foreach (var btn in _header.GetComponentsInChildren<Button>(true)) {
 	                if (btn == null) continue;
+	                // Import / AO / delete glyphs often ARE the targetGraphic — SolidSquare blanks them.
+	                if (btn.targetGraphic != null && btn.targetGraphic.color.a < 0.08f) {
+	                    SpzUiThemeOps.EnsureSelectableHitFace(btn);
+	                    SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
+	                    continue;
+	                }
+	                if (btn.targetGraphic is Image glyphFace
+	                    && glyphFace.sprite != null
+	                    && glyphFace.preserveAspect
+	                    && !UiRuntimeSprites.IsSolidRect(glyphFace.sprite)) {
+	                    SpzUiThemeOps.EnsureSelectableHitFace(btn);
+	                    SpzUiThemeOps.ApplyBoundChromeGraphic(glyphFace, t.iconTint);
+	                    var glyphLabel = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+	                    if (glyphLabel != null)
+	                        SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(glyphLabel, t.textPrimary, 11f);
+	                    SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
+	                    continue;
+	                }
 	                SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
 	                var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	                if (label != null)
