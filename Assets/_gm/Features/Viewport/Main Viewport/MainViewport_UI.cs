@@ -217,7 +217,7 @@ namespace spz {
 
 	        bool key_held =  Keyboard.current.rKey.isPressed;
 	        bool key_down =  Keyboard.current.rKey.wasPressedThisFrame;
-	        bool hovering =  isCursorHoveringMe() || KeyMousePenInput.isSomeInputFieldActive()==false;
+	        bool hovering =  isCursorHoveringMe() && KeyMousePenInput.isSomeInputFieldActive()==false;
 
 	        if (!hovering || !key_held){
 	            projs._showOrderOfProjections = false;
