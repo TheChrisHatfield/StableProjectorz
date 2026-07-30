@@ -1533,6 +1533,7 @@ namespace spz {
 
 		static void ThemeHeaderButton(Button button, Color normal, Color highlighted, Color foreground) {
 			if (button == null) return;
+			SpzUiThemeOps.EnsureSelectableHitFace(button);
 			SpzUiThemeOps.ApplyBoundChromeSelectable(button, normal, highlighted);
 			var label = button.transform.Find("Text")?.GetComponent<TextMeshProUGUI>();
 			var icon = button.transform.Find("LineIcon")?.GetComponent<Image>();
