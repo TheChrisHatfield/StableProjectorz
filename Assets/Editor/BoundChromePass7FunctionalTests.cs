@@ -55,6 +55,56 @@ public sealed class BoundChromePass7FunctionalTests {
 	}
 
 	[Test]
+	public void ThemeFlatToolToggle_SoftLabelFitsWithoutStripTrackingWrap() {
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-soft-label",
+			new JObject {
+				["control_bg"] = "#292A2EFF",
+				["accent"] = "#F2CA50FF",
+				["tab_active"] = "#343539FF",
+				["text_primary"] = "#E3E2E7FF",
+			},
+			"replace",
+			out string error), Is.True, error);
+
+		var go = new GameObject("SoftLabelCell", typeof(RectTransform), typeof(Image), typeof(Toggle));
+		go.SetActive(false);
+		try {
+			var rt = go.GetComponent<RectTransform>();
+			rt.sizeDelta = new Vector2(44f, 36f);
+			var face = go.GetComponent<Image>();
+			var toggle = go.GetComponent<Toggle>();
+			toggle.targetGraphic = face;
+			toggle.isOn = true;
+
+			var labelGo = new GameObject("Input (text)", typeof(RectTransform));
+			labelGo.transform.SetParent(go.transform, false);
+			var labelRt = labelGo.GetComponent<RectTransform>();
+			labelRt.anchorMin = Vector2.zero;
+			labelRt.anchorMax = Vector2.one;
+			labelRt.offsetMin = Vector2.zero;
+			labelRt.offsetMax = Vector2.zero;
+			var tmp = labelGo.AddComponent<TextMeshProUGUI>();
+			tmp.text = "soft";
+			tmp.font = TMP_Settings.defaultFontAsset;
+			tmp.fontSize = 18f;
+			tmp.enableWordWrapping = true;
+
+			Color faceCol = Color.Lerp(SpzUiThemeOps.Active.tabActive, SpzUiThemeOps.Active.accent, 0.45f);
+			SpzUiThemeOps.ThemeFlatToolToggle(toggle, faceCol, SpzUiThemeOps.Active.accent, SpzUiThemeOps.Active.textPrimary);
+
+			Assert.That(tmp.enableWordWrapping, Is.False, "SOFT must not wrap to SOF/T across Soft|Tile boundary");
+			Assert.That(tmp.characterSpacing, Is.LessThan(4f), "strip tracking (18) overflows Soft cell");
+			Assert.That(tmp.overflowMode, Is.EqualTo(TextOverflowModes.Truncate));
+			Assert.That((tmp.fontStyle & FontStyles.UpperCase) != 0, Is.True);
+		}
+		finally {
+			Object.DestroyImmediate(go);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
 	public void SoftTileable_SourceUsesThemeFlatToolToggle() {
 		string path = Path.GetFullPath(Path.Combine(
 			Application.dataPath,
