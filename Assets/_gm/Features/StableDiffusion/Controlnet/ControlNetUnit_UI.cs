@@ -318,6 +318,8 @@ namespace spz {
 	    void ApplyThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
+	            // Preprocessor res chip/slideOut are ownership roots — may sit outside unit transform.
+	            _preprocessor?.ApplyThemeTokens();
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
