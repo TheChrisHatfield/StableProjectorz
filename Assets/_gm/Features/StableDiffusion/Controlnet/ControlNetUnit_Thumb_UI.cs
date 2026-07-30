@@ -166,8 +166,9 @@ namespace spz {
 	        }
 	        if (_clickMe_text != null) {
 	            foreach (var tmp in _clickMe_text.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
-	                if (tmp != null)
-	                    SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textMuted, 11f);
+	                if (tmp == null) continue;
+	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textMuted, 11f);
+	                tmp.raycastTarget = false;
 	            }
 	        }
 	        // Thumb-local depth dials (shown when selected) — same Pass27 hit-face path as left-ribbon dials.
