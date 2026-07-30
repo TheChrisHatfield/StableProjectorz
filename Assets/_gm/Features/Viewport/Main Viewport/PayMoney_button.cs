@@ -43,8 +43,8 @@ namespace spz {
 	        SpzUiThemeOps.ApplyBoundChromeSelectable(_button, t.controlBg, t.accent);
 	        foreach (var tmp in _button.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp == null) continue;
-	            // Snapshot via ApplyBoundChromeTmp first — never clear raycast before snapshot (leave poison).
-	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	            // Compact — BoundChromeTmp (~10 tracking) still spills into Settings gear.
+	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
 	        }
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_button);
 	    }
