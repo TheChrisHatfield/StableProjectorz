@@ -542,19 +542,19 @@ namespace spz {
 	            var panelImg = _wholePanel_canvGrp.GetComponent<Image>();
 	            if (panelImg != null)
 	                SpzUiThemeOps.ApplyBoundChromeGraphic(panelImg, t.panelBg);
-	            foreach (var tmp in _wholePanel_canvGrp.GetComponentsInChildren<TextMeshProUGUI>(true)) {
-	                if (tmp == null) continue;
-	                // Soft/Tileable/Ignore get Compact via ThemeFlatToolToggle — skip strip tracking here.
-	                if (tmp.GetComponentInParent<Toggle>(true) != null) continue;
-	                if (tmp.GetComponentInParent<CircleSlider_Snapping_UI>(true) != null) continue;
-	                // Rethink/blur readouts themed as DialValue below.
-	                if (ReferenceEquals(tmp, _reThink_text) || ReferenceEquals(tmp, _reThink_text_mini)
-	                    || ReferenceEquals(tmp, _mask_blur_text))
-	                    continue;
-	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
-	                tmp.characterSpacing = 0f;
-	            }
+	            SpzUiThemeOps.ApplyBoundChromeRolesUnder(_wholePanel_canvGrp.transform, new SpzUiThemeRoleMatrixOptions {
+	                PreferFlatToolToggles = true,
+	                Exclude = c => {
+	                    if (c is TextMeshProUGUI tmp && (
+	                            ReferenceEquals(tmp, _reThink_text)
+	                            || ReferenceEquals(tmp, _reThink_text_mini)
+	                            || ReferenceEquals(tmp, _mask_blur_text)))
+	                        return true;
+	                    return false;
+	                },
+	            });
 	        }
+	        // Dial numerals beside GenArt — DialValue (may sit outside whole-panel root).
 	        ThemeTmp(_reThink_text, t);
 	        ThemeTmp(_reThink_text_mini, t);
 	        ThemeTmp(_mask_blur_text, t);
@@ -563,6 +563,7 @@ namespace spz {
 	        ThemeCircle(_blur_slider, t);
 	        ThemeCircle(_edgeThresh_slider, t);
 	        ThemeCircle(_edgeThick_slider, t);
+	        // Soft/Tileable/Ignore — PreferFlatToolToggles covers in-panel; re-assert if refs sit outside.
 	        ThemeToggle(_softInpaint, t);
 	        ThemeToggle(_tileableInpaint, t);
 	        ThemeToggle(_ignoreDepthOrNormals, t);

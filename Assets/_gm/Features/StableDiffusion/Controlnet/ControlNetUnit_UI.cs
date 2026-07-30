@@ -360,75 +360,29 @@ namespace spz {
 	        if (rootImg != null)
 	            SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.panelBg);
 
-	        foreach (var dd in GetComponentsInChildren<TMP_Dropdown>(true)) {
-	            if (dd == null) continue;
-	            // Caption TMP loses raycasts under BoundChrome; Ensure hit face or model/preproc picks die
-	            // (Gen Art stays gated until Depth/Normals ControlNet is enabled).
-	            SpzUiThemeOps.ApplyBoundChromeSelectable(dd, t.fieldBg, t.accent);
-	            if (dd.targetGraphic is Image fieldImg) {
-	                SpzUiThemeOps.ApplyRoundedControlSprite(fieldImg, markEligible: true);
-	            }
-	            if (dd.captionText != null)
-	                SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(dd.captionText, t.textPrimary, 12f);
-	            if (dd.itemText != null)
-	                SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(dd.itemText, t.textPrimary, 12f);
-	        }
+	        // Role matrix aligns Nomad with traditional CN chrome (dropdowns, buttons, dials, download slide).
+	        SpzUiThemeOps.ApplyBoundChromeRolesUnder(transform, new SpzUiThemeRoleMatrixOptions {
+	            CompactLooseLabels = true,
+	            Exclude = c => {
+	                if (ReferenceEquals(c, _headerRibbon_button)) return true;
+	                if (c is TextMeshProUGUI tmp && ReferenceEquals(tmp, _mainHeader)) return true;
+	                if (c is Toggle tog) {
+	                    if (IsHeaderModeToggle(tog)) return true;
+	                    if (_preprocessor != null && _preprocessor.OwnsResToggle(tog)) return true;
+	                }
+	                return false;
+	            },
+	        });
 
+	        // Checkbox silo for resize/context (matrix used ThemeCheckboxToggle without ReadableBody labels —
+	        // re-assert label ReadableBody for non-header toggles owned here).
 	        foreach (var toggle in GetComponentsInChildren<Toggle>(true)) {
-	            if (toggle == null) continue;
-	            if (IsHeaderModeToggle(toggle)) continue; // already themed above (bevel hide OK for P/B/C/LOW)
+	            if (toggle == null || IsHeaderModeToggle(toggle)) continue;
 	            if (_preprocessor != null && _preprocessor.OwnsResToggle(toggle)) continue;
-	            // Context menus / resize modes need real Checkmark glyphs — not flat-cell hide.
 	            ThemeCheckboxToggle(toggle, t);
 	        }
 
 	        _preprocessor?.ApplyThemeTokens();
-
-	        foreach (var btn in GetComponentsInChildren<Button>(true)) {
-	            if (btn == null) continue;
-	            if (ReferenceEquals(btn, _headerRibbon_button)) continue;
-	            if (btn.GetComponent<TMP_Dropdown>() != null) continue;
-	            // Download-more slide owns its chrome (ReadableBody list + Compact buttons).
-	            if (_downloadHelper != null && _downloadHelper.OwnsTransform(btn.transform)) continue;
-	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
-	            if (btn.targetGraphic is Image btnImg) {
-	                SpzUiThemeOps.ApplyRoundedControlSprite(btnImg, markEligible: true);
-	            }
-	            foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) {
-	                if (tmp != null)
-	                    SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
-	            }
-	        }
-
-	        foreach (var tmp in GetComponentsInChildren<TextMeshProUGUI>(true)) {
-	            if (tmp == null) continue;
-	            if (ReferenceEquals(tmp, _mainHeader)) continue;
-	            if (tmp.GetComponentInParent<CircleSlider_Snapping_UI>() != null) continue;
-	            if (tmp.GetComponentInParent<TMP_Dropdown>() != null) continue;
-	            if (tmp.GetComponentInParent<Toggle>() != null) continue;
-	            if (tmp.GetComponentInParent<Button>() != null) continue;
-	            if (_downloadHelper != null && _downloadHelper.OwnsTransform(tmp.transform)) continue;
-	            // Field labels (preprocess / model / start / end / weight) — lift contrast off muted authored grey.
-	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
-	        }
-
-	        ThemeCircleDial(_startingControl_step, t);
-	        ThemeCircleDial(_endingControl_step, t);
-	        ThemeCircleDial(_controlWeight_slider, t);
-	        // Dropdowns helper may hold a duplicate starting-step ref; theme all under unit.
-	        foreach (var dial in GetComponentsInChildren<CircleSlider_Snapping_UI>(true)) {
-	            if (dial != null)
-	                dial.ApplyThemeTokens(t.accent, t.textPrimary);
-	        }
-
-	        foreach (var lg in GetComponentsInChildren<LayoutGroup>(true)) {
-	            if (lg == null) continue;
-	            if (_downloadHelper != null && _downloadHelper.OwnsTransform(lg.transform)) continue;
-	            SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
-	        }
-
-	        // After unit sweeps — ReadableBody + row gaps for "download more" list (gen path).
-	        _downloadHelper?.ApplyThemeTokens();
 	    }
 
 	    /// <summary>

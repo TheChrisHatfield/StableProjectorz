@@ -200,7 +200,8 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Retints the SD input column: flat Nomad cells on prompt presets / web-find / fields (no chrome anchors).
+	    /// Retints the SD input column: role matrix aligns Nomad with traditional controls;
+	    /// prompt presets / web-find / resolution chips stay specialized composers.
 	    /// </summary>
 	    void ApplyThemeTokens() {
 	        // Bound chrome: authored SPZ colors until a non-default theme is applied.
@@ -217,98 +218,47 @@ namespace spz {
 	        if (rootImg != null)
 	            SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.panelBg);
 
+	        SpzUiThemeOps.ApplyBoundChromeRolesUnder(root, new SpzUiThemeRoleMatrixOptions {
+	            DetectPromptLabels = true,
+	            Exclude = c => {
+	                if (c is Button b && IsWebFindButton(b)) return true;
+	                if (c is Toggle tog && IsPromptPresetToggle(tog)) return true;
+	                if (IsResolutionPresetControl(c)) return true;
+	                return false;
+	            },
+	        });
+
+	        // Specialized traditional composers (not generic SelectableFace).
 	        foreach (var btn in root.GetComponentsInChildren<Button>(true)) {
-	            if (btn == null) continue;
-	            // Dropdown row hit targets stay transparent.
-	            if (btn.gameObject.name.StartsWith("Dropdown_", System.StringComparison.Ordinal))
-	                continue;
-	            // VAE / neural "download more" slides own ReadableBody chrome.
-	            if (btn.GetComponentInParent<SlideOut_Widget_UI>(true) != null)
-	                continue;
-	            bool isField = btn.GetComponent<TMP_Dropdown>() != null
-	                || string.Equals(btn.gameObject.name, "Dropdown", System.StringComparison.Ordinal);
-	            Color fill = isField ? t.fieldBg : FlatCellFill(false, t);
-	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, fill, t.accent);
-	            if (IsWebFindButton(btn)) {
-	                // Globe: same hard square as prompt preset chips.
-	                SpzUiThemeOps.ThemePromptPresetSquareCell(btn, FlatCellFill(false, t), t.accent);
-	                SpzUiThemeOps.ApplyControlLineIcon(btn.transform, StudioLineIcon.Globe, 16f);
-	                continue;
-	            }
-	            if (btn.targetGraphic is Image btnImg) {
-	                SpzUiThemeOps.ApplyRoundedControlSprite(btnImg, markEligible: true);
-	            }
+	            if (btn == null || !IsWebFindButton(btn)) continue;
+	            SpzUiThemeOps.ThemePromptPresetSquareCell(btn, FlatCellFill(false, t), t.accent);
+	            SpzUiThemeOps.ApplyControlLineIcon(btn.transform, StudioLineIcon.Globe, 16f);
 	        }
 	        foreach (var toggle in root.GetComponentsInChildren<Toggle>(true)) {
-	            if (toggle == null) continue;
-	            if (toggle.GetComponentInParent<SlideOut_Widget_UI>(true) != null) continue;
-	            if (IsPromptPresetToggle(toggle))
-	                ThemePromptPresetToggle(toggle, t);
-	            else
-	                SpzUiThemeOps.ThemeCheckboxToggle(toggle, t.controlBg, t.accent, t.success);
+	            if (toggle == null || !IsPromptPresetToggle(toggle)) continue;
+	            ThemePromptPresetToggle(toggle, t);
+	            SpzUiThemeOps.EnsurePromptPresetRowGaps(toggle.transform);
 	        }
-	        foreach (var dd in root.GetComponentsInChildren<TMP_Dropdown>(true)) {
-	            if (dd == null) continue;
-	            SpzUiThemeOps.ApplyBoundChromeSelectable(dd, t.fieldBg, t.accent);
-	            if (dd.targetGraphic is Image ddImg) {
-	                SpzUiThemeOps.ApplyRoundedControlSprite(ddImg, markEligible: true);
-	            }
-	            if (dd.captionText != null)
-	                SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(dd.captionText, t.textPrimary, 12f);
-	        }
-	        foreach (var input in root.GetComponentsInChildren<TMP_InputField>(true)) {
-	            if (input == null) continue;
-	            var bg = input.GetComponent<Image>();
-	            if (bg != null) {
-	                SpzUiThemeOps.ApplyBoundChromeGraphic(bg, t.fieldBg);
-	                SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
-	            }
-	            if (input.textComponent != null)
-	                SpzUiThemeOps.ApplyBoundChromeTmp(input.textComponent, t.textPrimary);
-	            if (input.placeholder is TMP_Text ph)
-	                SpzUiThemeOps.ApplyBoundChromeTmp(ph, t.textMuted);
-	        }
-	        foreach (var tmp in root.GetComponentsInChildren<TextMeshProUGUI>(true)) {
-	            if (tmp == null) continue;
-	            if (tmp.gameObject.name == "Placeholder") continue;
-	            if (tmp.GetComponentInParent<SlideOut_Widget_UI>(true) != null) continue;
-	            // Prompt +/- headers: mild uppercase — not strip tracking (collides with fixed "-" glyph).
-	            if (IsPromptPolaritySignLabel(tmp))
-	                SpzUiThemeOps.ApplyBoundChromePromptPolaritySignTmp(tmp, t.textPrimary);
-	            else if (IsPromptHeaderLabel(tmp))
-	                SpzUiThemeOps.ApplyBoundChromePromptHeaderTmp(tmp, t.textPrimary, 13f);
-	            else if (tmp.GetComponentInParent<TMP_InputField>(true) != null)
-	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
-	            else if (tmp.GetComponentInParent<Button>(true) != null
-	                     || tmp.GetComponentInParent<Toggle>(true) != null)
-	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
-	            else
-	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
-	        }
-	        if (_sampleSteps_slider != null)
-	            _sampleSteps_slider.ApplyThemeTokens(t.accent, t.textPrimary);
-	        if (_CFG_scale_slider != null)
-	            _CFG_scale_slider.ApplyThemeTokens(t.accent, t.textPrimary);
 	        ThemeResolutionPreset(_resolutionPreset_512, 512, t);
 	        ThemeResolutionPreset(_resolutionPreset_768, 768, t);
 	        ThemeResolutionPreset(_resolutionPreset_1024, 1024, t);
 	        ThemeResolutionPreset(_resolutionPreset_1536, 1536, t);
 	        ThemeResolutionPreset(_resolutionPreset_2048, 2048, t);
-	        foreach (var lg in root.GetComponentsInChildren<LayoutGroup>(true)) {
-	            if (lg == null) continue;
-	            if (lg.GetComponentInParent<SlideOut_Widget_UI>(true) != null) continue;
-	            SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
-	        }
-	        // Re-assert preset chip gaps after layout scale (authored spacing 0 → scale still 0).
-	        foreach (var toggle in root.GetComponentsInChildren<Toggle>(true)) {
-	            if (toggle != null && IsPromptPresetToggle(toggle))
-	                SpzUiThemeOps.EnsurePromptPresetRowGaps(toggle.transform);
-	        }
-	        // VAE / checkpoint "download more" — same ReadableBody path as ControlNet (gen basics).
-	        foreach (var slide in root.GetComponentsInChildren<SlideOut_Widget_UI>(true)) {
-	            if (slide != null)
-	                SpzUiThemeOps.ApplyDownloadMoreSlideChrome(slide.transform);
-	        }
+	    }
+
+	    bool IsResolutionPresetControl(Component c) {
+	        if (c == null) return false;
+	        Transform tr = c.transform;
+	        return IsUnderPreset(tr, _resolutionPreset_512)
+	            || IsUnderPreset(tr, _resolutionPreset_768)
+	            || IsUnderPreset(tr, _resolutionPreset_1024)
+	            || IsUnderPreset(tr, _resolutionPreset_1536)
+	            || IsUnderPreset(tr, _resolutionPreset_2048);
+	    }
+
+	    static bool IsUnderPreset(Transform tr, Component preset) {
+	        if (tr == null || preset == null) return false;
+	        return tr == preset.transform || tr.IsChildOf(preset.transform);
 	    }
 
 	    /// <summary>Re-sync preset cell fills after a slot is selected (selection can change without ThemeChanged).</summary>
