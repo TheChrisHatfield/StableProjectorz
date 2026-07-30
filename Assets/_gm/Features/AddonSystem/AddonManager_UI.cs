@@ -1626,7 +1626,12 @@ namespace spz {
 				var prefsLabel = prefsBtnT.GetComponentInChildren<TextMeshProUGUI>(true);
 				if (prefsLabel != null) {
 					float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(prefsLabel, 11f);
-					SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(prefsLabel, t.textPrimary, basePt);
+					// Not CompactToolLabel — UpperCase+Truncate turns "Preferences" into PREFEREN□ and clips.
+					SpzUiThemeOps.ApplyBoundChromeTmp(prefsLabel, t.textPrimary, basePt);
+					prefsLabel.enableWordWrapping = false;
+					prefsLabel.overflowMode = TextOverflowModes.Ellipsis;
+					prefsLabel.fontStyle = FontStyles.Normal;
+					prefsLabel.characterSpacing = 0f;
 				}
 			}
 			var toggle = (header != null ? header.Find("StatusToggle") : null)?.GetComponent<Toggle>();
@@ -1831,7 +1836,8 @@ namespace spz {
 			verticalLayout.padding = new RectOffset(0, 0, 2, 2);
 			verticalLayout.childAlignment = TextAnchor.UpperLeft;
 			verticalLayout.childControlWidth = true;
-			verticalLayout.childControlHeight = true;
+			// Prefer LayoutElement heights — childControlHeight=true stretched dials/prefs into grey bars.
+			verticalLayout.childControlHeight = false;
 			verticalLayout.childForceExpandWidth = true;
 			verticalLayout.childForceExpandHeight = false;
 
@@ -1980,12 +1986,16 @@ namespace spz {
 			prefsBody.transform.SetParent(itemObj.transform, false);
 			prefsBody.AddComponent<RectTransform>();
 			var prefsBodyLE = prefsBody.AddComponent<LayoutElement>();
-			prefsBodyLE.preferredHeight = 36f;
-			prefsBodyLE.minHeight = 32f;
+			prefsBodyLE.preferredHeight = 40f;
+			prefsBodyLE.minHeight = 36f;
 			prefsBodyLE.flexibleWidth = 1f;
+			var prefsBodyBg = prefsBody.AddComponent<Image>();
+			prefsBodyBg.color = new Color(0.14f, 0.14f, 0.16f, 0.92f);
+			prefsBodyBg.raycastTarget = false;
+			SpzUiThemeOps.ApplyRoundedControlSprite(prefsBodyBg, markEligible: true);
 			var prefsBodyHLG = prefsBody.AddComponent<HorizontalLayoutGroup>();
 			prefsBodyHLG.spacing = 8f;
-			prefsBodyHLG.padding = new RectOffset(38, 8, 2, 2);
+			prefsBodyHLG.padding = new RectOffset(38, 10, 6, 6);
 			prefsBodyHLG.childAlignment = TextAnchor.MiddleLeft;
 			prefsBodyHLG.childControlWidth = true;
 			prefsBodyHLG.childControlHeight = false;
@@ -2046,18 +2056,56 @@ namespace spz {
 				: "When on, an enabled add-on shows a Command Ribbon tab. When off, it stays active but the tab is hidden.");
 
 			void SetItemExpandedHeight(bool expanded) {
-				itemLayout.preferredHeight = expanded ? 78f : 40f;
-				itemLayout.minHeight = expanded ? 72f : 38f;
+				itemLayout.preferredHeight = expanded ? 86f : 40f;
+				itemLayout.minHeight = expanded ? 80f : 38f;
+			}
+
+			void SetPrefsButtonLabel(bool expanded) {
+				prefsBtnLabel.text = expanded ? "Hide" : "Preferences";
+				prefsBtnLabel.fontStyle = FontStyles.Normal;
+				prefsBtnLE.preferredWidth = expanded ? 64f : 96f;
+				prefsBtnLE.minWidth = expanded ? 56f : 88f;
 			}
 
 			prefsBtn.onClick.AddListener(() => {
 				bool next = !prefsBody.activeSelf;
+				// One expanded prefs row at a time — multiple open bodies stack grey panels over dials/names.
+				if (next && _addonsListParent != null) {
+					for (int i = 0; i < _addonsListParent.childCount; i++) {
+						var other = _addonsListParent.GetChild(i);
+						if (other == null || other == itemObj.transform) continue;
+						var otherBody = other.Find("PreferencesBody");
+						if (otherBody == null || !otherBody.gameObject.activeSelf) continue;
+						otherBody.gameObject.SetActive(false);
+						var otherItemLe = other.GetComponent<LayoutElement>();
+						if (otherItemLe != null) {
+							otherItemLe.preferredHeight = 40f;
+							otherItemLe.minHeight = 38f;
+						}
+						var otherPrefsBtn = other.Find("HeaderRow/PreferencesButton");
+						var otherLabel = otherPrefsBtn != null
+							? otherPrefsBtn.GetComponentInChildren<TextMeshProUGUI>(true) : null;
+						if (otherLabel != null) {
+							otherLabel.text = "Preferences";
+							otherLabel.fontStyle = FontStyles.Normal;
+						}
+						var otherBtnLe = otherPrefsBtn != null ? otherPrefsBtn.GetComponent<LayoutElement>() : null;
+						if (otherBtnLe != null) {
+							otherBtnLe.preferredWidth = 96f;
+							otherBtnLe.minWidth = 88f;
+						}
+					}
+				}
 				prefsBody.SetActive(next);
-				prefsBtnLabel.text = next ? "Preferences ▾" : "Preferences";
+				SetPrefsButtonLabel(next);
 				SetItemExpandedHeight(next);
 				LayoutRebuilder.ForceRebuildLayoutImmediate(itemObj.transform as RectTransform);
 				if (_addonsListParent != null)
 					LayoutRebuilder.ForceRebuildLayoutImmediate(_addonsListParent);
+				var scroll = _addonsListParent != null
+					? _addonsListParent.GetComponentInParent<ScrollRect>() : null;
+				if (scroll != null && scroll.viewport != null)
+					LayoutRebuilder.ForceRebuildLayoutImmediate(scroll.viewport);
 			});
 
 			ribbonToggle.onValueChanged.AddListener((isOn) => {
