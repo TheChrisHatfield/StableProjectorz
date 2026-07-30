@@ -98,12 +98,12 @@ namespace spz {
 	        var t = SpzUiThemeOps.Active;
 	        if (_cam_FOV_numberText != null) {
 	            // Snapshot first — FOV overlay must not steal slider drag (num-cams litmus).
-	            SpzUiThemeOps.ApplyBoundChromeTmp(_cam_FOV_numberText, t.textPrimary);
+	            SpzUiThemeOps.ApplyBoundChromeDialValueTmp(_cam_FOV_numberText, t.textPrimary);
 	            _cam_FOV_numberText.raycastTarget = false;
 	        }
 	        foreach (var tmp in GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp == null || tmp == _cam_FOV_numberText) continue;
-	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
 	        }
 	        // Nomad: mustard fill is the slider; Camera icon centered on fill with slight overlay.
 	        if (_camera_FOV_slider != null && _camera_FOV_slider.UnitySlider != null)
