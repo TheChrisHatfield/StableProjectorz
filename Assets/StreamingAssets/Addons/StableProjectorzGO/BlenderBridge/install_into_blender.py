@@ -135,8 +135,8 @@ def _enable(module: str) -> bool:
 	try:
 		bpy.ops.wm.save_userpref()
 	except Exception as e:
-		print("SPZ_GO_INSTALL_NOTE: save_userpref: " + str(e))
-		# Still treat as success if enable worked this session.
+		print("SPZ_GO_INSTALL_FAIL: save_userpref: " + str(e))
+		return False
 	return True
 
 
