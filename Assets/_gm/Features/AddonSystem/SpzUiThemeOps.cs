@@ -763,6 +763,39 @@ namespace spz {
 		}
 
 		/// <summary>
+		/// Multi-line help / download-list copy: reverse-out color without Compact uppercase,
+		/// strip tracking, or Truncate — those stacked ControlNet "download more" rows into clutter.
+		/// </summary>
+		public static void ApplyBoundChromeReadableBodyTmp(TMP_Text text, Color token, float fallbackBasePt = 14f) {
+			if (text == null) return;
+			if (!ShouldRecolorBoundChrome) {
+				RestoreAuthoredGraphic(text);
+				RestoreDesignFontSize(text, fallbackBasePt);
+				RestoreNomadTypography(text);
+				return;
+			}
+			SnapshotAuthoredGraphic(text);
+			SnapshotNomadTypography(text);
+			ApplyTmpScaledCaptured(text, token, fallbackBasePt);
+			ApplyNomadUiFont(text);
+			text.fontStyle = FontStyles.Normal;
+			text.characterSpacing = 0f;
+			text.enableWordWrapping = true;
+			text.overflowMode = TextOverflowModes.Overflow;
+			// Authored list rows use tight leading (-10/-20); keep mild so lines stay separable.
+			if (text.lineSpacing < -6f)
+				text.lineSpacing = -6f;
+			TrySetNomadOutline(text, 0.10f, new Color(0.04f, 0.04f, 0.06f, 0.55f));
+			try {
+				text.UpdateMeshPadding();
+				text.ForceMeshUpdate(ignoreActiveState: true);
+			}
+			catch (Exception) {
+				// Headless TMP — metrics still applied above.
+			}
+		}
+
+		/// <summary>
 		/// SD input "PROMPT" / "PROMPT +" row headers — uppercase without strip tracking.
 		/// Strip spacing (18) widens PROMPT into the fixed right-anchored "-" glyph on the negative row.
 		/// </summary>
