@@ -1047,15 +1047,17 @@ class ProjectAPI:
         return None
     
     def get_data_dir(self):
-        """Get project data directory path (if project is saved)
+        """Get project data directory path when a .spz project is saved.
         
         Returns:
-            str or None if project hasn't been saved
+            str or None if unsaved (session exchange folder only — not a saved project).
         """
         result = self._client._send_request("spz.cmd.get_project_data_dir", {})
-        if result.get("success", False):
-            return result.get("data_dir", None)
-        return None
+        if not result.get("success", False):
+            return None
+        if result.get("data_dir_is_session") is True:
+            return None
+        return result.get("data_dir", None)
     
     def is_operation_in_progress(self):
         """Check if save or load operation is in progress
