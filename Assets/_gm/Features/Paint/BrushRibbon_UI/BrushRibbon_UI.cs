@@ -219,7 +219,7 @@ namespace spz {
 	        foreach (var tmp in toggle.GetComponentsInChildren<TMP_Text>(true)) {
 	            if (tmp == null) continue;
 	            // Always light type on dark cell — selected used to go white-on-white.
-	            SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(tmp, t.textPrimary, 14f);
+	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
 	        }
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(toggle);
 	    }
