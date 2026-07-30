@@ -678,6 +678,10 @@ namespace spz {
 	                    var pin = _cameraPins[i];
 	                    if (pin == null) continue;
 	                    SpzUiThemeOps.RestoreBoundChromeUnder(pin.transform);
+	                    // Re-assert authored pin plate RGB after Restore (selection highlight may have written Nomad accent).
+	                    var rootImg = pin.GetComponent<Image>();
+	                    if (rootImg != null)
+	                        rootImg.color = new Color(_pinColor.r, _pinColor.g, _pinColor.b, rootImg.color.a);
 	                }
 	            }
 	            if (_noEditMode_enabledGO != null)
