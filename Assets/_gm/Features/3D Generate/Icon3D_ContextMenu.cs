@@ -61,8 +61,14 @@ namespace spz {
 	            SpzUiThemeOps.ApplyContextMenuChrome(_contextMenu_go);
 	        else
 	            SpzUiThemeOps.ApplyContextMenuChrome(gameObject);
-	        if (_text != null)
-	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(_text, SpzUiThemeOps.Active.textPrimary, 14f);
+	        // GEN label may sit outside menu root — restore on leave so Compact tracking does not stick.
+	        if (_text == null)
+	            return;
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreBoundChromeUnder(_text.transform);
+	            return;
+	        }
+	        SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(_text, SpzUiThemeOps.Active.textPrimary, 14f);
 	    }
 	}
 }//end namespace
