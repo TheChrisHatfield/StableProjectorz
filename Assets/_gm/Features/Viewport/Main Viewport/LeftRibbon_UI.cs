@@ -217,6 +217,10 @@ namespace spz {
 	                tmp.characterSpacing = 0f;
 	            }
 	        }
+	        foreach (var btn in root.GetComponentsInChildren<Button>(true)) {
+	            if (btn != null)
+	                SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
+	        }
 	        foreach (var lg in root.GetComponentsInChildren<LayoutGroup>(true))
 	            SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
 	    }
