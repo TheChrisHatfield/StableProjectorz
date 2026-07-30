@@ -74,7 +74,7 @@ namespace spz {
 	                _text.raycastTarget = false;
 	            }
 	            else
-	                SpzUiThemeOps.ApplyBoundChromeDialValueTmp(_text, Color.white);
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_text.transform);
 	        }
 	    }
 
