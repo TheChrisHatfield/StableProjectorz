@@ -310,6 +310,14 @@ namespace spz {
 	            RestoreWorkflowModeAuthored(_WhereEmpty_UI as MonoBehaviour);
 	            RestoreWorkflowModeAuthored(_AntiShade_UI as MonoBehaviour);
 	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
+	            // Belt-and-suspenders: Monolith overlays must not remain blended over OG mode cells.
+	            HideMonolithOverlaysUnder(transform);
+	            HideMonolithOverlaysUnder(_projMasking as MonoBehaviour);
+	            HideMonolithOverlaysUnder(_coloring as MonoBehaviour);
+	            HideMonolithOverlaysUnder(_colorless as MonoBehaviour);
+	            HideMonolithOverlaysUnder(_entireObj as MonoBehaviour);
+	            HideMonolithOverlaysUnder(_WhereEmpty_UI as MonoBehaviour);
+	            HideMonolithOverlaysUnder(_AntiShade_UI as MonoBehaviour);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
@@ -329,6 +337,38 @@ namespace spz {
 	    static void RestoreWorkflowModeAuthored(MonoBehaviour modeUi) {
 	        if (modeUi == null) return;
 	        SpzUiThemeOps.RestoreBoundChromeUnder(modeUi.transform);
+	        // Stacked-cell leave: hide Monolith + restore label band (RestoreBoundChromeUnder alone can miss
+	        // inactive icons when mode roots sit outside the ribbon transform).
+	        SpzUiThemeOps.ApplyNomadStackedToolCell(
+	            modeUi.transform,
+	            StudioLineIcon.Brush,
+	            Color.white,
+	            14f,
+	            tmp => !IsExcludedWorkflowLabel(tmp.transform, modeUi.transform));
+	        var toggle = modeUi.GetComponentInChildren<Toggle>(true);
+	        if (toggle != null && toggle.transform != modeUi.transform) {
+	            SpzUiThemeOps.ApplyNomadStackedToolCell(
+	                toggle.transform,
+	                StudioLineIcon.Brush,
+	                Color.white,
+	                14f,
+	                tmp => !IsExcludedWorkflowLabel(tmp.transform, modeUi.transform));
+	        }
+	    }
+
+	    static void HideMonolithOverlaysUnder(MonoBehaviour modeUi) {
+	        if (modeUi != null)
+	            HideMonolithOverlaysUnder(modeUi.transform);
+	    }
+
+	    static void HideMonolithOverlaysUnder(Transform root) {
+	        if (root == null) return;
+	        foreach (var t in root.GetComponentsInChildren<Transform>(true)) {
+	            if (t == null) continue;
+	            string n = t.name ?? "";
+	            if (n == "MonolithLineIcon" || n == "MonolithActiveBar")
+	                t.gameObject.SetActive(false);
+	        }
 	    }
 
 	    /// <summary>Nomad sculpt strip: solid cell + line icon above Roboto label (BoundChrome only).</summary>

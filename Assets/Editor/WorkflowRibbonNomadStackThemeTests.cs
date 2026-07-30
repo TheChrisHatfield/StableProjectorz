@@ -47,9 +47,11 @@ public sealed class WorkflowRibbonNomadStackThemeTests {
 			var tmp = labelGo.AddComponent<TextMeshProUGUI>();
 			tmp.text = "COLOR";
 			tmp.font = TMP_Settings.defaultFontAsset;
+			tmp.fontSize = 18f;
 			tmp.alignment = TextAlignmentOptions.Top;
 			var authoredFont = tmp.font;
 			var authoredAlign = tmp.alignment;
+			float authoredSize = tmp.fontSize;
 
 			SpzUiThemeOps.ApplyNomadStackedToolCell(
 				faceGo.transform, StudioLineIcon.Brush, SpzUiThemeOps.Active.textPrimary, 20f);
@@ -57,6 +59,11 @@ public sealed class WorkflowRibbonNomadStackThemeTests {
 			Assert.That(labelRt.anchorMax.y, Is.GreaterThan(0.42f),
 				"Workflow strip label band for 2-line caps");
 			Assert.That(tmp.alignment, Is.EqualTo(TextAlignmentOptions.Center));
+			var designTag = tmp.GetComponent<SpzUiThemeDesignFontPt>();
+			Assert.That(designTag, Is.Not.Null);
+			Assert.That(designTag.designPt, Is.GreaterThan(10f),
+				"compact display size must not overwrite authored designPt (Restore SPZ blend litmus)");
+			Assert.That(tmp.fontSize, Is.LessThan(12f), "Nomad stack uses compact display pt");
 
 			SpzUiThemeOps.ResetTheme();
 			SpzUiThemeOps.ApplyNomadStackedToolCell(
@@ -66,6 +73,8 @@ public sealed class WorkflowRibbonNomadStackThemeTests {
 			Assert.That(tmp.font, Is.EqualTo(authoredFont), "Builtin must not keep Roboto");
 			Assert.That(tmp.alignment, Is.EqualTo(authoredAlign), "Builtin must not keep Center stack align");
 			Assert.That(labelRt.anchorMax.y, Is.EqualTo(1f).Within(0.01f), "Label rect must unwind");
+			Assert.That(tmp.fontSize, Is.EqualTo(authoredSize).Within(0.05f),
+				"authored point size must return after Leave Nomad");
 			Transform iconT = SpzUiThemeOps.FindDirectChildIncludingInactive(faceGo.transform, "MonolithLineIcon");
 			Assert.That(iconT == null || !iconT.gameObject.activeSelf, Is.True, "Monolith icon hidden on builtin");
 		}
