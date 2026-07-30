@@ -176,6 +176,9 @@ namespace spz {
 	            return;
 	        }
 	        var tokens = SpzUiThemeOps.Active;
+	        // Before hiding Simple outer plates — disabled Images drop preferred size and HUE (Filled)
+	        // steals ChildForceExpand width → elliptical dials on art icon options.
+	        SpzUiThemeOps.EnsureCircleDialSquareLayout(this);
 	        // Invisible stretch face so EventSystem still delivers IPointer* after outer plate is hidden.
 	        Image hitFace = EnsureDialPointerHitFace();
 	        // Hide outer plate/box Images — dial + number only (user litmus: no charcoal square cell).
@@ -228,6 +231,14 @@ namespace spz {
 	            face.sprite = UiRuntimeSprites.SolidRect;
 	            face.type = Image.Type.Simple;
 	            face.preserveAspect = false;
+	            var ignore = go.AddComponent<LayoutElement>();
+	            ignore.ignoreLayout = true;
+	        }
+	        else {
+	            var ignore = face.GetComponent<LayoutElement>();
+	            if (ignore == null)
+	                ignore = face.gameObject.AddComponent<LayoutElement>();
+	            ignore.ignoreLayout = true;
 	        }
 	        face.color = new Color(1f, 1f, 1f, 0f);
 	        face.enabled = true;
