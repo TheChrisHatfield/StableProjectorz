@@ -62,7 +62,7 @@ namespace spz {
 	        else
 	            SpzUiThemeOps.ApplyContextMenuChrome(gameObject);
 	        if (_text != null)
-	            SpzUiThemeOps.ApplyBoundChromeTmp(_text, SpzUiThemeOps.Active.textPrimary);
+	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(_text, SpzUiThemeOps.Active.textPrimary, 14f);
 	    }
 	}
 }//end namespace
