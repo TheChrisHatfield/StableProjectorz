@@ -191,6 +191,7 @@ namespace spz {
 			RestoreSliderHandleLayoutsUnder(root);
 			RestoreToolFaceLayoutsUnder(root);
 			RestorePanelWidthsUnder(root);
+			RemoveSyntheticHitFacesUnder(root);
 			foreach (var g in root.GetComponentsInChildren<Graphic>(true))
 				RestoreAuthoredGraphic(g);
 			foreach (var s in root.GetComponentsInChildren<Selectable>(true))
@@ -209,6 +210,28 @@ namespace spz {
 		}
 
 		/// <summary>
+		/// Destroy runtime-only <c>BoundChromeHitFace</c> / strip <c>TabBg</c> faces tagged as synthetic.
+		/// Leave must not keep invisible hit planes after Restore SPZ (gen dials / ribbon tabs litmus).
+		/// </summary>
+		static void RemoveSyntheticHitFacesUnder(Transform root) {
+			if (root == null) return;
+			var tags = root.GetComponentsInChildren<SpzUiThemeSyntheticHitFace>(true);
+			for (int i = tags.Length - 1; i >= 0; i--) {
+				var tag = tags[i];
+				if (tag == null) continue;
+				var face = tag.GetComponent<Graphic>();
+				var sel = tag.GetComponentInParent<Selectable>(true);
+				if (sel != null && face != null && ReferenceEquals(sel.targetGraphic, face))
+					sel.targetGraphic = null;
+				var go = tag.gameObject;
+				if (Application.isPlaying)
+					UnityEngine.Object.Destroy(go);
+				else
+					UnityEngine.Object.DestroyImmediate(go);
+			}
+		}
+
+		/// <summary>
 		/// Settings-style checkbox: flat face + keep Toggle.graphic glyph (tinted success).
 		/// Use for menus / ON-OFF rows. Tool cells that use bevel plates as selection should hide separately.
 		/// </summary>
@@ -216,8 +239,10 @@ namespace spz {
 			if (toggle == null)
 				return;
 			// Ensure only under Nomad — leave/builtin must not leave synthetic hit faces sticky.
-			if (!ShouldRecolorBoundChrome)
+			if (!ShouldRecolorBoundChrome) {
+				RestoreBoundChromeUnder(toggle.transform);
 				return;
+			}
 			EnsureSelectableHitFace(toggle);
 			if (toggle.targetGraphic == null)
 				return;
@@ -243,8 +268,10 @@ namespace spz {
 		public static void ThemeFlatToolToggle(Toggle toggle, Color face, Color accent, Color labelColor) {
 			if (toggle == null)
 				return;
-			if (!ShouldRecolorBoundChrome)
+			if (!ShouldRecolorBoundChrome) {
+				RestoreBoundChromeUnder(toggle.transform);
 				return;
+			}
 			EnsureSelectableHitFace(toggle);
 			if (toggle.targetGraphic == null)
 				return;
@@ -349,6 +376,7 @@ namespace spz {
 			var go = new GameObject("BoundChromeHitFace", typeof(RectTransform));
 			go.transform.SetParent(selectable.transform, false);
 			go.transform.SetAsFirstSibling();
+			go.AddComponent<SpzUiThemeSyntheticHitFace>();
 			var rt = go.GetComponent<RectTransform>();
 			rt.anchorMin = Vector2.zero;
 			rt.anchorMax = Vector2.one;
@@ -374,10 +402,11 @@ namespace spz {
 		public static void ThemePromptPresetSquareCell(Selectable selectable, Color fill, Color accent) {
 			if (selectable == null)
 				return;
+			// Ensure only under Nomad — leave/builtin must not inject sticky BoundChromeHitFace.
+			if (!ShouldRecolorBoundChrome)
+				return;
 			EnsureSelectableHitFace(selectable);
 			if (selectable.targetGraphic == null)
-				return;
-			if (!ShouldRecolorBoundChrome)
 				return;
 			ApplySolidSquareChrome(selectable, fill, accent);
 			var cb = selectable.colors;
@@ -3021,6 +3050,10 @@ namespace spz {
 	/// </summary>
 	public sealed class SpzUiThemeNomadFillThumb : MonoBehaviour {
 		public StudioLineIcon icon = StudioLineIcon.Camera;
+	}
+
+	/// <summary>Runtime-only hit face created under Nomad; destroyed by RestoreBoundChromeUnder.</summary>
+	public sealed class SpzUiThemeSyntheticHitFace : MonoBehaviour {
 	}
 
 	/// <summary>Snapshots tool-face RectTransform before Nomad edge-to-edge flatten; unwound by RestoreBoundChromeUnder.</summary>
