@@ -36,7 +36,7 @@ namespace spz {
 	        if (SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            // Nomad: dark ink on luminous circular face — snapshot via BoundChrome so leave unwinds.
 	            Color ink = new Color(0.10f, 0.09f, 0.10f, 1f);
-	            SpzUiThemeOps.ApplyBoundChromeTmp(_brushOpacityText, ink, 16f);
+	            SpzUiThemeOps.ApplyBoundChromeDialValueTmp(_brushOpacityText, ink, 16f);
 	            _brushOpacityText.raycastTarget = false;
 	            return;
 	        }

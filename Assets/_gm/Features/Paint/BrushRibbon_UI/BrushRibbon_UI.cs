@@ -228,7 +228,7 @@ namespace spz {
 	        if (opacity == null || opacity.OpacityText == null) return;
 	        // Opacity sits on a luminous circular face — dark ink for contrast (matches dial fix).
 	        Color ink = new Color(0.10f, 0.09f, 0.10f, 1f);
-	        SpzUiThemeOps.ApplyBoundChromeTmp(opacity.OpacityText, ink, 16f);
+	        SpzUiThemeOps.ApplyBoundChromeDialValueTmp(opacity.OpacityText, ink, 16f);
 	    }
 
 	    static void ThemeDirectionTools(BrushRibbon_UI_Direction dir, SpzUiThemeOps.ThemeTokens t) {
