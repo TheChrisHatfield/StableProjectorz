@@ -48,12 +48,17 @@ public sealed class AddonManagerStatusDialChromeTests {
 			"..",
 			"Assets/_gm/Features/AddonSystem/AddonManager_UI.cs"));
 		string src = File.ReadAllText(path);
-		int prefs = src.IndexOf("PreferencesButton", System.StringComparison.Ordinal);
-		Assert.That(prefs, Is.GreaterThan(0));
-		int solid = src.IndexOf("UiRuntimeSprites.SolidRect", prefs, System.StringComparison.Ordinal);
-		int round = src.IndexOf("ApplyRoundedControlSprite(prefsBtnImage", prefs, System.StringComparison.Ordinal);
-		Assert.That(solid, Is.GreaterThan(0));
-		Assert.That(round, Is.GreaterThan(solid),
-			"SolidRect must be assigned before markEligible so Restore does not rewind null sprite.");
+		Assert.That(src, Does.Contain("AssignSolidFaceThenMarkRounded"),
+			"Manager faces must assign SolidRect via AssignSolidFaceThenMarkRounded before markEligible.");
+		int addBar = src.IndexOf("void AddBarButton(", System.StringComparison.Ordinal);
+		Assert.That(addBar, Is.GreaterThan(0));
+		int next = src.IndexOf("AddBarButton(headerObj.transform", addBar + 10, System.StringComparison.Ordinal);
+		if (next < 0) next = src.IndexOf("\n\t\tGameObject CreateFilterToggle", addBar, System.StringComparison.Ordinal);
+		Assert.That(next, Is.GreaterThan(addBar));
+		string body = src.Substring(addBar, next - addBar);
+		Assert.That(body, Does.Contain("AssignSolidFaceThenMarkRounded(img)"),
+			"AddBarButton must not call ApplyRoundedControlSprite on a null-sprite Image.");
+		Assert.That(body, Does.Not.Contain("ApplyRoundedControlSprite(img, markEligible: true)"),
+			"Raw markEligible on AddBarButton Image must go through AssignSolidFaceThenMarkRounded.");
 	}
 }
