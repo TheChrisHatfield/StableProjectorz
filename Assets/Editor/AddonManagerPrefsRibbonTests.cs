@@ -104,4 +104,16 @@ public sealed class AddonManagerPrefsRibbonTests {
 		Assert.That(window, Does.Contain("EnsureRibbonShellForEnabledAddon(addonId)"));
 		Assert.That(window, Does.Contain("AddonUI_MGR.instance != null"));
 	}
+
+	[Test]
+	public void AddonMgr_GetAddonPrefBoolStatic_HonorsDefaultWhenInstanceNull() {
+		string path = Path.GetFullPath(Path.Combine(
+			Application.dataPath,
+			"_gm/Features/AddonSystem/Addon_MGR.cs"));
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("if (instance == null)\r\n\t\t\t\treturn defaultValue;")
+			.Or.Contain("if (instance == null)\n\t\t\t\treturn defaultValue;"));
+		Assert.That(src, Does.Not.Contain(
+			"return instance != null && instance.GetAddonPrefBool(addonId, key, defaultValue);"));
+	}
 }
