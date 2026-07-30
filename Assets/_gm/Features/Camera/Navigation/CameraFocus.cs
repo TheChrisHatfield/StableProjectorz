@@ -48,7 +48,7 @@ namespace spz {
 	            }
 	        }
 
-	        if(!forceTheFocus  &&  Keyboard.current.fKey.wasPressedThisFrame==false){ return; }
+	        if(!forceTheFocus  &&  (Keyboard.current == null || Keyboard.current.fKey.wasPressedThisFrame==false)){ return; }
 	        if(!forceTheFocus  &&  KeyMousePenInput.isSomeInputFieldActive()){ return; }//maybe typing a prompt
 	        if(KeyMousePenInput.isKey_CtrlOrCommand_pressed()){ return; }
 	        if(KeyMousePenInput.isKey_Shift_pressed()){ return; }

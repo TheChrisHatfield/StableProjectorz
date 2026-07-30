@@ -111,7 +111,7 @@ namespace spz {
 	    void ShowColorPicker_if_spaceKey(){
 	        if(!CanShowColorPicker()){ return; }
 	        if (KeyMousePenInput.isSomeInputFieldActive()) { return; }
-	        if(Keyboard.current.spaceKey.wasPressedThisFrame==false){ return; }
+	        if(Keyboard.current == null || Keyboard.current.spaceKey.wasPressedThisFrame==false){ return; }
 	        ShowColorPicker();
 	    }
 
