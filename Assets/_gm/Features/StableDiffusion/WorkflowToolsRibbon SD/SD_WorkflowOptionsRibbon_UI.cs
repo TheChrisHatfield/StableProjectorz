@@ -535,6 +535,13 @@ namespace spz {
 	            RestoreSelectable(_softInpaint);
 	            RestoreSelectable(_tileableInpaint);
 	            RestoreSelectable(_ignoreDepthOrNormals);
+	            // Soft RolesUnder historically SolidSquared stamp hosts; restore ownership roots on Leave.
+	            if (_brushHardness != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_brushHardness.transform);
+	            if (_brushColor != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_brushColor.transform);
+	            if (_brushSize_slider != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_brushSize_slider.transform);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
