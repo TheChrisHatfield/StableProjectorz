@@ -319,7 +319,8 @@ namespace spz {
 	        }
 	        foreach (var tmp in toggle.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp == null) continue;
-	            SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(tmp, t.textPrimary, 13f);
+	            // DEP / INSIDE: strip tracking (18) wraps past the flat selected face (Soft litmus).
+	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
 	        }
 	        ApplyActiveBar(toggle.transform, toggle.isOn, t.accent);
 	        // Never mass-clear when targetGraphic is null (CommandRibbon / SAVE litmus).
