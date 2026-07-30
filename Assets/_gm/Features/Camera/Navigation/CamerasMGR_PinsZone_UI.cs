@@ -709,8 +709,8 @@ namespace spz {
 	            }
 	            foreach (var tmp in pin.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	                if (tmp == null) continue;
-	                // Snapshot first via ApplyBoundChromeTmp, then clear — POV digit labels must not steal pin grab.
-	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	                // Snapshot first, then clear — POV digit labels must not steal pin grab.
+	                SpzUiThemeOps.ApplyBoundChromeDialValueTmp(tmp, t.textPrimary, 14f);
 	                tmp.raycastTarget = false;
 	            }
 	        }
