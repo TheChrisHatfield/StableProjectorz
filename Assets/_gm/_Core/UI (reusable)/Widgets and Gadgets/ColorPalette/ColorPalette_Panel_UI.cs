@@ -312,7 +312,7 @@ namespace spz {
 	        _hexColorText.text = "#" + hexCol;
 	        _hexColor_inputText.text = "#" + hexCol;
 
-	        _OnColorChanged( Get_CurrentColor() );
+	        _OnColorChanged?.Invoke( Get_CurrentColor() );
 	    }
 
 
