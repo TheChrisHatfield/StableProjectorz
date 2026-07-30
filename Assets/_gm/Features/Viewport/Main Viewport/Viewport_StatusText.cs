@@ -170,6 +170,8 @@ namespace spz {
 	            SpzUiThemeOps.ApplyBoundChromeGraphic(_progressTotal, t.accent);
 	        // Help button uses authored icon art — only nudge ColorBlock multipliers, do not replace Image.color.
 	        if (_help_button != null) {
+	            // Help uses authored icon art — snapshot ColorBlock + Ensure face; do not solid-square the glyph.
+	            SpzUiThemeOps.SnapshotAuthoredColorBlock(_help_button);
 	            SpzUiThemeOps.EnsureSelectableHitFace(_help_button);
 	            var colors = _help_button.colors;
 	            colors.normalColor = Color.white;
