@@ -224,9 +224,7 @@ namespace spz {
 	                SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
 	            }
 	        }
-	        var rootImg = GetComponent<Image>();
-	        if (rootImg != null)
-	            SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.panelBg);
+	        // Outer panelBg owned by CommandRibbon_UI — skip dual root tint (Art list litmus).
 	    }
 
 	    void OnVertexColorsChromeChanged() => ThemeVertexColorsToggle(SpzUiThemeOps.Active);
@@ -237,8 +235,10 @@ namespace spz {
 	        Color fill = _showVertexColors_toggle.isPressed
 	            ? Color.Lerp(t.controlBg, t.accent, 0.14f)
 	            : t.controlBg;
-	        if (btn != null)
+	        if (btn != null) {
+	            SpzUiThemeOps.EnsureSelectableHitFace(btn);
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, fill, t.accent);
+	        }
 	        var label = _showVertexColors_toggle.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	        if (label != null)
 	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, t.textPrimary, 11f);

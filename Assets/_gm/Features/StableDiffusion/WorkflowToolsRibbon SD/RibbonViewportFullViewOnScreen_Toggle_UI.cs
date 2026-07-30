@@ -1057,6 +1057,7 @@ namespace spz {
 					_fillBase = t.controlBg;
 					Color fill = on ? Color.Lerp(t.controlBg, t.accent, 0.14f) : t.controlBg;
 					if (_dockButton != null) {
+						SpzUiThemeOps.EnsureSelectableHitFace(_dockButton);
 						SpzUiThemeOps.ApplyBoundChromeSelectable(_dockButton, fill, t.accent);
 						if (_dockButton.targetGraphic is Image face) {
 							SpzUiThemeOps.ApplyRoundedControlSprite(face, markEligible: true);
@@ -1090,6 +1091,7 @@ namespace spz {
 					var openImg = openRt.GetComponent<Image>();
 					if (sculpt) {
 						if (openBtn != null) {
+							SpzUiThemeOps.EnsureSelectableHitFace(openBtn);
 							SpzUiThemeOps.ApplyBoundChromeSelectable(openBtn, t.controlBg, t.accent);
 							if (openBtn.targetGraphic is Image of) {
 								SpzUiThemeOps.ApplyRoundedControlSprite(of, markEligible: true);
