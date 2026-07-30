@@ -279,6 +279,7 @@ namespace spz {
 	        Color wireNormal = FlatToolFill(_toggleWireframe.isPressed, t);
 	        var btn = _toggleWireframe.GetComponent<Button>();
 	        if (btn != null) {
+	            SpzUiThemeOps.EnsureSelectableHitFace(btn);
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, wireNormal, t.accent);
 	            ApplyFlatToolColorBlock(btn);
 	            if (btn.targetGraphic is Image btnImg) {
@@ -316,6 +317,7 @@ namespace spz {
 	    static void ThemeToggle(Toggle toggle, SpzUiThemeOps.ThemeTokens t) {
 	        if (toggle == null) return;
 	        Color normal = FlatToolFill(toggle.isOn, t);
+	        SpzUiThemeOps.EnsureSelectableHitFace(toggle);
 	        SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, normal, t.accent);
 	        ApplyFlatToolColorBlock(toggle);
 	        if (toggle.targetGraphic is Image bg) {
