@@ -445,7 +445,7 @@ namespace spz {
 		}
 
 		const string RememberRowTooltip =
-			"When on, Save settings restores which add-ons were enabled on the next launch.";
+			"When on, the next launch restores which add-ons were enabled (after Save settings). Preferences such as Show in Command Ribbon are always saved with Save settings.";
 
 		void EnsureRememberRowTooltip(GameObject rowOrToggle) {
 			if (rowOrToggle == null)

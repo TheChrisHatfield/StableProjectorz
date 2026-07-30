@@ -27,5 +27,6 @@ public sealed class AddonManagerTooltipTests {
 		Assert.That(startWindow, Does.Contain("EnsureChromeTooltips()"));
 		Assert.That(src, Does.Contain("EnsureRememberRowTooltip"));
 		Assert.That(src, Does.Contain("Full-row hover target"));
+		Assert.That(src, Does.Contain("Preferences such as Show in Command Ribbon are always saved"));
 	}
 }
