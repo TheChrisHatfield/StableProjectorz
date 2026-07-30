@@ -43,13 +43,15 @@ namespace spz {
 			// When Python FastAPI server is enabled (the default/recommended path),
 			// do NOT start this legacy C# HTTP server - they both use the same port
 			// and the port-freeing logic would kill the game's own process.
-			if (Addon_MGR.instance != null) {
-				if (Addon_MGR.instance.IsHttpServerEnabled()) {
-					UnityEngine.Debug.Log("[Addon_HttpServer] Skipping start: Python FastAPI server is enabled on same port. This legacy C# HTTP server is not needed.");
-					return;
-				}
-				_port = Addon_MGR.instance.GetHttpServerPort();
+			if (Addon_MGR.instance == null) {
+				UnityEngine.Debug.Log("[Addon_HttpServer] Addon_MGR not ready — skipping legacy C# HTTP server (honor enable flag once MGR exists).");
+				return;
 			}
+			if (Addon_MGR.instance.IsHttpServerEnabled()) {
+				UnityEngine.Debug.Log("[Addon_HttpServer] Skipping start: Python FastAPI server is enabled on same port. This legacy C# HTTP server is not needed.");
+				return;
+			}
+			_port = Addon_MGR.instance.GetHttpServerPort();
 			
 			StartServer();
 		}
@@ -586,7 +588,8 @@ namespace spz {
 						["r"] = body["r"]?.ToObject<float>() ?? 0f,
 						["g"] = body["g"]?.ToObject<float>() ?? 0f,
 						["b"] = body["b"]?.ToObject<float>() ?? 0f,
-						["a"] = body["a"]?.ToObject<float>() ?? 1f
+						["a"] = body["a"]?.ToObject<float>() ?? 1f,
+						["is_top"] = body["is_top"]?.ToObject<bool>() ?? true
 					}));
 				}
 			}
