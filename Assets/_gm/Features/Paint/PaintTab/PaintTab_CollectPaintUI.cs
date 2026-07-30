@@ -311,6 +311,10 @@ namespace spz {
 					tmp.characterSpacing = 0f;
 				} else if (tmp.GetComponentInParent<Button>(true) != null
 				           || tmp.GetComponentInParent<Toggle>(true) != null) {
+					var parentBtn = tmp.GetComponentInParent<Button>(true);
+					// Content-bearing: Compact clears label raycasts; brush/swatch may rely on TMP hits when face is payload.
+					if (parentBtn != null && IsContentBearingPaintButton(parentBtn))
+						continue;
 					SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, basePt);
 				} else {
 					SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, basePt);
