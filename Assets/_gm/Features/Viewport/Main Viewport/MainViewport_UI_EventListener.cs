@@ -51,6 +51,10 @@ namespace spz {
 	    }
 
 	    void RaycastToSelf(){
+	        if (EventSystem.current == null) {
+	            _prevRaycastToSelf_rslt = false;
+	            return;
+	        }
 	        Vector2 cursorScreenPos = KeyMousePenInput.cursorScreenPos();
 	        PointerEventData eventData = new PointerEventData( EventSystem.current );
 	        eventData.position = cursorScreenPos;
