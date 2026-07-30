@@ -78,7 +78,7 @@ namespace spz {
 	        //                                             textureSize:textureSize,  cbks );
 	        //_videoPreview_go.SetActive(false);
 	        //GenerateButtons_UI.OnConfirmed_GeneratePaused(false);
-	        onVideoLiked.Invoke();
+	        onVideoLiked?.Invoke();
 	    }
 
 	    protected virtual void OnVideo_Disliked(){
