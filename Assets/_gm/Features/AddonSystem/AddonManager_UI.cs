@@ -1460,6 +1460,7 @@ namespace spz {
 					le.minWidth = authored;
 				}
 			}
+			SpzUiThemeOps.ClearNonFaceRaycastsForTheme(button);
 		}
 
 		static float ResolveAuthoredHeaderButtonWidth(string goName) {
