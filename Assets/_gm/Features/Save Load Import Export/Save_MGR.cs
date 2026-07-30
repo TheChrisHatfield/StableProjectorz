@@ -351,7 +351,7 @@ namespace spz {
 	            TextureTools_SPZ.EncodeAndSaveTexture(tex, path);
 	            DestroyImmediate(tex);
 	        }
-	        Viewport_StatusText.instance.ShowStatusText("Saved to "+ basePath.Replace("\\", "\\\\"), 
+	        Viewport_StatusText.instance?.ShowStatusText("Saved to "+ basePath.Replace("\\", "\\\\"), 
 	                                                     false, 10, progressVisibility:false);
 	    }
 
@@ -380,7 +380,7 @@ namespace spz {
 	            pathAO = MakeUniquePath(save_to_basePath, "_AO");
 	            EncodeAndSaveTextures(albedo, pathAlbedo);
 	            EncodeAndSaveTextures(ao, pathAO);
-	            Viewport_StatusText.instance.ShowStatusText("Saved to "+ pathAlbedo.Replace("\\", "\\\\"), 
+	            Viewport_StatusText.instance?.ShowStatusText("Saved to "+ pathAlbedo.Replace("\\", "\\\\"), 
 	                                                         false, 10, progressVisibility:false);
 	        }
 	        //cleanup:
