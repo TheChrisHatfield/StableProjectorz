@@ -432,6 +432,46 @@ namespace spz {
 		}
 
 		/// <summary>
+		/// Art/icon options CircleSliders sit in ChildForceExpand HLGs. Nomad hides Simple outer plates
+		/// (<c>enabled=false</c>), collapsing ILayoutElement preferred size so Filled roots (HUE) steal
+		/// the row and stretch into ellipses. Lock a square LayoutElement before hide.
+		/// </summary>
+		public static void EnsureCircleDialSquareLayout(Component dial) {
+			if (dial == null || !ShouldRecolorBoundChrome) return;
+			var le = dial.GetComponent<LayoutElement>();
+			if (le == null)
+				le = dial.gameObject.AddComponent<LayoutElement>();
+			SnapshotLayoutElementSizes(le);
+
+			float side = 48f;
+			var img = dial.GetComponent<Image>();
+			if (img != null && img.sprite != null) {
+				float pw = img.preferredWidth;
+				float ph = img.preferredHeight;
+				if (pw > 1f && ph > 1f)
+					side = Mathf.Min(pw, ph);
+				else if (pw > 1f)
+					side = pw;
+				else if (ph > 1f)
+					side = ph;
+			}
+			if (le.preferredWidth > 0.5f && le.preferredHeight > 0.5f)
+				side = Mathf.Min(le.preferredWidth, le.preferredHeight);
+			else if (le.preferredWidth > 0.5f)
+				side = le.preferredWidth;
+			else if (le.preferredHeight > 0.5f)
+				side = le.preferredHeight;
+
+			side = Mathf.Clamp(side, 28f, 56f);
+			le.preferredWidth = side;
+			le.preferredHeight = side;
+			le.minWidth = side;
+			le.minHeight = side;
+			le.flexibleWidth = 0f;
+			le.flexibleHeight = 0f;
+		}
+
+		/// <summary>
 		/// Visible break between glued prompt preset chips (authored HLG spacing is often 0).
 		/// Call after <see cref="ApplyScaledLayoutGroup"/> so spacing is not wiped back to 0.
 		/// </summary>
@@ -471,6 +511,8 @@ namespace spz {
 				tag.minWidth = layout.minWidth;
 				tag.preferredHeight = layout.preferredHeight;
 				tag.minHeight = layout.minHeight;
+				tag.flexibleWidth = layout.flexibleWidth;
+				tag.flexibleHeight = layout.flexibleHeight;
 				tag.hasSnapshot = true;
 			}
 			else if (!tag.hasSnapshot) {
@@ -478,6 +520,8 @@ namespace spz {
 				tag.minWidth = layout.minWidth;
 				tag.preferredHeight = layout.preferredHeight;
 				tag.minHeight = layout.minHeight;
+				tag.flexibleWidth = layout.flexibleWidth;
+				tag.flexibleHeight = layout.flexibleHeight;
 				tag.hasSnapshot = true;
 			}
 		}
@@ -2043,6 +2087,8 @@ namespace spz {
 				tag.minWidth = layout.minWidth;
 				tag.preferredHeight = layout.preferredHeight;
 				tag.minHeight = layout.minHeight;
+				tag.flexibleWidth = layout.flexibleWidth;
+				tag.flexibleHeight = layout.flexibleHeight;
 				tag.hasSnapshot = true;
 			}
 			else if (!tag.hasSnapshot) {
@@ -2050,6 +2096,8 @@ namespace spz {
 				tag.minWidth = layout.minWidth;
 				tag.preferredHeight = layout.preferredHeight;
 				tag.minHeight = layout.minHeight;
+				tag.flexibleWidth = layout.flexibleWidth;
+				tag.flexibleHeight = layout.flexibleHeight;
 				tag.hasSnapshot = true;
 			}
 		}
@@ -2066,6 +2114,8 @@ namespace spz {
 					le.minWidth = tag.minWidth;
 					le.preferredHeight = tag.preferredHeight;
 					le.minHeight = tag.minHeight;
+					le.flexibleWidth = tag.flexibleWidth;
+					le.flexibleHeight = tag.flexibleHeight;
 				}
 				if (Application.isPlaying)
 					UnityEngine.Object.Destroy(tag);
@@ -2757,6 +2807,8 @@ namespace spz {
 		public float minWidth = -1f;
 		public float preferredHeight = -1f;
 		public float minHeight = -1f;
+		public float flexibleWidth = -1f;
+		public float flexibleHeight = -1f;
 		public bool hasSnapshot;
 	}
 
