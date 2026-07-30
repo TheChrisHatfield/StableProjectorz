@@ -100,14 +100,22 @@ namespace spz {
 	    void OnSuccess_AcceptModel( GameObject loadedRoot ){
         
 	        Resources.UnloadUnusedAssets();
-	        if(loadedRoot == null){  _Act_onImportComplete?.Invoke(false, null); return; }
+	        if(loadedRoot == null){
+		        _isImportingModel = false;
+		        _Act_onImportComplete?.Invoke(false, null);
+		        return;
+	        }
 
 	        //set to true again even if was already true (method might have been called separately)
 	        _isImportingModel = true;
 	        _latestSuccessRoot = loadedRoot;
 
 	        bool success = o3d.Init(loadedRoot);
-	        if(!success){ _Act_onImportComplete?.Invoke(false, _latestSuccessRoot);  return; }
+	        if(!success){
+		        _isImportingModel = false;
+		        _Act_onImportComplete?.Invoke(false, _latestSuccessRoot);
+		        return;
+	        }
 
 	        _udims_helper.Init_FindAll_UDIMs( o3d.meshes, (pcnt01)=>OnUDIMsProgress01(pcnt01, loadedRoot) );
 	    }
