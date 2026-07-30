@@ -1713,9 +1713,11 @@ namespace spz {
 			UnityEngine.Debug.Log($"[Addon_MGR] Enabled add-on: {addonId}");
 
 			// Ribbon tab appears as soon as the manager turns the dial on (when prefs allow).
-			if (ShouldShowInCommandRibbon(addonId))
+			if (ShouldShowInCommandRibbon(addonId)) {
 				EnsureRibbonShellForEnabledAddon(addonId);
-			else {
+				if (AddonUI_MGR.instance != null)
+					AddonUI_MGR.instance.RequestMigrateParkedPanelsNow();
+			} else {
 				var ribbonHide = AddonRibbonIntegration.ResolveCommandRibbon();
 				if (ribbonHide != null)
 					ribbonHide.RemoveAddonPanelPreservingContent(addonId);
@@ -1761,6 +1763,8 @@ namespace spz {
 				if (!ShouldShowInCommandRibbon(kvp.Key)) continue;
 				EnsureRibbonShellForEnabledAddon(kvp.Key);
 			}
+			if (AddonUI_MGR.instance != null)
+				AddonUI_MGR.instance.RequestMigrateParkedPanelsNow();
 		}
 
 		bool TryCreateRibbonShellNow(string addonId) {
