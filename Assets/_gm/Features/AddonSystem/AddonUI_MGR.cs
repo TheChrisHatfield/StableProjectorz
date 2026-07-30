@@ -413,7 +413,17 @@ namespace spz {
 			if (existing != null) {
 				var rt = existing.transform as RectTransform;
 				if (rt != null) {
+					// Legacy parking used center anchors and painted mid-viewport when briefly active.
+					rt.anchorMin = new Vector2(0f, 0f);
+					rt.anchorMax = new Vector2(0f, 0f);
+					rt.pivot = new Vector2(0f, 0f);
+					rt.sizeDelta = new Vector2(320f, 800f);
+					rt.anchoredPosition = new Vector2(-4000f, -4000f);
 					existing.SetActive(false);
+					var ray = existing.GetComponentInParent<GraphicRaycaster>();
+					if (ray != null && existing.transform.parent != null
+					    && string.Equals(existing.transform.parent.name, "AddonPanelsParking_Canvas", StringComparison.Ordinal))
+						ray.enabled = false;
 					_addonPanelsParent = rt;
 					return rt;
 				}
@@ -435,7 +445,7 @@ namespace spz {
 				c.renderMode = RenderMode.ScreenSpaceOverlay;
 				c.sortingOrder = -100; // behind app chrome while parking
 				canvasObj.AddComponent<CanvasScaler>();
-				canvasObj.AddComponent<GraphicRaycaster>();
+				// No GraphicRaycaster — parking must never steal viewport / ribbon hits.
 				canvasParent = canvasObj.transform;
 			}
 			var root = new GameObject("AddonPanelsParking");
@@ -1978,10 +1988,14 @@ namespace spz {
 						UnityEngine.Debug.LogWarning($"[AddonUI_MGR] Cannot set non-integer value to dropdown: {value.GetType()}");
 						return false;
 					}
-					// Edge case: Clamp to valid range
+					// Edge case: out-of-range must fail (not clamp) — clamping looked like success to Python set_value.
+					if (dropdown.options == null || dropdown.options.Count == 0) {
+						UnityEngine.Debug.LogWarning($"[AddonUI_MGR] Dropdown has no options; rejecting index {intValue}");
+						return false;
+					}
 					if (intValue < 0 || intValue >= dropdown.options.Count) {
-						UnityEngine.Debug.LogWarning($"[AddonUI_MGR] Dropdown index {intValue} out of range [0-{dropdown.options.Count-1}], clamping");
-						intValue = Mathf.Clamp(intValue, 0, dropdown.options.Count - 1);
+						UnityEngine.Debug.LogWarning($"[AddonUI_MGR] Dropdown index {intValue} out of range [0-{dropdown.options.Count-1}], rejecting");
+						return false;
 					}
 					dropdown.value = intValue;
 					_uiElementValues[elementId] = dropdown.value;
