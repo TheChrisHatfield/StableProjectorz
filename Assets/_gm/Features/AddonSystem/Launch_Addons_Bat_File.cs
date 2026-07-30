@@ -18,6 +18,7 @@ namespace spz {
 
 		const string DefaultBatName = "Run_with_Addons.bat";
 		const string EnvVarName = "SPZ_ADDONS_RUN_PATH";
+		const int MaxParentDepth = 10;
 
 		static bool s_restartInProgress;
 
@@ -42,25 +43,39 @@ namespace spz {
 			string exeDir = Path.GetDirectoryName(Application.dataPath);
 			if (string.IsNullOrEmpty(exeDir)) return "";
 
-			// Bat lives in project root; exe often in Build_IL2CPP, so check exe dir and parent
-			string[] candidates = new string[] {
-				Path.Combine(exeDir, DefaultBatName),
-				Path.Combine(exeDir, "..", DefaultBatName),
-				Path.Combine(exeDir, "..", "..", DefaultBatName),
-			};
-
-			foreach (string p in candidates) {
+			// Match Launch_WebUI: bat may sit several parents above Build_IL2CPP / nested player folders.
+			var roots = new System.Collections.Generic.List<string>();
+			void AddRoot(string r) {
+				if (string.IsNullOrEmpty(r)) return;
 				try {
-					string full = Path.GetFullPath(p);
-					if (File.Exists(full)) {
-						Debug.Log($"[Launch_Addons] Bat found: {full}");
-						return full;
-					}
+					string full = Path.GetFullPath(r);
+					if (!roots.Contains(full)) roots.Add(full);
 				} catch { /* skip */ }
+			}
+			AddRoot(exeDir);
+			AddRoot(Application.dataPath);
+			try { AddRoot(Directory.GetCurrentDirectory()); } catch { /* skip */ }
+
+			foreach (string root in roots) {
+				string dir = root;
+				for (int depth = 0; depth < MaxParentDepth; depth++) {
+					if (string.IsNullOrEmpty(dir)) break;
+					try {
+						string candidate = Path.Combine(dir, DefaultBatName);
+						if (File.Exists(candidate)) {
+							string full = Path.GetFullPath(candidate);
+							Debug.Log($"[Launch_Addons] Bat found: {full}");
+							return full;
+						}
+						string parent = Directory.GetParent(dir)?.FullName;
+						if (string.IsNullOrEmpty(parent) || parent == dir) break;
+						dir = parent;
+					} catch { break; }
+				}
 			}
 
 			if (logIfNotFound)
-				Debug.Log($"[Launch_Addons] {DefaultBatName} not found. Searched: {exeDir}. Optional: set {EnvVarName} to full path.");
+				Debug.Log($"[Launch_Addons] {DefaultBatName} not found. Roots: [{string.Join(", ", roots)}]. Up to {MaxParentDepth} levels each. Optional: set {EnvVarName} to full path.");
 			return "";
 #endif
 		}
