@@ -229,7 +229,7 @@ namespace spz {
 	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_cancelGeneration_button);
 	            var cancelLabel = _cancelGeneration_button.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	            if (cancelLabel != null)
-	                SpzUiThemeOps.ApplyBoundChromeTmp(cancelLabel, t.textPrimary);
+	                SpzUiThemeOps.ApplyBoundChromeNarrowDockLabelTmp(cancelLabel, t.textPrimary, 12f);
 	        }
 	        if (_deleteLast_button != null) {
 	            var delBtn = _deleteLast_button.GetComponent<Button>();
@@ -239,7 +239,7 @@ namespace spz {
 	            }
 	            var delLabel = _deleteLast_button.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	            if (delLabel != null)
-	                SpzUiThemeOps.ApplyBoundChromeTmp(delLabel, t.textPrimary);
+	                SpzUiThemeOps.ApplyBoundChromeNarrowDockLabelTmp(delLabel, t.textPrimary, 12f);
 	        }
 	        RefreshColors_of_GenArt_buttons();
 	    }
