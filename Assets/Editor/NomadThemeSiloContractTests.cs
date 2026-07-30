@@ -24,6 +24,7 @@ public sealed class NomadThemeSiloContractTests {
 		"ApplyNomadStackedToolCell",
 		"ApplyBoundChromeTmp",
 		"ApplyBoundChromeStripLabelTmp",
+		"ApplyBoundChromeCompactToolLabelTmp",
 		"ApplyBoundChromeNarrowDockLabelTmp",
 		"ApplyBoundChromePromptHeaderTmp",
 		"ApplyBoundChromePromptPolaritySignTmp",

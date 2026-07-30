@@ -282,7 +282,8 @@ namespace spz {
 			}
 			foreach (var tmp in toggle.GetComponentsInChildren<TMP_Text>(true)) {
 				if (tmp == null) continue;
-				ApplyBoundChromeStripLabelTmp(tmp, labelColor, 12f);
+				// Soft/Tileable/Ignore: strip tracking wraps SOFT out of the selected face (SOF / T spill).
+				ApplyBoundChromeCompactToolLabelTmp(tmp, labelColor, 11f);
 			}
 			ClearNonFaceRaycastsForTheme(toggle);
 		}
@@ -677,6 +678,31 @@ namespace spz {
 			SnapshotNomadTypography(text);
 			ApplyTmpScaledCaptured(text, token, fallbackBasePt);
 			ApplyNomadStripLabelMetrics(text);
+			ClearLabelRaycastIfUnderSelectable(text);
+		}
+
+		/// <summary>
+		/// Soft / Tileable / Point-Bilinear style tool radios: uppercase without strip tracking.
+		/// Strip spacing (18) wraps "SOFT" to SOF/T and spills past the gold selected face into TILE.
+		/// </summary>
+		public static void ApplyBoundChromeCompactToolLabelTmp(TMP_Text text, Color token, float fallbackBasePt = 11f) {
+			if (text == null) return;
+			if (!ShouldRecolorBoundChrome) {
+				RestoreAuthoredGraphic(text);
+				RestoreDesignFontSize(text, fallbackBasePt);
+				return;
+			}
+			SnapshotAuthoredGraphic(text);
+			SnapshotNomadTypography(text);
+			ApplyTmpScaledCaptured(text, token, fallbackBasePt);
+			ApplyNomadUiFont(text);
+			if (text.font != null) {
+				text.fontStyle = FontStyles.UpperCase;
+				text.characterSpacing = 1f;
+				text.enableWordWrapping = false;
+				text.overflowMode = TextOverflowModes.Truncate;
+				TrySetNomadOutline(text, 0.14f, new Color(0.05f, 0.05f, 0.07f, 0.65f));
+			}
 			ClearLabelRaycastIfUnderSelectable(text);
 		}
 
