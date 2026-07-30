@@ -69,12 +69,12 @@ namespace spz {
 	        SpzUiThemeOps.ApplyNomadSliderChrome(_slider);
 	        if (_text != null) {
 	            if (SpzUiThemeOps.ShouldRecolorBoundChrome) {
-	                SpzUiThemeOps.ApplyBoundChromeTmp(_text, SpzUiThemeOps.Active.textPrimary);
+	                SpzUiThemeOps.ApplyBoundChromeDialValueTmp(_text, SpzUiThemeOps.Active.textPrimary);
 	                // Value overlay is usually not under a Selectable face — keep track/handle hittable.
 	                _text.raycastTarget = false;
 	            }
 	            else
-	                SpzUiThemeOps.ApplyBoundChromeTmp(_text, Color.white);
+	                SpzUiThemeOps.ApplyBoundChromeDialValueTmp(_text, Color.white);
 	        }
 	    }
 
