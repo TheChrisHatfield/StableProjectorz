@@ -250,6 +250,8 @@ namespace spz {
 	            if (saveBtn != null)
 	                SpzUiThemeOps.ApplyBoundChromeSelectable(saveBtn, t.success, t.accent);
 	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(_save_texResQuality_text, t.textPrimary, 11f);
+	            if (saveBtn != null)
+	                SpzUiThemeOps.ClearNonFaceRaycastsForTheme(saveBtn);
 	        }
 	        // Prefab +/- may ship with null targetGraphic — Ensure inside ApplyBoundChromeSelectable.
 	        if (_sub_texResolutionQuality != null)
