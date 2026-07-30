@@ -132,4 +132,19 @@ public sealed class AddonManagerPrefsRibbonTests {
 		string window = src.Substring(syncIdx, Math.Min(280, src.Length - syncIdx));
 		Assert.That(window, Does.Contain("IsAddonEnabled(addonId)"));
 	}
+
+	[Test]
+	public void AddonUiMgr_CreatePanel_ForceParkStripsRibbonShellFirst() {
+		string path = Path.GetFullPath(Path.Combine(
+			Application.dataPath,
+			"_gm/Features/AddonSystem/AddonUI_MGR.cs"));
+		Assert.That(File.Exists(path), Is.True, path);
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("forceParkHiddenRibbon && commandRibbon != null"));
+		Assert.That(src, Does.Contain("RemoveAddonPanelPreservingContent(addonId)"));
+		int forceIdx = src.IndexOf("forceParkHiddenRibbon && commandRibbon != null", StringComparison.Ordinal);
+		Assert.That(forceIdx, Is.GreaterThan(0));
+		int createIdx = src.IndexOf("GetOrCreatePanelForAddon(addonId, title)", forceIdx, StringComparison.Ordinal);
+		Assert.That(createIdx, Is.GreaterThan(forceIdx), "ribbon strip must run before GetOrCreate when parking");
+	}
 }
