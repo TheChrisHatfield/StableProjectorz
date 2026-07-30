@@ -1128,6 +1128,21 @@ public sealed class SpzUiThemeOpsTests {
 	}
 
 	[Test]
+	public void RestoreBoundChromeUnder_HidesMonolithActiveBar() {
+		var root = new GameObject("ActiveBarRoot", typeof(RectTransform));
+		try {
+			var bar = new GameObject("MonolithActiveBar", typeof(RectTransform), typeof(Image));
+			bar.transform.SetParent(root.transform, false);
+			bar.SetActive(true);
+			SpzUiThemeOps.RestoreBoundChromeUnder(root.transform);
+			Assert.That(bar.activeSelf, Is.False,
+				"Leave litmus: MonolithActiveBar must deactivate with RestoreBoundChromeUnder");
+		} finally {
+			UnityEngine.Object.DestroyImmediate(root);
+		}
+	}
+
+	[Test]
 	public void ThemePromptPresetSquareCell_OnBuiltin_DoesNotInjectHitFace() {
 		var go = new GameObject("PresetLeaveNoEnsure", typeof(RectTransform), typeof(Toggle));
 		try {
