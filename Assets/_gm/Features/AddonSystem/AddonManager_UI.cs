@@ -1539,6 +1539,7 @@ namespace spz {
 			bool iconOnly = boundChrome && SpzUiThemeOps.RibbonIconOnlyActive;
 			if (icon != null && SpzUiThemeOps.ShouldRecolorBoundChrome) {
 				var iconRt = icon.rectTransform;
+				SpzUiThemeOps.SnapshotToolFaceLayout(iconRt);
 				iconRt.anchorMin = new Vector2(iconOnly ? 0.5f : 0f, 0.5f);
 				iconRt.anchorMax = new Vector2(iconOnly ? 0.5f : 0f, 0.5f);
 				iconRt.pivot = new Vector2(iconOnly ? 0.5f : 0f, 0.5f);
@@ -1559,6 +1560,7 @@ namespace spz {
 					float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(label, 13f);
 					SpzUiThemeOps.ApplyBoundChromeTmp(label, foreground, basePt);
 					var labelRt = label.rectTransform;
+					SpzUiThemeOps.SnapshotToolFaceLayout(labelRt);
 					// Leave a fixed gutter after the left-aligned line icon so labels share one column.
 					labelRt.offsetMin = new Vector2(boundChrome ? 30f : 25f, 0f);
 					labelRt.offsetMax = new Vector2(-5f, 0f);
@@ -1599,24 +1601,14 @@ namespace spz {
 
 		static void RestoreHeaderButtonAuthoredChrome(Button button) {
 			if (button == null) return;
+			// Unwind BoundChrome + snapshotted icon/label rects (do not hardcode 25/-5 / 8,14).
+			SpzUiThemeOps.RestoreBoundChromeUnder(button.transform);
 			var label = button.transform.Find("Text")?.GetComponent<TextMeshProUGUI>();
-			if (label != null) {
+			if (label != null)
 				label.maxVisibleCharacters = int.MaxValue;
-				SpzUiThemeOps.RestoreAuthoredGraphic(label);
-				var labelRt = label.rectTransform;
-				labelRt.offsetMin = new Vector2(25f, 0f);
-				labelRt.offsetMax = new Vector2(-5f, 0f);
-			}
 			var icon = button.transform.Find("LineIcon")?.GetComponent<Image>();
-			if (icon != null) {
-				var iconRt = icon.rectTransform;
-				iconRt.anchorMin = new Vector2(0f, 0.5f);
-				iconRt.anchorMax = new Vector2(0f, 0.5f);
-				iconRt.pivot = new Vector2(0f, 0.5f);
-				iconRt.anchoredPosition = new Vector2(8f, 0f);
-				iconRt.sizeDelta = new Vector2(14f, 14f);
+			if (icon != null)
 				icon.gameObject.SetActive(true);
-			}
 			var le = button.GetComponent<LayoutElement>();
 			if (le != null) {
 				float authored = ResolveAuthoredHeaderButtonWidth(button.gameObject.name);
