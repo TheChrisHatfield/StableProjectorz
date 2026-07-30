@@ -965,6 +965,39 @@ public sealed class SpzUiThemeOpsTests {
 	}
 
 	[Test]
+	public void BoundChromeReadableBodyTmpKeepsWrapAndZeroTrackingUnderNomad() {
+		var go = new GameObject("NomadReadableBody");
+		var tmp = go.AddComponent<TextMeshProUGUI>();
+		tmp.text = "IP Adapter:\nsd1.5, sdxl (h94)";
+		tmp.characterSpacing = 0f;
+		tmp.lineSpacing = -20f;
+		tmp.enableWordWrapping = true;
+		tmp.overflowMode = TextOverflowModes.Overflow;
+		tmp.fontStyle = FontStyles.Normal;
+		tmp.fontSize = 14f;
+		try {
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				Tokens(("text_primary", "#E3E2E7FF")),
+				"replace",
+				out string error), Is.True, error);
+			SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, SpzUiThemeOps.Active.textPrimary, 14f);
+			Assert.That(tmp.characterSpacing, Is.EqualTo(0f).Within(0.01f));
+			Assert.That(tmp.enableWordWrapping, Is.True);
+			Assert.That(tmp.overflowMode, Is.EqualTo(TextOverflowModes.Overflow));
+			Assert.That(tmp.fontStyle & FontStyles.UpperCase, Is.EqualTo((FontStyles)0));
+			Assert.That(tmp.lineSpacing, Is.GreaterThanOrEqualTo(-6.01f));
+			SpzUiThemeOps.ResetTheme();
+			SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, Color.white, 14f);
+			Assert.That(tmp.characterSpacing, Is.EqualTo(0f).Within(0.01f));
+			Assert.That(tmp.lineSpacing, Is.EqualTo(-20f).Within(0.01f));
+		} finally {
+			UnityEngine.Object.DestroyImmediate(go);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
 	public void FindDirectChildIncludingInactiveFindsDeactivatedMonolith() {
 		var parent = new GameObject("StripCell", typeof(RectTransform));
 		var child = new GameObject("MonolithLineIcon", typeof(RectTransform));

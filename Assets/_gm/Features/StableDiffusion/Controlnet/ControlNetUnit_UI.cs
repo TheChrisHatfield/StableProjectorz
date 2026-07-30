@@ -320,6 +320,7 @@ namespace spz {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
 	            // Preprocessor res chip/slideOut are ownership roots — may sit outside unit transform.
 	            _preprocessor?.ApplyThemeTokens();
+	            _downloadHelper?.ApplyThemeTokens();
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
@@ -387,6 +388,8 @@ namespace spz {
 	            if (btn == null) continue;
 	            if (ReferenceEquals(btn, _headerRibbon_button)) continue;
 	            if (btn.GetComponent<TMP_Dropdown>() != null) continue;
+	            // Download-more slide owns its chrome (ReadableBody list + Compact buttons).
+	            if (_downloadHelper != null && _downloadHelper.OwnsTransform(btn.transform)) continue;
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
 	            if (btn.targetGraphic is Image btnImg) {
 	                SpzUiThemeOps.ApplyRoundedControlSprite(btnImg, markEligible: true);
@@ -404,6 +407,7 @@ namespace spz {
 	            if (tmp.GetComponentInParent<TMP_Dropdown>() != null) continue;
 	            if (tmp.GetComponentInParent<Toggle>() != null) continue;
 	            if (tmp.GetComponentInParent<Button>() != null) continue;
+	            if (_downloadHelper != null && _downloadHelper.OwnsTransform(tmp.transform)) continue;
 	            // Field labels (preprocess / model / start / end / weight) — lift contrast off muted authored grey.
 	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
 	        }
@@ -418,9 +422,13 @@ namespace spz {
 	        }
 
 	        foreach (var lg in GetComponentsInChildren<LayoutGroup>(true)) {
-	            if (lg != null)
-	                SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
+	            if (lg == null) continue;
+	            if (_downloadHelper != null && _downloadHelper.OwnsTransform(lg.transform)) continue;
+	            SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
 	        }
+
+	        // After unit sweeps — ReadableBody + row gaps for "download more" list (gen path).
+	        _downloadHelper?.ApplyThemeTokens();
 	    }
 
 	    /// <summary>
