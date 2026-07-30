@@ -180,8 +180,17 @@ namespace spz {
 				if (vis != null) {
 					var visBtn = vis.GetComponent<Button>();
 					if (visBtn != null) {
-						SpzUiThemeOps.EnsureSelectableHitFace(visBtn);
-						SpzUiThemeOps.ClearNonFaceRaycastsForTheme(visBtn);
+						// Prefer authored Visibility Image as face — Ensure synthetic face + ClearNonFace
+						// can bury the eye glyph and make layer hide/show feel dead under Nomad.
+						if (visBtn.targetGraphic == null) {
+							var authored = vis.GetComponent<Image>();
+							if (authored != null)
+								visBtn.targetGraphic = authored;
+						}
+						if (visBtn.targetGraphic == null)
+							SpzUiThemeOps.EnsureSelectableHitFace(visBtn);
+						else if (visBtn.targetGraphic != null)
+							visBtn.targetGraphic.raycastTarget = true;
 					}
 				}
 			}

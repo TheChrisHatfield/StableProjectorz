@@ -248,7 +248,14 @@ namespace spz {
 
 	    static void ThemeChromeButton(Button btn, SpzUiThemeOps.ThemeTokens t) {
 	        if (btn == null) return;
-	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+	        SpzUiThemeOps.EnsureSelectableHitFace(btn);
+	        // Import/load glyphs often ARE the face — SolidSquare blanks mesh-list chrome under Nomad.
+	        if (SpzUiThemeOps.IsAuthoredIconFace(btn.targetGraphic)) {
+	            if (btn.targetGraphic is Image face)
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(face, t.iconTint);
+	        } else {
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+	        }
 	        var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	        if (label != null)
 	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, t.textPrimary, 11f);

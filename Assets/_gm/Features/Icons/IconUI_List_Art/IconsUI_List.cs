@@ -574,9 +574,8 @@ namespace spz {
 	                SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
 	            }
 	        }
-	        var rootImg = GetComponent<Image>();
-	        if (rootImg != null)
-	            SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.panelBg);
+	        // Outer panelBg owned by CommandRibbon_UI.RecolorOrRestorePanelShell — skip dual root tint
+	        // (same Image BoundChrome twice fights leave snapshot order under Nomad).
 	    }
 
 	    protected virtual void OnDestroy(){
