@@ -916,6 +916,10 @@ namespace spz {
 				tag.fontStyle = text.fontStyle;
 				tag.outlineWidth = text.outlineWidth;
 				tag.outlineColor = text.outlineColor;
+				tag.enableWordWrapping = text.enableWordWrapping;
+				tag.overflowMode = text.overflowMode;
+				tag.margin = text.margin;
+				tag.hasWrapSnapshot = true;
 				tag.alignment = text.alignment;
 				tag.hasAlignmentSnapshot = true;
 				tag.authoredFont = text.font;
@@ -933,6 +937,12 @@ namespace spz {
 				tag.outlineWidth = text.outlineWidth;
 				tag.outlineColor = text.outlineColor;
 				tag.hasSnapshot = true;
+			}
+			if (!tag.hasWrapSnapshot) {
+				tag.enableWordWrapping = text.enableWordWrapping;
+				tag.overflowMode = text.overflowMode;
+				tag.margin = text.margin;
+				tag.hasWrapSnapshot = true;
 			}
 			if (!tag.hasAlignmentSnapshot) {
 				tag.alignment = text.alignment;
@@ -971,6 +981,11 @@ namespace spz {
 				text.lineSpacing = tag.lineSpacing;
 				text.fontStyle = tag.fontStyle;
 				TrySetNomadOutline(text, tag.outlineWidth, tag.outlineColor);
+			}
+			if (tag.hasWrapSnapshot) {
+				text.enableWordWrapping = tag.enableWordWrapping;
+				text.overflowMode = tag.overflowMode;
+				text.margin = tag.margin;
 			}
 			if (tag.hasAlignmentSnapshot)
 				text.alignment = tag.alignment;
@@ -1147,15 +1162,13 @@ namespace spz {
 				// Do NOT clear raycast before BoundChrome snapshot (Pass9/10 poison class).
 				// StripLabel / ApplyBoundChromeTmp → ClearLabelRaycastIfUnderSelectable owns the clear.
 				if (stripUppercase) {
-					// Force compact design pt — authored/default TMP (often 36) was captured and blew out the cell.
-					const float stackDesignPt = 8f;
-					var designTag = tmp.GetComponent<SpzUiThemeDesignFontPt>();
-					if (designTag != null)
-						designTag.designPt = stackDesignPt;
-					else
-						tmp.fontSize = stackDesignPt;
-					ApplyBoundChromeStripLabelTmp(tmp, labelColor, stackDesignPt);
+					// Capture authored design pt first — never overwrite designPt with compact display
+					// size (that left PROJ MASK / COLOR / TOTAL at 8pt after Restore SPZ → blend over OG).
+					ResolveOrCaptureDesignFontPt(tmp, 14f);
+					ApplyBoundChromeStripLabelTmp(tmp, labelColor, 14f);
 					ApplyWorkflowStackedLabelMetrics(tmp);
+					const float stackDisplayPt = 8f;
+					tmp.fontSize = stackDisplayPt * Mathf.Clamp(_active.fontScale, ScaleTokenMin, ScaleTokenMax);
 				}
 				else
 					ApplyBoundChromeTmp(tmp, labelColor, 11f);
@@ -2837,6 +2850,10 @@ namespace spz {
 			public FontStyles fontStyle;
 			public float outlineWidth;
 			public Color outlineColor = Color.clear;
+			public bool enableWordWrapping = true;
+			public TextOverflowModes overflowMode = TextOverflowModes.Overflow;
+			public Vector4 margin;
+			public bool hasWrapSnapshot;
 			public TextAlignmentOptions alignment = TextAlignmentOptions.TopLeft;
 			public bool hasAlignmentSnapshot;
 			public TMP_FontAsset authoredFont;
