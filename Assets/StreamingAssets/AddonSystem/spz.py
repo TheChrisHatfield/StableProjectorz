@@ -28,13 +28,15 @@ def tcp_port_accepting_connections(host: str, port: int, timeout: float = 0.35) 
 class SPZClient:
     """Client for communicating with StableProjectorz via JSON-RPC"""
     DEFAULT_TIMEOUT_S = 5.0
-    LONG_OP_TIMEOUT_S = 120.0
+    LONG_OP_TIMEOUT_S = 300.0
     _LONG_OP_METHODS = {
         "spz.cmd.export_3d_with_textures_to_path",
         "spz.cmd.export_3d_with_textures",
         "spz.cmd.import_3d_model",
         "spz.cmd.save_project",
         "spz.cmd.load_project",
+        "spz.cmd.export_projection_textures",
+        "spz.cmd.export_view_textures",
     }
     
     def __init__(self, host='127.0.0.1', port=5555):
@@ -1172,26 +1174,67 @@ class UIAPI:
         return r.get("success", False)
 
     def get_theme(self):
-        """Return the active runtime UI theme id and complete effective color tokens."""
+        """Return the active theme, typed token_schema (color|float), bound surfaces, and composition metadata (rpc 1.13+)."""
         return self._client._send_request("spz.ui.get_theme", {})
 
-    def apply_theme(self, theme_id, tokens):
+    def list_themes(self):
+        """Return builtin and registered theme presets plus active catalog state."""
+        return self._client._send_request("spz.ui.list_themes", {})
+
+    def register_theme(self, theme_id, tokens, label=None, owner=None):
+        """Register or atomically replace a complete host-backed theme preset (colors #RRGGBB[AA]; scales as floats)."""
+        params = {
+            "theme_id": str(theme_id),
+            "tokens": dict(tokens or {}),
+        }
+        if label is not None:
+            params["label"] = str(label)
+        if owner is not None:
+            params["owner"] = str(owner)
+        return self._client._send_request("spz.ui.register_theme", params)
+
+    def unregister_theme(self, theme_id):
+        """Remove a registered preset without changing the active palette."""
+        return self._client._send_request("spz.ui.unregister_theme", {
+            "theme_id": str(theme_id),
+        })
+
+    def apply_theme(self, theme_id, tokens=None, mode=None):
         """
-        Apply a validated runtime UI color palette.
+        Apply a token body or registered preset using replace/patch semantics.
 
         ``tokens`` may contain: ``panel_bg``, ``control_bg``, ``field_bg``,
         ``accent``, ``text_primary``, ``text_muted``, and ``handle``.
         Colors use ``#RRGGBB`` or ``#RRGGBBAA``. The returned dict includes
-        ``success`` and either the effective palette or an ``error``.
+        ``success`` and either the effective palette or an ``error``. Omit
+        ``tokens`` to apply a registered preset by id. ``mode`` may be
+        ``replace`` (default) or ``patch``.
         """
-        return self._client._send_request("spz.ui.apply_theme", {
-            "theme_id": str(theme_id),
-            "tokens": dict(tokens or {}),
-        })
+        params = {"theme_id": str(theme_id)}
+        if tokens is not None:
+            params["tokens"] = dict(tokens)
+        if mode is not None:
+            params["mode"] = str(mode)
+        return self._client._send_request("spz.ui.apply_theme", params)
 
     def reset_theme(self):
         """Restore the built-in StableProjectorz runtime UI color tokens."""
         return self._client._send_request("spz.ui.reset_theme", {})
+
+    def list_line_icons(self):
+        """List built-in StudioLineIcon names (icon pack v1, rpc 1.15+)."""
+        return self._client._send_request("spz.ui.list_line_icons", {})
+
+    def set_line_icon(self, tab, icon):
+        """Set a CommandRibbon strip tab line glyph by tab name substring (rpc 1.15+).
+
+        ``tab`` matches strip cell names (e.g. ``Paint``, ``Art``, ``Nomad``).
+        ``icon`` is a name from ``list_line_icons`` (e.g. ``Brush``, ``Mesh``).
+        """
+        return self._client._send_request(
+            "spz.ui.set_line_icon",
+            {"tab": str(tab), "icon": str(icon)},
+        )
     
     def get_panel(self, panel_id):
         """Get a panel by ID"""
@@ -1216,6 +1259,25 @@ class Panel:
         })
         if result.get("success", False):
             return result.get("button_id")
+        return None
+
+    def add_toggle(self, label, default_on=False, callback=None):
+        """Add a checkbox-style toggle (rpc 1.14+). Returns element_id or None.
+
+        Value is bool via ``get_value`` / ``set_value``. Optional ``callback`` is
+        invoked when the user toggles (same invoke_callback channel as buttons).
+        """
+        params = {
+            "addon_id": self._addon_id,
+            "panel_id": self._panel_id,
+            "label": str(label),
+            "default": bool(default_on),
+        }
+        if callback is not None:
+            params["callback"] = str(callback)
+        result = self._client._send_request("spz.ui.add_toggle", params)
+        if result.get("success", False):
+            return result.get("element_id", None)
         return None
     
     def add_slider(self, label, min_val, max_val, default_val):

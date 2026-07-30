@@ -18,6 +18,7 @@ bl_info = {
 }
 
 import os
+import time
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -395,6 +396,9 @@ def _export_fbx_for_spz(context, filepath: str) -> set:
 _go_timer_state = None
 
 
+_GO_IMPORT_MAX_TICKS = 900  # 900 * 0.2s ≈ 180s fallback wait (HTTP path already waited for textures)
+
+
 def _file_fingerprint(path: str):
     """Return (mtime, size) or None if missing/unreadable."""
     try:
@@ -406,30 +410,39 @@ def _file_fingerprint(path: str):
         return None
 
 
+def _try_import_exchange_fbx(path: str) -> bool:
+    """Import FBX + auto-apply maps. Returns True on import attempt without hard fail."""
+    try:
+        bpy.ops.import_scene.fbx(filepath=path)
+        _auto_apply_exchange_texture_after_import(path)
+        return True
+    except Exception as e:
+        print("SPZ GO import_scene.fbx:", e)
+        return False
+
+
 def _go_import_timer():
     global _go_timer_state
     if not _go_timer_state:
         return None
-    # (path, tick, prior_fingerprint) — prior is fingerprint before SPZ export request
-    path, n, prior = _go_timer_state
-    if n > 100:
+    # (path, tick, prior_fingerprint, http_ok) — prior is fingerprint before SPZ export request
+    path, n, prior, http_ok = _go_timer_state
+    if n > _GO_IMPORT_MAX_TICKS:
         _go_timer_state = None
         print("SPZ GO: timeout waiting for:", path)
         return None
     fp = _file_fingerprint(path)
     if fp is not None and fp[1] > 32:
-        # Refuse a pre-existing exchange FBX that was not rewritten by this request.
-        if prior is not None and fp == prior:
-            _go_timer_state = (path, n + 1, prior)
+        # Refuse a pre-existing exchange FBX that was not rewritten — unless HTTP already
+        # confirmed export finished (mtime/size can match on coarse FS clocks).
+        if prior is not None and fp == prior and not http_ok:
+            _go_timer_state = (path, n + 1, prior, http_ok)
             return 0.2
-        try:
-            bpy.ops.import_scene.fbx(filepath=path)
-            _auto_apply_exchange_texture_after_import(path)
-        except Exception as e:
-            print("SPZ GO import_scene.fbx:", e)
+        if _try_import_exchange_fbx(path):
+            print("SPZ GO: imported", path)
         _go_timer_state = None
         return None
-    _go_timer_state = (path, n + 1, prior)
+    _go_timer_state = (path, n + 1, prior, http_ok)
     return 0.2
 
 
@@ -617,7 +630,15 @@ class SPZ_OT_go_import(Operator):
         if not ok:
             self.report({"WARNING"}, f"SPZ: {r!r}")
             return {"CANCELLED"}
-        _go_timer_state = (fbx, 0, prior)
+        # HTTP already waited for mesh+textures. Import now when the file is present;
+        # fall back to timer only if the write is not visible yet (AV / slow disk).
+        fp = _file_fingerprint(fbx)
+        if fp is not None and fp[1] > 32:
+            # After successful export, trust the file even if mtime/size matched prior.
+            if _try_import_exchange_fbx(fbx):
+                self.report({"INFO"}, f"Import ← SPZ: {fbx}")
+                return {"FINISHED"}
+        _go_timer_state = (fbx, 0, prior, True)
         try:
             if hasattr(bpy.app.timers, "is_registered") and bpy.app.timers.is_registered(
                 _go_import_timer
@@ -659,7 +680,14 @@ class SPZ_OT_go_apply_maps_only(Operator):
         if not ok:
             self.report({"WARNING"}, f"SPZ: {r!r}")
             return {"CANCELLED"}
-        if not _auto_apply_exchange_texture_after_import(fbx):
+        # Maps may land a moment after HTTP returns on slow disks — poll briefly.
+        applied = False
+        for _ in range(30):
+            if _auto_apply_exchange_texture_after_import(fbx):
+                applied = True
+                break
+            time.sleep(0.2)
+        if not applied:
             self.report(
                 {"WARNING"},
                 "SPZ export OK but no texture applied — select a mesh and ensure exchange maps exist beside the FBX.",

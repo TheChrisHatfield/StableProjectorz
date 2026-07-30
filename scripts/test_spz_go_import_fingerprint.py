@@ -17,7 +17,7 @@ def _load_fingerprint_helpers():
 	src = (ROOT / "External" / "Blender_SpzBridge" / "__init__.py").read_text(encoding="utf-8")
 	# Extract _file_fingerprint function body via a minimal sandbox.
 	start = src.index("def _file_fingerprint(path: str):")
-	end = src.index("\ndef _go_import_timer():", start)
+	end = src.index("\ndef _try_import_exchange_fbx(", start)
 	ns = {"os": os}
 	exec(src[start:end], ns)
 	return ns["_file_fingerprint"]

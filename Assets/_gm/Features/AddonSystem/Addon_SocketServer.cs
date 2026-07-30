@@ -48,7 +48,7 @@ namespace spz {
 		private const int MAX_COMMANDS_PER_FRAME = 10;
 		// JSON-RPC response wait budgets (background thread waiting for main-thread execution).
 		private const int COMMAND_TIMEOUT_DEFAULT_MS = 10000;   // fast commands
-		private const int COMMAND_TIMEOUT_LONG_OP_MS = 120000;  // mesh import/export/save/load
+		private const int COMMAND_TIMEOUT_LONG_OP_MS = 300000;  // mesh import/export + texture encode (was 120s; UDIM/dilate often exceeds)
 		
 		void Awake() {
 			// Diagnostic: if you search "Addon_SocketServer" in Player.log and never see this line, the scene/GameObject/script is not running (scene not loaded, GO disabled, or script missing).
@@ -538,12 +538,12 @@ namespace spz {
 				"spz.ui.add_button", "spz.ui.add_dropdown", "spz.ui.add_slider", "spz.ui.add_text_input", "spz.ui.add_toggle",
 				"spz.ui.attach_viewport_fullview_toggle",
 				"spz.ui.apply_theme", "spz.ui.create_panel", "spz.ui.get_theme", "spz.ui.get_value",
-				"spz.ui.list_themes", "spz.ui.register_theme", "spz.ui.reset_theme",
-				"spz.ui.set_value", "spz.ui.unregister_theme",
+				"spz.ui.list_line_icons", "spz.ui.list_themes", "spz.ui.register_theme", "spz.ui.reset_theme",
+				"spz.ui.set_line_icon", "spz.ui.set_value", "spz.ui.unregister_theme",
 			};
 			return new JObject {
 				["success"] = true,
-				["addon_rpc_version"] = "1.14",
+				["addon_rpc_version"] = "1.15",
 				["spz_cmd"] = cmd,
 				["spz_ui"] = ui,
 				["context_command"] = "spz.cmd.get_addon_context",
@@ -2084,6 +2084,25 @@ namespace spz {
 			if (string.Equals(method, "spz.ui.reset_theme", StringComparison.Ordinal)) {
 				SpzUiThemeOps.ResetTheme();
 				return SpzUiThemeOps.GetThemeResult();
+			}
+			if (string.Equals(method, "spz.ui.list_line_icons", StringComparison.Ordinal)) {
+				return new JObject {
+					["success"] = true,
+					["icons"] = SpzUiThemeOps.ListLineIconNames(),
+				};
+			}
+			if (string.Equals(method, "spz.ui.set_line_icon", StringComparison.Ordinal)) {
+				var iconResult = new JObject { ["success"] = false };
+				string tab = @params?["tab"]?.ToString() ?? @params?["target"]?.ToString() ?? "";
+				string icon = @params?["icon"]?.ToString() ?? "";
+				if (SpzUiThemeOps.TrySetStripTabLineIcon(tab, icon, out string iconError)) {
+					iconResult["success"] = true;
+					iconResult["tab"] = tab;
+					iconResult["icon"] = icon;
+				} else {
+					iconResult["error"] = iconError ?? "set_line_icon failed";
+				}
+				return iconResult;
 			}
 			if (AddonUI_MGR.instance == null) {
 				return new JObject { ["success"] = false, ["error"] = "AddonUI_MGR not available" };

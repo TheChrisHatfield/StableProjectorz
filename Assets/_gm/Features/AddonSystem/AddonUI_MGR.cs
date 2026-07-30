@@ -1282,7 +1282,7 @@ namespace spz {
 		/// </summary>
 		IEnumerator CoSpzGoFinishExportWhenSaveIdle() {
 			SpzGoStatusLine("Export: writing textures…", true);
-			const float timeoutSec = 120f;
+			const float timeoutSec = 300f;
 			float elapsed = 0f;
 			var sm = Save_MGR.instance;
 			while (sm != null && sm._isSaving && elapsed < timeoutSec) {
