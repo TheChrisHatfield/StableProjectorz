@@ -27,6 +27,29 @@ namespace spz {
 
 	    void Update(){
 	        string highlighted = GetHighlightedText();
+	        if (SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            // Nomad uses MonolithLineIcon Globe — do not swap authored globe sprites over it.
+	            var line = SpzUiThemeOps.FindDirectChildIncludingInactive(transform, "MonolithLineIcon");
+	            if (line != null) {
+	                var img = line.GetComponent<Image>();
+	                if (img != null) {
+	                    SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(img);
+	                    Color c = SpzUiThemeOps.Active.iconTint;
+	                    if (string.IsNullOrEmpty(highlighted))
+	                        c = Color.Lerp(c, SpzUiThemeOps.Active.textMuted, 0.45f);
+	                    img.color = c;
+	                }
+	            }
+	            _latestSelected_text = highlighted != "" ? highlighted : _latestSelected_text;
+	            return;
+	        }
+	        // Leave Nomad: unwind Monolith tint so authored globe sprites own the cue again.
+	        var monolith = SpzUiThemeOps.FindDirectChildIncludingInactive(transform, "MonolithLineIcon");
+	        if (monolith != null) {
+	            var mImg = monolith.GetComponent<Image>();
+	            if (mImg != null)
+	                SpzUiThemeOps.RestoreAuthoredGraphic(mImg);
+	        }
 	        _image.sprite =  highlighted!=""? _activeSprite : _inactiveSprite;
 
 	        // Only update the latest-selected text, if highlighted isn't "".
