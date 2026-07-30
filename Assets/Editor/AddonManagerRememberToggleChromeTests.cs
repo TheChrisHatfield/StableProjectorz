@@ -27,5 +27,8 @@ public sealed class AddonManagerRememberToggleChromeTests {
 		int roundBg = src.IndexOf("ApplyRoundedControlSprite(bgI", create, System.StringComparison.Ordinal);
 		Assert.That(roundBg, Is.GreaterThan(0));
 		Assert.That(roundBg, Is.LessThan(graphic));
+		int ckSprite = src.IndexOf("UiRuntimeSprites.CircleFilled", ck, System.StringComparison.Ordinal);
+		Assert.That(ckSprite, Is.GreaterThan(0), "Remember checkmark must assign CircleFilled or ON is invisible.");
+		Assert.That(ckSprite, Is.LessThan(graphic));
 	}
 }
