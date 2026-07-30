@@ -1304,10 +1304,9 @@ namespace spz {
 				return;
 			_adaptClearanceFrame = frame;
 
-			// force (OPEN RIGHT / rebuild): re-fit from max once. Periodic Update keeps current gap.
-			float gap = force || _appliedBottomGapPx < 0f
-				? ExtraBottomGapPx
-				: _appliedBottomGapPx;
+			// Only the first fit (or after TearDown resets _appliedBottomGapPx) starts from max.
+			// force:true used to reset to ExtraBottomGap every RefreshActiveFill → one-frame climb under SD.
+			float gap = _appliedBottomGapPx < 0f ? ExtraBottomGapPx : _appliedBottomGapPx;
 			int spacerIndex = ResolveSpacerSiblingIndex(vlgRoot);
 			_spacerRowRt = EnsureSpacerRow(vlgRoot, spacerIndex, gap, _builtRowRt.gameObject.layer);
 			LayoutRebuilder.ForceRebuildLayoutImmediate(vlgRoot);
