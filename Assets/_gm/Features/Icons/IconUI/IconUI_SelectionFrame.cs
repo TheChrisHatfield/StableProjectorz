@@ -21,6 +21,7 @@ namespace spz {
 	    Color _authoredChosenColor;
 	    Color _authoredChosenAndMainColor;
 	    bool _authoredSelectionSnapshotted;
+	    FrameShow _lastFrameShow = FrameShow.Hide;
 
 	    void Awake() {
 	        SnapshotAuthoredSelectionColors();
@@ -48,6 +49,8 @@ namespace spz {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            _theChosen_color = _authoredChosenColor;
 	            _theChosen_andMainSelected_color = _authoredChosenAndMainColor;
+	            // Leave Nomad: re-apply current show state so frames are not stuck on accent RGB.
+	            ToggleFrame(_lastFrameShow);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
@@ -55,6 +58,7 @@ namespace spz {
 	        Color main = Color.Lerp(t.accent, t.selection.a > 0.01f ? t.selection : t.tabActive, 0.4f);
 	        main.a = 1f;
 	        _theChosen_andMainSelected_color = main;
+	        ToggleFrame(_lastFrameShow);
 	    }
 
 	    public void PreventShowing(object requestor){
@@ -135,6 +139,7 @@ namespace spz {
 
 
 	    void ToggleFrame(FrameShow how){
+	        _lastFrameShow = how;
 	        Color usedFrameColor =  _theChosen_color;
 	        switch (how){
 	            case FrameShow.Hide:
