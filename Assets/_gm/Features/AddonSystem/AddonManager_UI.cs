@@ -1586,9 +1586,8 @@ namespace spz {
 				Color face = ribbonToggle.isOn
 					? Color.Lerp(t.controlBg, t.success, 0.35f)
 					: t.controlBg;
-				// Checkbox-style host pref — flat tool toggle, not SolidSquare selectable chrome.
-				SpzUiThemeOps.ThemeFlatToolToggle(
-					ribbonToggle, face, t.accent, ribbonToggle.isOn ? t.textPrimary : t.textMuted);
+				// Real ON/OFF checkbox — keep glyph (ThemeFlatToolToggle would hide Checkmark).
+				SpzUiThemeOps.ThemeCheckboxToggle(ribbonToggle, face, t.accent, t.success);
 				var ribbonLabel = FindChildRecursive(item.transform, "ShowInRibbonLabel")?.GetComponent<TextMeshProUGUI>();
 				if (ribbonLabel != null) {
 					float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(ribbonLabel, 13f);
