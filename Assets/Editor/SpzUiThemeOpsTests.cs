@@ -214,22 +214,32 @@ public sealed class SpzUiThemeOpsTests {
 		Assert.That(sawAccent && sawFont && sawSpacing && sawCorner && sawIconTint && sawPanelWidth && sawPanelAlpha && sawRibbonIconOnly, Is.True);
 		Assert.That(result["reserved_token_names"].ToString(), Does.Not.Contain("danger"));
 		var surfaces = (JArray)result["surfaces"];
-		Assert.That(surfaces.Count, Is.GreaterThanOrEqualTo(16));
+		Assert.That(surfaces.Count, Is.GreaterThanOrEqualTo(17));
 		bool sawLists = false, sawMultiview = false, sawWorkflowOpts = false, sawContextMenus = false, sawChromeTargets = false;
+		bool sawTopStripServ = false;
+		string connectionNotes = null;
 		foreach (var surface in surfaces) {
 			Assert.That((bool)surface["bound"], Is.True, surface["id"]?.ToString());
-			if ((string)surface["id"] == "right_panel_lists")
+			string id = (string)surface["id"];
+			if (id == "right_panel_lists")
 				sawLists = true;
-			if ((string)surface["id"] == "multiview_pins")
+			if (id == "multiview_pins")
 				sawMultiview = true;
-			if ((string)surface["id"] == "workflow_options")
+			if (id == "workflow_options")
 				sawWorkflowOpts = true;
-			if ((string)surface["id"] == "context_menus")
+			if (id == "context_menus")
 				sawContextMenus = true;
-			if ((string)surface["id"] == "chrome_targets")
+			if (id == "chrome_targets")
 				sawChromeTargets = true;
+			if (id == "top_strip_serv")
+				sawTopStripServ = true;
+			if (id == "connection_panels")
+				connectionNotes = (string)surface["notes"];
 		}
 		Assert.That(sawLists && sawMultiview && sawWorkflowOpts && sawContextMenus && sawChromeTargets, Is.True);
+		Assert.That(sawTopStripServ, Is.True, "SD SERV/3D SERV owned by RestartTheWebui, not ConnectionPanel_UI");
+		Assert.That(connectionNotes, Does.Not.Contain("SD SERV").IgnoreCase);
+		Assert.That(connectionNotes, Does.Contain("ConnectionPanel_UI"));
 		Assert.That(result["composes_with"].ToString(), Does.Contain("spz.cmd.set_ui_scale"));
 		Assert.That(result["composes_with"].ToString(), Does.Contain("spz.cmd.set_skybox_color"));
 	}

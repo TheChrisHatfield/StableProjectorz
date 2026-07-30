@@ -29,6 +29,24 @@ public sealed class RestartWebuiChromeThemeTests {
 	}
 
 	[Test]
+	public void ThemeCatalog_TopStripServSurfaceNamesRestartOwnerNotConnectionPanel() {
+		var method = typeof(SpzUiThemeOps).GetMethod(
+			"BuildSurfaces", BindingFlags.Static | BindingFlags.NonPublic);
+		Assert.That(method, Is.Not.Null);
+		var surfaces = (JArray)method.Invoke(null, null);
+		JToken serv = null;
+		JToken connection = null;
+		foreach (var s in surfaces) {
+			if ((string)s["id"] == "top_strip_serv") serv = s;
+			if ((string)s["id"] == "connection_panels") connection = s;
+		}
+		Assert.That(serv, Is.Not.Null);
+		Assert.That((bool)serv["bound"], Is.True);
+		Assert.That((string)serv["notes"], Does.Contain("RestartTheWebui"));
+		Assert.That((string)connection["notes"], Does.Not.Contain("SD SERV").IgnoreCase);
+	}
+
+	[Test]
 	public void ApplyThemeTokens_FlattensServAndFolderAndKeepsHitFaces() {
 		Assert.That(SpzUiThemeOps.TryApplyTheme(
 			"p1-experiment",
