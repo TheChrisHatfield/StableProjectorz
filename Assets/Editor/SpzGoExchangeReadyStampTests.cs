@@ -32,5 +32,7 @@ public sealed class SpzGoExchangeReadyStampTests {
 		Assert.That(deleteAt, Is.GreaterThan(0));
 		Assert.That(exportModel, Is.GreaterThan(deleteAt),
 			"Stale stamp must be removed before ExportModelToPath rewrites the mesh.");
+		Assert.That(src, Does.Contain("Viewport_StatusText.instance?.ShowStatusText"),
+			"Save_Mesh_Textures must not NRE on null status UI before onComplete/stamp.");
 	}
 }
