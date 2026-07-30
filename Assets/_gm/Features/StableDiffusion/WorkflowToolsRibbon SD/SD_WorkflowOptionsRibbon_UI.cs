@@ -542,6 +542,18 @@ namespace spz {
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_brushColor.transform);
 	            if (_brushSize_slider != null)
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_brushSize_slider.transform);
+	            if (_brushOpacity != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_brushOpacity.transform);
+	            if (_bucketFill != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_bucketFill.transform);
+	            if (_deleteMask != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_deleteMask.transform);
+	            if (_InvertMask != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_InvertMask.transform);
+	            if (_pressureTabletMode != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_pressureTabletMode.transform);
+	            if (_direction != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_direction.transform);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
@@ -557,10 +569,17 @@ namespace spz {
 	                            || ReferenceEquals(tmp, _reThink_text_mini)
 	                            || ReferenceEquals(tmp, _mask_blur_text)))
 	                        return true;
-	                    // BrushRibbon owns hit-only chrome for stamps/swatches — RolesUnder SolidSquare blanks them.
+	                    // BrushRibbon owns tool chrome (stamps, bucket, direction, opacity) —
+	                    // RolesUnder SolidSquare after BrushRibbon ThemeChanged blanks gen Soft tools.
 	                    if (c.GetComponentInParent<BrushRibbon_UI_Hardness>(true) != null) return true;
 	                    if (c.GetComponentInParent<BrushRibbon_UI_Colors>(true) != null) return true;
 	                    if (c.GetComponentInParent<BrushRibbon_UI_Size>(true) != null) return true;
+	                    if (c.GetComponentInParent<BrushRibbon_UI_Opacity>(true) != null) return true;
+	                    if (c.GetComponentInParent<BrushRibbon_UI_BucketFill>(true) != null) return true;
+	                    if (c.GetComponentInParent<BrushRibbon_UI_DeleteButton>(true) != null) return true;
+	                    if (c.GetComponentInParent<BrushRibbon_UI_InvertMask>(true) != null) return true;
+	                    if (c.GetComponentInParent<BrushRibbon_UI_PressureMode>(true) != null) return true;
+	                    if (c.GetComponentInParent<BrushRibbon_UI_Direction>(true) != null) return true;
 	                    return false;
 	                },
 	            });
