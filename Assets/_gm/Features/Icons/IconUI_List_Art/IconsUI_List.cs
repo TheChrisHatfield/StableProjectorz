@@ -515,6 +515,7 @@ namespace spz {
 	                var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	                if (label != null)
 	                    SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, t.textPrimary, 11f);
+	                SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	            }
 	            foreach (var tmp in _header.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
 	                if (tmp == null) continue;
