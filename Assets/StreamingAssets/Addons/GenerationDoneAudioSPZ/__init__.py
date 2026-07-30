@@ -237,27 +237,28 @@ def _play_with_powershell(path: str) -> bool:
         return False
 
 
-def _play_sound_now(from_test_button: bool = False) -> None:
+def _play_sound_now(from_test_button: bool = False) -> bool:
     path = _resolve_sound_path()
     if not path:
         _show("Set an audio file path first.", duration=3.0)
-        return
+        return False
     if not os.path.isfile(path):
         _show("Audio file not found. Check the path.", duration=3.0)
         print(f"[{ADDON_ID}] Missing audio file: {path}")
-        return
+        return False
     if not _is_audio_file(path):
         _show("Unsupported audio extension. Use wav/mp3/m4a/aac/wma/ogg/flac.", duration=3.0)
-        return
+        return False
 
     ok = _play_with_winsound(path) or _play_with_mci(path) or _play_with_powershell(path)
     if ok:
         if from_test_button:
             _show("Test sound played.", duration=2.0)
-        return
+        return True
 
     _show("Unable to play the audio file on this machine.", duration=3.0)
     print(f"[{ADDON_ID}] Playback failed for: {path}")
+    return False
 
 
 def _refresh_enabled_state_field() -> None:
@@ -316,8 +317,8 @@ def _ensure_watcher_running() -> None:
         _watcher_thread.start()
 
 
-def test_sound() -> None:
-    _play_sound_now(from_test_button=True)
+def test_sound() -> bool:
+    return _play_sound_now(from_test_button=True)
 
 
 def enable_sound_alerts() -> None:
@@ -332,27 +333,31 @@ def toggle_sound_alerts() -> None:
     _set_enabled(not _enabled, announce=True)
 
 
-def browse_audio_file() -> None:
+def browse_audio_file() -> bool:
     if _panel is None:
-        return
+        return False
     picked = _pick_audio_file()
     if not picked:
         _show("No file selected.", duration=2.0)
-        return
+        return False
     _panel.set_value(_el["sound_path"], picked)
     settings = _read_settings_from_panel()
-    _save_settings(settings)
+    if not _save_settings(settings):
+        return False
     _show("Audio file selected and saved.", duration=2.0)
+    return True
 
 
-def apply_settings() -> None:
+def apply_settings() -> bool:
     if _panel is None:
-        return
+        return False
     poll = max(0.2, _panel_value_float("poll_seconds", 0.6))
     _panel.set_value(_el["poll_seconds"], f"{poll:.2f}")
     settings = _read_settings_from_panel()
-    _save_settings(settings)
+    if not _save_settings(settings):
+        return False
     _show("Gen complete audio settings applied.", duration=2.0)
+    return True
 
 
 def register() -> None:
