@@ -72,11 +72,12 @@ namespace spz {
 						}
 					}
 				} else {
-					if (ViewportFullViewOnScreen_Driver.IsActive) {
-						ViewportFullViewOnScreen_Driver.TryExit();
-					} else {
-						ViewportFullViewOnScreen_Driver.TryEnter();
-					}
+					// Skeleton visibility probe failed — still toggle driver and run chrome/refit (sk may be null).
+					bool changed = ViewportFullViewOnScreen_Driver.IsActive
+						? ViewportFullViewOnScreen_Driver.TryExit()
+						: ViewportFullViewOnScreen_Driver.TryEnter();
+					if (changed)
+						AfterViewportFullViewLayoutChange(Global_Skeleton_UI.instance);
 				}
 			});
 		}
