@@ -210,7 +210,12 @@ namespace spz {
 	            if (tmp.GetComponentInParent<CircleSlider_Snapping_UI>(true) != null) continue;
 	            // Blur-inside toggle label is handled by ThemeToggle strip metrics.
 	            if (tmp.GetComponentInParent<Toggle>(true) != null) continue;
-	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	            if (tmp.GetComponentInParent<Button>(true) != null)
+	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+	            else {
+	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	                tmp.characterSpacing = 0f;
+	            }
 	        }
 	        foreach (var lg in root.GetComponentsInChildren<LayoutGroup>(true))
 	            SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
