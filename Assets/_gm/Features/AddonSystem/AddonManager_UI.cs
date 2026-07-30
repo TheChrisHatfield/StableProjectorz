@@ -421,7 +421,7 @@ namespace spz {
 			bgR.anchorMax = Vector2.one;
 			bgR.sizeDelta = Vector2.zero;
 			var bgI = bg.AddComponent<UnityEngine.UI.Image>();
-			SpzUiThemeOps.ApplyRoundedControlSprite(bgI, markEligible: true);
+			AssignSolidFaceThenMarkRounded(bgI);
 			bgI.color = new Color(0.3f, 0.3f, 0.3f, 1f);
 			bgI.raycastTarget = true;
 			var ck = new GameObject("Checkmark");
@@ -576,7 +576,7 @@ namespace spz {
 		rectTransform.anchoredPosition = Vector2.zero;
 		
 		var image = panelObj.AddComponent<UnityEngine.UI.Image>();
-		SpzUiThemeOps.ApplyRoundedControlSprite(image, markEligible: true);
+		AssignSolidFaceThenMarkRounded(image);
 		image.color = new Color(21f / 255f, 21f / 255f, 21f / 255f, 0.985f);
 		image.raycastTarget = true;
 		
@@ -643,7 +643,7 @@ namespace spz {
 			le.flexibleWidth = 0f;
 			le.preferredHeight = size.y;
 			var img = go.AddComponent<UnityEngine.UI.Image>();
-			SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
+			AssignSolidFaceThenMarkRounded(img);
 			img.color = bg;
 			img.raycastTarget = true;
 			var btn = go.AddComponent<UnityEngine.UI.Button>();
@@ -735,7 +735,7 @@ namespace spz {
 		pillsLE.preferredHeight = 34f;
 		pillsLE.minHeight = 34f;
 		var pillsBg = filterPillsObj.AddComponent<Image>();
-		SpzUiThemeOps.ApplyRoundedControlSprite(pillsBg, markEligible: true);
+		AssignSolidFaceThenMarkRounded(pillsBg);
 		pillsBg.color = new Color(39f / 255f, 39f / 255f, 42f / 255f, 0.55f);
 		pillsBg.raycastTarget = false;
 		var pillsLayout = filterPillsObj.AddComponent<HorizontalLayoutGroup>();
@@ -1215,7 +1215,7 @@ namespace spz {
 			le.minWidth = width;
 			le.preferredHeight = 28f;
 			var toggleBg = toggleObj.AddComponent<UnityEngine.UI.Image>();
-			SpzUiThemeOps.ApplyRoundedControlSprite(toggleBg, markEligible: true);
+			AssignSolidFaceThenMarkRounded(toggleBg);
 			toggleBg.color = new Color(0f, 0f, 0f, 0f);
 			toggleBg.raycastTarget = true;
 			var toggle = toggleObj.AddComponent<Toggle>();
@@ -1537,7 +1537,7 @@ namespace spz {
 				}
 			}
 			if (button.targetGraphic is Image btnImg)
-				SpzUiThemeOps.ApplyRoundedControlSprite(btnImg);
+				AssignSolidFaceThenMarkRounded(btnImg);
 			var le = button.GetComponent<LayoutElement>();
 			if (le != null) {
 				if (iconOnly) {
@@ -1829,6 +1829,18 @@ namespace spz {
 			graphic.color = color;
 		}
 
+		/// <summary>
+		/// Ensure a real sprite exists before BoundChrome marks the face eligible — otherwise Restore SPZ rewinds null.
+		/// </summary>
+		static void AssignSolidFaceThenMarkRounded(Image img) {
+			if (img == null) return;
+			if (img.sprite == null) {
+				img.sprite = UiRuntimeSprites.SolidRect;
+				img.type = Image.Type.Simple;
+			}
+			SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
+		}
+
 		void ReapplyAuthoredStatusDialsAfterThemeRestore() {
 			foreach (var item in _addonUIItems.Values) {
 				if (item == null) continue;
@@ -1968,9 +1980,7 @@ namespace spz {
 			prefsBtnLE.minHeight = 28f;
 			var prefsBtnImage = prefsBtnObj.AddComponent<Image>();
 			// Assign a real face before markEligible so Restore SPZ does not rewind authoredSprite=null.
-			prefsBtnImage.sprite = UiRuntimeSprites.SolidRect;
-			prefsBtnImage.type = Image.Type.Simple;
-			SpzUiThemeOps.ApplyRoundedControlSprite(prefsBtnImage, markEligible: true);
+			AssignSolidFaceThenMarkRounded(prefsBtnImage);
 			prefsBtnImage.color = new Color(61f / 255f, 61f / 255f, 61f / 255f, 1f);
 			prefsBtnImage.raycastTarget = true;
 			var prefsBtn = prefsBtnObj.AddComponent<Button>();
@@ -2000,9 +2010,7 @@ namespace spz {
 			removeBtnLE.preferredHeight = 28f;
 			removeBtnLE.minHeight = 28f;
 			var removeBtnImage = removeBtnObj.AddComponent<Image>();
-			removeBtnImage.sprite = UiRuntimeSprites.SolidRect;
-			removeBtnImage.type = Image.Type.Simple;
-			SpzUiThemeOps.ApplyRoundedControlSprite(removeBtnImage, markEligible: true);
+			AssignSolidFaceThenMarkRounded(removeBtnImage);
 			removeBtnImage.color = new Color(45f / 255f, 26f / 255f, 26f / 255f, 0.85f);
 			removeBtnImage.raycastTarget = true;
 			var removeBtn = removeBtnObj.AddComponent<Button>();
@@ -2031,11 +2039,9 @@ namespace spz {
 			prefsBodyLE.minHeight = 36f;
 			prefsBodyLE.flexibleWidth = 1f;
 			var prefsBodyBg = prefsBody.AddComponent<Image>();
-			prefsBodyBg.sprite = UiRuntimeSprites.SolidRect;
-			prefsBodyBg.type = Image.Type.Simple;
+			AssignSolidFaceThenMarkRounded(prefsBodyBg);
 			prefsBodyBg.color = new Color(0.14f, 0.14f, 0.16f, 0.92f);
 			prefsBodyBg.raycastTarget = false;
-			SpzUiThemeOps.ApplyRoundedControlSprite(prefsBodyBg, markEligible: true);
 			var prefsBodyHLG = prefsBody.AddComponent<HorizontalLayoutGroup>();
 			prefsBodyHLG.spacing = 8f;
 			prefsBodyHLG.padding = new RectOffset(38, 10, 6, 6);
@@ -2055,9 +2061,7 @@ namespace spz {
 			ribbonToggleLE.minHeight = 22f;
 			ribbonToggleLE.flexibleWidth = 0f;
 			var ribbonBg = ribbonToggleObj.AddComponent<Image>();
-			ribbonBg.sprite = UiRuntimeSprites.SolidRect;
-			ribbonBg.type = Image.Type.Simple;
-			SpzUiThemeOps.ApplyRoundedControlSprite(ribbonBg, markEligible: true);
+			AssignSolidFaceThenMarkRounded(ribbonBg);
 			ribbonBg.color = new Color(0.22f, 0.22f, 0.24f, 1f);
 			ribbonBg.raycastTarget = true;
 			var ribbonCheckGo = new GameObject("Checkmark");
