@@ -24,7 +24,9 @@ namespace spz {
 	    void OnApplicationFocus(bool focus){
 	        //important! Feb 2024 user told that after opening File window they couldn't
 	        //manipulate camera anymore, even after focusing the stable projectorz
-	        StopOrbit_ifWas();
+	        // Only clear sticky orbit on focus *loss* — clearing on focus-gain aborted a fresh Alt+LMB drag.
+	        if (!focus)
+	            StopOrbit_ifWas();
 	    }
 
 

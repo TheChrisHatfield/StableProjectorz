@@ -35,7 +35,9 @@ namespace spz {
 	        // Same class of bug as CameraOrbit/CameraMove/CameraDolly: after a file dialog or
 	        // alt-tab mid-MMB-pan, _theCurrentlyPanning + sticky nav lock stayed held and blocked
 	        // further multi-view pan ownership until a matching EndPanDrag ran.
-	        EndPanDrag();
+	        // Only clear on focus *loss* — EndPanDrag on focus-gain aborted a fresh MMB pan.
+	        if (!focus)
+	            EndPanDrag();
 	    }
 
 	    void OnUpdate(){
