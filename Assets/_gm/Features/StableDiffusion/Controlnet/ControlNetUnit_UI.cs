@@ -360,9 +360,11 @@ namespace spz {
 	        if (rootImg != null)
 	            SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.panelBg);
 
-	        // Role matrix aligns Nomad with traditional CN chrome (dropdowns, buttons, dials, download slide).
+	        // Role matrix aligns Nomad with traditional CN chrome (dropdowns, buttons, dials).
+	        // Download slide owned by ControlNetUnit_DownloadHelper — SkipDownloadSlides avoids dual ThemeChanged.
 	        SpzUiThemeOps.ApplyBoundChromeRolesUnder(transform, new SpzUiThemeRoleMatrixOptions {
 	            CompactLooseLabels = false,
+	            SkipDownloadSlides = true,
 	            Exclude = c => {
 	                if (ReferenceEquals(c, _headerRibbon_button)) return true;
 	                if (c is TextMeshProUGUI tmp && ReferenceEquals(tmp, _mainHeader)) return true;
@@ -373,6 +375,7 @@ namespace spz {
 	                return false;
 	            },
 	        });
+	        _downloadHelper?.ApplyThemeTokens();
 	        // Loose field captions (weight/start/end) — ReadableBody, not Compact truncate crowding dials.
 	        foreach (var tmp in GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp == null) continue;

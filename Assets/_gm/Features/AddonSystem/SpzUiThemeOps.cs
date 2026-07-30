@@ -725,6 +725,17 @@ namespace spz {
 		}
 
 		/// <summary>
+		/// True when the selectable face is a drawn icon glyph (preserveAspect non-SolidRect sprite).
+		/// SolidSquare blanks these under Nomad — prefer tint/hit-only instead.
+		/// </summary>
+		public static bool IsAuthoredIconFace(Graphic g) {
+			if (g is not Image img || img.sprite == null) return false;
+			if (!img.preserveAspect) return false;
+			if (IsToggleCheckmarkGraphic(img) || IsUiMaskGraphic(img)) return false;
+			return !UiRuntimeSprites.IsSolidRect(img.sprite);
+		}
+
+		/// <summary>
 		/// Converts authored <see cref="Image.Type.Sliced"/> chrome to a flat solid square.
 		/// Skips Nomad slider segment tiles, Toggle checkmarks, UI Mask sprites, and <see cref="Image.Type.Filled"/>
 		/// radial dials (CircleSlider) — flattening those into SolidRect causes overlay soup.
@@ -885,6 +896,11 @@ namespace spz {
 				// Skip near-transparent / glyph-only hit pads — SolidSquare blanks download-row icons.
 				if (btn.targetGraphic != null && btn.targetGraphic.color.a < 0.08f)
 					continue;
+				if (IsAuthoredIconFace(btn.targetGraphic)) {
+					EnsureSelectableHitFace(btn);
+					ClearNonFaceRaycastsForTheme(btn);
+					continue;
+				}
 				ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
 				foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 					if (tmp != null)
@@ -2356,6 +2372,12 @@ namespace spz {
 				// Mini/main generate column owns its chrome — dual ApplyContextMenuChrome blanks GEN under Nomad.
 				if (button.GetComponentInParent<GenerateButtons_UI>(true) != null)
 					continue;
+				// MoveToLayer / Clone / Save / AO icon faces — SolidSquare blanks glyphs (Art2D/AO litmus).
+				if (IsAuthoredIconFace(button.targetGraphic)) {
+					EnsureSelectableHitFace(button);
+					ClearNonFaceRaycastsForTheme(button);
+					continue;
+				}
 				// Prefab SAVE/LOAD/DELETE often ship null targetGraphic — clicked via TMP until Nomad
 				// clears label raycasts. EnsureSelectableHitFace lives in ApplyBoundChromeSelectable.
 				ApplyBoundChromeSelectable(button, tokens.controlBg, tokens.accent);
