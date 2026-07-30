@@ -296,7 +296,8 @@ namespace spz {
 	    void OnApplicationFocus(bool focus){
 	        // Mid-pin-drag + file dialog / alt-tab left IsDraggingViewPin + sticky nav lock held,
 	        // which blocked CameraPanning from taking MMB until an explicit DropPin ran.
-	        if (_draggedPin == null) { return; }
+	        // Only drop on focus *loss* — dropping on focus-gain aborted a fresh pin grab.
+	        if (focus || _draggedPin == null) { return; }
 	        OnPinDropped(isLeftMouseButton: false);
 	    }
 
@@ -311,9 +312,9 @@ namespace spz {
 	        ApplyPinLocksToSelectedMeshCenters();
 
 
-	        bool hoverMainView = MainViewport_UI.instance.isCursorHoveringMe();
+	        bool hoverMainView = MainViewport_UI.instance != null && MainViewport_UI.instance.isCursorHoveringMe();
 	        bool isMMB         = KeyMousePenInput.isMMBpressed();
-	        bool noUsual       = MainViewport_UI.instance.showing != MainViewport_UI.Showing.UsualView;
+	        bool noUsual       = MainViewport_UI.instance != null && MainViewport_UI.instance.showing != MainViewport_UI.Showing.UsualView;
 
 	        bool canShowNumbers  =  hoverMainView  ||  _draggedPin != null;
 	             canShowNumbers &= (noUsual || isMMB);//show numbers when  inpainting only when user pans using MMB
@@ -355,7 +356,7 @@ namespace spz {
 	    }
 
 	    void GrabPin_maybe(){
-	        bool isHoveringViewport = MainViewport_UI.instance.isCursorHoveringMe();
+	        bool isHoveringViewport = MainViewport_UI.instance != null && MainViewport_UI.instance.isCursorHoveringMe();
 	        bool isMMBpressed = KeyMousePenInput.isMMBpressed();
 	        bool isLMBpressed = KeyMousePenInput.isLMBpressed();
 	        bool isMousePressed = KeyMousePenInput.isMMBpressedThisFrame() || KeyMousePenInput.isLMBpressedThisFrame();
@@ -380,7 +381,10 @@ namespace spz {
 	        if(isLMBpressed && is_dimension_3d){ return; }
 	        if(isLMBpressed && is_dimension_sd && !isMultiViewEditing){ return; }
 	        if(is_dimension_uv){ return; }//no draggnig of pins during inspection of UV.
-	        if (KeyMousePenInput.isMMBpressedThisFrame() && !IsCursorWithinMmbGrabRadiusToPin(nearestPinIx)) { return; }
+	        // MMB and LMB both require cursor near the digit — LMB previously grabbed any nearest pin
+	        // across the whole viewport and stole paint / mesh clicks.
+	        if ((KeyMousePenInput.isMMBpressedThisFrame() || KeyMousePenInput.isLMBpressedThisFrame())
+	            && !IsCursorWithinMmbGrabRadiusToPin(nearestPinIx)) { return; }
 	        // Same rule as MmbDownWouldGrabNearestPin: MMB on the asset pans; pin only off-mesh / near digit.
 	        if (KeyMousePenInput.isMMBpressedThisFrame()
 	            && MultiviewPinLayoutRules.MmbShouldPreferPanOverPinGrab(IsCursorOverMeshForMmbPanPriority())) {
@@ -453,7 +457,7 @@ namespace spz {
         
 	        if(isOutsideViewport && recentReminderElapsed>15){
 	            _flyControlsHint_recentTime = Time.time;
-	            Viewport_StatusText.instance.ShowStatusText("Keep Viewports on screen.\nInstead, hold RightMouse + WASD or QE, to fly.  F to focus", false, 4, false);
+	            Viewport_StatusText.instance?.ShowStatusText("Keep Viewports on screen.\nInstead, hold RightMouse + WASD or QE, to fly.  F to focus", false, 4, false);
 	        }
 	        //we must not allow the perspective center to be outside the [0,1] range.
 	        //Otherwise leads to issues with depth, visibility of objects etc:

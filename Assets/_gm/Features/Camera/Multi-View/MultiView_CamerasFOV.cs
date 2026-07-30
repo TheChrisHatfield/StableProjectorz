@@ -16,6 +16,7 @@ namespace spz {
 	    bool _fovSliderBeingPressed = false;
 	    void OnFovSliderPressed(){
 	        if(_fovSliderBeingPressed){ return; }
+	        if( UserCameras_MGR.instance == null ){ return; }
 	        _fovSliderBeingPressed = true;
 	        UserCameras_MGR.instance.StartFOV_compensatedAdjustment();
 	    }
@@ -31,7 +32,8 @@ namespace spz {
 	        bool wasntPressed = !_fovSliderBeingPressed;
 	        if(wasntPressed){ OnFovSliderPressed(); }
 	        _fov_isSendingCallback = true;
-	        UserCameras_MGR.instance.SetFieldOfView_allCameras(value);
+	        if( UserCameras_MGR.instance != null )
+		        UserCameras_MGR.instance.SetFieldOfView_allCameras(value);
 	        _fov_isSendingCallback = false;
 	        if(wasntPressed){ OnFovSliderReleased(); }
 	    }
