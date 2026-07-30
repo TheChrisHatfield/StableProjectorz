@@ -279,17 +279,17 @@ namespace spz {
 	        if (_maskBrushSize_slider != null)
 	            _maskBrushSize_slider.ApplyThemeTokens(t.accent, t.textPrimary);
 	        if (_brushSize_text != null) {
-	            SpzUiThemeOps.ApplyBoundChromeTmp(_brushSize_text, t.textPrimary);
+	            SpzUiThemeOps.ApplyBoundChromeDialValueTmp(_brushSize_text, t.textPrimary);
 	            _brushSize_text.raycastTarget = false;
 	        }
 	        if (_brushSpacing_text != null) {
-	            SpzUiThemeOps.ApplyBoundChromeTmp(_brushSpacing_text, t.textMuted);
+	            SpzUiThemeOps.ApplyBoundChromeDialValueTmp(_brushSpacing_text, t.textMuted);
 	            _brushSpacing_text.raycastTarget = false;
 	        }
 	        // "size" caption labels under this control
 	        foreach (var tmp in GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp == null || tmp == _brushSize_text || tmp == _brushSpacing_text) continue;
-	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
 	        }
 	    }
 
