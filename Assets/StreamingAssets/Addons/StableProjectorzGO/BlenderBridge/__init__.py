@@ -676,9 +676,9 @@ class SPZ_OT_unity_request_export(Operator):
         ok = (r.get("success") is True) if isinstance(r, dict) else False
         if ok:
             self.report({"INFO"}, "Request sent. Complete any save dialogs in StableProjectorz.")
-        else:
-            self.report({"WARNING"}, f"Response: {r!r}")
-        return {"FINISHED"}
+            return {"FINISHED"}
+        self.report({"WARNING"}, f"Response: {r!r}")
+        return {"CANCELLED"}
 
 
 class SPZ_OT_unity_request_proj_tex(Operator):
@@ -695,8 +695,12 @@ class SPZ_OT_unity_request_proj_tex(Operator):
         except spz_http.SpzHttpError as e:
             self.report({"ERROR"}, str(e))
             return {"CANCELLED"}
-        self.report({"INFO"}, f"Request sent: {r!r}")
-        return {"FINISHED"}
+        ok = (r.get("success") is True) if isinstance(r, dict) else False
+        if ok:
+            self.report({"INFO"}, f"Request sent: {r!r}")
+            return {"FINISHED"}
+        self.report({"WARNING"}, f"Response: {r!r}")
+        return {"CANCELLED"}
 
 
 class SPZ_OT_blender_export_selection_fbx(Operator):
