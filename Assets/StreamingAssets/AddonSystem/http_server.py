@@ -946,6 +946,9 @@ async def get_scene_info():
         call_unity_async("spz.cmd.get_total_mesh_count", {}),
         call_unity_async("spz.cmd.get_selected_mesh_count", {}),
     )
+    # Match /health: do not report zeros as success when Unity RPC failed/omitted success.
+    if total.get("success") is not True or selected.get("success") is not True:
+        raise HTTPException(status_code=503, detail="Unity scene info unavailable")
     return {
         "total_meshes": total.get("count", 0),
         "selected_meshes": selected.get("count", 0)
