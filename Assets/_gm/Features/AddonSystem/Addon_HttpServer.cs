@@ -51,6 +51,10 @@ namespace spz {
 				UnityEngine.Debug.Log("[Addon_HttpServer] Skipping start: Python FastAPI server is enabled on same port. This legacy C# HTTP server is not needed.");
 				return;
 			}
+			if (!Addon_MGR.instance.IsCSharpHttpServerEnabled()) {
+				UnityEngine.Debug.Log("[Addon_HttpServer] Skipping start: legacy C# HTTP server disabled (_enableCSharpHttpServer=false).");
+				return;
+			}
 			_port = Addon_MGR.instance.GetHttpServerPort();
 			
 			StartServer();

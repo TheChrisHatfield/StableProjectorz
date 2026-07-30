@@ -1928,6 +1928,10 @@ namespace spz {
 		public bool IsHttpServerEnabled() {
 			return _enableHttpServer;
 		}
+
+		public bool IsCSharpHttpServerEnabled() {
+			return _enableCSharpHttpServer;
+		}
 		
 		public bool IsWebSocketServerEnabled() {
 			return _enableWebSocketServer;
