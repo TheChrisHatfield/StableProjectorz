@@ -91,6 +91,16 @@ def set_invoke_callback(callback):
     global _invoke_callback
     _invoke_callback = callback
 
+# Callback for Unity widget value changes (set by addon_server.py)
+_notify_value_change_callback = None
+
+def set_notify_value_change_callback(callback):
+    """Set the callback for POST /notify_value_change.
+    Signature: (addon_id: str, element_id: str, element_type: str, value: Any) -> bool
+    """
+    global _notify_value_change_callback
+    _notify_value_change_callback = callback
+
 # FastAPI app
 app = FastAPI(
     title="StableProjectorz API",
@@ -264,6 +274,13 @@ class LoadAddonRequest(BaseModel):
 class InvokeCallbackRequest(BaseModel):
     addon_id: str
     callback: str
+
+
+class NotifyValueChangeRequest(BaseModel):
+    addon_id: str
+    element_id: str
+    element_type: str
+    value: Any = None
 
 
 # --- Add-on UI (Unity AddonUI_MGR / ribbon tab content) — mirrors spz.ui.* JSON-RPC ---
@@ -1547,6 +1564,34 @@ async def invoke_callback(req: InvokeCallbackRequest):
     try:
         ok = await asyncio.to_thread(_invoke_callback, req.addon_id, req.callback)
         return {"success": ok, "addon_id": req.addon_id, "callback": req.callback}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/notify_value_change")
+async def notify_value_change(req: NotifyValueChangeRequest):
+    """Forward a Unity widget value change to the loaded add-on's optional on_value_change hook."""
+    if _notify_value_change_callback is None:
+        raise HTTPException(status_code=503, detail="Notify value-change callback not registered")
+    if _connection_ready_callback is not None:
+        try:
+            _ = await _connection_ready_async()
+        except Exception:
+            pass
+    try:
+        ok = await asyncio.to_thread(
+            _notify_value_change_callback,
+            req.addon_id,
+            req.element_id,
+            req.element_type,
+            req.value,
+        )
+        return {
+            "success": ok,
+            "addon_id": req.addon_id,
+            "element_id": req.element_id,
+            "element_type": req.element_type,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

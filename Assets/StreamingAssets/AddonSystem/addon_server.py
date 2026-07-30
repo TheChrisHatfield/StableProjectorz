@@ -214,6 +214,36 @@ def invoke_addon_callback(addon_id, callback_name):
         return _invoke_addon_callback_unlocked(addon_id, callback_name)
 
 
+def _notify_addon_value_change_unlocked(addon_id, element_id, element_type, value):
+    """Deliver a Unity widget value change to the loaded add-on module.
+
+    Optional hook: ``on_value_change(element_id, element_type, value)``.
+    Returns True when the add-on is loaded (delivery succeeded); False if missing.
+    Handler exceptions return False.
+    """
+    module = _loaded_addon_modules.get(addon_id)
+    if module is None:
+        print(f"[Addon Server] Value change for unloaded addon: {addon_id}.{element_id}")
+        return False
+    func = getattr(module, "on_value_change", None)
+    if not callable(func):
+        return True
+    try:
+        func(element_id, element_type, value)
+        return True
+    except Exception as e:
+        print(f"[Addon Server] Error in {addon_id}.on_value_change: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def notify_addon_value_change(addon_id, element_id, element_type, value):
+    """Serialize value-change notifies against reload/unload lifecycle transitions."""
+    with _addon_registry_lock:
+        return _notify_addon_value_change_unlocked(addon_id, element_id, element_type, value)
+
+
 def main():
     parser = argparse.ArgumentParser(description="StableProjectorz Add-on Server")
     parser.add_argument("--port", type=int, default=5555, help="Port to connect to Unity (default: 5555)")
@@ -277,12 +307,14 @@ def main():
                 set_load_addon_callback,
                 set_unload_addon_callback,
                 set_invoke_callback,
+                set_notify_value_change_callback,
                 set_connection_ready_callback,
             )
             set_api_instance(api)
             set_load_addon_callback(lambda addon_id: load_addon_by_id(addon_id, addons_dir))
             set_unload_addon_callback(unload_addon_by_id)
             set_invoke_callback(invoke_addon_callback)
+            set_notify_value_change_callback(notify_addon_value_change)
             set_connection_ready_callback(_check_connection_ready)
             _http_alive = [False]
             def _http_wrapper(host, port):
