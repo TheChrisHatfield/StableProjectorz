@@ -122,6 +122,9 @@ namespace spz {
 	            ThemePressureMode(_pressureTabletMode, t);
 	        if (_opacity != null)
 	            ThemeOpacityReadout(_opacity, t);
+	        // Hardness stamp / color swatch are content faces — Ensure+Clear only (never SolidSquare).
+	        ThemeContentSafeHitOnly(_hardness);
+	        ThemeContentSafeHitOnly(_colors);
 	        // Labels live on cross-wired tool roots, not under this empty MGR transform.
 	        ThemeTmpUnder(_size != null ? _size.transform : null, t, excludeOpacityPressure: true);
 	        ForEachDirectionHost(d => ThemeTmpUnder(d.transform, t, excludeOpacityPressure: true));
@@ -304,6 +307,17 @@ namespace spz {
 	        HideSecondaryChromeUnder(btn);
 	        if (applyIcon)
 	            SpzUiThemeOps.ApplyControlLineIcon(btn.transform, glyph, 22f);
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
+	    }
+
+	    /// <summary>
+	    /// Hardness stamp / brush-color swatch: keep authored Image content; only wire hit face + clear label steals.
+	    /// </summary>
+	    static void ThemeContentSafeHitOnly(Component host) {
+	        if (host == null || !SpzUiThemeOps.ShouldRecolorBoundChrome) return;
+	        var btn = host.GetComponentInChildren<Button>(true);
+	        if (btn == null) return;
+	        SpzUiThemeOps.EnsureSelectableHitFace(btn);
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }
 
