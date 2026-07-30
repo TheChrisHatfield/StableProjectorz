@@ -51,6 +51,8 @@ namespace spz {
 
 	        Debug.Assert( File.Exists(filepath)  &&  _isImportingModel==false );
 
+	        // Clear prior success so deferred RPC cannot treat a failed new import as OK.
+	        _lastImportSucceeded = false;
 	        _isImportingModel = true;
 	        _Act_onStartedImporting?.Invoke();
         
@@ -60,8 +62,13 @@ namespace spz {
 	        // Also, store bytes for later use.
 	        // If we decide to save project, we'll just dump them into needed location,
 	        // without having to convert unity mesh into needed format.
-	        _modelBytesCache = File.ReadAllBytes(filepath);
-	        _modelBytesCache_filename = Path.GetFileName(filepath);
+	        try {
+		        _modelBytesCache = File.ReadAllBytes(filepath);
+		        _modelBytesCache_filename = Path.GetFileName(filepath);
+	        } catch (Exception e) {
+		        OnError("Could not read file: " + e.Message);
+		        return;
+	        }
 
 	        StartCoroutine(ImportRoutine(filepath));
 	    }
