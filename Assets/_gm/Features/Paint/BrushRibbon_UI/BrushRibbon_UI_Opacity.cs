@@ -40,6 +40,8 @@ namespace spz {
 	            _brushOpacityText.raycastTarget = false;
 	            return;
 	        }
+	        // Leave: unwind Nomad DialValue typography before polarity ink.
+	        SpzUiThemeOps.RestoreAuthoredGraphic(_brushOpacityText);
 	        _brushOpacityText.color = SD_WorkflowOptionsRibbon_UI.instance.isPositive?
 	            new Color(0.2f, 0.2f, 0.2f, 1) : new Color(0.8f, 0.8f, 0.8f, 1);
 	    }
