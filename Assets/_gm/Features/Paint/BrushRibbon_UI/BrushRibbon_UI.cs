@@ -298,6 +298,7 @@ namespace spz {
 
 	    static void ThemeToolButton(Button btn, StudioLineIcon glyph, SpzUiThemeOps.ThemeTokens t, bool applyIcon = true) {
 	        if (btn == null || !SpzUiThemeOps.ShouldRecolorBoundChrome) return;
+	        SpzUiThemeOps.EnsureSelectableHitFace(btn);
 	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, FlatToolFill(false, t), t.accent);
 	        ApplyFlatToolColorBlock(btn);
 	        if (btn.targetGraphic is Image bg) {

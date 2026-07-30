@@ -349,7 +349,12 @@ namespace spz {
 	        if (_BlendCams_button != null) {
 	            // Ensure face before Compact — Compact clears label raycasts (gen Blend Cams hit path).
 	            SpzUiThemeOps.EnsureSelectableHitFace(_BlendCams_button);
-	            SpzUiThemeOps.ApplyBoundChromeSelectable(_BlendCams_button, t.controlBg, t.accent);
+	            if (SpzUiThemeOps.IsAuthoredIconFace(_BlendCams_button.targetGraphic)) {
+	                if (_BlendCams_button.targetGraphic is Image blendFace)
+	                    SpzUiThemeOps.ApplyBoundChromeGraphic(blendFace, t.iconTint);
+	            } else {
+	                SpzUiThemeOps.ApplyBoundChromeSelectable(_BlendCams_button, t.controlBg, t.accent);
+	            }
 	            var label = _BlendCams_button.GetComponentInChildren<TextMeshProUGUI>(true);
 	            if (label != null)
 	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, t.textPrimary, 11f);
