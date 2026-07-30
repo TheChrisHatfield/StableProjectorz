@@ -362,7 +362,7 @@ namespace spz {
 	            if (sortBtn != null)
 	                SpzUiThemeOps.ApplyBoundChromeSelectable(sortBtn, t.controlBg, t.accent);
 	            foreach (var tmp in _sortPins_Button.GetComponentsInChildren<TextMeshProUGUI>(true))
-	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
 	        }
 	        foreach (var lg in GetComponentsInChildren<LayoutGroup>(true))
 	            SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
