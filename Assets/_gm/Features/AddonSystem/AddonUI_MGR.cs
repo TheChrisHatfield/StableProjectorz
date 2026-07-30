@@ -1759,6 +1759,7 @@ namespace spz {
 			labelText.fontSize = 12;
 			labelText.color = Color.white;
 			labelText.raycastTarget = false;
+			ApplyRuntimeTmpFont(labelText);
 			
 			// Add dropdown
 			var fieldObj = new GameObject("Dropdown");
@@ -1787,6 +1788,7 @@ namespace spz {
 			labelText2.fontSize = 12;
 			labelText2.color = Color.white;
 			labelText2.raycastTarget = false;
+			ApplyRuntimeTmpFont(labelText2);
 			
 			var arrowObj = new GameObject("Arrow");
 			arrowObj.transform.SetParent(fieldObj.transform, false);
@@ -1801,6 +1803,7 @@ namespace spz {
 			arrowText.color = Color.white;
 			arrowText.alignment = TextAlignmentOptions.Center;
 			arrowText.raycastTarget = false;
+			ApplyRuntimeTmpFont(arrowText);
 			
 			var dropdown = fieldObj.AddComponent<TMP_Dropdown>();
 			dropdown.captionText = labelText2;
@@ -1891,12 +1894,18 @@ namespace spz {
 					_uiElementValues[elementId] = inputField.text;
 					return true;
 				} else if (component is TMP_Dropdown dropdown) {
-					// Type safety: Only accept integer types
-					if (!(value is int || value is short || value is byte)) {
+					// Type safety: integer index (also accept whole-number floats from JSON leftovers).
+					int intValue;
+					if (value is int || value is short || value is byte)
+						intValue = Convert.ToInt32(value);
+					else if (value is float f && Mathf.Approximately(f, Mathf.Round(f)))
+						intValue = Mathf.RoundToInt(f);
+					else if (value is double d && Math.Abs(d - Math.Round(d)) < 1e-6)
+						intValue = (int)Math.Round(d);
+					else {
 						UnityEngine.Debug.LogWarning($"[AddonUI_MGR] Cannot set non-integer value to dropdown: {value.GetType()}");
 						return false;
 					}
-					int intValue = Convert.ToInt32(value);
 					// Edge case: Clamp to valid range
 					if (intValue < 0 || intValue >= dropdown.options.Count) {
 						UnityEngine.Debug.LogWarning($"[AddonUI_MGR] Dropdown index {intValue} out of range [0-{dropdown.options.Count-1}], clamping");
