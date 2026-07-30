@@ -428,7 +428,8 @@ namespace spz {
 				};
 				return;
 			}
-			StartCoroutine(CoRespondWhenProjectSaveIdle(id, result));
+			string meshPath = @params?["mesh_filepath"]?.ToString() ?? "";
+			StartCoroutine(CoRespondWhenProjectSaveIdle(id, result, meshPath));
 		}
 
 		void BeginCommandAndRespondWhenImportIdle(string id, string method, JObject @params) {
@@ -451,7 +452,7 @@ namespace spz {
 			StartCoroutine(CoRespondWhenImportIdle(id, result));
 		}
 
-		IEnumerator CoRespondWhenProjectSaveIdle(string id, JObject result) {
+		IEnumerator CoRespondWhenProjectSaveIdle(string id, JObject result, string meshFilePath) {
 			float timeoutSec = COMMAND_TIMEOUT_LONG_OP_MS / 1000f;
 			float elapsed = 0f;
 			var sm = Save_MGR.instance;
@@ -469,6 +470,22 @@ namespace spz {
 				result["success"] = false;
 				result["error"] = "export to path timed out waiting for texture write";
 				UnityEngine.Debug.LogWarning("[Addon_SocketServer] export_3d_with_textures_to_path: texture write still in progress after timeout.");
+			} else if (!string.IsNullOrEmpty(meshFilePath)) {
+				// Same contract as native SPZ GO: Blender auto-import / litmus needs .spz_go_ready.
+				string stamp = null;
+				try {
+					string dir = Path.GetDirectoryName(meshFilePath);
+					string baseName = Path.GetFileNameWithoutExtension(meshFilePath);
+					if (!string.IsNullOrEmpty(dir) && !string.IsNullOrEmpty(baseName))
+						stamp = Path.Combine(dir, baseName + ".spz_go_ready");
+				} catch (Exception ex) {
+					UnityEngine.Debug.LogWarning("[Addon_SocketServer] export stamp path: " + ex.Message);
+				}
+				if (string.IsNullOrEmpty(stamp) || !File.Exists(stamp)) {
+					result["success"] = false;
+					result["error"] = "export to path failed (ready stamp missing for Blender auto-import)";
+					UnityEngine.Debug.LogWarning("[Addon_SocketServer] export_3d_with_textures_to_path: ready stamp missing: " + stamp);
+				}
 			}
 			_pendingResponses[id] = new JObject {
 				["jsonrpc"] = "2.0",
