@@ -1920,6 +1920,14 @@ namespace spz {
 				Color c = string.Equals(text.gameObject.name, "Placeholder", StringComparison.Ordinal)
 					? tokens.textMuted
 					: tokens.textPrimary;
+				// Transparent Selectable hit pads were skipped above — do not ClearLabelRaycast on their TMP
+				// (those labels are often the only click path under Nomad).
+				var sel = text.GetComponentInParent<Selectable>(true);
+				if (sel != null && sel.targetGraphic != null && sel.targetGraphic.color.a < 0.08f) {
+					SnapshotAuthoredGraphic(text);
+					text.color = c;
+					continue;
+				}
 				ApplyBoundChromeTmp(text, c, 14f);
 			}
 
