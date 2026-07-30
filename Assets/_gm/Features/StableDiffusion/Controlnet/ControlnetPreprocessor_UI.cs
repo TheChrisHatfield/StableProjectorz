@@ -172,12 +172,9 @@ namespace spz {
 	        Color fill = toggle.isOn
 	            ? Color.Lerp(t.controlBg, t.accent, 0.14f)
 	            : t.controlBg;
-	        // Bevel "pressed" plates — flat fill like Point/Bilinear, not checkbox silo.
+	        // ThemeFlatToolToggle already applies CompactToolLabel — do not re-ApplyBoundChromeTmp
+	        // (that restores Nomad tracking ~10 and undoes Soft no-wrap litmus on .5/1/1.5/2).
 	        SpzUiThemeOps.ThemeFlatToolToggle(toggle, fill, t.accent, t.textPrimary);
-	        foreach (var tmp in toggle.GetComponentsInChildren<TextMeshProUGUI>(true)) {
-	            if (tmp != null)
-	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, 12f);
-	        }
 	    }
 	}
 }//end namespace
