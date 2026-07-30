@@ -779,6 +779,7 @@ namespace spz {
 			if (!ShouldRecolorBoundChrome) {
 				RestoreAuthoredGraphic(text);
 				RestoreDesignFontSize(text, fallbackBasePt);
+				RestoreNomadTypography(text);
 				return;
 			}
 			SnapshotAuthoredGraphic(text);
@@ -797,6 +798,7 @@ namespace spz {
 			if (!ShouldRecolorBoundChrome) {
 				RestoreAuthoredGraphic(text);
 				RestoreDesignFontSize(text, fallbackBasePt);
+				RestoreNomadTypography(text);
 				return;
 			}
 			SnapshotAuthoredGraphic(text);
