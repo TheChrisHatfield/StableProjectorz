@@ -309,9 +309,11 @@ namespace spz {
 					title = title,
 					panel = panelObj,
 				});
-				// New parked work resets the give-up budget so a later ribbon can still migrate.
-				_ribbonMigrateRounds = 0;
-				EnsureRibbonMigrateCoroutine();
+				// Only retry migrate when a ribbon tab is expected; host-hidden stays parked until pref flips.
+				if (Addon_MGR.ShouldShowInCommandRibbonStatic(addonId)) {
+					_ribbonMigrateRounds = 0;
+					EnsureRibbonMigrateCoroutine();
+				}
 			} else {
 				// Live under ribbon — purge any earlier parked duplicates for this addon.
 				PurgeParkedForAddon(addonId, panelObj);
@@ -358,6 +360,8 @@ namespace spz {
 				title = title,
 				panel = panel,
 			});
+			if (!Addon_MGR.ShouldShowInCommandRibbonStatic(addonId))
+				return;
 			_ribbonMigrateRounds = 0;
 			EnsureRibbonMigrateCoroutine();
 		}
