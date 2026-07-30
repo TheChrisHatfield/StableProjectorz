@@ -1717,7 +1717,7 @@ namespace spz {
 				LockPreferencesBodyLayout(prefsBodyT);
 			}
 			var ribbonToggle = FindChildRecursive(item.transform, "ShowInRibbonToggle")?.GetComponent<Toggle>();
-			if (ribbonToggle != null) {
+			if (ribbonToggle != null && ribbonToggle.gameObject.activeSelf) {
 				Color face = ribbonToggle.isOn
 					? Color.Lerp(t.controlBg, t.success, 0.35f)
 					: t.controlBg;
@@ -1825,6 +1825,12 @@ namespace spz {
 				bool ribbonOnly = string.Equals(addonId, Addon_MGR.RibbonOnlyFullscreenAddonId, StringComparison.Ordinal);
 				bool showRibbon = !ribbonOnly && Addon_MGR.instance.ShouldShowInCommandRibbon(addonId);
 				ribbonToggle.SetIsOnWithoutNotify(showRibbon);
+				if (ribbonToggle.gameObject.activeSelf)
+					ThemeShowInRibbonCheckbox(ribbonToggle,
+						showRibbon
+							? Color.Lerp(new Color(0.22f, 0.22f, 0.24f, 1f), _statusOk, 0.35f)
+							: new Color(0.22f, 0.22f, 0.24f, 1f),
+						_statusOk);
 			}
 			bool stillVisible = _filterState == 0
 				|| (_filterState == 1 && showOn)
@@ -1853,6 +1859,7 @@ namespace spz {
 				fillImg.gameObject.SetActive(true);
 				fillImg.canvasRenderer.SetAlpha(enabled ? 1f : 0f);
 			}
+			LockStatusDialLayout(toggle);
 		}
 
 		/// <summary>
@@ -1879,6 +1886,7 @@ namespace spz {
 
 		/// <summary>
 		/// Tint the Show-in-Ribbon checkbox without SolidSquare / Flatten (those stretch it into a green capsule over the row).
+		/// LayoutElement sizes only — do not rewrite anchors (HLG must own placement).
 		/// </summary>
 		static void ThemeShowInRibbonCheckbox(Toggle toggle, Color face, Color checkOk) {
 			if (toggle == null) return;
@@ -1891,16 +1899,10 @@ namespace spz {
 				le.flexibleWidth = 0f;
 				le.flexibleHeight = 0f;
 			}
-			var rt = toggle.transform as RectTransform;
-			if (rt != null) {
-				rt.anchorMin = new Vector2(0f, 0.5f);
-				rt.anchorMax = new Vector2(0f, 0.5f);
-				rt.pivot = new Vector2(0.5f, 0.5f);
-				rt.sizeDelta = new Vector2(22f, 22f);
-			}
 			if (toggle.targetGraphic is Image bg) {
 				if (SpzUiThemeOps.ShouldRecolorBoundChrome)
 					SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(bg);
+				bg.sprite = UiRuntimeSprites.SolidRect;
 				bg.color = face;
 				bg.type = Image.Type.Simple;
 				bg.preserveAspect = false;
@@ -1932,11 +1934,22 @@ namespace spz {
 				le.flexibleWidth = 0f;
 				le.flexibleHeight = 0f;
 			}
+			var rt = toggle.transform as RectTransform;
+			if (rt != null)
+				rt.sizeDelta = new Vector2(28f, 28f);
 			var ring = toggle.transform.Find("Ring") as RectTransform;
 			if (ring != null) {
-				ring.anchorMin = ring.anchorMax = ring.pivot = new Vector2(0.5f, 0.5f);
+				ring.anchorMin = ring.anchorMax = new Vector2(0.5f, 0.5f);
+				ring.pivot = new Vector2(0.5f, 0.5f);
 				ring.sizeDelta = new Vector2(14f, 14f);
 				ring.anchoredPosition = Vector2.zero;
+			}
+			var check = toggle.transform.Find("Ring/Checkmark") as RectTransform;
+			if (check != null) {
+				check.anchorMin = new Vector2(0.28f, 0.28f);
+				check.anchorMax = new Vector2(0.72f, 0.72f);
+				check.offsetMin = Vector2.zero;
+				check.offsetMax = Vector2.zero;
 			}
 		}
 
@@ -2016,6 +2029,7 @@ namespace spz {
 			headerLE.preferredHeight = 36f;
 			headerLE.minHeight = 34f;
 			headerLE.flexibleWidth = 1f;
+			headerLE.flexibleHeight = 0f;
 			var horizontalLayout = headerObj.AddComponent<HorizontalLayoutGroup>();
 			horizontalLayout.spacing = 10f;
 			horizontalLayout.padding = new RectOffset(0, 0, 4, 4);
@@ -2153,17 +2167,17 @@ namespace spz {
 
 			var prefsBody = new GameObject("PreferencesBody");
 			prefsBody.transform.SetParent(itemObj.transform, false);
-			var prefsBodyRt = prefsBody.AddComponent<RectTransform>();
-			prefsBodyRt.anchorMin = new Vector2(0f, 1f);
-			prefsBodyRt.anchorMax = new Vector2(1f, 1f);
-			prefsBodyRt.pivot = new Vector2(0.5f, 1f);
+			// Let VerticalLayoutGroup own placement — fixed top anchors previously stacked prefs over the header dial/name.
+			prefsBody.AddComponent<RectTransform>();
 			var prefsBodyLE = prefsBody.AddComponent<LayoutElement>();
 			prefsBodyLE.preferredHeight = 36f;
 			prefsBodyLE.minHeight = 36f;
 			prefsBodyLE.flexibleHeight = 0f;
 			prefsBodyLE.flexibleWidth = 1f;
 			var prefsBodyBg = prefsBody.AddComponent<Image>();
-			AssignSolidFaceThenMarkRounded(prefsBodyBg);
+			// Plain fill — markEligible/SolidSquare on this full-width row helped grey/green overlays.
+			prefsBodyBg.sprite = UiRuntimeSprites.SolidRect;
+			prefsBodyBg.type = Image.Type.Simple;
 			prefsBodyBg.color = new Color(0.14f, 0.14f, 0.16f, 0.92f);
 			prefsBodyBg.raycastTarget = false;
 			var prefsBodyHLG = prefsBody.AddComponent<HorizontalLayoutGroup>();
@@ -2178,8 +2192,7 @@ namespace spz {
 
 			var ribbonToggleObj = new GameObject("ShowInRibbonToggle");
 			ribbonToggleObj.transform.SetParent(prefsBody.transform, false);
-			var ribbonToggleRt = ribbonToggleObj.AddComponent<RectTransform>();
-			ribbonToggleRt.sizeDelta = new Vector2(22f, 22f);
+			ribbonToggleObj.AddComponent<RectTransform>().sizeDelta = new Vector2(22f, 22f);
 			var ribbonToggleLE = ribbonToggleObj.AddComponent<LayoutElement>();
 			ribbonToggleLE.preferredWidth = 22f;
 			ribbonToggleLE.minWidth = 22f;
@@ -2317,6 +2330,11 @@ namespace spz {
 				if (Addon_MGR.instance == null || ribbonOnly)
 					return;
 				Addon_MGR.instance.SetShowInCommandRibbon(addonId, isOn);
+				ThemeShowInRibbonCheckbox(ribbonToggle,
+					isOn
+						? Color.Lerp(new Color(0.22f, 0.22f, 0.24f, 1f), _statusOk, 0.35f)
+						: new Color(0.22f, 0.22f, 0.24f, 1f),
+					_statusOk);
 				bool enabled = GetDraftEnabled(addonId, addonInfo.isEnabled);
 				ShowStatus(enabled
 					? (isOn

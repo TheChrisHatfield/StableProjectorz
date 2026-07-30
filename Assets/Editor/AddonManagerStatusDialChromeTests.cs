@@ -61,6 +61,31 @@ public sealed class AddonManagerStatusDialChromeTests {
 	}
 
 	[Test]
+	public void PreferencesBody_LayoutDoesNotFightVerticalLayoutGroup() {
+		string path = Path.GetFullPath(Path.Combine(
+			Application.dataPath,
+			"..",
+			"Assets/_gm/Features/AddonSystem/AddonManager_UI.cs"));
+		string src = File.ReadAllText(path);
+		int create = src.IndexOf("void CreateAddonListItem(", System.StringComparison.Ordinal);
+		Assert.That(create, Is.GreaterThan(0));
+		int prefs = src.IndexOf("PreferencesBody", create, System.StringComparison.Ordinal);
+		Assert.That(prefs, Is.GreaterThan(create));
+		// Top-stretch anchors on PreferencesBody stacked the row over HeaderRow dial/name.
+		Assert.That(src.Substring(prefs, 500), Does.Not.Contain("anchorMin = new Vector2(0f, 1f)"),
+			"PreferencesBody must not use fixed top anchors under the item VLG.");
+		Assert.That(src, Does.Contain("verticalLayout.childControlHeight = false"));
+		Assert.That(src, Does.Contain("prefsBodyHLG.childControlHeight = false"));
+		Assert.That(src, Does.Contain("horizontalLayout.childControlHeight = false"));
+		// ThemeShowInRibbonCheckbox must not rewrite left anchors (fights HLG).
+		int themeCb = src.IndexOf("static void ThemeShowInRibbonCheckbox(", System.StringComparison.Ordinal);
+		int themeEnd = src.IndexOf("static void LockStatusDialLayout(", themeCb, System.StringComparison.Ordinal);
+		string themeBody = src.Substring(themeCb, themeEnd - themeCb);
+		Assert.That(themeBody, Does.Not.Contain("anchorMin"),
+			"Show-in-Ribbon theming must leave HLG-owned anchors alone.");
+	}
+
+	[Test]
 	public void ApplyThemeTokens_SnapshotsLayoutGroupsBeforeNomadPads() {
 		string path = Path.GetFullPath(Path.Combine(
 			Application.dataPath,
