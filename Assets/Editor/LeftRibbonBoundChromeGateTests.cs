@@ -125,4 +125,66 @@ public sealed class LeftRibbonBoundChromeGateTests {
 			SpzUiThemeOps.ResetTheme();
 		}
 	}
+
+	[Test]
+	public void ThemeToggle_DepInsideUsesCompactLabelNotStripTracking() {
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-dep-compact",
+			new JObject {
+				["control_bg"] = "#292A2EFF",
+				["accent"] = "#F2CA50FF",
+				["text_primary"] = "#E3E2E7FF",
+			},
+			"replace",
+			out string error), Is.True, error);
+
+		var go = new GameObject("DepCell", typeof(RectTransform), typeof(Image), typeof(Toggle));
+		go.SetActive(false);
+		try {
+			var rt = go.GetComponent<RectTransform>();
+			rt.sizeDelta = new Vector2(40f, 36f);
+			var face = go.GetComponent<Image>();
+			var toggle = go.GetComponent<Toggle>();
+			toggle.targetGraphic = face;
+			toggle.isOn = true;
+
+			var labelGo = new GameObject("Input (text)", typeof(RectTransform));
+			labelGo.transform.SetParent(go.transform, false);
+			var labelRt = labelGo.GetComponent<RectTransform>();
+			labelRt.anchorMin = Vector2.zero;
+			labelRt.anchorMax = Vector2.one;
+			labelRt.offsetMin = Vector2.zero;
+			labelRt.offsetMax = Vector2.zero;
+			var tmp = labelGo.AddComponent<TextMeshProUGUI>();
+			tmp.text = "inside";
+			tmp.font = TMP_Settings.defaultFontAsset;
+			tmp.enableWordWrapping = true;
+
+			var theme = typeof(LeftRibbon_UI).GetMethod(
+				"ThemeToggle", BindingFlags.Static | BindingFlags.NonPublic);
+			Assert.That(theme, Is.Not.Null);
+			theme.Invoke(null, new object[] { toggle, SpzUiThemeOps.Active });
+
+			Assert.That(tmp.enableWordWrapping, Is.False, "INSIDE must not wrap across DEP cell");
+			Assert.That(tmp.characterSpacing, Is.LessThan(4f), "strip tracking 18 overflows LeftRibbon tool cells");
+		}
+		finally {
+			Object.DestroyImmediate(go);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
+	public void ThemeToggle_SourceUsesCompactToolLabel() {
+		string path = Path.GetFullPath(Path.Combine(
+			Application.dataPath,
+			"..",
+			"Assets/_gm/Features/Viewport/Main Viewport/LeftRibbon_UI.cs"));
+		string src = File.ReadAllText(path);
+		int idx = src.IndexOf("static void ThemeToggle", System.StringComparison.Ordinal);
+		Assert.That(idx, Is.GreaterThan(0));
+		string body = src.Substring(idx, System.Math.Min(1600, src.Length - idx));
+		Assert.That(body, Does.Contain("ApplyBoundChromeCompactToolLabelTmp"));
+		Assert.That(body, Does.Not.Contain("ApplyBoundChromeStripLabelTmp"));
+	}
 }
