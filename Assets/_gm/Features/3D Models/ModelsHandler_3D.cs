@@ -324,6 +324,10 @@ namespace spz {
 	                   path = Path.Combine(path, "door_temp.fbx");
 	            _importHelper.SaveDefaultDoor_toFile(path);
 	            mesh_extension_ = "fbx";
+	            if( !File.Exists( path ) ){
+		            UnityEngine.Debug.LogWarning("[ModelsHandler_3D] Get_3dModel_asBytes: FBX was not written: " + path);
+		            return null;
+	            }
 	            byte[] bytes = File.ReadAllBytes(path);
 	            return bytes;
 	        }
