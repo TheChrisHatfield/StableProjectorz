@@ -70,6 +70,20 @@ namespace spz {
 				}
 			}
 
+			// Compact/NarrowDock clear label raycasts — re-assert Selectable faces after TMP pass.
+			if (!opts.SkipSelectables) {
+				foreach (var btn in root.GetComponentsInChildren<Button>(true)) {
+					if (btn == null || IsExcluded(opts, btn)) continue;
+					if (btn.GetComponentInParent<SlideOut_Widget_UI>(true) != null) continue;
+					ClearNonFaceRaycastsForTheme(btn);
+				}
+				foreach (var tog in root.GetComponentsInChildren<Toggle>(true)) {
+					if (tog == null || IsExcluded(opts, tog)) continue;
+					if (tog.GetComponentInParent<SlideOut_Widget_UI>(true) != null) continue;
+					ClearNonFaceRaycastsForTheme(tog);
+				}
+			}
+
 			if (!opts.SkipLayoutScale) {
 				foreach (var lg in root.GetComponentsInChildren<LayoutGroup>(true)) {
 					if (lg == null) continue;
