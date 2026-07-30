@@ -37,6 +37,8 @@ namespace spz {
 	    void ApplyArt3dListChromeThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
+	            if (_draggableItemsGrid != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_draggableItemsGrid.transform);
 	            SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(transform);
 	            return;
 	        }

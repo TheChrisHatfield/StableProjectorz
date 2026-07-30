@@ -499,8 +499,14 @@ namespace spz {
 	    /// </summary>
 	    protected virtual void ApplyListChromeThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
-	            // Header + scroll shell: full BoundChrome unwind (IconUI domain chrome is tag-less no-op).
+	            // Header + scroll shell may be cross-wired (not children of this host).
 	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
+	            if (_header != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_header.transform);
+	            if (_sr_itemFocuser != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_sr_itemFocuser.transform);
+	            if (_container != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_container);
 	            SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(transform);
 	            return;
 	        }

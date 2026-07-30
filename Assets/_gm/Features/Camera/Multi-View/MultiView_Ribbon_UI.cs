@@ -322,6 +322,20 @@ namespace spz {
 	    void ApplyMultiviewChromeThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
+	            if (_BlendCams_button != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_BlendCams_button.transform);
+	            if (_showGrid_toggle != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_showGrid_toggle.transform);
+	            if (_numCameras_slider != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_numCameras_slider.transform);
+	            if (_sortPins_Button != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_sortPins_Button.transform);
+	            if (_editPOV_toggles != null) {
+	                foreach (var pov in _editPOV_toggles) {
+	                    if (pov != null)
+	                        SpzUiThemeOps.RestoreBoundChromeUnder(pov.transform);
+	                }
+	            }
 	            SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(transform);
 	            return;
 	        }
