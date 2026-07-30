@@ -270,6 +270,12 @@ namespace spz {
 	    }
 
 	    public void SaveViewTextures(){ //save whatever the camera is observing (view,depth,normals,etc)
+	        // Do not clobber an in-flight 3D/export save: cancel of this dialog would clear shared _isSaving.
+	        if( _isSaving ){
+		        Viewport_StatusText.instance?.ShowStatusText(
+			        "Can't export view textures while a save/export is still writing.", false, 5f, false );
+		        return;
+	        }
 	        _isSaving = true;
 	        string defaultName = "Tex_StableProjectorz";
 	        GetBasePathForTextures(defaultName, onComplete:(path) => OnSaveViewTextures_PathChosen(path,OnReady));
@@ -279,6 +285,11 @@ namespace spz {
 
 	    //dilation allows to "spread" the texture outwards from uv-chunks. Helps to avoid seams.
 	    public void SaveProjectionTextures(bool isDilate){
+	        if( _isSaving ){
+		        Viewport_StatusText.instance?.ShowStatusText(
+			        "Can't export projection textures while a save/export is still writing.", false, 5f, false );
+		        return;
+	        }
 	        _isSaving = true;
 	        string defaultName = "Tex_StableProjectorz";
 	        GetBasePathForTextures( defaultName, onComplete:(path)=>OnSaveProjTextures_PathChosen(path,isDilate,OnReady) );
