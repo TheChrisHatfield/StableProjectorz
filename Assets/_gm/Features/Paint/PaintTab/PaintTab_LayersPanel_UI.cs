@@ -409,7 +409,7 @@ namespace spz {
 			}
 			foreach (var go in _rows)
 			{
-				if (go != null) Destroy(go);
+				if (go != null) DestroyImmediate(go);
 			}
 			_rows.Clear();
 
