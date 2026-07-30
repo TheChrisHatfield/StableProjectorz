@@ -2297,13 +2297,17 @@ namespace spz {
 						var valueToken = @params["value"];
 						object valueObj = null;
 						if (valueToken != null) {
-							if (valueToken.Type == JTokenType.Float || valueToken.Type == JTokenType.Integer) {
-								valueObj = valueToken.ToObject<float>();
-							} else if (valueToken.Type == JTokenType.String) {
-								valueObj = valueToken.ToString();
-							} else if (valueToken.Type == JTokenType.Integer) {
+							// Keep JSON types distinct: int for dropdowns, bool for toggles, float for sliders.
+							if (valueToken.Type == JTokenType.Boolean)
+								valueObj = valueToken.ToObject<bool>();
+							else if (valueToken.Type == JTokenType.Integer)
 								valueObj = valueToken.ToObject<int>();
-							}
+							else if (valueToken.Type == JTokenType.Float)
+								valueObj = valueToken.ToObject<float>();
+							else if (valueToken.Type == JTokenType.String)
+								valueObj = valueToken.ToString();
+							else
+								valueObj = valueToken.ToObject<object>();
 						}
 						result["success"] = uiMgr.SetUIElementValue(elementId, valueObj);
 						if (!result["success"].ToObject<bool>()) {
