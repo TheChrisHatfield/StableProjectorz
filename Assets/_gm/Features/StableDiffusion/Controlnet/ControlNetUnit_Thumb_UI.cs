@@ -133,6 +133,13 @@ namespace spz {
 	    void ApplyThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
+	            if (_closeButton != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_closeButton.transform);
+	            // Dial leave self-silos BoundChrome (gen path: thumb depth after Leave Nomad).
+	            if (_depthContrast_slider != null)
+	                _depthContrast_slider.ApplyThemeTokens(Color.white, Color.white);
+	            if (_depthBrightness_slider != null)
+	                _depthBrightness_slider.ApplyThemeTokens(Color.white, Color.white);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
