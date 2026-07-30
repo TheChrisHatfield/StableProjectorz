@@ -121,7 +121,8 @@ namespace spz {
 	            // Create URL for video player
 	            string videoUrl = "file://" + tempPath;
 	            return videoUrl;
-	        }catch{
+	        }catch(Exception e){
+	            Debug.LogWarning($"Failed to write preview video file: {e}");
 	            return "";
 	        }
 	    }
