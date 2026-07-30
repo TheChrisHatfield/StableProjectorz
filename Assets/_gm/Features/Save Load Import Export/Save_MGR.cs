@@ -52,12 +52,30 @@ namespace spz {
 
 
 	    public void DoSaveProject(){
-	        _isSaving = true;
+	        // Must not set _isSaving before SaveProject: that helper refuses while _isSaving and
+	        // would invoke saveFinalTex(null) without ever clearing a flag we already set (self-deadlock).
+	        if( _isSaving ){
+		        if( Viewport_StatusText.instance != null ){
+			        Viewport_StatusText.instance.ShowStatusText(
+				        "Can't save project while an export/save is still writing textures.", false, 5f, false );
+		        }
+		        return;
+	        }
 
-	        Action<string> onResultMessage =  msg =>Viewport_StatusText.instance.ShowStatusText(msg, false, 6, false);
+	        Action<string> onResultMessage = msg => {
+		        if( Viewport_StatusText.instance != null )
+			        Viewport_StatusText.instance.ShowStatusText(msg, false, 6, false);
+	        };
 	        _saveLoad_helper.SaveProject( onReady1, onResultMessage );
         
-	        void onReady1(string path) => OnSaveProjTextures_PathChosen(path, isDilate:true, onReady2);
+	        void onReady1(string path) {
+		        if( string.IsNullOrEmpty( path ) ){
+			        // Cancelled dialog or busy refuse — never claimed _isSaving.
+			        return;
+		        }
+		        _isSaving = true;
+		        OnSaveProjTextures_PathChosen(path, isDilate:true, onReady2);
+	        }
 
 	        void onReady2(){
 	            //after saving, Unpress any ctrl, alt etc. Else unity might keep thinking they are still pressed:
@@ -286,7 +304,10 @@ namespace spz {
     
 
 	    void OnSaveViewTextures_PathChosen( string basePath, Action onComplete ){
-	        if(string.IsNullOrEmpty(basePath)){ return; }
+	        if(string.IsNullOrEmpty(basePath)){
+		        onComplete?.Invoke();
+		        return;
+	        }
         
 	        StartCoroutine( WaitForRenderAll_crtn(skipAO_blit:false, onReady) );
 
@@ -298,7 +319,10 @@ namespace spz {
 
 
 	    void OnSaveProjTextures_PathChosen( string basePath, bool isDilate, Action onComplete ){
-	        if(string.IsNullOrEmpty(basePath)){ return; }
+	        if(string.IsNullOrEmpty(basePath)){
+		        onComplete?.Invoke();
+		        return;
+	        }
         
 	        StartCoroutine( WaitForRenderAll_crtn(skipAO_blit:true, onReady) );
         
