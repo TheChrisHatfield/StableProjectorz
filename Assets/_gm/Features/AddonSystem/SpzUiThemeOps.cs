@@ -492,6 +492,26 @@ namespace spz {
 				side = le.preferredHeight;
 
 			side = Mathf.Clamp(side, 28f, 56f);
+
+			// Brush size (and similar): CircleSlider lives on a tall holder that also owns the
+			// "size" caption band (authored preferredHeight ~85). Squashing to a square pins
+			// the caption onto the dial's bottom border (weird spacing litmus).
+			var snap = le.GetComponent<SpzUiThemeDesignLayoutElement>();
+			if (snap != null && snap.hasSnapshot
+			    && snap.preferredHeight > side + 10f
+			    && snap.preferredHeight > snap.preferredWidth + 8f) {
+				le.preferredHeight = snap.preferredHeight;
+				le.minHeight = snap.minHeight > 0.5f ? snap.minHeight : snap.preferredHeight;
+				le.flexibleHeight = snap.flexibleHeight;
+				// Keep width from crushing the column; do not force a square on tall holders.
+				if (snap.preferredWidth > 0.5f)
+					le.preferredWidth = snap.preferredWidth;
+				if (snap.minWidth > 0.5f)
+					le.minWidth = snap.minWidth;
+				le.flexibleWidth = snap.flexibleWidth;
+				return;
+			}
+
 			le.preferredWidth = side;
 			le.preferredHeight = side;
 			le.minWidth = side;
