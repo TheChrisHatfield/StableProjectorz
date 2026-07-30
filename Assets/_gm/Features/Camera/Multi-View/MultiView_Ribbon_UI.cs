@@ -345,6 +345,7 @@ namespace spz {
 	            var gLabel = _showGrid_toggle.GetComponentInChildren<TextMeshProUGUI>(true);
 	            if (gLabel != null)
 	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(gLabel, t.textPrimary, 11f);
+	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_showGrid_toggle);
 	        }
 	        if (_numCams_numberText != null) {
 	            SpzUiThemeOps.ApplyBoundChromeDialValueTmp(_numCams_numberText, t.textPrimary, 14f);
@@ -358,6 +359,7 @@ namespace spz {
 	                var povLabel = pov.GetComponentInChildren<TextMeshProUGUI>(true);
 	                if (povLabel != null)
 	                    SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(povLabel, t.textPrimary, 11f);
+	                SpzUiThemeOps.ClearNonFaceRaycastsForTheme(pov);
 	            }
 	        }
 	        if (_sortPins_Button != null) {
