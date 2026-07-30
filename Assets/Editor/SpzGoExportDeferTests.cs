@@ -75,5 +75,7 @@ public sealed class SpzGoExportDeferTests {
 			"TCP export defer must require Blender auto-import ready stamp.");
 		Assert.That(src, Does.Contain("ready stamp missing"),
 			"TCP export must fail closed when .spz_go_ready is absent after save idle.");
+		Assert.That(src, Does.Contain("_path_recentlyExported"),
+			"TCP stamp check must prefer the FBX path actually written.");
 	}
 }
