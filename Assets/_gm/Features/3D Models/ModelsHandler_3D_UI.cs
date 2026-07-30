@@ -231,7 +231,7 @@ namespace spz {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, fill, t.accent);
 	        var label = _showVertexColors_toggle.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	        if (label != null)
-	            SpzUiThemeOps.ApplyBoundChromeTmp(label, t.textPrimary);
+	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, t.textPrimary, 11f);
 	    }
 
 	    static void ThemeChromeButton(Button btn, SpzUiThemeOps.ThemeTokens t) {
@@ -239,7 +239,7 @@ namespace spz {
 	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
 	        var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	        if (label != null)
-	            SpzUiThemeOps.ApplyBoundChromeTmp(label, t.textPrimary);
+	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, t.textPrimary, 11f);
 	    }
 
 
