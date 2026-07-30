@@ -53,8 +53,10 @@ public sealed class SpzGoExportDeferTests {
 			System.IO.Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "AddonSystem", "AddonUI_MGR.cs");
 		string src = System.IO.File.ReadAllText(path);
-		Assert.That(src, Does.Contain("sm != null && !sm._isSaving"),
-			"Missing Save_MGR must not count as Export OK.");
+		Assert.That(src, Does.Contain("saveIdle && stampOk"),
+			"Export OK for auto-import must require Save_MGR idle and .spz_go_ready stamp.");
+		Assert.That(src, Does.Contain(".spz_go_ready"),
+			"Native export finish must verify Blender auto-import ready stamp.");
 		Assert.That(src, Does.Not.Contain("sm == null || !sm._isSaving"),
 			"Do not treat null Save_MGR as successful texture write.");
 	}

@@ -1351,7 +1351,7 @@ namespace spz {
 				SpzGoStatusLine("Export failed (valid path / API ready?)", false);
 				return false;
 			}
-			StartCoroutine(CoSpzGoFinishExportWhenSaveIdle());
+			StartCoroutine(CoSpzGoFinishExportWhenSaveIdle(path));
 			return true;
 		}
 
@@ -1359,7 +1359,7 @@ namespace spz {
 		/// After native headless export starts, wait for texture pipeline before claiming success
 		/// (same contract as deferred TCP <c>export_3d_with_textures_to_path</c>).
 		/// </summary>
-		IEnumerator CoSpzGoFinishExportWhenSaveIdle() {
+		IEnumerator CoSpzGoFinishExportWhenSaveIdle(string exportMeshPath) {
 			SpzGoStatusLine("Export: writing textures…", true);
 			const float timeoutSec = 300f;
 			float elapsed = 0f;
@@ -1370,12 +1370,35 @@ namespace spz {
 				sm = Save_MGR.instance;
 			}
 			// sm == null must not count as success (previously: sm == null || !sm._isSaving).
-			bool ok = sm != null && !sm._isSaving;
+			bool saveIdle = sm != null && !sm._isSaving;
 			if (sm == null)
 				UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO native export: Save_MGR unavailable during texture write.");
-			else if (!ok)
+			else if (!saveIdle)
 				UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO native export: texture write still in progress after timeout.");
-			SpzGoStatusLine(ok ? "Export OK" : "Export failed (texture write timeout)", ok);
+
+			bool stampOk = false;
+			if (saveIdle && !string.IsNullOrEmpty(exportMeshPath)) {
+				try {
+					string stamp = Path.Combine(
+						Path.GetDirectoryName(exportMeshPath) ?? "",
+						Path.GetFileNameWithoutExtension(exportMeshPath) + ".spz_go_ready");
+					stampOk = File.Exists(stamp);
+					if (!stampOk)
+						UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO native export: ready stamp missing — Blender auto-import will not fire: " + stamp);
+				} catch (Exception ex) {
+					UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO native export: stamp check failed: " + ex.Message);
+				}
+			}
+
+			bool ok = saveIdle && stampOk;
+			string status;
+			if (ok)
+				status = "Export OK — Blender can auto-import";
+			else if (saveIdle && !stampOk)
+				status = "Export wrote mesh/textures; ready stamp missing (Blender auto-import may not run)";
+			else
+				status = "Export failed (texture write timeout)";
+			SpzGoStatusLine(status, ok);
 		}
 
 		IEnumerator CoSpzGoFinishImportWhenIdle() {
