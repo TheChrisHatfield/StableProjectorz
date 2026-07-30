@@ -295,9 +295,11 @@ namespace spz {
 	        FileBrowser.SetDefaultFilter("png");
 
 	        FileBrowser.ShowSaveDialog( (paths) => {
-	            if(paths.Length > 0){
-	                onComplete(paths[0]);
+	            if(paths == null || paths.Length == 0){
+	                onComplete(null);
+	                return;
 	            }
+	            onComplete(paths[0]);
 	        },
 	        () => {
 	             onComplete(null);
