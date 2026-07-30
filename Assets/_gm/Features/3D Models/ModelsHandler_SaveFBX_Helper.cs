@@ -23,8 +23,20 @@ namespace spz {
 		};
 
 		/// <summary>Blender 4+ / io_scene_fbx does not import ASCII FBX. Avoid depending on a single
-		/// <see cref="FbxIOPluginRegistry.FindWriterIDByDescription"/> string (varies by SDK) — see <see cref="ResolveFbxBinaryWriterFormatId"/>.</summary>
-		public void SaveModels(string finalFilepath_with_exten, GameObject saveMe){
+		/// <see cref="FbxIOPluginRegistry.FindWriterIDByDescription"/> string (varies by SDK) — see <see cref="ResolveFbxBinaryWriterFormatId"/>.
+		/// Returns true only when Export succeeds and the file exists (not a pre-existing stale FBX).</summary>
+		public bool SaveModels(string finalFilepath_with_exten, GameObject saveMe){
+			if (string.IsNullOrEmpty(finalFilepath_with_exten) || saveMe == null) {
+				return false;
+			}
+			// Remove any prior file so File.Exists after a failed Initialize cannot look like success.
+			try {
+				if (File.Exists(finalFilepath_with_exten)) {
+					File.Delete(finalFilepath_with_exten);
+				}
+			} catch (Exception ex) {
+				UnityEngine.Debug.LogWarning("[SPZ] FBX: could not clear prior file before export: " + ex.Message);
+			}
 			using (FbxManager fbxManager = FbxManager.Create()) {
 				fbxManager.SetIOSettings(FbxIOSettings.Create(fbxManager, Globals.IOSROOT));
 				ApplyFbxExportPreferBinary(fbxManager.GetIOSettings());
@@ -39,7 +51,7 @@ namespace spz {
 						UnityEngine.Debug.LogError(
 							"[SPZ] FBX Export Initialize failed: " + exporter.GetStatus().GetErrorString()
 						);
-						return;
+						return false;
 					}
 					FbxScene scene = FbxScene.Create(fbxManager, "StableProjectorz Scene");
 					FbxNode fbxRootNode = scene.GetRootNode();
@@ -49,9 +61,11 @@ namespace spz {
 						UnityEngine.Debug.LogError(
 							"[SPZ] FBX Export() failed: " + exporter.GetStatus().GetErrorString()
 						);
+						return false;
 					}
 				}
 			}
+			return File.Exists(finalFilepath_with_exten);
 		}
 
 		static int TryInvokeIntNoArgs(object target, string methodName) {
