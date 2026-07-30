@@ -153,10 +153,19 @@ namespace spz {
 	        // Close disables the unit from the thumbs strip (gen path). Prefab may rely on label hits;
 	        // Ensure face before any label raycast clears (CommandRibbon/SAVE litmus).
 	        if (_closeButton != null) {
-	            SpzUiThemeOps.ApplyBoundChromeSelectable(_closeButton, t.controlBg, t.danger);
-	            if (_closeButton.targetGraphic is Image closeFace) {
-	                SpzUiThemeOps.ApplyRoundedControlSprite(closeFace, markEligible: true);
-	                closeFace.preserveAspect = false;
+	            SpzUiThemeOps.EnsureSelectableHitFace(_closeButton);
+	            // Prefab close often uses X/icon as targetGraphic — SolidSquare blanks the glyph.
+	            if (_closeButton.targetGraphic is Image closeGlyph
+	                && closeGlyph.sprite != null
+	                && closeGlyph.preserveAspect
+	                && !UiRuntimeSprites.IsSolidRect(closeGlyph.sprite)) {
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(closeGlyph, t.danger);
+	            } else {
+	                SpzUiThemeOps.ApplyBoundChromeSelectable(_closeButton, t.controlBg, t.danger);
+	                if (_closeButton.targetGraphic is Image closeFace) {
+	                    SpzUiThemeOps.ApplyRoundedControlSprite(closeFace, markEligible: true);
+	                    closeFace.preserveAspect = false;
+	                }
 	            }
 	            foreach (var tmp in _closeButton.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
 	                if (tmp != null)
