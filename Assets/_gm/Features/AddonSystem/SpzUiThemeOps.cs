@@ -1363,9 +1363,16 @@ namespace spz {
 					// Capture authored design pt first — never overwrite designPt with compact display
 					// size (that left PROJ MASK / COLOR / TOTAL stuck after Restore SPZ → blend over OG).
 					ResolveOrCaptureDesignFontPt(tmp, 14f);
-					ApplyBoundChromeStripLabelTmp(tmp, labelColor, 14f);
+					// Do NOT use StripLabel here — its outline 0.22 + tracking 18 ghost 2-line caps
+					// after click retheme (WHERE EMPTY / TOTAL OBJ double-glyph look).
+					SnapshotAuthoredGraphic(tmp);
+					ApplyTmpScaledCaptured(tmp, labelColor, 14f);
+					ApplyNomadUiFont(tmp);
+					if (tmp.font != null)
+						tmp.fontStyle = FontStyles.UpperCase;
+					ClearLabelRaycastIfUnderSelectable(tmp);
 					ApplyWorkflowStackedLabelMetrics(tmp);
-					const float stackDisplayPt = 10f; // +2 from prior 8pt; leading stays -12
+					const float stackDisplayPt = 10f; // +2 from prior 8pt; leading stays mild
 					tmp.fontSize = stackDisplayPt * Mathf.Clamp(_active.fontScale, ScaleTokenMin, ScaleTokenMax);
 				}
 				else
@@ -1380,12 +1387,16 @@ namespace spz {
 		static void ApplyWorkflowStackedLabelMetrics(TMP_Text text) {
 			if (text == null) return;
 			// Narrow ribbon: keep tracking mild; strip default 18 forces wrap/overflow.
-			text.characterSpacing = 2f;
-			// Keep mine tight leading while stack display pt grows (do not ease toward -2).
-			text.lineSpacing = -12f;
+			text.characterSpacing = 1f;
+			// Mild leading — StripLabel -12 + outline 0.22 read as ghosted double glyphs after click retheme.
+			text.lineSpacing = -6f;
 			text.enableWordWrapping = true;
-			text.overflowMode = TextOverflowModes.Truncate;
+			// Overflow (not Truncate): Truncate ate the second word ("MASK"/"COLOR") until layout
+			// settled on click — theme-apply looked like PROJ / NO / TOTAL only.
+			text.overflowMode = TextOverflowModes.Overflow;
 			text.margin = new Vector4(1f, 0f, 1f, 1f);
+			// Kill StripLabel fringe if a prior path applied it — outline looks like double text.
+			TrySetNomadOutline(text, 0f, new Color(0f, 0f, 0f, 0f));
 			try {
 				text.UpdateMeshPadding();
 				text.ForceMeshUpdate(ignoreActiveState: true);

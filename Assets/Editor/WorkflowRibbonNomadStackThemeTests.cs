@@ -166,12 +166,14 @@ public sealed class WorkflowRibbonNomadStackThemeTests {
 				"Label band stays below icon");
 			Assert.That(tmp.characterSpacing, Is.LessThanOrEqualTo(3f),
 				"Compact tracking so narrow cells do not wrap/overflow");
-			Assert.That(tmp.lineSpacing, Is.EqualTo(-12f).Within(0.01f),
-				"Keep mine tight leading while stack display pt grows");
+			Assert.That(tmp.lineSpacing, Is.EqualTo(-6f).Within(0.01f),
+				"Mild leading — StripLabel -12+outline ghosted 2-line caps after click");
 			Assert.That(tmp.fontSize, Is.EqualTo(10f).Within(0.05f),
 				"Stack display +2pt from prior 8pt");
-			Assert.That(tmp.overflowMode, Is.EqualTo(TextOverflowModes.Truncate),
-				"Truncate — Overflow painted WHERE EMPTY past the box");
+			Assert.That(tmp.overflowMode, Is.EqualTo(TextOverflowModes.Overflow),
+				"Overflow — Truncate ate MASK/COLOR until click retheme");
+			Assert.That(tmp.outlineWidth, Is.EqualTo(0f).Within(0.001f),
+				"No StripLabel outline ghost on stacked workflow caps");
 			var nomadFont = SpzUiThemeOps.ResolveNomadUiFont();
 			Assert.That(tmp.font, Is.EqualTo(nomadFont));
 			Assert.That((tmp.fontStyle & FontStyles.UpperCase) != 0, Is.True);
