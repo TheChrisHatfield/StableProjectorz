@@ -123,13 +123,17 @@ namespace spz {
 		    if( mh==null ){
 			    return false;
 		    }
+		    if( _isSaving ){
+			    UnityEngine.Debug.LogWarning("[Save_MGR] Export3D_with_textures_ToPath: refused — another save/export is in progress.");
+			    return false;
+		    }
 		    _isSaving = true;
 		    mh.ExportModelToPath( meshFilePath );
 		    string path_exported3D = mh._path_recentlyExported;
-		    if( string.IsNullOrEmpty( path_exported3D ) ){
+		    if( string.IsNullOrEmpty( path_exported3D ) || !File.Exists( path_exported3D ) ){
 			    _isSaving = false;
 			    if( Viewport_StatusText.instance!=null ){
-				    Viewport_StatusText.instance.ShowStatusText( "Export: mesh path not written.", false, 5f, false );
+				    Viewport_StatusText.instance.ShowStatusText( "Export: mesh file not written.", false, 5f, false );
 			    }
 			    return false;
 		    }

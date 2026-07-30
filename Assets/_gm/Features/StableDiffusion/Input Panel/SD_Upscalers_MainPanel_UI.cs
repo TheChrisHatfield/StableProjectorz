@@ -15,6 +15,12 @@ namespace spz {
 	    [SerializeField] Button _upscaleVisible_x2_button;
 	    [SerializeField] Button _upscaleVisible_x4_button;
 
+	    bool _lastSoftInteractable = true;
+
+	    void Awake() {
+	        SpzUiThemeOps.ThemeChanged += OnThemeChanged_ReapplySoftDisable;
+	    }
+
 	    void Start(){
 	        StaticEvents.SubscribeAppend<List<string>>("SD_Upscalers:ListUpdated", Populate_Dropdown);
 	        StaticEvents.SubscribeAppend<bool>("SD_Upscalers:SetButtonsInteractable", SetButtonsInteractable);
@@ -27,10 +33,16 @@ namespace spz {
 	    }
 
 	    void OnDestroy(){
+	        SpzUiThemeOps.ThemeChanged -= OnThemeChanged_ReapplySoftDisable;
 	        StaticEvents.Unsubscribe<List<string>>("SD_Upscalers:ListUpdated", Populate_Dropdown);
 	        StaticEvents.Unsubscribe<bool>("SD_Upscalers:SetButtonsInteractable", SetButtonsInteractable);
 	        StaticEvents.Unsubscribe("SD_Upscalers:PlayAttentionAnim", PlayAttentionAnim);
 	        StaticEvents.Unsubscribe<string>("SD_Upscalers:SetSelectedByName", SetSelectedUpscaler);
+	    }
+
+	    void OnThemeChanged_ReapplySoftDisable() {
+	        // ThemeChanged BoundChrome rewrites face RGB at full alpha — re-assert soft-disable (GEN litmus).
+	        SetButtonsInteractable(_lastSoftInteractable);
 	    }
     
 	    private void PlayAttentionAnim(){
@@ -40,14 +52,21 @@ namespace spz {
 	    }
     
 	    private void SetButtonsInteractable(bool interactable){
+	        _lastSoftInteractable = interactable;
 	        if (_upscaleVisible_x2_button == null || _upscaleVisible_x4_button == null) return;
-        
-	        var artColor = _upscaleVisible_x2_button.image.color;
-	        var bgColor  = _upscaleVisible_x4_button.image.color;
-	        artColor.a = interactable ? 1f : 0.5f;
-	        bgColor.a  = interactable ? 1f : 0.5f;
-	        _upscaleVisible_x2_button.image.color = artColor;
-	        _upscaleVisible_x4_button.image.color  = bgColor;
+
+	        ApplySoftAlpha(_upscaleVisible_x2_button, interactable);
+	        ApplySoftAlpha(_upscaleVisible_x4_button, interactable);
+	    }
+
+	    static void ApplySoftAlpha(Button btn, bool interactable) {
+	        if (btn == null) return;
+	        // Prefer BoundChrome face (targetGraphic) — .image may lag after theme apply.
+	        var face = btn.targetGraphic != null ? btn.targetGraphic : btn.image;
+	        if (face == null) return;
+	        var c = face.color;
+	        c.a = interactable ? 1f : 0.5f;
+	        face.color = c;
 	    }
     
 	    private void Populate_Dropdown(List<string> upscalerNames){
