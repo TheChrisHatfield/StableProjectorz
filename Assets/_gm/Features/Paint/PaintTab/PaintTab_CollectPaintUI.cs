@@ -288,6 +288,9 @@ namespace spz {
 				// Value Assist owns its chrome via ApplyContextMenuChrome — avoid double SolidSquare.
 				if (btn.GetComponentInParent<PaintTab_ValueAssistPanel_UI>(true) != null)
 					continue;
+				// Layers panel owns Add/Collapse/Delete/Visibility — dual Collect SolidSquare races leave.
+				if (btn.GetComponentInParent<PaintTab_LayersPanel_UI>(true) != null)
+					continue;
 				string n = btn.gameObject.name ?? "";
 				Color normal = t.controlBg;
 				if (IsPaintActionName(n, "Add", "Bucket", "+"))
@@ -301,6 +304,8 @@ namespace spz {
 			{
 				if (toggle == null) continue;
 				if (toggle.targetGraphic is RawImage) continue;
+				if (toggle.GetComponentInParent<PaintTab_LayersPanel_UI>(true) != null)
+					continue;
 				Color fill = toggle.isOn
 					? Color.Lerp(t.controlBg, t.accent, 0.14f)
 					: t.controlBg;
@@ -344,10 +349,12 @@ namespace spz {
 			foreach (var btn in section.GetComponentsInChildren<Button>(true)) {
 				if (btn == null || IsContentBearingPaintButton(btn)) continue;
 				if (btn.GetComponentInParent<PaintTab_ValueAssistPanel_UI>(true) != null) continue;
+				if (btn.GetComponentInParent<PaintTab_LayersPanel_UI>(true) != null) continue;
 				SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 			}
 			foreach (var toggle in section.GetComponentsInChildren<Toggle>(true)) {
 				if (toggle == null || toggle.targetGraphic is RawImage) continue;
+				if (toggle.GetComponentInParent<PaintTab_LayersPanel_UI>(true) != null) continue;
 				SpzUiThemeOps.ClearNonFaceRaycastsForTheme(toggle);
 			}
 		}

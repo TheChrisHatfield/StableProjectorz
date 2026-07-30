@@ -257,7 +257,13 @@ namespace spz {
 	        ThemeToggle(_makeScreenshots_toggle, t);
 	        if (_rembg_button != null) {
 	            SpzUiThemeOps.EnsureSelectableHitFace(_rembg_button);
-	            SpzUiThemeOps.ApplyBoundChromeSelectable(_rembg_button, t.controlBg, t.accent);
+	            // Icon-as-face rembg — SolidSquare blanks the glyph (Gen3D Soft litmus).
+	            if (SpzUiThemeOps.IsAuthoredIconFace(_rembg_button.targetGraphic)) {
+	                if (_rembg_button.targetGraphic is Image rembgFace)
+	                    SpzUiThemeOps.ApplyBoundChromeGraphic(rembgFace, t.iconTint);
+	            } else {
+	                SpzUiThemeOps.ApplyBoundChromeSelectable(_rembg_button, t.controlBg, t.accent);
+	            }
 	            foreach (var tmp in _rembg_button.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	                if (tmp != null)
 	                    SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);

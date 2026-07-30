@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -16,6 +17,7 @@ namespace spz {
 	    [SerializeField] Button _upscaleVisible_x4_button;
 
 	    bool _lastSoftInteractable = true;
+	    Coroutine _deferredSoftDisable;
 
 	    void Awake() {
 	        SpzUiThemeOps.ThemeChanged += OnThemeChanged_ReapplySoftDisable;
@@ -34,6 +36,10 @@ namespace spz {
 
 	    void OnDestroy(){
 	        SpzUiThemeOps.ThemeChanged -= OnThemeChanged_ReapplySoftDisable;
+	        if (_deferredSoftDisable != null) {
+	            StopCoroutine(_deferredSoftDisable);
+	            _deferredSoftDisable = null;
+	        }
 	        StaticEvents.Unsubscribe<List<string>>("SD_Upscalers:ListUpdated", Populate_Dropdown);
 	        StaticEvents.Unsubscribe<bool>("SD_Upscalers:SetButtonsInteractable", SetButtonsInteractable);
 	        StaticEvents.Unsubscribe("SD_Upscalers:PlayAttentionAnim", PlayAttentionAnim);
@@ -41,7 +47,20 @@ namespace spz {
 	    }
 
 	    void OnThemeChanged_ReapplySoftDisable() {
-	        // ThemeChanged BoundChrome rewrites face RGB at full alpha — re-assert soft-disable (GEN litmus).
+	        // Other ThemeChanged listeners SolidSquare faces at full alpha after we run —
+	        // defer one frame so soft-disable wins (GEN litmus: disabled x2/x4 stay dim).
+	        if (!isActiveAndEnabled || !gameObject.activeInHierarchy) {
+	            SetButtonsInteractable(_lastSoftInteractable);
+	            return;
+	        }
+	        if (_deferredSoftDisable != null)
+	            StopCoroutine(_deferredSoftDisable);
+	        _deferredSoftDisable = StartCoroutine(CoReapplySoftDisableNextFrame());
+	    }
+
+	    IEnumerator CoReapplySoftDisableNextFrame() {
+	        yield return null;
+	        _deferredSoftDisable = null;
 	        SetButtonsInteractable(_lastSoftInteractable);
 	    }
     

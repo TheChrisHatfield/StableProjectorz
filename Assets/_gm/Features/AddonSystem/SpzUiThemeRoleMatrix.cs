@@ -173,6 +173,9 @@ namespace spz {
 				// Check BEFORE Ensure (Ensure creates a transparent BoundChromeHitFace when null).
 				if (btn.targetGraphic != null && btn.targetGraphic.color.a < 0.08f)
 					continue;
+				// Opaque icon-as-face — SolidSquare blanks glyphs (SD input / Soft / CN litmus).
+				if (SpzUiThemeOps.IsAuthoredIconFace(btn.targetGraphic))
+					continue;
 				ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
 				if (btn.targetGraphic is Image btnImg)
 					ApplyRoundedControlSprite(btnImg, markEligible: true);
