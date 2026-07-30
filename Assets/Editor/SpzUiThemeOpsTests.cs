@@ -1128,6 +1128,24 @@ public sealed class SpzUiThemeOpsTests {
 	}
 
 	[Test]
+	public void ApplyBoundChromeSelectable_OnBuiltin_DoesNotInjectHitFace() {
+		var go = new GameObject("LeaveNoEnsure", typeof(RectTransform), typeof(Button));
+		try {
+			var btn = go.GetComponent<Button>();
+			btn.targetGraphic = null;
+			SpzUiThemeOps.ResetTheme();
+			Assert.That(SpzUiThemeOps.ShouldRecolorBoundChrome, Is.False);
+			SpzUiThemeOps.ApplyBoundChromeSelectable(btn, Color.black, Color.yellow);
+			Assert.That(btn.targetGraphic, Is.Null,
+				"Leave/builtin must not call EnsureSelectableHitFace (sticky BoundChromeHitFace poisons Restore SPZ)");
+			Assert.That(go.transform.Find("BoundChromeHitFace"), Is.Null);
+		} finally {
+			UnityEngine.Object.DestroyImmediate(go);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
 	public void BoundChromeHelpersRestoreAuthoredOnBuiltin() {
 		var go = new GameObject("theme-bound-chrome-test", typeof(RectTransform), typeof(Image));
 		try {

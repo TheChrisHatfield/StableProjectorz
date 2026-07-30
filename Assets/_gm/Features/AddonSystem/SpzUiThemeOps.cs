@@ -215,11 +215,11 @@ namespace spz {
 		public static void ThemeCheckboxToggle(Toggle toggle, Color face, Color accent, Color checkSuccess) {
 			if (toggle == null)
 				return;
+			// Ensure only under Nomad — leave/builtin must not leave synthetic hit faces sticky.
+			if (!ShouldRecolorBoundChrome)
+				return;
 			EnsureSelectableHitFace(toggle);
 			if (toggle.targetGraphic == null)
-				return;
-			// Apply-only under BoundChrome; leave paths use RestoreBoundChromeUnder (do not unhide here).
-			if (!ShouldRecolorBoundChrome)
 				return;
 			ApplyBoundChromeSelectable(toggle, face, accent);
 			if (toggle.graphic != null) {
@@ -243,10 +243,10 @@ namespace spz {
 		public static void ThemeFlatToolToggle(Toggle toggle, Color face, Color accent, Color labelColor) {
 			if (toggle == null)
 				return;
+			if (!ShouldRecolorBoundChrome)
+				return;
 			EnsureSelectableHitFace(toggle);
 			if (toggle.targetGraphic == null)
-				return;
-			if (!ShouldRecolorBoundChrome)
 				return;
 			ApplyBoundChromeSelectable(toggle, face, accent);
 			var cb = toggle.colors;
@@ -639,14 +639,17 @@ namespace spz {
 		public static void ApplyBoundChromeSelectable(Selectable selectable, Color normal, Color accent) {
 			if (selectable == null)
 				return;
+			// Ensure only under Nomad — leave/builtin must not inject synthetic hit faces then "restore".
+			if (!ShouldRecolorBoundChrome) {
+				if (selectable.targetGraphic != null) {
+					RestoreAuthoredGraphic(selectable.targetGraphic);
+					RestoreAuthoredColorBlock(selectable);
+				}
+				return;
+			}
 			EnsureSelectableHitFace(selectable);
 			if (selectable.targetGraphic == null)
 				return;
-			if (!ShouldRecolorBoundChrome) {
-				RestoreAuthoredGraphic(selectable.targetGraphic);
-				RestoreAuthoredColorBlock(selectable);
-				return;
-			}
 			ApplySolidSquareChrome(selectable, normal, accent);
 			ClearNonFaceRaycastsForTheme(selectable);
 		}
