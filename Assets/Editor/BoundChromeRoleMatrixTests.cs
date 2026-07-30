@@ -119,4 +119,32 @@ public sealed class BoundChromeRoleMatrixTests {
 		Assert.That(cn, Does.Contain("ApplyBoundChromeRolesUnder"));
 		Assert.That(soft, Does.Contain("ApplyBoundChromeRolesUnder"));
 	}
+
+	[Test]
+	public void ThemeSelectablesUnder_SkipsNearTransparentTargetGraphic() {
+		var root = new GameObject("MatrixHitPad", typeof(RectTransform));
+		var btnGo = new GameObject("InvisHit", typeof(RectTransform), typeof(Image), typeof(Button));
+		btnGo.transform.SetParent(root.transform, false);
+		var face = btnGo.GetComponent<Image>();
+		face.color = new Color(1f, 1f, 1f, 0f);
+		face.sprite = null;
+		var btn = btnGo.GetComponent<Button>();
+		btn.targetGraphic = face;
+		try {
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				Tokens(("control_bg", "#292A2EFF"), ("accent", "#F2CA50FF")),
+				"replace",
+				out string error), Is.True, error);
+
+			SpzUiThemeOps.ApplyBoundChromeRolesUnder(root.transform);
+
+			Assert.That(face.color.a, Is.EqualTo(0f).Within(0.01f),
+				"Near-transparent hit pads must stay invisible — SolidSquare would steal clicks");
+			Assert.That(UiRuntimeSprites.IsSolidRect(face.sprite), Is.False);
+		} finally {
+			Object.DestroyImmediate(root);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
 }

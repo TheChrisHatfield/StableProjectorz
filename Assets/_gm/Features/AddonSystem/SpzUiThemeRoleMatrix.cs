@@ -152,6 +152,9 @@ namespace spz {
 				if (dd == null) continue;
 				if (IsExcluded(opts, dd)) continue;
 				if (dd.GetComponentInParent<SlideOut_Widget_UI>(true) != null) continue;
+				// Invisible authored hit pads — SolidSquare would opaque them and steal clicks (gen/CN litmus).
+				if (dd.targetGraphic != null && dd.targetGraphic.color.a < 0.08f)
+					continue;
 				ApplyBoundChromeSelectable(dd, t.fieldBg, t.accent);
 				if (dd.targetGraphic is Image fieldImg)
 					ApplyRoundedControlSprite(fieldImg, markEligible: true);
@@ -167,6 +170,9 @@ namespace spz {
 				if (btn.GetComponent<TMP_Dropdown>() != null) continue;
 				if (btn.gameObject.name.StartsWith("Dropdown_", StringComparison.Ordinal)) continue;
 				if (btn.GetComponentInParent<SlideOut_Widget_UI>(true) != null) continue;
+				// Check BEFORE Ensure (Ensure creates a transparent BoundChromeHitFace when null).
+				if (btn.targetGraphic != null && btn.targetGraphic.color.a < 0.08f)
+					continue;
 				ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
 				if (btn.targetGraphic is Image btnImg)
 					ApplyRoundedControlSprite(btnImg, markEligible: true);
@@ -176,6 +182,8 @@ namespace spz {
 				if (toggle == null) continue;
 				if (IsExcluded(opts, toggle)) continue;
 				if (toggle.GetComponentInParent<SlideOut_Widget_UI>(true) != null) continue;
+				if (toggle.targetGraphic != null && toggle.targetGraphic.color.a < 0.08f)
+					continue;
 				if (opts.PreferFlatToolToggles) {
 					Color face = toggle.isOn
 						? Color.Lerp(t.tabActive, t.accent, 0.45f)
