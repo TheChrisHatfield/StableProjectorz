@@ -1196,17 +1196,39 @@ namespace spz {
 		/// When Python created the panel first, native apply still needs slider instance ids.
 		/// </summary>
 		void MaybeBindNomadSlidersFromExistingPanel() {
-			if (!string.IsNullOrEmpty(_nomadFontScaleSliderId) && !string.IsNullOrEmpty(_nomadSpacingScaleSliderId))
+			if (IsLiveNomadSliderId(_nomadFontScaleSliderId) && IsLiveNomadSliderId(_nomadSpacingScaleSliderId))
 				return;
+			if (!IsLiveNomadSliderId(_nomadFontScaleSliderId))
+				_nomadFontScaleSliderId = null;
+			if (!IsLiveNomadSliderId(_nomadSpacingScaleSliderId))
+				_nomadSpacingScaleSliderId = null;
 			if (!_addonUIElements.TryGetValue(NomadThemeAddonId, out var list) || list == null)
 				return;
 			foreach (var go in list) {
 				if (go == null) continue;
-				if (go.name.StartsWith("Slider_Font scale", StringComparison.Ordinal))
-					_nomadFontScaleSliderId = go.GetInstanceID().ToString();
-				else if (go.name.StartsWith("Slider_Spacing scale", StringComparison.Ordinal))
-					_nomadSpacingScaleSliderId = go.GetInstanceID().ToString();
+				// Sliders are panel children (Slider_*), not the panel root — scan descendants too.
+				var transforms = go.GetComponentsInChildren<Transform>(true);
+				for (int i = 0; i < transforms.Length; i++) {
+					var t = transforms[i];
+					if (t == null || t.name == null) continue;
+					if (string.IsNullOrEmpty(_nomadFontScaleSliderId)
+					    && t.name.StartsWith("Slider_Font scale", StringComparison.Ordinal)
+					    && t.GetComponentInChildren<Slider>(true) != null)
+						_nomadFontScaleSliderId = t.gameObject.GetInstanceID().ToString();
+					else if (string.IsNullOrEmpty(_nomadSpacingScaleSliderId)
+					         && t.name.StartsWith("Slider_Spacing scale", StringComparison.Ordinal)
+					         && t.GetComponentInChildren<Slider>(true) != null)
+						_nomadSpacingScaleSliderId = t.gameObject.GetInstanceID().ToString();
+				}
 			}
+		}
+
+		bool IsLiveNomadSliderId(string elementId) {
+			if (string.IsNullOrEmpty(elementId))
+				return false;
+			if (!_uiElementComponents.TryGetValue(elementId, out var c) || !IsLiveUiComponent(c))
+				return false;
+			return c is Slider;
 		}
 
 		static void ShowAddonButtonStatus(string message, bool ok) {
@@ -1860,6 +1882,13 @@ namespace spz {
 		/// Gets the value of a UI element
 		/// </summary>
 		public object GetUIElementValue(string elementId) {
+			if (string.IsNullOrEmpty(elementId))
+				return null;
+			if (_uiElementComponents.TryGetValue(elementId, out var component) && !IsLiveUiComponent(component)) {
+				_uiElementComponents.Remove(elementId);
+				_uiElementValues.Remove(elementId);
+				return null;
+			}
 			if (_uiElementValues.ContainsKey(elementId)) {
 				return _uiElementValues[elementId];
 			}
@@ -1870,10 +1899,15 @@ namespace spz {
 		/// Sets the value of a UI element (with type safety)
 		/// </summary>
 		public bool SetUIElementValue(string elementId, object value) {
-			if (!_uiElementComponents.ContainsKey(elementId)) return false;
+			if (string.IsNullOrEmpty(elementId) || !_uiElementComponents.ContainsKey(elementId)) return false;
 			if (value == null) return false;
 			
 			var component = _uiElementComponents[elementId];
+			if (!IsLiveUiComponent(component)) {
+				_uiElementComponents.Remove(elementId);
+				_uiElementValues.Remove(elementId);
+				return false;
+			}
 			
 			try {
 				if (component is Slider slider) {
@@ -2061,13 +2095,38 @@ namespace spz {
 			       && string.Equals(parsedId, addonId, StringComparison.Ordinal);
 		}
 
-		static void ClearAddonPanelChildren(Transform panelRoot) {
+		/// <summary>
+		/// Destroys panel widgets for reload/reuse and drops their get/set_value map entries.
+		/// Without the map scrub, Python still reads ghost values and set_value can hit destroyed components.
+		/// </summary>
+		void ClearAddonPanelChildren(Transform panelRoot) {
 			if (panelRoot == null) return;
 			for (int i = panelRoot.childCount - 1; i >= 0; i--) {
 				var c = panelRoot.GetChild(i);
-				if (c != null)
-					UnityEngine.Object.Destroy(c.gameObject);
+				if (c == null) continue;
+				PurgeUiElementMapsUnder(c);
+				UnityEngine.Object.Destroy(c.gameObject);
 			}
+		}
+
+		void PurgeUiElementMapsUnder(Transform root) {
+			if (root == null) return;
+			var transforms = root.GetComponentsInChildren<Transform>(true);
+			for (int i = 0; i < transforms.Length; i++) {
+				var t = transforms[i];
+				if (t == null) continue;
+				string id = t.gameObject.GetInstanceID().ToString();
+				_uiElementValues.Remove(id);
+				_uiElementComponents.Remove(id);
+				if (string.Equals(id, _nomadFontScaleSliderId, StringComparison.Ordinal))
+					_nomadFontScaleSliderId = null;
+				if (string.Equals(id, _nomadSpacingScaleSliderId, StringComparison.Ordinal))
+					_nomadSpacingScaleSliderId = null;
+			}
+		}
+
+		static bool IsLiveUiComponent(Component c) {
+			return c != null && !ReferenceEquals(c, null) && c;
 		}
 
 		/// <summary>Panels parented to the floating fallback root (when the command ribbon was unavailable at create time) are not always in <see cref="CommandRibbon_UI"/> maps; remove strays when unloading.</summary>
