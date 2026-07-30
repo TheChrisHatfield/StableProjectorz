@@ -80,7 +80,19 @@ namespace spz {
 	            if (_txt_input.textComponent != null)
 	                SpzUiThemeOps.ApplyBoundChromeTmp(_txt_input.textComponent, t.textPrimary);
 	        }
+	        // Mirror SD_InputPanel_UI web-find: square cell + Globe so Gen3D prompt search is not dead under Nomad.
+	        ThemeWebFindChrome(t);
 	        RefreshPresetChrome();
+	    }
+
+	    void ThemeWebFindChrome(SpzUiThemeOps.ThemeTokens t) {
+	        if (_webFind == null) return;
+	        var btn = _webFind.GetComponent<Button>() ?? _webFind.GetComponentInChildren<Button>(true);
+	        if (btn == null) return;
+	        Color fill = Color.Lerp(t.controlBg, t.panelBg, 0.2f);
+	        SpzUiThemeOps.ThemePromptPresetSquareCell(btn, fill, t.accent);
+	        SpzUiThemeOps.ApplyControlLineIcon(btn.transform, StudioLineIcon.Globe, 16f);
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }
 
 	    /// <summary>Re-tint preset cells from isOn (BoundChrome). Call after WithoutNotify loads too.</summary>
