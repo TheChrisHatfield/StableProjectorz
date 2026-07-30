@@ -273,6 +273,9 @@ namespace spz {
 				// Content-bearing widgets: Image/RawImage IS the payload (brush alpha, palette swatch, transparent hit).
 				if (IsContentBearingPaintButton(btn))
 					continue;
+				// Value Assist owns its chrome via ApplyContextMenuChrome — avoid double SolidSquare.
+				if (btn.GetComponentInParent<PaintTab_ValueAssistPanel_UI>(true) != null)
+					continue;
 				string n = btn.gameObject.name ?? "";
 				Color normal = t.controlBg;
 				if (IsPaintActionName(n, "Add", "Bucket", "+"))
@@ -324,6 +327,7 @@ namespace spz {
 			// Compact clears label raycasts — re-assert face-only hits on chrome buttons/toggles.
 			foreach (var btn in section.GetComponentsInChildren<Button>(true)) {
 				if (btn == null || IsContentBearingPaintButton(btn)) continue;
+				if (btn.GetComponentInParent<PaintTab_ValueAssistPanel_UI>(true) != null) continue;
 				SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 			}
 			foreach (var toggle in section.GetComponentsInChildren<Toggle>(true)) {

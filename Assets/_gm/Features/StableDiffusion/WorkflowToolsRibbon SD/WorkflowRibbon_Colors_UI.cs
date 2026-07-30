@@ -126,8 +126,9 @@ namespace spz {
 	                    SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
 	            }
 	            foreach (var tog in root.GetComponentsInChildren<Toggle>(true)) {
-	                if (tog != null)
-	                    SpzUiThemeOps.ApplyBoundChromeSelectable(tog, t.controlBg, t.accent);
+	                if (tog == null) continue;
+	                // Checkboxes — ThemeCheckboxToggle keeps ON glyphs (SolidSquare hides Checkmark).
+	                SpzUiThemeOps.ThemeCheckboxToggle(tog, t.controlBg, t.accent, t.success);
 	            }
 	            foreach (var tmp in root.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
 	                if (tmp == null) continue;

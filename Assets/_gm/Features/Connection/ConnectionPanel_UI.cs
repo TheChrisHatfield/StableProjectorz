@@ -282,6 +282,8 @@ namespace spz {
 	                SpzUiThemeOps.ApplyRoundedControlSprite(face, markEligible: true);
 	                face.preserveAspect = false;
 	            }
+	            // Replace blanked authored glyph so SERV open stays recognizable (gen path).
+	            SpzUiThemeOps.ApplyControlLineIcon(_openPanel_button.transform, StudioLineIcon.Globe, 16f);
 	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_openPanel_button);
 	        }
 	        // Do not recolor _dim_text / _connectionIcon — CheckConnection owns live status green/red.

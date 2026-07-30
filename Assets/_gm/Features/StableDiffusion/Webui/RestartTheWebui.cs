@@ -178,8 +178,9 @@ namespace spz {
 	            face.preserveAspect = false;
 	            face.raycastTarget = true;
 	        }
-	        if (applyFolderIcon)
-	            SpzUiThemeOps.ApplyControlLineIcon(btn.transform, StudioLineIcon.Folder, 16f);
+	        // Launch must replace blanked authored glyphs (folder picker already did).
+	        SpzUiThemeOps.ApplyControlLineIcon(btn.transform,
+	            applyFolderIcon ? StudioLineIcon.Folder : StudioLineIcon.Bullseye, 16f);
 	        foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp == null) continue;
 	            // SD SERV / 3D SERV: strip tracking 18 overflows ~118px top-strip (Soft litmus).

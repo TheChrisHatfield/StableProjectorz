@@ -882,6 +882,9 @@ namespace spz {
 
 			foreach (var btn in root.GetComponentsInChildren<Button>(true)) {
 				if (btn == null) continue;
+				// Skip near-transparent / glyph-only hit pads — SolidSquare blanks download-row icons.
+				if (btn.targetGraphic != null && btn.targetGraphic.color.a < 0.08f)
+					continue;
 				ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
 				foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 					if (tmp != null)
@@ -2349,6 +2352,9 @@ namespace spz {
 					continue;
 				// Runtime Import→Layer glyph IS the face — SolidSquare replaces the drawn sprite with a blank plate.
 				if (string.Equals(button.gameObject.name, "ImportToLayerBtn", StringComparison.Ordinal))
+					continue;
+				// Mini/main generate column owns its chrome — dual ApplyContextMenuChrome blanks GEN under Nomad.
+				if (button.GetComponentInParent<GenerateButtons_UI>(true) != null)
 					continue;
 				// Prefab SAVE/LOAD/DELETE often ship null targetGraphic — clicked via TMP until Nomad
 				// clears label raycasts. EnsureSelectableHitFace lives in ApplyBoundChromeSelectable.
