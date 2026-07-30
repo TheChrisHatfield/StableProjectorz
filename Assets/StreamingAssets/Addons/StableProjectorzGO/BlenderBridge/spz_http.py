@@ -91,8 +91,13 @@ def post_import_3d_model(base_url: str, filepath: str) -> dict:
 
 
 def post_export_3d_to_path(base_url: str, mesh_filepath: str) -> dict:
+    # Texture dilate/encode can exceed the default 120s; must match Unity long-op budget (~300s).
     return request_json(
-        base_url, "POST", "/api/v1/export/3d_to_path", {"mesh_filepath": str(mesh_filepath)}
+        base_url,
+        "POST",
+        "/api/v1/export/3d_to_path",
+        {"mesh_filepath": str(mesh_filepath)},
+        timeout_s=300.0,
     )
 
 
