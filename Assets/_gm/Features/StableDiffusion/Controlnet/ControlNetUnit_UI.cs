@@ -393,7 +393,7 @@ namespace spz {
 	            }
 	            foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	                if (tmp != null)
-	                    SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, 11f);
+	                    SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
 	            }
 	        }
 
@@ -405,7 +405,7 @@ namespace spz {
 	            if (tmp.GetComponentInParent<Toggle>() != null) continue;
 	            if (tmp.GetComponentInParent<Button>() != null) continue;
 	            // Field labels (preprocess / model / start / end / weight) — lift contrast off muted authored grey.
-	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, 11f);
+	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
 	        }
 
 	        ThemeCircleDial(_startingControl_step, t);
