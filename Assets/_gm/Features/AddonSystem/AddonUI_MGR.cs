@@ -1090,9 +1090,13 @@ namespace spz {
 		}
 
 		void RestoreNomadSkyboxNative() {
+			if (!_nomadSkyboxCaptured) {
+				// Never captured — do not wipe the live skybox to Color.clear.
+				return;
+			}
 			var fastPath = FastPath_API.instance;
-			Color top = _nomadSkyboxCaptured ? _nomadSkyboxTopBefore : Color.clear;
-			Color bottom = _nomadSkyboxCaptured ? _nomadSkyboxBottomBefore : Color.clear;
+			Color top = _nomadSkyboxTopBefore;
+			Color bottom = _nomadSkyboxBottomBefore;
 			_nomadSkyboxCaptured = false;
 			if (fastPath == null) {
 				UnityEngine.Debug.LogWarning("[AddonUI_MGR] Nomad skybox restore skipped — FastPath_API missing.");
@@ -2178,7 +2182,8 @@ namespace spz {
 				var c = panelRoot.GetChild(i);
 				if (c == null) continue;
 				PurgeUiElementMapsUnder(c);
-				UnityEngine.Object.Destroy(c.gameObject);
+				// DestroyImmediate so same-frame create_panel/add_* does not see leftover Title/widgets.
+				UnityEngine.Object.DestroyImmediate(c.gameObject);
 			}
 		}
 
