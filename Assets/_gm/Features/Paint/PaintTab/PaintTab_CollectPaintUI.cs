@@ -321,6 +321,15 @@ namespace spz {
 					tmp.characterSpacing = 0f;
 				}
 			}
+			// Compact clears label raycasts — re-assert face-only hits on chrome buttons/toggles.
+			foreach (var btn in section.GetComponentsInChildren<Button>(true)) {
+				if (btn == null || IsContentBearingPaintButton(btn)) continue;
+				SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
+			}
+			foreach (var toggle in section.GetComponentsInChildren<Toggle>(true)) {
+				if (toggle == null || toggle.targetGraphic is RawImage) continue;
+				SpzUiThemeOps.ClearNonFaceRaycastsForTheme(toggle);
+			}
 		}
 
 		static UnityEngine.Events.UnityAction<bool> s_paintToggleChromeHook;
