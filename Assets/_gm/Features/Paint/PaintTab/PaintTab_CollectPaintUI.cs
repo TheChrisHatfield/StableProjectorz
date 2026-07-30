@@ -232,10 +232,10 @@ namespace spz {
 			}
 			var t = SpzUiThemeOps.Active;
 			_layout.ApplyThemeTokens();
-			ThemeOwnedSection(_layout.ToolOptionsSection, t);
-			ThemeOwnedSection(_layout.BrushPresetsSection, t);
-			ThemeOwnedSection(_layout.ColorPaletteSection, t);
-			ThemeOwnedSection(_layout.LayersSection, t);
+			ThemeOwnedSection(_layout.ToolOptionsSection, t, preferFlatToolToggles: true);
+			ThemeOwnedSection(_layout.BrushPresetsSection, t, preferFlatToolToggles: false);
+			ThemeOwnedSection(_layout.ColorPaletteSection, t, preferFlatToolToggles: false);
+			ThemeOwnedSection(_layout.LayersSection, t, preferFlatToolToggles: false);
 			PaintTab_LayersPanel_UI layers = null;
 			if (_layout.LayersSection != null)
 				layers = _layout.LayersSection.GetComponentInChildren<PaintTab_LayersPanel_UI>(true);
@@ -245,7 +245,7 @@ namespace spz {
 				layers.ApplyThemeTokens();
 		}
 
-		static void ThemeOwnedSection(RectTransform section, SpzUiThemeOps.ThemeTokens t)
+		static void ThemeOwnedSection(RectTransform section, SpzUiThemeOps.ThemeTokens t, bool preferFlatToolToggles = false)
 		{
 			if (section == null) return;
 			foreach (var slider in section.GetComponentsInChildren<Slider>(true))
@@ -292,10 +292,14 @@ namespace spz {
 				Color fill = toggle.isOn
 					? Color.Lerp(t.controlBg, t.accent, 0.14f)
 					: t.controlBg;
-				if (toggle.graphic != null)
+				if (preferFlatToolToggles) {
+					// Smudge / Strict Isolation / tool radios — bevel Checkmark is not a real ✓.
+					SpzUiThemeOps.ThemeFlatToolToggle(toggle, fill, t.accent, t.textPrimary);
+				} else if (toggle.graphic != null) {
 					SpzUiThemeOps.ThemeCheckboxToggle(toggle, fill, t.accent, t.success);
-				else
+				} else {
 					SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, fill, t.accent);
+				}
 				EnsurePaintToggleChromeHook(toggle);
 			}
 			foreach (var tmp in section.GetComponentsInChildren<TextMeshProUGUI>(true))
