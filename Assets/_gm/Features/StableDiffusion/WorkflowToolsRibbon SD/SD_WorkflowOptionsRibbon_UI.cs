@@ -550,6 +550,10 @@ namespace spz {
 	                            || ReferenceEquals(tmp, _reThink_text_mini)
 	                            || ReferenceEquals(tmp, _mask_blur_text)))
 	                        return true;
+	                    // BrushRibbon owns hit-only chrome for stamps/swatches — RolesUnder SolidSquare blanks them.
+	                    if (c.GetComponentInParent<BrushRibbon_UI_Hardness>(true) != null) return true;
+	                    if (c.GetComponentInParent<BrushRibbon_UI_Colors>(true) != null) return true;
+	                    if (c.GetComponentInParent<BrushRibbon_UI_Size>(true) != null) return true;
 	                    return false;
 	                },
 	            });
