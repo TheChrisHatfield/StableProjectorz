@@ -1355,12 +1355,14 @@ namespace spz {
 			return null;
 		}
 
-		/// <summary>Deactivates MonolithLineIcon / fill-thumb overlay children and restores authored icon Images under <paramref name="root"/>.</summary>
+		/// <summary>Deactivates MonolithLineIcon / ActiveBar / fill-thumb overlay children and restores authored icon Images under <paramref name="root"/>.</summary>
 		public static void RestoreControlLineIconsUnder(Transform root) {
 			if (root == null) return;
 			foreach (var t in root.GetComponentsInChildren<Transform>(true)) {
 				if (t == null) continue;
-				if (t.name == ControlLineIconChildName || t.name == FillThumbOverlayChildName)
+				if (t.name == ControlLineIconChildName
+				    || t.name == FillThumbOverlayChildName
+				    || t.name == "MonolithActiveBar")
 					t.gameObject.SetActive(false);
 			}
 			RestoreHiddenAuthoredIconsUnder(root);
