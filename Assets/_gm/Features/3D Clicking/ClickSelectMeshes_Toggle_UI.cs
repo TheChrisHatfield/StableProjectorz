@@ -45,6 +45,7 @@ namespace spz {
 	        if (_selectMode_toggle == null) return;
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(_selectMode_toggle.transform);
+	            ApplyActiveBar(_selectMode_toggle.transform, selected: false, SpzUiThemeOps.Active.accent);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
