@@ -428,8 +428,13 @@ namespace spz {
 			while (sm != null && sm._isSaving && elapsed < timeoutSec) {
 				elapsed += Time.unscaledDeltaTime;
 				yield return null;
+				sm = Save_MGR.instance;
 			}
-			if (sm != null && sm._isSaving) {
+			if (sm == null) {
+				result["success"] = false;
+				result["error"] = "export to path failed (Save_MGR unavailable during texture write)";
+				UnityEngine.Debug.LogWarning("[Addon_SocketServer] export_3d_with_textures_to_path: Save_MGR became null while waiting for texture write.");
+			} else if (sm._isSaving) {
 				result["success"] = false;
 				result["error"] = "export to path timed out waiting for texture write";
 				UnityEngine.Debug.LogWarning("[Addon_SocketServer] export_3d_with_textures_to_path: texture write still in progress after timeout.");

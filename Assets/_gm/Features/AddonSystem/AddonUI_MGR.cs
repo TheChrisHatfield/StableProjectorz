@@ -1288,9 +1288,13 @@ namespace spz {
 			while (sm != null && sm._isSaving && elapsed < timeoutSec) {
 				elapsed += Time.unscaledDeltaTime;
 				yield return null;
+				sm = Save_MGR.instance;
 			}
-			bool ok = sm == null || !sm._isSaving;
-			if (!ok)
+			// sm == null must not count as success (previously: sm == null || !sm._isSaving).
+			bool ok = sm != null && !sm._isSaving;
+			if (sm == null)
+				UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO native export: Save_MGR unavailable during texture write.");
+			else if (!ok)
 				UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO native export: texture write still in progress after timeout.");
 			SpzGoStatusLine(ok ? "Export OK" : "Export failed (texture write timeout)", ok);
 		}
