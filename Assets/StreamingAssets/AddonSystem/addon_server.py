@@ -440,7 +440,10 @@ def main():
     def connection_loop():
         for retry in range(max_retries):
             try:
-                api.cameras.get_pos(0)
+                # Prefer capabilities (same as /ready) — camera 0 may be inactive and fail spuriously.
+                caps = api.addon.get_capabilities()
+                if not isinstance(caps, dict):
+                    raise RuntimeError("capabilities response not a dict")
                 with _connection_lock:
                     _connected_to_unity[0] = True
                 return
