@@ -140,9 +140,7 @@ namespace spz {
 	                SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
 	            }
 	        }
-	        var rootImg = GetComponent<Image>();
-	        if (rootImg != null)
-	            SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.panelBg);
+	        // Outer panelBg owned by CommandRibbon_UI — skip dual root tint (Art/mesh list litmus).
 	    }
 	}
 }//end namespace
