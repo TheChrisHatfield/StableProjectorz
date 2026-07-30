@@ -330,10 +330,13 @@ namespace spz {
 	        if (rootImg != null)
 	            SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.panelBg);
 	        if (_BlendCams_button != null) {
+	            // Ensure face before Compact — Compact clears label raycasts (gen Blend Cams hit path).
+	            SpzUiThemeOps.EnsureSelectableHitFace(_BlendCams_button);
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_BlendCams_button, t.controlBg, t.accent);
 	            var label = _BlendCams_button.GetComponentInChildren<TextMeshProUGUI>(true);
 	            if (label != null)
 	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, t.textPrimary, 11f);
+	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_BlendCams_button);
 	        }
 	        // Ensure GRID/POV faces BEFORE label TMP — StripLabel/Tmp clear label raycasts under Nomad;
 	        // if Refresh ran after and face was null, POV digits / Grid stayed dead (gen path).
@@ -359,10 +362,14 @@ namespace spz {
 	        }
 	        if (_sortPins_Button != null) {
 	            var sortBtn = _sortPins_Button.GetComponent<Button>();
-	            if (sortBtn != null)
+	            if (sortBtn != null) {
+	                SpzUiThemeOps.EnsureSelectableHitFace(sortBtn);
 	                SpzUiThemeOps.ApplyBoundChromeSelectable(sortBtn, t.controlBg, t.accent);
+	            }
 	            foreach (var tmp in _sortPins_Button.GetComponentsInChildren<TextMeshProUGUI>(true))
 	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+	            if (sortBtn != null)
+	                SpzUiThemeOps.ClearNonFaceRaycastsForTheme(sortBtn);
 	        }
 	        foreach (var lg in GetComponentsInChildren<LayoutGroup>(true))
 	            SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
