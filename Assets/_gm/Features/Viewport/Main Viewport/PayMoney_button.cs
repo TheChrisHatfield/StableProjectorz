@@ -39,7 +39,8 @@ namespace spz {
 	        }
 	        var t = SpzUiThemeOps.Active;
 	        // Ensure hit face first — ApplySolidSquareChrome alone no-ops when targetGraphic is null,
-	        // then ApplyBoundChromeTmp clears label raycasts → dead thank-you click under Nomad.
+	        // then Compact clears label raycasts → dead thank-you click under Nomad.
+	        SpzUiThemeOps.EnsureSelectableHitFace(_button);
 	        SpzUiThemeOps.ApplyBoundChromeSelectable(_button, t.controlBg, t.accent);
 	        foreach (var tmp in _button.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp == null) continue;

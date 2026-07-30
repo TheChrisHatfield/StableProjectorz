@@ -103,7 +103,12 @@ namespace spz {
 	    static void ThemeMenuButton(Button btn, SpzUiThemeOps.ThemeTokens t) {
 	        if (btn == null) return;
 	        SpzUiThemeOps.EnsureSelectableHitFace(btn);
-	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+	        if (SpzUiThemeOps.IsAuthoredIconFace(btn.targetGraphic)) {
+	            if (btn.targetGraphic is Image face)
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(face, t.iconTint);
+	        } else {
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+	        }
 	        var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	        if (label != null)
 	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, t.textPrimary, 11f);

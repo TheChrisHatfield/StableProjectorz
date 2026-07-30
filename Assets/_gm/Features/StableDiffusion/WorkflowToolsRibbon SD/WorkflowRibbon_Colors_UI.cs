@@ -155,7 +155,13 @@ namespace spz {
 	            }
 	        }
 	        if (_bakeColors_button != null) {
-	            SpzUiThemeOps.ApplyBoundChromeSelectable(_bakeColors_button, t.controlBg, t.accent);
+	            SpzUiThemeOps.EnsureSelectableHitFace(_bakeColors_button);
+	            if (SpzUiThemeOps.IsAuthoredIconFace(_bakeColors_button.targetGraphic)) {
+	                if (_bakeColors_button.targetGraphic is Image bakeFace)
+	                    SpzUiThemeOps.ApplyBoundChromeGraphic(bakeFace, t.iconTint);
+	            } else {
+	                SpzUiThemeOps.ApplyBoundChromeSelectable(_bakeColors_button, t.controlBg, t.accent);
+	            }
 	            var bakeLabel = _bakeColors_button.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	            if (bakeLabel != null)
 	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(bakeLabel, t.textPrimary, 11f);
