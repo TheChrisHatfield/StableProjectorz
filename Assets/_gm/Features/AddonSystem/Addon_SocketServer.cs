@@ -143,17 +143,28 @@ namespace spz {
 						continue;
 					}
 					
-					// Check connection limit
+					// Check connection limit — must Accept+Close or Pending() stays true forever.
+					bool atLimit;
 					lock (_connectionLock) {
-						if (_activeConnections >= MAX_CONCURRENT_CONNECTIONS) {
-							UnityEngine.Debug.LogWarning($"[Addon_SocketServer] Connection limit reached ({MAX_CONCURRENT_CONNECTIONS}), rejecting new connection");
-							Thread.Sleep(100); // Wait before checking again
-							continue;
+						atLimit = _activeConnections >= MAX_CONCURRENT_CONNECTIONS;
+					}
+					if (atLimit) {
+						UnityEngine.Debug.LogWarning($"[Addon_SocketServer] Connection limit reached ({MAX_CONCURRENT_CONNECTIONS}), rejecting new connection");
+						try {
+							TcpClient rejected = _listener.AcceptTcpClient();
+							rejected?.Close();
+						} catch (Exception rejectEx) {
+							if (_isRunning)
+								UnityEngine.Debug.LogWarning($"[Addon_SocketServer] Reject close failed: {rejectEx.Message}");
 						}
-						_activeConnections++;
+						Thread.Sleep(100);
+						continue;
 					}
 					
 					TcpClient client = _listener.AcceptTcpClient();
+					lock (_connectionLock) {
+						_activeConnections++;
+					}
 					Thread clientThread = new Thread(() => {
 						try {
 							HandleClient(client);
