@@ -2069,14 +2069,23 @@ namespace spz {
 				// and PickWorkflowRibbonHost still returns that inactive host — so enable-after-Generate
 				// never reaches TryEnsureOnGenerateButtonsStrip and FULL/SRN never appears.
 				if (RibbonViewportFullViewOnScreen_Toggle_UI.TryEnsureOnGenerateButtonsStrip(spec)) {
-					r["success"] = true;
+					bool visible = RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyVisibleBuiltDock();
+					bool inFlight = RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyDockBuildInFlight();
+					// Kicked ≠ visible: Python register() must not treat a pending CoBuild as attached.
+					r["success"] = visible || inFlight;
+					r["visible"] = visible;
+					r["building"] = inFlight;
 					r["host"] = "GenerateButtons_Main_UI";
 					return r;
 				}
 				var host = PickWorkflowRibbonHostForFullViewAttach();
 				if (host != null) {
 					RibbonViewportFullViewOnScreen_Toggle_UI.EnsureCreated(host, spec);
-					r["success"] = true;
+					bool visible = RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyVisibleBuiltDock();
+					bool inFlight = RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyDockBuildInFlight();
+					r["success"] = visible || inFlight;
+					r["visible"] = visible;
+					r["building"] = inFlight;
 					r["host"] = "SD_WorkflowOptionsRibbon_UI";
 					return r;
 				}
