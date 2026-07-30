@@ -1638,9 +1638,11 @@ async def health():
     if _api is None:
         return {"status": "disconnected", "unity": False}
     try:
-        # Try a simple call to Unity
-        await call_unity_async("spz.cmd.get_total_mesh_count", {})
-        return {"status": "connected", "unity": True}
+        # Try a simple call to Unity — require explicit success, not merely a non-throwing RPC.
+        result = await call_unity_async("spz.cmd.get_total_mesh_count", {})
+        if result.get("success") is True:
+            return {"status": "connected", "unity": True}
+        return {"status": "disconnected", "unity": False}
     except Exception:
         return {"status": "disconnected", "unity": False}
 
