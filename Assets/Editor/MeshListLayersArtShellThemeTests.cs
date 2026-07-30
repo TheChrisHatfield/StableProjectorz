@@ -10,6 +10,8 @@ public sealed class MeshListGlyphChromeThemeTests {
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("IsAuthoredIconFace(btn.targetGraphic)"));
 		Assert.That(src, Does.Contain("ApplyBoundChromeGraphic(face, t.iconTint)"));
+		Assert.That(src, Does.Contain("EnsureSelectableHitFace(btn)"));
+		Assert.That(src, Does.Contain("CommandRibbon_UI — skip dual root tint"));
 	}
 }
 
