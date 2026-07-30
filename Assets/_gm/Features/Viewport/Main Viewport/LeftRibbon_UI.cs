@@ -213,7 +213,8 @@ namespace spz {
 	            // Blur-inside toggle label is handled by ThemeToggle strip metrics.
 	            if (tmp.GetComponentInParent<Toggle>(true) != null) continue;
 	            if (tmp.GetComponentInParent<Button>(true) != null)
-	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+	                // Compact Truncate clipped Depth Options / left-ribbon tool labels under Nomad.
+	                SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, t.textPrimary, 11f);
 	            else {
 	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
 	                tmp.characterSpacing = 0f;
@@ -338,8 +339,8 @@ namespace spz {
 	        }
 	        foreach (var tmp in toggle.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp == null) continue;
-	            // DEP / INSIDE: strip tracking (18) wraps past the flat selected face (Soft litmus).
-	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+	            // DEP / INSIDE: Compact Truncate clipped strip labels; ReadableBody keeps wrap + no uppercase.
+	            SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, t.textPrimary, 11f);
 	        }
 	        ApplyActiveBar(toggle.transform, toggle.isOn, t.accent);
 	        // Never mass-clear when targetGraphic is null (CommandRibbon / SAVE litmus).
