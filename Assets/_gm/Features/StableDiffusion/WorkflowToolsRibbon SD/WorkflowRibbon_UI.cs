@@ -337,23 +337,11 @@ namespace spz {
 	    static void RestoreWorkflowModeAuthored(MonoBehaviour modeUi) {
 	        if (modeUi == null) return;
 	        SpzUiThemeOps.RestoreBoundChromeUnder(modeUi.transform);
-	        // Stacked-cell leave: hide Monolith + restore label band (RestoreBoundChromeUnder alone can miss
-	        // inactive icons when mode roots sit outside the ribbon transform).
-	        SpzUiThemeOps.ApplyNomadStackedToolCell(
-	            modeUi.transform,
-	            StudioLineIcon.Brush,
-	            Color.white,
-	            14f,
-	            tmp => !IsExcludedWorkflowLabel(tmp.transform, modeUi.transform));
+	        // Leave: hide Monolith overlays only — do not re-enter ApplyNomadStackedToolCell with a dummy glyph.
+	        HideMonolithOverlaysUnder(modeUi);
 	        var toggle = modeUi.GetComponentInChildren<Toggle>(true);
-	        if (toggle != null && toggle.transform != modeUi.transform) {
-	            SpzUiThemeOps.ApplyNomadStackedToolCell(
-	                toggle.transform,
-	                StudioLineIcon.Brush,
-	                Color.white,
-	                14f,
-	                tmp => !IsExcludedWorkflowLabel(tmp.transform, modeUi.transform));
-	        }
+	        if (toggle != null && toggle.transform != modeUi.transform)
+	            HideMonolithOverlaysUnder(toggle.transform);
 	    }
 
 	    static void HideMonolithOverlaysUnder(MonoBehaviour modeUi) {
