@@ -231,6 +231,7 @@ namespace spz {
 	                SpzUiThemeOps.ApplyBoundChromeTmp(_hexColor_inputText.textComponent, t.textPrimary);
 	        }
 	        if (_commitButton != null) {
+	            SpzUiThemeOps.EnsureSelectableHitFace(_commitButton);
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_commitButton, t.success, t.accent);
 	            foreach (var tmp in _commitButton.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	                if (tmp != null)

@@ -54,6 +54,7 @@ namespace spz {
 	        Color normal = _selectMode_toggle.isOn
 	            ? Color.Lerp(t.controlBg, t.accent, 0.14f)
 	            : t.controlBg;
+	        SpzUiThemeOps.EnsureSelectableHitFace(_selectMode_toggle);
 	        SpzUiThemeOps.ApplyBoundChromeSelectable(_selectMode_toggle, normal, t.accent);
 	        if (_selectMode_toggle.targetGraphic is Image bg)
 	            SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);

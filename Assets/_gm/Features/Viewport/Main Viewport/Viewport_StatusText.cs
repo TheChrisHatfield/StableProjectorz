@@ -196,6 +196,7 @@ namespace spz {
 
 	    static void ThemeFooterButton(Button btn, Color fill, SpzUiThemeOps.ThemeTokens t) {
 	        if (btn == null) return;
+	        SpzUiThemeOps.EnsureSelectableHitFace(btn);
 	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, fill, t.accent);
 	        foreach (var tmp in btn.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
 	            if (tmp == null) continue;

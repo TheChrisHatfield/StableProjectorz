@@ -52,9 +52,7 @@ namespace spz {
 	                SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
 	            }
 	        }
-	        var rootImg = GetComponent<UnityEngine.UI.Image>();
-	        if (rootImg != null)
-	            SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.panelBg);
+	        // Outer panelBg owned by CommandRibbon_UI — skip dual root tint (Art/CN/mesh litmus).
 	    }
 
 	    void Update(){

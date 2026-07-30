@@ -86,7 +86,14 @@ namespace spz {
 	        if (_name != null)
 	            SpzUiThemeOps.ApplyBoundChromeTmp(_name, t.textPrimary);
 	        if (_rmvButton != null) {
-	            SpzUiThemeOps.ApplyBoundChromeSelectable(_rmvButton, t.controlBg, t.danger);
+	            SpzUiThemeOps.EnsureSelectableHitFace(_rmvButton);
+	            // Trash glyph often IS the face — SolidSquare blanks remove under Nomad (mesh select litmus).
+	            if (SpzUiThemeOps.IsAuthoredIconFace(_rmvButton.targetGraphic)) {
+	                if (_rmvButton.targetGraphic is Image rmvFace)
+	                    SpzUiThemeOps.ApplyBoundChromeGraphic(rmvFace, t.danger);
+	            } else {
+	                SpzUiThemeOps.ApplyBoundChromeSelectable(_rmvButton, t.controlBg, t.danger);
+	            }
 	            foreach (var tmp in _rmvButton.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
 	                if (tmp != null)
 	                    SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);

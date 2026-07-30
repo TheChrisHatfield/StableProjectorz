@@ -178,11 +178,17 @@ namespace spz {
 
 	    static void ThemeDecisionButton(Button btn, Color fill, SpzUiThemeOps.ThemeTokens t) {
 	        if (btn == null) return;
-	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, fill, t.accent);
-	        if (btn.targetGraphic is Image face) {
-	            SpzUiThemeOps.ApplyRoundedControlSprite(face, markEligible: true);
-	            face.preserveAspect = false;
-	            face.raycastTarget = true;
+	        SpzUiThemeOps.EnsureSelectableHitFace(btn);
+	        if (SpzUiThemeOps.IsAuthoredIconFace(btn.targetGraphic)) {
+	            if (btn.targetGraphic is Image glyph)
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(glyph, fill);
+	        } else {
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, fill, t.accent);
+	            if (btn.targetGraphic is Image face) {
+	                SpzUiThemeOps.ApplyRoundedControlSprite(face, markEligible: true);
+	                face.preserveAspect = false;
+	                face.raycastTarget = true;
+	            }
 	        }
 	        var label = btn.GetComponentInChildren<TextMeshProUGUI>(true);
 	        if (label != null)
