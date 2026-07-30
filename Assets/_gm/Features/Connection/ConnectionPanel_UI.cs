@@ -283,7 +283,7 @@ namespace spz {
 	        // Apply Nomad tracking/outline without replacing status RGB.
 	        if (_dim_text != null && SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            Color status = _dim_text.color;
-	            SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(_dim_text, status, 11f);
+	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(_dim_text, status, 11f);
 	            _dim_text.color = status;
 	        }
 	        if (_connectionIcon != null) {
@@ -304,6 +304,18 @@ namespace spz {
 	                SpzUiThemeOps.ApplyBoundChromeTmp(_ip_text.textComponent, t.textPrimary);
 	            if (_ip_text.placeholder is TMPro.TMP_Text ph)
 	                SpzUiThemeOps.ApplyBoundChromeTmp(ph, t.textMuted);
+	        }
+	        if (_port_text != null) {
+	            var portField = _port_text.GetComponentInChildren<TMP_InputField>(true);
+	            if (portField != null) {
+	                var portBg = portField.GetComponent<Image>();
+	                if (portBg != null)
+	                    SpzUiThemeOps.ApplyBoundChromeGraphic(portBg, t.fieldBg);
+	                if (portField.textComponent != null)
+	                    SpzUiThemeOps.ApplyBoundChromeTmp(portField.textComponent, t.textPrimary);
+	                if (portField.placeholder is TMPro.TMP_Text portPh)
+	                    SpzUiThemeOps.ApplyBoundChromeTmp(portPh, t.textMuted);
+	            }
 	        }
 	        if (_resetToDefault_button != null) {
 	            SpzUiThemeOps.EnsureSelectableHitFace(_resetToDefault_button);
