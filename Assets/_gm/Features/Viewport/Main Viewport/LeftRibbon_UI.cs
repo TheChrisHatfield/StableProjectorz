@@ -378,8 +378,10 @@ namespace spz {
 	    }
 
 	    static void ThemeTmp(TextMeshProUGUI tmp, Color color) {
-	        if (tmp != null)
-	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, color);
+	        if (tmp == null) return;
+	        // Depth numerals — DialValue + no raycast so overflow cannot steal dial hits (CN/gen path).
+	        SpzUiThemeOps.ApplyBoundChromeDialValueTmp(tmp, color, 14f);
+	        tmp.raycastTarget = false;
 	    }
 
 	    static void ThemeCircleSlider(CircleSlider_Snapping_UI slider, SpzUiThemeOps.ThemeTokens t) {
