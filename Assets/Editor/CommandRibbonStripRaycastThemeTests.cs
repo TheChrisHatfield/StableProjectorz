@@ -37,6 +37,8 @@ public sealed class CommandRibbonStripRaycastThemeTests {
 		Assert.That(nomad, Is.GreaterThan(leave));
 		string leaveBody = src.Substring(leave, nomad - leave);
 		Assert.That(leaveBody, Does.Not.Contain("ClearStripTabNonFaceRaycasts"));
+		Assert.That(leaveBody, Does.Not.Contain("EnsureStripTabHitFace"),
+			"Leave must not Ensure TabBg after Restore SPZ (sticky synthetic face)");
 		Assert.That(src.IndexOf("ClearStripTabNonFaceRaycasts(cell)", nomad, System.StringComparison.Ordinal), Is.GreaterThan(0));
 	}
 
