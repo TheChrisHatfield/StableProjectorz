@@ -215,7 +215,10 @@ namespace spz {
 			}
 			if (fieldOfView.HasValue) {
 				float f = Mathf.Clamp(fieldOfView.Value, 1f, 179f);
-				cam.orthographic = false;
+				// Do not force perspective when only FOV is sent for an ortho camera.
+				if (orthographic == false || (orthographic == null && !cam.orthographic)) {
+					cam.orthographic = false;
+				}
 				vc.fovMgr.SetFieldOfView(f);
 				any = true;
 			}
@@ -650,6 +653,8 @@ namespace spz {
 			var camera = cameras.GetViewCamera(cameraIndex);
 			if (camera == null || !camera.gameObject.activeInHierarchy) return null;
 			
+			if (camera.fovMgr != null && camera.fovMgr._trueCameraFov >= 1f && camera.fovMgr._trueCameraFov <= 179f)
+				return camera.fovMgr._trueCameraFov;
 			if (camera.myCamera != null) {
 				return camera.myCamera.fieldOfView;
 			}
@@ -1304,8 +1309,9 @@ namespace spz {
 			var saveMGR = Save_MGR.instance;
 			if (saveMGR == null) return false;
 			
+			// SaveProjectionTextures is void/async (file dialog); success means save actually started.
 			saveMGR.SaveProjectionTextures(isDilate);
-			return true;
+			return saveMGR._isSaving;
 		}
 		
 		/// <summary>
@@ -1317,8 +1323,9 @@ namespace spz {
 			var saveMGR = Save_MGR.instance;
 			if (saveMGR == null) return false;
 			
+			// SaveViewTextures is void/async (file dialog); success means save actually started.
 			saveMGR.SaveViewTextures();
-			return true;
+			return saveMGR._isSaving;
 		}
 		
 		// ============================================
@@ -1849,7 +1856,7 @@ namespace spz {
 		/// (same data as separate spz.cmd.* calls; for add-on ergonomics).
 		/// </summary>
 		public void PopulateAddonContext(JObject root) {
-			root["success"] = true;
+			root["success"] = _isInitialized;
 			root["fast_path_ready"] = _isInitialized;
 			root["viewport_camera_count"] = GetCameraCount();
 			root["total_mesh_count"] = GetTotalMeshCount();
