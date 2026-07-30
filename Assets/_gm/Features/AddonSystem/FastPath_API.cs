@@ -1314,6 +1314,7 @@ namespace spz {
 			
 			var saveMGR = Save_MGR.instance;
 			if (saveMGR == null) return false;
+			if (saveMGR._isSaving || saveMGR._isLoading) return false;
 			
 			// SaveProjectionTextures is void/async (file dialog); success means save actually started.
 			saveMGR.SaveProjectionTextures(isDilate);
@@ -1328,6 +1329,7 @@ namespace spz {
 			
 			var saveMGR = Save_MGR.instance;
 			if (saveMGR == null) return false;
+			if (saveMGR._isSaving || saveMGR._isLoading) return false;
 			
 			// SaveViewTextures is void/async (file dialog); success means save actually started.
 			saveMGR.SaveViewTextures();
@@ -2029,8 +2031,9 @@ namespace spz {
 			if (index < 0) return false;
 			if (BrushAlphas_MGR.instance == null) return false;
 			if (BrushAlphas_MGR.instance.AllEntries.Count == 0) return false;
+			if (index >= BrushAlphas_MGR.instance.AllEntries.Count) return false;
 			BrushAlphas_MGR.instance.CurrentIndex = index;
-			return true;
+			return BrushAlphas_MGR.instance.CurrentIndex == index;
 		}
 
 		public bool SetActivePaintLayerIndex(int index) {
