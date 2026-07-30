@@ -1623,8 +1623,23 @@ namespace spz {
 			Color face = toggle.isOn
 				? Color.Lerp(t.controlBg, t.accent, 0.14f)
 				: t.controlBg;
-			// Flat tool radios — Compact labels; avoid a≈0 SolidSquare faces that kill All/Enabled/Disabled hits.
-			SpzUiThemeOps.ThemeFlatToolToggle(toggle, face, t.accent, toggle.isOn ? t.textPrimary : t.textMuted);
+			// Flat fill for the pill — but not ThemeFlatToolToggle: CompactToolLabel truncates "Disabled" → DISABLE□.
+			SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, face, t.accent);
+			if (toggle.targetGraphic is Image bg) {
+				bg.color = face;
+				bg.raycastTarget = true;
+			}
+			var label = toggle.transform.Find("Label")?.GetComponent<TextMeshProUGUI>();
+			if (label != null) {
+				float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(label, 14f);
+				SpzUiThemeOps.ApplyBoundChromeTmp(label, toggle.isOn ? t.textPrimary : t.textMuted, basePt);
+				label.enableWordWrapping = false;
+				label.overflowMode = TextOverflowModes.Ellipsis;
+				label.fontStyle = FontStyles.Normal;
+				label.characterSpacing = 0f;
+				label.maxVisibleCharacters = int.MaxValue;
+			}
+			SpzUiThemeOps.ClearNonFaceRaycastsForTheme(toggle);
 		}
 
 		void ThemeAddonListItem(GameObject item, SpzUiThemeOps.ThemeTokens t) {

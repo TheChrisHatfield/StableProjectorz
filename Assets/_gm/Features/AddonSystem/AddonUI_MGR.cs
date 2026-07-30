@@ -1766,8 +1766,12 @@ namespace spz {
 			var dropdownRect = dropdownObj.AddComponent<RectTransform>();
 			dropdownRect.sizeDelta = new Vector2(200, 40);
 			// Ensure entire row can receive pointer events (not only inner field).
+			// Null sprite Images often fail raycasts — assign SolidRect with near-clear alpha.
 			var rowBg = dropdownObj.AddComponent<Image>();
+			rowBg.sprite = UiRuntimeSprites.SolidRect;
+			rowBg.type = Image.Type.Simple;
 			rowBg.color = new Color(0f, 0f, 0f, 0.001f);
+			rowBg.raycastTarget = true;
 			
 			// Add label
 			var labelObj = new GameObject("Label");
