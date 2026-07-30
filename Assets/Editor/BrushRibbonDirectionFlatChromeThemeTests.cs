@@ -210,6 +210,20 @@ public sealed class BrushRibbonDirectionFlatChromeThemeTests {
 	}
 
 	[Test]
+	public void LeavePath_SourceRestoresBucketAndTrashIconRoots() {
+		string path = System.IO.Path.GetFullPath(System.IO.Path.Combine(
+			Application.dataPath,
+			"_gm/Features/Paint/BrushRibbon_UI/BrushRibbon_UI.cs"));
+		string src = System.IO.File.ReadAllText(path);
+		int leave = src.IndexOf("if (!SpzUiThemeOps.ShouldRecolorBoundChrome)", System.StringComparison.Ordinal);
+		Assert.That(leave, Is.GreaterThan(0));
+		int themed = src.IndexOf("var t = SpzUiThemeOps.Active;", leave, System.StringComparison.Ordinal);
+		string body = src.Substring(leave, themed - leave);
+		Assert.That(body, Does.Contain("RestoreBoundChromeUnder(_bucketFill.IconRoot)"));
+		Assert.That(body, Does.Contain("RestoreBoundChromeUnder(_deleteColorsButton.IconRoot)"));
+	}
+
+	[Test]
 	public void ThemeToolToggleReplacesSlicedBevelWithFlatSimpleAndHidesTick() {
 		var root = new GameObject("BrushDirFlatChrome");
 		root.SetActive(false);
