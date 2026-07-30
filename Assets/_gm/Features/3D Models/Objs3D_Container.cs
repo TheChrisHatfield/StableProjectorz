@@ -143,6 +143,8 @@ namespace spz {
 
 	    //this will prevent issues with depth-testing (when applying projections, painting, etc etc).
 	    void RescaleModel_fitIntoVolume(){
+	        // Always clear prior fit so a failed/empty Init cannot leave a stale factor for GO export undo.
+	        currModelRoot_scaleAfterImport = 1f;
 	        currModelRootGO.transform.rotation = Quaternion.identity;
 	        currModelRootGO.transform.localScale = Vector3.one;//important, before calculating the bounds. Else their sizes would be affected.
 	        currModelRootGO.transform.position = Vector3.zero;
