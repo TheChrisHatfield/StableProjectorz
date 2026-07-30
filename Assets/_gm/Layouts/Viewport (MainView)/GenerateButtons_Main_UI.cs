@@ -216,6 +216,15 @@ namespace spz {
 	    void ApplyThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
+	            RestoreGenButton(_generateART_button);
+	            RestoreGenButton(_generateBG_button);
+	            RestoreGenButton(_generate3D_button);
+	            RestoreGenButton(_generate3D_retexture_button);
+	            RestoreGenButton(_cancelGeneration_button);
+	            if (_deleteLast_button != null) {
+	                var delBtn = _deleteLast_button.GetComponent<Button>();
+	                RestoreGenButton(delBtn);
+	            }
 	            RefreshColors_of_GenArt_buttons();
 	            return;
 	        }
@@ -267,6 +276,11 @@ namespace spz {
 	            // GEN/ART stacked caps: strip tracking 18 overflows the gen column (FULL/SRN NarrowDock litmus).
 	            SpzUiThemeOps.ApplyBoundChromeNarrowDockLabelTmp(label, t.textPrimary, 14f);
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
+	    }
+
+	    static void RestoreGenButton(Button btn) {
+	        if (btn != null)
+	            SpzUiThemeOps.RestoreBoundChromeUnder(btn.transform);
 	    }
 
 	    void UpdateTooltips_GenButtons(Button genArt, Button genBG, Button gen3D, Button gen3D_retex){
