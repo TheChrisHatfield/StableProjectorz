@@ -85,8 +85,14 @@ namespace spz {
 	        }
 	        if (_name != null)
 	            SpzUiThemeOps.ApplyBoundChromeTmp(_name, t.textPrimary);
-	        if (_rmvButton != null)
+	        if (_rmvButton != null) {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_rmvButton, t.controlBg, t.danger);
+	            foreach (var tmp in _rmvButton.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
+	                if (tmp != null)
+	                    SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+	            }
+	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_rmvButton);
+	        }
 	    }
 
 
