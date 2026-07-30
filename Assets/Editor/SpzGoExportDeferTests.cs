@@ -69,5 +69,9 @@ public sealed class SpzGoExportDeferTests {
 		string src = System.IO.File.ReadAllText(path);
 		Assert.That(src, Does.Contain("Save_MGR unavailable during texture write"),
 			"TCP export defer must fail closed if Save_MGR disappears mid-write.");
+		Assert.That(src, Does.Contain(".spz_go_ready"),
+			"TCP export defer must require Blender auto-import ready stamp.");
+		Assert.That(src, Does.Contain("ready stamp missing"),
+			"TCP export must fail closed when .spz_go_ready is absent after save idle.");
 	}
 }
