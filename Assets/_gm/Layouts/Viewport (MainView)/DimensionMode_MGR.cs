@@ -115,6 +115,16 @@ namespace spz {
 	    void ApplyThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
+	            if (_choicesPanel_rectTransf != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_choicesPanel_rectTransf);
+	            RestoreDimChoice(_3d_choice_button);
+	            RestoreDimChoice(_sd_choice_button);
+	            RestoreDimChoice(_uv_choice_button);
+	            RestoreDimChoice(_bg_choice_button);
+	            if (_mainChoiceHoverSurf != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_mainChoiceHoverSurf.transform);
+	            if (_mainChoice_text != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_mainChoice_text.transform);
 	            ApplyAuthoredSelectionColors();
 	            return;
 	        }
@@ -177,6 +187,11 @@ namespace spz {
 	        SpzUiThemeOps.EnsureSelectableHitFace(btn);
 	        if (btn.targetGraphic != null)
 	            btn.targetGraphic.raycastTarget = true;
+	    }
+
+	    static void RestoreDimChoice(Button btn) {
+	        if (btn != null)
+	            SpzUiThemeOps.RestoreBoundChromeUnder(btn.transform);
 	    }
 
 	    static void ApplyFlatDiscsUnder(Transform root, bool selected, SpzUiThemeOps.ThemeTokens t) {
