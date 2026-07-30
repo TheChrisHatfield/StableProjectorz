@@ -252,10 +252,23 @@ namespace spz {
 		}
 
 		void ApplyThemeTokens() {
+			// ApplyContextMenuChrome self-silos (restore on builtin); solid-square face also gated.
 			SpzUiThemeOps.ApplyContextMenuChrome(gameObject);
+			if (!SpzUiThemeOps.ShouldRecolorBoundChrome)
+				return;
 			var bg = GetComponent<Image>();
 			if (bg != null)
 				SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
+			var t = SpzUiThemeOps.Active;
+			foreach (var btn in GetComponentsInChildren<Button>(true)) {
+				if (btn == null) continue;
+				SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+				foreach (var tmp in btn.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
+					if (tmp != null)
+						SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+				}
+				SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
+			}
 		}
 
 		void Update() {
