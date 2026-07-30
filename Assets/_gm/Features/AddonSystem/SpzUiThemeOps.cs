@@ -2185,7 +2185,19 @@ namespace spz {
 			foreach (var text in root.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 				if (text == null)
 					continue;
-				ApplyBoundChromeTmp(text, tokens.textPrimary);
+				if (text.GetComponentInParent<TMP_InputField>(true) != null) {
+					ApplyBoundChromeTmp(text, tokens.textPrimary);
+					continue;
+				}
+				if (text.GetComponentInParent<CircleSlider_Snapping_UI>(true) != null) {
+					ApplyBoundChromeDialValueTmp(text, tokens.textPrimary, 16f);
+					continue;
+				}
+				if (text.GetComponentInParent<Button>(true) != null
+				    || text.GetComponentInParent<Toggle>(true) != null)
+					ApplyBoundChromeCompactToolLabelTmp(text, tokens.textPrimary, 11f);
+				else
+					ApplyBoundChromeTmp(text, tokens.textPrimary);
 			}
 
 			foreach (var toggle in root.GetComponentsInChildren<Toggle>(true)) {
