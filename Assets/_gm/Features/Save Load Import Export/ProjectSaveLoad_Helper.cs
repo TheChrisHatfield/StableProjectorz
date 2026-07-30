@@ -27,13 +27,31 @@ namespace spz {
 
 
 	    public void SaveProject( Action<string> saveFinalTex,  Action<string> onResultMessage){
+	        // Do not StopAllCoroutines while headless export owns final-composite / _isSaving —
+	        // that orphans texture encode and makes deferred RPC report false success.
+	        var sm = Save_MGR.instance;
+	        if (sm != null && sm._isSaving) {
+		        onResultMessage?.Invoke("Can't save project while an export/save is still writing textures.");
+		        saveFinalTex?.Invoke(null);
+		        return;
+	        }
 	        StopAllCoroutines();
 	        StartCoroutine(SaveProj_crtn(saveFinalTex, onResultMessage));
 	    }
 
 
 	    public void Save_FinalCompositeTexture(Action saveFinalTex){
-	        if(_finalComposite_crtn != null){ StopCoroutine(_finalComposite_crtn); } 
+	        if(_finalComposite_crtn != null){
+		        // Stopping mid-flight orphans Export3D_with_textures_ToPath's texture encode while
+		        // CoRespondWhenProjectSaveIdle still waits on shared _isSaving.
+		        var sm = Save_MGR.instance;
+		        if (sm != null && sm._isSaving) {
+			        UnityEngine.Debug.LogWarning(
+				        "[ProjectSaveLoad_Helper] Refusing to restart final-composite while a save/export is in progress.");
+			        return;
+		        }
+		        StopCoroutine(_finalComposite_crtn);
+	        }
 	        _finalComposite_crtn = StartCoroutine( Save_FinalCompositeTexture_crtn(saveFinalTex) );
 	    }
 
@@ -113,9 +131,20 @@ namespace spz {
 	        // This is important, in case the spz file gets corrupted. At least the user will have the png:
 	        Action onSaveFinalTex =  ()=>saveFinalTexs( spz.filepath_dataDir + "/FINAL_COMPOSITE_4K.png" );
         
-	        if(_finalComposite_crtn != null){ StopCoroutine(_finalComposite_crtn); } 
-	        _finalComposite_crtn = StartCoroutine( Save_FinalCompositeTexture_crtn(onSaveFinalTex) );
-	        yield return _finalComposite_crtn;
+	        if(_finalComposite_crtn != null){
+		        var smBusy = Save_MGR.instance;
+		        if (smBusy != null && smBusy._isSaving) {
+			        UnityEngine.Debug.LogWarning(
+				        "[ProjectSaveLoad_Helper] Project save: final-composite already owned by an in-progress export; skipping restart.");
+		        } else {
+			        StopCoroutine(_finalComposite_crtn);
+			        _finalComposite_crtn = StartCoroutine( Save_FinalCompositeTexture_crtn(onSaveFinalTex) );
+			        yield return _finalComposite_crtn;
+		        }
+	        } else {
+		        _finalComposite_crtn = StartCoroutine( Save_FinalCompositeTexture_crtn(onSaveFinalTex) );
+		        yield return _finalComposite_crtn;
+	        }
 
 	        _last_saveFilepath = saveFile;
 	        _onMade_FinalCompositeImg?.Invoke();
