@@ -229,6 +229,7 @@ namespace spz {
 	            rt.offsetMin = Vector2.zero;
 	            rt.offsetMax = Vector2.zero;
 	            face = go.AddComponent<Image>();
+	            go.AddComponent<SpzUiThemeSyntheticHitFace>();
 	            face.sprite = UiRuntimeSprites.SolidRect;
 	            face.type = Image.Type.Simple;
 	            face.preserveAspect = false;
