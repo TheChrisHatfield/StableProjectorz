@@ -84,8 +84,12 @@ namespace spz {
 	                    BrushRibbon_UI_Direction.ApplyPaintSmudgeEraseGaps(d, nomadGaps: false);
 	            });
 	            RestoreSelectableChrome(_bucketFill != null ? _bucketFill.Button : null);
+	            if (_bucketFill != null && _bucketFill.IconRoot != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_bucketFill.IconRoot);
 	            RestoreSelectableChrome(_invertMask != null ? _invertMask.Button : null);
 	            RestoreSelectableChrome(_deleteColorsButton != null ? _deleteColorsButton.Button : null);
+	            if (_deleteColorsButton != null && _deleteColorsButton.IconRoot != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_deleteColorsButton.IconRoot);
 	            RestoreSelectableChrome(_eyeDropperToggle);
 	            if (_pressureTabletMode != null)
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_pressureTabletMode.transform);
