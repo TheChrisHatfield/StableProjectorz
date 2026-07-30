@@ -272,9 +272,11 @@ namespace spz {
 	void Start() {
 		if (_openPanel_button != null) {
 			_openPanel_button.onClick.AddListener(OpenPanel);
+			AttachTooltip(_openPanel_button.gameObject, "Open the Add-on Manager.");
 		}
 		if (_closePanel_button != null) {
 			_closePanel_button.onClick.AddListener(ClosePanel);
+			AttachTooltip(_closePanel_button.gameObject, "Close the Add-on Manager.");
 		}
 		if (_installFromFile_button != null) {
 			_installFromFile_button.onClick.AddListener(OnInstallFromFile);
@@ -285,6 +287,8 @@ namespace spz {
 		
 		// Always run full connectivity check (panel + list parent + ref layout), not only _panel
 		CreatePanelIfNeeded();
+		// Prefab-assigned header buttons / recovered shells need tips even if OpenPanel never runs this session.
+		EnsureChromeTooltips();
 		// Synchronous finish: no yield — avoids racing other coroutines that call OpenPanel the same frame.
 		FinishStartBootstrap();
 	}
@@ -334,6 +338,8 @@ namespace spz {
 				if (_saveAddonSettings_button != null) {
 					_saveAddonSettings_button.onClick.RemoveListener(OnSaveAddonSettings);
 					_saveAddonSettings_button.onClick.AddListener(OnSaveAddonSettings);
+					AttachTooltip(_saveAddonSettings_button.gameObject,
+						"Persist enabled add-ons and Preferences (e.g. Show in Command Ribbon) for the next launch.");
 				}
 				return;
 			}
@@ -429,6 +435,8 @@ namespace spz {
 			tgl.graphic = ckI;
 			tgl.onValueChanged.AddListener(OnRememberEnabledAddonsToggleChanged);
 			_rememberEnabledAddonToggle = tgl;
+			AttachTooltip(toggleContainer,
+				"When on, Save settings restores which add-ons were enabled on the next launch.");
 			return row;
 		}
 
@@ -602,7 +610,7 @@ namespace spz {
 		titleText.overflowMode = TMPro.TextOverflowModes.Overflow;
 		titleText.raycastTarget = false;
 		
-		void AddBarButton(Transform parent, string goName, string label, Color bg, Color fg, UnityEngine.Events.UnityAction onClick, Vector2 size, out Button outBtn) {
+		void AddBarButton(Transform parent, string goName, string label, Color bg, Color fg, UnityEngine.Events.UnityAction onClick, Vector2 size, out Button outBtn, string tooltip = null) {
 			var go = new GameObject(goName);
 			go.transform.SetParent(parent, false);
 			go.AddComponent<RectTransform>().sizeDelta = size;
@@ -645,21 +653,27 @@ namespace spz {
 			iconImg.color = fg;
 			iconImg.preserveAspect = true;
 			iconImg.raycastTarget = false;
+			AttachTooltip(go, tooltip);
 			outBtn = btn;
 		}
 		
 		AddBarButton(headerObj.transform, "InstallButton", "Install from File", new Color(61f / 255f, 61f / 255f, 61f / 255f, 1f),
-			Color.white, OnInstallFromFile, new Vector2(122, 34), out var installBtn);
+			Color.white, OnInstallFromFile, new Vector2(122, 34), out var installBtn,
+			"Install an add-on from a .zip file into StreamingAssets/Addons.");
 		_installFromFile_button = installBtn;
 		AddBarButton(headerObj.transform, "RefreshButton", "Refresh", new Color(61f / 255f, 61f / 255f, 61f / 255f, 1f),
-			Color.white, RefreshAddonsList, new Vector2(82, 34), out var refreshBtn);
+			Color.white, RefreshAddonsList, new Vector2(82, 34), out var refreshBtn,
+			"Rescan the Addons folder and refresh this list (keeps enable state for add-ons still present).");
 		_refresh_button = refreshBtn;
 		AddBarButton(headerObj.transform, "LoadAddonsNowButton", "Load addons now", new Color(46f / 255f, 204f / 255f, 113f / 255f, 1f),
-			Color.white, OnLoadAddonsNow, new Vector2(126, 34), out _loadAddonsNow_button);
+			Color.white, OnLoadAddonsNow, new Vector2(126, 34), out _loadAddonsNow_button,
+			"Ask Python to load every currently enabled add-on now (register / create panels).");
 		AddBarButton(headerObj.transform, "SaveAddonSettingsButton", "Save settings", new Color(242f / 255f, 202f / 255f, 80f / 255f, 1f),
-			new Color(0.12f, 0.12f, 0.14f, 1f), OnSaveAddonSettings, new Vector2(118, 34), out _saveAddonSettings_button);
+			new Color(0.12f, 0.12f, 0.14f, 1f), OnSaveAddonSettings, new Vector2(118, 34), out _saveAddonSettings_button,
+			"Persist enabled add-ons and Preferences (e.g. Show in Command Ribbon) for the next launch.");
 		AddBarButton(headerObj.transform, "RunWithAddonsButton", "Restart with addons", new Color(52f / 255f, 152f / 255f, 219f / 255f, 1f),
-			Color.white, OnRestartWithAddons, new Vector2(142, 34), out _restartWithAddons_button);
+			Color.white, OnRestartWithAddons, new Vector2(142, 34), out _restartWithAddons_button,
+			"Quit and relaunch StableProjectorz with the add-on Python server (Run_with_Addons).");
 		_closePanel_button = null;
 		
 		GameObject filterBarObj = new GameObject("FilterBar");
@@ -929,6 +943,7 @@ namespace spz {
 			CreatePanelIfNeeded();
 			TryAddRememberPreferenceRowIfMissing();
 			TryEnsureSaveSettingsButton();
+			EnsureChromeTooltips();
 			SyncRememberEnabledToggleFromPrefs();
 			if (!_draftDirty)
 				SeedDraftFromLiveAddons();
@@ -1204,7 +1219,53 @@ namespace spz {
 				}
 				ApplyThemeTokens();
 			});
+			string tip = filterValue == 0
+				? "Show all installed add-ons."
+				: filterValue == 1
+					? "Show only enabled (loaded) add-ons."
+					: "Show only disabled add-ons.";
+			AttachTooltip(toggleObj, tip);
 			return toggleObj;
+		}
+
+		/// <summary>Hover tip via shared <see cref="CanShowTooltip_UI"/> (respects Settings → Allow tooltips).</summary>
+		static void AttachTooltip(GameObject go, string tip) {
+			if (go == null || string.IsNullOrEmpty(tip))
+				return;
+			var tipUi = go.GetComponent<CanShowTooltip_UI>() ?? go.AddComponent<CanShowTooltip_UI>();
+			tipUi.set_overrideMessage(tip);
+		}
+
+		/// <summary>Re-apply tips on header/remember chrome recovered from an older panel shell.</summary>
+		void EnsureChromeTooltips() {
+			if (_installFromFile_button != null)
+				AttachTooltip(_installFromFile_button.gameObject,
+					"Install an add-on from a .zip file into StreamingAssets/Addons.");
+			if (_refresh_button != null)
+				AttachTooltip(_refresh_button.gameObject,
+					"Rescan the Addons folder and refresh this list (keeps enable state for add-ons still present).");
+			if (_loadAddonsNow_button != null)
+				AttachTooltip(_loadAddonsNow_button.gameObject,
+					"Ask Python to load every currently enabled add-on now (register / create panels).");
+			if (_saveAddonSettings_button != null)
+				AttachTooltip(_saveAddonSettings_button.gameObject,
+					"Persist enabled add-ons and Preferences (e.g. Show in Command Ribbon) for the next launch.");
+			if (_restartWithAddons_button != null)
+				AttachTooltip(_restartWithAddons_button.gameObject,
+					"Quit and relaunch StableProjectorz with the add-on Python server (Run_with_Addons).");
+			if (_openPanel_button != null)
+				AttachTooltip(_openPanel_button.gameObject, "Open the Add-on Manager.");
+			if (_closePanel_button != null)
+				AttachTooltip(_closePanel_button.gameObject, "Close the Add-on Manager.");
+			if (_rememberEnabledAddonToggle != null)
+				AttachTooltip(_rememberEnabledAddonToggle.gameObject,
+					"When on, Save settings restores which add-ons were enabled on the next launch.");
+			if (_filterAllToggle != null)
+				AttachTooltip(_filterAllToggle.gameObject, "Show all installed add-ons.");
+			if (_filterEnabledToggle != null)
+				AttachTooltip(_filterEnabledToggle.gameObject, "Show only enabled (loaded) add-ons.");
+			if (_filterDisabledToggle != null)
+				AttachTooltip(_filterDisabledToggle.gameObject, "Show only disabled add-ons.");
 		}
 		
 		/// <summary>
@@ -1811,6 +1872,8 @@ namespace spz {
 			bool draftOn = GetDraftEnabled(addonId, addonInfo.isEnabled);
 			rowToggle.SetIsOnWithoutNotify(draftOn);
 			ApplyStatusDialVisual(rowToggle, draftOn);
+			AttachTooltip(toggleObj,
+				"Enable or disable this add-on. Enabled add-ons load (Python register) and can show a Command Ribbon tab.");
 
 			var nameObj = new GameObject("Name");
 			nameObj.transform.SetParent(headerObj.transform, false);
@@ -1855,6 +1918,8 @@ namespace spz {
 			prefsBtnLabel.alignment = TextAlignmentOptions.Center;
 			prefsBtnLabel.color = new Color(0.88f, 0.88f, 0.9f, 1f);
 			prefsBtnLabel.raycastTarget = false;
+			AttachTooltip(prefsBtnObj,
+				"Expand host preferences for this add-on (Show in Command Ribbon, and future settings).");
 
 			var removeBtnObj = new GameObject("RemoveButton");
 			removeBtnObj.transform.SetParent(headerObj.transform, false);
@@ -1884,6 +1949,7 @@ namespace spz {
 			removeBtnTextComp.color = new Color(0.96f, 0.44f, 0.44f, 0.9f);
 			removeBtnTextComp.raycastTarget = false;
 			removeBtn.onClick.AddListener(() => OnRemoveAddon(addonId));
+			AttachTooltip(removeBtnObj, "Uninstall this add-on from StreamingAssets/Addons (cannot be undone).");
 
 			var prefsBody = new GameObject("PreferencesBody");
 			prefsBody.transform.SetParent(itemObj.transform, false);
@@ -1950,6 +2016,9 @@ namespace spz {
 			ribbonLabel.enableWordWrapping = false;
 			ribbonLabel.overflowMode = TextOverflowModes.Ellipsis;
 			ribbonLabel.raycastTarget = false;
+			AttachTooltip(ribbonToggleObj, ribbonOnly
+				? "RibbonOnlyFullscreen uses the viewport Gen Art dock — it never appears as a Command Ribbon tab."
+				: "When on, an enabled add-on shows a Command Ribbon tab. When off, it stays active but the tab is hidden.");
 
 			void SetItemExpandedHeight(bool expanded) {
 				itemLayout.preferredHeight = expanded ? 78f : 40f;
