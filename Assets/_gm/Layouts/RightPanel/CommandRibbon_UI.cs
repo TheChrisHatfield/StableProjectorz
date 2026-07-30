@@ -425,18 +425,26 @@ namespace spz {
 			    string cn = ch.name ?? "";
 			    if (!cn.StartsWith("AddonPanel_", StringComparison.Ordinal)) continue;
 			    ch.gameObject.SetActive(true);
-			    for (int j = 0; j < ch.childCount; j++) {
-				    Transform w = ch.GetChild(j);
-				    if (w == null) continue;
-				    string wn = w.name ?? "";
-				    if (string.Equals(wn, "Title", StringComparison.Ordinal)) continue;
-				if (wn.StartsWith("Button_", StringComparison.Ordinal)
-				        || wn.StartsWith("TextInput_", StringComparison.Ordinal)
-				        || wn.StartsWith("Slider_", StringComparison.Ordinal)
-				        || wn.StartsWith("Dropdown_", StringComparison.Ordinal)
-				        || wn.StartsWith("Toggle_", StringComparison.Ordinal))
-					    return true;
-			    }
+			    if (AddonPanelHasWidgetDescendant(ch))
+				    return true;
+		    }
+		    return false;
+	    }
+
+	    static bool AddonPanelHasWidgetDescendant(Transform panel) {
+		    if (panel == null) return false;
+		    var transforms = panel.GetComponentsInChildren<Transform>(true);
+		    for (int i = 0; i < transforms.Length; i++) {
+			    Transform w = transforms[i];
+			    if (w == null || w == panel) continue;
+			    string wn = w.name ?? "";
+			    if (string.Equals(wn, "Title", StringComparison.Ordinal)) continue;
+			    if (wn.StartsWith("Button_", StringComparison.Ordinal)
+			        || wn.StartsWith("TextInput_", StringComparison.Ordinal)
+			        || wn.StartsWith("Slider_", StringComparison.Ordinal)
+			        || wn.StartsWith("Dropdown_", StringComparison.Ordinal)
+			        || wn.StartsWith("Toggle_", StringComparison.Ordinal))
+				    return true;
 		    }
 		    return false;
 	    }

@@ -89,6 +89,14 @@ public sealed class AddonRibbonEmptyStateTests {
 			Assert.That(withButton, Is.True, "Button_* child must count as populated UI.");
 
 			UnityEngine.Object.DestroyImmediate(button);
+			var wrap = new GameObject("Content");
+			wrap.transform.SetParent(panel.transform, false);
+			var nested = new GameObject("Button_Nested");
+			nested.transform.SetParent(wrap.transform, false);
+			bool withNested = (bool)method.Invoke(null, new object[] { root.transform });
+			Assert.That(withNested, Is.True, "Nested Button_* under a wrapper must count as populated UI.");
+
+			UnityEngine.Object.DestroyImmediate(wrap);
 			var toggle = new GameObject("Toggle_Show");
 			toggle.transform.SetParent(panel.transform, false);
 			bool withToggle = (bool)method.Invoke(null, new object[] { root.transform });
