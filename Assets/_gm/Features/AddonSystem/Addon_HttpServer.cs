@@ -455,13 +455,22 @@ namespace spz {
 					return prompt;
 				}
 				if (method == "POST" && body != null) {
+					bool any = false;
+					bool ok = true;
 					if (body["positive"] != null) {
-						ExecuteJsonRpc("spz.cmd.set_positive_prompt", new JObject { ["prompt"] = body["positive"] });
+						any = true;
+						var r = ExecuteJsonRpc("spz.cmd.set_positive_prompt", new JObject { ["prompt"] = body["positive"] });
+						ok &= r["success"]?.ToObject<bool>() ?? (r["error"] == null);
 					}
 					if (body["negative"] != null) {
-						ExecuteJsonRpc("spz.cmd.set_negative_prompt", new JObject { ["prompt"] = body["negative"] });
+						any = true;
+						var r = ExecuteJsonRpc("spz.cmd.set_negative_prompt", new JObject { ["prompt"] = body["negative"] });
+						ok &= r["success"]?.ToObject<bool>() ?? (r["error"] == null);
 					}
-					return new JObject { ["success"] = true };
+					if (!any) {
+						return new JObject { ["success"] = false, ["error"] = "positive or negative required" };
+					}
+					return new JObject { ["success"] = ok };
 				}
 			}
 			return new JObject { ["error"] = "Invalid action" };
@@ -628,10 +637,20 @@ namespace spz {
 					["params"] = @params
 				};
 				var response = Addon_SocketServer.instance.ProcessRequestDirect(request);
+				if (response == null) {
+					return new JObject { ["success"] = false, ["error"] = "null JSON-RPC response" };
+				}
+				// ProcessRequestDirect returns full JSON-RPC envelopes; do not drop "error".
+				if (response["error"] != null) {
+					return new JObject {
+						["success"] = false,
+						["error"] = response["error"]
+					};
+				}
 				return response["result"] as JObject ?? new JObject();
 			}
 			
-			return new JObject { ["error"] = "JSON-RPC handler not available" };
+			return new JObject { ["success"] = false, ["error"] = "JSON-RPC handler not available" };
 		}
 		
 		/// <summary>
