@@ -693,18 +693,17 @@ namespace spz {
 	            if (pin == null) continue;
 	            var rootImg = pin.GetComponent<Image>();
 	            if (rootImg != null) {
+	                // Color only — do not ApplyRoundedControlSprite on pin faces (crushes authored POV glyphs).
 	                SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.controlBg);
-	                // Pins may use Simple bevel sprites — force flat soft fill (not only Sliced).
-	                SpzUiThemeOps.ApplyRoundedControlSprite(rootImg, markEligible: true);
-	                rootImg.preserveAspect = false;
 	            }
 	            foreach (var img in pin.GetComponentsInChildren<Image>(true)) {
 	                if (img == null || img == rootImg) continue;
 	                string n = img.gameObject.name ?? "";
-	                // Corner bevel triangles only — never Toggle/product Check glyphs.
+	                // Corner bevel triangles only — never Toggle/product Check glyphs / pin faces.
 	                if (n.IndexOf("triangle", System.StringComparison.OrdinalIgnoreCase) >= 0)
 	                    SpzUiThemeOps.HideAuthoredGraphicForTheme(img);
-	                else if (img.type == Image.Type.Sliced && !SpzUiThemeOps.IsToggleCheckmarkGraphic(img))
+	                else if (img.type == Image.Type.Sliced && !SpzUiThemeOps.IsToggleCheckmarkGraphic(img)
+	                         && n.IndexOf("bevel", System.StringComparison.OrdinalIgnoreCase) >= 0)
 	                    SpzUiThemeOps.FlattenSlicedChromeFace(img);
 	            }
 	            foreach (var tmp in pin.GetComponentsInChildren<TextMeshProUGUI>(true)) {
