@@ -286,10 +286,10 @@ namespace spz {
 	            SpzUiThemeOps.ApplyBoundChromeDialValueTmp(_brushSpacing_text, t.textMuted);
 	            _brushSpacing_text.raycastTarget = false;
 	        }
-	        // "size" caption labels under this control — ReadableBody so Compact truncate cannot clip.
+	        // "size" caption — Compact short chrome word (ReadableBody wrap bloated the 15px header band).
 	        foreach (var tmp in GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp == null || tmp == _brushSize_text || tmp == _brushSpacing_text) continue;
-	            SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, t.textPrimary, 11f);
+	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
 	            tmp.raycastTarget = false;
 	        }
 	    }

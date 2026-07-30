@@ -942,6 +942,32 @@ public sealed class SpzUiThemeOpsTests {
 	}
 
 	[Test]
+	public void EnsureCircleDialSquareLayout_PreservesTallHolderPreferredHeight() {
+		var go = new GameObject("BrushSizeHolder", typeof(RectTransform), typeof(LayoutElement));
+		try {
+			var le = go.GetComponent<LayoutElement>();
+			le.preferredWidth = -1f;
+			le.minHeight = 85f;
+			le.preferredHeight = 85f;
+			le.flexibleWidth = 1f;
+
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				Tokens(("accent", "#F2CA50FF"), ("control_bg", "#292A2EFF")),
+				"replace",
+				out string error), Is.True, error);
+
+			SpzUiThemeOps.EnsureCircleDialSquareLayout(le);
+			Assert.That(le.preferredHeight, Is.EqualTo(85f).Within(0.01f),
+				"Tall brush-size holder must not squash to a square (keeps 'size' caption band)");
+			Assert.That(le.minHeight, Is.EqualTo(85f).Within(0.01f));
+		} finally {
+			UnityEngine.Object.DestroyImmediate(go);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
 	public void BoundChromeDialValueTmpZeroesCharacterSpacingUnderNomad() {
 		var go = new GameObject("NomadDialValue");
 		var tmp = go.AddComponent<TextMeshProUGUI>();

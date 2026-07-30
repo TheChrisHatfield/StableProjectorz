@@ -179,6 +179,12 @@ namespace spz {
 	            // Direction tool cells: ThemeToolToggle owns TMP (hidden under Nomad square litmus).
 	            if (dir != null && IsUnderDirectionToolToggle(tmp.transform, dir))
 	                continue;
+	            // Size dial owns DialValue + Compact "size" caption — BoundChromeTmp tracking would
+	            // re-open spacing and fight the tall-holder layout (100 / size crush litmus).
+	            if (_size != null && tmp.transform.IsChildOf(_size.transform))
+	                continue;
+	            if (tmp.GetComponentInParent<CircleSlider_Snapping_UI>(true) != null)
+	                continue;
 	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
 	        }
 	    }
