@@ -85,8 +85,13 @@ def post_export_view_textures(base_url: str) -> dict:
 
 
 def post_import_3d_model(base_url: str, filepath: str) -> dict:
+    # Assimp + UDIM scan can exceed the default 120s; match Unity long-op budget (~300s).
     return request_json(
-        base_url, "POST", "/api/v1/meshes/import", {"filepath": str(filepath)}
+        base_url,
+        "POST",
+        "/api/v1/meshes/import",
+        {"filepath": str(filepath)},
+        timeout_s=300.0,
     )
 
 

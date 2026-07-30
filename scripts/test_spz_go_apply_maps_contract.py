@@ -26,6 +26,7 @@ class SpzGoApplyMapsContractTests(unittest.TestCase):
 	def test_export_http_timeout_matches_long_texture_write(self):
 		http = HTTP.read_text(encoding="utf-8")
 		self.assertIn("timeout_s=300.0", http)
+		self.assertIn("/api/v1/meshes/import", http)
 
 
 if __name__ == "__main__":

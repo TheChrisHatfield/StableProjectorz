@@ -30,6 +30,8 @@ namespace spz {
 	    public byte[] _modelBytesCache { get; private set; } = null;
 	    public string _modelBytesCache_filename { get; private set; } = "";
 	    public bool _isImportingModel { get; private set; } = false;
+	    /// <summary>Result of the most recently finished import (false if never imported or last run failed).</summary>
+	    public bool _lastImportSucceeded { get; private set; } = false;
 	    public string _path_recentlyExported { get; private set; } = "";
 
 	    public Action _Act_onStartedImporting{ get; set; } = null;// isSuccess,What.
@@ -92,6 +94,7 @@ namespace spz {
 	        string statusMsg = $"Importing failed.\nError: {errorMsg}";
 	        Viewport_StatusText.instance.ShowStatusText(statusMsg, false, 15, true);
 	        Resources.UnloadUnusedAssets();
+	        _lastImportSucceeded = false;
 	        _isImportingModel = false;
 	        _Act_onImportComplete?.Invoke(false, null);
 	    }
@@ -101,6 +104,7 @@ namespace spz {
         
 	        Resources.UnloadUnusedAssets();
 	        if(loadedRoot == null){
+		        _lastImportSucceeded = false;
 		        _isImportingModel = false;
 		        _Act_onImportComplete?.Invoke(false, null);
 		        return;
@@ -112,6 +116,7 @@ namespace spz {
 
 	        bool success = o3d.Init(loadedRoot);
 	        if(!success){
+		        _lastImportSucceeded = false;
 		        _isImportingModel = false;
 		        _Act_onImportComplete?.Invoke(false, _latestSuccessRoot);
 		        return;
@@ -152,6 +157,7 @@ namespace spz {
 	        }
 
 	        Viewport_StatusText.instance.ShowStatusText(msg, false, dur, false);
+	        _lastImportSucceeded = true;
 	        _isImportingModel = false;
 	        _Act_onImportComplete?.Invoke(true, _latestSuccessRoot);
 	    }
