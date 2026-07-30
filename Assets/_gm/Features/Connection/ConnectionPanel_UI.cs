@@ -341,6 +341,7 @@ namespace spz {
 	    }
 
 	    void Start(){
+	        if (Coroutines_MGR.instance == null) return;
 	        _connectionCheckCoroutine = Coroutines_MGR.instance.StartCoroutine( CheckConnection(setColorToPending_once:true) );
 	    }
 	}
