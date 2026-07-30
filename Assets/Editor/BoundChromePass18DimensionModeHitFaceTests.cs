@@ -27,6 +27,18 @@ public sealed class BoundChromePass18DimensionModeHitFaceTests {
 	}
 
 	[Test]
+	public void DimensionMode_SourceKeepsMainChoiceHoverRaycast() {
+		string path = System.IO.Path.GetFullPath(System.IO.Path.Combine(
+			Application.dataPath,
+			"_gm/Layouts/Viewport (MainView)/DimensionMode_MGR.cs"));
+		string src = System.IO.File.ReadAllText(path);
+		Assert.That(src, Does.Contain("_mainChoice_text.raycastTarget = false"));
+		Assert.That(src, Does.Contain("_mainChoiceHoverSurf"));
+		Assert.That(src, Does.Contain("hoverImg.raycastTarget = true"),
+			"Main choice open must keep hover sensor Graphic hittable after TMP clear");
+	}
+
+	[Test]
 	public void EnsureThenClearNonFace_KeepsHittableFaceWhenLabelsCleared() {
 		var go = new GameObject("DimChoice", typeof(RectTransform), typeof(Button));
 		try {

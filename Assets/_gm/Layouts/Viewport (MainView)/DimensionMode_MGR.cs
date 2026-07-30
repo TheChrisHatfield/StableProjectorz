@@ -146,6 +146,15 @@ namespace spz {
 	        ApplyReverseOutLabel(_mainChoice_text, t, 22f);
 	        if (_mainChoice_text != null)
 	            _mainChoice_text.raycastTarget = false;
+	        // Main choice opens via hover sensor Graphic — keep that face hittable after TMP clear.
+	        if (_mainChoiceHoverSurf != null) {
+	            var hoverImg = _mainChoiceHoverSurf.GetComponent<Image>();
+	            if (hoverImg != null) {
+	                SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(hoverImg);
+	                hoverImg.enabled = true;
+	                hoverImg.raycastTarget = true;
+	            }
+	        }
 	        ApplyReverseOutLabelsUnder(_3d_choice_button, t);
 	        ApplyReverseOutLabelsUnder(_sd_choice_button, t);
 	        ApplyReverseOutLabelsUnder(_uv_choice_button, t);
