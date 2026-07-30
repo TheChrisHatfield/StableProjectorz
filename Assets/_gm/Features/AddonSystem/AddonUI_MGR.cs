@@ -1261,9 +1261,13 @@ namespace spz {
 				return false;
 			}
 			if (isImport) {
-				bool ok = fp.Import3DModelFromFile(path);
-				SpzGoStatusLine(ok ? "Import OK" : "Import failed (see log)", ok);
-				return ok;
+				bool started = fp.Import3DModelFromFile(path);
+				if (!started) {
+					SpzGoStatusLine("Import failed (see log)", false);
+					return false;
+				}
+				StartCoroutine(CoSpzGoFinishImportWhenIdle());
+				return true;
 			}
 			// Mesh write is sync; albedo/AO encode continues under Save_MGR._isSaving.
 			// Returning true here only means "started" — do not fall back to Python mid-write.
@@ -1297,6 +1301,24 @@ namespace spz {
 			else if (!ok)
 				UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO native export: texture write still in progress after timeout.");
 			SpzGoStatusLine(ok ? "Export OK" : "Export failed (texture write timeout)", ok);
+		}
+
+		IEnumerator CoSpzGoFinishImportWhenIdle() {
+			SpzGoStatusLine("Import: loading mesh…", true);
+			const float timeoutSec = 300f;
+			float elapsed = 0f;
+			var mh = ModelsHandler_3D.instance;
+			while (mh != null && mh._isImportingModel && elapsed < timeoutSec) {
+				elapsed += Time.unscaledDeltaTime;
+				yield return null;
+				mh = ModelsHandler_3D.instance;
+			}
+			bool ok = mh != null && !mh._isImportingModel && mh._lastImportSucceeded;
+			if (mh == null)
+				UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO native import: ModelsHandler unavailable during load.");
+			else if (mh._isImportingModel)
+				UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO native import: still importing after timeout.");
+			SpzGoStatusLine(ok ? "Import OK" : "Import failed (see log)", ok);
 		}
 		
 		void SpzGoStatusLine(string text, bool ok) {

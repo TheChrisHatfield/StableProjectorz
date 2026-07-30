@@ -337,10 +337,13 @@ namespace spz {
 			_pendingResponses[id] = null; // Mark as pending
 			_mainThreadQueue.Enqueue(() => {
 				try {
-					// Headless 3D+textures export starts async texture I/O after the mesh write.
-					// Do not mark success until Save_MGR finishes, or Blender/SPZ GO apply stale maps.
+					// Headless mesh I/O: export waits for texture encode; import waits for Assimp/UDIM complete.
 					if (DefersResponseUntilProjectSaveIdle(method)) {
 						BeginCommandAndRespondWhenProjectSaveIdle(id, method, @params);
+						return;
+					}
+					if (DefersResponseUntilImportIdle(method)) {
+						BeginCommandAndRespondWhenImportIdle(id, method, @params);
 						return;
 					}
 					JObject response = ExecuteCommand(method, @params);
@@ -400,6 +403,14 @@ namespace spz {
 			return string.Equals(method, "spz.cmd.export_3d_with_textures_to_path", StringComparison.Ordinal);
 		}
 
+		/// <summary>
+		/// True when JSON-RPC success must wait for <see cref="ModelsHandler_3D._isImportingModel"/> to clear
+		/// (Assimp load + UDIM scan are async after TryImport returns).
+		/// </summary>
+		public static bool DefersResponseUntilImportIdle(string method) {
+			return string.Equals(method, "spz.cmd.import_3d_model", StringComparison.Ordinal);
+		}
+
 		void BeginCommandAndRespondWhenProjectSaveIdle(string id, string method, JObject @params) {
 			JObject result;
 			try {
@@ -420,6 +431,26 @@ namespace spz {
 			StartCoroutine(CoRespondWhenProjectSaveIdle(id, result));
 		}
 
+		void BeginCommandAndRespondWhenImportIdle(string id, string method, JObject @params) {
+			JObject result;
+			try {
+				result = ExecuteFastPathCommand(method, @params ?? new JObject());
+			} catch (Exception e) {
+				_pendingResponses[id] = CreateErrorResponse(-32603, $"Internal error: {e.Message}", JToken.FromObject(id));
+				return;
+			}
+			bool started = result["success"]?.ToObject<bool>() ?? false;
+			if (!started) {
+				_pendingResponses[id] = new JObject {
+					["jsonrpc"] = "2.0",
+					["result"] = result,
+					["id"] = JToken.FromObject(id)
+				};
+				return;
+			}
+			StartCoroutine(CoRespondWhenImportIdle(id, result));
+		}
+
 		IEnumerator CoRespondWhenProjectSaveIdle(string id, JObject result) {
 			float timeoutSec = COMMAND_TIMEOUT_LONG_OP_MS / 1000f;
 			float elapsed = 0f;
@@ -438,6 +469,36 @@ namespace spz {
 				result["success"] = false;
 				result["error"] = "export to path timed out waiting for texture write";
 				UnityEngine.Debug.LogWarning("[Addon_SocketServer] export_3d_with_textures_to_path: texture write still in progress after timeout.");
+			}
+			_pendingResponses[id] = new JObject {
+				["jsonrpc"] = "2.0",
+				["result"] = result,
+				["id"] = JToken.FromObject(id)
+			};
+		}
+
+		IEnumerator CoRespondWhenImportIdle(string id, JObject result) {
+			float timeoutSec = COMMAND_TIMEOUT_LONG_OP_MS / 1000f;
+			float elapsed = 0f;
+			var mh = ModelsHandler_3D.instance;
+			while (mh != null && mh._isImportingModel && elapsed < timeoutSec) {
+				elapsed += Time.unscaledDeltaTime;
+				yield return null;
+				mh = ModelsHandler_3D.instance;
+			}
+			if (mh == null) {
+				result["success"] = false;
+				result["error"] = "import failed (ModelsHandler unavailable during load)";
+				UnityEngine.Debug.LogWarning("[Addon_SocketServer] import_3d_model: ModelsHandler became null while waiting.");
+			} else if (mh._isImportingModel) {
+				result["success"] = false;
+				result["error"] = "import timed out waiting for Assimp/UDIM load";
+				UnityEngine.Debug.LogWarning("[Addon_SocketServer] import_3d_model: still importing after timeout.");
+			} else if (!mh._lastImportSucceeded) {
+				result["success"] = false;
+				result["error"] = "import failed (Assimp/Init/UDIM)";
+			} else {
+				result["success"] = true;
 			}
 			_pendingResponses[id] = new JObject {
 				["jsonrpc"] = "2.0",

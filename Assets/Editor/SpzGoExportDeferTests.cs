@@ -25,6 +25,24 @@ public sealed class SpzGoExportDeferTests {
 	}
 
 	[Test]
+	public void Import3DModel_DefersResponseUntilImportIdle() {
+		Assert.That(
+			Addon_SocketServer.DefersResponseUntilImportIdle("spz.cmd.import_3d_model"),
+			Is.True,
+			"Blender→SPZ import must not report success before Assimp/UDIM finishes.");
+		Assert.That(Addon_SocketServer.DefersResponseUntilImportIdle("spz.cmd.export_3d_with_textures_to_path"), Is.False);
+	}
+
+	[Test]
+	public void NativeSpzGoImport_WaitsForImportIdleBeforeStatusOk() {
+		var method = typeof(AddonUI_MGR).GetMethod(
+			"CoSpzGoFinishImportWhenIdle",
+			BindingFlags.Instance | BindingFlags.NonPublic);
+		Assert.That(method, Is.Not.Null,
+			"Native Import must finish via CoSpzGoFinishImportWhenIdle so status is not premature.");
+	}
+
+	[Test]
 	public void NativeSpzGoExport_WaitsForSaveIdleBeforeStatusOk() {
 		var method = typeof(AddonUI_MGR).GetMethod(
 			"CoSpzGoFinishExportWhenSaveIdle",
