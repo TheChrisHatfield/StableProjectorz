@@ -316,10 +316,13 @@ namespace spz {
 
 	    // For example, text is being typed into an text prompt, etc.
 	    // Usually we check it before recognising viewport shorcuts like 'R', or 'TAB'.
-	    public static bool isSomeInputFieldActive() 
-	        => EventSystem.current.currentSelectedGameObject != null &&
-	           EventSystem.current.currentSelectedGameObject.GetComponent<TMP_InputField>()!=null &&
-	           EventSystem.current.currentSelectedGameObject.activeInHierarchy;
+	    public static bool isSomeInputFieldActive() {
+	        if (EventSystem.current == null) return false;
+	        var selected = EventSystem.current.currentSelectedGameObject;
+	        return selected != null &&
+	               selected.GetComponent<TMP_InputField>() != null &&
+	               selected.activeInHierarchy;
+	    }
 
 	}
 }//end namespace
