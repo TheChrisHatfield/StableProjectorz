@@ -114,13 +114,13 @@ def _set_mode(mode: int, announce: bool = False) -> None:
     _current_mode = mode
     try:
         gfr.get_runtime().set_mode(mode)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[{ADDON_ID}] set_mode({mode}) failed: {e}")
     if _panel is not None and _el.get("mode_state"):
         try:
             _panel.set_value(_el["mode_state"], _mode_label(mode))
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[{ADDON_ID}] mode_state set_value failed: {e}")
     if announce:
         _show(f"GPU Flow mode: {_mode_label(mode)}", duration=2.0)
     _save_settings()
@@ -218,8 +218,8 @@ def register() -> None:
     _set_mode(_current_mode, announce=False)
     try:
         gfr.get_runtime().set_fixed_ceiling(start_ceiling)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[{ADDON_ID}] set_fixed_ceiling({start_ceiling}) failed: {e}")
 
     _panel.add_button("Mode: Off", "gpu_flow_mode_off")
     _panel.add_button("Mode: Adaptive", "gpu_flow_mode_adaptive")
@@ -236,8 +236,8 @@ def register() -> None:
         s = gfr.get_runtime().status()
         print(f"[{ADDON_ID}] Telemetry JSONL: {s.get('telemetry_jsonl')}")
         print(f"[{ADDON_ID}] Startup mode={s.get('mode_label')} source={s.get('last_source')} phase={s.get('last_phase')}")
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[{ADDON_ID}] Startup status() failed: {e}")
 
 
 def unregister() -> None:
