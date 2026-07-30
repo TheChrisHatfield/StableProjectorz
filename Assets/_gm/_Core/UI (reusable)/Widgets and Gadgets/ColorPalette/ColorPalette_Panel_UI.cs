@@ -121,9 +121,28 @@ namespace spz {
 	        gameObject.SetActive(false);
 	    }
 
+	    /// <summary> Parses a typed hex string (#RGB / #RRGGBB). Shared by end-edit and Commit/Enter. </summary>
+	    public static bool TryParseHexColor(string hexString, out Color color) {
+	        color = default;
+	        if (string.IsNullOrWhiteSpace(hexString)) return false;
+	        if (hexString.IndexOf('#') < 0) hexString = "#" + hexString.Trim();
+	        return ColorUtility.TryParseHtmlString(hexString.Trim(), out color);
+	    }
+
+	    /// <summary>
+	    /// Syncs HSV dots from the hex field when the user typed a color but did not blur the field
+	    /// (Commit / Enter otherwise discarded the typed value and used the old dots).
+	    /// </summary>
+	    void ApplyPendingHexInputIfAny() {
+	        if (_hexColor_inputText == null) return;
+	        if (TryParseHexColor(_hexColor_inputText.text, out Color newColor))
+	            Set_CurrentColor(newColor);
+	    }
+
 	    /// <summary> Applies the current color (invokes callback) and closes the picker. Used by Commit button and Enter key. </summary>
 	    public void CommitAndClose(){
 	        if(!_isShowing){ return; }
+	        ApplyPendingHexInputIfAny();
 	        _OnColorChanged?.Invoke(Get_CurrentColor());
 	        Hide();
 	    }
@@ -230,12 +249,10 @@ namespace spz {
 
 
 	    void OnHexColorInput_EndedEdit(string hexString){
-	        Color newColor;
-	        if (hexString.Contains("#")==false){ hexString = "#"+ hexString; }
-	        if(ColorUtility.TryParseHtmlString(hexString, out newColor)){
+	        if (TryParseHexColor(hexString, out Color newColor)) {
 	            Set_CurrentColor(newColor);
-	            _OnColorChanged(Get_CurrentColor());
-	        }else {
+	            _OnColorChanged?.Invoke(Get_CurrentColor());
+	        } else {
 	            Debug.Log("Wrong Hex string");
 	        }
 	    }
