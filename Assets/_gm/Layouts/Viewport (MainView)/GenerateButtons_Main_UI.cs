@@ -226,20 +226,20 @@ namespace spz {
 	        ThemeGenButton(_generate3D_retexture_button, t);
 	        if (_cancelGeneration_button != null) {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_cancelGeneration_button, t.danger, t.accent);
-	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_cancelGeneration_button);
 	            var cancelLabel = _cancelGeneration_button.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	            if (cancelLabel != null)
 	                SpzUiThemeOps.ApplyBoundChromeNarrowDockLabelTmp(cancelLabel, t.textPrimary, 12f);
+	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_cancelGeneration_button);
 	        }
 	        if (_deleteLast_button != null) {
 	            var delBtn = _deleteLast_button.GetComponent<Button>();
-	            if (delBtn != null) {
+	            if (delBtn != null)
 	                SpzUiThemeOps.ApplyBoundChromeSelectable(delBtn, t.controlBg, t.accent);
-	                SpzUiThemeOps.ClearNonFaceRaycastsForTheme(delBtn);
-	            }
 	            var delLabel = _deleteLast_button.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	            if (delLabel != null)
 	                SpzUiThemeOps.ApplyBoundChromeNarrowDockLabelTmp(delLabel, t.textPrimary, 12f);
+	            if (delBtn != null)
+	                SpzUiThemeOps.ClearNonFaceRaycastsForTheme(delBtn);
 	        }
 	        RefreshColors_of_GenArt_buttons();
 	    }
