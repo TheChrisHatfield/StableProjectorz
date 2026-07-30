@@ -67,6 +67,9 @@ namespace spz {
 	    void ApplyThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
+	            // Web-find / presets may be remapped outside the host root after layout.
+	            RestoreWebFindChrome();
+	            RestorePresetChrome();
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
@@ -83,6 +86,22 @@ namespace spz {
 	        // Mirror SD_InputPanel_UI web-find: square cell + Globe so Gen3D prompt search is not dead under Nomad.
 	        ThemeWebFindChrome(t);
 	        RefreshPresetChrome();
+	    }
+
+	    void RestoreWebFindChrome() {
+	        if (_webFind == null) return;
+	        var btn = _webFind.GetComponent<Button>() ?? _webFind.GetComponentInChildren<Button>(true);
+	        if (btn != null)
+	            SpzUiThemeOps.RestoreBoundChromeUnder(btn.transform);
+	    }
+
+	    void RestorePresetChrome() {
+	        if (_presetToggles == null) return;
+	        for (int i = 0; i < _presetToggles.Count; i++) {
+	            var toggle = _presetToggles[i];
+	            if (toggle != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(toggle.transform);
+	        }
 	    }
 
 	    void ThemeWebFindChrome(SpzUiThemeOps.ThemeTokens t) {

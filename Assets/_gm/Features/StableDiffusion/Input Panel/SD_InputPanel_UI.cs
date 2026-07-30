@@ -210,12 +210,15 @@ namespace spz {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(rootRestore);
 	            if (!ReferenceEquals(rootRestore, transform))
 	                SpzUiThemeOps.RestoreBoundChromeUnder(transform);
-	            // Resolution chips / web-find may sit outside movable root after layout remaps.
+	            // Resolution chips / web-find / presets may sit outside movable root after layout remaps.
 	            RestorePreset(_resolutionPreset_512);
 	            RestorePreset(_resolutionPreset_768);
 	            RestorePreset(_resolutionPreset_1024);
 	            RestorePreset(_resolutionPreset_1536);
 	            RestorePreset(_resolutionPreset_2048);
+	            RestoreWebFindAndPromptPresets(rootRestore);
+	            if (!ReferenceEquals(rootRestore, transform))
+	                RestoreWebFindAndPromptPresets(transform);
 	            SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(rootRestore);
 	            return;
 	        }
@@ -341,6 +344,18 @@ namespace spz {
 	    static void RestorePreset(Button btn) {
 	        if (btn != null)
 	            SpzUiThemeOps.RestoreBoundChromeUnder(btn.transform);
+	    }
+
+	    void RestoreWebFindAndPromptPresets(Transform root) {
+	        if (root == null) return;
+	        foreach (var btn in root.GetComponentsInChildren<Button>(true)) {
+	            if (btn != null && IsWebFindButton(btn))
+	                SpzUiThemeOps.RestoreBoundChromeUnder(btn.transform);
+	        }
+	        foreach (var toggle in root.GetComponentsInChildren<Toggle>(true)) {
+	            if (toggle != null && IsPromptPresetToggle(toggle))
+	                SpzUiThemeOps.RestoreBoundChromeUnder(toggle.transform);
+	        }
 	    }
 
 	    void ThemeResolutionPreset(Button btn, int presetPx, SpzUiThemeOps.ThemeTokens t) {
