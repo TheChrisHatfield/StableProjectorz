@@ -157,6 +157,8 @@ namespace spz {
 
 	    void RestoreLeftRibbonAuthoredChrome() {
 	        SpzUiThemeOps.RestoreBoundChromeUnder(transform);
+	        if (_toggleWireframe != null)
+	            SpzUiThemeOps.RestoreBoundChromeUnder(_toggleWireframe.transform);
 	        // Hide Monolith bars created for Nomad selection chrome.
 	        foreach (Transform t in GetComponentsInChildren<Transform>(true)) {
 	            if (t != null && t.name == "MonolithActiveBar")
@@ -290,6 +292,8 @@ namespace spz {
 	        }
 	        SpzUiThemeOps.ApplyControlLineIcon(_toggleWireframe.transform, StudioLineIcon.Wireframe, 20f);
 	        ApplyActiveBar(_toggleWireframe.transform, _toggleWireframe.isPressed, t.accent);
+	        if (btn != null)
+	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }
 
 	    /// <summary>

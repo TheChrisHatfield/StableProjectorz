@@ -175,6 +175,7 @@ namespace spz {
 	        // ThemeFlatToolToggle already applies CompactToolLabel — do not re-ApplyBoundChromeTmp
 	        // (that restores Nomad tracking ~10 and undoes Soft no-wrap litmus on .5/1/1.5/2).
 	        SpzUiThemeOps.ThemeFlatToolToggle(toggle, fill, t.accent, t.textPrimary);
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(toggle);
 	    }
 	}
 }//end namespace
