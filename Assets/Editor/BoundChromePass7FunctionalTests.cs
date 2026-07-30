@@ -170,6 +170,8 @@ public sealed class BoundChromePass7FunctionalTests {
 		Assert.That(src, Does.Contain("const float openRightLabelPt = DockLabelBasePt - 1f"));
 		Assert.That(src, Does.Contain("s_columnFrameSuppressCount"));
 		Assert.That(src, Does.Contain("FindDirectChildIncludingInactive(vlgRoot, MenuRowName)"));
+		Assert.That(src, Does.Contain("ResetColumnFrameSuppressStatics"));
+		Assert.That(src, Does.Contain("RuntimeInitializeLoadType.SubsystemRegistration"));
 	}
 
 	[Test]
