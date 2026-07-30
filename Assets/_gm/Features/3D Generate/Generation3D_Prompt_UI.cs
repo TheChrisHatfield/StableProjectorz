@@ -98,6 +98,7 @@ namespace spz {
 	                if (tmp != null)
 	                    SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
 	            }
+	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(toggle);
 	        }
 	    }
 
