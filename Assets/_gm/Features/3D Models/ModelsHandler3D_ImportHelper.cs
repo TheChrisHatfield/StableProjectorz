@@ -283,7 +283,18 @@ namespace spz {
 		            UnityEngine.Debug.LogWarning("[ModelsHandler3D_ImportHelper] SaveDefaultDoor_toFile: no current model root GO; cannot re-export FBX scene.");
 		            return;
 	            }
-	            if (!_saveFBX_helper.SaveModels(path, o3d.currModelRootGO)) {
+	            // Undo SPZ fit-to-volume for DCC round-trip (Blender default-cube litmus).
+	            // User global scale is preserved; only the import shrink/grow is removed.
+	            bool undidFit = o3d.TryBeginFbxExportAuthoringScale( out var restoreScale );
+	            bool wrote;
+	            try {
+		            wrote = _saveFBX_helper.SaveModels(path, o3d.currModelRootGO);
+	            } finally {
+		            if( undidFit ){
+			            o3d.EndFbxExportAuthoringScale( restoreScale );
+		            }
+	            }
+	            if (!wrote) {
 		            UnityEngine.Debug.LogWarning("[ModelsHandler3D_ImportHelper] SaveDefaultDoor_toFile: FBX export failed: " + path);
 		            return;
 	            }
