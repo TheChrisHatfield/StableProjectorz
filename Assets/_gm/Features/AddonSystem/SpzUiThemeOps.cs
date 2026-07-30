@@ -1508,13 +1508,14 @@ namespace spz {
 		/// </summary>
 		public static void ApplyNomadSliderChrome(Slider slider) {
 			if (slider == null) return;
+			// Leave/builtin first — FillThumb marker must not skip Restore and re-Nomad FOV (gen litmus).
+			if (!ShouldRecolorBoundChrome) {
+				RestoreBoundChromeUnder(slider.transform);
+				return;
+			}
 			var fillThumb = slider.GetComponent<SpzUiThemeNomadFillThumb>();
 			if (fillThumb != null) {
 				ApplyNomadFillThumbSliderChrome(slider, fillThumb.icon);
-				return;
-			}
-			if (!ShouldRecolorBoundChrome) {
-				RestoreBoundChromeUnder(slider.transform);
 				return;
 			}
 			var t = _active;

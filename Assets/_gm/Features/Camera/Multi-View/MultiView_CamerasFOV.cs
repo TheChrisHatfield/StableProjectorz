@@ -91,8 +91,9 @@ namespace spz {
 	        EnsureFovFillThumbMarker();
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
-	            if (_camera_FOV_slider != null && _camera_FOV_slider.UnitySlider != null)
-	                SpzUiThemeOps.ApplyNomadSliderChrome(_camera_FOV_slider.UnitySlider);
+	            if (_camera_FOV_slider != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_camera_FOV_slider.transform);
+	            // Do NOT ApplyNomadSliderChrome on leave — that re-Nomads fill after Restore (FOV litmus).
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
