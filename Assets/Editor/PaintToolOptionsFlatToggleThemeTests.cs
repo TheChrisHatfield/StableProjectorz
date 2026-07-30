@@ -15,5 +15,8 @@ public sealed class PaintToolOptionsFlatToggleThemeTests {
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("ThemeOwnedSection(_layout.ToolOptionsSection, t, preferFlatToolToggles: true)"));
 		Assert.That(src, Does.Contain("ThemeFlatToolToggle(toggle, fill, t.accent, t.textPrimary)"));
+		Assert.That(src, Does.Contain("Follow stroke"));
+		Assert.That(src, Does.Contain("useReadable"),
+			"Tool Options label pass must skip Compact for multi-word radios like Follow stroke.");
 	}
 }
