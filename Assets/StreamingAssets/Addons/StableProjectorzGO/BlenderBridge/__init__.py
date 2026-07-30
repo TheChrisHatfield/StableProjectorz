@@ -599,12 +599,13 @@ def _exchange_watch_timer():
     mesh_fp = _file_fingerprint(fbx)
     if mesh_fp is None or mesh_fp[1] <= 32:
         return 0.5
-    # Record before import so a failed import does not spin every tick on the same stamp.
-    _watch_last_ready_fp = fp
     if _try_import_exchange_fbx(fbx):
+        # Only advance after success so a transient lock/AV miss can retry the same stamp.
+        _watch_last_ready_fp = fp
         print("SPZ GO: auto-imported from SPZ export:", fbx)
     else:
-        print("SPZ GO: auto-import failed (will retry when stamp changes):", fbx)
+        print("SPZ GO: auto-import failed (will retry):", fbx)
+        return 2.0
     return 1.0
 
 
