@@ -333,7 +333,7 @@ namespace spz {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_BlendCams_button, t.controlBg, t.accent);
 	            var label = _BlendCams_button.GetComponentInChildren<TextMeshProUGUI>(true);
 	            if (label != null)
-	                SpzUiThemeOps.ApplyBoundChromeTmp(label, t.textPrimary);
+	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, t.textPrimary, 11f);
 	        }
 	        // Ensure GRID/POV faces BEFORE label TMP — StripLabel/Tmp clear label raycasts under Nomad;
 	        // if Refresh ran after and face was null, POV digits / Grid stayed dead (gen path).
@@ -341,10 +341,10 @@ namespace spz {
 	        if (_showGrid_toggle != null) {
 	            var gLabel = _showGrid_toggle.GetComponentInChildren<TextMeshProUGUI>(true);
 	            if (gLabel != null)
-	                SpzUiThemeOps.ApplyBoundChromeTmp(gLabel, t.textPrimary);
+	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(gLabel, t.textPrimary, 11f);
 	        }
 	        if (_numCams_numberText != null) {
-	            SpzUiThemeOps.ApplyBoundChromeTmp(_numCams_numberText, t.textPrimary);
+	            SpzUiThemeOps.ApplyBoundChromeDialValueTmp(_numCams_numberText, t.textPrimary, 14f);
 	            _numCams_numberText.raycastTarget = false;
 	        }
 	        if (_numCameras_slider != null && _numCameras_slider.UnitySlider != null)
