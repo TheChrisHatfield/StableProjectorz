@@ -184,6 +184,16 @@ namespace spz {
 	    void ApplyMeshListChromeThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
+	            // Import/select chrome may sit on slide-out / sibling roots — leave each themed control.
+	            RestoreChromeButton(_loadModel_button);
+	            RestoreChromeButton(_import_button);
+	            RestoreChromeButton(_import_andKeepIcons_button);
+	            RestoreChromeButton(_selectAll_button);
+	            RestoreChromeButton(_deleteAllNonSelected_button);
+	            if (_showVertexColors_toggle != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_showVertexColors_toggle.transform);
+	            if (_contentParent != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_contentParent);
 	            foreach (var g in GetComponentsInChildren<Graphic>(true)) {
 	                if (g.GetComponentInParent<SD_subMesh_IconUI>() != null) continue;
 	                SpzUiThemeOps.RestoreAuthoredGraphic(g);
@@ -243,6 +253,11 @@ namespace spz {
 	        if (label != null)
 	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, t.textPrimary, 11f);
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
+	    }
+
+	    static void RestoreChromeButton(Button btn) {
+	        if (btn != null)
+	            SpzUiThemeOps.RestoreBoundChromeUnder(btn.transform);
 	    }
 
 
