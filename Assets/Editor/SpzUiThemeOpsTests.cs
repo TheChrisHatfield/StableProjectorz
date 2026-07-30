@@ -1128,6 +1128,48 @@ public sealed class SpzUiThemeOpsTests {
 	}
 
 	[Test]
+	public void ThemePromptPresetSquareCell_OnBuiltin_DoesNotInjectHitFace() {
+		var go = new GameObject("PresetLeaveNoEnsure", typeof(RectTransform), typeof(Toggle));
+		try {
+			var toggle = go.GetComponent<Toggle>();
+			toggle.targetGraphic = null;
+			SpzUiThemeOps.ResetTheme();
+			Assert.That(SpzUiThemeOps.ShouldRecolorBoundChrome, Is.False);
+			SpzUiThemeOps.ThemePromptPresetSquareCell(toggle, Color.black, Color.yellow);
+			Assert.That(toggle.targetGraphic, Is.Null);
+			Assert.That(go.transform.Find("BoundChromeHitFace"), Is.Null);
+		} finally {
+			UnityEngine.Object.DestroyImmediate(go);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
+	public void RestoreBoundChromeUnder_RemovesSyntheticHitFace() {
+		var root = new GameObject("SyntheticHitRoot", typeof(RectTransform), typeof(Button));
+		try {
+			var btn = root.GetComponent<Button>();
+			btn.targetGraphic = null;
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				new JObject { ["accent"] = "#F2CA50FF", ["control_bg"] = "#292A2EFF" },
+				"replace",
+				out string error), Is.True, error);
+			SpzUiThemeOps.ApplyBoundChromeSelectable(btn, SpzUiThemeOps.Active.controlBg, SpzUiThemeOps.Active.accent);
+			Assert.That(btn.targetGraphic, Is.Not.Null);
+			Assert.That(btn.targetGraphic.GetComponent<SpzUiThemeSyntheticHitFace>(), Is.Not.Null);
+
+			SpzUiThemeOps.ResetTheme();
+			SpzUiThemeOps.RestoreBoundChromeUnder(root.transform);
+			Assert.That(root.transform.Find("BoundChromeHitFace"), Is.Null);
+			Assert.That(btn.targetGraphic, Is.Null);
+		} finally {
+			UnityEngine.Object.DestroyImmediate(root);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
 	public void ApplyBoundChromeSelectable_OnBuiltin_DoesNotInjectHitFace() {
 		var go = new GameObject("LeaveNoEnsure", typeof(RectTransform), typeof(Button));
 		try {
