@@ -56,7 +56,10 @@ namespace spz {
 
 	    public Color Get_CurrentColor(){
 	        Vector2 normalizedPos = Rect.PointToNormalized(_gradientArea_rt.rect, _gradientArea_dot.anchoredPosition);
-	        return Color.HSVToRGB(Get_CurrentHue(), normalizedPos.x, normalizedPos.y);
+	        Color c = Color.HSVToRGB(Get_CurrentHue(), normalizedPos.x, normalizedPos.y);
+	        if (finalColorImage != null)
+	            c.a = finalColorImage.color.a;
+	        return c;
 	    }
 
 	    float Get_CurrentHue(){
@@ -285,7 +288,8 @@ namespace spz {
 	        if(!_isShowing){return; }
 
 	        // Enter key: commit current color and close picker
-	        if(Keyboard.current != null && Keyboard.current.enterKey.wasPressedThisFrame)
+	        if(Keyboard.current != null &&
+	           (Keyboard.current.enterKey.wasPressedThisFrame || Keyboard.current.numpadEnterKey.wasPressedThisFrame))
 	        {
 	            CommitAndClose();
 	            return;
