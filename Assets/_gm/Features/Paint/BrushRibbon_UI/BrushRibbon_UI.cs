@@ -97,6 +97,11 @@ namespace spz {
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_size.transform);
 	            if (_opacity != null)
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_opacity.transform);
+	            // Hardness / color swatch live on cross-wired roots — leave must unwind if Nomad walked them.
+	            if (_hardness != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_hardness.transform);
+	            if (_colors != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_colors.transform);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;

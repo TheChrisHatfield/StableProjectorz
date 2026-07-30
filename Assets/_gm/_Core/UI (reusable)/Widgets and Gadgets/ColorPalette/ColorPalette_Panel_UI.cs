@@ -154,6 +154,10 @@ namespace spz {
 	        EnsureCommitButton();
 	        if(_commitButton != null)
 	            _commitButton.onClick.AddListener(CommitAndClose);
+
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        ApplyThemeTokens();
 	    }
 
 	    void EnsureCommitButton(){
@@ -188,8 +192,38 @@ namespace spz {
 	        txt.raycastTarget = false;
 	    }
 
+	    void ApplyThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        var rootImg = GetComponent<Image>();
+	        if (rootImg != null)
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.panelBg);
+	        // Domain swatches / HSV RawImages stay authored — chrome only around chrome.
+	        if (_hexColorText != null)
+	            SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(_hexColorText, t.textPrimary, 12f);
+	        if (_hexColor_inputText != null) {
+	            var fieldBg = _hexColor_inputText.GetComponent<Image>();
+	            if (fieldBg != null)
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(fieldBg, t.fieldBg);
+	            if (_hexColor_inputText.textComponent != null)
+	                SpzUiThemeOps.ApplyBoundChromeTmp(_hexColor_inputText.textComponent, t.textPrimary);
+	        }
+	        if (_commitButton != null) {
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(_commitButton, t.success, t.accent);
+	            foreach (var tmp in _commitButton.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	                if (tmp != null)
+	                    SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+	            }
+	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_commitButton);
+	        }
+	    }
+
 
 	    void OnDestroy(){
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 	        DestroyImmediate(_gradientArea_texture);
 	        DestroyImmediate(_hueArea_texture);
 	    }
