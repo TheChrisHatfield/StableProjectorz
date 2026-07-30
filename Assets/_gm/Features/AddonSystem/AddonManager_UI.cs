@@ -1434,6 +1434,7 @@ namespace spz {
 			}
 			if (label != null) {
 				if (iconOnly) {
+					SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(label);
 					label.maxVisibleCharacters = 0;
 					label.color = new Color(foreground.r, foreground.g, foreground.b, 0f);
 				} else {
@@ -1475,6 +1476,7 @@ namespace spz {
 			var label = button.transform.Find("Text")?.GetComponent<TextMeshProUGUI>();
 			if (label != null) {
 				label.maxVisibleCharacters = int.MaxValue;
+				SpzUiThemeOps.RestoreAuthoredGraphic(label);
 				var labelRt = label.rectTransform;
 				labelRt.offsetMin = new Vector2(25f, 0f);
 				labelRt.offsetMax = new Vector2(-5f, 0f);
