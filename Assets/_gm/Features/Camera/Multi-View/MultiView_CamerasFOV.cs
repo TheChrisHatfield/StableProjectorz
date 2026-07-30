@@ -103,7 +103,9 @@ namespace spz {
 	        }
 	        foreach (var tmp in GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp == null || tmp == _cam_FOV_numberText) continue;
-	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+	            // Captions — ReadableBody (not Compact truncate) so FOV help stays legible beside the dial.
+	            SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, t.textPrimary, 11f);
+	            tmp.raycastTarget = false;
 	        }
 	        // Nomad: mustard fill is the slider; Camera icon centered on fill with slight overlay.
 	        if (_camera_FOV_slider != null && _camera_FOV_slider.UnitySlider != null)
