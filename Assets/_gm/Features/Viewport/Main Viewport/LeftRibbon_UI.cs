@@ -220,8 +220,12 @@ namespace spz {
 	            }
 	        }
 	        foreach (var btn in root.GetComponentsInChildren<Button>(true)) {
-	            if (btn != null)
-	                SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
+	            if (btn == null) continue;
+	            // Compact labels clear TMP hits — without a wired face, Depth Options buttons go dead under Nomad.
+	            SpzUiThemeOps.EnsureSelectableHitFace(btn);
+	            if (btn.targetGraphic != null && btn.targetGraphic.color.a >= 0.08f)
+	                SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	        }
 	        foreach (var lg in root.GetComponentsInChildren<LayoutGroup>(true))
 	            SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
