@@ -1501,15 +1501,11 @@ namespace spz {
 
 		static void ThemeFilterToggle(Toggle toggle, SpzUiThemeOps.ThemeTokens t) {
 			if (toggle == null) return;
-			Color normal = toggle.isOn
-				? t.textPrimary
-				: new Color(t.controlBg.r, t.controlBg.g, t.controlBg.b, 0f);
-			SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, normal, toggle.isOn ? t.textPrimary : t.tabActive);
-			var label = toggle.GetComponentInChildren<TextMeshProUGUI>(true);
-			if (label != null) {
-				float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(label, 12f);
-				SpzUiThemeOps.ApplyBoundChromeTmp(label, toggle.isOn ? t.panelBg : t.textMuted, basePt);
-			}
+			Color face = toggle.isOn
+				? Color.Lerp(t.controlBg, t.accent, 0.14f)
+				: t.controlBg;
+			// Flat tool radios — Compact labels; avoid a≈0 SolidSquare faces that kill All/Enabled/Disabled hits.
+			SpzUiThemeOps.ThemeFlatToolToggle(toggle, face, t.accent, toggle.isOn ? t.textPrimary : t.textMuted);
 		}
 
 		void ThemeAddonListItem(GameObject item, SpzUiThemeOps.ThemeTokens t) {
@@ -1524,8 +1520,10 @@ namespace spz {
 				var removeLabel = remove.GetComponentInChildren<TextMeshProUGUI>(true);
 				if (removeLabel != null) {
 					float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(removeLabel, 12f);
-					SpzUiThemeOps.ApplyBoundChromeTmp(removeLabel, new Color(t.danger.r, t.danger.g, t.danger.b, 0.88f), basePt);
+					SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(removeLabel, new Color(t.danger.r, t.danger.g, t.danger.b, 0.88f), basePt);
 				}
+				if (removeBtn != null)
+					SpzUiThemeOps.ClearNonFaceRaycastsForTheme(removeBtn);
 			}
 			var toggle = item.transform.Find("StatusToggle")?.GetComponent<Toggle>();
 			if (toggle == null)
@@ -1540,7 +1538,8 @@ namespace spz {
 			var name = item.transform.Find("Name")?.GetComponent<TextMeshProUGUI>();
 			if (name != null) {
 				float nameBase = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(name, 14f);
-				SpzUiThemeOps.ApplyBoundChromeTmp(name, t.textPrimary, nameBase);
+				SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(name, t.textPrimary, nameBase);
+				name.raycastTarget = false;
 			}
 			if (toggle != null) {
 				Color ringColor = enabled ? t.success : t.textMuted;
@@ -1556,6 +1555,8 @@ namespace spz {
 					SpzUiThemeOps.ApplyBoundChromeGraphic(fill, t.success);
 					fill.preserveAspect = true;
 					fill.gameObject.SetActive(true);
+					// Prefer Graphic.enabled over canvasRenderer.SetAlpha so Restore SPZ can unwind.
+					fill.enabled = enabled;
 					fill.canvasRenderer.SetAlpha(enabled ? 1f : 0f);
 				}
 			}
