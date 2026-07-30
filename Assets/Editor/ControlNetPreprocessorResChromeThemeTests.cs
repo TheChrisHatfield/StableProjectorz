@@ -69,6 +69,60 @@ public sealed class ControlNetPreprocessorResChromeThemeTests {
 	}
 
 	[Test]
+	public void ThemeResRadio_KeepsCompactLabelNotUndoneByBoundChromeTmp() {
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-res-compact",
+			new JObject {
+				["control_bg"] = "#292A2EFF",
+				["accent"] = "#F2CA50FF",
+				["text_primary"] = "#E3E2E7FF",
+			},
+			"replace",
+			out string error), Is.True, error);
+
+		var root = new GameObject("ResCompact", typeof(RectTransform), typeof(Image), typeof(MouseHoverSensor_UI));
+		root.SetActive(false);
+		try {
+			var slide = new GameObject("slide", typeof(RectTransform));
+			slide.transform.SetParent(root.transform, false);
+
+			var opt = new GameObject("opt", typeof(RectTransform), typeof(Image), typeof(Toggle));
+			opt.transform.SetParent(slide.transform, false);
+			var optFace = opt.GetComponent<Image>();
+			var optToggle = opt.GetComponent<Toggle>();
+			optToggle.targetGraphic = optFace;
+			optToggle.isOn = true;
+
+			var labelGo = new GameObject("Input (text)", typeof(RectTransform));
+			labelGo.transform.SetParent(opt.transform, false);
+			var tmp = labelGo.AddComponent<TextMeshProUGUI>();
+			tmp.text = "1.5";
+			tmp.font = TMP_Settings.defaultFontAsset;
+			tmp.enableWordWrapping = true;
+			tmp.characterSpacing = 0f;
+
+			var pre = root.AddComponent<ControlnetPreprocessor_UI>();
+			typeof(ControlnetPreprocessor_UI)
+				.GetField("_preprocessorRes_hoverMe", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+				.SetValue(pre, root.GetComponent<MouseHoverSensor_UI>());
+			typeof(ControlnetPreprocessor_UI)
+				.GetField("_preprocessorRes_slideOut", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+				.SetValue(pre, slide.transform);
+			typeof(ControlnetPreprocessor_UI)
+				.GetField("_preprocessorRes_15", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+				.SetValue(pre, optToggle);
+
+			pre.ApplyThemeTokens();
+
+			Assert.That(tmp.enableWordWrapping, Is.False, "CompactToolLabel must survive ThemeResRadio");
+			Assert.That(tmp.characterSpacing, Is.LessThan(4f), "ApplyBoundChromeTmp after Flat must not restore ~10 tracking");
+		}
+		finally {
+			Object.DestroyImmediate(root);
+		}
+	}
+
+	[Test]
 	public void BuiltinLeave_RestoresResChipFace() {
 		Assert.That(SpzUiThemeOps.TryApplyTheme(
 			"p1-experiment",
