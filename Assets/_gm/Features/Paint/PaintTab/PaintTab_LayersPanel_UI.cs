@@ -197,7 +197,9 @@ namespace spz {
 				if (row == null) continue;
 				var vis = row.transform.Find("Visibility");
 				if (vis == null) continue;
-				var visImg = vis.GetComponent<Image>();
+				var visBtn = vis.GetComponent<Button>();
+				var visImg = (visBtn != null ? visBtn.targetGraphic as Image : null)
+					?? vis.GetComponent<Image>();
 				if (visImg == null) continue;
 				int layerIx = LayerIndexFromDisplay(i);
 				bool visible = layerIx >= 0 && layerIx < _layerStack.Layers.Count

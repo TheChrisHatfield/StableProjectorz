@@ -286,6 +286,7 @@ namespace spz {
 	            : t.controlBg;
 	        // Point/Bilinear are tool radios with bevel Checkmark plates (raycastTarget=1) — flat path.
 	        SpzUiThemeOps.ThemeFlatToolToggle(tgl, fill, t.accent, t.textPrimary);
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(tgl);
 	    }
 	}
 }//end namespace
