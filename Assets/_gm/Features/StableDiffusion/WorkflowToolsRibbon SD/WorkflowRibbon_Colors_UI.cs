@@ -120,6 +120,15 @@ namespace spz {
 	                    || n.IndexOf("Background", System.StringComparison.OrdinalIgnoreCase) >= 0)
 	                    SpzUiThemeOps.ApplyBoundChromeGraphic(img, t.panelBg);
 	            }
+	            // Selectables before Compact — Compact clears label raycasts (bake/options dead clicks).
+	            foreach (var btn in root.GetComponentsInChildren<Button>(true)) {
+	                if (btn != null)
+	                    SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+	            }
+	            foreach (var tog in root.GetComponentsInChildren<Toggle>(true)) {
+	                if (tog != null)
+	                    SpzUiThemeOps.ApplyBoundChromeSelectable(tog, t.controlBg, t.accent);
+	            }
 	            foreach (var tmp in root.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
 	                if (tmp == null) continue;
 	                if (tmp.GetComponentInParent<Button>(true) != null
