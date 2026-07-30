@@ -295,7 +295,10 @@ namespace spz {
 			JObject bag = EnsurePrefsBag(info);
 			bool prev = GetAddonPrefBool(addonId, key, string.Equals(key, PrefKeyShowInCommandRibbon, StringComparison.Ordinal));
 			bag[key] = value;
-			if (string.Equals(key, PrefKeyShowInCommandRibbon, StringComparison.Ordinal) && prev != value)
+			// Ribbon presence only matters while loaded; syncing while disabled was destroying UI unnecessarily.
+			if (string.Equals(key, PrefKeyShowInCommandRibbon, StringComparison.Ordinal)
+			    && prev != value
+			    && IsAddonEnabled(addonId))
 				SyncRibbonTabWithEnabledState(addonId);
 		}
 
