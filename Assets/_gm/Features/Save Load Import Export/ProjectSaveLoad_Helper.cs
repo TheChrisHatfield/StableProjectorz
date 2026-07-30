@@ -87,7 +87,7 @@ namespace spz {
 
 	        string saveFile = FileBrowser.Result[0];
 
-	        if (StableDiffusion_Hub.instance._generating) {
+	        if (StableDiffusion_Hub.instance != null && StableDiffusion_Hub.instance._generating) {
 	            onResultMessage?.Invoke("Can't save while generating.");
 	            saveFinalTexs?.Invoke(null);
 	            yield break;
@@ -193,13 +193,13 @@ namespace spz {
 
 	        FileBrowser.ShowLoadDialog((paths) => {
 	            if (paths.Length == 0){
-	                onResult?.Invoke("Didn't save - no file selected.");
+	                onResult?.Invoke("Load cancelled — no file selected.");
 	                return;
 	            }
 
 	            string spzFilepath = paths[0];
 
-	            if (StableDiffusion_Hub.instance._generating){
+	            if (StableDiffusion_Hub.instance != null && StableDiffusion_Hub.instance._generating){
 	                onResult?.Invoke("Can't Load while generating.");
 	                return;
 	            }
