@@ -906,6 +906,7 @@ namespace spz {
 			}
 			foreach (var le in root.GetComponentsInChildren<LayoutElement>(true)) {
 				if (le == null || le.ignoreLayout) continue;
+				SnapshotLayoutElementSizes(le);
 				if (le.minHeight > 0.5f && le.minHeight < 36f)
 					le.minHeight = 36f;
 				if (le.preferredHeight > 0.5f && le.preferredHeight < 36f)
