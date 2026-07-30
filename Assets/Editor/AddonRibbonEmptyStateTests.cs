@@ -74,6 +74,12 @@ public sealed class AddonRibbonEmptyStateTests {
 			button.transform.SetParent(panel.transform, false);
 			bool withButton = (bool)method.Invoke(null, new object[] { root.transform });
 			Assert.That(withButton, Is.True, "Button_* child must count as populated UI.");
+
+			UnityEngine.Object.DestroyImmediate(button);
+			var toggle = new GameObject("Toggle_Show");
+			toggle.transform.SetParent(panel.transform, false);
+			bool withToggle = (bool)method.Invoke(null, new object[] { root.transform });
+			Assert.That(withToggle, Is.True, "Toggle_* child must count as populated UI (same as HasLiveAddonPanelWithWidgets).");
 		} finally {
 			UnityEngine.Object.DestroyImmediate(root);
 		}

@@ -430,10 +430,11 @@ namespace spz {
 				    if (w == null) continue;
 				    string wn = w.name ?? "";
 				    if (string.Equals(wn, "Title", StringComparison.Ordinal)) continue;
-				    if (wn.StartsWith("Button_", StringComparison.Ordinal)
+				if (wn.StartsWith("Button_", StringComparison.Ordinal)
 				        || wn.StartsWith("TextInput_", StringComparison.Ordinal)
 				        || wn.StartsWith("Slider_", StringComparison.Ordinal)
-				        || wn.StartsWith("Dropdown_", StringComparison.Ordinal))
+				        || wn.StartsWith("Dropdown_", StringComparison.Ordinal)
+				        || wn.StartsWith("Toggle_", StringComparison.Ordinal))
 					    return true;
 			    }
 		    }
