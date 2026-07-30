@@ -249,7 +249,7 @@ namespace spz {
 	            // Solid-square litmus (same path as all Nomad BoundChrome selectables).
 	            if (saveBtn != null)
 	                SpzUiThemeOps.ApplyBoundChromeSelectable(saveBtn, t.success, t.accent);
-	            SpzUiThemeOps.ApplyBoundChromeTmp(_save_texResQuality_text, t.textPrimary);
+	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(_save_texResQuality_text, t.textPrimary, 11f);
 	        }
 	        // Prefab +/- may ship with null targetGraphic — Ensure inside ApplyBoundChromeSelectable.
 	        if (_sub_texResolutionQuality != null)
