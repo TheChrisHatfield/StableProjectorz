@@ -288,11 +288,11 @@ namespace spz {
 	    }
 
 
-	    public void ExportModel(){
+	    public void ExportModel(System.Action<string> afterMeshWritten=null, System.Action onCancelledOrFailed=null){
 	        if (_importHelper._modelBytesCache != null){ 
-	            _importHelper.SaveCachedMesh_toFile();
+	            _importHelper.SaveCachedMesh_toFile(null, afterMeshWritten, onCancelledOrFailed);
 	        }else { 
-	            _importHelper.SaveDefaultDoor_toFile();
+	            _importHelper.SaveDefaultDoor_toFile(null, afterMeshWritten, onCancelledOrFailed);
 	        }
 	    }
 

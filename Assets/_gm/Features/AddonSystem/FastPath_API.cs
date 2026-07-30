@@ -1048,8 +1048,7 @@ namespace spz {
 			var saveMGR = Save_MGR.instance;
 			if (saveMGR == null) return false;
 			
-			saveMGR.Export3D_with_textures();
-			return true;
+			return saveMGR.Export3D_with_textures();
 		}
 		
 		/// <summary>

@@ -241,19 +241,26 @@ namespace spz {
 	    }
 
 
-	    public void SaveCachedMesh_toFile(string pathWithExten=null){
-	        if(_modelBytesCache == null){ return; }
+	    public void SaveCachedMesh_toFile(string pathWithExten=null, Action<string> afterMeshWritten=null, Action onCancelledOrFailed=null){
+	        if(_modelBytesCache == null){
+		        onCancelledOrFailed?.Invoke();
+		        return;
+	        }
         
 	        // Define local callback to handle saving (replaces previous flow with confirmation popup)
 	        void onComplete(string path){
 	            _path_recentlyExported = path;
-	            if(string.IsNullOrEmpty(path)){ return; }
+	            if(string.IsNullOrEmpty(path)){
+		            onCancelledOrFailed?.Invoke();
+		            return;
+	            }
 	            var dir = Path.GetDirectoryName(path);
 	            if (!string.IsNullOrEmpty(dir)) {
 		            Directory.CreateDirectory( dir );
 	            }
 	            File.WriteAllBytes(path, _modelBytesCache);
 	            Viewport_StatusText.instance.ShowStatusText("Exported the mesh to\n"+path, false, 5, false);
+	            afterMeshWritten?.Invoke(path);
 	        }
 
 	        if(string.IsNullOrEmpty(pathWithExten)){//allow user to select directory manually
@@ -264,8 +271,9 @@ namespace spz {
 	            FileBrowser.SetDefaultFilter(exten);
 
 	            FileBrowser.ShowSaveDialog((paths) => {
-	                if(paths.Length > 0) onComplete(paths[0]);
-	            }, null, FileBrowser.PickMode.Files, false, null, fname, "Save Mesh", "Save");
+	                if(paths != null && paths.Length > 0) onComplete(paths[0]);
+	                else onCancelledOrFailed?.Invoke();
+	            }, () => onCancelledOrFailed?.Invoke(), FileBrowser.PickMode.Files, false, null, fname, "Save Mesh", "Save");
 	        }
 	        else{
 	            // Path provided directly (e.g. from script or known location), check existing handled by OS or caller logic mostly
@@ -275,12 +283,13 @@ namespace spz {
 	    }
 
 
-	    public void SaveDefaultDoor_toFile(string pathWithExten=null){
+	    public void SaveDefaultDoor_toFile(string pathWithExten=null, Action<string> afterMeshWritten=null, Action onCancelledOrFailed=null){
         
 	        void PerformSave(string path){
 	             path = Path.ChangeExtension(path, "fbx");
 	            if (o3d == null || o3d.currModelRootGO == null) {
 		            UnityEngine.Debug.LogWarning("[ModelsHandler3D_ImportHelper] SaveDefaultDoor_toFile: no current model root GO; cannot re-export FBX scene.");
+		            onCancelledOrFailed?.Invoke();
 		            return;
 	            }
 	            // Undo SPZ fit-to-volume for DCC round-trip (Blender default-cube litmus).
@@ -296,9 +305,11 @@ namespace spz {
 	            }
 	            if (!wrote) {
 		            UnityEngine.Debug.LogWarning("[ModelsHandler3D_ImportHelper] SaveDefaultDoor_toFile: FBX export failed: " + path);
+		            onCancelledOrFailed?.Invoke();
 		            return;
 	            }
 	            _path_recentlyExported = path;
+	            afterMeshWritten?.Invoke(path);
 	        }
 
 	        if(string.IsNullOrEmpty(pathWithExten)){//allow user to select directory manually
@@ -306,8 +317,9 @@ namespace spz {
 	            FileBrowser.SetDefaultFilter("fbx");
             
 	            FileBrowser.ShowSaveDialog((paths) => {
-	                if(paths.Length > 0) PerformSave(paths[0]);
-	            }, null, FileBrowser.PickMode.Files, false, null, "StableProjectorz_door", "Save Door", "Save");
+	                if(paths != null && paths.Length > 0) PerformSave(paths[0]);
+	                else onCancelledOrFailed?.Invoke();
+	            }, () => onCancelledOrFailed?.Invoke(), FileBrowser.PickMode.Files, false, null, "StableProjectorz_door", "Save Door", "Save");
 	        }
 	        else{
 	            PerformSave(pathWithExten);
