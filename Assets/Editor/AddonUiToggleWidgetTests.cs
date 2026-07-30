@@ -53,4 +53,17 @@ public sealed class AddonUiToggleWidgetTests {
 			SpzUiThemeOps.ResetTheme();
 		}
 	}
+
+	[Test]
+	public void BuildNotifyValueChangeRequestBody_SerializesToggleAndSlider() {
+		string toggleBody = AddonUI_MGR.BuildNotifyValueChangeRequestBody("demo", "el1", "toggle", true);
+		Assert.That(toggleBody, Does.Contain("\"addon_id\":\"demo\""));
+		Assert.That(toggleBody, Does.Contain("\"element_id\":\"el1\""));
+		Assert.That(toggleBody, Does.Contain("\"element_type\":\"toggle\""));
+		Assert.That(toggleBody, Does.Contain("\"value\":true"));
+
+		string sliderBody = AddonUI_MGR.BuildNotifyValueChangeRequestBody("demo", "el2", "slider", 0.5f);
+		Assert.That(sliderBody, Does.Contain("\"element_type\":\"slider\""));
+		Assert.That(sliderBody, Does.Contain("\"value\":0.5"));
+	}
 }
