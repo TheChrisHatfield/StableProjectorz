@@ -125,8 +125,12 @@ namespace spz {
 	                    SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
 	            }
 	        }
-	        if (_bakeColors_button != null)
+	        if (_bakeColors_button != null) {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_bakeColors_button, t.controlBg, t.accent);
+	            var bakeLabel = _bakeColors_button.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+	            if (bakeLabel != null)
+	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(bakeLabel, t.textPrimary, 11f);
+	        }
 	    }
 	}
 }//end namespace
