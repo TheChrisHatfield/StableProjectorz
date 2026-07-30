@@ -109,6 +109,7 @@ namespace spz {
 
 	    static void ThemePopupButton(Button btn, Color fill, Color accent, TextMeshProUGUI label, SpzUiThemeOps.ThemeTokens t) {
 	        if (btn == null) return;
+	        SpzUiThemeOps.EnsureSelectableHitFace(btn);
 	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, fill, accent);
 	        if (btn.targetGraphic is Image face) {
 	            SpzUiThemeOps.ApplyRoundedControlSprite(face, markEligible: true);

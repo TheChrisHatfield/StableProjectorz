@@ -247,18 +247,22 @@ namespace spz {
 	        if (_save_texResQuality_text != null) {
 	            var saveBtn = _save_texResQuality_text.GetComponentInParent<Button>();
 	            // Solid-square litmus (same path as all Nomad BoundChrome selectables).
-	            if (saveBtn != null)
+	            if (saveBtn != null) {
+	                SpzUiThemeOps.EnsureSelectableHitFace(saveBtn);
 	                SpzUiThemeOps.ApplyBoundChromeSelectable(saveBtn, t.success, t.accent);
+	            }
 	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(_save_texResQuality_text, t.textPrimary, 11f);
 	            if (saveBtn != null)
 	                SpzUiThemeOps.ClearNonFaceRaycastsForTheme(saveBtn);
 	        }
-	        // Prefab +/- may ship with null targetGraphic — Ensure inside ApplyBoundChromeSelectable.
+	        // Prefab +/- may ship with null targetGraphic — Ensure before ClearNonFace.
 	        if (_sub_texResolutionQuality != null) {
+	            SpzUiThemeOps.EnsureSelectableHitFace(_sub_texResolutionQuality);
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_sub_texResolutionQuality, t.controlBg, t.accent);
 	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_sub_texResolutionQuality);
 	        }
 	        if (_add_texResolutionQuality != null) {
+	            SpzUiThemeOps.EnsureSelectableHitFace(_add_texResolutionQuality);
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_add_texResolutionQuality, t.controlBg, t.accent);
 	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_add_texResolutionQuality);
 	        }

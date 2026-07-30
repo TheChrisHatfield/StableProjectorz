@@ -1450,6 +1450,7 @@ namespace spz {
 				}
 			}
 			if (_closePanel_button != null) {
+				SpzUiThemeOps.EnsureSelectableHitFace(_closePanel_button);
 				SpzUiThemeOps.ApplyBoundChromeSelectable(_closePanel_button, t.controlBg, t.accent);
 				foreach (var tmp in _closePanel_button.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 					if (tmp == null) continue;
