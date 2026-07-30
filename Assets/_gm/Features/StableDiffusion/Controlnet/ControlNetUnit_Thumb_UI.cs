@@ -153,14 +153,21 @@ namespace spz {
 	            }
 	            foreach (var tmp in _closeButton.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
 	                if (tmp != null)
-	                    SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, 11f);
+	                    SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
 	            }
 	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_closeButton);
+	        }
+	        if (_plusIcon != null) {
+	            foreach (var img in _plusIcon.GetComponentsInChildren<Image>(true)) {
+	                if (img == null) continue;
+	                SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(img);
+	                SpzUiThemeOps.ApplyLineIconTint(img);
+	            }
 	        }
 	        if (_clickMe_text != null) {
 	            foreach (var tmp in _clickMe_text.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
 	                if (tmp != null)
-	                    SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textMuted, 11f);
+	                    SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textMuted, 11f);
 	            }
 	        }
 	        // Thumb-local depth dials (shown when selected) — same Pass27 hit-face path as left-ribbon dials.
