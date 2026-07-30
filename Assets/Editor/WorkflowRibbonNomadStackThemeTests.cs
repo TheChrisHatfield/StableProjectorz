@@ -58,6 +58,11 @@ public sealed class WorkflowRibbonNomadStackThemeTests {
 			Assert.That(labelRt.anchorMax.y, Is.LessThan(0.55f));
 			Assert.That(labelRt.anchorMax.y, Is.GreaterThan(0.42f),
 				"Workflow strip label band for 2-line caps");
+			Transform iconT = SpzUiThemeOps.FindDirectChildIncludingInactive(faceGo.transform, "MonolithLineIcon");
+			Assert.That(iconT, Is.Not.Null);
+			var iconRt = iconT as RectTransform;
+			Assert.That(iconRt.anchorMin.y, Is.EqualTo(0.74f).Within(0.01f),
+				"Icon sits in upper band so TOTAL OBJ does not collide with label");
 			Assert.That(tmp.alignment, Is.EqualTo(TextAlignmentOptions.Center));
 			var designTag = tmp.GetComponent<SpzUiThemeDesignFontPt>();
 			Assert.That(designTag, Is.Not.Null);
@@ -75,8 +80,8 @@ public sealed class WorkflowRibbonNomadStackThemeTests {
 			Assert.That(labelRt.anchorMax.y, Is.EqualTo(1f).Within(0.01f), "Label rect must unwind");
 			Assert.That(tmp.fontSize, Is.EqualTo(authoredSize).Within(0.05f),
 				"authored point size must return after Leave Nomad");
-			Transform iconT = SpzUiThemeOps.FindDirectChildIncludingInactive(faceGo.transform, "MonolithLineIcon");
-			Assert.That(iconT == null || !iconT.gameObject.activeSelf, Is.True, "Monolith icon hidden on builtin");
+			Transform iconLeave = SpzUiThemeOps.FindDirectChildIncludingInactive(faceGo.transform, "MonolithLineIcon");
+			Assert.That(iconLeave == null || !iconLeave.gameObject.activeSelf, Is.True, "Monolith icon hidden on builtin");
 		}
 		finally {
 			Object.DestroyImmediate(root);

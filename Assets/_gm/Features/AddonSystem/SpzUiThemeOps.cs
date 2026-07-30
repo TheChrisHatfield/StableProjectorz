@@ -1297,13 +1297,23 @@ namespace spz {
 				}
 				return;
 			}
-			// Compact strip: small icon lift + lower label band so type sits close under the glyph.
-			// +2pt stack type needs a slightly taller label band so PROJ/MASK keep mine leading (-12).
-			float labelMaxY = stripUppercase ? 0.52f : 0.36f;
+			// Compact strip: icon in upper band, label below — center+yLift collided with labelMaxY 0.52
+			// (TOTAL OBJ icon/text overlap until click retheme).
+			float labelMaxY = stripUppercase ? 0.48f : 0.36f;
 			float yLift = stripUppercase
 				? Mathf.Max(2.5f, iconPx * 0.18f)
 				: Mathf.Max(3f, iconPx * 0.18f);
-			ApplyControlLineIconAt(cell, glyph, iconPx, new Vector2(0f, yLift));
+			ApplyControlLineIconAt(cell, glyph, iconPx, stripUppercase ? Vector2.zero : new Vector2(0f, yLift));
+			if (stripUppercase) {
+				Transform iconT = FindDirectChildIncludingInactive(cell, ControlLineIconChildName);
+				var iconRt = iconT as RectTransform;
+				if (iconRt != null) {
+					iconRt.anchorMin = new Vector2(0.5f, 0.74f);
+					iconRt.anchorMax = new Vector2(0.5f, 0.74f);
+					iconRt.pivot = new Vector2(0.5f, 0.5f);
+					iconRt.anchoredPosition = Vector2.zero;
+				}
+			}
 			foreach (var tmp in cell.GetComponentsInChildren<TMP_Text>(true)) {
 				if (tmp == null) continue;
 				if (includeLabel != null && !includeLabel(tmp))

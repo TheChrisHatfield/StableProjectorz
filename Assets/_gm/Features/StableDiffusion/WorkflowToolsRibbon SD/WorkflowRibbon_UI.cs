@@ -331,15 +331,48 @@ namespace spz {
 	            var holderImg = _holderGO_turnMeOnOff.GetComponent<Image>();
 	            if (holderImg != null)
 	                SpzUiThemeOps.ApplyBoundChromeGraphic(holderImg, t.panelBg);
+	            var holderRt = _holderGO_turnMeOnOff.transform as RectTransform;
+	            if (holderRt != null)
+	                LayoutRebuilder.ForceRebuildLayoutImmediate(holderRt);
+	        }
+	        // ThemeChanged can run before layout has a real cell size — one-frame retheme matches
+	        // the "click fixes it" path (OnToggle → ApplyThemeTokens) without requiring a click.
+	        if (!_rethemeModesSkipDefer && isActiveAndEnabled && gameObject.activeInHierarchy) {
+	            if (_deferredModeChrome != null)
+	                StopCoroutine(_deferredModeChrome);
+	            _deferredModeChrome = StartCoroutine(CoRethemeModesNextFrame());
+	        }
+	    }
+
+	    Coroutine _deferredModeChrome;
+	    bool _rethemeModesSkipDefer;
+
+	    IEnumerator CoRethemeModesNextFrame() {
+	        yield return null;
+	        _deferredModeChrome = null;
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) yield break;
+	        _rethemeModesSkipDefer = true;
+	        try {
+	            ApplyThemeTokens();
+	        } finally {
+	            _rethemeModesSkipDefer = false;
 	        }
 	    }
 
 	    static void RestoreWorkflowModeAuthored(MonoBehaviour modeUi) {
 	        if (modeUi == null) return;
 	        SpzUiThemeOps.RestoreBoundChromeUnder(modeUi.transform);
-	        // Leave: hide Monolith overlays only — do not re-enter ApplyNomadStackedToolCell with a dummy glyph.
-	        HideMonolithOverlaysUnder(modeUi);
+	        // Stacked-cell leave must restore label rects + authored TMP (Restore alone can miss
+	        // when mode roots sit outside the ribbon transform / inactive icon children).
 	        var toggle = modeUi.GetComponentInChildren<Toggle>(true);
+	        Transform cell = toggle != null ? toggle.transform : modeUi.transform;
+	        SpzUiThemeOps.ApplyNomadStackedToolCell(
+	            cell,
+	            StudioLineIcon.Brush,
+	            Color.white,
+	            14f,
+	            tmp => !IsExcludedWorkflowLabel(tmp.transform, modeUi.transform));
+	        HideMonolithOverlaysUnder(modeUi);
 	        if (toggle != null && toggle.transform != modeUi.transform)
 	            HideMonolithOverlaysUnder(toggle.transform);
 	    }
@@ -366,8 +399,19 @@ namespace spz {
 	            return;
 	        var toggle = modeUi.GetComponentInChildren<Toggle>(true);
 	        if (toggle != null) {
-	            Color normal = selected ? t.tabActive : t.controlBg;
+	            // Subtle selected fill (Brush/Multiview) — full tabActive reads as a stuck mustard brick.
+	            Color normal = selected
+	                ? Color.Lerp(t.controlBg, t.accent, 0.14f)
+	                : t.controlBg;
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, normal, t.accent);
+	            var cb = toggle.colors;
+	            cb.normalColor = Color.white;
+	            cb.highlightedColor = Color.white;
+	            cb.pressedColor = new Color(0.92f, 0.92f, 0.92f, 1f);
+	            cb.selectedColor = Color.white;
+	            cb.disabledColor = new Color(1f, 1f, 1f, 0.4f);
+	            cb.colorMultiplier = 1f;
+	            toggle.colors = cb;
 	            if (toggle.targetGraphic is Image tgImg)
 	                SpzUiThemeOps.ApplyRoundedControlSprite(tgImg, markEligible: true);
 	            // Authored checkmark is a beveled ON plate — selection = flat fill only (Brush/Multiview parity).
@@ -390,7 +434,10 @@ namespace spz {
 	        else {
 	            var img = modeUi.GetComponent<Image>();
 	            if (img != null) {
-	                SpzUiThemeOps.ApplyBoundChromeGraphic(img, selected ? t.tabActive : t.controlBg);
+	                Color fill = selected
+	                    ? Color.Lerp(t.controlBg, t.accent, 0.14f)
+	                    : t.controlBg;
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(img, fill);
 	                SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
 	            }
 	        }
