@@ -232,13 +232,22 @@ namespace spz {
 	            var panelImg = _wholePanel_canvGrp.GetComponent<Image>();
 	            if (panelImg != null)
 	                SpzUiThemeOps.ApplyBoundChromeGraphic(panelImg, t.panelBg);
-	            foreach (var tmp in _wholePanel_canvGrp.GetComponentsInChildren<TextMeshProUGUI>(true)) {
-	                if (tmp == null) continue;
-	                // rembg button labels get Compact after Selectable — skip strip tracking here.
-	                if (_rembg_button != null && tmp.GetComponentInParent<Button>() == _rembg_button)
-	                    continue;
-	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
-	            }
+	            SpzUiThemeOps.ApplyBoundChromeRolesUnder(_wholePanel_canvGrp.transform, new SpzUiThemeRoleMatrixOptions {
+	                PreferFlatToolToggles = true,
+	                Exclude = c => {
+	                    if (c is TextMeshProUGUI tmp && (
+	                            ReferenceEquals(tmp, _rembg_backgroundTxt)
+	                            || ReferenceEquals(tmp, _rembg_foregroundTxt)))
+	                        return true;
+	                    if (_rembg_button != null && c is Button b && ReferenceEquals(b, _rembg_button))
+	                        return true;
+	                    if (_rembg_button != null && c.transform != null
+	                        && (c.transform == _rembg_button.transform
+	                            || c.transform.IsChildOf(_rembg_button.transform)))
+	                        return true;
+	                    return false;
+	                },
+	            });
 	        }
 	        ThemeTmp(_rembg_backgroundTxt, t);
 	        ThemeTmp(_rembg_foregroundTxt, t);
@@ -270,7 +279,8 @@ namespace spz {
 
 	    static void ThemeTmp(TextMeshProUGUI tmp, SpzUiThemeOps.ThemeTokens t) {
 	        if (tmp == null) return;
-	        SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	        // Rembg thresh numerals — DialValue so strip tracking does not steal dial hits (SD Soft litmus).
+	        SpzUiThemeOps.ApplyBoundChromeDialValueTmp(tmp, t.textPrimary, 14f);
 	        tmp.raycastTarget = false;
 	    }
 
