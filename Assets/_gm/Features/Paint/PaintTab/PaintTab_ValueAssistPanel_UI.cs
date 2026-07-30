@@ -252,23 +252,14 @@ namespace spz {
 		}
 
 		void ApplyThemeTokens() {
-			// ApplyContextMenuChrome self-silos (restore on builtin); solid-square face also gated.
+			// ApplyContextMenuChrome self-silos (restore on builtin). Do not re-SolidSquare here —
+			// ThemeOwnedSection also skips this panel to avoid triple ownership crush.
 			SpzUiThemeOps.ApplyContextMenuChrome(gameObject);
 			if (!SpzUiThemeOps.ShouldRecolorBoundChrome)
 				return;
 			var bg = GetComponent<Image>();
 			if (bg != null)
 				SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
-			var t = SpzUiThemeOps.Active;
-			foreach (var btn in GetComponentsInChildren<Button>(true)) {
-				if (btn == null) continue;
-				SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
-				foreach (var tmp in btn.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
-					if (tmp != null)
-						SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
-				}
-				SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
-			}
 		}
 
 		void Update() {

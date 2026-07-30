@@ -207,6 +207,8 @@ namespace spz {
 		static readonly Color kAuthoredStatusMuted = new Color(0.63f, 0.63f, 0.67f, 1f);
 		bool? _lastStatusIsSuccess;
 		float _themeTitleBasePt = -1f;
+		TextAnchor _authoredHeaderChildAlignment = TextAnchor.MiddleCenter;
+		bool _headerChildAlignSnapshotted;
 		float _themeFilterLabelBasePt = -1f;
 		float _themeStatusBasePt = -1f;
 		float _themeRememberLabelBasePt = -1f;
@@ -1373,6 +1375,7 @@ namespace spz {
 					// Full unwind: ColorBlocks / TMP metrics / line icons — not Graphic colors alone.
 					SpzUiThemeOps.RestoreBoundChromeUnder(_panel.transform);
 					SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(_panel.transform);
+					RestoreHeaderChildAlignment();
 					RestoreHeaderButtonAuthoredChrome(_installFromFile_button);
 					RestoreHeaderButtonAuthoredChrome(_refresh_button);
 					RestoreHeaderButtonAuthoredChrome(_loadAddonsNow_button);
@@ -1412,6 +1415,11 @@ namespace spz {
 					if (headerHlg != null) {
 						SpzUiThemeOps.ApplyScaledLayoutGroup(headerHlg);
 						headerHlg.spacing = SpzUiThemeOps.ScaledSpace(6);
+						// Snapshot authored alignment before Nomad write — leave RefreshScaled restores pad only.
+						if (!_headerChildAlignSnapshotted) {
+							_authoredHeaderChildAlignment = headerHlg.childAlignment;
+							_headerChildAlignSnapshotted = true;
+						}
 						headerHlg.childAlignment = TextAnchor.MiddleLeft;
 						int hPad = Mathf.RoundToInt(SpzUiThemeOps.ScaledSpace(2));
 						headerHlg.padding = new RectOffset(hPad, hPad, 0, 0);
@@ -1566,6 +1574,14 @@ namespace spz {
 			if (string.Equals(goName, "SaveAddonSettingsButton", StringComparison.Ordinal)) return 118f;
 			if (string.Equals(goName, "RunWithAddonsButton", StringComparison.Ordinal)) return 142f;
 			return 100f;
+		}
+
+		void RestoreHeaderChildAlignment() {
+			if (!_headerChildAlignSnapshotted || _panel == null) return;
+			var header = _panel.transform.Find("Header");
+			var headerHlg = header != null ? header.GetComponent<HorizontalLayoutGroup>() : null;
+			if (headerHlg != null)
+				headerHlg.childAlignment = _authoredHeaderChildAlignment;
 		}
 
 		static void RestoreHeaderButtonAuthoredChrome(Button button) {
