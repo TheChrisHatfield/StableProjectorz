@@ -276,7 +276,9 @@ namespace spz {
 		}
 
 		public static bool GetAddonPrefBoolStatic(string addonId, string key, bool defaultValue = false) {
-			return instance != null && instance.GetAddonPrefBool(addonId, key, defaultValue);
+			if (instance == null)
+				return defaultValue;
+			return instance.GetAddonPrefBool(addonId, key, defaultValue);
 		}
 
 		/// <summary>Writes a bool pref and runs ribbon sync when the host ribbon key changes.</summary>
