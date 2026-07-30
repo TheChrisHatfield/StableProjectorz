@@ -1452,8 +1452,15 @@ namespace spz {
 			if (_closePanel_button != null) {
 				SpzUiThemeOps.ApplyBoundChromeSelectable(_closePanel_button, t.controlBg, t.accent);
 				foreach (var tmp in _closePanel_button.GetComponentsInChildren<TextMeshProUGUI>(true)) {
-					if (tmp != null)
-						SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+					if (tmp == null) continue;
+					// Not CompactToolLabel — UpperCase+Truncate clips Close like Uninstall/Disabled did.
+					float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(tmp, 11f);
+					SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, basePt);
+					tmp.enableWordWrapping = false;
+					tmp.overflowMode = TextOverflowModes.Ellipsis;
+					tmp.fontStyle = FontStyles.Normal;
+					tmp.characterSpacing = 0f;
+					tmp.maxVisibleCharacters = int.MaxValue;
 				}
 				SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_closePanel_button);
 			}
