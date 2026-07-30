@@ -1687,19 +1687,23 @@ namespace spz {
 		}
 
 		void DestroyAddonUiShell(string addonId) {
-			if (string.IsNullOrEmpty(addonId) || !_registeredAddons.TryGetValue(addonId, out var addon) || addon == null)
+			if (string.IsNullOrEmpty(addonId))
 				return;
+			// Must not require a live registry entry: Discover may Remove the add-on while
+			// CoPythonUnloadThenDestroyUi is still pending after HTTP unload.
 			if (AddonUI_MGR.instance != null)
 				AddonUI_MGR.instance.DestroyAddonUI(addonId);
 			var ribbon = AddonRibbonIntegration.ResolveCommandRibbon();
 			if (ribbon != null)
 				ribbon.RemoveAddonPanel(addonId);
-			if (addon.uiElements != null) {
-				foreach (var go in addon.uiElements) {
-					if (go != null)
-						UnityEngine.Object.Destroy(go);
+			if (_registeredAddons.TryGetValue(addonId, out var addon) && addon != null) {
+				if (addon.uiElements != null) {
+					foreach (var go in addon.uiElements) {
+						if (go != null)
+							UnityEngine.Object.Destroy(go);
+					}
+					addon.uiElements.Clear();
 				}
-				addon.uiElements.Clear();
 			}
 		}
 		
