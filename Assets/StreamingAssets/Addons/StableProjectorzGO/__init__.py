@@ -167,7 +167,7 @@ def do_install_blender_addon(force=False, report_status=True):
 
 def do_install_blender_addon_force():
     """Button callback: always reinstall/update."""
-    do_install_blender_addon(force=True, report_status=True)
+    return do_install_blender_addon(force=True, report_status=True)
 
 
 def _status(message: str, duration: float = 4.0):
@@ -274,17 +274,17 @@ def do_import_from_path():
     global _panel, _eid_import
     if not _SPZ_OK:
         print(ADDON_ID + ": spz not available")
-        return
+        return False
     if _panel is None or _eid_import is None:
         print(ADDON_ID + ": panel not ready")
-        return
+        return False
     path = _panel.get_value(_eid_import)
     if not path or not str(path).strip():
         print(ADDON_ID + ": set Import mesh path first (or use Autofill)")
-        return
+        return False
     path = os.path.normpath(str(path).strip().strip('"'))
     if not path:
-        return
+        return False
     print(f"{ADDON_ID} import start:")
     print("  raw path:", repr(_panel.get_value(_eid_import)))
     print("  normalized path:", path)
@@ -295,7 +295,7 @@ def do_import_from_path():
             spz.get_api().ui_chrome.show_status_text("Import: file not found", 4.0)
         except Exception as ex:
             print(ADDON_ID + " show_status_text:", ex)
-        return
+        return False
     try:
         print("  size_bytes:", os.path.getsize(path))
     except OSError as e:
@@ -315,23 +315,24 @@ def do_import_from_path():
         api.ui_chrome.show_status_text("Import OK" if ok else "Import failed (check console)", 4.0)
     except Exception as ex:
         print(ADDON_ID + " show_status_text:", ex)
+    return ok
 
 
 def do_export_to_path():
     global _panel, _eid_export
     if not _SPZ_OK:
         print(ADDON_ID + ": spz not available")
-        return
+        return False
     if _panel is None or _eid_export is None:
         print(ADDON_ID + ": panel not ready")
-        return
+        return False
     path = _panel.get_value(_eid_export)
     if not path or not str(path).strip():
         print(ADDON_ID + ": set Export mesh path first (or use Autofill)")
-        return
+        return False
     path = os.path.normpath(str(path).strip().strip('"'))
     if not path:
-        return
+        return False
     print(f"{ADDON_ID} export start:")
     print("  raw path:", repr(_panel.get_value(_eid_export)))
     print("  normalized path:", path)
@@ -357,6 +358,7 @@ def do_export_to_path():
         api.ui_chrome.show_status_text("Export OK" if ok else "Export failed (check console)", 5.0)
     except Exception as ex:
         print(ADDON_ID + " show_status_text:", ex)
+    return ok
 
 
 def do_refresh_blender_path():

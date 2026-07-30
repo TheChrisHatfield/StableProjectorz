@@ -189,7 +189,11 @@ def load_addon_by_id(addon_id, addons_dir):
 
 
 def _invoke_addon_callback_unlocked(addon_id, callback_name):
-    """Invoke a named function in a loaded addon. Called by Unity when user clicks an addon button."""
+    """Invoke a named function in a loaded addon. Called by Unity when user clicks an addon button.
+
+    If the handler returns ``False``, HTTP ``success`` is false (early abort without exception).
+    ``None`` / other truthy values count as success so void handlers stay compatible.
+    """
     module = _loaded_addon_modules.get(addon_id)
     if module is None:
         print(f"[Addon Server] Addon not loaded: {addon_id}")
@@ -199,7 +203,10 @@ def _invoke_addon_callback_unlocked(addon_id, callback_name):
         print(f"[Addon Server] Callback not found or not callable: {addon_id}.{callback_name}")
         return False
     try:
-        func()
+        result = func()
+        if result is False:
+            print(f"[Addon Server] Callback reported failure: {addon_id}.{callback_name}")
+            return False
         return True
     except Exception as e:
         print(f"[Addon Server] Error invoking {addon_id}.{callback_name}: {e}")
