@@ -68,6 +68,7 @@ namespace spz {
 
 	    void ShowHide_ConnButton(){
 	        // show or hide our connection button, if we are for StableDiffusion, but user is generating 3D, etc.
+	        if( DimensionMode_MGR.instance == null || _openPanel_button == null ){ return; }
 	        switch (DimensionMode_MGR.instance._dimensionMode){
 	            case DimensionMode.dim_uv:
 	            case DimensionMode.dim_sd:
