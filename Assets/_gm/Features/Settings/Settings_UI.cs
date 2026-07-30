@@ -893,6 +893,15 @@ namespace spz {
 	            if (tmp.lineSpacing < 0f)
 	                tmp.lineSpacing = 0f;
 	        }
+	        // Compact clears label raycasts — re-assert face-only hits after label pass.
+	        foreach (var btn in _settingsPanel_go.GetComponentsInChildren<Button>(true)) {
+	            if (btn == null) continue;
+	            if (ReferenceEquals(btn, _wireframeColor_button) || ReferenceEquals(btn, _noiseColor_button))
+	                continue;
+	            if (IsUnderProductColorSurface(btn.transform))
+	                continue;
+	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
+	        }
 	        foreach (var slider in _settingsPanel_go.GetComponentsInChildren<Slider>(true)) {
 	            if (slider == null || IsUnderProductColorSurface(slider.transform)) continue;
 	            SpzUiThemeOps.ApplyNomadSliderChrome(slider);
