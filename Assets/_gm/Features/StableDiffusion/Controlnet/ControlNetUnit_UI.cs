@@ -435,11 +435,6 @@ namespace spz {
 	            || ReferenceEquals(toggle, _lowVRAM_toggle);
 	    }
 
-	    static void ThemeCircleDial(CircleSlider_Snapping_UI dial, SpzUiThemeOps.ThemeTokens t) {
-	        if (dial == null) return;
-	        dial.ApplyThemeTokens(t.accent, t.textPrimary);
-	    }
-
 	    /// <summary>
 	    /// Flat dark cell (no lime/cyan bevel plate). Selected = subtle accent mix; letter stays reverse-out.
 	    /// Header P/B/C/LOW only — routes through <see cref="SpzUiThemeOps.ThemeFlatToolToggle"/> (face raycast litmus).
