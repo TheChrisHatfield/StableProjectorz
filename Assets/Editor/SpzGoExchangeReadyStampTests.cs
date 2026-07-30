@@ -25,5 +25,12 @@ public sealed class SpzGoExchangeReadyStampTests {
 			"Ready stamp must be written from texture OnComplete, not before maps finish.");
 		Assert.That(clearSaving, Is.GreaterThan(stampCall),
 			"Ready stamp must be written before _isSaving clears, or waiters race a missing sidecar.");
+		Assert.That(src, Does.Contain("TryDeleteSpzGoExchangeReadyStamp"),
+			"Export must clear a stale ready stamp before rewriting the exchange FBX.");
+		int deleteAt = src.IndexOf("TryDeleteSpzGoExchangeReadyStamp( meshFilePath )");
+		int exportModel = src.IndexOf("mh.ExportModelToPath( meshFilePath )");
+		Assert.That(deleteAt, Is.GreaterThan(0));
+		Assert.That(exportModel, Is.GreaterThan(deleteAt),
+			"Stale stamp must be removed before ExportModelToPath rewrites the mesh.");
 	}
 }
