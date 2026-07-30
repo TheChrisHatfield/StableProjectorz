@@ -354,7 +354,7 @@ namespace spz {
 	                if (pov == null) continue;
 	                var povLabel = pov.GetComponentInChildren<TextMeshProUGUI>(true);
 	                if (povLabel != null)
-	                    SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(povLabel, t.textPrimary, 12f);
+	                    SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(povLabel, t.textPrimary, 11f);
 	            }
 	        }
 	        if (_sortPins_Button != null) {
