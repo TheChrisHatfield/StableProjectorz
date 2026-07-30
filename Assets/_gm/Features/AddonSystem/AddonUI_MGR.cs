@@ -727,11 +727,13 @@ namespace spz {
 				var go = list[i];
 				if (go == null) continue;
 				if (!go.name.StartsWith("AddonPanel_", StringComparison.Ordinal)) continue;
-				// Title only = not enough; need at least one control child beyond Title.
+				// Title only = not enough; need at least one control descendant beyond Title
+				// (widgets may sit under Content/ wrappers from Python layouts).
+				var transforms = go.GetComponentsInChildren<Transform>(true);
 				int controls = 0;
-				for (int c = 0; c < go.transform.childCount; c++) {
-					var ch = go.transform.GetChild(c);
-					if (ch == null) continue;
+				for (int c = 0; c < transforms.Length; c++) {
+					var ch = transforms[c];
+					if (ch == null || ch == go.transform) continue;
 					if (string.Equals(ch.name, "Title", StringComparison.Ordinal)) continue;
 					if (ch.name.StartsWith("Button_", StringComparison.Ordinal)
 					    || ch.name.StartsWith("TextInput_", StringComparison.Ordinal)
