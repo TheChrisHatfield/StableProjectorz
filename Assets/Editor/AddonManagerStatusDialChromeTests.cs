@@ -42,6 +42,25 @@ public sealed class AddonManagerStatusDialChromeTests {
 	}
 
 	[Test]
+	public void ApplyThemeTokens_SnapshotsLayoutGroupsBeforeNomadPads() {
+		string path = Path.GetFullPath(Path.Combine(
+			Application.dataPath,
+			"..",
+			"Assets/_gm/Features/AddonSystem/AddonManager_UI.cs"));
+		string src = File.ReadAllText(path);
+		int apply = src.IndexOf("void ApplyThemeTokens()", System.StringComparison.Ordinal);
+		Assert.That(apply, Is.GreaterThan(0));
+		int panelVlg = src.IndexOf("panelVlg", apply, System.StringComparison.Ordinal);
+		Assert.That(panelVlg, Is.GreaterThan(apply));
+		int snapshot = src.IndexOf("ApplyScaledLayoutGroup(panelVlg)", panelVlg, System.StringComparison.Ordinal);
+		int padWrite = src.IndexOf("panelVlg.padding = new RectOffset", panelVlg, System.StringComparison.Ordinal);
+		Assert.That(snapshot, Is.GreaterThan(0), "Must snapshot panel VLG before Nomad absolute pads.");
+		Assert.That(padWrite, Is.GreaterThan(snapshot), "Absolute Nomad padding must follow ApplyScaledLayoutGroup snapshot.");
+		Assert.That(src.IndexOf("ApplyScaledLayoutGroup(headerHlg)", apply, System.StringComparison.Ordinal), Is.GreaterThan(0));
+		Assert.That(src.IndexOf("ApplyScaledLayoutGroup(listVlg)", apply, System.StringComparison.Ordinal), Is.GreaterThan(0));
+	}
+
+	[Test]
 	public void PreferencesButton_SnapshotsSolidRectBeforeRoundedMark() {
 		string path = Path.GetFullPath(Path.Combine(
 			Application.dataPath,
