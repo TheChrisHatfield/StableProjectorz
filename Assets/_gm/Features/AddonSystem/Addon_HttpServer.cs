@@ -378,8 +378,8 @@ namespace spz {
 				// GET /api/v1/meshes/{id} - Get mesh info
 				if (method == "GET") {
 					var info = new JObject();
-					var pos = ConvertToRestResponse(ExecuteJsonRpc("spz.cmd.get_mesh_position", new JObject { ["mesh_id"] = meshId }));
-					var rot = ConvertToRestResponse(ExecuteJsonRpc("spz.cmd.get_mesh_rotation", new JObject { ["mesh_id"] = meshId }));
+					var pos = ConvertToRestResponse(ExecuteJsonRpc("spz.cmd.get_mesh_pos", new JObject { ["mesh_id"] = meshId }));
+					var rot = ConvertToRestResponse(ExecuteJsonRpc("spz.cmd.get_mesh_rot", new JObject { ["mesh_id"] = meshId }));
 					var scale = ConvertToRestResponse(ExecuteJsonRpc("spz.cmd.get_mesh_scale", new JObject { ["mesh_id"] = meshId }));
 					info["position"] = pos;
 					info["rotation"] = rot;
@@ -389,10 +389,10 @@ namespace spz {
 			}
 			else if (action == "position") {
 				if (method == "GET") {
-					return ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.get_mesh_position", new JObject { ["mesh_id"] = meshId }));
+					return ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.get_mesh_pos", new JObject { ["mesh_id"] = meshId }));
 				}
 				if (method == "POST" && body != null) {
-					return ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.set_mesh_position", new JObject {
+					return ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.set_mesh_pos", new JObject {
 						["mesh_id"] = meshId,
 						["x"] = body["x"]?.ToObject<float>() ?? 0f,
 						["y"] = body["y"]?.ToObject<float>() ?? 0f,
@@ -640,8 +640,8 @@ namespace spz {
 				completed = true;
 			});
 			
-			// Wait for completion (with timeout)
-			int timeout = 1000; // 1 second
+			// Wait for completion (with timeout). Mesh/export RPCs need the long-op budget, not 1s.
+			int timeout = 300000;
 			int elapsed = 0;
 			while (!completed && elapsed < timeout) {
 				Thread.Sleep(10);
