@@ -13,7 +13,7 @@ namespace spz {
 	/// Core UI may opt in by reading tokens or subscribing to <see cref="ThemeChanged"/>;
 	/// this class never scans arbitrary scene UI.
 	/// </summary>
-	public static class SpzUiThemeOps {
+	public static partial class SpzUiThemeOps {
 
 		public const string DefaultThemeId = "stableprojectorz-default";
 		public const string ThemeApiVersion = "1.18";
