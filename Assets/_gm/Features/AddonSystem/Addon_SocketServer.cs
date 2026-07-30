@@ -1729,7 +1729,7 @@ namespace spz {
 							}
 							
 							int successCountPos = fastPath.SetMeshPositions(meshIdsList, positionsList);
-							result["success"] = true;
+							result["success"] = successCountPos > 0;
 							result["count"] = successCountPos;
 						} else {
 							result["success"] = false;
@@ -1760,7 +1760,7 @@ namespace spz {
 							}
 							
 							int successCountRot = fastPath.SetMeshRotations(meshIdsRot, rotationsList);
-							result["success"] = true;
+							result["success"] = successCountRot > 0;
 							result["count"] = successCountRot;
 						} else {
 							result["success"] = false;
@@ -1790,7 +1790,7 @@ namespace spz {
 							}
 							
 							int successCountScale = fastPath.SetMeshScales(meshIdsScale, scalesList);
-							result["success"] = true;
+							result["success"] = successCountScale > 0;
 							result["count"] = successCountScale;
 						} else {
 							result["success"] = false;
