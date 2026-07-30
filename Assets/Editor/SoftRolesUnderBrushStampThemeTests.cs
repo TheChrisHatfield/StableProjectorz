@@ -16,5 +16,8 @@ public sealed class SoftRolesUnderBrushStampThemeTests {
 		Assert.That(src, Does.Contain("GetComponentInParent<BrushRibbon_UI_Hardness>(true)"));
 		Assert.That(src, Does.Contain("GetComponentInParent<BrushRibbon_UI_Colors>(true)"));
 		Assert.That(src, Does.Contain("GetComponentInParent<BrushRibbon_UI_Size>(true)"));
+		Assert.That(src, Does.Contain("GetComponentInParent<BrushRibbon_UI_BucketFill>(true)"));
+		Assert.That(src, Does.Contain("GetComponentInParent<BrushRibbon_UI_Direction>(true)"));
+		Assert.That(src, Does.Contain("GetComponentInParent<BrushRibbon_UI_Opacity>(true)"));
 	}
 }
