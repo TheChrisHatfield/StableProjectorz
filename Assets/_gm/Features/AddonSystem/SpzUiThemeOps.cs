@@ -726,6 +726,18 @@ namespace spz {
 		}
 
 		/// <summary>
+		/// Circle dial numerals (CFG / steps / CN / depth): BoundChrome label tracking (10) spills
+		/// multi-digit values past the ring. Same color/scale path, zero character spacing.
+		/// </summary>
+		public static void ApplyBoundChromeDialValueTmp(TMP_Text text, Color token, float fallbackBasePt = 16f) {
+			if (text == null) return;
+			ApplyBoundChromeTmp(text, token, fallbackBasePt);
+			if (!ShouldRecolorBoundChrome) return;
+			text.characterSpacing = 0f;
+			text.enableWordWrapping = false;
+		}
+
+		/// <summary>
 		/// Soft / Tileable / Point-Bilinear style tool radios: uppercase without strip tracking.
 		/// Strip spacing (18) wraps "SOFT" to SOF/T and spills past the gold selected face into TILE.
 		/// </summary>

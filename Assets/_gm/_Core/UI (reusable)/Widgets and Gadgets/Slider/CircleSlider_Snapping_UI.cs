@@ -202,7 +202,8 @@ namespace spz {
 	        }
 	        if (_text != null) {
 	            // Always reverse-out on the dark app chrome — never dark ink (boxes are gone; fill is a ring).
-	            SpzUiThemeOps.ApplyBoundChromeTmp(_text, textPrimary, 16f);
+	            // DialValue zeroes Nomad tracking so multi-digit CFG/steps stay inside the ring.
+	            SpzUiThemeOps.ApplyBoundChromeDialValueTmp(_text, textPrimary, 16f);
 	            _text.raycastTarget = false;
 	            _text.enabled = true;
 	        }
