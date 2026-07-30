@@ -105,7 +105,7 @@ namespace spz {
 	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
 	        var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	        if (label != null)
-	            SpzUiThemeOps.ApplyBoundChromeTmp(label, t.textPrimary);
+	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, t.textPrimary, 11f);
 	    }
 	}
 }//end namespace
