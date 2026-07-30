@@ -147,4 +147,22 @@ public sealed class AddonManagerPrefsRibbonTests {
 		int createIdx = src.IndexOf("GetOrCreatePanelForAddon(addonId, title)", forceIdx, StringComparison.Ordinal);
 		Assert.That(createIdx, Is.GreaterThan(forceIdx), "ribbon strip must run before GetOrCreate when parking");
 	}
+
+	[Test]
+	public void AddonMgr_EnableAndBulkEnsure_MigrateParkedWhenShowingRibbon() {
+		string path = Path.GetFullPath(Path.Combine(
+			Application.dataPath,
+			"_gm/Features/AddonSystem/Addon_MGR.cs"));
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("RequestMigrateParkedPanelsNow()"));
+		// EnableAddon show-branch and bulk ensure both migrate.
+		int enableIdx = src.IndexOf("public void EnableAddon(string addonId)", StringComparison.Ordinal);
+		Assert.That(enableIdx, Is.GreaterThan(0));
+		string enableWindow = src.Substring(enableIdx, Math.Min(900, src.Length - enableIdx));
+		Assert.That(enableWindow, Does.Contain("RequestMigrateParkedPanelsNow()"));
+		int bulkIdx = src.IndexOf("void EnsureRibbonShellsForAllEnabledAddons()", StringComparison.Ordinal);
+		Assert.That(bulkIdx, Is.GreaterThan(0));
+		string bulkWindow = src.Substring(bulkIdx, Math.Min(450, src.Length - bulkIdx));
+		Assert.That(bulkWindow, Does.Contain("RequestMigrateParkedPanelsNow()"));
+	}
 }
