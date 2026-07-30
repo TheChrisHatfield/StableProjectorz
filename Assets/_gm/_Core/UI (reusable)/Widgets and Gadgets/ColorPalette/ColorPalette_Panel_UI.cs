@@ -68,20 +68,25 @@ namespace spz {
 
 	    public void Set_CurrentColor(Color col) {
 	        col = new Color(Mathf.Clamp01(col.r), Mathf.Clamp01(col.g), Mathf.Clamp01(col.b), Mathf.Clamp01(col.a));
-	        finalColorImage.color = col;
+	        if (finalColorImage != null)
+		        finalColorImage.color = col;
 	        string htmlColor = ColorUtility.ToHtmlStringRGB(col).ToUpper();
-	        _hexColorText.text = "#" + htmlColor;
-	        _hexColor_inputText.text = htmlColor;
+	        if (_hexColorText != null)
+		        _hexColorText.text = "#" + htmlColor;
+	        if (_hexColor_inputText != null)
+		        _hexColor_inputText.text = htmlColor;
 
 	        Color.RGBToHSV(col, out float h, out float s, out float v);
 
 	        // Set hue dot position (centered horizontally)
+	        if (_hueArea_dot != null && _hueArea_rt != null)
 	        _hueArea_dot.anchoredPosition = new Vector2(
 	            _hueArea_rt.rect.center.x,
 	            _hueArea_rt.rect.height * (1 - h) + _hueArea_rt.rect.yMin
 	        );
 
 	        // Set gradient dot position
+	        if (_gradientArea_dot != null && _gradientArea_rt != null)
 	        _gradientArea_dot.anchoredPosition = new Vector2(
 	            _gradientArea_rt.rect.width * s + _gradientArea_rt.rect.xMin,
 	            _gradientArea_rt.rect.height * v + _gradientArea_rt.rect.yMin
