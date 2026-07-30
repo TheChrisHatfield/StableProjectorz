@@ -59,6 +59,16 @@ namespace spz {
 		static int s_columnFrameSuppressCount;
 		static GameObject s_columnFrameGo;
 		static bool s_columnFrameWasActive;
+
+		[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+		static void ResetColumnFrameSuppressStatics() {
+			// Enter Play Mode Options can disable domain reload — static suppress count would stick
+			// and leave GenerateButtons cream frame off after the next Play.
+			s_columnFrameSuppressCount = 0;
+			s_columnFrameGo = null;
+			s_columnFrameWasActive = false;
+		}
+
 		Sprite _cachedFaceBorderSprite;
 		Color _cachedFaceBorderColor = new Color(1f, 0.959f, 0.881f, 0.922f);
 		float _cachedFaceBorderPpu = 6f;
