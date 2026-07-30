@@ -35,7 +35,7 @@ def center_selected_meshes():
     
     if not selected:
         print("No meshes selected")
-        return
+        return False
     
     # Get bounds of selected meshes
     bounds = api.scene.get_selected_meshes_bounds()
@@ -62,7 +62,7 @@ def randomize_selected_positions():
     
     if not selected:
         print("No meshes selected")
-        return
+        return False
     
     for mesh_id in selected:
         pos = api.models.get_pos(mesh_id)
@@ -131,11 +131,11 @@ def generate_with_prompt():
     
     if not api.sd.is_connected():
         print("Stable Diffusion not connected!")
-        return
+        return False
     
     if api.sd.is_generating():
         print("Generation already in progress!")
-        return
+        return False
     
     # Set prompts
     api.sd.set_positive_prompt("beautiful texture, high quality, detailed")
