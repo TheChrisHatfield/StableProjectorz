@@ -89,12 +89,56 @@ namespace spz {
 	    }
 
 
+	    /// <summary>
+	    /// Litmus: SPZ fits imported meshes so max AABB edge ≈ this many Unity units
+	    /// (see <see cref="RescaleModel_fitIntoVolume"/>). Blender's default cube is 2m edge;
+	    /// GO export undoes the fit so that cube returns to ~2m in Blender.
+	    /// </summary>
+	    public const float SpzFitTargetMaxDimension = 3.0f;
+	    public const float BlenderDefaultCubeEdgeMeters = 2.0f;
+
 	    // please don't change to much, to avoid depth-precision issues with projections or painting.
 	    // Remember that we were tyring to fit the model into small volume when  ModelsHandler3D_ImportHelper.AcceptModel()
 	    // via doing RescaleModel_fitIntoVolume().
 	    public void ChangeScaleEntireModel(float new_globalScale){
 	        if(currModelRootGO == null){ return; }
-	        currModelRootGO.transform.localScale =  Vector3.one*new_globalScale*currModelRoot_scaleAfterImport;
+	        currModelRootGO.transform.localScale =  Vector3.one*new_globalScale*EffectiveFitScale();
+	    }
+
+	    /// <summary>Import fit factor (never 0). User global scale is localScale / this.</summary>
+	    public float EffectiveFitScale(){
+		    float f = currModelRoot_scaleAfterImport;
+		    return f > 1e-8f ? f : 1f;
+	    }
+
+	    /// <summary>
+	    /// User scale slider factor (1 = as fitted). Survives GO export because we write authoring size = mesh × this.
+	    /// </summary>
+	    public float GetUserGlobalScale(){
+		    if( currModelRootGO == null ) return 1f;
+		    float fit = EffectiveFitScale();
+		    // Uniform fit is applied on all axes; read X.
+		    return currModelRootGO.transform.localScale.x / fit;
+	    }
+
+	    /// <summary>
+	    /// Temporarily remove the import fit-to-volume scale so FBX writes Blender/authoring meters
+	    /// (default-cube litmus). Keeps user global scale. Call restore after export.
+	    /// </summary>
+	    public bool TryBeginFbxExportAuthoringScale( out Vector3 restoreLocalScale ){
+		    restoreLocalScale = Vector3.one;
+		    if( currModelRootGO == null ) return false;
+		    Transform t = currModelRootGO.transform;
+		    restoreLocalScale = t.localScale;
+		    float fit = EffectiveFitScale();
+		    if( Mathf.Abs( fit - 1f ) < 1e-6f ) return false;
+		    t.localScale = restoreLocalScale / fit;
+		    return true;
+	    }
+
+	    public void EndFbxExportAuthoringScale( Vector3 restoreLocalScale ){
+		    if( currModelRootGO == null ) return;
+		    currModelRootGO.transform.localScale = restoreLocalScale;
 	    }
 
 	    //this will prevent issues with depth-testing (when applying projections, painting, etc etc).
@@ -113,9 +157,19 @@ namespace spz {
 	        //excessively large meshes might not scale correctly. Might warn user later.
 	        //This might be helpful if user included some "distant light", etc into the FBX, which will mess up the auto-depth.
 	        float maxDimension = Mathf.Max(totalBounds.size.x, totalBounds.size.y, totalBounds.size.z);
-	        scaleWasTooLarge_duringImport = maxDimension>1001; 
+	        scaleWasTooLarge_duringImport = maxDimension>1001;
 
-	        float scaleFactor = 3.0f/maxDimension;
+	        // Degenerate / empty bounds: do not divide by zero (Inf/NaN breaks export undo + painting depth).
+	        if( maxDimension < 1e-8f ){
+		        currModelRoot_scaleAfterImport = 1f;
+		        currModelRootGO.transform.localScale = Vector3.one;
+		        currModelRootGO.transform.position = Vector3.zero;
+		        currModelRootGO.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+		        UnityEngine.Debug.LogWarning("[Objs3D_Container] fit-to-volume skipped: mesh bounds were empty/degenerate.");
+		        return;
+	        }
+
+	        float scaleFactor = SpzFitTargetMaxDimension/maxDimension;
 	        currModelRoot_scaleAfterImport = scaleFactor;
 
 	        currModelRootGO.transform.localScale =  Vector3.one*scaleFactor;
