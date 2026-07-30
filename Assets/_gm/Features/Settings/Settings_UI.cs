@@ -880,7 +880,16 @@ namespace spz {
 	            if (tmp == null || IsUnderProductColorSurface(tmp.transform)) continue;
 	            if (tmp.gameObject.name == "Placeholder" || tmp.gameObject.name == "Checkmark")
 	                continue;
-	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	            if (tmp.GetComponentInParent<TMP_InputField>(true) != null)
+	                continue;
+	            // Short chrome captions on buttons/toggles — Compact; body copy keeps color with zero tracking.
+	            if (tmp.GetComponentInParent<Button>(true) != null
+	                || tmp.GetComponentInParent<Toggle>(true) != null) {
+	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 12f);
+	            } else {
+	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	                tmp.characterSpacing = 0f;
+	            }
 	            if (tmp.lineSpacing < 0f)
 	                tmp.lineSpacing = 0f;
 	        }
