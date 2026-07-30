@@ -1,5 +1,9 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem.UI;
+#endif
 
 namespace spz {
 	/// <summary>
@@ -21,6 +25,11 @@ namespace spz {
 
 #if ENABLE_INPUT_SYSTEM
 		void Update() {
+			// InputSystemUIInputModule already drives sliders — avoid double-driving pen.
+			var es = EventSystem.current;
+			if (es != null && es.GetComponent<InputSystemUIInputModule>() != null)
+				return;
+
 			var pen = UnityEngine.InputSystem.Pen.current;
 			if (pen == null) {
 				_penDragging = false;
