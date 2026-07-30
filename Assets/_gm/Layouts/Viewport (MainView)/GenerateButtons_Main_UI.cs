@@ -264,7 +264,8 @@ namespace spz {
 	        }
 	        var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	        if (label != null)
-	            SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(label, t.textPrimary, 14f);
+	            // GEN/ART stacked caps: strip tracking 18 overflows the gen column (FULL/SRN NarrowDock litmus).
+	            SpzUiThemeOps.ApplyBoundChromeNarrowDockLabelTmp(label, t.textPrimary, 14f);
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }
 
