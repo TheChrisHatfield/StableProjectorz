@@ -140,10 +140,22 @@ namespace spz {
 			_visOff = t.controlBg; _visOff.a = 0.95f;
 			_rowDefault = t.panelBg; _rowDefault.a = 0.2f;
 			_rowActive = t.selection; _rowActive.a = 0.45f;
-			if (_addLayerButton != null)
+			if (_addLayerButton != null) {
 				SpzUiThemeOps.ApplyBoundChromeSelectable(_addLayerButton, t.success, t.accent);
-			if (_collapseButton != null)
+				foreach (var tmp in _addLayerButton.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
+					if (tmp != null)
+						SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+				}
+				SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_addLayerButton);
+			}
+			if (_collapseButton != null) {
 				SpzUiThemeOps.ApplyBoundChromeSelectable(_collapseButton, t.controlBg, t.accent);
+				foreach (var tmp in _collapseButton.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
+					if (tmp != null)
+						SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+				}
+				SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_collapseButton);
+			}
 			RefreshActiveHighlight();
 			for (int i = 0; i < _rows.Count; i++)
 			{
@@ -154,8 +166,23 @@ namespace spz {
 				if (del != null)
 				{
 					var delBtn = del.GetComponent<Button>();
-					if (delBtn != null)
+					if (delBtn != null) {
 						SpzUiThemeOps.ApplyBoundChromeSelectable(delBtn, t.danger, t.accent);
+						foreach (var tmp in delBtn.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
+							if (tmp != null)
+								SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+						}
+						SpzUiThemeOps.ClearNonFaceRaycastsForTheme(delBtn);
+					}
+					SpzUiThemeOps.ApplyControlLineIcon(del, StudioLineIcon.Trash, 16f);
+				}
+				var vis = row.transform.Find("Visibility");
+				if (vis != null) {
+					var visBtn = vis.GetComponent<Button>();
+					if (visBtn != null) {
+						SpzUiThemeOps.EnsureSelectableHitFace(visBtn);
+						SpzUiThemeOps.ClearNonFaceRaycastsForTheme(visBtn);
+					}
 				}
 			}
 			RefreshVisibilityColors();
@@ -693,6 +720,8 @@ namespace spz {
 				_layerStack.RemoveLayer(idx);
 				RequestReRender();
 			});
+			if (SpzUiThemeOps.ShouldRecolorBoundChrome)
+				SpzUiThemeOps.ApplyControlLineIcon(deleteGo.transform, StudioLineIcon.Trash, 16f);
 
 			return row;
 		}
