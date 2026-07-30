@@ -156,17 +156,20 @@ namespace spz {
 			var commandRibbon = AddonRibbonIntegration.ResolveCommandRibbon();
 			if (CommandRibbon_UI.instance == null && commandRibbon != null)
 				UnityEngine.Debug.Log("[AddonUI_MGR] CommandRibbon_UI.instance was null; resolved ribbon via FindObjectOfType(including inactive).");
-			bool ribbonResolved = commandRibbon != null;
+			bool forceParkHiddenRibbon = !Addon_MGR.ShouldShowInCommandRibbonStatic(addonId);
+			bool ribbonResolved = commandRibbon != null && !forceParkHiddenRibbon;
 			if (ribbonResolved) {
 				parentForThisAddon = commandRibbon.GetOrCreatePanelForAddon(addonId, title);
 				if (parentForThisAddon != null)
 					UnityEngine.Debug.Log($"[AddonUI_MGR] Got ribbon panel parent for: {title}");
 				else
 					UnityEngine.Debug.LogWarning($"[AddonUI_MGR] GetOrCreatePanelForAddon returned null for: {addonId}. Parking until ribbon shell is ready.");
+			} else if (forceParkHiddenRibbon) {
+				UnityEngine.Debug.Log($"[AddonUI_MGR] Host pref hide ribbon for '{addonId}' — parking panel (add-on stays active).");
 			} else {
 				UnityEngine.Debug.LogWarning("[AddonUI_MGR] CommandRibbon_UI not found yet. Parking panel off-screen until ribbon is ready (will not overlay the viewport).");
 			}
-			// Temporary parking — ribbon missing OR ribbon present but shell not creatable yet.
+			// Temporary parking — ribbon missing OR ribbon present but shell not creatable yet OR host ribbon pref off.
 			bool parkedPendingRibbon = parentForThisAddon == null;
 			if (parkedPendingRibbon)
 				parentForThisAddon = EnsureHiddenAddonPanelsParking();
@@ -538,17 +541,18 @@ namespace spz {
 				while (elapsed < maxWait) {
 					QuarantineLegacyMidScreenFallbackRoot();
 					TryMigrateParkedPanelsNow();
-					if (_parkedForRibbon.Count == 0)
+					if (CountParkedAwaitingRibbonShow() == 0)
 						yield break;
 					elapsed += 0.25f;
 					yield return new WaitForSeconds(0.25f);
 				}
-				if (_parkedForRibbon.Count > 0)
-					UnityEngine.Debug.LogWarning($"[AddonUI_MGR] {_parkedForRibbon.Count} add-on panel(s) still parked after {maxWait}s (ribbon shell not ready).");
+				int pending = CountParkedAwaitingRibbonShow();
+				if (pending > 0)
+					UnityEngine.Debug.LogWarning($"[AddonUI_MGR] {pending} add-on panel(s) still parked after {maxWait}s (ribbon shell not ready).");
 			}
 			finally {
 				_ribbonMigrateRunning = false;
-				if (_parkedForRibbon.Count == 0) {
+				if (CountParkedAwaitingRibbonShow() == 0) {
 					_ribbonMigrateRounds = 0;
 				} else {
 					_ribbonMigrateRounds++;
@@ -556,9 +560,9 @@ namespace spz {
 						// Back off between passes so we do not spin forever at 0.25s.
 						float backoff = Mathf.Min(8f, 0.5f * _ribbonMigrateRounds);
 						StartCoroutine(RestartRibbonMigrateAfterBackoff_crtn(backoff));
-					} else if (_parkedForRibbon.Count > 0) {
+					} else if (CountParkedAwaitingRibbonShow() > 0) {
 						UnityEngine.Debug.LogWarning(
-							$"[AddonUI_MGR] Giving up ribbon migrate after {kRibbonMigrateMaxRounds} passes; {_parkedForRibbon.Count} panel(s) remain parked.");
+							$"[AddonUI_MGR] Giving up ribbon migrate after {kRibbonMigrateMaxRounds} passes; {CountParkedAwaitingRibbonShow()} panel(s) remain parked.");
 					}
 				}
 			}
@@ -567,7 +571,30 @@ namespace spz {
 		IEnumerator RestartRibbonMigrateAfterBackoff_crtn(float delaySeconds) {
 			if (delaySeconds > 0f)
 				yield return new WaitForSeconds(delaySeconds);
-			if (_parkedForRibbon.Count > 0 && isActiveAndEnabled && !_ribbonMigrateRunning)
+			if (CountParkedAwaitingRibbonShow() > 0 && isActiveAndEnabled && !_ribbonMigrateRunning)
+				EnsureRibbonMigrateCoroutine();
+		}
+
+		/// <summary>Parked panels that should move onto the ribbon when the shell is ready (excludes host ribbon-hidden).</summary>
+		int CountParkedAwaitingRibbonShow() {
+			int n = 0;
+			for (int i = 0; i < _parkedForRibbon.Count; i++) {
+				ParkedPanel parked = _parkedForRibbon[i];
+				if (parked == null || parked.panel == null)
+					continue;
+				if (!Addon_MGR.IsAddonEnabledStatic(parked.addonId))
+					continue;
+				if (!Addon_MGR.ShouldShowInCommandRibbonStatic(parked.addonId))
+					continue;
+				n++;
+			}
+			return n;
+		}
+
+		/// <summary>Re-run park→ribbon migrate (e.g. after host pref Show in Command Ribbon turns on).</summary>
+		public void RequestMigrateParkedPanelsNow() {
+			TryMigrateParkedPanelsNow();
+			if (CountParkedAwaitingRibbonShow() > 0)
 				EnsureRibbonMigrateCoroutine();
 		}
 
@@ -586,6 +613,10 @@ namespace spz {
 						$"[AddonUI_MGR] Discarding parked panel for disabled add-on '{parked.addonId}'.");
 					Destroy(parked.panel);
 					_parkedForRibbon.RemoveAt(i);
+					continue;
+				}
+				if (!Addon_MGR.ShouldShowInCommandRibbonStatic(parked.addonId)) {
+					// Host pref: keep under parking; leave on migrate list until ribbon is shown again.
 					continue;
 				}
 				RectTransform shell = ribbon.GetOrCreatePanelForAddon(parked.addonId, parked.title);

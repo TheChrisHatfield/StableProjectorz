@@ -118,6 +118,7 @@
 - Typed `font_scale` / `spacing_scale` + schema — completed at rpc 1.13 (`docs/specs/addon-theme-api-p3/`)
 - Phase A–C + B4–B8 — through glass-lite `panel_alpha`, icon pack v1, constrained chrome show/hide (theme **1.17**, addon **1.15**)
 - Theme **1.18** — CommandRibbon `ribbon_icon_only` (Nomad icon-only strip; reversible via reset)
+- Nomad sculpt chrome — strip accent bar + centered icons; FULL/SRN Expand + OPEN/HIDE RIGHT chevrons; Addon Manager header icon align / icon-only (`docs/delta/20_micro/nomad-sculpt-side-ribbon-fullscreen-icons.md`)
 - Remaining hard non-goals: true blur shaders · custom icon upload · create/destroy built-in widgets · theme file export/import
 
 ### 14. ControlNet Operations ✅ COMPLETED
@@ -143,6 +144,16 @@
 
 **Still Missing:**
 - Background image control (complex, future consideration)
+
+### 16. Add-on Manager host preferences (Blender-like) ✅ PARTIAL
+**Status:** Host framework shipped  
+**Added:**
+- Expandable **Preferences** per add-on row in Add-on Manager
+- Host pref `show_in_command_ribbon` — enabled add-on can stay active without a Command Ribbon tab
+- Persist via Save settings (`spz.addons.prefsByIdJson.v1`)
+
+**Still Missing (Optional):**
+- Addon-declared preference schemas (`addon.json` / Python) rendered into the same Preferences body
 
 ## Summary
 

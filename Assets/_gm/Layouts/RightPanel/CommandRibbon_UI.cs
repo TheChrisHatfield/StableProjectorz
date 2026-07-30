@@ -1928,6 +1928,18 @@ namespace spz {
 
 	    /// <summary>Removes an addon's tab and panel (e.g. when addon is disabled). Call from Addon_MGR.UnloadAddon.</summary>
 	    public void RemoveAddonPanel(string addonId){
+		    RemoveAddonPanelCore(addonId, preserveContent: false);
+	    }
+
+	    /// <summary>
+	    /// Removes the ribbon tab/shell but reparents AddonPanel_* content into off-screen parking
+	    /// (enabled add-on with host pref show_in_command_ribbon = false).
+	    /// </summary>
+	    public void RemoveAddonPanelPreservingContent(string addonId) {
+		    RemoveAddonPanelCore(addonId, preserveContent: true);
+	    }
+
+	    void RemoveAddonPanelCore(string addonId, bool preserveContent){
 	        if (string.IsNullOrEmpty(addonId)) return;
 	        EnsureTabGroupResolved();
 	        string tabId = AddonRibbonIntegration.TabIdForAddon(addonId);
@@ -1939,6 +1951,23 @@ namespace spz {
 		        tabElemOnStrip = FindAddonTabElementForTabId(_tabGroup, tabId);
 	        bool addonTabWasSelected = tabElemOnStrip != null && tabElemOnStrip.IsVisuallySelectedAsActiveTab();
 	        bool hadRibbonShell = _addonPanelsById.TryGetValue(addonId, out var panelRect);
+
+	        List<Transform> salvaged = null;
+	        if (preserveContent && hadRibbonShell && panelRect != null && panelRect.gameObject != null) {
+		        salvaged = new List<Transform>();
+		        for (int ci = panelRect.childCount - 1; ci >= 0; ci--) {
+			        Transform child = panelRect.GetChild(ci);
+			        if (child == null) continue;
+			        string cn = child.name ?? "";
+			        bool match = AddonUI_MGR.instance != null
+				        ? AddonUI_MGR.instance.IsAddonPanelOwnedBy(cn, addonId)
+				        : (cn.StartsWith("AddonPanel_" + addonId + "_", StringComparison.Ordinal)
+				           || string.Equals(cn, "AddonPanel_" + addonId, StringComparison.Ordinal));
+			        if (!match) continue;
+			        child.SetParent(null, false);
+			        salvaged.Add(child);
+		        }
+	        }
 
 	        StripAddonTabPanelShowHandler(addonId, tabElemOnStrip, tabGo);
 	        if(tabGo != null){
@@ -1959,7 +1988,18 @@ namespace spz {
 		        _addonPanelsById.Remove(addonId);
 	        UnregisterAddonShortcutOrder(addonId);
 	        DestroyAddonStripDivider(addonId);
-	        UnityEngine.Debug.Log($"[CommandRibbon_UI] Removed addon tab/panel: {addonId} (hadRibbonShell={hadRibbonShell})");
+
+	        if (preserveContent && salvaged != null && salvaged.Count > 0) {
+		        string title = addonId;
+		        if (Addon_MGR.instance != null
+		            && Addon_MGR.instance.GetAddons().TryGetValue(addonId, out var info)
+		            && info != null
+		            && !string.IsNullOrWhiteSpace(info.displayName))
+			        title = info.displayName.Trim();
+		        ReparkSalvagedInsteadOfDestroy(addonId, title, salvaged);
+	        }
+
+	        UnityEngine.Debug.Log($"[CommandRibbon_UI] Removed addon tab/panel: {addonId} (hadRibbonShell={hadRibbonShell}, preserveContent={preserveContent})");
 	        if (_tabGroup != null) {
 		        if (addonTabWasSelected)
 			        _tabGroup.SwitchTab("art list");
