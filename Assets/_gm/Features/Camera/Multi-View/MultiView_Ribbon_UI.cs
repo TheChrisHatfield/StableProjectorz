@@ -44,7 +44,12 @@ namespace spz {
 	    // Helps to figure out which brush-mask to tweak (what we will be painting)
 	    // Even if we have 4 pov inside a generation, current camera might be #2,  but currentPovIx might be #3, etc
 	    // NOTICE 5 - sibling index because they are arranged in reversed order in hieararchy.
-	    public int currentPovIx =>  5 - _editPOV_toggles.First(t=>t.isOn).transform.GetSiblingIndex();
+	    public int currentPovIx {
+	        get {
+	            var on = _editPOV_toggles.FirstOrDefault(t => t.isOn);
+	            return on != null ? 5 - on.transform.GetSiblingIndex() : 0;
+	        }
+	    }
 	    public int hoveredPovIx { get; private set; } = -1; //cursor might be hovering a pov-toggle, but not click it yet. Useful for previewing via checker-texture.
 	    public bool _isEditingMode{ get; private set; } = false;
 	    public bool _isShowGrid => _showGrid_toggle.isOn;
