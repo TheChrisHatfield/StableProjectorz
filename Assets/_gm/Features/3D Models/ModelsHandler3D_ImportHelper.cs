@@ -276,13 +276,11 @@ namespace spz {
 		            UnityEngine.Debug.LogWarning("[ModelsHandler3D_ImportHelper] SaveDefaultDoor_toFile: no current model root GO; cannot re-export FBX scene.");
 		            return;
 	            }
-	            _saveFBX_helper.SaveModels(path, o3d.currModelRootGO);
-	            // Only record path after a successful write — stale _path_recentlyExported misleads headless export.
-	            if (File.Exists(path)) {
-		            _path_recentlyExported = path;
-	            } else {
-		            UnityEngine.Debug.LogWarning("[ModelsHandler3D_ImportHelper] SaveDefaultDoor_toFile: FBX not found after SaveModels: " + path);
+	            if (!_saveFBX_helper.SaveModels(path, o3d.currModelRootGO)) {
+		            UnityEngine.Debug.LogWarning("[ModelsHandler3D_ImportHelper] SaveDefaultDoor_toFile: FBX export failed: " + path);
+		            return;
 	            }
+	            _path_recentlyExported = path;
 	        }
 
 	        if(string.IsNullOrEmpty(pathWithExten)){//allow user to select directory manually
