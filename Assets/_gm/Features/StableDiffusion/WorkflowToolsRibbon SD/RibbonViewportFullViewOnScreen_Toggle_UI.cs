@@ -910,6 +910,7 @@ namespace spz {
 			}
 			// Do not set _fullViewMenuOpen here: that flag is for legacy popup/click-away; the secondary
 			// control is a layout row and should stay up while in on-screen full-view session.
+			bool wasShown = _fullViewMenuRt.gameObject.activeSelf;
 			_fullViewMenuRt.gameObject.SetActive(show);
 			_fullViewMenuCg.alpha = show ? 1f : 0f;
 			_fullViewMenuCg.interactable = show;
@@ -918,8 +919,9 @@ namespace spz {
 			if (show && _builtRowRt != null && _fullViewMenuRt.parent == _builtRowRt.parent) {
 				_fullViewMenuRt.SetSiblingIndex(_builtRowRt.GetSiblingIndex() + 1);
 			}
-			// OPEN RIGHT adds 52px — stack climbs toward DimensionMode SD; re-fit spacer.
-			ApplyAdaptiveBottomGap(force: true);
+			// OPEN RIGHT adds/removes 52px — only re-fit when visibility actually changes.
+			if (wasShown != show)
+				ApplyAdaptiveBottomGap(force: true);
 		}
 
 		void EnsureFullViewMenuWiringIfMissing() {
