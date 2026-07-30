@@ -23,6 +23,7 @@ public sealed class Gen3dVideoPreviewChromeThemeTests {
 		Assert.That(src, Does.Contain("ThemeChanged += ApplyThemeTokens"));
 		Assert.That(src, Does.Contain("ApplyBoundChromeSelectable"));
 		Assert.That(src, Does.Contain("RestoreBoundChromeUnder"));
+		Assert.That(src, Does.Contain("RestoreDecisionButton"));
 		Assert.That(src, Does.Contain("OnConfirmed_GeneratePaused"));
 	}
 
