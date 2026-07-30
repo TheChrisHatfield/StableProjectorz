@@ -40,7 +40,7 @@ namespace spz {
 	    }
 
 	    void Update(){
-	        if(Keyboard.current.escapeKey.wasPressedThisFrame){  OnNoClicked(); }
+	        if(Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame){  OnNoClicked(); }
 	    }
 
 	    public void Show( string text,  Action onYes,  Action onNo, string yesText="Yes", string noText="No" ){
@@ -117,7 +117,7 @@ namespace spz {
 	            face.raycastTarget = true;
 	        }
 	        if (label != null)
-	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, t.textPrimary, 15f);
+	            SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(label, t.textPrimary, 15f);
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }
 
