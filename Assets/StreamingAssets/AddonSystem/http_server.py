@@ -334,9 +334,13 @@ class UISetValueBody(BaseModel):
     value: Any = None
 
 
+class CameraFovBody(BaseModel):
+    fov: float
+
+
 class UIApplyThemeBody(BaseModel):
     theme_id: str
-    tokens: Optional[Dict[str, str]] = None
+    tokens: Optional[Dict[str, Any]] = None
     mode: Optional[str] = None
 
 
@@ -347,7 +351,7 @@ class UISetLineIconBody(BaseModel):
 
 class UIRegisterThemeBody(BaseModel):
     theme_id: str
-    tokens: Dict[str, str]
+    tokens: Dict[str, Any]
     label: Optional[str] = None
     owner: Optional[str] = None
 
@@ -636,11 +640,11 @@ async def get_camera_fov(camera_id: int):
     raise HTTPException(status_code=404, detail="Camera not found")
 
 @app.post("/api/v1/cameras/{camera_id}/fov")
-async def set_camera_fov(camera_id: int, fov: float):
-    """Set camera FOV"""
+async def set_camera_fov(camera_id: int, body: CameraFovBody):
+    """Set camera FOV (JSON body ``{\"fov\": ...}``, not a query param)."""
     result = await call_unity_async("spz.cmd.set_camera_fov", {
         "camera_index": camera_id,
-        "fov": float(fov)
+        "fov": float(body.fov)
     })
     return {"success": result.get("success", False)}
 
