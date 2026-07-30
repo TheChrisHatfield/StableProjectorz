@@ -226,6 +226,7 @@ namespace spz {
 	        if (button == null) return;
 	        foreach (var tmp in button.GetComponentsInChildren<TMP_Text>(true))
 	            ApplyReverseOutLabel(tmp, t, 14f);
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(button);
 	    }
 
 	    void ApplyAuthoredSelectionColors() {
