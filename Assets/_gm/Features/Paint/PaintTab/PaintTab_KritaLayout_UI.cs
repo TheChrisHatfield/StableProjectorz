@@ -88,8 +88,9 @@ namespace spz {
 		}
 
 		static void RestoreHeader(TextMeshProUGUI header) {
-			if (header != null)
-				SpzUiThemeOps.RestoreAuthoredGraphic(header);
+			if (header == null) return;
+			// Full unwind: color + Nomad typography (tracking/font) — graphic-only left sticky spacing.
+			SpzUiThemeOps.RestoreBoundChromeUnder(header.transform);
 		}
 
 		static void RestoreSectionShell(RectTransform section) {
