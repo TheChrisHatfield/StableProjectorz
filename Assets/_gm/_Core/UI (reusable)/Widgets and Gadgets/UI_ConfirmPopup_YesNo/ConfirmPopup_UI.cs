@@ -62,6 +62,7 @@ namespace spz {
 	    void ApplyThemeTokens() {
 	        Transform root = _background_button != null ? _background_button.transform : transform;
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
 	            SpzUiThemeOps.RestoreBoundChromeUnder(root);
 	            if (_yes != null)
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_yes.transform);
@@ -72,19 +73,31 @@ namespace spz {
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
-	        // Dimmer / panel shells under the background button (authored Unity Default sprites).
+	        // Dimmer / panel shells — walk host + background (dialog card may be a sibling of the blocker).
+	        ThemeShellImagesUnder(root, t);
+	        if (!ReferenceEquals(root, transform))
+	            ThemeShellImagesUnder(transform, t);
+	        if (_header != null)
+	            SpzUiThemeOps.ApplyBoundChromeTmp(_header, t.textPrimary, 16f);
+	        // Don't Close = neutral; Close = danger (exit confirm).
+	        ThemePopupButton(_no, t.controlBg, t.accent, _noText, t);
+	        ThemePopupButton(_yes, t.danger, t.accent, _yesText, t);
+	    }
+
+	    void ThemeShellImagesUnder(Transform root, SpzUiThemeOps.ThemeTokens t) {
+	        if (root == null) return;
 	        foreach (var img in root.GetComponentsInChildren<Image>(true)) {
 	            if (img == null) continue;
 	            if (_yes != null && img.transform.IsChildOf(_yes.transform)) continue;
 	            if (_no != null && img.transform.IsChildOf(_no.transform)) continue;
 	            if (_yes != null && ReferenceEquals(img, _yes.targetGraphic)) continue;
 	            if (_no != null && ReferenceEquals(img, _no.targetGraphic)) continue;
-	            // Fullscreen blocker stays near-black; dialog card uses panel_bg.
 	            string n = img.gameObject.name ?? "";
-	            bool isBlocker = ReferenceEquals(img.gameObject, _background_button.gameObject)
-	                || n.IndexOf("background", StringComparison.OrdinalIgnoreCase) >= 0
-	                || n.IndexOf("blocker", StringComparison.OrdinalIgnoreCase) >= 0
-	                || n.IndexOf("overlay", StringComparison.OrdinalIgnoreCase) >= 0;
+	            bool isBlocker = _background_button != null
+	                && (ReferenceEquals(img.gameObject, _background_button.gameObject)
+	                    || n.IndexOf("background", StringComparison.OrdinalIgnoreCase) >= 0
+	                    || n.IndexOf("blocker", StringComparison.OrdinalIgnoreCase) >= 0
+	                    || n.IndexOf("overlay", StringComparison.OrdinalIgnoreCase) >= 0);
 	            Color fill = isBlocker
 	                ? new Color(0f, 0f, 0f, Mathf.Clamp01(t.panelBg.a * 0.72f))
 	                : SpzUiThemeOps.ResolvePanelShellColor();
@@ -92,11 +105,6 @@ namespace spz {
 	            if (!isBlocker)
 	                SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
 	        }
-	        if (_header != null)
-	            SpzUiThemeOps.ApplyBoundChromeTmp(_header, t.textPrimary, 16f);
-	        // Don't Close = neutral; Close = danger (exit confirm).
-	        ThemePopupButton(_no, t.controlBg, t.accent, _noText, t);
-	        ThemePopupButton(_yes, t.danger, t.accent, _yesText, t);
 	    }
 
 	    static void ThemePopupButton(Button btn, Color fill, Color accent, TextMeshProUGUI label, SpzUiThemeOps.ThemeTokens t) {
