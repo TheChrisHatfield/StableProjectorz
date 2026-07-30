@@ -99,6 +99,7 @@ namespace spz {
 
 	    void OnButton_GenRetexture(){
 	        if( !isCanStart_retexture() ){ return; }
+	        if( ModelsHandler_3D.instance == null ){ return; }
 	        GenerateButtons_UI.OnConfirmed_StartedGenerate();
 
 	        Dictionary<string,object> all_values = gather_all_ui_inputs();
@@ -107,6 +108,10 @@ namespace spz {
 	        all_values.Add("generate_what", "retexture");
 
 	        if(isSupports_retexture_via_masks()){
+	            if( Art2D_IconsUI_List.instance == null ){
+	                GenRetexture_Start2( all_values,  include_paintedMask:false,  udim_albedoTextures_NoOwner:null );
+	                return;
+	            }
 	            Art2D_IconsUI_List.instance.GetTextures_FromAllIcons( 
 	                (List<Texture2D> textures) => GenRetexture_Start2(all_values,  include_paintedMask:true,  textures)
 	            );
@@ -129,7 +134,7 @@ namespace spz {
 	            udim_albedoTextures_NoOwner.Clear();
 	        }
 
-	        if (include_paintedMask){
+	        if (include_paintedMask && Inpaint_MaskPainter.instance != null){
 	            RenderUdims painted_renderUdims = Inpaint_MaskPainter.instance.GetLayerCompositeOrFallback();
 	            RenderTexture painted_texArray  = painted_renderUdims.texArray;
 	            List<Texture2D> maskTextures = TextureTools_SPZ.TextureArray_to_Texture2DList(painted_texArray);
@@ -175,6 +180,8 @@ namespace spz {
 	    }
 
 	    void Gen_OnMeshReady(byte[] bytes){
+	        if (bytes == null || bytes.Length == 0){ return; }
+	        if (ModelsHandler_3D.instance == null){ return; }
 	        string tempPath = Path.Combine(Application.temporaryCachePath, $"mesh_trellis.glb");
 	        if (File.Exists(tempPath)){  File.Delete(tempPath); }// Clean up temp file
 	        File.WriteAllBytes(tempPath, bytes);
