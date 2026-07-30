@@ -26,6 +26,8 @@ public sealed class SoftBrushHostsLeaveThemeTests {
 		Assert.That(src, Does.Contain("RestoreBoundChromeUnder(_brushHardness.transform)"));
 		Assert.That(src, Does.Contain("RestoreBoundChromeUnder(_brushColor.transform)"));
 		Assert.That(src, Does.Contain("RestoreBoundChromeUnder(_brushSize_slider.transform)"));
+		Assert.That(src, Does.Contain("RestoreBoundChromeUnder(_bucketFill.transform)"));
+		Assert.That(src, Does.Contain("RestoreBoundChromeUnder(_direction.transform)"));
 	}
 }
 
