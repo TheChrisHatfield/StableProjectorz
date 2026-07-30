@@ -139,6 +139,14 @@ namespace spz {
 	                    tmp.characterSpacing = 0f;
 	                }
 	            }
+	            foreach (var btn in root.GetComponentsInChildren<Button>(true)) {
+	                if (btn != null)
+	                    SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
+	            }
+	            foreach (var tog in root.GetComponentsInChildren<Toggle>(true)) {
+	                if (tog != null)
+	                    SpzUiThemeOps.ClearNonFaceRaycastsForTheme(tog);
+	            }
 	        }
 	        if (_bakeColors_button != null) {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_bakeColors_button, t.controlBg, t.accent);
