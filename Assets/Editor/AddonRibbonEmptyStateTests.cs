@@ -67,6 +67,22 @@ public sealed class AddonRibbonEmptyStateTests {
 	}
 
 	[Test]
+	public void AddonMgr_QueuesPendingPythonUnloadWhenHttpSkip() {
+		var field = typeof(Addon_MGR).GetField(
+			"_pendingPythonUnloadIds",
+			BindingFlags.Instance | BindingFlags.NonPublic);
+		Assert.That(field, Is.Not.Null, "Skipped HTTP unloads must queue via _pendingPythonUnloadIds.");
+		var queue = typeof(Addon_MGR).GetMethod(
+			"QueuePendingPythonUnload",
+			BindingFlags.Instance | BindingFlags.NonPublic);
+		Assert.That(queue, Is.Not.Null);
+		var flush = typeof(Addon_MGR).GetMethod(
+			"CoFlushPendingPythonUnloads",
+			BindingFlags.Instance | BindingFlags.NonPublic);
+		Assert.That(flush, Is.Not.Null, "Pending Python unregister must flush when :5557 recovers.");
+	}
+
+	[Test]
 	public void CommandRibbon_WidgetProbeIgnoresTitleOnlyPanels() {
 		var method = typeof(CommandRibbon_UI).GetMethod(
 			"ShellHasAddonPanelWidgets",

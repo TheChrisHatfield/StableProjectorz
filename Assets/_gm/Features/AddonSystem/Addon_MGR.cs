@@ -155,6 +155,9 @@ namespace spz {
 		readonly Dictionary<string, Coroutine> _ribbonShellEnsureById = new Dictionary<string, Coroutine>();
 		/// <summary>Single FULL/SRN dock ensure — Gen Art finish / enable / load-fail must not run parallel attach loops.</summary>
 		Coroutine _ribbonOnlyDockEnsureCrtn;
+		/// <summary>Python unregister skipped while :5557 was down — retry so watchers/routes do not stay live after dial-off.</summary>
+		readonly HashSet<string> _pendingPythonUnloadIds = new HashSet<string>();
+		Coroutine _pendingPythonUnloadFlushCrtn;
 		/// <summary>Single shared /ready poll so parallel Enable/Load-now do not storm HTTP + socket.</summary>
 		Coroutine _sharedAddonReadyWaitCrtn;
 		/// <summary>Set before StartCoroutine so two WaitForAddonServerReady callers in one frame cannot both spawn polls.</summary>
@@ -1341,6 +1344,7 @@ namespace spz {
 			if (!_enableHttpServer || !_isServerRunning) {
 				UnityEngine.Debug.LogWarning(
 					$"[Addon_MGR] Cannot notify Python to unload {addonId}; add-on HTTP server is unavailable.");
+				QueuePendingPythonUnload(addonId);
 				yield break;
 			}
 			if (epoch >= 0 && !IsLifecycleEpochCurrent(addonId, epoch))
@@ -1348,12 +1352,14 @@ namespace spz {
 			// Re-enabled while a prior unload was queued — do not unregister in Python.
 			if (IsAddonEnabled(addonId)) {
 				UnityEngine.Debug.Log($"[Addon_MGR] Skipping unload for re-enabled add-on: {addonId}");
+				_pendingPythonUnloadIds.Remove(addonId);
 				yield break;
 			}
 			// Dead :5557 / stale fail marker: do not burn 3×8s POSTs while /ready polls also storm.
 			if (TryReadAddonHttpFailMarker(out string failReason)) {
 				UnityEngine.Debug.LogWarning(
 					$"[Addon_MGR] Skipping unload for {addonId}; Python HTTP fail marker present:\n{failReason}");
+				QueuePendingPythonUnload(addonId);
 				yield break;
 			}
 			bool httpReady = false;
@@ -1362,12 +1368,14 @@ namespace spz {
 				yield break;
 			if (IsAddonEnabled(addonId)) {
 				UnityEngine.Debug.Log($"[Addon_MGR] Skipping unload for re-enabled add-on: {addonId}");
+				_pendingPythonUnloadIds.Remove(addonId);
 				yield break;
 			}
 			if (!httpReady) {
 				UnityEngine.Debug.LogWarning(
 					$"[Addon_MGR] Skipping unload for {addonId}; Python HTTP :{_httpServerPort} not ready (Unity will still tear UI after this op).");
 				InvalidateSharedAddonReadyCache();
+				QueuePendingPythonUnload(addonId);
 				yield break;
 			}
 
@@ -1396,6 +1404,7 @@ namespace spz {
 					}
 					if (unloadSucceeded) {
 						UnityEngine.Debug.Log($"[Addon_MGR] Python unloaded add-on: {addonId}");
+						_pendingPythonUnloadIds.Remove(addonId);
 						// Stale unload (user re-enabled mid-flight) or enabled again: reload so the ribbon returns.
 						if (IsAddonEnabled(addonId))
 							StartAddonLifecycleOp(addonId, true);
@@ -1406,6 +1415,7 @@ namespace spz {
 							$"[Addon_MGR] unload_addon failed for {addonId} after {attempt} attempts: " +
 							$"{req.error ?? req.downloadHandler?.text}");
 						InvalidateSharedAddonReadyCache();
+						QueuePendingPythonUnload(addonId);
 						yield break;
 					}
 				}
@@ -1432,6 +1442,52 @@ namespace spz {
 				? RequestLoadAddon(addonId, epoch)
 				: RequestUnloadAddon(addonId, epoch));
 			_addonLifecycleOpById[addonId] = op;
+		}
+
+		void QueuePendingPythonUnload(string addonId) {
+			if (string.IsNullOrEmpty(addonId) || IsAddonEnabled(addonId))
+				return;
+			_pendingPythonUnloadIds.Add(addonId);
+			if (_pendingPythonUnloadFlushCrtn == null && isActiveAndEnabled)
+				_pendingPythonUnloadFlushCrtn = StartCoroutine(CoFlushPendingPythonUnloads());
+		}
+
+		IEnumerator CoFlushPendingPythonUnloads() {
+			try {
+				while (_pendingPythonUnloadIds.Count > 0) {
+					if (IsAddonApiShuttingDown())
+						yield break;
+					var ids = new List<string>(_pendingPythonUnloadIds);
+					foreach (var id in ids) {
+						if (IsAddonEnabled(id))
+							_pendingPythonUnloadIds.Remove(id);
+					}
+					if (_pendingPythonUnloadIds.Count == 0)
+						yield break;
+					if (TryReadAddonHttpFailMarker(out _)) {
+						yield return new WaitForSecondsRealtime(2f);
+						continue;
+					}
+					bool ready = false;
+					yield return CoProbeAddonReadyOnce(ok => ready = ok);
+					if (!ready) {
+						yield return new WaitForSecondsRealtime(2f);
+						continue;
+					}
+					ids = new List<string>(_pendingPythonUnloadIds);
+					foreach (var id in ids) {
+						if (IsAddonEnabled(id)) {
+							_pendingPythonUnloadIds.Remove(id);
+							continue;
+						}
+						// Kick a real unload epoch; success path removes from the pending set.
+						StartAddonLifecycleOp(id, false);
+					}
+					yield return new WaitForSecondsRealtime(1f);
+				}
+			} finally {
+				_pendingPythonUnloadFlushCrtn = null;
+			}
 		}
 
 		/// <summary>
@@ -1721,6 +1777,7 @@ namespace spz {
 				return;
 			}
 			
+			_pendingPythonUnloadIds.Remove(addonId);
 			_registeredAddons[addonId].isEnabled = true;
 			UnityEngine.Debug.Log($"[Addon_MGR] Enabled add-on: {addonId}");
 
