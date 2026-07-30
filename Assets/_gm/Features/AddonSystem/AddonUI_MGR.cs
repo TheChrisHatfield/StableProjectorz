@@ -1482,6 +1482,7 @@ namespace spz {
 			labelText.fontSize = 12;
 			labelText.color = Color.white;
 			labelText.raycastTarget = false;
+			ApplyRuntimeTmpFont(labelText);
 			
 			// Add slider
 			var sliderObj2 = new GameObject("Slider");
@@ -1492,7 +1493,10 @@ namespace spz {
 			sliderRect2.sizeDelta = Vector2.zero;
 			
 			var sliderBg = sliderObj2.AddComponent<Image>();
+			sliderBg.sprite = UiRuntimeSprites.SolidRect;
+			sliderBg.type = Image.Type.Simple;
 			sliderBg.color = new Color(0.2f, 0.2f, 0.2f, 1f);
+			SpzUiThemeOps.ApplyRoundedControlSprite(sliderBg, markEligible: true);
 			
 			var sliderFill = new GameObject("Fill");
 			sliderFill.transform.SetParent(sliderObj2.transform, false);
@@ -1501,6 +1505,8 @@ namespace spz {
 			fillRect.anchorMax = new Vector2(0.5f, 1);
 			fillRect.sizeDelta = Vector2.zero;
 			var fillImage = sliderFill.AddComponent<Image>();
+			fillImage.sprite = UiRuntimeSprites.SolidRect;
+			fillImage.type = Image.Type.Simple;
 			fillImage.color = new Color(0.3f, 0.6f, 1f, 1f);
 			
 			var sliderHandle = new GameObject("Handle");
@@ -1510,6 +1516,8 @@ namespace spz {
 			handleRect.anchorMax = new Vector2(0.5f, 1);
 			handleRect.sizeDelta = new Vector2(20, 0);
 			var handleImage = sliderHandle.AddComponent<Image>();
+			handleImage.sprite = UiRuntimeSprites.SolidRect;
+			handleImage.type = Image.Type.Simple;
 			handleImage.color = Color.white;
 			
 			var slider = sliderObj2.AddComponent<Slider>();
@@ -1533,6 +1541,7 @@ namespace spz {
 			valueText.color = Color.white;
 			valueText.alignment = TextAlignmentOptions.Right;
 			valueText.raycastTarget = false;
+			ApplyRuntimeTmpFont(valueText);
 			
 			// Update value text when slider changes
 			slider.onValueChanged.AddListener((value) => {
