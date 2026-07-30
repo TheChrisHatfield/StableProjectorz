@@ -22,6 +22,7 @@ class SpzGoApplyMapsContractTests(unittest.TestCase):
 		self.assertIn("_try_import_exchange_fbx(fbx)", src)
 		self.assertIn("_GO_IMPORT_MAX_TICKS", src)
 		self.assertIn("http_ok", src)
+		self.assertIn('"FINISHED" not in ret', src)
 
 	def test_export_http_timeout_matches_long_texture_write(self):
 		http = HTTP.read_text(encoding="utf-8")
