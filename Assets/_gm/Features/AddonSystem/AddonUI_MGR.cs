@@ -91,7 +91,7 @@ namespace spz {
 		const int kRibbonMigrateMaxRounds = 6;
 		
 		void Awake() {
-			if (instance != null) { DestroyImmediate(this); return; }
+			if (instance != null) { DestroyImmediate(gameObject); return; }
 			instance = this;
 			SpzUiThemeOps.ThemeChanged += ApplyThemeToAllAddonUi;
 		}
@@ -1987,11 +1987,16 @@ namespace spz {
 					_uiElementValues[elementId] = dropdown.value;
 					return true;
 				} else if (component is Toggle toggle) {
+					// Accept bool, int, whole-number float/double 0/1 (JSON leftovers), or parseable string.
 					bool on;
 					if (value is bool b)
 						on = b;
 					else if (value is int i)
 						on = i != 0;
+					else if (value is float f && Mathf.Approximately(f, Mathf.Round(f)))
+						on = Mathf.RoundToInt(f) != 0;
+					else if (value is double d && Math.Abs(d - Math.Round(d)) < 1e-6)
+						on = (int)Math.Round(d) != 0;
 					else if (!bool.TryParse(value.ToString(), out on)) {
 						UnityEngine.Debug.LogWarning($"[AddonUI_MGR] Cannot set non-bool value to toggle: {value.GetType()}");
 						return false;
