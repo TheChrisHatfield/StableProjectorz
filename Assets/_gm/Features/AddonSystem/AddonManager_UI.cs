@@ -1400,17 +1400,20 @@ namespace spz {
 				}
 				var panelVlg = _panel.GetComponent<UnityEngine.UI.VerticalLayoutGroup>();
 				if (panelVlg != null) {
-					int pad = Mathf.RoundToInt(SpzUiThemeOps.ScaledSpace(boundChrome ? 3 : 4));
-					panelVlg.spacing = SpzUiThemeOps.ScaledSpace(boundChrome ? 2 : 1);
+					// Snapshot authored pads first — absolute Nomad writes must not become the Restore baseline.
+					SpzUiThemeOps.ApplyScaledLayoutGroup(panelVlg);
+					int pad = Mathf.RoundToInt(SpzUiThemeOps.ScaledSpace(3));
+					panelVlg.spacing = SpzUiThemeOps.ScaledSpace(2);
 					panelVlg.padding = new RectOffset(pad, pad, pad, pad);
 				}
 				var header = _panel.transform.Find("Header");
 				if (header != null) {
 					var headerHlg = header.GetComponent<HorizontalLayoutGroup>();
 					if (headerHlg != null) {
-						headerHlg.spacing = SpzUiThemeOps.ScaledSpace(boundChrome ? 6 : 8);
+						SpzUiThemeOps.ApplyScaledLayoutGroup(headerHlg);
+						headerHlg.spacing = SpzUiThemeOps.ScaledSpace(6);
 						headerHlg.childAlignment = TextAnchor.MiddleLeft;
-						int hPad = Mathf.RoundToInt(SpzUiThemeOps.ScaledSpace(boundChrome ? 2 : 0));
+						int hPad = Mathf.RoundToInt(SpzUiThemeOps.ScaledSpace(2));
 						headerHlg.padding = new RectOffset(hPad, hPad, 0, 0);
 					}
 				}
@@ -1468,6 +1471,7 @@ namespace spz {
 					SpzUiThemeOps.ApplyBoundChromeGraphic(listImg, t.fieldBg);
 				var listVlg = _addonsListParent.GetComponent<UnityEngine.UI.VerticalLayoutGroup>();
 				if (listVlg != null) {
+					SpzUiThemeOps.ApplyScaledLayoutGroup(listVlg);
 					int listPad = Mathf.RoundToInt(SpzUiThemeOps.ScaledSpace(1));
 					listVlg.spacing = SpzUiThemeOps.ScaledSpace(2);
 					listVlg.padding = new RectOffset(0, 0, listPad, listPad);
