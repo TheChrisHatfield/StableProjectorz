@@ -1378,6 +1378,8 @@ namespace spz {
 				}
 				if (_closePanel_button != null)
 					SpzUiThemeOps.RestoreBoundChromeUnder(_closePanel_button.transform);
+				// Dial/prefs colors are tinted without Flatten — re-apply authored after Restore so Nomad green does not stick.
+				ReapplyAuthoredStatusDialsAfterThemeRestore();
 				return;
 			}
 			var t = SpzUiThemeOps.Active;
@@ -1658,8 +1660,8 @@ namespace spz {
 				Color ringColor = enabled ? t.success : t.textMuted;
 				var ringImg = toggle.transform.Find("Ring")?.GetComponent<Image>();
 				if (ringImg != null) {
-					// Keep CircleRing sprite — ApplyBoundChromeGraphic can turn dials into grey/green capsules.
-					ringImg.color = ringColor;
+					// Keep CircleRing sprite — ApplyBoundChromeGraphic flattens dials into grey/green capsules.
+					TintStatusDialGraphic(ringImg, ringColor);
 					ringImg.preserveAspect = true;
 					ringImg.type = Image.Type.Simple;
 				}
@@ -1667,7 +1669,7 @@ namespace spz {
 				if (fill == null)
 					fill = toggle.transform.Find("Ring/Checkmark")?.GetComponent<Image>();
 				if (fill != null) {
-					fill.color = t.success;
+					TintStatusDialGraphic(fill, t.success);
 					fill.preserveAspect = true;
 					fill.type = Image.Type.Simple;
 					fill.gameObject.SetActive(true);
@@ -1681,7 +1683,7 @@ namespace spz {
 				if (prefsBodyImg != null) {
 					Color body = t.panelBg;
 					body.a = Mathf.Clamp01(Mathf.Max(0.85f, body.a));
-					prefsBodyImg.color = body;
+					TintStatusDialGraphic(prefsBodyImg, body);
 				}
 			}
 			var ribbonToggle = FindChildRecursive(item.transform, "ShowInRibbonToggle")?.GetComponent<Toggle>();
@@ -1800,18 +1802,40 @@ namespace spz {
 			Color ring = enabled ? _statusOk : _statusMuted;
 			var ringImg = toggle.transform.Find("Ring")?.GetComponent<Image>();
 			if (ringImg != null) {
-				ringImg.color = ring;
+				TintStatusDialGraphic(ringImg, ring);
 				ringImg.preserveAspect = true;
+				ringImg.type = Image.Type.Simple;
 			}
 			// Prefer manual Checkmark — Toggle.graphic is left null so Unity does not hide it mid-click.
 			Image fillImg = toggle.graphic as Image;
 			if (fillImg == null)
 				fillImg = toggle.transform.Find("Ring/Checkmark")?.GetComponent<Image>();
 			if (fillImg != null) {
-				fillImg.color = _statusOk;
+				TintStatusDialGraphic(fillImg, _statusOk);
 				fillImg.preserveAspect = true;
+				fillImg.type = Image.Type.Simple;
 				fillImg.gameObject.SetActive(true);
 				fillImg.canvasRenderer.SetAlpha(enabled ? 1f : 0f);
+			}
+		}
+
+		/// <summary>
+		/// Tint dial/prefs faces without FlattenSlicedChromeFace. Snapshot under Nomad so Restore SPZ can unwind.
+		/// </summary>
+		static void TintStatusDialGraphic(Graphic graphic, Color color) {
+			if (graphic == null) return;
+			if (SpzUiThemeOps.ShouldRecolorBoundChrome)
+				SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(graphic);
+			graphic.color = color;
+		}
+
+		void ReapplyAuthoredStatusDialsAfterThemeRestore() {
+			foreach (var item in _addonUIItems.Values) {
+				if (item == null) continue;
+				var header = item.transform.Find("HeaderRow");
+				var toggle = (header != null ? header.Find("StatusToggle") : null)?.GetComponent<Toggle>();
+				if (toggle != null)
+					ApplyStatusDialVisual(toggle, toggle.isOn);
 			}
 		}
 		
@@ -1943,6 +1967,9 @@ namespace spz {
 			prefsBtnLE.preferredHeight = 28f;
 			prefsBtnLE.minHeight = 28f;
 			var prefsBtnImage = prefsBtnObj.AddComponent<Image>();
+			// Assign a real face before markEligible so Restore SPZ does not rewind authoredSprite=null.
+			prefsBtnImage.sprite = UiRuntimeSprites.SolidRect;
+			prefsBtnImage.type = Image.Type.Simple;
 			SpzUiThemeOps.ApplyRoundedControlSprite(prefsBtnImage, markEligible: true);
 			prefsBtnImage.color = new Color(61f / 255f, 61f / 255f, 61f / 255f, 1f);
 			prefsBtnImage.raycastTarget = true;
@@ -1973,6 +2000,8 @@ namespace spz {
 			removeBtnLE.preferredHeight = 28f;
 			removeBtnLE.minHeight = 28f;
 			var removeBtnImage = removeBtnObj.AddComponent<Image>();
+			removeBtnImage.sprite = UiRuntimeSprites.SolidRect;
+			removeBtnImage.type = Image.Type.Simple;
 			SpzUiThemeOps.ApplyRoundedControlSprite(removeBtnImage, markEligible: true);
 			removeBtnImage.color = new Color(45f / 255f, 26f / 255f, 26f / 255f, 0.85f);
 			removeBtnImage.raycastTarget = true;
@@ -2002,6 +2031,8 @@ namespace spz {
 			prefsBodyLE.minHeight = 36f;
 			prefsBodyLE.flexibleWidth = 1f;
 			var prefsBodyBg = prefsBody.AddComponent<Image>();
+			prefsBodyBg.sprite = UiRuntimeSprites.SolidRect;
+			prefsBodyBg.type = Image.Type.Simple;
 			prefsBodyBg.color = new Color(0.14f, 0.14f, 0.16f, 0.92f);
 			prefsBodyBg.raycastTarget = false;
 			SpzUiThemeOps.ApplyRoundedControlSprite(prefsBodyBg, markEligible: true);
@@ -2024,6 +2055,8 @@ namespace spz {
 			ribbonToggleLE.minHeight = 22f;
 			ribbonToggleLE.flexibleWidth = 0f;
 			var ribbonBg = ribbonToggleObj.AddComponent<Image>();
+			ribbonBg.sprite = UiRuntimeSprites.SolidRect;
+			ribbonBg.type = Image.Type.Simple;
 			SpzUiThemeOps.ApplyRoundedControlSprite(ribbonBg, markEligible: true);
 			ribbonBg.color = new Color(0.22f, 0.22f, 0.24f, 1f);
 			ribbonBg.raycastTarget = true;
