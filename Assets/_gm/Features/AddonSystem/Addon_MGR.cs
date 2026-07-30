@@ -153,6 +153,8 @@ namespace spz {
 		readonly Dictionary<string, int> _addonLifecycleEpochById = new Dictionary<string, int>();
 		/// <summary>Deferred ribbon tab create when CommandRibbon_UI is not ready at Enable / prefs restore.</summary>
 		readonly Dictionary<string, Coroutine> _ribbonShellEnsureById = new Dictionary<string, Coroutine>();
+		/// <summary>Single FULL/SRN dock ensure — Gen Art finish / enable / load-fail must not run parallel attach loops.</summary>
+		Coroutine _ribbonOnlyDockEnsureCrtn;
 		/// <summary>Single shared /ready poll so parallel Enable/Load-now do not storm HTTP + socket.</summary>
 		Coroutine _sharedAddonReadyWaitCrtn;
 		/// <summary>Set before StartCoroutine so two WaitForAddonServerReady callers in one frame cannot both spawn polls.</summary>
@@ -562,7 +564,7 @@ namespace spz {
 				return;
 			if (RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyVisibleBuiltDock())
 				return;
-			StartCoroutine(CoEnsureRibbonOnlyFullscreenViewportDock());
+			StartEnsureRibbonOnlyFullscreenViewportDock();
 		}
 		
 		IEnumerator InitializeAddonSystem() {
@@ -1446,7 +1448,7 @@ namespace spz {
 				UnityEngine.Debug.LogWarning(
 					$"[Addon_MGR] Python load failed for {addonId}, but keeping add-on enabled — viewport dock does not require Python. Response/timeout is non-fatal.");
 				if (!RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyVisibleBuiltDock())
-					StartCoroutine(CoEnsureRibbonOnlyFullscreenViewportDock());
+					StartEnsureRibbonOnlyFullscreenViewportDock();
 				return;
 			}
 			// SPZ GO / Nomad Theme already work in-process when HTTP :5557 is down. Do not disable or remove the tab —
@@ -1527,46 +1529,56 @@ namespace spz {
 		/// until the Gen Art column dock is visible. Does not use the right command-ribbon tab strip; add-on is driven from <see cref="EnableAddon"/> only.
 		/// When HTTP is off, Python <c>register()</c> may not run, so this path is required.
 		/// </summary>
+		void StartEnsureRibbonOnlyFullscreenViewportDock() {
+			if (_ribbonOnlyDockEnsureCrtn != null)
+				StopCoroutine(_ribbonOnlyDockEnsureCrtn);
+			_ribbonOnlyDockEnsureCrtn = StartCoroutine(CoEnsureRibbonOnlyFullscreenViewportDock());
+		}
+
 		IEnumerator CoEnsureRibbonOnlyFullscreenViewportDock() {
-			yield return null;
-			const int maxFrames = 600;
-			bool attachKicked = false;
-			int lastForceGenStripFrame = -999;
-			for (int f = 0; f < maxFrames; f++) {
-				if (this == null) {
-					yield break;
-				}
-				if (!IsAddonEnabled(RibbonOnlyFullscreenAddonId)) {
-					yield break;
-				}
-				// Kick attach once (or again only if nothing is building). Per-frame NotifyAttachRequested
-				// previously tore down CoBuildWhenGenArtReady every frame → dial ON, no FULL/SRN button.
-				if (!RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyVisibleBuiltDock()) {
-					bool inFlight = RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyDockBuildInFlight();
-					bool alreadyBuiltOrBuilding = RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyDockBuiltOrBuilding();
-					// Do not re-call attach while a dock already exists/builds — that tore/rebuilt and flashed.
-					if (!alreadyBuiltOrBuilding && (!attachKicked || !inFlight)) {
-						Addon_SocketServer.TryAttachViewportFullViewToggleFromCore(null);
-						attachKicked = true;
-					}
-					// Every ~1s without a visible dock, force a single dock on the Gen Art strip
-					// (migrates off inactive workflow hosts — never dual-mount).
-					if (!inFlight && f - lastForceGenStripFrame >= 60) {
-						lastForceGenStripFrame = f;
-						RibbonViewportFullViewOnScreen_Toggle_UI.TryEnsureOnGenerateButtonsStrip(
-							RibbonDock_ButtonSpec.FromRpc(null));
-					}
-				} else {
-					UnityEngine.Debug.Log(
-						"[Addon_MGR] RibbonOnlyFullscreen: viewport FULL/SRN dock next to Gen Art is visible (add-on manager path).");
-					yield break;
-				}
+			try {
 				yield return null;
+				const int maxFrames = 600;
+				bool attachKicked = false;
+				int lastForceGenStripFrame = -999;
+				for (int f = 0; f < maxFrames; f++) {
+					if (this == null) {
+						yield break;
+					}
+					if (!IsAddonEnabled(RibbonOnlyFullscreenAddonId)) {
+						yield break;
+					}
+					// Kick attach once (or again only if nothing is building). Per-frame NotifyAttachRequested
+					// previously tore down CoBuildWhenGenArtReady every frame → dial ON, no FULL/SRN button.
+					if (!RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyVisibleBuiltDock()) {
+						bool inFlight = RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyDockBuildInFlight();
+						bool alreadyBuiltOrBuilding = RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyDockBuiltOrBuilding();
+						// Do not re-call attach while a dock already exists/builds — that tore/rebuilt and flashed.
+						if (!alreadyBuiltOrBuilding && (!attachKicked || !inFlight)) {
+							Addon_SocketServer.TryAttachViewportFullViewToggleFromCore(null);
+							attachKicked = true;
+						}
+						// Every ~1s without a visible dock, force a single dock on the Gen Art strip
+						// (migrates off inactive workflow hosts — never dual-mount).
+						if (!inFlight && f - lastForceGenStripFrame >= 60) {
+							lastForceGenStripFrame = f;
+							RibbonViewportFullViewOnScreen_Toggle_UI.TryEnsureOnGenerateButtonsStrip(
+								RibbonDock_ButtonSpec.FromRpc(null));
+						}
+					} else {
+						UnityEngine.Debug.Log(
+							"[Addon_MGR] RibbonOnlyFullscreen: viewport FULL/SRN dock next to Gen Art is visible (add-on manager path).");
+						yield break;
+					}
+					yield return null;
+				}
+				UnityEngine.Debug.LogWarning(
+					"[Addon_MGR] RibbonOnlyFullscreen: no visible viewport dock after "
+					+ maxFrames
+					+ " frames. Use Play with the main scene, SD/Gen Art UI loaded, and enable the add-on. If HTTP is on, check Python <c>register()</c> and the Console for attach errors.");
+			} finally {
+				_ribbonOnlyDockEnsureCrtn = null;
 			}
-			UnityEngine.Debug.LogWarning(
-				"[Addon_MGR] RibbonOnlyFullscreen: no visible viewport dock after "
-				+ maxFrames
-				+ " frames. Use Play with the main scene, SD/Gen Art UI loaded, and enable the add-on. If HTTP is on, check Python <c>register()</c> and the Console for attach errors.");
 		}
 		
 		/// <summary>
@@ -1675,7 +1687,7 @@ namespace spz {
 				if (ribbonOnly != null)
 					ribbonOnly.RemoveAddonPanel(addonId);
 				if (IsAddonEnabled(addonId))
-					StartCoroutine(CoEnsureRibbonOnlyFullscreenViewportDock());
+					StartEnsureRibbonOnlyFullscreenViewportDock();
 				else
 					RibbonViewportFullViewOnScreen_Toggle_UI.TeardownAllDocksForAddonDisabled();
 				return;
@@ -1736,7 +1748,7 @@ namespace spz {
 				if (ribbon != null) {
 					ribbon.RemoveAddonPanel(addonId);
 				}
-				StartCoroutine(CoEnsureRibbonOnlyFullscreenViewportDock());
+				StartEnsureRibbonOnlyFullscreenViewportDock();
 			}
 			OnAddonEnabledStateChanged?.Invoke(addonId);
 			// Persistence is owned by Add-on Manager "Save settings" (not every dial click).
