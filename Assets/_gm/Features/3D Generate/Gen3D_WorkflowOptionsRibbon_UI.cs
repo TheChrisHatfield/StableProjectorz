@@ -225,6 +225,8 @@ namespace spz {
 	            RestoreSelectable(_showAlphaOnly_toggle);
 	            RestoreSelectable(_makeScreenshots_toggle);
 	            RestoreSelectable(_rembg_button);
+	            if (_direction != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_direction.transform);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
@@ -245,6 +247,8 @@ namespace spz {
 	                        && (c.transform == _rembg_button.transform
 	                            || c.transform.IsChildOf(_rembg_button.transform)))
 	                        return true;
+	                    // BrushRibbon owns Gen3D direction strip — RolesUnder SolidSquare blanks it after BrushRibbon themes.
+	                    if (c.GetComponentInParent<BrushRibbon_UI_Direction>(true) != null) return true;
 	                    return false;
 	                },
 	            });
