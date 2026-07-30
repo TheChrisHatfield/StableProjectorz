@@ -20,11 +20,14 @@ namespace spz {
 	        #if UNITY_EDITOR
 	        return;
 	        #endif
-	        StopMoveRotate();
+	        // Only clear sticky nav on focus *loss* — clearing on focus-gain aborted a fresh RMB fly.
+	        if (!focus)
+	            StopMoveRotate();
 	    }
 
 
 	    void OnUpdate(){
+	        if (UserCameras_MGR.instance == null) return;
 	        View_UserCamera nearestCam = UserCameras_MGR.instance.NearestToCursor();
 	        if(nearestCam==_cam){  StartMoveRotate_ifCan(); }
 	        if(_currentMover==this){  MoveRotate(); }
@@ -33,6 +36,7 @@ namespace spz {
 
 	    void StartMoveRotate_ifCan(){
 	        if(_currentMover != null){ return; }
+	        if (MainViewport_UI.instance == null || DimensionMode_MGR.instance == null) return;
 	        bool pressedThisFrame  = KeyMousePenInput.isRMBpressedThisFrame();
 	        bool hovering   =  MainViewport_UI.instance.isCursorHoveringMe();
 	        bool navAllowed =  DimensionMode_MGR.instance.is_3d_navigation_allowed;
@@ -65,11 +69,13 @@ namespace spz {
 
 	        Move();
 	        Rotate();
-	        CameraOrbit_ClickPivot.instance.ForceInFrontOfCamera(_cam);
+	        if (CameraOrbit_ClickPivot.instance != null)
+	            CameraOrbit_ClickPivot.instance.ForceInFrontOfCamera(_cam);
 	    }
 
 
 	    void Rotate(){
+	        if (_cam == null || _cam.contentCam == null || _cam.contentCam.myCamera == null) return;
 	        Vector2 rotationInput = KeyMousePenInput.delta_while_RMBpressed(normalizeByScreenDiagonal: true);
 
 	        float fov = _cam.contentCam.myCamera.fieldOfView;
@@ -88,6 +94,8 @@ namespace spz {
 
 
 	    void Move(){
+	        if (Keyboard.current == null) return;
+	        if (_cam == null || _cam.contentCam == null || _cam.contentCam.myCamera == null) return;
 	        // Reading values from Keyboard or another device if needed
 	        Vector3 moveInput = new Vector3(
 	            Keyboard.current.aKey.isPressed ? -1.0f : Keyboard.current.dKey.isPressed ? 1.0f : 0.0f,
