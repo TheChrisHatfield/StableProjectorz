@@ -31,5 +31,23 @@ public sealed class SpzGoExportDeferTests {
 			BindingFlags.Instance | BindingFlags.NonPublic);
 		Assert.That(method, Is.Not.Null,
 			"Native Export must finish via CoSpzGoFinishExportWhenSaveIdle so status is not premature.");
+		string path = System.IO.Path.Combine(
+			System.IO.Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "AddonUI_MGR.cs");
+		string src = System.IO.File.ReadAllText(path);
+		Assert.That(src, Does.Contain("sm != null && !sm._isSaving"),
+			"Missing Save_MGR must not count as Export OK.");
+		Assert.That(src, Does.Not.Contain("sm == null || !sm._isSaving"),
+			"Do not treat null Save_MGR as successful texture write.");
+	}
+
+	[Test]
+	public void TcpDefer_FailsWhenSaveMgrLostMidWrite() {
+		string path = System.IO.Path.Combine(
+			System.IO.Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "Addon_SocketServer.cs");
+		string src = System.IO.File.ReadAllText(path);
+		Assert.That(src, Does.Contain("Save_MGR unavailable during texture write"),
+			"TCP export defer must fail closed if Save_MGR disappears mid-write.");
 	}
 }
