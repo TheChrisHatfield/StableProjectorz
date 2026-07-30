@@ -233,8 +233,11 @@ namespace spz {
 	            if (panelImg != null)
 	                SpzUiThemeOps.ApplyBoundChromeGraphic(panelImg, t.panelBg);
 	            foreach (var tmp in _wholePanel_canvGrp.GetComponentsInChildren<TextMeshProUGUI>(true)) {
-	                if (tmp != null)
-	                    SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	                if (tmp == null) continue;
+	                // rembg button labels get Compact after Selectable — skip strip tracking here.
+	                if (_rembg_button != null && tmp.GetComponentInParent<Button>() == _rembg_button)
+	                    continue;
+	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
 	            }
 	        }
 	        ThemeTmp(_rembg_backgroundTxt, t);
@@ -245,6 +248,10 @@ namespace spz {
 	        ThemeToggle(_makeScreenshots_toggle, t);
 	        if (_rembg_button != null) {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_rembg_button, t.controlBg, t.accent);
+	            foreach (var tmp in _rembg_button.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	                if (tmp != null)
+	                    SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+	            }
 	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_rembg_button);
 	        }
 	    }
