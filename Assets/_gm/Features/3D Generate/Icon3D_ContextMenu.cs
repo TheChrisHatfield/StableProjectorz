@@ -70,7 +70,7 @@ namespace spz {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(_text.transform);
 	            return;
 	        }
-	        SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(_text, SpzUiThemeOps.Active.textPrimary, 14f);
+	        SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(_text, SpzUiThemeOps.Active.textPrimary, 14f);
 	    }
 
 	    static void ThemeOrRestoreGenExportButton(Button btn) {
@@ -92,7 +92,8 @@ namespace spz {
 	        }
 	        foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp != null)
-	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 14f);
+	                // Compact Truncate clipped "Export Mesh" / confirmation text under Nomad.
+	                SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, t.textPrimary, 14f);
 	        }
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }

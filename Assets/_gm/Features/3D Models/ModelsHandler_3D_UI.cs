@@ -241,7 +241,8 @@ namespace spz {
 	        }
 	        var label = _showVertexColors_toggle.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	        if (label != null)
-	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, t.textPrimary, 11f);
+	            // Compact Truncate+UpperCase clipped "Show Vertex Colors" under Nomad.
+	            SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(label, t.textPrimary, 11f);
 	        if (btn != null)
 	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }
@@ -258,7 +259,7 @@ namespace spz {
 	        }
 	        var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	        if (label != null)
-	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, t.textPrimary, 11f);
+	            SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(label, t.textPrimary, 11f);
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }
 
