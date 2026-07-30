@@ -792,6 +792,10 @@ namespace spz {
 				layoutElement.flexibleWidth = 1f;
 				
 				var image = buttonObj.AddComponent<Image>();
+				if (image.sprite == null) {
+					image.sprite = UiRuntimeSprites.SolidRect;
+					image.type = Image.Type.Simple;
+				}
 				SpzUiThemeOps.ApplyRoundedControlSprite(image, markEligible: true);
 				image.color = new Color(0.3f, 0.3f, 0.3f, 1f);
 				image.raycastTarget = true;
@@ -1621,6 +1625,10 @@ namespace spz {
 			fieldLe.flexibleHeight = 0f;
 			
 			var fieldBg = fieldObj.AddComponent<Image>();
+			if (fieldBg.sprite == null) {
+				fieldBg.sprite = UiRuntimeSprites.SolidRect;
+				fieldBg.type = Image.Type.Simple;
+			}
 			SpzUiThemeOps.ApplyRoundedControlSprite(fieldBg, markEligible: true);
 			fieldBg.color = new Color(0.15f, 0.15f, 0.15f, 1f);
 
