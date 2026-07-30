@@ -351,6 +351,8 @@ namespace spz {
 			if (_layers[index].Visible == visible) return;
 			_layers[index].Visible = visible;
 			OnLayersChanged?.Invoke();
+			if (Objects_Renderer_MGR.instance != null)
+				Objects_Renderer_MGR.instance.ReRenderAll_soon();
 		}
 
 		const int MaxLayerNameLength = 128;
@@ -805,6 +807,8 @@ namespace spz {
 			if (index < 0 || index >= _layers.Count) return;
 			_layers[index].Opacity = Mathf.Clamp01(opacity);
 			OnLayersChanged?.Invoke();
+			if (Objects_Renderer_MGR.instance != null)
+				Objects_Renderer_MGR.instance.ReRenderAll_soon();
 		}
 
 		// --- Compositing (used by Inpaint_MaskPainter for new-layer injection and for APIs that need a flat image) ---
