@@ -1,13 +1,13 @@
-﻿using System.IO;
+using System.IO;
 using NUnit.Framework;
 using UnityEngine;
 
 public sealed class FullViewSpacerLeaveThemeTests {
 	[Test]
 	public void FullView_LeaveRestoresSpacerRow() {
-		string path = Path.Combine(Application.dataPath, ""_gm"", ""Features"", ""StableDiffusion"", ""WorkflowToolsRibbon SD"", ""RibbonViewportFullViewOnScreen_Toggle_UI.cs"");
+		string path = Path.Combine(Application.dataPath, "_gm", "Features", "StableDiffusion", "WorkflowToolsRibbon SD", "RibbonViewportFullViewOnScreen_Toggle_UI.cs");
 		Assert.That(File.Exists(path), Is.True, path);
 		string src = File.ReadAllText(path);
-		Assert.That(src, Does.Contain(""RestoreBoundChromeUnder(_spacerRowRt)""));
+		Assert.That(src, Does.Contain("RestoreBoundChromeUnder(_spacerRowRt)"));
 	}
 }
