@@ -25,5 +25,7 @@ public sealed class AddonManagerTooltipTests {
 		Assert.That(startIdx, Is.GreaterThan(0));
 		string startWindow = src.Substring(startIdx, Math.Min(700, src.Length - startIdx));
 		Assert.That(startWindow, Does.Contain("EnsureChromeTooltips()"));
+		Assert.That(src, Does.Contain("EnsureRememberRowTooltip"));
+		Assert.That(src, Does.Contain("Full-row hover target"));
 	}
 }

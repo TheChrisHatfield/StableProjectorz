@@ -360,6 +360,7 @@ namespace spz {
 					_rememberEnabledAddonToggle.onValueChanged.RemoveListener(OnRememberEnabledAddonsToggleChanged);
 					_rememberEnabledAddonToggle.onValueChanged.AddListener(OnRememberEnabledAddonsToggleChanged);
 				}
+				EnsureRememberRowTooltip(found.gameObject);
 				return;
 			}
 			Transform status = _panel.transform.Find("StatusText");
@@ -382,6 +383,10 @@ namespace spz {
 			var rowLE = row.AddComponent<LayoutElement>();
 			rowLE.preferredHeight = 30f;
 			rowLE.minHeight = 26f;
+			// Full-row hover target so the label text area also shows the tip (TMP is non-raycast).
+			var rowHit = row.AddComponent<Image>();
+			rowHit.color = Color.clear;
+			rowHit.raycastTarget = true;
 			var rowH = row.AddComponent<HorizontalLayoutGroup>();
 			rowH.spacing = grid;
 			rowH.childAlignment = TextAnchor.MiddleLeft;
@@ -435,9 +440,27 @@ namespace spz {
 			tgl.graphic = ckI;
 			tgl.onValueChanged.AddListener(OnRememberEnabledAddonsToggleChanged);
 			_rememberEnabledAddonToggle = tgl;
-			AttachTooltip(toggleContainer,
-				"When on, Save settings restores which add-ons were enabled on the next launch.");
+			EnsureRememberRowTooltip(row);
 			return row;
+		}
+
+		const string RememberRowTooltip =
+			"When on, Save settings restores which add-ons were enabled on the next launch.";
+
+		void EnsureRememberRowTooltip(GameObject rowOrToggle) {
+			if (rowOrToggle == null)
+				return;
+			if (string.Equals(rowOrToggle.name, "RememberEnabledRow", StringComparison.Ordinal)) {
+				var hit = rowOrToggle.GetComponent<Image>();
+				if (hit == null) {
+					hit = rowOrToggle.AddComponent<Image>();
+					hit.color = Color.clear;
+				}
+				hit.raycastTarget = true;
+			}
+			AttachTooltip(rowOrToggle, RememberRowTooltip);
+			if (_rememberEnabledAddonToggle != null)
+				AttachTooltip(_rememberEnabledAddonToggle.gameObject, RememberRowTooltip);
 		}
 
 	/// <summary>
@@ -1258,8 +1281,10 @@ namespace spz {
 			if (_closePanel_button != null)
 				AttachTooltip(_closePanel_button.gameObject, "Close the Add-on Manager.");
 			if (_rememberEnabledAddonToggle != null)
-				AttachTooltip(_rememberEnabledAddonToggle.gameObject,
-					"When on, Save settings restores which add-ons were enabled on the next launch.");
+				AttachTooltip(_rememberEnabledAddonToggle.gameObject, RememberRowTooltip);
+			var rememberRow = _panel != null ? _panel.transform.Find("RememberEnabledRow") : null;
+			if (rememberRow != null)
+				EnsureRememberRowTooltip(rememberRow.gameObject);
 			if (_filterAllToggle != null)
 				AttachTooltip(_filterAllToggle.gameObject, "Show all installed add-ons.");
 			if (_filterEnabledToggle != null)
