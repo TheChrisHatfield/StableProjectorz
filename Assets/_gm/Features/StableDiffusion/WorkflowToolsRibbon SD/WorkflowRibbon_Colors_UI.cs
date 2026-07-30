@@ -145,6 +145,7 @@ namespace spz {
 	            var bakeLabel = _bakeColors_button.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	            if (bakeLabel != null)
 	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(bakeLabel, t.textPrimary, 11f);
+	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_bakeColors_button);
 	        }
 	    }
 	}
