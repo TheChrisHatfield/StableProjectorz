@@ -58,7 +58,7 @@ namespace spz {
 		public bool CanCompositeLayers => _compositeBlendMat != null;
 
 		public event Action OnLayersChanged;
-		/// <summary>Add/remove/reorder, full stack load, or resolution/UDIM count change — invalidates paint undo snapshots. Visibility/opacity use <see cref="OnLayersChanged"/> only.</summary>
+		/// <summary>Add/remove/reorder, full stack load, or resolution/UDIM count change — invalidates paint undo snapshots. Visibility does not fire <see cref="OnLayersChanged"/> (avoids RebuildList mid-eye-toggle); opacity still does.</summary>
 		public event Action OnLayerStackStructureChanged;
 		public event Action OnActiveLayerChanged;
 		/// <summary>Invoked when a new layer is added (the new layer is already active). Inpaint_MaskPainter subscribes to inject scene into it (OnLayerAdded_InjectScene).</summary>
@@ -344,13 +344,14 @@ namespace spz {
 			return -1;
 		}
 
-		/// <summary>Set visibility of a layer (Photoshop-style: hidden layers are not shown in viewport). Fires OnLayersChanged. </summary>
+		/// <summary>Set visibility of a layer (Photoshop-style: hidden layers are not shown in viewport).
+		/// Does <b>not</b> fire <see cref="OnLayersChanged"/> — that rebuilt the entire layers UI (destroying rows mid-eye-toggle).
+		/// Callers that own row chrome (panel eye button) update the glyph locally; viewport uses <see cref="Objects_Renderer_MGR.ReRenderAll_soon"/>.</summary>
 		public void SetLayerVisible(int index, bool visible)
 		{
 			if (index < 0 || index >= _layers.Count) return;
 			if (_layers[index].Visible == visible) return;
 			_layers[index].Visible = visible;
-			OnLayersChanged?.Invoke();
 			if (Objects_Renderer_MGR.instance != null)
 				Objects_Renderer_MGR.instance.ReRenderAll_soon();
 		}
