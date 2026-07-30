@@ -116,4 +116,20 @@ public sealed class AddonManagerPrefsRibbonTests {
 		Assert.That(src, Does.Not.Contain(
 			"return instance != null && instance.GetAddonPrefBool(addonId, key, defaultValue);"));
 	}
+
+	[Test]
+	public void AddonMgr_RibbonPrefSync_OnlyWhenAddonEnabled() {
+		string path = Path.GetFullPath(Path.Combine(
+			Application.dataPath,
+			"_gm/Features/AddonSystem/Addon_MGR.cs"));
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("&& IsAddonEnabled(addonId))"));
+		Assert.That(src, Does.Contain("SyncRibbonTabWithEnabledState(addonId)"));
+		int syncIdx = src.IndexOf(
+			"if (string.Equals(key, PrefKeyShowInCommandRibbon, StringComparison.Ordinal)",
+			StringComparison.Ordinal);
+		Assert.That(syncIdx, Is.GreaterThan(0));
+		string window = src.Substring(syncIdx, Math.Min(280, src.Length - syncIdx));
+		Assert.That(window, Does.Contain("IsAddonEnabled(addonId)"));
+	}
 }
