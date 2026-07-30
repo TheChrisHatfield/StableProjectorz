@@ -289,6 +289,12 @@ namespace spz {
 
 
 	    public void ExportModel(System.Action<string> afterMeshWritten=null, System.Action onCancelledOrFailed=null){
+	        // Always re-export the live scene for interactive export so in-SPZ transforms/edits
+	        // are not replaced by stale cached import bytes (headless .fbx path already does this).
+	        if( o3d != null && o3d.currModelRootGO != null ){
+		        _importHelper.SaveDefaultDoor_toFile(null, afterMeshWritten, onCancelledOrFailed);
+		        return;
+	        }
 	        if (_importHelper._modelBytesCache != null){ 
 	            _importHelper.SaveCachedMesh_toFile(null, afterMeshWritten, onCancelledOrFailed);
 	        }else { 
