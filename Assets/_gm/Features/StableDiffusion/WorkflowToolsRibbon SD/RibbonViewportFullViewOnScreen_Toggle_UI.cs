@@ -1047,6 +1047,8 @@ namespace spz {
 				// Dock face can sit outside built row — restore so leave does not leave Nomad ColorBlock sticky.
 				if (_dockButton != null)
 					SpzUiThemeOps.RestoreBoundChromeUnder(_dockButton.transform);
+				if (_spacerRowRt != null)
+					SpzUiThemeOps.RestoreBoundChromeUnder(_spacerRowRt);
 			}
 
 			if (_bgImage != null) {
