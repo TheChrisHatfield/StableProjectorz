@@ -78,69 +78,7 @@ namespace spz {
 	    /// </summary>
 	    public void ApplyThemeTokens() {
 	        if (_getMore_slideOut == null) return;
-	        Transform root = _getMore_slideOut.transform;
-	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
-	            SpzUiThemeOps.RestoreBoundChromeUnder(root);
-	            return;
-	        }
-	        var t = SpzUiThemeOps.Active;
-	        var panelImg = root.GetComponent<Image>();
-	        if (panelImg != null)
-	            SpzUiThemeOps.ApplyBoundChromeGraphic(panelImg, t.panelBg);
-
-	        // Row / mask shells — dark cells so reverse-out list text stays legible.
-	        foreach (var img in root.GetComponentsInChildren<Image>(true)) {
-	            if (img == null || img == panelImg) continue;
-	            if (img.GetComponentInParent<Button>(true) != null) continue;
-	            if (img.GetComponentInParent<Toggle>(true) != null) continue;
-	            string n = img.gameObject.name ?? "";
-	            if (n.IndexOf("progress", StringComparison.OrdinalIgnoreCase) >= 0) continue;
-	            // List row faces + "background" / mask panels (not line icons).
-	            if (img.GetComponent<LayoutElement>() != null
-	                || n.Equals("background", StringComparison.OrdinalIgnoreCase)
-	                || n.IndexOf("mask", StringComparison.OrdinalIgnoreCase) >= 0
-	                || n.IndexOf("container", StringComparison.OrdinalIgnoreCase) >= 0) {
-	                SpzUiThemeOps.ApplyBoundChromeGraphic(img, t.controlBg);
-	            }
-	        }
-
-	        foreach (var btn in root.GetComponentsInChildren<Button>(true)) {
-	            if (btn == null) continue;
-	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
-	            foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) {
-	                if (tmp != null)
-	                    SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
-	            }
-	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
-	        }
-
-	        foreach (var tmp in root.GetComponentsInChildren<TextMeshProUGUI>(true)) {
-	            if (tmp == null) continue;
-	            if (tmp.GetComponentInParent<Button>(true) != null) continue;
-	            bool isHeader = tmp.gameObject.name != null
-	                && tmp.gameObject.name.IndexOf("header", StringComparison.OrdinalIgnoreCase) >= 0;
-	            if (isHeader)
-	                SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, t.textMuted, 13f);
-	            else
-	                SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, t.textPrimary, 14f);
-	            tmp.raycastTarget = false;
-	        }
-
-	        // Authored VLG spacing is 0 — rows glue under Nomad font_scale; add a hairline gap.
-	        foreach (var vlg in root.GetComponentsInChildren<VerticalLayoutGroup>(true)) {
-	            if (vlg == null) continue;
-	            SpzUiThemeOps.ApplyScaledLayoutGroup(vlg);
-	            if (vlg.spacing < 4f)
-	                vlg.spacing = 4f;
-	        }
-	        foreach (var le in root.GetComponentsInChildren<LayoutElement>(true)) {
-	            if (le == null || le.ignoreLayout) continue;
-	            // Keep multi-line IP Adapter / flux rows from collapsing under ChildControlHeight.
-	            if (le.minHeight > 0.5f && le.minHeight < 36f)
-	                le.minHeight = 36f;
-	            if (le.preferredHeight > 0.5f && le.preferredHeight < 36f)
-	                le.preferredHeight = 36f;
-	        }
+	        SpzUiThemeOps.ApplyDownloadMoreSlideChrome(_getMore_slideOut.transform);
 	    }
 
     

@@ -796,6 +796,72 @@ namespace spz {
 		}
 
 		/// <summary>
+		/// "download more" slide-outs (ControlNet / VAE / neural models): ReadableBody list copy,
+		/// dark row faces, hairline VLG gaps. Call instead of CompactToolLabel / BoundChromeTmp sweeps.
+		/// </summary>
+		public static void ApplyDownloadMoreSlideChrome(Transform root) {
+			if (root == null) return;
+			if (!ShouldRecolorBoundChrome) {
+				RestoreBoundChromeUnder(root);
+				return;
+			}
+			var t = _active;
+			var panelImg = root.GetComponent<Image>();
+			if (panelImg != null)
+				ApplyBoundChromeGraphic(panelImg, t.panelBg);
+
+			foreach (var img in root.GetComponentsInChildren<Image>(true)) {
+				if (img == null || img == panelImg) continue;
+				if (img.GetComponentInParent<Button>(true) != null) continue;
+				if (img.GetComponentInParent<Toggle>(true) != null) continue;
+				string n = img.gameObject.name ?? "";
+				if (n.IndexOf("progress", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+				if (img.GetComponent<LayoutElement>() != null
+				    || n.Equals("background", StringComparison.OrdinalIgnoreCase)
+				    || n.IndexOf("mask", StringComparison.OrdinalIgnoreCase) >= 0
+				    || n.IndexOf("container", StringComparison.OrdinalIgnoreCase) >= 0) {
+					ApplyBoundChromeGraphic(img, t.controlBg);
+				}
+			}
+
+			foreach (var btn in root.GetComponentsInChildren<Button>(true)) {
+				if (btn == null) continue;
+				ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+				foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+					if (tmp != null)
+						ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+				}
+				ClearNonFaceRaycastsForTheme(btn);
+			}
+
+			foreach (var tmp in root.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+				if (tmp == null) continue;
+				if (tmp.GetComponentInParent<Button>(true) != null) continue;
+				bool isHeader = tmp.gameObject.name != null
+				    && tmp.gameObject.name.IndexOf("header", StringComparison.OrdinalIgnoreCase) >= 0;
+				if (isHeader)
+					ApplyBoundChromeReadableBodyTmp(tmp, t.textMuted, 13f);
+				else
+					ApplyBoundChromeReadableBodyTmp(tmp, t.textPrimary, 14f);
+				tmp.raycastTarget = false;
+			}
+
+			foreach (var vlg in root.GetComponentsInChildren<VerticalLayoutGroup>(true)) {
+				if (vlg == null) continue;
+				ApplyScaledLayoutGroup(vlg);
+				if (vlg.spacing < 4f)
+					vlg.spacing = 4f;
+			}
+			foreach (var le in root.GetComponentsInChildren<LayoutElement>(true)) {
+				if (le == null || le.ignoreLayout) continue;
+				if (le.minHeight > 0.5f && le.minHeight < 36f)
+					le.minHeight = 36f;
+				if (le.preferredHeight > 0.5f && le.preferredHeight < 36f)
+					le.preferredHeight = 36f;
+			}
+		}
+
+		/// <summary>
 		/// SD input "PROMPT" / "PROMPT +" row headers — uppercase without strip tracking.
 		/// Strip spacing (18) widens PROMPT into the fixed right-anchored "-" glyph on the negative row.
 		/// </summary>

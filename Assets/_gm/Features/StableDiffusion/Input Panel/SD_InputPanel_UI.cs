@@ -222,6 +222,9 @@ namespace spz {
 	            // Dropdown row hit targets stay transparent.
 	            if (btn.gameObject.name.StartsWith("Dropdown_", System.StringComparison.Ordinal))
 	                continue;
+	            // VAE / neural "download more" slides own ReadableBody chrome.
+	            if (btn.GetComponentInParent<SlideOut_Widget_UI>(true) != null)
+	                continue;
 	            bool isField = btn.GetComponent<TMP_Dropdown>() != null
 	                || string.Equals(btn.gameObject.name, "Dropdown", System.StringComparison.Ordinal);
 	            Color fill = isField ? t.fieldBg : FlatCellFill(false, t);
@@ -238,6 +241,7 @@ namespace spz {
 	        }
 	        foreach (var toggle in root.GetComponentsInChildren<Toggle>(true)) {
 	            if (toggle == null) continue;
+	            if (toggle.GetComponentInParent<SlideOut_Widget_UI>(true) != null) continue;
 	            if (IsPromptPresetToggle(toggle))
 	                ThemePromptPresetToggle(toggle, t);
 	            else
@@ -267,6 +271,7 @@ namespace spz {
 	        foreach (var tmp in root.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp == null) continue;
 	            if (tmp.gameObject.name == "Placeholder") continue;
+	            if (tmp.GetComponentInParent<SlideOut_Widget_UI>(true) != null) continue;
 	            // Prompt +/- headers: mild uppercase — not strip tracking (collides with fixed "-" glyph).
 	            if (IsPromptPolaritySignLabel(tmp))
 	                SpzUiThemeOps.ApplyBoundChromePromptPolaritySignTmp(tmp, t.textPrimary);
@@ -289,12 +294,20 @@ namespace spz {
 	        ThemeResolutionPreset(_resolutionPreset_1024, 1024, t);
 	        ThemeResolutionPreset(_resolutionPreset_1536, 1536, t);
 	        ThemeResolutionPreset(_resolutionPreset_2048, 2048, t);
-	        foreach (var lg in root.GetComponentsInChildren<LayoutGroup>(true))
+	        foreach (var lg in root.GetComponentsInChildren<LayoutGroup>(true)) {
+	            if (lg == null) continue;
+	            if (lg.GetComponentInParent<SlideOut_Widget_UI>(true) != null) continue;
 	            SpzUiThemeOps.ApplyScaledLayoutGroup(lg);
+	        }
 	        // Re-assert preset chip gaps after layout scale (authored spacing 0 → scale still 0).
 	        foreach (var toggle in root.GetComponentsInChildren<Toggle>(true)) {
 	            if (toggle != null && IsPromptPresetToggle(toggle))
 	                SpzUiThemeOps.EnsurePromptPresetRowGaps(toggle.transform);
+	        }
+	        // VAE / checkpoint "download more" — same ReadableBody path as ControlNet (gen basics).
+	        foreach (var slide in root.GetComponentsInChildren<SlideOut_Widget_UI>(true)) {
+	            if (slide != null)
+	                SpzUiThemeOps.ApplyDownloadMoreSlideChrome(slide.transform);
 	        }
 	    }
 
