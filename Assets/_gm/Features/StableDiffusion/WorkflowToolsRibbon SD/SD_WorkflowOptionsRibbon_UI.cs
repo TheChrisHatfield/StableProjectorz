@@ -543,8 +543,16 @@ namespace spz {
 	            if (panelImg != null)
 	                SpzUiThemeOps.ApplyBoundChromeGraphic(panelImg, t.panelBg);
 	            foreach (var tmp in _wholePanel_canvGrp.GetComponentsInChildren<TextMeshProUGUI>(true)) {
-	                if (tmp != null)
-	                    SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	                if (tmp == null) continue;
+	                // Soft/Tileable/Ignore get Compact via ThemeFlatToolToggle — skip strip tracking here.
+	                if (tmp.GetComponentInParent<Toggle>(true) != null) continue;
+	                if (tmp.GetComponentInParent<CircleSlider_Snapping_UI>(true) != null) continue;
+	                // Rethink/blur readouts themed as DialValue below.
+	                if (ReferenceEquals(tmp, _reThink_text) || ReferenceEquals(tmp, _reThink_text_mini)
+	                    || ReferenceEquals(tmp, _mask_blur_text))
+	                    continue;
+	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	                tmp.characterSpacing = 0f;
 	            }
 	        }
 	        ThemeTmp(_reThink_text, t);
@@ -574,8 +582,8 @@ namespace spz {
 
 	    static void ThemeTmp(TextMeshProUGUI tmp, SpzUiThemeOps.ThemeTokens t) {
 	        if (tmp == null) return;
-	        // Snapshot first — rethink/blur readouts sit beside GenArt and must not steal hits.
-	        SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	        // Rethink/blur numerals sit beside GenArt — BoundChrome tracking (10) spills past the dial.
+	        SpzUiThemeOps.ApplyBoundChromeDialValueTmp(tmp, t.textPrimary, 14f);
 	        tmp.raycastTarget = false;
 	    }
 
