@@ -272,6 +272,11 @@ namespace spz {
 	                SpzUiThemeOps.ApplyBoundChromePromptPolaritySignTmp(tmp, t.textPrimary);
 	            else if (IsPromptHeaderLabel(tmp))
 	                SpzUiThemeOps.ApplyBoundChromePromptHeaderTmp(tmp, t.textPrimary, 13f);
+	            else if (tmp.GetComponentInParent<TMP_InputField>(true) != null)
+	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	            else if (tmp.GetComponentInParent<Button>(true) != null
+	                     || tmp.GetComponentInParent<Toggle>(true) != null)
+	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
 	            else
 	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
 	        }
