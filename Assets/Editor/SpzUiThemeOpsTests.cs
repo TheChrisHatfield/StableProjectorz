@@ -942,6 +942,29 @@ public sealed class SpzUiThemeOpsTests {
 	}
 
 	[Test]
+	public void BoundChromeDialValueTmpZeroesCharacterSpacingUnderNomad() {
+		var go = new GameObject("NomadDialValue");
+		var tmp = go.AddComponent<TextMeshProUGUI>();
+		tmp.characterSpacing = 0f;
+		tmp.fontSize = 16f;
+		try {
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				Tokens(("text_primary", "#E3E2E7FF")),
+				"replace",
+				out string error), Is.True, error);
+			SpzUiThemeOps.ApplyBoundChromeDialValueTmp(tmp, SpzUiThemeOps.Active.textPrimary, 16f);
+			Assert.That(tmp.characterSpacing, Is.EqualTo(0f).Within(0.01f));
+			SpzUiThemeOps.ResetTheme();
+			SpzUiThemeOps.ApplyBoundChromeDialValueTmp(tmp, Color.white, 16f);
+			Assert.That(tmp.characterSpacing, Is.EqualTo(0f).Within(0.01f));
+		} finally {
+			UnityEngine.Object.DestroyImmediate(go);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
 	public void FindDirectChildIncludingInactiveFindsDeactivatedMonolith() {
 		var parent = new GameObject("StripCell", typeof(RectTransform));
 		var child = new GameObject("MonolithLineIcon", typeof(RectTransform));
