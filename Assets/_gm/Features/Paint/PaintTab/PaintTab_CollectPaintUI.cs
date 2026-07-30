@@ -220,6 +220,12 @@ namespace spz {
 			if (_layout == null) return;
 			if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 				SpzUiThemeOps.RestoreBoundChromeUnder(transform);
+				// Sections may be remapped outside the collector host (Krita dockers).
+				RestoreOwnedSection(_layout.ToolOptionsSection);
+				RestoreOwnedSection(_layout.BrushPresetsSection);
+				RestoreOwnedSection(_layout.ColorPaletteSection);
+				RestoreOwnedSection(_layout.LayersSection);
+				RestoreOwnedSection(_layout.ToolchestRow);
 				_layout.ApplyThemeTokens();
 				PaintTab_LayersPanel_UI layersRestore = null;
 				if (_layout.LayersSection != null)
@@ -243,6 +249,12 @@ namespace spz {
 				layers = GetComponentInChildren<PaintTab_LayersPanel_UI>(true);
 			if (layers != null)
 				layers.ApplyThemeTokens();
+		}
+
+		static void RestoreOwnedSection(RectTransform section)
+		{
+			if (section != null)
+				SpzUiThemeOps.RestoreBoundChromeUnder(section);
 		}
 
 		static void ThemeOwnedSection(RectTransform section, SpzUiThemeOps.ThemeTokens t, bool preferFlatToolToggles = false)

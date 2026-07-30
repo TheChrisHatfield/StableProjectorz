@@ -256,6 +256,7 @@ namespace spz {
 	        ThemeToggle(_showAlphaOnly_toggle, t);
 	        ThemeToggle(_makeScreenshots_toggle, t);
 	        if (_rembg_button != null) {
+	            SpzUiThemeOps.EnsureSelectableHitFace(_rembg_button);
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_rembg_button, t.controlBg, t.accent);
 	            foreach (var tmp in _rembg_button.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	                if (tmp != null)
