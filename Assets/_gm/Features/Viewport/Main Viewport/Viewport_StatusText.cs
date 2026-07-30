@@ -158,6 +158,8 @@ namespace spz {
 	        if (_statusText != null) {
 	            float a = _statusText.alpha;
 	            SpzUiThemeOps.ApplyBoundChromeTmp(_statusText, _statusTextRgb);
+	            // Status lines are sentences — strip tracking (10) looks broken and can overflow.
+	            _statusText.characterSpacing = 0f;
 	            Color c = _statusText.color;
 	            c.a = a;
 	            _statusText.color = c;
@@ -199,7 +201,7 @@ namespace spz {
 	            Color ink = RelativeLuminance(fill) > 0.36f
 	                ? new Color(0.10f, 0.09f, 0.10f, 1f)
 	                : t.textPrimary;
-	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, ink, 12f);
+	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, ink, 12f);
 	        }
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }
