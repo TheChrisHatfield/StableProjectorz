@@ -1767,7 +1767,10 @@ namespace spz {
 			fieldRect.sizeDelta = Vector2.zero;
 			
 			var fieldBg = fieldObj.AddComponent<Image>();
+			fieldBg.sprite = UiRuntimeSprites.SolidRect;
+			fieldBg.type = Image.Type.Simple;
 			fieldBg.color = new Color(0.15f, 0.15f, 0.15f, 1f);
+			SpzUiThemeOps.ApplyRoundedControlSprite(fieldBg, markEligible: true);
 			
 			var labelObj2 = new GameObject("Label");
 			labelObj2.transform.SetParent(fieldObj.transform, false);
@@ -1814,8 +1817,7 @@ namespace spz {
 				_uiElementValues[idLocal] = next;
 				SendValueChangeToPython(addonId, idLocal, "dropdown", next);
 			}
-			// Fallback interaction: cycle selection on click even if no TMP template is configured.
-			// This guarantees add-on dropdowns remain clickable in minimal runtime-generated UI.
+			// Button-only click path — MouseClickSensor + Button both firing skipped every other option.
 			var clickBtn = fieldObj.GetComponent<Button>();
 			if (clickBtn == null) clickBtn = fieldObj.AddComponent<Button>();
 			clickBtn.targetGraphic = fieldBg;
@@ -1825,12 +1827,6 @@ namespace spz {
 			if (rowBtn == null) rowBtn = dropdownObj.AddComponent<Button>();
 			rowBtn.targetGraphic = rowBg;
 			rowBtn.onClick.AddListener(CycleDropdownValue);
-			var clickSensor = fieldObj.GetComponent<MouseClickSensor_UI>();
-			if (clickSensor == null) clickSensor = fieldObj.AddComponent<MouseClickSensor_UI>();
-			clickSensor._onMouseClick += _ => CycleDropdownValue();
-			var rowClickSensor = dropdownObj.GetComponent<MouseClickSensor_UI>();
-			if (rowClickSensor == null) rowClickSensor = dropdownObj.AddComponent<MouseClickSensor_UI>();
-			rowClickSensor._onMouseClick += _ => CycleDropdownValue();
 			
 			// Update value when selection changes
 			dropdown.onValueChanged.AddListener((index) => {
