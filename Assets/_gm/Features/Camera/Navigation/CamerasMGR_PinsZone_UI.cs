@@ -325,6 +325,7 @@ namespace spz {
 
 
 	    void ResizeSelf_to_InnerViewport(){
+	        if (MainViewport_UI.instance == null || MainViewport_UI.instance.innerViewportRect == null){ return; }
 	        Vector3 innerViewportPos = MainViewport_UI.instance.innerViewportRect.position;
 	        Vector2 innerViewportSize =  MainViewport_UI.instance.innerViewportRect.rect.size;
 	        RectTransform myRectTrsf = transform as RectTransform;
@@ -364,6 +365,7 @@ namespace spz {
 	        //COMMENTED OUT, KEPT FOR PRECAUTION. Some people expect alt+MMB to work for panning:
 	        //  areModifiersPressed |= KeyMousePenInput.isKey_alt_pressed(); 
 	        bool isRMBpressed = KeyMousePenInput.isRMBpressed();
+	        if (DimensionMode_MGR.instance == null){ return; }
 	        bool is_dimension_3d = DimensionMode_MGR.instance._dimensionMode == DimensionMode.dim_gen_3d;
 	        bool is_dimension_sd = DimensionMode_MGR.instance._dimensionMode == DimensionMode.dim_sd;
 	        bool is_dimension_uv = DimensionMode_MGR.instance._dimensionMode == DimensionMode.dim_uv;
