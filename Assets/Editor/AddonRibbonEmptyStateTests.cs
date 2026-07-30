@@ -54,6 +54,19 @@ public sealed class AddonRibbonEmptyStateTests {
 	}
 
 	[Test]
+	public void AddonMgr_FullscreenDockEnsureIsCoalesced() {
+		var field = typeof(Addon_MGR).GetField(
+			"_ribbonOnlyDockEnsureCrtn",
+			BindingFlags.Instance | BindingFlags.NonPublic);
+		Assert.That(field, Is.Not.Null, "FULL/SRN dock ensure must coalesce via _ribbonOnlyDockEnsureCrtn.");
+		Assert.That(field.FieldType, Is.EqualTo(typeof(Coroutine)));
+		var start = typeof(Addon_MGR).GetMethod(
+			"StartEnsureRibbonOnlyFullscreenViewportDock",
+			BindingFlags.Instance | BindingFlags.NonPublic);
+		Assert.That(start, Is.Not.Null, "StartEnsureRibbonOnlyFullscreenViewportDock must stop prior dock ensure before restart.");
+	}
+
+	[Test]
 	public void CommandRibbon_WidgetProbeIgnoresTitleOnlyPanels() {
 		var method = typeof(CommandRibbon_UI).GetMethod(
 			"ShellHasAddonPanelWidgets",
