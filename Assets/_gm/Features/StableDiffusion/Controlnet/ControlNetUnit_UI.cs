@@ -369,9 +369,9 @@ namespace spz {
 	                SpzUiThemeOps.ApplyRoundedControlSprite(fieldImg, markEligible: true);
 	            }
 	            if (dd.captionText != null)
-	                SpzUiThemeOps.ApplyBoundChromeTmp(dd.captionText, t.textPrimary, 12f);
+	                SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(dd.captionText, t.textPrimary, 12f);
 	            if (dd.itemText != null)
-	                SpzUiThemeOps.ApplyBoundChromeTmp(dd.itemText, t.textPrimary, 12f);
+	                SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(dd.itemText, t.textPrimary, 12f);
 	        }
 
 	        foreach (var toggle in GetComponentsInChildren<Toggle>(true)) {
@@ -504,7 +504,7 @@ namespace spz {
 	        SpzUiThemeOps.ThemeCheckboxToggle(toggle, t.controlBg, t.accent, t.success);
 	        foreach (var tmp in toggle.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp == null) continue;
-	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, 12f);
+	            SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, t.textPrimary, 12f);
 	        }
 	    }
 
