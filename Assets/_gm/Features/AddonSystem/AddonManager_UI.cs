@@ -1658,18 +1658,30 @@ namespace spz {
 				Color ringColor = enabled ? t.success : t.textMuted;
 				var ringImg = toggle.transform.Find("Ring")?.GetComponent<Image>();
 				if (ringImg != null) {
-					SpzUiThemeOps.ApplyBoundChromeGraphic(ringImg, ringColor);
+					// Keep CircleRing sprite — ApplyBoundChromeGraphic can turn dials into grey/green capsules.
+					ringImg.color = ringColor;
 					ringImg.preserveAspect = true;
+					ringImg.type = Image.Type.Simple;
 				}
 				Image fill = toggle.graphic as Image;
 				if (fill == null)
 					fill = toggle.transform.Find("Ring/Checkmark")?.GetComponent<Image>();
 				if (fill != null) {
-					SpzUiThemeOps.ApplyBoundChromeGraphic(fill, t.success);
+					fill.color = t.success;
 					fill.preserveAspect = true;
+					fill.type = Image.Type.Simple;
 					fill.gameObject.SetActive(true);
 					fill.enabled = enabled;
 					fill.canvasRenderer.SetAlpha(enabled ? 1f : 0f);
+				}
+			}
+			var prefsBodyT = item.transform.Find("PreferencesBody");
+			if (prefsBodyT != null) {
+				var prefsBodyImg = prefsBodyT.GetComponent<Image>();
+				if (prefsBodyImg != null) {
+					Color body = t.panelBg;
+					body.a = Mathf.Clamp01(Mathf.Max(0.85f, body.a));
+					prefsBodyImg.color = body;
 				}
 			}
 			var ribbonToggle = FindChildRecursive(item.transform, "ShowInRibbonToggle")?.GetComponent<Toggle>();
