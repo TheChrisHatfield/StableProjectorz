@@ -218,8 +218,8 @@ namespace spz {
 
 	    static void ApplyReverseOutLabel(TMP_Text text, SpzUiThemeOps.ThemeTokens t, float basePt = 16f) {
 	        if (text == null) return;
-	        // Reverse-out: light type on dark disc (not black-on-white sphere).
-	        SpzUiThemeOps.ApplyBoundChromeTmp(text, t.textPrimary, basePt);
+	        // Reverse-out light type on dark disc; Compact so SD/3D/UV/BG chips do not spill.
+	        SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(text, t.textPrimary, basePt);
 	    }
 
 	    static void ApplyReverseOutLabelsUnder(Button button, SpzUiThemeOps.ThemeTokens t) {
