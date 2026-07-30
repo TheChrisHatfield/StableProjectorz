@@ -722,6 +722,7 @@ namespace spz {
 	            rt.offsetMin = Vector2.zero;
 	            rt.offsetMax = Vector2.zero;
 	            face = go.AddComponent<Image>();
+	            go.AddComponent<SpzUiThemeSyntheticHitFace>();
 	            // Invisible until BoundChrome paints fill — still receives hits (label-cleared litmus).
 	            face.color = new Color(1f, 1f, 1f, 0f);
 	            face.raycastTarget = true;
@@ -752,8 +753,8 @@ namespace spz {
 	                if (label == null) continue;
 	                label.maxVisibleCharacters = int.MaxValue;
 	            }
-	            // Keep a wired hit face after Restore SPZ (labels may stay non-raycast until next frame restore).
-	            EnsureStripTabHitFace(cell);
+	            // Do not EnsureStripTabHitFace on leave — Restore already unwound raycasts;
+	            // injecting TabBg after Restore SPZ sticks forever and can steal hits.
 	            ApplyStudioTabChromeColors(cell, t, recolorChrome: false);
 	            return;
 	        }
