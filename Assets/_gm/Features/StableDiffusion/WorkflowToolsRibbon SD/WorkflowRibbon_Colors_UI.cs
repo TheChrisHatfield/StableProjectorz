@@ -139,7 +139,8 @@ namespace spz {
 	                if (tmp == null) continue;
 	                if (tmp.GetComponentInParent<Button>(true) != null
 	                    || tmp.GetComponentInParent<Toggle>(true) != null)
-	                    SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+	                    // Compact Truncate+UpperCase ate bake / options labels under Nomad.
+	                    SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, t.textPrimary, 11f);
 	                else {
 	                    SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
 	                    tmp.characterSpacing = 0f;
@@ -164,7 +165,7 @@ namespace spz {
 	            }
 	            var bakeLabel = _bakeColors_button.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	            if (bakeLabel != null)
-	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(bakeLabel, t.textPrimary, 11f);
+	                SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(bakeLabel, t.textPrimary, 11f);
 	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_bakeColors_button);
 	        }
 	    }
