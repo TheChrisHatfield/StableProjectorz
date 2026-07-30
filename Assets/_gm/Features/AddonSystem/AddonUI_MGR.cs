@@ -158,6 +158,10 @@ namespace spz {
 				UnityEngine.Debug.Log("[AddonUI_MGR] CommandRibbon_UI.instance was null; resolved ribbon via FindObjectOfType(including inactive).");
 			bool forceParkHiddenRibbon = !Addon_MGR.ShouldShowInCommandRibbonStatic(addonId);
 			bool ribbonResolved = commandRibbon != null && !forceParkHiddenRibbon;
+			if (forceParkHiddenRibbon && commandRibbon != null) {
+				// Prefer a single parking host — drop any leftover ribbon tab/shell without destroying panel content.
+				commandRibbon.RemoveAddonPanelPreservingContent(addonId);
+			}
 			if (ribbonResolved) {
 				parentForThisAddon = commandRibbon.GetOrCreatePanelForAddon(addonId, title);
 				if (parentForThisAddon != null)
