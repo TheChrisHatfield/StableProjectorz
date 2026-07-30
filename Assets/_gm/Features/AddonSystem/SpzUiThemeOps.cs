@@ -350,6 +350,10 @@ namespace spz {
 		/// </summary>
 		public static Image EnsureSelectableHitFace(Selectable selectable) {
 			if (selectable == null) return null;
+			// Leave/builtin litmus: never inject sticky BoundChromeHitFace (poisons Restore SPZ).
+			// Callers under Nomad already gate ApplyTheme; this is the hard backstop for direct Ensure.
+			if (!ShouldRecolorBoundChrome)
+				return selectable.targetGraphic as Image;
 			if (selectable.targetGraphic is Image wired) {
 				SnapshotAuthoredGraphic(wired);
 				wired.raycastTarget = true;

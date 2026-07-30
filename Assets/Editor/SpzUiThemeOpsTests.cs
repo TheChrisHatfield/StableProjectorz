@@ -1229,6 +1229,24 @@ public sealed class SpzUiThemeOpsTests {
 	}
 
 	[Test]
+	public void EnsureSelectableHitFace_OnBuiltin_DoesNotInjectHitFace() {
+		var go = new GameObject("DirectEnsureLeave", typeof(RectTransform), typeof(Button));
+		try {
+			var btn = go.GetComponent<Button>();
+			btn.targetGraphic = null;
+			SpzUiThemeOps.ResetTheme();
+			Assert.That(SpzUiThemeOps.ShouldRecolorBoundChrome, Is.False);
+			Assert.That(SpzUiThemeOps.EnsureSelectableHitFace(btn), Is.Null);
+			Assert.That(btn.targetGraphic, Is.Null);
+			Assert.That(go.transform.Find("BoundChromeHitFace"), Is.Null,
+				"Direct Ensure must hard-gate on ShouldRecolorBoundChrome");
+		} finally {
+			UnityEngine.Object.DestroyImmediate(go);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
+
+	[Test]
 	public void BoundChromeHelpersRestoreAuthoredOnBuiltin() {
 		var go = new GameObject("theme-bound-chrome-test", typeof(RectTransform), typeof(Image));
 		try {
