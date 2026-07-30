@@ -385,11 +385,17 @@ namespace spz {
 				return true;
 			if (n.StartsWith("Swatch", System.StringComparison.OrdinalIgnoreCase))
 				return true;
+			// Layer row: soft rename plate + visibility chip own their colors (SolidSquare blanks/covers labels).
+			if (string.Equals(n, "DisplayBlock", System.StringComparison.OrdinalIgnoreCase)
+			    || string.Equals(n, "Visibility", System.StringComparison.OrdinalIgnoreCase)
+			    || string.Equals(n, "Grip", System.StringComparison.OrdinalIgnoreCase))
+				return true;
 			if (btn.GetComponentInChildren<RawImage>(true) != null)
 				return true;
-			// Transparent hit-only graphics (alpha ≈ 0) are scaffolding, not chrome tokens.
+			// Soft / transparent hit-only graphics are scaffolding, not chrome tokens.
+			// DisplayBlock ships ~0.12a — threshold must be above that (was 0.05 → opaque crush).
 			var g = btn.targetGraphic;
-			if (g != null && g.color.a < 0.05f)
+			if (g != null && g.color.a < 0.15f)
 				return true;
 			return false;
 		}
