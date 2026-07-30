@@ -96,11 +96,11 @@ public sealed class BoundChromePass9FunctionalTests {
 		Assert.That(themeGen, Is.GreaterThan(0));
 		string themeBody = gen.Substring(themeGen, System.Math.Min(1400, gen.Length - themeGen));
 		Assert.That(themeBody, Does.Contain("ClearNonFaceRaycastsForTheme"));
-		Assert.That(themeBody, Does.Contain("ApplyBoundChromeStripLabelTmp"));
-		// Must not poison typography snapshot by clearing raycast before StripLabel.
+		Assert.That(themeBody, Does.Contain("ApplyBoundChromeNarrowDockLabelTmp"));
+		// Must not poison typography snapshot by clearing raycast before NarrowDock label.
 		int poison = themeBody.IndexOf("label.raycastTarget = false", System.StringComparison.Ordinal);
-		int strip = themeBody.IndexOf("ApplyBoundChromeStripLabelTmp", System.StringComparison.Ordinal);
-		Assert.That(poison < 0 || poison > strip, Is.True);
+		int dock = themeBody.IndexOf("ApplyBoundChromeNarrowDockLabelTmp", System.StringComparison.Ordinal);
+		Assert.That(poison < 0 || poison > dock, Is.True);
 	}
 
 	[Test]

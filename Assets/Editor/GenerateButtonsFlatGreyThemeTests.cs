@@ -43,8 +43,11 @@ public sealed class GenerateButtonsFlatGreyThemeTests {
 			themeGen.Invoke(null, new object[] { btn, SpzUiThemeOps.Active });
 
 			Assert.That(face.color, Is.EqualTo(SpzUiThemeOps.Active.controlBg));
-			Assert.That(face.type, Is.EqualTo(Image.Type.Sliced));
+			Assert.That(face.type, Is.EqualTo(Image.Type.Simple), "Nomad litmus: GEN faces are solid squares");
+			Assert.That(UiRuntimeSprites.IsSolidRect(face.sprite), Is.True);
 			Assert.That(ColorDistance(face.color, peach), Is.GreaterThan(0.2f));
+			Assert.That(label.characterSpacing, Is.LessThan(8f), "GEN ART must use NarrowDock eased tracking, not strip 18");
+			Assert.That((label.fontStyle & FontStyles.UpperCase) != 0, Is.True);
 		}
 		finally {
 			Object.DestroyImmediate(root);
