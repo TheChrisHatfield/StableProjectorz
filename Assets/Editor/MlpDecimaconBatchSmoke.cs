@@ -26,11 +26,16 @@ namespace spz.Editor {
 				sb.AppendLine("OK routing max_nodes=" + plan.MaxNodes + " max_stages=" + plan.MaxStages);
 
 				AssertTrue(spz.MlpDecimacon.MlpDecimaconRuntime.TryCreate(out var rt, out err), "runtime:" + err);
+				AssertTrue(rt.Body.IsWarmStarted, "body_warm_start");
+				sb.AppendLine("OK body warm-start=" + rt.Body.IsWarmStarted);
 				float[] feat = { 0.5f, 0.2f, 0.2f, 0.2f, 0.2f, 0.2f, 0.1f };
 				var fr = rt.Forward(spz.MlpDecimacon.TelemetrySnapshot.ForPropose(0f), feat);
 				AssertTrue(fr.BodyVector != null && fr.BodyVector.Length == 96, "body");
 				AssertTrue(fr.ActiveLayers >= 1 && fr.ActiveLayers <= 5, "depth");
-				sb.AppendLine("OK forward L=" + fr.ActiveLayers + " stages=" + fr.Stage.StagesRun + " hasValue=" + fr.HasValue);
+				if (fr.HasValue)
+					spz.MlpDecimacon.DecimaconProductGate.ReportForwardQuality(fr.Plan.RouteConfidence, fr.Value.DesiredConfidence01);
+				sb.AppendLine("OK forward L=" + fr.ActiveLayers + " stages=" + fr.Stage.StagesRun + " hasValue=" + fr.HasValue
+					+ " q=" + spz.MlpDecimacon.DecimaconProductGate.LastForwardQuality.ToString("0.00"));
 
 				var assist = ValuePaintAssistFactory.Create(preferNeural: true, out string which);
 				sb.AppendLine("factory=" + which);

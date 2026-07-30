@@ -108,7 +108,7 @@ namespace spz {
 	    public int inpainting_fill; //https://github.com/AUTOMATIC1111/stable-diffusion-webui/discussions/5529#discussion-4639917
 	    public int inpaint_full_res; //Inpaint area (Whole picture=0, only masked=1) https://github.com/AUTOMATIC1111/stable-diffusion-webui/discussions/9739#discussioncomment-5658646
 	    public int inpaint_full_res_padding; //Only masked padding, pixels.
-	    public int inpainting_mask_invert; //inpaint area:  0 inpaint masked, 1 inpaint whole image
+	    public int inpainting_mask_invert; //WebUI: 0 = inpaint masked (white), 1 = inpaint outside mask / invert (see Settings_MGR.get_sd_inpaintingMaskInvert)
 	    public int mask_blur = 8; //8 because user can use soft brush manually, inside StableProjectorz. Don't put zero - I think it messes up Soft Inpaint (July 2024)
 	    public float denoising_strength;
 	    public bool include_init_images = true; //https://blog.runpod.io/runpod-partners-with-randomseed-to-provide-accessible-user-friendly-stable-diffusion-api-access/

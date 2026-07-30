@@ -41,7 +41,7 @@ TOKENS: Dict[str, Any] = {
     "selection": "#F2CA5033",
     "font_scale": 0.84,
     "spacing_scale": 0.94,
-    "corner_radius": 5,
+    "corner_radius": 0,
     "icon_tint": "#D0C5AFFF",
     "panel_width": 220,
     "panel_alpha": 0.92,

@@ -38,6 +38,8 @@ namespace spz {
 		Eraser,
 		/// <summary>Smudge / smear blob.</summary>
 		Smudge,
+		/// <summary>Nomad Flatten litmus — trapezoid press + tip foot (outline-only style reference).</summary>
+		Flatten,
 		/// <summary>Nomad vertical-slider thumb (circle + center dot).</summary>
 		Bullseye,
 		/// <summary>Web-find / globe (prompt header image search).</summary>
@@ -134,6 +136,12 @@ namespace spz {
 		public static bool IsNomadSliderSegmentTile(Sprite sprite) =>
 			sprite != null && ReferenceEquals(sprite, _nomadSliderSegmentTile);
 
+		/// <summary>
+		/// Nomad paint-tool outline stroke on the 64px atlas (Flatten litmus).
+		/// Thinner than legacy chrome glyphs so Brush/Smudge/Bucket/Trash read as wire outlines.
+		/// </summary>
+		public const float NomadPaintToolStroke = 2.4f;
+
 		/// <summary>Thin 1.5px-style line glyphs for runtime-created professional chrome.</summary>
 		public static Sprite GetLineIcon(StudioLineIcon icon) {
 			if (!LineIcons.TryGetValue(icon, out Sprite sprite) || sprite == null) {
@@ -142,6 +150,9 @@ namespace spz {
 			}
 			return sprite;
 		}
+
+		/// <summary>Drops cached line glyphs so redesigned paths regenerate (also cleared on domain reload).</summary>
+		public static void ClearLineIconCache() => LineIcons.Clear();
 
 		static float SoftAlpha(float signedDistance) {
 			return Mathf.Clamp01(0.5f - signedDistance);
@@ -277,6 +288,7 @@ namespace spz {
 					tex.SetPixel(x, y, clear);
 
 			const float stroke = 3.2f;
+			float paintStroke = NomadPaintToolStroke;
 			switch (icon) {
 				case StudioLineIcon.Folder:
 					Line(tex, 12, 18, 27, 18, stroke);
@@ -302,21 +314,35 @@ namespace spz {
 					Line(tex, 51, 16, 48, 23, stroke);
 					break;
 				case StudioLineIcon.Trash:
-					Line(tex, 20, 22, 44, 22, stroke);
-					Line(tex, 24, 22, 26, 49, stroke);
-					Line(tex, 26, 49, 40, 49, stroke);
-					Line(tex, 40, 49, 42, 22, stroke);
-					Line(tex, 27, 16, 37, 16, stroke);
-					Line(tex, 17, 20, 47, 20, stroke);
+					// Nomad litmus: lid + can body as closed outlines (no fill ribs).
+					Line(tex, 26, 14, 38, 14, paintStroke);
+					Line(tex, 26, 14, 26, 20, paintStroke);
+					Line(tex, 38, 14, 38, 20, paintStroke);
+					Line(tex, 18, 20, 46, 20, paintStroke);
+					Line(tex, 22, 22, 42, 22, paintStroke);
+					Line(tex, 42, 22, 40, 50, paintStroke);
+					Line(tex, 40, 50, 24, 50, paintStroke);
+					Line(tex, 24, 50, 22, 22, paintStroke);
 					break;
 				case StudioLineIcon.Brush:
-					// Paintbrush: handle + ferrule + angled bristle tip.
-					Line(tex, 14, 50, 28, 36, stroke + 0.8f);
-					Line(tex, 28, 36, 34, 30, stroke);
-					Line(tex, 30, 34, 38, 26, stroke + 0.4f);
-					Line(tex, 36, 28, 48, 16, stroke + 1.2f);
-					Line(tex, 46, 14, 52, 20, stroke);
-					Line(tex, 48, 18, 42, 24, stroke);
+					// Nomad litmus: closed handle parallelogram + triangular tip (outline only).
+					Line(tex, 14, 48, 20, 42, paintStroke);
+					Line(tex, 20, 42, 32, 30, paintStroke);
+					Line(tex, 32, 30, 26, 24, paintStroke);
+					Line(tex, 26, 24, 14, 36, paintStroke);
+					Line(tex, 14, 36, 14, 48, paintStroke);
+					Line(tex, 26, 24, 36, 14, paintStroke);
+					Line(tex, 36, 14, 48, 20, paintStroke);
+					Line(tex, 48, 20, 32, 30, paintStroke);
+					break;
+				case StudioLineIcon.Flatten:
+					// Litmus reference: wide-top trapezoid press + tip foot (matches Nomad Flatten cell).
+					Line(tex, 16, 16, 48, 16, paintStroke);
+					Line(tex, 48, 16, 40, 38, paintStroke);
+					Line(tex, 40, 38, 24, 38, paintStroke);
+					Line(tex, 24, 38, 16, 16, paintStroke);
+					Line(tex, 32, 38, 38, 50, paintStroke);
+					Line(tex, 35, 50, 44, 50, paintStroke);
 					break;
 				case StudioLineIcon.Grid:
 					for (int i = 0; i < 3; i++) {
@@ -424,13 +450,14 @@ namespace spz {
 					Line(tex, 38, 16, 42, 24, stroke);
 					break;
 				case StudioLineIcon.Bucket:
-					Line(tex, 20, 18, 44, 18, stroke);
-					Line(tex, 44, 18, 48, 36, stroke);
-					Line(tex, 48, 36, 16, 36, stroke);
-					Line(tex, 16, 36, 20, 18, stroke);
-					Line(tex, 28, 36, 34, 50, stroke + 0.6f);
-					Line(tex, 34, 50, 40, 42, stroke);
-					Circle(tex, 42, 48, 3.5f, stroke * 0.8f);
+					// Nomad litmus: pot trapezoid + side handle + pour tick (outline only).
+					Line(tex, 18, 18, 46, 18, paintStroke);
+					Line(tex, 46, 18, 42, 38, paintStroke);
+					Line(tex, 42, 38, 22, 38, paintStroke);
+					Line(tex, 22, 38, 18, 18, paintStroke);
+					Arc(tex, 46, 28, 9, 280, 80, paintStroke);
+					Line(tex, 30, 38, 34, 50, paintStroke);
+					Line(tex, 32, 50, 40, 50, paintStroke);
 					break;
 				case StudioLineIcon.Drop:
 					Line(tex, 32, 12, 44, 34, stroke);
@@ -439,17 +466,20 @@ namespace spz {
 					Line(tex, 32, 28, 32, 48, stroke * 0.7f);
 					break;
 				case StudioLineIcon.Eraser:
-					Line(tex, 16, 40, 28, 16, stroke);
-					Line(tex, 28, 16, 48, 26, stroke);
-					Line(tex, 48, 26, 36, 50, stroke);
-					Line(tex, 36, 50, 16, 40, stroke);
-					Line(tex, 22, 36, 40, 45, stroke * 0.85f);
+					// Same tool strip as Brush — Nomad outline parallelogram + ferrule tick.
+					Line(tex, 16, 40, 28, 16, paintStroke);
+					Line(tex, 28, 16, 48, 26, paintStroke);
+					Line(tex, 48, 26, 36, 50, paintStroke);
+					Line(tex, 36, 50, 16, 40, paintStroke);
+					Line(tex, 22, 36, 40, 45, paintStroke);
 					break;
 				case StudioLineIcon.Smudge:
-					Arc(tex, 28, 34, 14, 40, 280, stroke);
-					Arc(tex, 40, 28, 10, 200, 80, stroke);
-					Line(tex, 18, 42, 24, 50, stroke);
-					Line(tex, 46, 22, 52, 16, stroke);
+					// Nomad litmus: closed teardrop body + two parallel smear arcs.
+					Arc(tex, 28, 36, 13, 50, 310, paintStroke);
+					Line(tex, 18, 42, 22, 50, paintStroke);
+					Line(tex, 22, 50, 28, 48, paintStroke);
+					Arc(tex, 40, 26, 9, 200, 40, paintStroke);
+					Arc(tex, 48, 20, 6, 200, 40, paintStroke);
 					break;
 				case StudioLineIcon.Bullseye:
 					Circle(tex, 32, 32, 18, stroke);

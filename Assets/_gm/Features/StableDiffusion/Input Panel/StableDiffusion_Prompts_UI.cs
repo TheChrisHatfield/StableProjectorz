@@ -344,6 +344,7 @@ namespace spz {
 	            input.SetTextWithoutNotify(prompts[ix]);
 	            if(isPositive){ _recentPositiveToggle_ix = ix; }
 	            else{ _recentNegativeToggle_ix = ix; }
+	            SD_InputPanel_UI.instance?.RefreshPromptPresetChrome();
 	            return;
 	        }//otherwise, append inside the prompt, where the cursor is:
 
@@ -357,6 +358,7 @@ namespace spz {
 	        // Insert the prompt text at the current caret position
 	        input.text = currText.Insert(caretPosition, " " + prompts[ix]);
 	        input.caretPosition = caretPosition + prompts[ix].Length + 1;
+	        SD_InputPanel_UI.instance?.RefreshPromptPresetChrome();
 	    }
 
 	    //ensures there are new lines if any line is too long.

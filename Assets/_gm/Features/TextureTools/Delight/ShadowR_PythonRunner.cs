@@ -133,7 +133,7 @@ namespace spz {
 	    {
 	        Debug.Log($"Attempting to run command in directory: {workingDirectory}");
 	        Debug.Log($"Full command: {fullCommand}");
-	        uint processId = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(fullCommand, isJustFile: false, workingDirectory, keepWindow:true);
+	        uint processId = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(fullCommand, isJustFile: false, workingDirectory, keepWindow:true, hidden:false);
 
 	        if (processId == 0){
 	            Debug.LogError("Failed to start process. Process ID is 0.");

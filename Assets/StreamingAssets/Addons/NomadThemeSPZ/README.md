@@ -10,7 +10,8 @@ through theme tokens + compose hooks:
 - RibbonOnlyFullscreen FULL/SRN + OPEN/HIDE RIGHT: under Nomad, **flat grey face + FULL/SRN text** (not icon-only / not beveled peach)
 - Left / brush strips: Nomad applies **studio line icons** (wireframe, cursor, camera FOV handle, brush tools) and **open letter-spacing** on BoundChrome labels (`font_scale` still drives size)
 - Paint / Smudge / Erase direction cells: **flat square control_bg** + line icons (not beveled 9-slice plates, corner chevrons, or +/− tick overlays)
-- BoundChrome Selectable/Graphic: **auto-flatten 9-slice** faces (Multiview POV slots, pins, etc.) so four corner arrows disappear
+- BoundChrome Selectable/Graphic: **hard solid squares** (SAVE 2K litmus expanded) — opaque Simple fills, no soft sliced whiskers / corner chevrons; real Toggle checkmarks kept
+- `corner_radius` token kept at **0** (soft rounded control sprites retired for Nomad chrome)
 - Vertical sliders (FOV, etc.): **pill track + segmented coral fill + bullseye thumb** (not gold disc / red camera chip)
 - Dimension mode SD/3D/UV: **flat discs + reverse-out** light type (not glossy spheres)
 - Addon Manager fullscreen: header icons share a left gutter; with `ribbon_icon_only`, compact icon-only header actions
@@ -46,7 +47,7 @@ Hovering a strip tab shows its name (useful in icon-only mode). Auto-resolve use
 
 ## Palette (defaults)
 
-Colors as Pro-Studio Monolith; `corner_radius` 5; `icon_tint` muted; `panel_width` 220; `panel_alpha` 0.92; `font_scale` 0.84; `spacing_scale` 0.94.
+Colors as Pro-Studio Monolith; `corner_radius` 0 (solid-square litmus); `icon_tint` muted; `panel_width` 220; `panel_alpha` 0.92; `font_scale` 0.84; `spacing_scale` 0.94.
 
 Native Unity fallback (`AddonUI_MGR`) mirrors the same path when Python HTTP is down.
 

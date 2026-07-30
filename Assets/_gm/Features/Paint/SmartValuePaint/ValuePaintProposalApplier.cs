@@ -4,7 +4,10 @@ namespace spz {
 
 	/// <summary>
 	/// Accepts a reviewable <see cref="ValuePaintProposal"/> into the live color paint stack (Task 4 / Spec R3).
-	/// Arms brush color/size/opacity via existing ribbon APIs; subsequent strokes write through
+	/// Arms brush color / opacity / hardness via ribbon APIs, and loops
+	/// <see cref="ValuePaintProposal.BrushWidthHint01"/> into canonical
+	/// <see cref="BrushRibbon_UI_Size"/> (no parallel Size dial in Value Assist UI).
+	/// Subsequent strokes write through
 	/// <see cref="Inpaint_MaskPainter"/> → <see cref="ApplyBrushStroke_ToUvMask.Apply_into_ColorBrushTex"/>.
 	/// Does not invent a parallel painter and does not silent-overwrite inactive layers.
 	/// </summary>
@@ -118,6 +121,7 @@ namespace spz {
 			var sd = SD_WorkflowOptionsRibbon_UI.instance;
 			if (sd == null) return;
 			sd.SetBrushColorQuietFromApi(_snapshotColor.r, _snapshotColor.g, _snapshotColor.b, 1f);
+			// Size was soft-armed into BrushRibbon_UI_Size — restore the pre-Live traditional size.
 			if (float.IsFinite(_snapshotSize01) && BrushRibbon_UI_Size.instance != null)
 				sd.SetBrushSize(_snapshotSize01);
 			if (_snapshotOpacity01 >= 0f) {
@@ -265,10 +269,10 @@ namespace spz {
 
 			var opacityUi = Object.FindObjectOfType<BrushRibbon_UI_Opacity>(true);
 			if (opacityUi == null) {
-				reason = _lastFailReason = "BrushRibbon_UI_Opacity missing — refuse before mutating brush color/size";
+				reason = _lastFailReason = "BrushRibbon_UI_Opacity missing — refuse before mutating brush color/opacity/size";
 				return false;
 			}
-			// Size lives on SD ribbon's BrushRibbon_UI_Size; null slider → SetBrushSize NREs after color already applied.
+			// Width hint is applied into canonical SPZ size (BrushRibbon_UI_Size) — not a VA-only Size dial.
 			if (BrushRibbon_UI_Size.instance == null) {
 				reason = _lastFailReason = "BrushRibbon_UI_Size missing — refuse before mutating brush color";
 				return false;
@@ -283,16 +287,9 @@ namespace spz {
 				return false;
 			}
 
-			// Sanitize width before ribbon mutate — Clamp01(NaN) stays NaN and can poison the size slider.
-			float proposedWidth = float.IsFinite(proposal.BrushWidthHint01) ? Mathf.Clamp01(proposal.BrushWidthHint01) : 0.5f;
-			float liveWidth = BrushRibbon_UI_Size.GetBrushSize01();
-			if (!float.IsFinite(liveWidth)) liveWidth = proposedWidth;
-			float sizeInf = PaintTab_ValueAssistOptions.SizeInfluence01;
-			if (!float.IsFinite(sizeInf)) sizeInf = 1f;
-			sizeInf = Mathf.Clamp01(sizeInf);
-			float width01 = Mathf.Lerp(liveWidth, proposedWidth, sizeInf);
-			if (!float.IsFinite(width01)) width01 = proposedWidth;
+			float width01 = SanitizeBrushWidthHint01(proposal.BrushWidthHint01);
 			sd.SetBrushSize(width01);
+
 			// Apply blend into effective opacity so Accept does not silently drop BlendStrength01 (Spec R2).
 			float blend = float.IsFinite(proposal.BlendStrength01) ? Mathf.Clamp01(proposal.BlendStrength01) : 1f;
 			float blendOpt = PaintTab_ValueAssistOptions.Blend01;
@@ -335,8 +332,43 @@ namespace spz {
 			reason = "Armed on target=" + DescribeTarget(target) + " desiredBin=" + proposal.DesiredBin
 			         + " color=" + tint + " size01=" + width01.ToString("F2")
 			         + " opacity01=" + effectiveOpacity.ToString("F2")
-			         + " (blend=" + blend.ToString("F2") + ") " + hardnessNote;
+			         + " (blend=" + blend.ToString("F2") + ") " + hardnessNote
+			         + " size→BrushRibbon_UI_Size";
 			return true;
+		}
+
+		/// <summary>
+		/// Loop proposal width into canonical SPZ brush size. Implementation stays in Value Assist;
+		/// the write target is always <see cref="BrushRibbon_UI_Size"/> via the SD ribbon setter.
+		/// </summary>
+		public static float SanitizeBrushWidthHint01(float brushWidthHint01) {
+			return float.IsFinite(brushWidthHint01) ? Mathf.Clamp01(brushWidthHint01) : 0.5f;
+		}
+
+		/// <summary>
+		/// Soft-arm Live: push width hint into <see cref="BrushRibbon_UI_Size"/> while respecting
+		/// traditional size edits ([ ] / Shift+RMB / size slider) as the new session anchor.
+		/// Accept applies the hint at full strength; Live uses a fixed soft factor (no Size dial).
+		/// </summary>
+		const float LiveSizeSoftArm01 = 0.35f;
+
+		static void SoftArmBrushWidthIntoSpzSize(SD_WorkflowOptionsRibbon_UI sd, ValuePaintProposal proposal) {
+			if (sd == null || BrushRibbon_UI_Size.instance == null) return;
+			float proposedWidth = SanitizeBrushWidthHint01(proposal.BrushWidthHint01);
+			float liveWidth = BrushRibbon_UI_Size.GetBrushSize01();
+			if (!float.IsFinite(liveWidth)) liveWidth = proposedWidth;
+			// User moved traditional size since our last write? Adopt it as the new session anchor
+			// (and restore target) instead of yanking the slider every tick.
+			if (float.IsFinite(_lastLiveAppliedSize01) && Mathf.Abs(liveWidth - _lastLiveAppliedSize01) > 0.01f)
+				_snapshotSize01 = liveWidth;
+			float anchor = float.IsFinite(_snapshotSize01) ? _snapshotSize01 : liveWidth;
+			float width01 = Mathf.Lerp(anchor, proposedWidth, LiveSizeSoftArm01);
+			if (float.IsFinite(width01) && Mathf.Abs(width01 - liveWidth) > 0.015f) {
+				sd.SetBrushSize(width01);
+				_lastLiveAppliedSize01 = width01;
+			} else {
+				_lastLiveAppliedSize01 = liveWidth;
+			}
 		}
 
 		/// <summary>Map Spec R2 EdgeSoftness01 → built-in round tip index (0=soft, 1=medium, 2=hard).</summary>
@@ -451,26 +483,8 @@ namespace spz {
 				return false;
 			}
 
-			float sizeInf = PaintTab_ValueAssistOptions.SizeInfluence01;
-			if (float.IsFinite(sizeInf) && sizeInf > 0.02f && BrushRibbon_UI_Size.instance != null) {
-				float proposedWidth = float.IsFinite(proposal.BrushWidthHint01) ? Mathf.Clamp01(proposal.BrushWidthHint01) : 0.5f;
-				float liveWidth = BrushRibbon_UI_Size.GetBrushSize01();
-				if (!float.IsFinite(liveWidth)) liveWidth = proposedWidth;
-				// User moved the size dial since our last write? Adopt it as the new session anchor
-				// (and restore target) instead of pulling it back toward the proposal every tick.
-				if (float.IsFinite(_lastLiveAppliedSize01) && Mathf.Abs(liveWidth - _lastLiveAppliedSize01) > 0.01f)
-					_snapshotSize01 = liveWidth;
-				// Anchor on the USER size, not the assist's own last write — self-lerp converges to
-				// the full proposal after a few ticks and the influence dial loses all effect.
-				float anchor = float.IsFinite(_snapshotSize01) ? _snapshotSize01 : liveWidth;
-				float width01 = Mathf.Lerp(anchor, proposedWidth, Mathf.Clamp01(sizeInf));
-				if (float.IsFinite(width01) && Mathf.Abs(width01 - liveWidth) > 0.015f) {
-					sd.SetBrushSize(width01);
-					_lastLiveAppliedSize01 = width01;
-				} else {
-					_lastLiveAppliedSize01 = liveWidth;
-				}
-			}
+			// Loop width hint into canonical SPZ size (same owner as [ ] / Shift+RMB / size slider).
+			SoftArmBrushWidthIntoSpzSize(sd, proposal);
 
 			if (PaintTab_ValueAssistOptions.ApplyHardness && !_liveHardnessUserOverride) {
 				int hardnessIx = Softness01ToHardnessIx(proposal.EdgeSoftness01);

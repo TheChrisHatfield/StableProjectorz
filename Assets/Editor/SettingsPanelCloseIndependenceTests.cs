@@ -21,12 +21,13 @@ public sealed class SettingsPanelCloseIndependenceTests {
 		ColorPalette_Panel_UI colorPicker = null; // binding missing — prior bug early-returned before close
 		Assert.That(colorPicker, Is.Null);
 
-		// Outside the panel (screen point far left).
+		// Outside the panel + release (not mere hover / not launcher).
 		Vector2 cursorPos = new Vector2(-100f, -100f);
-		bool isPressed = false;
-		if (panel != null && panel.gameObject.activeInHierarchy && !isPressed) {
+		bool releaseOutside = true;
+		bool onLauncher = false;
+		if (panel != null && panel.gameObject.activeInHierarchy && releaseOutside) {
 			bool isInsidePanel = RectTransformUtility.RectangleContainsScreenPoint(panel, cursorPos, null);
-			if (!isInsidePanel)
+			if (!isInsidePanel && !onLauncher)
 				panel.gameObject.SetActive(false);
 		}
 

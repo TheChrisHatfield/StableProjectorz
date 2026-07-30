@@ -59,12 +59,6 @@ if (Test-Path $LockFile -ErrorAction SilentlyContinue) {
     Write-Host "Removed Library\lock"
 }
 
-Write-Host ""
-Write-Host "This may take 10-30 minutes. Do not open this project in Unity Editor while building."
-Write-Host "Build indicators: progress bar updates every 3s; 'Still building...' heartbeat every ~15s."
-Write-Host "When done you will see: *** BUILD FINISHED. Unity exit code: N ***"
-Write-Host ""
-
 # If the Editor (or any Unity) already has this project, batchmode often exits immediately
 # (tiny log, no "[BuildForTesting]" lines, return code 1).
 if (-not $env:SPZ_BUILD_ALLOW_UNITY_RUNNING) {
@@ -78,6 +72,46 @@ if (-not $env:SPZ_BUILD_ALLOW_UNITY_RUNNING) {
         exit 1
     }
 }
+
+# Stale UPM "resolved" state can register PackageCache paths with no files on disk.
+# Editor script compile then misses ugui/TMP/Mathematics and fails with CS0246.
+$packageCacheDir = Join-Path $ProjectRoot "Library\PackageCache"
+$packageMgrDir = Join-Path $ProjectRoot "Library\PackageManager"
+$pkgCount = @(Get-ChildItem $packageCacheDir -Directory -ErrorAction SilentlyContinue).Count
+if ($pkgCount -lt 10) {
+    Write-Host "PackageCache is empty/incomplete ($pkgCount entries). Forcing UPM re-resolve..."
+    Remove-Item (Join-Path $packageMgrDir "projectResolution.json") -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $packageMgrDir "ProjectCache") -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $packageMgrDir "ProjectCache.md5") -Force -ErrorAction SilentlyContinue
+    $resolveLog = Join-Path $ProjectRoot "pkg_resolve_log.txt"
+    $resolveArgs = @(
+        "-batchmode", "-nographics", "-quit",
+        "-projectPath", $ProjectPath,
+        "-logFile", $resolveLog
+    )
+    $resolveProc = Start-Process -FilePath $UnityExe -ArgumentList $resolveArgs -PassThru
+    Wait-Process -Id $resolveProc.Id -Timeout 300 -ErrorAction SilentlyContinue
+    if (-not $resolveProc.HasExited) {
+        Write-Host "ERROR: Package resolve Unity is still running; close it and retry."
+        Read-Host "Press Enter to close"
+        exit 1
+    }
+    $pkgCount = @(Get-ChildItem $packageCacheDir -Directory -ErrorAction SilentlyContinue).Count
+    if ($pkgCount -lt 10) {
+        Write-Host "ERROR: PackageCache still empty after resolve ($pkgCount). Check network / $resolveLog"
+        Read-Host "Press Enter to close"
+        exit 1
+    }
+    Write-Host "PackageCache restored ($pkgCount packages)."
+} else {
+    Write-Host "PackageCache OK ($pkgCount packages)."
+}
+
+Write-Host ""
+Write-Host "This may take 10-30 minutes. Do not open this project in Unity Editor while building."
+Write-Host "Build indicators: progress bar updates every 3s; 'Still building...' heartbeat every ~15s."
+Write-Host "When done you will see: *** BUILD FINISHED. Unity exit code: N ***"
+Write-Host ""
 
 # Reference log size for progress estimation
 $refSize = 0

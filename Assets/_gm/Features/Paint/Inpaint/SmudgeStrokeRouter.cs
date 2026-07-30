@@ -156,10 +156,16 @@ namespace spz {
 				if (multi) {
 					if (prebuiltMultiLayerUnderlay != null && UnderlayBarrierOk(plan.Dest, prebuiltMultiLayerUnderlay))
 						plan.Underlay = prebuiltMultiLayerUnderlay;
-				} else if (includeUvMeshUnderLayerSmudge
-				           && meshAccumulation != null && SameShape(layerPaintTarget, meshAccumulation)
-				           && UnderlayBarrierOk(plan.Dest, meshAccumulation)) {
-					plan.Underlay = meshAccumulation;
+				}
+				// Adaptive Art/mesh under the active layer: single-layer always; multi-layer when
+				// PreferMesh skipped the layer-below composite (or that pass built nothing).
+				if (plan.Underlay == null && includeUvMeshUnderLayerSmudge) {
+					if (meshAccumulation != null && SameShape(layerPaintTarget, meshAccumulation)
+					    && UnderlayBarrierOk(plan.Dest, meshAccumulation))
+						plan.Underlay = meshAccumulation;
+					else if (artIconUvWrapper != null && SameShape(layerPaintTarget, artIconUvWrapper)
+					         && UnderlayBarrierOk(plan.Dest, artIconUvWrapper))
+						plan.Underlay = artIconUvWrapper;
 				}
 				return plan;
 			}
@@ -203,9 +209,14 @@ namespace spz {
 			plan.UndoKind = PaintUndoNonStackTarget.InpaintColor;
 			plan.Domain = WriteDomain.LayerOnlyNoUnderlay;
 			plan.KernelSpacingMultiplier = ComputeKernelSpacingMultiplier(layerPaintTarget);
-			if (includeUvMeshUnderLayerSmudge && meshAccumulation != null && SameShape(layerPaintTarget, meshAccumulation)
-			    && UnderlayBarrierOk(plan.Dest, meshAccumulation))
-				plan.Underlay = meshAccumulation;
+			if (includeUvMeshUnderLayerSmudge) {
+				if (meshAccumulation != null && SameShape(layerPaintTarget, meshAccumulation)
+				    && UnderlayBarrierOk(plan.Dest, meshAccumulation))
+					plan.Underlay = meshAccumulation;
+				else if (artIconUvWrapper != null && SameShape(layerPaintTarget, artIconUvWrapper)
+				         && UnderlayBarrierOk(plan.Dest, artIconUvWrapper))
+					plan.Underlay = artIconUvWrapper;
+			}
 
 			return plan;
 		}

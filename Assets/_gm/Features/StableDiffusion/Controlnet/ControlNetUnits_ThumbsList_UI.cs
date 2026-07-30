@@ -125,11 +125,9 @@ namespace spz {
 	    /// <summary>Themes ControlNet thumbs strip chrome — not unit preview content / domain state.</summary>
 	    void ApplyControlNetListChromeThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
 	            if (_thumbs_parent != null)
-	                SpzUiThemeOps.RestoreAuthoredGraphic(_thumbs_parent.GetComponent<Image>());
-	            SpzUiThemeOps.RestoreAuthoredGraphic(GetComponent<Image>());
-	            if (_thumbs_parent != null)
-	                SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(_thumbs_parent);
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_thumbs_parent);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;

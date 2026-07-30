@@ -18,6 +18,9 @@ namespace spz {
 	    string _runtimeTitle; // set via InitForRuntime so runtime-created tabs have a title
 	    public string title => !string.IsNullOrEmpty(_runtimeTitle) ? _runtimeTitle : _title;
 
+	    /// <summary>True when this tab is the selected strip cell (active highlight child is on).</summary>
+	    public bool IsVisuallySelectedAsActiveTab() => _go_active != null && _go_active.activeSelf;
+
 	    bool _isInvoking_onClicked = false;//prevents recursive stack overflow
 	    public Action<TabsGroupElem_UI> onClicked { get; set; }
 

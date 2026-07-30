@@ -3,6 +3,7 @@ using NUnit.Framework;
 
 /// <summary>
 /// Editable path fields must not use Ellipsis overflow (truncates caret/selection on long paths).
+/// They must clip with Text Area + RectMask2D so Overflow does not paint past the panel.
 /// </summary>
 public sealed class SpzGoInputOverflowTests {
 
@@ -22,5 +23,11 @@ public sealed class SpzGoInputOverflowTests {
 			"Editable InputField text must use Overflow so long exchange paths stay editable.");
 		int editableOverflow = body.LastIndexOf("text.overflowMode = TextOverflowModes.Overflow");
 		Assert.That(editableOverflow, Is.GreaterThan(0));
+		Assert.That(body, Does.Contain("RectMask2D"),
+			"Text Area must RectMask2D-clip long paths inside the field bounds.");
+		Assert.That(body, Does.Contain("textViewport"),
+			"TMP_InputField.textViewport must point at the masked Text Area.");
+		Assert.That(body, Does.Contain("\"Text Area\""),
+			"Expected a Text Area child under InputField for clipping.");
 	}
 }

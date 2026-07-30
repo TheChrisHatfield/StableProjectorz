@@ -67,6 +67,11 @@ namespace spz {
 	        img2img_GetTextures_andFill( forceFullWhiteMask:isMakingBackgrounds,  out screenMask_skipAntiEdge, out screenMask_withAntiEdge,
 	                                     out viewTex, out inpaint_fill, out denoise_strength);
 
+	        int inpaintMaskInvert01 = 0;
+	        // Background / full-white mask paths keep WebUI default (inpaint inside mask). User toggle applies to main viewport img2img only.
+	        if (!isMakingBackgrounds && Settings_MGR.instance != null && Settings_MGR.instance.get_sd_inpaintingMaskInvert())
+		        inpaintMaskInvert01 = 1;
+
 	        intermediates_ =  new SD_GenRequestArgs_byproducts{
 	            screenSpaceMask_NE_disposableTex = screenMask_skipAntiEdge,
 	            screenSpaceMask_WE_disposableTex = screenMask_withAntiEdge,//so that we can use it later, during projections etc.
@@ -110,7 +115,7 @@ namespace spz {
 	            tiling = SD_WorkflowOptionsRibbon_UI.instance.isTileable, 
 
 	            inpaint_full_res = (int)0,//whole picture always. User can zoom up if they need to.
-	            inpainting_mask_invert = (int)0, //always mask inside the mask, don't invert. Jul 2024.
+	            inpainting_mask_invert = inpaintMaskInvert01, //0 = WebUI inpaint masked (white); 1 = inpaint outside mask (Settings).
 
 	            inpaint_full_res_padding = 0, //how many pixels to add to the mask.  Note, in case of entireShape, silhuette was already dilated by correct number of pixels.
 	                                          //For brushed masks, padding is undesirable, could mess up around brushed borders in StableProjectorz (in projection shader)

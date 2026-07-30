@@ -11,11 +11,9 @@ namespace spz {
 		static bool _enabled = true;
 		static bool _useNeural = true;
 		static bool _applyHardness = true;
-		// Live soft-arm mutates brush color/size under the tip — opt-in so stable brush picks stay stable.
+		// Live soft-arm mutates brush color/opacity/size-into-SPZ under the tip — opt-in so stable picks stay stable.
 		static bool _livePredict = false;
 		static float _blend01 = 1f;
-		// Non-zero so Live/Accept can visibly change tip size with value planes (0 made strokes look identical).
-		static float _sizeInfluence01 = 0.35f;
 		static float _opacityInfluence01 = 1f;
 
 		/// <summary>Fired after any stored value changes.</summary>
@@ -29,8 +27,11 @@ namespace spz {
 		public static bool LivePredict => _livePredict;
 		/// <summary>Multiplies proposal <see cref="ValuePaintProposal.BlendStrength01"/> on Accept (0 = no blend pull).</summary>
 		public static float Blend01 => _blend01;
-		/// <summary>0 = keep live brush size; 1 = use proposal width hint.</summary>
-		public static float SizeInfluence01 => _sizeInfluence01;
+		/// <summary>
+		/// Unused by UI — width hints apply directly into <see cref="BrushRibbon_UI_Size"/>.
+		/// Kept as a stable API stub (always 1 = full apply of proposal width into SPZ size).
+		/// </summary>
+		public static float SizeInfluence01 => 1f;
 		/// <summary>0 = keep live opacity; 1 = use proposal opacity×blend.</summary>
 		public static float OpacityInfluence01 => _opacityInfluence01;
 
@@ -78,13 +79,8 @@ namespace spz {
 			RaiseChanged();
 		}
 
-		public static void SetSizeInfluence01(float v) {
-			if (!float.IsFinite(v)) return;
-			float c = Mathf.Clamp01(v);
-			if (Mathf.Approximately(c, _sizeInfluence01)) return;
-			_sizeInfluence01 = c;
-			RaiseChanged();
-		}
+		/// <summary>No-op — no Size dial; VA loops width hints into BrushRibbon_UI_Size at full strength.</summary>
+		public static void SetSizeInfluence01(float v) { }
 
 		public static void SetOpacityInfluence01(float v) {
 			if (!float.IsFinite(v)) return;

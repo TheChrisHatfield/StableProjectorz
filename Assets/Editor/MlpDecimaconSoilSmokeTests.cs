@@ -80,9 +80,31 @@ public sealed class MlpDecimaconSoilSmokeTests {
 		var d = DecimaconProductGate.BeginPropose();
 		Assert.That(DecimaconProductGate.LastRunForward, Is.True);
 		float a0 = DecimaconProductGate.Scheduler.GetAlpha(d.SelectedArm);
-		DecimaconProductGate.EndInference(d, elapsedMs: 2f, ranForward: true, accuracyProxy: 0.99f);
+		DecimaconProductGate.ReportForwardQuality(routeConfidence01: 0.9f, headConfidence01: 0.85f);
+		DecimaconProductGate.EndInference(d, elapsedMs: 2f, ranForward: true);
 		// Success under budget may bump alpha
 		Assert.That(DecimaconProductGate.Scheduler.GetAlpha(d.SelectedArm), Is.GreaterThanOrEqualTo(a0));
+	}
+
+	[Test]
+	public void ProductGate_UserOutcome_Updates_Bandit_Without_Hardcoded_Accuracy() {
+		DecimaconProductGate.ResetForTests(11);
+		var d = DecimaconProductGate.BeginPropose();
+		DecimaconProductGate.ReportForwardQuality(0.7f, 0.6f);
+		Assert.That(DecimaconProductGate.LastForwardQuality, Is.InRange(0.2f, 0.99f));
+		Assert.That(DecimaconProductGate.LastForwardQuality, Is.Not.EqualTo(0.99f));
+		float a0 = DecimaconProductGate.Scheduler.GetAlpha(d.SelectedArm);
+		DecimaconProductGate.ReportUserOutcome(accepted: true);
+		Assert.That(DecimaconProductGate.Scheduler.GetAlpha(d.SelectedArm), Is.GreaterThanOrEqualTo(a0));
+		DecimaconProductGate.ReportUserOutcome(accepted: false);
+	}
+
+	[Test]
+	public void Body_Prefers_WarmStart_When_Artifact_Present() {
+		var body = TransformerLiteBody.CreatePreferWarmStart();
+		string path = System.IO.Path.Combine(Application.streamingAssetsPath, TransformerBodyWeightsDto.StreamingRelative.Replace('/', System.IO.Path.DirectorySeparatorChar));
+		if (System.IO.File.Exists(path))
+			Assert.That(body.IsWarmStarted, Is.True, path);
 	}
 
 	[Test]

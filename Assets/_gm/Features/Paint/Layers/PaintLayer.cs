@@ -108,12 +108,34 @@ namespace spz {
 		/// <summary>Assign content loaded from project (used by PaintLayerStack_MGR.Load). Disposes existing content. Data is synced from Content. </summary>
 		public void SetContentFromLoad(RenderUdims loadedContent)
 		{
+			NoColorMask?.Dispose();
+			NoColorMask = null;
 			Content?.Dispose();
 			Data?.Dispose();
 			Content = loadedContent;
 			Data = null;
 			SyncDataFromContent();
 			HasReceivedSceneInject = true; // loaded content is the source of truth; do not overwrite with scene
+		}
+
+		/// <summary>Assign No-Color mask from disk; takes ownership of <paramref name="loaded"/> or disposes it on mismatch.</summary>
+		public void SetNoColorMaskFromLoad(RenderUdims loaded)
+		{
+			NoColorMask?.Dispose();
+			NoColorMask = null;
+			if (loaded == null) return;
+			if (Content == null)
+			{
+				loaded.Dispose();
+				return;
+			}
+			if (loaded.width != Content.width || loaded.height != Content.height || loaded.UdimsCount != Content.UdimsCount)
+			{
+				Debug.LogWarning("[PaintLayer] NoColorMask size mismatch vs Content; discarding loaded mask.");
+				loaded.Dispose();
+				return;
+			}
+			NoColorMask = loaded;
 		}
 
 		public void Dispose()

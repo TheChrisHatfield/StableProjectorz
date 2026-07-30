@@ -129,8 +129,10 @@ namespace spz {
 	    }//end()
 
 	    /// <summary>
-	    /// For img2img redo-style requests (inpainting_fill=Original), keep unmasked pixels from the init image.
-	    /// This enforces "redo only inside mask" even when the external generator slightly drifts outside mask.
+	    /// For img2img redo-style requests (inpainting_fill=Original), copy init back onto pixels WebUI was asked to keep fixed,
+	    /// so small SD drift does not leak into protected regions. Must match <see cref="SD_img2img_payload.inpainting_mask_invert"/>:
+	    /// when invert is 0, SD edits brush (mask R&gt;0); preserve init outside brush. When invert is 1, SD edits outside brush;
+	    /// preserve init inside brush. <see cref="PaintTab_StrictIsolationBrushOptions.FlipInvertIsolationMask"/> XORs that choice for post-SD only.
 	    /// </summary>
 	    void TryConstrainImg2ImgResult_toScreenMask(Texture2D[] generatedTexs){
 	        if (Settings_MGR.instance == null || !Settings_MGR.instance.get_sd_strictMaskIsolation()) return;
@@ -144,6 +146,8 @@ namespace spz {
 	        Texture2D maskTex = byp.screenSpaceMask_NE_disposableTex;
 	        if (initTex == null || maskTex == null) return;
 
+	        bool webUiInpaintOutsideMask = genData.img2img_req.inpainting_mask_invert != 0;
+
 	        for (int i = 0; i < generatedTexs.Length; i++){
 	            var outTex = generatedTexs[i];
 	            if (outTex == null) continue;
@@ -154,12 +158,15 @@ namespace spz {
 	            Color32[] initPx = initTex.GetPixels32();
 	            Color32[] maskPx = maskTex.GetPixels32();
 	            int n = Mathf.Min(outPx.Length, Mathf.Min(initPx.Length, maskPx.Length));
+	            bool flipInvertMask = PaintTab_StrictIsolationBrushOptions.FlipInvertIsolationMask;
 	            for (int p = 0; p < n; p++){
-	                // Strict isolation: only masked pixels are replaced by generated output.
+	                // Screen mask R>0 = brush / No-Color composite region (same PNG sent as WebUI mask when invert=0).
 	                bool masked = maskPx[p].r > 0;
-	                if (!masked){
+	                // WebUI invert=0: protect outside brush. invert=1: protect inside brush (SD runs outside mask).
+	                bool preserveInitForWebUi = webUiInpaintOutsideMask ? masked : !masked;
+	                bool preserveInit = flipInvertMask ? !preserveInitForWebUi : preserveInitForWebUi;
+	                if (preserveInit)
 	                    outPx[p] = initPx[p];
-	                }
 	            }
 	            outTex.SetPixels32(outPx);
 	            outTex.Apply(updateMipmaps:false, makeNoLongerReadable:false);

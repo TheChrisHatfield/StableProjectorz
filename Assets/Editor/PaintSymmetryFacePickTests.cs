@@ -23,7 +23,7 @@ public sealed class PaintSymmetryFacePickTests {
 				Vector3 pointBefore = host.symmetryPlanePointWorld;
 				Vector3 normalBefore = host.symmetryPlaneNormalWorld;
 
-				go.transform.Rotate(0f, 90f, 0f, SpaceAndSpace.World);
+				go.transform.Rotate(0f, 90f, 0f, Space.World);
 
 				Vector3 pointAfter = host.symmetryPlanePointWorld;
 				Vector3 normalAfter = host.symmetryPlaneNormalWorld;
@@ -33,7 +33,7 @@ public sealed class PaintSymmetryFacePickTests {
 				Assert.That(Vector3.Dot(normalBefore.normalized, normalAfter.normalized), Is.LessThan(0.5f),
 					"face-pick plane normal must rotate with the mesh");
 
-				go.transform.Rotate(0f, -90f, 0f, SpaceAndSpace.World);
+				go.transform.Rotate(0f, -90f, 0f, Space.World);
 				Assert.That(Vector3.Distance(host.symmetryPlanePointWorld, pointBefore), Is.LessThan(1e-4f));
 				Assert.That(Vector3.Dot(host.symmetryPlaneNormalWorld.normalized, normalBefore.normalized),
 					Is.GreaterThan(0.999f));
