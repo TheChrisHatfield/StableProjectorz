@@ -165,4 +165,19 @@ public sealed class AddonManagerPrefsRibbonTests {
 		string bulkWindow = src.Substring(bulkIdx, Math.Min(450, src.Length - bulkIdx));
 		Assert.That(bulkWindow, Does.Contain("RequestMigrateParkedPanelsNow()"));
 	}
+
+	[Test]
+	public void AddonUiMgr_ParkedHiddenRibbon_DoesNotStartMigrateCoroutine() {
+		string path = Path.GetFullPath(Path.Combine(
+			Application.dataPath,
+			"_gm/Features/AddonSystem/AddonUI_MGR.cs"));
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("Only retry migrate when a ribbon tab is expected"));
+		Assert.That(src, Does.Contain("if (!Addon_MGR.ShouldShowInCommandRibbonStatic(addonId))"));
+		int ensureIdx = src.IndexOf("void EnsureParkedEntry(string addonId, string title, GameObject panel)", StringComparison.Ordinal);
+		Assert.That(ensureIdx, Is.GreaterThan(0));
+		string window = src.Substring(ensureIdx, Math.Min(500, src.Length - ensureIdx));
+		Assert.That(window, Does.Contain("ShouldShowInCommandRibbonStatic(addonId)"));
+		Assert.That(window, Does.Contain("return;"));
+	}
 }
