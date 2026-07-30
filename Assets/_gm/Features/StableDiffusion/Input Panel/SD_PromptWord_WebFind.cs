@@ -29,6 +29,8 @@ namespace spz {
 	        string highlighted = GetHighlightedText();
 	        if (SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            // Nomad uses MonolithLineIcon Globe — do not swap authored globe sprites over it.
+	            // Gen3D may theme a frame later than first Update: if Monolith is not wired yet,
+	            // keep authored active/inactive sprites so the control is not a dead mute glyph.
 	            var line = SpzUiThemeOps.FindDirectChildIncludingInactive(transform, "MonolithLineIcon");
 	            if (line != null) {
 	                var img = line.GetComponent<Image>();
@@ -39,6 +41,8 @@ namespace spz {
 	                        c = Color.Lerp(c, SpzUiThemeOps.Active.textMuted, 0.45f);
 	                    img.color = c;
 	                }
+	            } else if (_image != null) {
+	                _image.sprite = highlighted != "" ? _activeSprite : _inactiveSprite;
 	            }
 	            _latestSelected_text = highlighted != "" ? highlighted : _latestSelected_text;
 	            return;

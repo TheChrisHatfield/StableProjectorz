@@ -1,3 +1,4 @@
+using System.IO;
 using System.Reflection;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
@@ -102,5 +103,27 @@ public sealed class PromptPresetSquareChromeThemeTests {
 			Object.DestroyImmediate(go);
 			SpzUiThemeOps.ResetTheme();
 		}
+	}
+
+	[Test]
+	public void Generation3D_Prompt_ThemesWebFindLikeSdInput() {
+		string path = Path.Combine(Application.dataPath, "_gm", "Features", "3D Generate", "Generation3D_Prompt_UI.cs");
+		Assert.That(File.Exists(path), Is.True, path);
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("ThemeWebFindChrome"),
+			"Gen3D must theme web-find (SD input already does) so Nomad Globe is not a dead mute glyph");
+		Assert.That(src, Does.Contain("ThemePromptPresetSquareCell"));
+		Assert.That(src, Does.Contain("StudioLineIcon.Globe"));
+		Assert.That(src, Does.Contain("ClearNonFaceRaycastsForTheme"));
+	}
+
+	[Test]
+	public void WebFind_NomadUpdateFallsBackToAuthoredSpritesWithoutMonolith() {
+		string path = Path.Combine(Application.dataPath, "_gm", "Features", "StableDiffusion", "Input Panel", "SD_PromptWord_WebFind.cs");
+		Assert.That(File.Exists(path), Is.True, path);
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("_image.sprite"),
+			"Without MonolithLineIcon, Nomad Update must still drive authored active/inactive sprites");
+		Assert.That(src, Does.Contain("else if (_image != null)"));
 	}
 }
