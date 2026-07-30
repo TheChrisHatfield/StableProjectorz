@@ -64,10 +64,10 @@ namespace spz {
 			else
 				proposal.OpacityHint01 = Mathf.Lerp(proposal.OpacityHint01, OpacityForPlane(plane), 0.65f);
 			if (!ValuePaintProposalApplier.TryLiveArm(proposal, out reason)) {
-				DecimaconProductGate.EndInference(lavd, DecimaconProductGate.ElapsedMs(sw), ranForward: true, accuracyProxy: 0.9f);
+				DecimaconProductGate.EndInference(lavd, DecimaconProductGate.ElapsedMs(sw), ranForward: true, accuracy: 0.4f);
 				return false;
 			}
-			DecimaconProductGate.EndInference(lavd, DecimaconProductGate.ElapsedMs(sw), ranForward: true, accuracyProxy: 0.99f);
+			DecimaconProductGate.EndInference(lavd, DecimaconProductGate.ElapsedMs(sw), ranForward: true);
 			LastProposal = proposal;
 			HasLastProposal = true;
 			return true;

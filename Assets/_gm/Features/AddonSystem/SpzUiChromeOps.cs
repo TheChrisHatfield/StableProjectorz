@@ -75,6 +75,11 @@ namespace spz {
 			"global_skeleton_canvas",
 			"viewport_statusline",
 			"command_ribbon",
+			"left_ribbon",
+			"workflow_ribbon",
+			"workflow_options",
+			"generate_buttons",
+			"multiview_ribbon",
 		};
 
 		public static List<string> ListUiTargetIds() {
@@ -104,6 +109,25 @@ namespace spz {
 					return go != null;
 				case "command_ribbon":
 					go = CommandRibbon_UI.instance != null ? CommandRibbon_UI.instance.gameObject : null;
+					return go != null;
+				case "left_ribbon":
+					go = LeftRibbon_UI.instance != null ? LeftRibbon_UI.instance.gameObject : null;
+					return go != null;
+				case "workflow_ribbon":
+					go = WorkflowRibbon_UI.instance != null ? WorkflowRibbon_UI.instance.gameObject : null;
+					return go != null;
+				case "workflow_options":
+					go = SD_WorkflowOptionsRibbon_UI.instance != null
+						? SD_WorkflowOptionsRibbon_UI.instance.gameObject
+						: null;
+					return go != null;
+				case "generate_buttons":
+					go = GenerateButtons_Main_UI.instance != null
+						? GenerateButtons_Main_UI.instance.gameObject
+						: null;
+					return go != null;
+				case "multiview_ribbon":
+					go = MultiView_Ribbon_UI.instance != null ? MultiView_Ribbon_UI.instance.gameObject : null;
 					return go != null;
 				default:
 					return SpzUiChromeRegistry.instance != null

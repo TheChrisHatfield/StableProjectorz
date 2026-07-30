@@ -1300,8 +1300,8 @@ namespace spz {
 				return false;
 			}
 			if (isImport) {
-				bool started = fp.Import3DModelFromFile(path);
-				if (!started) {
+				bool importStarted = fp.Import3DModelFromFile(path);
+				if (!importStarted) {
 					SpzGoStatusLine("Import failed (see log)", false);
 					return false;
 				}
@@ -1310,8 +1310,8 @@ namespace spz {
 			}
 			// Mesh write is sync; albedo/AO encode continues under Save_MGR._isSaving.
 			// Returning true here only means "started" — do not fall back to Python mid-write.
-			bool started = fp.Export3DWithTexturesToPath(path);
-			if (!started) {
+			bool exportStarted = fp.Export3DWithTexturesToPath(path);
+			if (!exportStarted) {
 				SpzGoStatusLine("Export failed (valid path / API ready?)", false);
 				return false;
 			}

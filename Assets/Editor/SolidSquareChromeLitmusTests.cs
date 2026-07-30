@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Litmus: SAVE 2K / solid-square chrome = opaque Simple rect, not 9-slice bevel.
+/// Litmus expanded: Nomad BoundChrome selectables + rounded API → opaque Simple solid squares.
 /// </summary>
 public sealed class SolidSquareChromeLitmusTests {
 
@@ -53,6 +53,64 @@ public sealed class SolidSquareChromeLitmusTests {
 		}
 		finally {
 			Object.DestroyImmediate(root);
+		}
+	}
+
+	[Test]
+	public void ApplyBoundChromeSelectableDelegatesToSolidSquareLitmus() {
+		var root = new GameObject("BoundChromeSolidLitmus");
+		root.SetActive(false);
+		try {
+			var go = new GameObject("Btn", typeof(RectTransform), typeof(Image), typeof(Button));
+			go.transform.SetParent(root.transform, false);
+			var face = go.GetComponent<Image>();
+			face.type = Image.Type.Sliced;
+			var btn = go.GetComponent<Button>();
+			btn.targetGraphic = face;
+			var tri = new GameObject("triangle", typeof(RectTransform), typeof(Image));
+			tri.transform.SetParent(go.transform, false);
+			tri.GetComponent<Image>().enabled = true;
+
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				new JObject {
+					["control_bg"] = "#292A2EFF",
+					["accent"] = "#F2CA50FF",
+					["corner_radius"] = 8,
+				},
+				"replace",
+				out string error), Is.True, error);
+
+			SpzUiThemeOps.ApplyBoundChromeSelectable(btn, SpzUiThemeOps.Active.controlBg, SpzUiThemeOps.Active.accent);
+
+			Assert.That(UiRuntimeSprites.IsSolidRect(face.sprite), Is.True,
+				"even with corner_radius>0, BoundChrome must stay solid-square litmus");
+			Assert.That(face.type, Is.EqualTo(Image.Type.Simple));
+			Assert.That(tri.GetComponent<Image>().enabled, Is.False);
+		}
+		finally {
+			Object.DestroyImmediate(root);
+		}
+	}
+
+	[Test]
+	public void ApplyRoundedControlSpriteForcesSolidSquareIgnoringRadius() {
+		Assert.That(SpzUiThemeOps.TryApplyTheme(
+			"p1-experiment",
+			new JObject { ["corner_radius"] = 8 },
+			"replace",
+			out string error), Is.True, error);
+
+		var go = new GameObject("RoundedApiSolid");
+		try {
+			var img = go.AddComponent<Image>();
+			img.type = Image.Type.Sliced;
+			SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
+			Assert.That(UiRuntimeSprites.IsSolidRect(img.sprite), Is.True);
+			Assert.That(img.type, Is.EqualTo(Image.Type.Simple));
+		}
+		finally {
+			Object.DestroyImmediate(go);
 		}
 	}
 }

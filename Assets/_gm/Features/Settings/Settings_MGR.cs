@@ -511,9 +511,13 @@ namespace spz {
 	    }
 
  
+	    float _settingsOpenedAtUnscaled = -999f;
+	    const float SettingsOpenGraceSeconds = 0.35f;
+
 	    void OnButton_OpenSettingsPanel() {
 	        var panel = EventsBinder.FindComponent<RectTransform>("Settings:SettingsPanel");
 	        if (panel != null) panel.gameObject.SetActive(true);
+	        _settingsOpenedAtUnscaled = Time.unscaledTime;
 	        var settingsUi = panel != null ? panel.GetComponentInParent<Settings_UI>(true) : null;
 	        if (settingsUi == null)
 	            settingsUi = FindObjectOfType<Settings_UI>(true);
@@ -525,6 +529,7 @@ namespace spz {
 	    void OnButton_OpenHelpSettingsPanel() {
 	        var panel = EventsBinder.FindComponent<RectTransform>("Settings:SettingsPanel");
 	        if (panel != null) panel.gameObject.SetActive(true);
+	        _settingsOpenedAtUnscaled = Time.unscaledTime;
 	        var settingsUi = panel != null ? panel.GetComponentInParent<Settings_UI>(true) : null;
 	        if (settingsUi == null)
 	            settingsUi = FindObjectOfType<Settings_UI>(true);
@@ -620,21 +625,27 @@ namespace spz {
 	        bool isClicked = KeyMousePenInput.isLMBpressedThisFrame() || KeyMousePenInput.isRMBpressedThisFrame() || KeyMousePenInput.isMMBpressedThisFrame();
 
 	        // Click-outside / Escape close must not depend on ColorPicker binding.
-	        // Hit rect must stay host-sized (see Settings_UI.ClampSettingsPanelHitRect) — Nomad CSF Preferred
-	        // previously grew the panel over the whole screen so outside never registered.
+	        // Hit rect must stay host-sized (see Settings_UI.ClampSettingsPanelHitRect).
+	        // Close only on pointer *release* outside, never during the open-click grace, and never
+	        // when the pointer is over the gear/help launchers (they sit outside the panel rect).
 	        if (settingsPanel != null && settingsPanel.gameObject.activeInHierarchy) {
 	            bool escape = UnityEngine.InputSystem.Keyboard.current != null
 	                && UnityEngine.InputSystem.Keyboard.current.escapeKey.wasPressedThisFrame;
 	            if (escape) {
 	                settingsPanel.gameObject.SetActive(false);
 	            }
-	            else if (!isPressed) {
+	            else if (Time.unscaledTime >= _settingsOpenedAtUnscaled + SettingsOpenGraceSeconds
+	                     && (KeyMousePenInput.isLMBreleasedThisFrame()
+	                         || KeyMousePenInput.isRMBpressedThisFrame()
+	                         || KeyMousePenInput.isMMBpressedThisFrame())) {
 	                Canvas canvas = settingsPanel.GetComponentInParent<Canvas>();
 	                Camera cam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
 	                    ? canvas.worldCamera
 	                    : null;
 	                bool isInsidePanel = RectTransformUtility.RectangleContainsScreenPoint(settingsPanel, cursorPos, cam);
-	                if (!isInsidePanel) settingsPanel.gameObject.SetActive(false);
+	                bool onLauncher = IsPointerOverSettingsLauncher(cursorPos, cam);
+	                if (!isInsidePanel && !onLauncher)
+	                    settingsPanel.gameObject.SetActive(false);
 	            }
 	        }
 
@@ -644,6 +655,15 @@ namespace spz {
 	                colorPicker.Hide();
 	            }
 	        }
+	    }
+
+	    /// <summary>
+	    /// Gear / help launchers sit outside the Settings panel hit-rect — treat them as non-dismiss.
+	    /// </summary>
+	    static bool IsPointerOverSettingsLauncher(Vector2 cursorPos, Camera cam) {
+	        var ui = FindObjectOfType<Settings_UI>(true);
+	        if (ui == null) return false;
+	        return ui.IsPointerOverLauncher(cursorPos, cam);
 	    }
 
 

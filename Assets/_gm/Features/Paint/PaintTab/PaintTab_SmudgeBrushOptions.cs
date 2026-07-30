@@ -14,8 +14,8 @@ namespace spz {
 		static float _colorMixSimilarity01;
 		/// <summary>Integer grid radius in UV texel steps between neighbor taps (1–4). Larger = more spatial samples (still scaled by kernel spacing in the smudge compute pass).</summary>
 		static int _neighborGridRadius = 2;
-		/// <summary>When false (default), smudge on paint layers samples only layer pixels (and multi-layer “under” from other layers / scene buffer), not generated mesh UV accumulation — avoids pulling UvPaintedBrush / bake icon through transparent strokes.</summary>
-		static bool _includeUvMeshInLayerSmudge;
+		/// <summary>When true (default), smudge on paint layers also samples Art-tab / mesh UV under transparent texels (layer-over-accum). Off = layer pixels only (multi-layer “under” from other layers / scene still used).</summary>
+		static bool _includeUvMeshInLayerSmudge = true;
 
 		/// <summary>Fired after any stored value changes (including from API). Read from properties.</summary>
 		public static event Action Changed;

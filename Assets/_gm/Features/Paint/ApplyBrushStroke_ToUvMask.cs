@@ -17,12 +17,18 @@ namespace spz {
 
 	    //used when user presses InvertMaskTool button.
 	    public void InvertMask(RenderUdims invertThis, RenderUdims visibilityTexture){
+	        if (_invertMask_shader == null || invertThis?.texArray == null || visibilityTexture?.texArray == null)
+		        return;
 	        int kernel = _invertMask_shader.FindKernel("CSMain");
+	        if (kernel < 0)
+		        return;
 
 	        _invertMask_shader.SetTexture(kernel, "_InputOutput", invertThis.texArray);
 	        _invertMask_shader.SetTexture(kernel, "_Visibility_R8G8", visibilityTexture.texArray);
 
 	        Vector3Int grps = invertThis.CalcGroups_for_ComputeShader();
+	        if (grps.x <= 0 || grps.y <= 0 || grps.z <= 0)
+		        return;
 	        _invertMask_shader.Dispatch(kernel, grps.x, grps.y, grps.z);
 	    }
 

@@ -55,7 +55,7 @@ namespace spz.MlpDecimacon {
 			runtime = new MlpDecimaconRuntime(
 				new LavadSmartScheduler(seed: 7),
 				routing,
-				new TransformerLiteBody(),
+				TransformerLiteBody.CreatePreferWarmStart(),
 				new StageDagRuntime(),
 				value);
 			error = null;

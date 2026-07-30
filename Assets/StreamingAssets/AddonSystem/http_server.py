@@ -67,6 +67,14 @@ def set_load_addon_callback(callback):
     global _load_addon_callback
     _load_addon_callback = callback
 
+# Callback to unload an addon by id (set by addon_server.py)
+_unload_addon_callback = None
+
+def set_unload_addon_callback(callback):
+    """Set the callback used by POST /unload_addon. Signature: (addon_id: str) -> bool"""
+    global _unload_addon_callback
+    _unload_addon_callback = callback
+
 # Callback: True when Python has connected to Unity socket (set by addon_server.py)
 _connection_ready_callback = None
 
@@ -272,6 +280,14 @@ class UIAddButtonBody(BaseModel):
     callback: str = ""
 
 
+class UIAddToggleBody(BaseModel):
+    addon_id: str
+    panel_id: str = ""
+    label: str = "Toggle"
+    default: bool = False
+    callback: str | None = None
+
+
 class UIAddSliderBody(BaseModel):
     addon_id: str
     panel_id: str = ""
@@ -303,7 +319,24 @@ class UISetValueBody(BaseModel):
 
 class UIApplyThemeBody(BaseModel):
     theme_id: str
+    tokens: Optional[Dict[str, str]] = None
+    mode: Optional[str] = None
+
+
+class UISetLineIconBody(BaseModel):
+    tab: str
+    icon: str
+
+
+class UIRegisterThemeBody(BaseModel):
+    theme_id: str
     tokens: Dict[str, str]
+    label: Optional[str] = None
+    owner: Optional[str] = None
+
+
+class UIUnregisterThemeBody(BaseModel):
+    theme_id: str
 
 
 class PaintFloat01Body(BaseModel):
@@ -1307,6 +1340,20 @@ async def ui_add_button(body: UIAddButtonBody):
     })
 
 
+@app.post("/api/v1/ui/toggle", tags=["ui"])
+async def ui_add_toggle(body: UIAddToggleBody):
+    """Add a checkbox-style toggle to an add-on panel (rpc 1.14+)."""
+    params = {
+        "addon_id": body.addon_id,
+        "panel_id": body.panel_id,
+        "label": body.label,
+        "default": body.default,
+    }
+    if body.callback:
+        params["callback"] = body.callback
+    return await call_unity_async("spz.ui.add_toggle", params)
+
+
 @app.post("/api/v1/ui/slider", tags=["ui"])
 async def ui_add_slider(body: UIAddSliderBody):
     return await call_unity_async("spz.ui.add_slider", {
@@ -1355,23 +1402,68 @@ async def ui_set_value(body: UISetValueBody):
 
 @app.get("/api/v1/ui/theme", tags=["ui"])
 async def ui_get_theme():
-    """Return the active runtime UI theme and effective color tokens."""
+    """Return the active theme plus schema, surfaces, and composition metadata."""
     return await call_unity_async("spz.ui.get_theme", {})
+
+
+@app.get("/api/v1/ui/themes", tags=["ui"])
+async def ui_list_themes():
+    """List builtin and registered theme presets."""
+    return await call_unity_async("spz.ui.list_themes", {})
+
+
+@app.post("/api/v1/ui/themes/register", tags=["ui"])
+async def ui_register_theme(body: UIRegisterThemeBody):
+    """Register or atomically replace a theme preset."""
+    params = {
+        "theme_id": body.theme_id,
+        "tokens": body.tokens,
+    }
+    if body.label is not None:
+        params["label"] = body.label
+    if body.owner is not None:
+        params["owner"] = body.owner
+    return await call_unity_async("spz.ui.register_theme", params)
+
+
+@app.post("/api/v1/ui/themes/unregister", tags=["ui"])
+async def ui_unregister_theme(body: UIUnregisterThemeBody):
+    """Remove a registered preset without changing the active palette."""
+    return await call_unity_async("spz.ui.unregister_theme", {
+        "theme_id": body.theme_id,
+    })
 
 
 @app.post("/api/v1/ui/theme", tags=["ui"])
 async def ui_apply_theme(body: UIApplyThemeBody):
-    """Validate and apply a runtime UI color palette."""
-    return await call_unity_async("spz.ui.apply_theme", {
-        "theme_id": body.theme_id,
-        "tokens": body.tokens,
-    })
+    """Apply tokens or a registered preset using replace/patch semantics."""
+    params = {"theme_id": body.theme_id}
+    if body.tokens is not None:
+        params["tokens"] = body.tokens
+    if body.mode is not None:
+        params["mode"] = body.mode
+    return await call_unity_async("spz.ui.apply_theme", params)
 
 
 @app.post("/api/v1/ui/theme/reset", tags=["ui"])
 async def ui_reset_theme():
     """Restore the built-in StableProjectorz runtime UI color tokens."""
     return await call_unity_async("spz.ui.reset_theme", {})
+
+
+@app.get("/api/v1/ui/line_icons", tags=["ui"])
+async def ui_list_line_icons():
+    """List built-in StudioLineIcon names (icon pack v1, rpc 1.15+)."""
+    return await call_unity_async("spz.ui.list_line_icons", {})
+
+
+@app.post("/api/v1/ui/line_icon", tags=["ui"])
+async def ui_set_line_icon(body: UISetLineIconBody):
+    """Set a CommandRibbon strip tab line glyph by tab name substring."""
+    return await call_unity_async("spz.ui.set_line_icon", {
+        "tab": body.tab,
+        "icon": body.icon,
+    })
 
 # ============================================
 # Addon loading (Unity calls this when user enables an addon or at startup)
@@ -1421,6 +1513,18 @@ async def load_addon(req: LoadAddonRequest):
             pass
     try:
         ok = await asyncio.to_thread(_load_addon_callback, req.addon_id)
+        return {"success": ok, "addon_id": req.addon_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/unload_addon")
+async def unload_addon(req: LoadAddonRequest):
+    """Unload a single addon by id. Called by Unity when an addon is disabled."""
+    if _unload_addon_callback is None:
+        raise HTTPException(status_code=503, detail="Addon unloader not registered")
+    try:
+        ok = await asyncio.to_thread(_unload_addon_callback, req.addon_id)
         return {"success": ok, "addon_id": req.addon_id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -13,6 +13,9 @@ namespace spz {
 		/// <summary>Spacing in reference pixels: n × 8 (e.g. <c>Space(3) == 24</c> for padding).</summary>
 		public static float Space(int n) => n * SpaceUnit;
 
+		/// <summary>Spacing grid multiplied by a theme (or other) scale factor.</summary>
+		public static float Space(int n, float scale) => Space(n) * scale;
+
 		/// <summary>Width breakpoints in reference pixels (Tailwind default scale).</summary>
 		public const float BreakpointSm = 640f;
 		public const float BreakpointMd = 768f;

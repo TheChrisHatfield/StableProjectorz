@@ -68,6 +68,8 @@ namespace spz.MlpDecimacon {
 			public float EdgeSoft01;
 			public float Width01;
 			public float Opacity01;
+			public float DesiredConfidence01;
+			public float CurrentConfidence01;
 		}
 
 		public ValueHeadsRuntime(ValueHeadsWeightsDto w) {
@@ -100,15 +102,33 @@ namespace spz.MlpDecimacon {
 			Linear(_w.des_weight, _w.des_bias, _z, _width, logitsDes, 5);
 			Linear(_w.role_weight, _w.role_bias, _z, _width, logitsRole, 5);
 			Linear(_w.cont_weight, _w.cont_bias, _z, _width, cont, 4);
+			SoftmaxInPlace(logitsCur);
+			SoftmaxInPlace(logitsDes);
+			int curIx = ArgMax(logitsCur);
+			int desIx = ArgMax(logitsDes);
 			return new Output {
-				CurrentBin = ArgMax(logitsCur),
-				DesiredBin = ArgMax(logitsDes),
+				CurrentBin = curIx,
+				DesiredBin = desIx,
 				StrokeRole = ArgMax(logitsRole),
 				Blend01 = Sigmoid(cont[0]),
 				EdgeSoft01 = Sigmoid(cont[1]),
 				Width01 = Sigmoid(cont[2]),
 				Opacity01 = Sigmoid(cont[3]),
+				CurrentConfidence01 = logitsCur[curIx],
+				DesiredConfidence01 = logitsDes[desIx],
 			};
+		}
+
+		static void SoftmaxInPlace(float[] v) {
+			float m = v[0];
+			for (int i = 1; i < v.Length; i++) if (v[i] > m) m = v[i];
+			float sum = 0f;
+			for (int i = 0; i < v.Length; i++) {
+				v[i] = Mathf.Exp(v[i] - m);
+				sum += v[i];
+			}
+			float inv = sum > 1e-8f ? 1f / sum : 0f;
+			for (int i = 0; i < v.Length; i++) v[i] *= inv;
 		}
 
 		static float Gelu(float x) =>

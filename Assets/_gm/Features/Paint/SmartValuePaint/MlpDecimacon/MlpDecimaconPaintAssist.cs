@@ -53,6 +53,8 @@ namespace spz {
 				return new DeterministicValuePaintAssist().ProposeFromLuminance(feat[0], strokeState);
 
 			var o = fr.Value;
+			float headConf = 0.5f * (o.CurrentConfidence01 + o.DesiredConfidence01);
+			DecimaconProductGate.ReportForwardQuality(fr.Plan.RouteConfidence, headConf, armSucceeded: true);
 			float blend = o.Blend01;
 			float edge = o.EdgeSoft01;
 			float width = o.Width01;

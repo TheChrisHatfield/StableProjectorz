@@ -67,6 +67,16 @@ namespace spz {
 
 	    void Awake(){
 	        LayoutRebuilder.ForceRebuildLayoutImmediate(transform as RectTransform);
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        ApplyThemeTokens();
+	    }
+
+	    void OnDestroy() {
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	    }
+
+	    void ApplyThemeTokens() {
+	        SpzUiThemeOps.ApplyContextMenuChrome(gameObject);
 	    }
 
 	    void Start(){

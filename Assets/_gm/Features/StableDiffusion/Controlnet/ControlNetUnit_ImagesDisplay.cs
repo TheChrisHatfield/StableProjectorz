@@ -195,6 +195,9 @@ namespace spz {
 	        //Notify, because changing our image might have changed the type we are considerd to be (depth, normals etc)
 	        //our type is also inferred from the image, so maybe we are no longer considered "depth" etc:
 	        _threshSliders.OnUnitAltered();
+	        var unit = GetComponentInParent<ControlNetUnit_UI>();
+	        if (unit != null)
+	            unit.RefreshBoundChromeSelection();
 	    }
 
 
@@ -202,6 +205,9 @@ namespace spz {
 	        if (!isOn){ return; }
 	        if(how == _customImg_howResize){ return; }//avoid duplicate invocations, especially when CopyFromOther()
 	        _customImg_howResize = how;
+	        var unit = GetComponentInParent<ControlNetUnit_UI>();
+	        if (unit != null)
+	            unit.RefreshBoundChromeSelection();
 	    }
 
 

@@ -1,5 +1,3 @@
-using System.Collections;
-using System.Collections.Generic;
 using System.Threading;
 using UnityEngine;
 
@@ -10,17 +8,44 @@ namespace spz {
 	    bool _quitPopupConfirmed = false;
 	    /// <summary>Hard-exit cap so a hung OnDestroy / Dispose / native plugin can't keep the process alive forever
 	    /// (heavy painting + many RenderUdims layers can stall GPU release; some IL2CPP/Mono shutdown paths in standalone Win builds
-	    /// don't actually terminate the process on Application.Quit alone — see <c>Launch_Addons_Bat_File.RestartWithAddons</c>
-	    /// which already uses <c>Environment.Exit</c> for the same reason).</summary>
+	    /// don't actually terminate the process on Application.Quit alone — see <c>Launch_Addons_Bat_File.RestartWithAddons</c>).</summary>
 	    const int ForceExitGraceMs = 4000;
 	    static bool _forceExitArmed = false;
+	    /// <summary>Set by restart-with-addons (and similar) so <see cref="Application.Quit"/> is not blocked by the close confirm popup.</summary>
+	    static bool s_allowQuitWithoutPrompt;
+
+	    public static ExitTheProgram_MGR instance { get; private set; }
 
 	    void Awake(){
+	        if (instance != null && instance != this) {
+	            Destroy(this);
+	            return;
+	        }
+	        instance = this;
 	        Application.wantsToQuit += WantsToQuit;
 	    }
 
+	    void OnDestroy(){
+	        if (instance == this)
+	            instance = null;
+	        Application.wantsToQuit -= WantsToQuit;
+	    }
+
+	    /// <summary>
+	    /// Marks the next quit as user-confirmed (no "Close the program?" popup), arms the force-exit watchdog,
+	    /// and starts addon API teardown. Call before <see cref="Application.Quit"/> for programmatic restarts.
+	    /// </summary>
+	    public static void AllowQuitWithoutConfirmAndArmWatchdog(){
+	        s_allowQuitWithoutPrompt = true;
+	        if (instance != null)
+	            instance._quitPopupConfirmed = true;
+	        Addon_MGR.ShutdownAddonApiBeforeQuit();
+	        ArmForceExitWatchdog();
+	    }
+
 	    bool WantsToQuit(){
-	        if(_quitPopupConfirmed){
+	        if(_quitPopupConfirmed || s_allowQuitWithoutPrompt){
+	            s_allowQuitWithoutPrompt = false;
 	            Addon_MGR.ShutdownAddonApiBeforeQuit();
 	            ArmForceExitWatchdog();
 	            return true;

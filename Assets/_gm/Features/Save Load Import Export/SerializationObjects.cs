@@ -304,6 +304,8 @@ namespace spz {
 	    public float opacity = 1f;
 	    public int blendMode; // PaintLayerBlendMode as int
 	    public RenderUdims_SL content; // null if layer has no content or is empty
+	    /// <summary>Optional per-layer mask for <see cref="WorkflowRibbon_CurrMode.Inpaint_NoColor"/> strokes; null if unused or pre-layer-mask saves.</summary>
+	    public RenderUdims_SL noColorMask;
 	}
 
 
