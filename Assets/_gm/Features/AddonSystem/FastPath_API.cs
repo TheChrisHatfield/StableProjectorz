@@ -16,8 +16,9 @@ namespace spz {
 	public class FastPath_API : MonoBehaviour {
 		public static FastPath_API instance { get; private set; }
 		
-		// Rate limiting to prevent spam
-		private float _lastCameraUpdate = 0f;
+		// Rate limiting to prevent spam (separate clocks so set_pos + set_rot in one frame both apply)
+		private float _lastCameraPosUpdate = 0f;
+		private float _lastCameraRotUpdate = 0f;
 		private const float MIN_CAMERA_UPDATE_INTERVAL = 0.016f; // ~60fps max
 		
 		// Validation flags
@@ -50,7 +51,7 @@ namespace spz {
 		/// </summary>
 		public bool SetCameraPosition(int cameraIndex, float x, float y, float z) {
 			if (!_isInitialized) return false;
-			if (Time.time - _lastCameraUpdate < MIN_CAMERA_UPDATE_INTERVAL) return false;
+			if (Time.time - _lastCameraPosUpdate < MIN_CAMERA_UPDATE_INTERVAL) return false;
 			
 			var cameras = UserCameras_MGR.instance;
 			if (cameras == null) return false;
@@ -69,7 +70,7 @@ namespace spz {
 			z = Mathf.Clamp(z, -1000f, 1000f);
 			
 			camera.transform.position = new Vector3(x, y, z);
-			_lastCameraUpdate = Time.time;
+			_lastCameraPosUpdate = Time.time;
 			return true;
 		}
 		
@@ -78,7 +79,7 @@ namespace spz {
 		/// </summary>
 		public bool SetCameraRotation(int cameraIndex, float x, float y, float z, float w) {
 			if (!_isInitialized) return false;
-			if (Time.time - _lastCameraUpdate < MIN_CAMERA_UPDATE_INTERVAL) return false;
+			if (Time.time - _lastCameraRotUpdate < MIN_CAMERA_UPDATE_INTERVAL) return false;
 			
 			var cameras = UserCameras_MGR.instance;
 			if (cameras == null) return false;
@@ -99,7 +100,7 @@ namespace spz {
 			quat.Normalize();
 			
 			camera.transform.rotation = quat;
-			_lastCameraUpdate = Time.time;
+			_lastCameraRotUpdate = Time.time;
 			return true;
 		}
 		
