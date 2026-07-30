@@ -89,26 +89,43 @@ namespace spz {
 
 
 
-	    public void Export3D_with_textures(){
+	    /// <summary>
+	    /// Opens a save dialog, writes the mesh, then runs the texture pipeline for that path.
+	    /// Returns true once the dialog/export flow was started; false if busy or no mesh handler.
+	    /// Texture writes wait until a real path is chosen (cancel clears <see cref="_isSaving"/>).
+	    /// </summary>
+	    public bool Export3D_with_textures(){
 	        if( ModelsHandler_3D.instance==null ){
-		        return;
+		        return false;
+	        }
+	        if( _isSaving ){
+		        UnityEngine.Debug.LogWarning("[Save_MGR] Export3D_with_textures: refused — another save/export is in progress.");
+		        return false;
 	        }
 	        _isSaving = true;
-        
-	        // let the user pick path and export the 3d model:
-	        ModelsHandler_3D.instance.ExportModel();
-	        string path_exported3D = ModelsHandler_3D.instance._path_recentlyExported;
-	        //remove .obj or fbx, because images will use default .png:
-	        path_exported3D =  Path.ChangeExtension(path_exported3D, null);
 
-	        //save the final composite texture:
-	        _saveLoad_helper.Save_FinalCompositeTexture( OnReady1 );
-
-	        void OnReady1() => StartCoroutine( WaitForRenderAll_crtn(skipAO_blit: true, OnReady2) );
-
-	        void OnReady2() => Save_Mesh_Textures( onHaveAlbedo:null, path_exported3D, isDilate: true, 
-	                                               forbid_albedoDelete:false,  onComplete:OnComplete);
-	        void OnComplete()=>_isSaving=false;
+	        ModelsHandler_3D.instance.ExportModel(
+		        afterMeshWritten: path => {
+			        if( string.IsNullOrEmpty( path ) || !File.Exists( path ) ){
+				        _isSaving = false;
+				        if( Viewport_StatusText.instance!=null ){
+					        Viewport_StatusText.instance.ShowStatusText( "Export: mesh file not written.", false, 5f, false );
+				        }
+				        return;
+			        }
+			        // remove .obj or fbx — images use default .png beside the mesh:
+			        string path_exported3D = Path.ChangeExtension( path, null );
+			        _saveLoad_helper.Save_FinalCompositeTexture( OnReady1 );
+			        void OnReady1() => StartCoroutine( WaitForRenderAll_crtn( skipAO_blit: true, OnReady2 ) );
+			        void OnReady2() => Save_Mesh_Textures( onHaveAlbedo:null, path_exported3D, isDilate: true,
+				        forbid_albedoDelete:false, onComplete:OnComplete );
+			        void OnComplete() => _isSaving = false;
+		        },
+		        onCancelledOrFailed: () => {
+			        _isSaving = false;
+		        }
+	        );
+	        return true;
 	    }
 
 	    /// <summary>
