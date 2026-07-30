@@ -17,8 +17,11 @@ namespace spz {
 	    private void OnApplicationFocus(bool focus){
 	        //important! Feb 2024 user told that after opening File window they couldn't
 	        //manipulate camera anymore, even after focusing the stable projectorz
-	        _allowZoom = false;
-	        _isZooming = false;
+	        // Only clear sticky dolly on focus *loss* — clearing on focus-gain aborted a fresh Alt+RMB zoom.
+	        if (!focus) {
+	            _allowZoom = false;
+	            _isZooming = false;
+	        }
 	    }
 
 
