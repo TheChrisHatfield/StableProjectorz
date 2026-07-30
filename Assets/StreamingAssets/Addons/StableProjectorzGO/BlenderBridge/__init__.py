@@ -118,6 +118,11 @@ class StableProjectorzGOPreferences(AddonPreferences):
         default="from_spz",
         description="Headless pull from SPZ: mesh+textures written as <name>.fbx under the exchange folder",
     )
+    auto_import_from_spz: BoolProperty(
+        name="Auto-import when SPZ exports",
+        default=True,
+        description="Watch the exchange folder; when StableProjectorz finishes Export, import into Blender automatically",
+    )
 
     def draw(self, context):
         info = self.layout.box()
@@ -130,6 +135,7 @@ class StableProjectorzGOPreferences(AddonPreferences):
         self.layout.prop(self, "exchange_subdir")
         self.layout.prop(self, "uv_svg_name")
         self.layout.prop(self, "spz_pull_basename")
+        self.layout.prop(self, "auto_import_from_spz")
         self.layout.separator()
         box = self.layout.box()
         box.label(
@@ -360,14 +366,31 @@ def _auto_apply_exchange_texture_after_import(fbx_path: str) -> bool:
     return True
 
 
+# Unity FBX export uses Y-up / -Z forward–compatible local scales; keep Blender I/O aligned.
+_FBX_AXIS_FORWARD = "-Z"
+_FBX_AXIS_UP = "Y"
+
+
 def _export_fbx_for_spz(context, filepath: str) -> set:
     """
     If any objects are selected: export the *active* object only (or first in selection if active
     is not in the selection), then restore selection. If nothing is selected: `use_selection=False`
     (same as Blender's default File → Export → FBX, i.e. full scene to FBX).
+
+    Scale/axis: apply unit scale + FBX_SCALE_ALL so object/scale adjustments survive the SPZ round-trip.
     """
+    kwargs = dict(
+        filepath=filepath,
+        global_scale=1.0,
+        apply_unit_scale=True,
+        apply_scale_options="FBX_SCALE_ALL",
+        axis_forward=_FBX_AXIS_FORWARD,
+        axis_up=_FBX_AXIS_UP,
+        use_space_transform=True,
+        bake_space_transform=False,
+    )
     if not context.selected_objects:
-        return bpy.ops.export_scene.fbx(filepath=filepath, use_selection=False)
+        return bpy.ops.export_scene.fbx(use_selection=False, **kwargs)
     act = context.view_layer.objects.active
     if act is not None and act.select_get():
         target = act
@@ -383,7 +406,7 @@ def _export_fbx_for_spz(context, filepath: str) -> set:
         bpy.ops.object.select_all(action="DESELECT")
         target.select_set(True)
         context.view_layer.objects.active = target
-        return bpy.ops.export_scene.fbx(filepath=filepath, use_selection=True)
+        return bpy.ops.export_scene.fbx(use_selection=True, **kwargs)
     finally:
         try:
             bpy.ops.object.select_all(action="DESELECT")
@@ -401,6 +424,11 @@ def _export_fbx_for_spz(context, filepath: str) -> set:
 # --- SPZ → Blender: wait for exported FBX, then import ---
 
 _go_timer_state = None
+_watch_last_ready_fp = None
+_watch_cached_exchange_dir = ""
+_watch_cached_exchange_at = 0.0
+# True until we have observed the current exchange stamp once (avoid importing leftovers on enable).
+_watch_needs_seed = True
 
 
 _GO_IMPORT_MAX_TICKS = 900  # 900 * 0.2s ≈ 180s fallback wait (HTTP path already waited for textures)
@@ -417,19 +445,167 @@ def _file_fingerprint(path: str):
         return None
 
 
+def _mark_exchange_stamp_seen_for_fbx(fbx_path: str) -> None:
+    """After any successful import of exchange FBX, ignore that stamp in the auto-watch."""
+    global _watch_last_ready_fp, _watch_needs_seed
+    if not fbx_path:
+        return
+    stamp = os.path.splitext(fbx_path)[0] + ".spz_go_ready"
+    fp = _file_fingerprint(stamp)
+    if fp is not None:
+        _watch_last_ready_fp = fp
+        _watch_needs_seed = False
+
+
 def _try_import_exchange_fbx(path: str) -> bool:
     """Import FBX + auto-apply maps. Returns True only when import finished."""
     try:
-        ret = bpy.ops.import_scene.fbx(filepath=path)
+        ret = bpy.ops.import_scene.fbx(
+            filepath=path,
+            global_scale=1.0,
+            use_manual_orientation=True,
+            axis_forward=_FBX_AXIS_FORWARD,
+            axis_up=_FBX_AXIS_UP,
+        )
         # bpy ops return a set like {'FINISHED'} / {'CANCELLED'} — no exception on cancel.
         if ret is None or "FINISHED" not in ret:
             print("SPZ GO import_scene.fbx did not finish:", ret, "path=", path)
             return False
+        _apply_spz_export_scale_litmus(path)
         _auto_apply_exchange_texture_after_import(path)
+        # Manual Import and auto-watch share this path — prevent the watcher from importing again.
+        _mark_exchange_stamp_seen_for_fbx(path)
         return True
     except Exception as e:
         print("SPZ GO import_scene.fbx:", e)
         return False
+
+
+def _parse_ready_stamp(stamp_path: str) -> dict:
+    out = {}
+    try:
+        with open(stamp_path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                out[k.strip()] = v.strip()
+    except OSError:
+        pass
+    return out
+
+
+def _selected_mesh_max_edge(context) -> float:
+    """Max world AABB edge among selected mesh objects (0 if none)."""
+    mx = 0.0
+    for obj in context.selected_objects:
+        if getattr(obj, "type", None) != "MESH":
+            continue
+        try:
+            dims = obj.dimensions
+            edge = max(float(dims.x), float(dims.y), float(dims.z))
+            if edge > mx:
+                mx = edge
+        except Exception:
+            pass
+    return mx
+
+
+def _apply_spz_export_scale_litmus(fbx_path: str) -> None:
+    """
+    Litmus: Blender default cube edge = 2m; SPZ fit target max edge = 3u.
+    New SPZ exports undo fit before write (scale_undid_fit=1) — leave size alone.
+    Legacy exports baked the fit (viewport ~3u) into the FBX — map 3→2 so a fitted
+    SPZ model lands at default-cube size in Blender.
+    """
+    stamp = os.path.splitext(fbx_path)[0] + ".spz_go_ready"
+    meta = _parse_ready_stamp(stamp) if os.path.isfile(stamp) else {}
+    undid = meta.get("scale_undid_fit", "0") in ("1", "true", "True", "yes")
+    if undid:
+        return
+    try:
+        spz_fit = float(meta.get("spz_fit_target", "3") or 3)
+        cube = float(meta.get("blender_default_cube_edge", "2") or 2)
+    except ValueError:
+        spz_fit, cube = 3.0, 2.0
+    if spz_fit <= 1e-8:
+        return
+    factor = cube / spz_fit  # 2/3
+    # Only apply when the import looks like SPZ-fitted size (~fit target), not authoring meters.
+    edge = _selected_mesh_max_edge(bpy.context)
+    if edge <= 1e-8:
+        return
+    # Within ~35% of fit target → treat as legacy fitted export.
+    if abs(edge - spz_fit) / spz_fit > 0.35:
+        return
+    for obj in list(bpy.context.selected_objects):
+        if getattr(obj, "type", None) != "MESH":
+            continue
+        try:
+            obj.scale = (obj.scale[0] * factor, obj.scale[1] * factor, obj.scale[2] * factor)
+        except Exception as e:
+            print("SPZ GO scale litmus:", e)
+    print(
+        f"SPZ GO: applied legacy fit→cube litmus ×{factor:.6g} (edge≈{edge:.4g} → ~{cube})"
+    )
+
+
+def _resolve_exchange_dir_cached() -> str:
+    """Best-effort exchange folder (cached ~5s) for the auto-import watcher."""
+    global _watch_cached_exchange_dir, _watch_cached_exchange_at
+    now = time.time()
+    if _watch_cached_exchange_dir and (now - _watch_cached_exchange_at) < 5.0:
+        return _watch_cached_exchange_dir
+    try:
+        p = prefs()
+        info = spz_http.get_project_info(p.base_url)
+        if info.get("data_dir_available") and info.get("data_dir"):
+            d = os.path.join(info["data_dir"], p.exchange_subdir)
+            _watch_cached_exchange_dir = d
+            _watch_cached_exchange_at = now
+            return d
+    except Exception:
+        pass
+    return _watch_cached_exchange_dir or ""
+
+
+def _exchange_watch_timer():
+    """Persistent timer: when SPZ writes from_spz.spz_go_ready, auto-import the FBX."""
+    global _watch_last_ready_fp, _watch_needs_seed
+    try:
+        p = prefs()
+    except Exception:
+        return 2.0
+    if not getattr(p, "auto_import_from_spz", True):
+        return 2.0
+    exdir = _resolve_exchange_dir_cached()
+    if not exdir or not os.path.isdir(exdir):
+        return 2.0
+    base = (bpy.path.clean_name(p.spz_pull_basename) or "from_spz").strip()
+    stamp = os.path.join(exdir, base + ".spz_go_ready")
+    fbx = os.path.join(exdir, base + ".fbx")
+    fp = _file_fingerprint(stamp)
+    if fp is None:
+        return 1.0
+    # First sight of exchange (e.g. SPZ was down at register): adopt stamp, do not import stale mesh.
+    if _watch_needs_seed:
+        _watch_last_ready_fp = fp
+        _watch_needs_seed = False
+        return 1.0
+    if _watch_last_ready_fp is not None and fp == _watch_last_ready_fp:
+        return 1.0
+    # New/updated stamp — import if FBX is present and non-trivial.
+    mesh_fp = _file_fingerprint(fbx)
+    if mesh_fp is None or mesh_fp[1] <= 32:
+        return 0.5
+    # Record before import so a failed import does not spin every tick on the same stamp.
+    _watch_last_ready_fp = fp
+    if _try_import_exchange_fbx(fbx):
+        print("SPZ GO: auto-imported from SPZ export:", fbx)
+    else:
+        print("SPZ GO: auto-import failed (will retry when stamp changes):", fbx)
+    return 1.0
 
 
 def _go_import_timer():
@@ -870,15 +1046,14 @@ class SPZ_PT_main(Panel):
             l.label(text=str(e))
             return
         l.label(text="StableProjectorz link (HTTP :5557):", icon="URL")
-        l.label(text="• Import: SPZ writes FBX+textures, opens here")
-        l.label(
-            text="• Export: active if selected, else full scene (like default FBX) → from_blender.fbx"
-        )
+        l.label(text="• SPZ Export → Blender: undoes fit (cube litmus ~2m)")
+        l.label(text="• Blender Export → SPZ: re-fits to SPZ volume (~3u)")
         l.prop(p, "base_url", text="Base URL")
         l.prop(p, "exchange_subdir", text="Exchange subfolder")
+        l.prop(p, "auto_import_from_spz", text="Auto-import SPZ exports")
         l.separator()
         b = l.box()
-        b.label(text="Main", icon="LINKED")
+        b.label(text="Main (one-click)", icon="LINKED")
         b.operator(
             SPZ_OT_go_import.bl_idname,
             text=SPZ_OT_go_import.bl_label,
@@ -929,18 +1104,48 @@ classes = (
 )
 
 
+def _seed_watch_fingerprint():
+    """Ignore an already-present ready stamp so enable doesn't re-import old exports."""
+    global _watch_last_ready_fp, _watch_needs_seed
+    try:
+        p = prefs()
+        exdir = _resolve_exchange_dir_cached()
+        if not exdir:
+            _watch_needs_seed = True
+            return
+        base = (bpy.path.clean_name(p.spz_pull_basename) or "from_spz").strip()
+        stamp = os.path.join(exdir, base + ".spz_go_ready")
+        fp = _file_fingerprint(stamp)
+        _watch_last_ready_fp = fp
+        # Seeded (even if stamp missing): only future stamp changes should auto-import.
+        _watch_needs_seed = False
+    except Exception:
+        _watch_last_ready_fp = None
+        _watch_needs_seed = True
+
+
 def register():
+    global _watch_needs_seed
     for c in classes:
         try:
             bpy.utils.register_class(c)
         except Exception as e:
             print("SPZ GO: register_class failed for", getattr(c, "__name__", str(c)), "—", e)
+    _watch_needs_seed = True
+    _seed_watch_fingerprint()
+    if not bpy.app.timers.is_registered(_exchange_watch_timer):
+        bpy.app.timers.register(_exchange_watch_timer, first_interval=1.0, persistent=True)
     print(
-        "SPZ GO: add-on on. 3D View: press N (or View → Sidebar) → top tab 'SPZ GO'."
+        "SPZ GO: add-on on. 3D View: press N → 'SPZ GO'. Auto-import watches exchange for SPZ Export."
     )
 
 
 def unregister():
+    if bpy.app.timers.is_registered(_exchange_watch_timer):
+        try:
+            bpy.app.timers.unregister(_exchange_watch_timer)
+        except Exception as e:
+            print("SPZ GO: unregister watch timer:", e)
     for c in reversed(classes):
         try:
             bpy.utils.unregister_class(c)
