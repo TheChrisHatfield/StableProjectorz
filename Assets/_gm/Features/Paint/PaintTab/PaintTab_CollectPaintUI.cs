@@ -339,7 +339,19 @@ namespace spz {
 					// Content-bearing: Compact clears label raycasts; brush/swatch may rely on TMP hits when face is payload.
 					if (parentBtn != null && IsContentBearingPaintButton(parentBtn))
 						continue;
-					SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, basePt);
+					string raw = tmp.text ?? "";
+					// Tool Options radios like "Follow stroke" — Compact UpperCase+Truncate → FOLLOW ST□.
+					bool useReadable = raw.IndexOf(' ') >= 0 || raw.Length >= 10;
+					if (useReadable) {
+						SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, basePt);
+						tmp.enableWordWrapping = false;
+						tmp.overflowMode = TextOverflowModes.Ellipsis;
+						tmp.fontStyle = FontStyles.Normal;
+						tmp.characterSpacing = 0f;
+						tmp.maxVisibleCharacters = int.MaxValue;
+					} else {
+						SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, basePt);
+					}
 				} else {
 					SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, basePt);
 					tmp.characterSpacing = 0f;

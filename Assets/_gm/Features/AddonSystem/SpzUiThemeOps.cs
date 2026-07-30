@@ -309,8 +309,22 @@ namespace spz {
 			}
 			foreach (var tmp in toggle.GetComponentsInChildren<TMP_Text>(true)) {
 				if (tmp == null) continue;
-				// Soft/Tileable/Ignore: strip tracking wraps SOFT out of the selected face (SOF / T spill).
-				ApplyBoundChromeCompactToolLabelTmp(tmp, labelColor, 11f);
+				string raw = tmp.text ?? "";
+				// Soft/Tileable fit Compact; multi-word radios ("Follow stroke") truncate to FOLLOW ST□.
+				bool useReadable = raw.IndexOf(' ') >= 0 || raw.Length >= 10;
+				if (useReadable) {
+					ApplyBoundChromeTmp(tmp, labelColor, 11f);
+					tmp.fontStyle = FontStyles.Normal;
+					if (tmp is TextMeshProUGUI ugui) {
+						ugui.enableWordWrapping = false;
+						ugui.overflowMode = TextOverflowModes.Ellipsis;
+						ugui.characterSpacing = 0f;
+						ugui.maxVisibleCharacters = int.MaxValue;
+					}
+				} else {
+					// Soft/Tileable/Ignore: strip tracking wraps SOFT out of the selected face (SOF / T spill).
+					ApplyBoundChromeCompactToolLabelTmp(tmp, labelColor, 11f);
+				}
 			}
 			ClearNonFaceRaycastsForTheme(toggle);
 		}
