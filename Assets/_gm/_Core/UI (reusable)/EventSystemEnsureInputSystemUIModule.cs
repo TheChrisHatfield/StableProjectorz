@@ -30,10 +30,14 @@ namespace spz {
 				if (es == null) continue;
 				if (es.GetComponent<InputSystemUIInputModule>() != null) continue;
 				var legacy = es.GetComponent<StandaloneInputModule>();
-				if (legacy == null) continue;
-				legacy.enabled = false;
+				if (legacy != null) {
+					legacy.enabled = false;
+					es.gameObject.AddComponent<InputSystemUIInputModule>();
+					Object.Destroy(legacy);
+					continue;
+				}
+				// No Standalone and no InputSystem module → still unwired (pen/uGUI dead).
 				es.gameObject.AddComponent<InputSystemUIInputModule>();
-				Object.Destroy(legacy);
 			}
 		}
 	}
