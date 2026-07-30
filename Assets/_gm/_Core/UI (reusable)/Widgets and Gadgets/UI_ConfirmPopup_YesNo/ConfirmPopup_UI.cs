@@ -102,7 +102,7 @@ namespace spz {
 	            face.raycastTarget = true;
 	        }
 	        if (label != null)
-	            SpzUiThemeOps.ApplyBoundChromeTmp(label, t.textPrimary, 15f);
+	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, t.textPrimary, 15f);
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }
 
