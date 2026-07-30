@@ -322,6 +322,23 @@ public sealed class ControlNetUnitChromeThemeTests {
 		}
 	}
 
+	[Test]
+	public void LeavePath_SourceInvokesPreprocessorApplyThemeTokens() {
+		string path = System.IO.Path.GetFullPath(System.IO.Path.Combine(
+			Application.dataPath,
+			"_gm/Features/StableDiffusion/Controlnet/ControlNetUnit_UI.cs"));
+		string src = System.IO.File.ReadAllText(path);
+		int apply = src.IndexOf("void ApplyThemeTokens()", System.StringComparison.Ordinal);
+		Assert.That(apply, Is.GreaterThan(0));
+		int leave = src.IndexOf("if (!SpzUiThemeOps.ShouldRecolorBoundChrome)", apply, System.StringComparison.Ordinal);
+		int themed = src.IndexOf("var t = SpzUiThemeOps.Active;", leave, System.StringComparison.Ordinal);
+		Assert.That(leave, Is.GreaterThan(0));
+		Assert.That(themed, Is.GreaterThan(leave));
+		string leaveBody = src.Substring(leave, themed - leave);
+		Assert.That(leaveBody, Does.Contain("_preprocessor?.ApplyThemeTokens()"),
+			"Leave must restore preprocessor res chip/slideOut ownership roots");
+	}
+
 	static void SetPrivate(object target, string fieldName, object value) {
 		var f = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
 		Assert.That(f, Is.Not.Null, fieldName);
