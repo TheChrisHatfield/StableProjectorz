@@ -121,8 +121,14 @@ namespace spz {
 	                    SpzUiThemeOps.ApplyBoundChromeGraphic(img, t.panelBg);
 	            }
 	            foreach (var tmp in root.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
-	                if (tmp != null)
+	                if (tmp == null) continue;
+	                if (tmp.GetComponentInParent<Button>(true) != null
+	                    || tmp.GetComponentInParent<Toggle>(true) != null)
+	                    SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+	                else {
 	                    SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	                    tmp.characterSpacing = 0f;
+	                }
 	            }
 	        }
 	        if (_bakeColors_button != null) {
