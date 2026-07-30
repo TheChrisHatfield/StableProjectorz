@@ -864,6 +864,10 @@ namespace spz {
 			layoutElement.flexibleWidth = 1f;
 
 			var bg = toggleObj.AddComponent<Image>();
+			if (bg.sprite == null) {
+				bg.sprite = UiRuntimeSprites.SolidRect;
+				bg.type = Image.Type.Simple;
+			}
 			SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
 			bg.color = new Color(0.3f, 0.3f, 0.3f, 1f);
 			bg.raycastTarget = true;
@@ -880,6 +884,10 @@ namespace spz {
 			checkRt.offsetMin = Vector2.zero;
 			checkRt.offsetMax = Vector2.zero;
 			var checkImg = checkGo.AddComponent<Image>();
+			// Null sprite = invisible ON; match Manager dial/ribbon checkmarks.
+			checkImg.sprite = UiRuntimeSprites.CircleFilled;
+			checkImg.type = Image.Type.Simple;
+			checkImg.preserveAspect = true;
 			checkImg.color = new Color(0.3f, 0.6f, 1f, 1f);
 			checkImg.raycastTarget = false;
 			// Assign graphic before BoundChrome; never solid-square the ON glyph (IsToggleCheckmarkGraphic).

@@ -45,6 +45,9 @@ public sealed class AddonUiToggleWidgetTests {
 			var toggle = panel.GetComponentInChildren<Toggle>(true);
 			Assert.That(toggle, Is.Not.Null);
 			Assert.That(toggle.graphic, Is.Not.Null);
+			Assert.That(toggle.graphic, Is.InstanceOf<Image>());
+			Assert.That(((Image)toggle.graphic).sprite, Is.Not.Null,
+				"AddToggle Checkmark must have a sprite or ON state is invisible.");
 		} finally {
 			Object.DestroyImmediate(host);
 			SpzUiThemeOps.ResetTheme();
