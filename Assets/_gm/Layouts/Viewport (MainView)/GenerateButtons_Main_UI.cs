@@ -233,34 +233,18 @@ namespace spz {
 	        ThemeGenButton(_generateBG_button, t);
 	        ThemeGenButton(_generate3D_button, t);
 	        ThemeGenButton(_generate3D_retexture_button, t);
-	        if (_cancelGeneration_button != null) {
-	            SpzUiThemeOps.ApplyBoundChromeSelectable(_cancelGeneration_button, t.danger, t.accent);
-	            var cancelLabel = _cancelGeneration_button.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
-	            if (cancelLabel != null)
-	                SpzUiThemeOps.ApplyBoundChromeNarrowDockLabelTmp(cancelLabel, t.textPrimary, 12f);
-	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_cancelGeneration_button);
-	        }
-	        if (_deleteLast_button != null) {
-	            var delBtn = _deleteLast_button.GetComponent<Button>();
-	            if (delBtn != null)
-	                SpzUiThemeOps.ApplyBoundChromeSelectable(delBtn, t.controlBg, t.accent);
-	            var delLabel = _deleteLast_button.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
-	            if (delLabel != null)
-	                SpzUiThemeOps.ApplyBoundChromeNarrowDockLabelTmp(delLabel, t.textPrimary, 12f);
-	            if (delBtn != null)
-	                SpzUiThemeOps.ClearNonFaceRaycastsForTheme(delBtn);
-	        }
+	        ThemeDockChromeButton(_cancelGeneration_button, t.danger, t, labelSize: 12f);
+	        if (_deleteLast_button != null)
+	            ThemeDockChromeButton(_deleteLast_button.GetComponent<Button>(), t.controlBg, t, labelSize: 12f);
 	        RefreshColors_of_GenArt_buttons();
 	    }
 
-	    static void ThemeGenButton(Button btn, SpzUiThemeOps.ThemeTokens t) {
+	    static void ThemeDockChromeButton(Button btn, Color fill, SpzUiThemeOps.ThemeTokens t, float labelSize) {
 	        if (btn == null) return;
 	        SpzUiThemeOps.EnsureSelectableHitFace(btn);
 	        if (btn.targetGraphic == null) return;
-	        Color fill = t.controlBg;
 	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, fill, t.accent);
 	        if (btn.targetGraphic is Image face) {
-	            // Flat grey Simple fill — replaces beveled/gradient 9-slice brick shading.
 	            SpzUiThemeOps.ApplyRoundedControlSprite(face, markEligible: true);
 	            face.preserveAspect = false;
 	            face.raycastTarget = true;
@@ -273,9 +257,12 @@ namespace spz {
 	        }
 	        var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	        if (label != null)
-	            // GEN/ART stacked caps: strip tracking 18 overflows the gen column (FULL/SRN NarrowDock litmus).
-	            SpzUiThemeOps.ApplyBoundChromeNarrowDockLabelTmp(label, t.textPrimary, 14f);
+	            SpzUiThemeOps.ApplyBoundChromeNarrowDockLabelTmp(label, t.textPrimary, labelSize);
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
+	    }
+
+	    static void ThemeGenButton(Button btn, SpzUiThemeOps.ThemeTokens t) {
+	        ThemeDockChromeButton(btn, t.controlBg, t, labelSize: 14f);
 	    }
 
 	    static void RestoreGenButton(Button btn) {

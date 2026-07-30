@@ -80,7 +80,16 @@ namespace spz {
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
-	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+	        SpzUiThemeOps.EnsureSelectableHitFace(btn);
+	        // GEN/Export often use the drawn glyph as targetGraphic — SolidSquare blanks mid Gen3D.
+	        if (btn.targetGraphic is Image face
+	            && face.sprite != null
+	            && face.preserveAspect
+	            && !UiRuntimeSprites.IsSolidRect(face.sprite)) {
+	            SpzUiThemeOps.ApplyBoundChromeGraphic(face, t.iconTint);
+	        } else {
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+	        }
 	        foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp != null)
 	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 14f);
