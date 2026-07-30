@@ -208,6 +208,14 @@ namespace spz {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            Transform rootRestore = _movableRectTransform != null ? _movableRectTransform : transform;
 	            SpzUiThemeOps.RestoreBoundChromeUnder(rootRestore);
+	            if (!ReferenceEquals(rootRestore, transform))
+	                SpzUiThemeOps.RestoreBoundChromeUnder(transform);
+	            // Resolution chips / web-find may sit outside movable root after layout remaps.
+	            RestorePreset(_resolutionPreset_512);
+	            RestorePreset(_resolutionPreset_768);
+	            RestorePreset(_resolutionPreset_1024);
+	            RestorePreset(_resolutionPreset_1536);
+	            RestorePreset(_resolutionPreset_2048);
 	            SpzUiThemeOps.RefreshScaledLayoutGroupsUnder(rootRestore);
 	            return;
 	        }
@@ -328,6 +336,11 @@ namespace spz {
 	        if (tmp == null) return false;
 	        string t = (tmp.text ?? "").Trim();
 	        return t == "-" || t == "+" || t == "\u2212" || t == "\u2013" || t == "\u2014";
+	    }
+
+	    static void RestorePreset(Button btn) {
+	        if (btn != null)
+	            SpzUiThemeOps.RestoreBoundChromeUnder(btn.transform);
 	    }
 
 	    void ThemeResolutionPreset(Button btn, int presetPx, SpzUiThemeOps.ThemeTokens t) {
