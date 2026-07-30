@@ -411,9 +411,13 @@ def _file_fingerprint(path: str):
 
 
 def _try_import_exchange_fbx(path: str) -> bool:
-    """Import FBX + auto-apply maps. Returns True on import attempt without hard fail."""
+    """Import FBX + auto-apply maps. Returns True only when import finished."""
     try:
-        bpy.ops.import_scene.fbx(filepath=path)
+        ret = bpy.ops.import_scene.fbx(filepath=path)
+        # bpy ops return a set like {'FINISHED'} / {'CANCELLED'} — no exception on cancel.
+        if ret is None or "FINISHED" not in ret:
+            print("SPZ GO import_scene.fbx did not finish:", ret, "path=", path)
+            return False
         _auto_apply_exchange_texture_after_import(path)
         return True
     except Exception as e:
@@ -440,8 +444,11 @@ def _go_import_timer():
             return 0.2
         if _try_import_exchange_fbx(path):
             print("SPZ GO: imported", path)
-        _go_timer_state = None
-        return None
+            _go_timer_state = None
+            return None
+        # Import cancelled/failed — keep waiting (file may still be flushing).
+        _go_timer_state = (path, n + 1, prior, http_ok)
+        return 0.5
     _go_timer_state = (path, n + 1, prior, http_ok)
     return 0.2
 
