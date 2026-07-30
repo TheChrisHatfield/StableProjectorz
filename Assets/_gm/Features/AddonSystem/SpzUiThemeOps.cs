@@ -2346,6 +2346,9 @@ namespace spz {
 			foreach (var button in root.GetComponentsInChildren<Button>(true)) {
 				if (button == null)
 					continue;
+				// Runtime Import→Layer glyph IS the face — SolidSquare replaces the drawn sprite with a blank plate.
+				if (string.Equals(button.gameObject.name, "ImportToLayerBtn", StringComparison.Ordinal))
+					continue;
 				// Prefab SAVE/LOAD/DELETE often ship null targetGraphic — clicked via TMP until Nomad
 				// clears label raycasts. EnsureSelectableHitFace lives in ApplyBoundChromeSelectable.
 				ApplyBoundChromeSelectable(button, tokens.controlBg, tokens.accent);

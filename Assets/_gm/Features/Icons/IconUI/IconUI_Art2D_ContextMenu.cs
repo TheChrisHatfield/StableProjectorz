@@ -206,6 +206,7 @@ namespace spz {
 
 	    void ApplyThemeTokens() {
 	        SpzUiThemeOps.ApplyContextMenuChrome(gameObject);
+	        ThemeImportToLayerButton();
 	    }
 
 	    void Start(){
@@ -248,14 +249,33 @@ namespace spz {
 	        var le = go.AddComponent<LayoutElement>();
 	        le.preferredWidth = 28; le.preferredHeight = 28;
 	        var bg = go.AddComponent<Image>();
-	        var t = SpzUiThemeOps.Active;
-	        // Authored fallback until a non-builtin theme retints via ApplyBoundChrome*.
-	        bg.color = new Color(0.25f, 0.25f, 0.28f, 1f);
 	        bg.sprite = CreateImportToLayerSprite();
 	        bg.type = Image.Type.Simple;
 	        bg.preserveAspect = true;
+	        bg.raycastTarget = true;
 	        _button_importToLayer = go.AddComponent<Button>();
-	        SpzUiThemeOps.ApplyBoundChromeSelectable(_button_importToLayer, t.controlBg, t.accent);
+	        _button_importToLayer.targetGraphic = bg;
+	        ThemeImportToLayerButton();
+	    }
+
+	    /// <summary>
+	    /// Import glyph is the selectable face — never ApplyBoundChromeSelectable (SolidSquare blanks the icon).
+	    /// </summary>
+	    void ThemeImportToLayerButton() {
+	        if (_button_importToLayer == null) return;
+	        var bg = _button_importToLayer.targetGraphic as Image
+	                 ?? _button_importToLayer.GetComponent<Image>();
+	        if (bg == null) return;
+	        bg.sprite = CreateImportToLayerSprite();
+	        bg.type = Image.Type.Simple;
+	        bg.preserveAspect = true;
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreAuthoredGraphic(bg);
+	            bg.color = new Color(0.25f, 0.25f, 0.28f, 1f);
+	            return;
+	        }
+	        SpzUiThemeOps.ApplyBoundChromeGraphic(bg, SpzUiThemeOps.Active.iconTint);
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_button_importToLayer);
 	    }
 
 	    static Sprite _cachedImportToLayerSprite;
