@@ -162,7 +162,7 @@ namespace spz {
 	            if (_preprocessorRes_slideOut != null
 	                && tmp.transform.IsChildOf(_preprocessorRes_slideOut.transform))
 	                continue;
-	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, 12f);
+	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 12f);
 	            tmp.raycastTarget = false;
 	        }
 	    }
