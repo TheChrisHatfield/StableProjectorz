@@ -321,12 +321,8 @@ namespace spz {
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
-	        ThemeModeToggle(_projMasking as MonoBehaviour, _projMasking != null && _projMasking.isOn, StudioLineIcon.Camera, t);
-	        ThemeModeToggle(_coloring as MonoBehaviour, _coloring != null && _coloring.isOn, StudioLineIcon.Brush, t);
-	        ThemeModeToggle(_colorless as MonoBehaviour, _colorless != null && _colorless.isOn, StudioLineIcon.Drop, t);
-	        ThemeModeToggle(_entireObj as MonoBehaviour, _entireObj != null && _entireObj.isOn, StudioLineIcon.Mesh, t);
-	        ThemeModeToggle(_WhereEmpty_UI as MonoBehaviour, _WhereEmpty_UI != null && _WhereEmpty_UI.isOn, StudioLineIcon.Expand, t);
-	        ThemeModeToggle(_AntiShade_UI as MonoBehaviour, _AntiShade_UI != null && _AntiShade_UI.isOn, StudioLineIcon.Layers, t);
+	        // Rebuild shell BEFORE mode cells so wrap/"PROJ MASK" sees real cell height on ThemeChanged
+	        // (was: theme first → Truncate → one-word labels until click retheme).
 	        if (_holderGO_turnMeOnOff != null) {
 	            var holderImg = _holderGO_turnMeOnOff.GetComponent<Image>();
 	            if (holderImg != null)
@@ -335,8 +331,14 @@ namespace spz {
 	            if (holderRt != null)
 	                LayoutRebuilder.ForceRebuildLayoutImmediate(holderRt);
 	        }
-	        // ThemeChanged can run before layout has a real cell size — one-frame retheme matches
-	        // the "click fixes it" path (OnToggle → ApplyThemeTokens) without requiring a click.
+	        Canvas.ForceUpdateCanvases();
+	        ThemeModeToggle(_projMasking as MonoBehaviour, _projMasking != null && _projMasking.isOn, StudioLineIcon.Camera, t);
+	        ThemeModeToggle(_coloring as MonoBehaviour, _coloring != null && _coloring.isOn, StudioLineIcon.Brush, t);
+	        ThemeModeToggle(_colorless as MonoBehaviour, _colorless != null && _colorless.isOn, StudioLineIcon.Drop, t);
+	        ThemeModeToggle(_entireObj as MonoBehaviour, _entireObj != null && _entireObj.isOn, StudioLineIcon.Mesh, t);
+	        ThemeModeToggle(_WhereEmpty_UI as MonoBehaviour, _WhereEmpty_UI != null && _WhereEmpty_UI.isOn, StudioLineIcon.Expand, t);
+	        ThemeModeToggle(_AntiShade_UI as MonoBehaviour, _AntiShade_UI != null && _AntiShade_UI.isOn, StudioLineIcon.Layers, t);
+	        // ThemeChanged can still race inactive layout — one-frame retheme matches click path.
 	        if (!_rethemeModesSkipDefer && isActiveAndEnabled && gameObject.activeInHierarchy) {
 	            if (_deferredModeChrome != null)
 	                StopCoroutine(_deferredModeChrome);
@@ -349,6 +351,12 @@ namespace spz {
 
 	    IEnumerator CoRethemeModesNextFrame() {
 	        yield return null;
+	        Canvas.ForceUpdateCanvases();
+	        if (_holderGO_turnMeOnOff != null) {
+	            var holderRt = _holderGO_turnMeOnOff.transform as RectTransform;
+	            if (holderRt != null)
+	                LayoutRebuilder.ForceRebuildLayoutImmediate(holderRt);
+	        }
 	        _deferredModeChrome = null;
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) yield break;
 	        _rethemeModesSkipDefer = true;
