@@ -1714,20 +1714,27 @@ namespace spz {
 					body.a = Mathf.Clamp01(Mathf.Max(0.85f, body.a));
 					TintStatusDialGraphic(prefsBodyImg, body);
 				}
+				LockPreferencesBodyLayout(prefsBodyT);
 			}
 			var ribbonToggle = FindChildRecursive(item.transform, "ShowInRibbonToggle")?.GetComponent<Toggle>();
 			if (ribbonToggle != null) {
 				Color face = ribbonToggle.isOn
 					? Color.Lerp(t.controlBg, t.success, 0.35f)
 					: t.controlBg;
-				// Real ON/OFF checkbox — keep glyph (ThemeFlatToolToggle would hide Checkmark).
-				SpzUiThemeOps.ThemeCheckboxToggle(ribbonToggle, face, t.accent, t.success);
+				// Do NOT ThemeCheckboxToggle here — ApplySolidSquareChrome stretches the 22px face into a green capsule over the dial/name.
+				ThemeShowInRibbonCheckbox(ribbonToggle, face, t.success);
 				var ribbonLabel = FindChildRecursive(item.transform, "ShowInRibbonLabel")?.GetComponent<TextMeshProUGUI>();
 				if (ribbonLabel != null) {
 					float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(ribbonLabel, 13f);
 					SpzUiThemeOps.ApplyBoundChromeTmp(ribbonLabel, t.textMuted, basePt);
+					ribbonLabel.enableWordWrapping = false;
+					ribbonLabel.overflowMode = TextOverflowModes.Ellipsis;
+					ribbonLabel.fontStyle = FontStyles.Normal;
 				}
 			}
+			// Keep status dial square after any theme pass (layout smash otherwise elongates CircleFilled).
+			if (toggle != null)
+				LockStatusDialLayout(toggle);
 		}
 
 		static Transform FindChildRecursive(Transform root, string childName) {
@@ -1868,6 +1875,90 @@ namespace spz {
 				img.type = Image.Type.Simple;
 			}
 			SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
+		}
+
+		/// <summary>
+		/// Tint the Show-in-Ribbon checkbox without SolidSquare / Flatten (those stretch it into a green capsule over the row).
+		/// </summary>
+		static void ThemeShowInRibbonCheckbox(Toggle toggle, Color face, Color checkOk) {
+			if (toggle == null) return;
+			var le = toggle.GetComponent<LayoutElement>();
+			if (le != null) {
+				le.preferredWidth = 22f;
+				le.minWidth = 22f;
+				le.preferredHeight = 22f;
+				le.minHeight = 22f;
+				le.flexibleWidth = 0f;
+				le.flexibleHeight = 0f;
+			}
+			var rt = toggle.transform as RectTransform;
+			if (rt != null) {
+				rt.anchorMin = new Vector2(0f, 0.5f);
+				rt.anchorMax = new Vector2(0f, 0.5f);
+				rt.pivot = new Vector2(0.5f, 0.5f);
+				rt.sizeDelta = new Vector2(22f, 22f);
+			}
+			if (toggle.targetGraphic is Image bg) {
+				if (SpzUiThemeOps.ShouldRecolorBoundChrome)
+					SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(bg);
+				bg.color = face;
+				bg.type = Image.Type.Simple;
+				bg.preserveAspect = false;
+			}
+			Image ck = toggle.graphic as Image;
+			if (ck == null)
+				ck = toggle.transform.Find("Checkmark")?.GetComponent<Image>();
+			if (ck != null) {
+				if (SpzUiThemeOps.ShouldRecolorBoundChrome)
+					SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(ck);
+				ck.sprite = UiRuntimeSprites.CircleFilled;
+				ck.type = Image.Type.Simple;
+				ck.preserveAspect = true;
+				ck.color = checkOk;
+				ck.enabled = true;
+				ck.gameObject.SetActive(true);
+				ck.canvasRenderer.SetAlpha(toggle.isOn ? 1f : 0f);
+			}
+		}
+
+		static void LockStatusDialLayout(Toggle toggle) {
+			if (toggle == null) return;
+			var le = toggle.GetComponent<LayoutElement>();
+			if (le != null) {
+				le.preferredWidth = 28f;
+				le.minWidth = 28f;
+				le.preferredHeight = 28f;
+				le.minHeight = 28f;
+				le.flexibleWidth = 0f;
+				le.flexibleHeight = 0f;
+			}
+			var ring = toggle.transform.Find("Ring") as RectTransform;
+			if (ring != null) {
+				ring.anchorMin = ring.anchorMax = ring.pivot = new Vector2(0.5f, 0.5f);
+				ring.sizeDelta = new Vector2(14f, 14f);
+				ring.anchoredPosition = Vector2.zero;
+			}
+		}
+
+		static void LockPreferencesBodyLayout(Transform prefsBody) {
+			if (prefsBody == null) return;
+			var le = prefsBody.GetComponent<LayoutElement>();
+			if (le != null) {
+				le.preferredHeight = 36f;
+				le.minHeight = 36f;
+				le.flexibleHeight = 0f;
+				le.flexibleWidth = 1f;
+			}
+			var hlg = prefsBody.GetComponent<HorizontalLayoutGroup>();
+			if (hlg != null) {
+				hlg.childControlHeight = false;
+				hlg.childForceExpandHeight = false;
+				hlg.childControlWidth = true;
+				hlg.childForceExpandWidth = false;
+				hlg.childAlignment = TextAnchor.MiddleLeft;
+				hlg.padding = new RectOffset(38, 10, 6, 6);
+				hlg.spacing = 8f;
+			}
 		}
 
 		void ReapplyAuthoredStatusDialsAfterThemeRestore() {
@@ -2062,10 +2153,14 @@ namespace spz {
 
 			var prefsBody = new GameObject("PreferencesBody");
 			prefsBody.transform.SetParent(itemObj.transform, false);
-			prefsBody.AddComponent<RectTransform>();
+			var prefsBodyRt = prefsBody.AddComponent<RectTransform>();
+			prefsBodyRt.anchorMin = new Vector2(0f, 1f);
+			prefsBodyRt.anchorMax = new Vector2(1f, 1f);
+			prefsBodyRt.pivot = new Vector2(0.5f, 1f);
 			var prefsBodyLE = prefsBody.AddComponent<LayoutElement>();
-			prefsBodyLE.preferredHeight = 40f;
+			prefsBodyLE.preferredHeight = 36f;
 			prefsBodyLE.minHeight = 36f;
+			prefsBodyLE.flexibleHeight = 0f;
 			prefsBodyLE.flexibleWidth = 1f;
 			var prefsBodyBg = prefsBody.AddComponent<Image>();
 			AssignSolidFaceThenMarkRounded(prefsBodyBg);
@@ -2083,14 +2178,19 @@ namespace spz {
 
 			var ribbonToggleObj = new GameObject("ShowInRibbonToggle");
 			ribbonToggleObj.transform.SetParent(prefsBody.transform, false);
+			var ribbonToggleRt = ribbonToggleObj.AddComponent<RectTransform>();
+			ribbonToggleRt.sizeDelta = new Vector2(22f, 22f);
 			var ribbonToggleLE = ribbonToggleObj.AddComponent<LayoutElement>();
 			ribbonToggleLE.preferredWidth = 22f;
 			ribbonToggleLE.minWidth = 22f;
 			ribbonToggleLE.preferredHeight = 22f;
 			ribbonToggleLE.minHeight = 22f;
 			ribbonToggleLE.flexibleWidth = 0f;
+			ribbonToggleLE.flexibleHeight = 0f;
 			var ribbonBg = ribbonToggleObj.AddComponent<Image>();
-			AssignSolidFaceThenMarkRounded(ribbonBg);
+			// Plain SolidRect — do not markEligible/SolidSquare (Nomad stretches this face into a green capsule).
+			ribbonBg.sprite = UiRuntimeSprites.SolidRect;
+			ribbonBg.type = Image.Type.Simple;
 			ribbonBg.color = new Color(0.22f, 0.22f, 0.24f, 1f);
 			ribbonBg.raycastTarget = true;
 			var ribbonCheckGo = new GameObject("Checkmark");
@@ -2102,6 +2202,8 @@ namespace spz {
 			ribbonCheckRt.offsetMax = Vector2.zero;
 			var ribbonCheck = ribbonCheckGo.AddComponent<Image>();
 			ribbonCheck.sprite = UiRuntimeSprites.CircleFilled;
+			ribbonCheck.type = Image.Type.Simple;
+			ribbonCheck.preserveAspect = true;
 			ribbonCheck.color = new Color(34f / 255f, 197f / 255f, 94f / 255f, 1f);
 			ribbonCheck.raycastTarget = false;
 			var ribbonToggle = ribbonToggleObj.AddComponent<Toggle>();
@@ -2110,8 +2212,10 @@ namespace spz {
 			ribbonToggle.transition = Selectable.Transition.None;
 			ribbonToggle.SetIsOnWithoutNotify(showInRibbon);
 			ribbonToggle.interactable = !ribbonOnly;
-			if (ribbonOnly)
-				ribbonCheck.canvasRenderer.SetAlpha(0f);
+			if (ribbonOnly) {
+				// RibbonOnlyFullscreen never uses a Command Ribbon tab — hide the broken N/A checkbox.
+				ribbonToggleObj.SetActive(false);
+			}
 
 			var ribbonLabelObj = new GameObject("ShowInRibbonLabel");
 			ribbonLabelObj.transform.SetParent(prefsBody.transform, false);
@@ -2119,9 +2223,10 @@ namespace spz {
 			ribbonLabelLE.flexibleWidth = 1f;
 			ribbonLabelLE.minWidth = 160f;
 			ribbonLabelLE.preferredHeight = 24f;
+			ribbonLabelLE.flexibleHeight = 0f;
 			var ribbonLabel = ribbonLabelObj.AddComponent<TextMeshProUGUI>();
 			ribbonLabel.text = ribbonOnly
-				? "Show in Command Ribbon (viewport dock only — N/A)"
+				? "Viewport Gen Art dock only — no Command Ribbon tab"
 				: "Show in Command Ribbon";
 			ribbonLabel.fontSize = 13f;
 			ribbonLabel.color = new Color(0.78f, 0.78f, 0.82f, 1f);
@@ -2129,13 +2234,24 @@ namespace spz {
 			ribbonLabel.enableWordWrapping = false;
 			ribbonLabel.overflowMode = TextOverflowModes.Ellipsis;
 			ribbonLabel.raycastTarget = false;
-			AttachTooltip(ribbonToggleObj, ribbonOnly
+			AttachTooltip(ribbonOnly ? ribbonLabelObj : ribbonToggleObj, ribbonOnly
 				? "RibbonOnlyFullscreen uses the viewport Gen Art dock — it never appears as a Command Ribbon tab."
 				: "When on, an enabled add-on shows a Command Ribbon tab. When off, it stays active but the tab is hidden.");
 
 			void SetItemExpandedHeight(bool expanded) {
-				itemLayout.preferredHeight = expanded ? 86f : 40f;
-				itemLayout.minHeight = expanded ? 80f : 38f;
+				if (!expanded) {
+					itemLayout.preferredHeight = 40f;
+					itemLayout.minHeight = 38f;
+					return;
+				}
+				// Header + prefs body + VLG spacing/padding — keep prefs below the name dial row.
+				float h = headerLE.preferredHeight
+					+ prefsBodyLE.preferredHeight
+					+ verticalLayout.spacing
+					+ verticalLayout.padding.top
+					+ verticalLayout.padding.bottom;
+				itemLayout.preferredHeight = h;
+				itemLayout.minHeight = h;
 			}
 
 			void SetPrefsButtonLabel(bool expanded) {
@@ -2175,6 +2291,17 @@ namespace spz {
 					}
 				}
 				prefsBody.SetActive(next);
+				if (next) {
+					prefsBody.transform.SetAsLastSibling();
+					LockPreferencesBodyLayout(prefsBody.transform);
+					if (!ribbonOnly)
+						ThemeShowInRibbonCheckbox(ribbonToggle,
+							ribbonToggle.isOn
+								? Color.Lerp(new Color(0.22f, 0.22f, 0.24f, 1f), _statusOk, 0.35f)
+								: new Color(0.22f, 0.22f, 0.24f, 1f),
+							_statusOk);
+					LockStatusDialLayout(rowToggle);
+				}
 				SetPrefsButtonLabel(next);
 				SetItemExpandedHeight(next);
 				LayoutRebuilder.ForceRebuildLayoutImmediate(itemObj.transform as RectTransform);
