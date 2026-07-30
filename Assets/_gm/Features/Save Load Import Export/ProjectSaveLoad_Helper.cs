@@ -264,6 +264,9 @@ namespace spz {
 	            ArtBG_IconsUI_List.instance.OnAfter_AllLoaded();
 
 	            Objects_Renderer_MGR.instance.ReRenderAll_soon();
+
+	            // Same as SaveProj: so GetProjectDataDirOrSession / SPZ GO exchange use this project, not a prior save or session folder.
+	            _last_saveFilepath = spzFilepath;
             
 	            onResult?.Invoke(resultMessage_);
 
