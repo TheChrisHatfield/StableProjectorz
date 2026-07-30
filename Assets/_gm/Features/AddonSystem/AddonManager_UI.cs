@@ -1449,8 +1449,14 @@ namespace spz {
 					SpzUiThemeOps.ApplyBoundChromeTmp(rememberLabel, t.textMuted, _themeRememberLabelBasePt);
 				}
 			}
-			if (_closePanel_button != null)
+			if (_closePanel_button != null) {
 				SpzUiThemeOps.ApplyBoundChromeSelectable(_closePanel_button, t.controlBg, t.accent);
+				foreach (var tmp in _closePanel_button.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+					if (tmp != null)
+						SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+				}
+				SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_closePanel_button);
+			}
 			if (_installFromFile_button != null)
 				ThemeHeaderButton(_installFromFile_button, t.controlBg, t.accent, t.textPrimary);
 			if (_refresh_button != null)

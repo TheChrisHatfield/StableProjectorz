@@ -299,6 +299,8 @@ namespace spz {
 	            Color normal = _showGrid_toggle.isOn
 	                ? Color.Lerp(t.tabActive, t.accent, 0.45f)
 	                : t.controlBg;
+	            // Ensure before fill — POV/grid prefab faces can be null after layout remaps (gen path).
+	            SpzUiThemeOps.EnsureSelectableHitFace(_showGrid_toggle);
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_showGrid_toggle, normal, t.accent);
 	            if (_showGrid_toggle.graphic is Image gTick && gTick != _showGrid_toggle.targetGraphic)
 	                SpzUiThemeOps.HideAuthoredGraphicForTheme(gTick);
@@ -311,6 +313,7 @@ namespace spz {
 	            Color normal = pov.isOn
 	                ? Color.Lerp(t.controlBg, t.accent, 0.14f)
 	                : t.controlBg;
+	            SpzUiThemeOps.EnsureSelectableHitFace(pov);
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(pov, normal, t.accent);
 	            if (pov.graphic is Image tick && tick != pov.targetGraphic)
 	                SpzUiThemeOps.HideAuthoredGraphicForTheme(tick);
