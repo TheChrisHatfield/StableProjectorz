@@ -182,8 +182,8 @@ namespace spz {
 	            SpzUiThemeOps.ApplyControlLineIcon(btn.transform, StudioLineIcon.Folder, 16f);
 	        foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp == null) continue;
-	            // Compact strip caps (SD SERV / 3D SERV) — match SAVE / workflow top chrome.
-	            SpzUiThemeOps.ApplyBoundChromeStripLabelTmp(tmp, t.textPrimary, 11f);
+	            // SD SERV / 3D SERV: strip tracking 18 overflows ~118px top-strip (Soft litmus).
+	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
 	        }
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }

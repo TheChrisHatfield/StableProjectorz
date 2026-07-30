@@ -23,6 +23,7 @@ public sealed class RestartWebuiChromeThemeTests {
 			"Assets/_gm/Features/StableDiffusion/Webui/RestartTheWebui.cs");
 		Assert.That(src, Does.Contain("ThemeChanged += ApplyThemeTokens"));
 		Assert.That(src, Does.Contain("ApplyBoundChromeSelectable"));
+		Assert.That(src, Does.Contain("ApplyBoundChromeCompactToolLabelTmp"));
 		Assert.That(src, Does.Contain("StudioLineIcon.Folder"));
 		Assert.That(src, Does.Contain("RestoreBoundChromeUnder"));
 	}
@@ -79,6 +80,8 @@ public sealed class RestartWebuiChromeThemeTests {
 			Assert.That(UiRuntimeSprites.IsSolidRect(((Image)launch.targetGraphic).sprite), Is.True);
 			Assert.That(launchLabel.color, Is.EqualTo(SpzUiThemeOps.Active.textPrimary));
 			Assert.That(launchLabel.raycastTarget, Is.False);
+			Assert.That(launchLabel.characterSpacing, Is.LessThan(4f), "SD SERV must not use strip tracking 18");
+			Assert.That(launchLabel.enableWordWrapping, Is.False);
 			Assert.That(launch.targetGraphic.raycastTarget, Is.True);
 
 			var folderIcon = SpzUiThemeOps.FindDirectChildIncludingInactive(file.transform, "MonolithLineIcon");
