@@ -127,11 +127,14 @@ namespace spz {
 			    UnityEngine.Debug.LogWarning("[Save_MGR] Export3D_with_textures_ToPath: refused — another save/export is in progress.");
 			    return false;
 		    }
+		    // Drop stale ready sidecar before rewriting FBX so Blender cannot auto-import a half-finished export.
+		    TryDeleteSpzGoExchangeReadyStamp( meshFilePath );
 		    _isSaving = true;
 		    mh.ExportModelToPath( meshFilePath );
 		    string path_exported3D = mh._path_recentlyExported;
 		    if( string.IsNullOrEmpty( path_exported3D ) || !File.Exists( path_exported3D ) ){
 			    _isSaving = false;
+			    TryDeleteSpzGoExchangeReadyStamp( meshFilePath );
 			    if( Viewport_StatusText.instance!=null ){
 				    Viewport_StatusText.instance.ShowStatusText( "Export: mesh file not written.", false, 5f, false );
 			    }
@@ -154,6 +157,21 @@ namespace spz {
 	    /// Sidecar next to exchange FBX so Blender's SPZ GO watcher can auto-import after Export.
 	    /// Name: <c>{basename}.spz_go_ready</c> (e.g. from_spz.spz_go_ready).
 	    /// </summary>
+	    public static void TryDeleteSpzGoExchangeReadyStamp( string meshFilePath ){
+		    if( string.IsNullOrEmpty( meshFilePath ) ) return;
+		    try {
+			    string dir = Path.GetDirectoryName( meshFilePath );
+			    string baseName = Path.GetFileNameWithoutExtension( meshFilePath );
+			    if( string.IsNullOrEmpty( dir ) || string.IsNullOrEmpty( baseName ) ) return;
+			    string stamp = Path.Combine( dir, baseName + ".spz_go_ready" );
+			    if( File.Exists( stamp ) ){
+				    File.Delete( stamp );
+				    UnityEngine.Debug.Log( "[Save_MGR] SPZ GO exchange ready stamp cleared: " + stamp );
+			    }
+		    } catch( Exception ex ) {
+			    UnityEngine.Debug.LogWarning( "[Save_MGR] SPZ GO ready stamp delete failed: " + ex.Message );
+		    }
+	    }
 	    public static void TryWriteSpzGoExchangeReadyStamp( string meshFilePath ){
 		    if( string.IsNullOrEmpty( meshFilePath ) ) return;
 		    try {
