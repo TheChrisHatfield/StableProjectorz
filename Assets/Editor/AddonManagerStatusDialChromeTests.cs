@@ -42,6 +42,21 @@ public sealed class AddonManagerStatusDialChromeTests {
 	}
 
 	[Test]
+	public void UninstallLabel_DoesNotUseCompactToolLabel() {
+		string path = Path.GetFullPath(Path.Combine(
+			Application.dataPath,
+			"..",
+			"Assets/_gm/Features/AddonSystem/AddonManager_UI.cs"));
+		string src = File.ReadAllText(path);
+		int themeItem = src.IndexOf("void ThemeAddonListItem(", System.StringComparison.Ordinal);
+		int next = src.IndexOf("static Transform FindChildRecursive(", themeItem, System.StringComparison.Ordinal);
+		string body = src.Substring(themeItem, next - themeItem);
+		Assert.That(body, Does.Not.Contain("ApplyBoundChromeCompactToolLabelTmp(removeLabel"),
+			"Uninstall CompactToolLabel clips to UNINSTA□ under Nomad like Preferences did.");
+		Assert.That(body, Does.Contain("ApplyBoundChromeTmp(removeLabel"));
+	}
+
+	[Test]
 	public void PreferencesShowInRibbon_DoesNotUseThemeCheckboxToggle() {
 		string path = Path.GetFullPath(Path.Combine(
 			Application.dataPath,

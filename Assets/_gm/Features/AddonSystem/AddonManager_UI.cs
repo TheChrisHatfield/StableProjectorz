@@ -1641,8 +1641,13 @@ namespace spz {
 				}
 				var removeLabel = remove.GetComponentInChildren<TextMeshProUGUI>(true);
 				if (removeLabel != null) {
-					float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(removeLabel, 12f);
-					SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(removeLabel, new Color(t.danger.r, t.danger.g, t.danger.b, 0.88f), basePt);
+					float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(removeLabel, 11f);
+					// Not CompactToolLabel — UpperCase+Truncate turns "Uninstall" into UNINSTA□ in the 76px button.
+					SpzUiThemeOps.ApplyBoundChromeTmp(removeLabel, new Color(t.danger.r, t.danger.g, t.danger.b, 0.88f), basePt);
+					removeLabel.enableWordWrapping = false;
+					removeLabel.overflowMode = TextOverflowModes.Ellipsis;
+					removeLabel.fontStyle = FontStyles.Normal;
+					removeLabel.characterSpacing = 0f;
 				}
 				if (removeBtn != null)
 					SpzUiThemeOps.ClearNonFaceRaycastsForTheme(removeBtn);
