@@ -40,7 +40,7 @@ namespace spz {
 
 	    public bool CanImportFile(string filepath){
 	        if (!File.Exists(filepath)){
-	            Viewport_StatusText.instance.ShowStatusText("3d-model file doesn't exist.", false, 1.5f, false);
+	            Viewport_StatusText.instance?.ShowStatusText("3d-model file doesn't exist.", false, 1.5f, false);
 	            return false;  
 	        }
 	        return !_isImportingModel;
@@ -57,7 +57,7 @@ namespace spz {
 	        _Act_onStartedImporting?.Invoke();
         
 	        // We simulate the progress text here since Assimp is fast/blocking in this implementation
-	        Viewport_StatusText.instance.ShowStatusText($"Importing {Path.GetFileName(filepath)}...", false, 15, true);
+	        Viewport_StatusText.instance?.ShowStatusText($"Importing {Path.GetFileName(filepath)}...", false, 15, true);
 
 	        // Also, store bytes for later use.
 	        // If we decide to save project, we'll just dump them into needed location,
@@ -99,7 +99,7 @@ namespace spz {
 
 	    void OnError(string errorMsg){
 	        string statusMsg = $"Importing failed.\nError: {errorMsg}";
-	        Viewport_StatusText.instance.ShowStatusText(statusMsg, false, 15, true);
+	        Viewport_StatusText.instance?.ShowStatusText(statusMsg, false, 15, true);
 	        Resources.UnloadUnusedAssets();
 	        _lastImportSucceeded = false;
 	        _isImportingModel = false;
@@ -134,7 +134,7 @@ namespace spz {
 
 
 	    void OnUDIMsProgress01(float progress01, GameObject rootObj ){
-	        Viewport_StatusText.instance.ShowStatusText($"Scanning UVs. Progress: {progress01}", false, 2.5f, false);
+	        Viewport_StatusText.instance?.ShowStatusText($"Scanning UVs. Progress: {progress01}", false, 2.5f, false);
 	        if(progress01<1.0){ return; }
         
 	        o3d.meshes.ForEach(sm => sm.TryChange_SelectionStatus(true, out bool isSuccess));
@@ -163,7 +163,7 @@ namespace spz {
 	            dur = 9;
 	        }
 
-	        Viewport_StatusText.instance.ShowStatusText(msg, false, dur, false);
+	        Viewport_StatusText.instance?.ShowStatusText(msg, false, dur, false);
 	        _lastImportSucceeded = true;
 	        _isImportingModel = false;
 	        _Act_onImportComplete?.Invoke(true, _latestSuccessRoot);
@@ -223,6 +223,10 @@ namespace spz {
 	        o3d.nonSelectedMeshes.Clear();
         
 	        for(int i=0; i<o3d.meshes.Count; ++i){
+		        if( _modelsHandler_SL.meshes == null || i >= _modelsHandler_SL.meshes.Count ){
+			        UnityEngine.Debug.LogWarning("[ModelsHandler3D_ImportHelper] ProjectLoad: mesh SL count mismatch at i=" + i);
+			        break;
+		        }
 	            SD_3D_Mesh_SL sl = _modelsHandler_SL.meshes[i];
 	            o3d.meshes[i].Load( sl );
 	            o3d.meshID_to_mesh.Add( sl.unique_id, o3d.meshes[i] );//we cleared above, so re-add with a new ID.
@@ -259,7 +263,7 @@ namespace spz {
 		            Directory.CreateDirectory( dir );
 	            }
 	            File.WriteAllBytes(path, _modelBytesCache);
-	            Viewport_StatusText.instance.ShowStatusText("Exported the mesh to\n"+path, false, 5, false);
+	            Viewport_StatusText.instance?.ShowStatusText("Exported the mesh to\n"+path, false, 5, false);
 	            afterMeshWritten?.Invoke(path);
 	        }
 
