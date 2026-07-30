@@ -254,7 +254,7 @@ namespace spz {
 	                SpzUiThemeOps.ApplyRoundedControlSprite(ddImg, markEligible: true);
 	            }
 	            if (dd.captionText != null)
-	                SpzUiThemeOps.ApplyBoundChromeTmp(dd.captionText, t.textPrimary);
+	                SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(dd.captionText, t.textPrimary, 12f);
 	        }
 	        foreach (var input in root.GetComponentsInChildren<TMP_InputField>(true)) {
 	            if (input == null) continue;
