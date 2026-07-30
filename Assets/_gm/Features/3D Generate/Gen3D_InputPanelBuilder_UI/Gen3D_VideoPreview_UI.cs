@@ -152,6 +152,19 @@ namespace spz {
 	            : (_decisionButtons_go != null ? _decisionButtons_go.transform : transform);
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(root);
+	            // Decision buttons may sit outside the preview root — restore each themed control.
+	            if (_decisionButtons_go != null
+	                && (root == null || !_decisionButtons_go.transform.IsChildOf(root)))
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_decisionButtons_go.transform);
+	            RestoreDecisionButton(_video_OK_button);
+	            RestoreDecisionButton(_video_NO_button);
+	            RestoreDecisionButton(_video_retry_button);
+	            if (_gauss_toggle != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_gauss_toggle.transform);
+	            if (_mesh_toggle != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_mesh_toggle.transform);
+	            if (_radiance_toggle != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_radiance_toggle.transform);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
@@ -175,6 +188,11 @@ namespace spz {
 	        if (label != null)
 	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, t.textPrimary, 15f);
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
+	    }
+
+	    static void RestoreDecisionButton(Button btn) {
+	        if (btn != null)
+	            SpzUiThemeOps.RestoreBoundChromeUnder(btn.transform);
 	    }
 
 	    protected void CleanupPreviewVideos(){
