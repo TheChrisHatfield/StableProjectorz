@@ -1016,10 +1016,16 @@ async def set_sd_prompt(prompt: Prompt):
             results[k] = r
     return results
 
+class SdGenerateBody(BaseModel):
+    is_background: bool = False
+
+
 @app.post("/api/v1/sd/generate")
-async def trigger_sd_generation(is_background: bool = False):
-    """Trigger Stable Diffusion texture generation (``is_background`` = backgrounds pass)."""
-    result = await call_unity_async("spz.cmd.trigger_texture_generation", {"is_background": is_background})
+async def trigger_sd_generation(body: SdGenerateBody = SdGenerateBody()):
+    """Trigger Stable Diffusion texture generation (JSON body ``{\"is_background\": true}``)."""
+    result = await call_unity_async(
+        "spz.cmd.trigger_texture_generation", {"is_background": bool(body.is_background)}
+    )
     return result
 
 
