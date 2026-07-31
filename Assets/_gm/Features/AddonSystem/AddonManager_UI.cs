@@ -2459,9 +2459,15 @@ namespace spz {
 			ribbonLabel.enableWordWrapping = true;
 			ribbonLabel.overflowMode = TextOverflowModes.Overflow;
 			ribbonLabel.raycastTarget = false;
-			AttachTooltip(ribbonOnly ? ribbonLabelObj : ribbonToggleObj, ribbonOnly
-				? "RibbonOnlyFullscreen uses the viewport Gen Art dock — it never appears as a Command Ribbon tab."
-				: "When on, an enabled add-on shows a Command Ribbon tab. When off, it stays active but the tab is hidden.");
+			if (ribbonOnly) {
+				// Checkbox is hidden — tip must live on the pref row (label alone has raycastTarget=false).
+				prefRowBg.raycastTarget = true;
+				AttachTooltip(prefRow,
+					"RibbonOnlyFullscreen uses the viewport Gen Art dock — it never appears as a Command Ribbon tab.");
+			} else {
+				AttachTooltip(ribbonToggleObj,
+					"When on, an enabled add-on shows a Command Ribbon tab. When off, it stays active but the tab is hidden.");
+			}
 
 			void SetItemExpandedHeight(bool expanded) {
 				if (!expanded) {

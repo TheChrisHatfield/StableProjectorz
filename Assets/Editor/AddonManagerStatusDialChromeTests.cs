@@ -90,6 +90,8 @@ public sealed class AddonManagerStatusDialChromeTests {
 		Assert.That(body, Does.Contain("ThemeShowInRibbonCheckbox(ribbonToggle"));
 		Assert.That(src, Does.Contain("Viewport Gen Art dock only"),
 			"RibbonOnlyFullscreen prefs must show dock-only copy without a N/A checkbox.");
+		Assert.That(src, Does.Contain("prefRowBg.raycastTarget = true"),
+			"Dock-only tip must hit PrefRow_ShowInRibbon (label raycast is off).");
 	}
 
 	[Test]
