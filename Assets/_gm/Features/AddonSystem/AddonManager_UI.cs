@@ -1775,9 +1775,9 @@ namespace spz {
 				}
 				var prefRowBg = prefsBodyT.Find("PrefRow_ShowInRibbon")?.GetComponent<Image>();
 				if (prefRowBg != null) {
-					Color row = t.controlBg;
-					row.a = Mathf.Clamp01(Mathf.Max(0.75f, row.a));
-					TintStatusDialGraphic(prefRowBg, row);
+					// Keep transparent — no square/row plate under Host preferences.
+					prefRowBg.color = Color.clear;
+					prefRowBg.raycastTarget = false;
 				}
 				var prefsHdr = prefsBodyT.Find("PrefsDropdownHeader")?.GetComponent<TextMeshProUGUI>();
 				if (prefsHdr != null) {
@@ -1792,11 +1792,8 @@ namespace spz {
 			}
 			var ribbonToggle = FindChildRecursive(item.transform, "ShowInRibbonToggle")?.GetComponent<Toggle>();
 			if (ribbonToggle != null && ribbonToggle.gameObject.activeSelf) {
-				Color face = ribbonToggle.isOn
-					? Color.Lerp(t.controlBg, t.success, 0.35f)
-					: t.controlBg;
-				// Do NOT ThemeCheckboxToggle here — ApplySolidSquareChrome stretches the 22px face into a green capsule over the dial/name.
-				ThemeShowInRibbonCheckbox(ribbonToggle, face, t.success);
+				// Do NOT ThemeCheckboxToggle / SolidRect face — square chrome is the bug; use ring dial only.
+				ThemeShowInRibbonDial(ribbonToggle, ribbonToggle.isOn, t.success, t.textMuted, t.success);
 				var ribbonLabel = FindChildRecursive(item.transform, "ShowInRibbonLabel")?.GetComponent<TextMeshProUGUI>();
 				if (ribbonLabel != null) {
 					float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(ribbonLabel, 13f);
@@ -1900,11 +1897,7 @@ namespace spz {
 				bool showRibbon = !ribbonOnly && Addon_MGR.instance.ShouldShowInCommandRibbon(addonId);
 				ribbonToggle.SetIsOnWithoutNotify(showRibbon);
 				if (ribbonToggle.gameObject.activeSelf)
-					ThemeShowInRibbonCheckbox(ribbonToggle,
-						showRibbon
-							? Color.Lerp(new Color(0.22f, 0.22f, 0.24f, 1f), _statusOk, 0.35f)
-							: new Color(0.22f, 0.22f, 0.24f, 1f),
-						_statusOk);
+					ThemeShowInRibbonDial(ribbonToggle, showRibbon, _statusOk, _statusMuted, _statusOk);
 			}
 			bool stillVisible = _filterState == 0
 				|| (_filterState == 1 && showOn)
@@ -1959,45 +1952,60 @@ namespace spz {
 		}
 
 		/// <summary>
-		/// Tint the Show-in-Ribbon checkbox without SolidSquare / Flatten (those stretch it into a green capsule over the row).
-		/// LayoutElement sizes only — do not rewrite anchors (HLG must own placement).
+		/// Show-in-Ribbon uses the same ring dial as the enable toggle — no square face
+		/// (SolidRect/SolidSquare stretch into a capsule or look like a checkbox box).
 		/// </summary>
-		static void ThemeShowInRibbonCheckbox(Toggle toggle, Color face, Color checkOk) {
+		static void ThemeShowInRibbonDial(Toggle toggle, bool isOn, Color ringOn, Color ringOff, Color fillOk) {
 			if (toggle == null) return;
 			var le = toggle.GetComponent<LayoutElement>();
 			if (le != null) {
-				le.preferredWidth = 22f;
-				le.minWidth = 22f;
-				le.preferredHeight = 22f;
-				le.minHeight = 22f;
+				le.preferredWidth = 28f;
+				le.minWidth = 28f;
+				le.preferredHeight = 28f;
+				le.minHeight = 28f;
 				le.flexibleWidth = 0f;
 				le.flexibleHeight = 0f;
 			}
-			Image ck = toggle.graphic as Image;
-			if (ck == null)
-				ck = toggle.transform.Find("Checkmark")?.GetComponent<Image>();
-			// Leave SPZ: do not restomp authored sprites after RestoreBoundChrome — only sync on/off alpha.
-			if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
-				if (ck != null)
-					ck.canvasRenderer.SetAlpha(toggle.isOn ? 1f : 0f);
-				return;
+			var rt = toggle.transform as RectTransform;
+			if (rt != null)
+				rt.sizeDelta = new Vector2(28f, 28f);
+			var ring = toggle.transform.Find("Ring") as RectTransform;
+			if (ring != null) {
+				ring.anchorMin = ring.anchorMax = new Vector2(0.5f, 0.5f);
+				ring.pivot = new Vector2(0.5f, 0.5f);
+				ring.sizeDelta = new Vector2(14f, 14f);
+				ring.anchoredPosition = Vector2.zero;
 			}
-			if (toggle.targetGraphic is Image bg) {
-				SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(bg);
-				bg.sprite = UiRuntimeSprites.SolidRect;
-				bg.color = face;
-				bg.type = Image.Type.Simple;
-				bg.preserveAspect = false;
+			var checkRt = toggle.transform.Find("Ring/Checkmark") as RectTransform;
+			if (checkRt != null) {
+				checkRt.anchorMin = new Vector2(0.28f, 0.28f);
+				checkRt.anchorMax = new Vector2(0.72f, 0.72f);
+				checkRt.offsetMin = Vector2.zero;
+				checkRt.offsetMax = Vector2.zero;
 			}
-			if (ck != null) {
-				SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(ck);
-				ck.sprite = UiRuntimeSprites.CircleFilled;
-				ck.type = Image.Type.Simple;
-				ck.preserveAspect = true;
-				ck.color = checkOk;
-				ck.enabled = true;
-				ck.gameObject.SetActive(true);
-				ck.canvasRenderer.SetAlpha(toggle.isOn ? 1f : 0f);
+			var ringImg = toggle.transform.Find("Ring")?.GetComponent<Image>();
+			if (ringImg != null) {
+				TintStatusDialGraphic(ringImg, isOn ? ringOn : ringOff);
+				ringImg.sprite = UiRuntimeSprites.CircleRing;
+				ringImg.preserveAspect = true;
+				ringImg.type = Image.Type.Simple;
+			}
+			Image fill = toggle.graphic as Image;
+			if (fill == null)
+				fill = toggle.transform.Find("Ring/Checkmark")?.GetComponent<Image>();
+			if (fill != null) {
+				TintStatusDialGraphic(fill, fillOk);
+				fill.sprite = UiRuntimeSprites.CircleFilled;
+				fill.preserveAspect = true;
+				fill.type = Image.Type.Simple;
+				fill.gameObject.SetActive(true);
+				fill.enabled = true;
+				fill.canvasRenderer.SetAlpha(isOn ? 1f : 0f);
+			}
+			// Hit target stays clear — never paint a square under the dial.
+			if (toggle.targetGraphic is Image hit && hit.transform == toggle.transform) {
+				hit.color = Color.clear;
+				hit.raycastTarget = true;
 			}
 		}
 
@@ -2080,7 +2088,7 @@ namespace spz {
 			int padY = Mathf.RoundToInt(ProjectUiScale.Space(narrow ? 2 : 1));
 			int padRight = Mathf.RoundToInt(ProjectUiScale.Space(2));
 			float sectionGap = ProjectUiScale.Space(narrow ? 2 : 1);
-			float rowH = narrow ? 48f : 36f;
+			float rowH = narrow ? 40f : 32f;
 			float labelMinW = narrow ? 120f : 160f;
 
 			var bodyLE = prefsBody.GetComponent<LayoutElement>();
@@ -2218,15 +2226,16 @@ namespace spz {
 			var itemObj = new GameObject($"AddonItem_{addonId}");
 			itemObj.transform.SetParent(_addonsListParent, false);
 			itemObj.layer = _addonsListParent.gameObject.layer;
-			itemObj.AddComponent<RectTransform>().sizeDelta = new Vector2(0f, 40f);
+			itemObj.AddComponent<RectTransform>().sizeDelta = new Vector2(0f, 48f);
 			var itemLayout = itemObj.AddComponent<LayoutElement>();
-			itemLayout.preferredHeight = 40f;
-			itemLayout.minHeight = 38f;
+			itemLayout.preferredHeight = 48f;
+			itemLayout.minHeight = 44f;
 			itemLayout.minWidth = 440f;
 			itemLayout.flexibleWidth = 1f;
 			var verticalLayout = itemObj.AddComponent<VerticalLayoutGroup>();
-			verticalLayout.spacing = 4f;
-			verticalLayout.padding = new RectOffset(0, 0, 2, 2);
+			// Gap between HeaderRow and PreferencesBody so prefs bg does not clip Preferences/Uninstall.
+			verticalLayout.spacing = 8f;
+			verticalLayout.padding = new RectOffset(0, 0, 2, 4);
 			verticalLayout.childAlignment = TextAnchor.UpperLeft;
 			verticalLayout.childControlWidth = true;
 			// true: assign HeaderRow / PreferencesBody heights from LayoutElement so prefs nest under the name.
@@ -2239,8 +2248,9 @@ namespace spz {
 			headerObj.transform.SetParent(itemObj.transform, false);
 			headerObj.AddComponent<RectTransform>();
 			var headerLE = headerObj.AddComponent<LayoutElement>();
-			headerLE.preferredHeight = 36f;
-			headerLE.minHeight = 34f;
+			// Tall enough for 28px buttons + HLG pad without prefs body eating the bottom edge.
+			headerLE.preferredHeight = 40f;
+			headerLE.minHeight = 38f;
 			headerLE.flexibleWidth = 1f;
 			headerLE.flexibleHeight = 0f;
 			var horizontalLayout = headerObj.AddComponent<HorizontalLayoutGroup>();
@@ -2427,45 +2437,57 @@ namespace spz {
 			prefRow.transform.SetParent(prefsBody.transform, false);
 			prefRow.AddComponent<RectTransform>();
 			var prefRowLE = prefRow.AddComponent<LayoutElement>();
-			prefRowLE.preferredHeight = 36f;
-			prefRowLE.minHeight = 36f;
+			prefRowLE.preferredHeight = 32f;
+			prefRowLE.minHeight = 28f;
 			prefRowLE.flexibleWidth = 1f;
 			prefRowLE.flexibleHeight = 0f;
+			// No row chrome / square plate — dial + label only under Host preferences.
 			var prefRowBg = prefRow.AddComponent<Image>();
 			prefRowBg.sprite = UiRuntimeSprites.SolidRect;
 			prefRowBg.type = Image.Type.Simple;
-			prefRowBg.color = new Color(0.16f, 0.16f, 0.18f, 0.9f);
+			prefRowBg.color = Color.clear;
 			prefRowBg.raycastTarget = false;
 			var prefRowHLG = prefRow.AddComponent<HorizontalLayoutGroup>();
 			prefRowHLG.spacing = ProjectUiScale.Space(1);
-			prefRowHLG.padding = new RectOffset(8, 8, 4, 4);
+			prefRowHLG.padding = new RectOffset(4, 4, 2, 2);
 			prefRowHLG.childAlignment = TextAnchor.MiddleLeft;
 			prefRowHLG.childControlWidth = true;
 			prefRowHLG.childControlHeight = false;
 			prefRowHLG.childForceExpandWidth = false;
 			prefRowHLG.childForceExpandHeight = false;
 
+			const float ribbonDialHit = 28f;
+			const float ribbonDialSize = 14f;
 			var ribbonToggleObj = new GameObject("ShowInRibbonToggle");
 			ribbonToggleObj.transform.SetParent(prefRow.transform, false);
-			ribbonToggleObj.AddComponent<RectTransform>().sizeDelta = new Vector2(22f, 22f);
+			var ribbonToggleRt = ribbonToggleObj.AddComponent<RectTransform>();
+			ribbonToggleRt.sizeDelta = new Vector2(ribbonDialHit, ribbonDialHit);
 			var ribbonToggleLE = ribbonToggleObj.AddComponent<LayoutElement>();
-			ribbonToggleLE.preferredWidth = 22f;
-			ribbonToggleLE.minWidth = 22f;
-			ribbonToggleLE.preferredHeight = 22f;
-			ribbonToggleLE.minHeight = 22f;
+			ribbonToggleLE.preferredWidth = ribbonDialHit;
+			ribbonToggleLE.minWidth = ribbonDialHit;
+			ribbonToggleLE.preferredHeight = ribbonDialHit;
+			ribbonToggleLE.minHeight = ribbonDialHit;
 			ribbonToggleLE.flexibleWidth = 0f;
 			ribbonToggleLE.flexibleHeight = 0f;
-			var ribbonBg = ribbonToggleObj.AddComponent<Image>();
-			// Plain SolidRect — do not markEligible/SolidSquare (Nomad stretches this face into a green capsule).
-			ribbonBg.sprite = UiRuntimeSprites.SolidRect;
-			ribbonBg.type = Image.Type.Simple;
-			ribbonBg.color = new Color(0.22f, 0.22f, 0.24f, 1f);
-			ribbonBg.raycastTarget = true;
+			var ribbonHit = ribbonToggleObj.AddComponent<Image>();
+			ribbonHit.color = Color.clear;
+			ribbonHit.raycastTarget = true;
+			var ribbonRingObj = new GameObject("Ring");
+			ribbonRingObj.transform.SetParent(ribbonToggleObj.transform, false);
+			var ribbonRingRt = ribbonRingObj.AddComponent<RectTransform>();
+			ribbonRingRt.anchorMin = ribbonRingRt.anchorMax = new Vector2(0.5f, 0.5f);
+			ribbonRingRt.pivot = new Vector2(0.5f, 0.5f);
+			ribbonRingRt.sizeDelta = new Vector2(ribbonDialSize, ribbonDialSize);
+			var ribbonRing = ribbonRingObj.AddComponent<Image>();
+			ribbonRing.sprite = UiRuntimeSprites.CircleRing;
+			ribbonRing.type = Image.Type.Simple;
+			ribbonRing.preserveAspect = true;
+			ribbonRing.raycastTarget = false;
 			var ribbonCheckGo = new GameObject("Checkmark");
-			ribbonCheckGo.transform.SetParent(ribbonToggleObj.transform, false);
+			ribbonCheckGo.transform.SetParent(ribbonRingObj.transform, false);
 			var ribbonCheckRt = ribbonCheckGo.AddComponent<RectTransform>();
-			ribbonCheckRt.anchorMin = new Vector2(0.2f, 0.2f);
-			ribbonCheckRt.anchorMax = new Vector2(0.8f, 0.8f);
+			ribbonCheckRt.anchorMin = new Vector2(0.28f, 0.28f);
+			ribbonCheckRt.anchorMax = new Vector2(0.72f, 0.72f);
 			ribbonCheckRt.offsetMin = Vector2.zero;
 			ribbonCheckRt.offsetMax = Vector2.zero;
 			var ribbonCheck = ribbonCheckGo.AddComponent<Image>();
@@ -2475,13 +2497,15 @@ namespace spz {
 			ribbonCheck.color = new Color(34f / 255f, 197f / 255f, 94f / 255f, 1f);
 			ribbonCheck.raycastTarget = false;
 			var ribbonToggle = ribbonToggleObj.AddComponent<Toggle>();
-			ribbonToggle.targetGraphic = ribbonBg;
-			ribbonToggle.graphic = ribbonCheck;
+			ribbonToggle.targetGraphic = ribbonHit;
+			ribbonToggle.graphic = null;
 			ribbonToggle.transition = Selectable.Transition.None;
+			ribbonToggle.toggleTransition = Toggle.ToggleTransition.None;
 			ribbonToggle.SetIsOnWithoutNotify(showInRibbon);
 			ribbonToggle.interactable = !ribbonOnly;
+			ThemeShowInRibbonDial(ribbonToggle, showInRibbon, _statusOk, _statusMuted, _statusOk);
 			if (ribbonOnly) {
-				// RibbonOnlyFullscreen never uses a Command Ribbon tab — hide the broken N/A checkbox.
+				// RibbonOnlyFullscreen never uses a Command Ribbon tab — hide the dial.
 				ribbonToggleObj.SetActive(false);
 			}
 
@@ -2503,9 +2527,9 @@ namespace spz {
 			ribbonLabel.overflowMode = TextOverflowModes.Overflow;
 			ribbonLabel.raycastTarget = false;
 			if (ribbonOnly) {
-				// Checkbox is hidden — tip must live on the pref row (label alone has raycastTarget=false).
-				prefRowBg.raycastTarget = true;
-				AttachTooltip(prefRow,
+				// Dial hidden — tip on the label (row plate is intentionally clear / non-raycast).
+				ribbonLabel.raycastTarget = true;
+				AttachTooltip(ribbonLabelObj,
 					"RibbonOnlyFullscreen uses the viewport Gen Art dock — it never appears as a Command Ribbon tab.");
 			} else {
 				AttachTooltip(ribbonToggleObj,
@@ -2513,11 +2537,12 @@ namespace spz {
 			}
 
 			void SetItemExpandedHeight(bool expanded) {
+				const float collapsedH = 48f;
 				float h;
 				if (!expanded) {
-					h = 40f;
+					h = collapsedH;
 					itemLayout.preferredHeight = h;
-					itemLayout.minHeight = 38f;
+					itemLayout.minHeight = 44f;
 				} else {
 					ApplyResponsivePrefsDropdownLayout(prefsBody.transform);
 					float bodyH = prefsBodyLE.preferredHeight > 0f
@@ -2556,12 +2581,12 @@ namespace spz {
 						otherBody.gameObject.SetActive(false);
 						var otherItemLe = other.GetComponent<LayoutElement>();
 						if (otherItemLe != null) {
-							otherItemLe.preferredHeight = 40f;
-							otherItemLe.minHeight = 38f;
+							otherItemLe.preferredHeight = 48f;
+							otherItemLe.minHeight = 44f;
 						}
 						var otherRt = other as RectTransform;
 						if (otherRt != null)
-							otherRt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 40f);
+							otherRt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 48f);
 						var otherPrefsBtn = other.Find("HeaderRow/PreferencesButton");
 						var otherLabel = otherPrefsBtn != null
 							? otherPrefsBtn.GetComponentInChildren<TextMeshProUGUI>(true) : null;
@@ -2582,11 +2607,7 @@ namespace spz {
 					ApplyResponsivePrefsDropdownLayout(prefsBody.transform);
 					LockPreferencesBodyLayout(prefsBody.transform);
 					if (!ribbonOnly)
-						ThemeShowInRibbonCheckbox(ribbonToggle,
-							ribbonToggle.isOn
-								? Color.Lerp(new Color(0.22f, 0.22f, 0.24f, 1f), _statusOk, 0.35f)
-								: new Color(0.22f, 0.22f, 0.24f, 1f),
-							_statusOk);
+						ThemeShowInRibbonDial(ribbonToggle, ribbonToggle.isOn, _statusOk, _statusMuted, _statusOk);
 					LockStatusDialLayout(rowToggle);
 				}
 				SetPrefsButtonLabel(next);
@@ -2598,11 +2619,7 @@ namespace spz {
 				if (Addon_MGR.instance == null || ribbonOnly)
 					return;
 				Addon_MGR.instance.SetShowInCommandRibbon(addonId, isOn);
-				ThemeShowInRibbonCheckbox(ribbonToggle,
-					isOn
-						? Color.Lerp(new Color(0.22f, 0.22f, 0.24f, 1f), _statusOk, 0.35f)
-						: new Color(0.22f, 0.22f, 0.24f, 1f),
-					_statusOk);
+				ThemeShowInRibbonDial(ribbonToggle, isOn, _statusOk, _statusMuted, _statusOk);
 				bool enabled = GetDraftEnabled(addonId, addonInfo.isEnabled);
 				ShowStatus(enabled
 					? (isOn
