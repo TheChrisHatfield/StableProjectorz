@@ -110,16 +110,24 @@ public sealed class AddonManagerStatusDialChromeTests {
 		// Top-stretch anchors on PreferencesBody stacked the row over HeaderRow dial/name.
 		Assert.That(src.Substring(prefs, 500), Does.Not.Contain("anchorMin = new Vector2(0f, 1f)"),
 			"PreferencesBody must not use fixed top anchors under the item VLG.");
-		Assert.That(src, Does.Contain("prefsBodyVLG.childControlHeight = false"));
-		Assert.That(src, Does.Contain("prefRowHLG.childControlHeight = false"));
+		Assert.That(src, Does.Contain("prefsBodyVLG.childControlHeight = true"),
+			"Prefs body must control child heights so Host preferences stacks under the section header.");
+		Assert.That(src, Does.Contain("prefRowHLG.childControlHeight = false"),
+			"Pref row HLG must not stretch the checkbox face.");
 		Assert.That(src, Does.Contain("PrefRow_ShowInRibbon"));
 		Assert.That(src, Does.Contain("ApplyResponsivePrefsDropdownLayout"));
 		Assert.That(src, Does.Contain("ResolveOrCaptureDesignFontPt(header"),
 			"Responsive prefs must not stomp BoundChrome fontScale with bare fontSize writes.");
 		Assert.That(src, Does.Contain("ResolveOrCaptureDesignFontPt(label"));
-		Assert.That(src, Does.Contain("horizontalLayout.childControlHeight = false"));
+		Assert.That(src, Does.Contain("horizontalLayout.childControlHeight = false"),
+			"HeaderRow HLG must not control height (protects status dial).");
 		Assert.That(src, Does.Contain("Preferences ▾"));
-		Assert.That(src, Does.Contain("verticalLayout.childControlHeight = false"));
+		Assert.That(src, Does.Contain("verticalLayout.childControlHeight = true"),
+			"Item VLG must assign HeaderRow + PreferencesBody heights or Host preferences overlays the name.");
+		Assert.That(src, Does.Contain("contentLayout.childControlHeight = true"),
+			"List content must size AddonItem rows to preferredHeight when prefs expand.");
+		Assert.That(src, Does.Contain("SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, h)"),
+			"Expanded item rect must sync with LayoutElement preferredHeight.");
 		// ThemeShowInRibbonCheckbox must not rewrite left anchors (fights HLG).
 		int themeCb = src.IndexOf("static void ThemeShowInRibbonCheckbox(", System.StringComparison.Ordinal);
 		int themeEnd = src.IndexOf("static void LockStatusDialLayout(", themeCb, System.StringComparison.Ordinal);
