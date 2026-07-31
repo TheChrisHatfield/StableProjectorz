@@ -42,7 +42,12 @@ namespace spz {
 	    }
 
 
-	    public void Save_FinalCompositeTexture(Action saveFinalTex){
+	    /// <summary>
+	    /// Starts final-composite then invokes <paramref name="saveFinalTex"/>.
+	    /// Returns <c>false</c> if an in-flight composite already owns a save/export — callers that
+	    /// already set <see cref="Save_MGR._isSaving"/> must clear it (otherwise the flag sticks forever).
+	    /// </summary>
+	    public bool Save_FinalCompositeTexture(Action saveFinalTex){
 	        if(_finalComposite_crtn != null || _finalCompositeActive){
 		        // Stopping a live in-flight composite orphans Export3D_with_textures_ToPath's texture encode while
 		        // CoRespondWhenProjectSaveIdle still waits on shared _isSaving.
@@ -50,7 +55,7 @@ namespace spz {
 		        if (sm != null && sm._isSaving && _finalCompositeActive) {
 			        UnityEngine.Debug.LogWarning(
 				        "[ProjectSaveLoad_Helper] Refusing to restart final-composite while a save/export is in progress.");
-			        return;
+			        return false;
 		        }
 		        // Stale handle (e.g. StopAllCoroutines left a non-null ref): clear and start so this export is not orphaned.
 		        if (_finalComposite_crtn != null) {
@@ -64,6 +69,7 @@ namespace spz {
 		        }
 	        }
 	        _finalComposite_crtn = StartCoroutine( Save_FinalCompositeTexture_crtn(saveFinalTex) );
+	        return true;
 	    }
 
 

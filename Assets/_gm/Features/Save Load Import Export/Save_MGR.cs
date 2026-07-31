@@ -28,7 +28,12 @@ namespace spz {
 	    public void MergeIcons( Action<Dictionary<Texture2D,UDIM_Sector>> onHaveAlbedo,  bool oldIcons_survive=false ){
 	        _isSaving = true;
 
-	        _saveLoad_helper.Save_FinalCompositeTexture( OnReady1 );
+	        if( !_saveLoad_helper.Save_FinalCompositeTexture( OnReady1 ) ){
+		        _isSaving = false;
+		        Viewport_StatusText.instance?.ShowStatusText(
+			        "Can't merge icons while another save/export is still writing.", false, 5f, false );
+		        return;
+	        }
 
 	        void OnReady1() => StartCoroutine( WaitForRenderAll_crtn(skipAO_blit:true, OnReady2) );
      
@@ -136,7 +141,14 @@ namespace spz {
 			        }
 			        // remove .obj or fbx — images use default .png beside the mesh:
 			        string path_exported3D = Path.ChangeExtension( path, null );
-			        _saveLoad_helper.Save_FinalCompositeTexture( OnReady1 );
+			        if( !_saveLoad_helper.Save_FinalCompositeTexture( OnReady1 ) ){
+				        _isSaving = false;
+				        if( Viewport_StatusText.instance!=null ){
+					        Viewport_StatusText.instance.ShowStatusText(
+						        "Export: busy composing textures — try again.", false, 5f, false );
+				        }
+				        return;
+			        }
 			        void OnReady1() => StartCoroutine( WaitForRenderAll_crtn( skipAO_blit: true, OnReady2 ) );
 			        void OnReady2() => Save_Mesh_Textures( onHaveAlbedo:null, path_exported3D, isDilate: true,
 				        forbid_albedoDelete:false, onComplete:OnComplete );
@@ -180,7 +192,15 @@ namespace spz {
 		    }
 		    path_exported3D = Path.ChangeExtension( path_exported3D, null );
 		    string meshPathForStamp = mh._path_recentlyExported;
-		    _saveLoad_helper.Save_FinalCompositeTexture( OnReady1 );
+		    if( !_saveLoad_helper.Save_FinalCompositeTexture( OnReady1 ) ){
+			    _isSaving = false;
+			    TryDeleteSpzGoExchangeReadyStamp( meshFilePath );
+			    if( Viewport_StatusText.instance!=null ){
+				    Viewport_StatusText.instance.ShowStatusText(
+					    "Export: busy composing textures — try again.", false, 5f, false );
+			    }
+			    return false;
+		    }
 		    void OnReady1() => StartCoroutine( WaitForRenderAll_crtn( skipAO_blit:true, OnReady2 ) );
 		    void OnReady2() => Save_Mesh_Textures( onHaveAlbedo:null, path_exported3D, isDilate: true, forbid_albedoDelete:false, onComplete:OnComplete );
 		    void OnComplete() {
