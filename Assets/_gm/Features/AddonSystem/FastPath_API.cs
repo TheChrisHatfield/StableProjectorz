@@ -119,9 +119,15 @@ namespace spz {
 			if (!IsValidFloat(fov) || fov < 1f || fov > 179f) {
 				return false;
 			}
-			
+
+			float clamped = Mathf.Clamp(fov, 1f, 179f);
+			// Must go through fovMgr — GetCameraFOV / RestoreMatrices prefer _trueCameraFov over myCamera.fieldOfView.
+			if (camera.fovMgr != null) {
+				camera.fovMgr.SetFieldOfView(clamped);
+				return true;
+			}
 			if (camera.myCamera != null) {
-				camera.myCamera.fieldOfView = fov;
+				camera.myCamera.fieldOfView = clamped;
 				return true;
 			}
 			
