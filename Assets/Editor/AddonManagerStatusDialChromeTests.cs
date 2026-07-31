@@ -74,26 +74,30 @@ public sealed class AddonManagerStatusDialChromeTests {
 	}
 
 	[Test]
-	public void PreferencesShowInRibbon_DoesNotUseThemeCheckboxToggle() {
+	public void PreferencesShowInRibbon_UsesRingDialNotSquareFace() {
 		string path = Path.GetFullPath(Path.Combine(
 			Application.dataPath,
 			"..",
 			"Assets/_gm/Features/AddonSystem/AddonManager_UI.cs"));
 		string src = File.ReadAllText(path);
-		Assert.That(src, Does.Contain("ThemeShowInRibbonCheckbox"),
-			"Show-in-Ribbon must use ThemeShowInRibbonCheckbox (no SolidSquare stretch).");
-		Assert.That(src, Does.Contain("Leave SPZ: do not restomp authored sprites"),
-			"ThemeShowInRibbonCheckbox must early-out when !ShouldRecolorBoundChrome.");
+		Assert.That(src, Does.Contain("ThemeShowInRibbonDial"),
+			"Show-in-Ribbon must use ThemeShowInRibbonDial (ring + fill, no square plate).");
+		Assert.That(src, Does.Contain("CircleRing"),
+			"Ribbon dial must use CircleRing like the enable status dial.");
+		Assert.That(src, Does.Not.Contain("ThemeShowInRibbonCheckbox"),
+			"Legacy square-face ThemeShowInRibbonCheckbox must be removed.");
 		int themeItem = src.IndexOf("void ThemeAddonListItem(", System.StringComparison.Ordinal);
 		int next = src.IndexOf("static Transform FindChildRecursive(", themeItem, System.StringComparison.Ordinal);
 		string body = src.Substring(themeItem, next - themeItem);
 		Assert.That(body, Does.Not.Contain("ThemeCheckboxToggle(ribbonToggle"),
 			"ThemeCheckboxToggle on ShowInRibbonToggle stretches the face into a green capsule over dials/names.");
-		Assert.That(body, Does.Contain("ThemeShowInRibbonCheckbox(ribbonToggle"));
+		Assert.That(body, Does.Contain("ThemeShowInRibbonDial(ribbonToggle"));
 		Assert.That(src, Does.Contain("Viewport Gen Art dock only"),
 			"RibbonOnlyFullscreen prefs must show dock-only copy without a N/A checkbox.");
-		Assert.That(src, Does.Contain("prefRowBg.raycastTarget = true"),
-			"Dock-only tip must hit PrefRow_ShowInRibbon (label raycast is off).");
+		Assert.That(src, Does.Contain("prefRowBg.color = Color.clear"),
+			"Pref row must not paint a square/row plate under Host preferences.");
+		Assert.That(src, Does.Contain("ribbonLabel.raycastTarget = true"),
+			"RibbonOnly tip must hit the label when dial is hidden.");
 	}
 
 	[Test]
@@ -113,7 +117,7 @@ public sealed class AddonManagerStatusDialChromeTests {
 		Assert.That(src, Does.Contain("prefsBodyVLG.childControlHeight = true"),
 			"Prefs body must control child heights so Host preferences stacks under the section header.");
 		Assert.That(src, Does.Contain("prefRowHLG.childControlHeight = false"),
-			"Pref row HLG must not stretch the checkbox face.");
+			"Pref row HLG must not stretch the dial.");
 		Assert.That(src, Does.Contain("PrefRow_ShowInRibbon"));
 		Assert.That(src, Does.Contain("ApplyResponsivePrefsDropdownLayout"));
 		Assert.That(src, Does.Contain("ResolveOrCaptureDesignFontPt(header"),
@@ -126,14 +130,22 @@ public sealed class AddonManagerStatusDialChromeTests {
 			"Item VLG must assign HeaderRow + PreferencesBody heights or Host preferences overlays the name.");
 		Assert.That(src, Does.Contain("contentLayout.childControlHeight = true"),
 			"List content must size AddonItem rows to preferredHeight when prefs expand.");
+		Assert.That(src, Does.Contain("verticalLayout.spacing = 8f"),
+			"Gap between header and prefs body so Preferences/Uninstall are not clipped.");
+		Assert.That(src, Does.Contain("headerLE.preferredHeight = 40f"),
+			"Header must be tall enough for 28px buttons without prefs overlap.");
 		Assert.That(src, Does.Contain("SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, h)"),
 			"Expanded item rect must sync with LayoutElement preferredHeight.");
-		// ThemeShowInRibbonCheckbox must not rewrite left anchors (fights HLG).
-		int themeCb = src.IndexOf("static void ThemeShowInRibbonCheckbox(", System.StringComparison.Ordinal);
+		// ThemeShowInRibbonDial must not rewrite left anchors (fights HLG).
+		int themeCb = src.IndexOf("static void ThemeShowInRibbonDial(", System.StringComparison.Ordinal);
 		int themeEnd = src.IndexOf("static void LockStatusDialLayout(", themeCb, System.StringComparison.Ordinal);
 		string themeBody = src.Substring(themeCb, themeEnd - themeCb);
-		Assert.That(themeBody, Does.Not.Contain("anchorMin"),
-			"Show-in-Ribbon theming must leave HLG-owned anchors alone.");
+		Assert.That(themeBody, Does.Not.Contain("anchorMin = Vector2.zero"),
+			"Show-in-Ribbon theming must leave HLG-owned root anchors alone.");
+		Assert.That(themeBody, Does.Not.Contain("anchorMin = new Vector2(0f,"),
+			"Show-in-Ribbon theming must not stretch the dial root under HLG.");
+		Assert.That(themeBody, Does.Contain("CircleRing"),
+			"Dial theme must keep CircleRing (not SolidRect square).");
 	}
 
 	[Test]
