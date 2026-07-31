@@ -688,9 +688,25 @@ namespace spz {
 		}
 
 		void EnsureNativeSpzGoPanel() {
-			if (HasLiveAddonPanelWithWidgets(StableProjectorzGoAddonId))
+			// Path TextInputs alone must not skip seeding — Import/Export buttons are the other half.
+			if (TryGetLiveAddonPanel(StableProjectorzGoAddonId, out GameObject existingPanel)
+			    && PanelHasNamedControlPrefix(existingPanel, "Button_Import")
+			    && PanelHasNamedControlPrefix(existingPanel, "Button_Export"))
 				return;
-			string panelId = CreatePanel(StableProjectorzGoAddonId, "SPZ GO");
+
+			string panelId;
+			if (existingPanel != null) {
+				panelId = existingPanel.GetInstanceID().ToString();
+				if (!_addonUIElements.ContainsKey(StableProjectorzGoAddonId))
+					_addonUIElements[StableProjectorzGoAddonId] = new List<GameObject>();
+				if (!_addonUIElements[StableProjectorzGoAddonId].Contains(existingPanel))
+					_addonUIElements[StableProjectorzGoAddonId].Add(existingPanel);
+				UnityEngine.Debug.Log("[AddonUI_MGR] Completing native SPZ GO panel (path fields present, action buttons missing).");
+				EnsureNativeSpzGoMissingWidgets(panelId, existingPanel, seedPathsIfMissing: true);
+				return;
+			}
+
+			panelId = CreatePanel(StableProjectorzGoAddonId, "SPZ GO");
 			if (string.IsNullOrEmpty(panelId)) {
 				UnityEngine.Debug.LogWarning("[AddonUI_MGR] Native SPZ GO fallback: CreatePanel failed.");
 				return;
@@ -712,6 +728,59 @@ namespace spz {
 			AddButton(StableProjectorzGoAddonId, panelId, "Import", "do_import_from_path");
 			AddButton(StableProjectorzGoAddonId, panelId, "Export", "do_export_to_path");
 			AddButton(StableProjectorzGoAddonId, panelId, "Install into Blender", "do_install_blender_addon_force");
+		}
+
+		void EnsureNativeSpzGoMissingWidgets(string panelId, GameObject panel, bool seedPathsIfMissing) {
+			if (panel == null || string.IsNullOrEmpty(panelId)) return;
+			if (seedPathsIfMissing) {
+				string importDefault = "";
+				string exportDefault = "";
+				var fp = FastPath_API.instance;
+				string dataDir = fp != null ? fp.GetProjectDataDirOrSession() : null;
+				if (!string.IsNullOrEmpty(dataDir)) {
+					string exchange = Path.Combine(dataDir, "StableProjectorzGO_exchange");
+					importDefault = Path.Combine(exchange, "from_blender.fbx");
+					exportDefault = Path.Combine(exchange, "from_spz.fbx");
+				}
+				if (!PanelHasNamedControlPrefix(panel, "TextInput_Import path"))
+					AddTextInput(StableProjectorzGoAddonId, panelId, "Import path", importDefault);
+				if (!PanelHasNamedControlPrefix(panel, "TextInput_Export path"))
+					AddTextInput(StableProjectorzGoAddonId, panelId, "Export path", exportDefault);
+				if (!PanelHasNamedControlPrefix(panel, "TextInput_Blender.exe"))
+					AddTextInput(StableProjectorzGoAddonId, panelId, "Blender.exe (optional)", "");
+			}
+			if (!PanelHasNamedControlPrefix(panel, "Button_Import"))
+				AddButton(StableProjectorzGoAddonId, panelId, "Import", "do_import_from_path");
+			if (!PanelHasNamedControlPrefix(panel, "Button_Export"))
+				AddButton(StableProjectorzGoAddonId, panelId, "Export", "do_export_to_path");
+			if (!PanelHasNamedControlPrefix(panel, "Button_Install into Blender"))
+				AddButton(StableProjectorzGoAddonId, panelId, "Install into Blender", "do_install_blender_addon_force");
+		}
+
+		bool TryGetLiveAddonPanel(string addonId, out GameObject panel) {
+			panel = null;
+			if (!_addonUIElements.TryGetValue(addonId, out var list) || list == null)
+				return false;
+			for (int i = 0; i < list.Count; i++) {
+				var go = list[i];
+				if (go == null) continue;
+				if (!go.name.StartsWith("AddonPanel_", StringComparison.Ordinal)) continue;
+				panel = go;
+				return true;
+			}
+			return false;
+		}
+
+		static bool PanelHasNamedControlPrefix(GameObject panel, string namePrefix) {
+			if (panel == null || string.IsNullOrEmpty(namePrefix)) return false;
+			var transforms = panel.GetComponentsInChildren<Transform>(true);
+			for (int c = 0; c < transforms.Length; c++) {
+				var ch = transforms[c];
+				if (ch == null || ch == panel.transform) continue;
+				if (ch.name.StartsWith(namePrefix, StringComparison.Ordinal))
+					return true;
+			}
+			return false;
 		}
 
 		void EnsureNativeNomadThemePanel() {
