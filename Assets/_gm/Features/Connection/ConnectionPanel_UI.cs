@@ -110,9 +110,15 @@ namespace spz {
 	        while (true){
 	            string url_for_ping = where_to_ping(this);
 
-	            bool skip =  url_for_ping==""  ||  StableDiffusion_Hub.instance==null;
-            
-	            if (skip){
+	            // Empty URL only — Trellis/Gen3D must ping even when StableDiffusion_Hub is late/null.
+	            if (string.IsNullOrEmpty(url_for_ping)){
+	                yield return new WaitForSeconds(spacing);
+	                continue;
+	            }
+	            // SD panel still needs the hub for generate-aware timeouts; Trellis does not.
+	            bool sdNeedsHub = _panelKind == ConnectionPanel_Kind.StableDiffusion
+	                              && StableDiffusion_Hub.instance == null;
+	            if (sdNeedsHub){
 	                yield return new WaitForSeconds(spacing);
 	                continue;
 	            }
@@ -130,8 +136,11 @@ namespace spz {
 	                // So if not connected -> short timeout
 	                // If generating or conencted -> longer timeout (trusting more that we're still connected)
 	                request.timeout = 4;
-	                request.timeout = isConnected? 12 : request.timeout; 
-	                request.timeout = StableDiffusion_Hub.instance._generating? 25 : request.timeout;
+	                request.timeout = isConnected? 12 : request.timeout;
+	                bool generating = _panelKind == ConnectionPanel_Kind.StableDiffusion
+	                                  && StableDiffusion_Hub.instance != null
+	                                  && StableDiffusion_Hub.instance._generating;
+	                request.timeout = generating ? 25 : request.timeout;
 	                yield return request.SendWebRequest();
 
 	                if (request.result == UnityWebRequest.Result.Success){//connection successful:
