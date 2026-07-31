@@ -17,6 +17,9 @@ namespace spz {
 
 	    [SerializeField] Rembg_RepoInit _repoInit; // Can download the "inspyrenet-stable-projectorz" repo
 
+	    /// <summary>Active rembg CMD process — killed on cancel so VRAM/IO is not left racing the next run.</summary>
+	    uint _activeProcessId;
+
 
 	    public class Rembg_arg{
 	        public int backgroundThresh_0_255 = 20;
@@ -112,9 +115,22 @@ namespace spz {
 	        if (StableDiffusion_Hub.instance._isGeneratingWhat != Generate_RequestingWhat.rembg_backgroundRemoval){
 	            return;
 	        }
+	        KillActiveRembgProcess();
 	        StopAllCoroutines();
 	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled: true);
 	        StableDiffusion_Hub.instance.MarkCustomWorkflow_Done();
+	    }
+
+	    void KillActiveRembgProcess(){
+	        if (_activeProcessId == 0) return;
+	        uint pid = _activeProcessId;
+	        _activeProcessId = 0;
+	        try {
+	            StartExternalProcess.KillProcessTree(pid);
+	            Debug.Log($"[Rembg_PythonRunner] Killed process tree {pid} on cancel.");
+	        } catch (Exception ex) {
+	            Debug.LogWarning($"[Rembg_PythonRunner] KillProcessTree({pid}) failed: {ex.Message}");
+	        }
 	    }
 
 
@@ -145,12 +161,18 @@ namespace spz {
 	            reportOk?.Invoke(false);
 	            yield break;
 	        }
+	        _activeProcessId = processId;
 	        Debug.Log($"Process started with ID: {processId}");
 
-	        while (!func_isCanFinish()){
-	            yield return new WaitForSeconds(0.2f);
+	        try {
+	            while (!func_isCanFinish()){
+	                yield return new WaitForSeconds(0.2f);
+	            }
+	            reportOk?.Invoke(true);
+	        } finally {
+	            if (_activeProcessId == processId)
+	                _activeProcessId = 0;
 	        }
-	        reportOk?.Invoke(true);
 	    }
 
 	    void Awake(){
@@ -164,6 +186,8 @@ namespace spz {
 
 	    void OnDestroy(){
 	        GenerateButtons_UI.OnCancelGenerationButton -= OnCancelRembg_Button;
+	        KillActiveRembgProcess();
+	        if (instance == this) instance = null;
 	    }
 	}
 }//end namespace
