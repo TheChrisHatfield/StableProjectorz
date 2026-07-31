@@ -106,9 +106,13 @@ public sealed class AddonManagerStatusDialChromeTests {
 		// Top-stretch anchors on PreferencesBody stacked the row over HeaderRow dial/name.
 		Assert.That(src.Substring(prefs, 500), Does.Not.Contain("anchorMin = new Vector2(0f, 1f)"),
 			"PreferencesBody must not use fixed top anchors under the item VLG.");
-		Assert.That(src, Does.Contain("verticalLayout.childControlHeight = false"));
-		Assert.That(src, Does.Contain("prefsBodyHLG.childControlHeight = false"));
+		Assert.That(src, Does.Contain("prefsBodyVLG.childControlHeight = false"));
+		Assert.That(src, Does.Contain("prefRowHLG.childControlHeight = false"));
+		Assert.That(src, Does.Contain("PrefRow_ShowInRibbon"));
+		Assert.That(src, Does.Contain("ApplyResponsivePrefsDropdownLayout"));
 		Assert.That(src, Does.Contain("horizontalLayout.childControlHeight = false"));
+		Assert.That(src, Does.Contain("Preferences ▾"));
+		Assert.That(src, Does.Contain("verticalLayout.childControlHeight = false"));
 		// ThemeShowInRibbonCheckbox must not rewrite left anchors (fights HLG).
 		int themeCb = src.IndexOf("static void ThemeShowInRibbonCheckbox(", System.StringComparison.Ordinal);
 		int themeEnd = src.IndexOf("static void LockStatusDialLayout(", themeCb, System.StringComparison.Ordinal);
