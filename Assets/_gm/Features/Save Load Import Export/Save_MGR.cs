@@ -90,6 +90,22 @@ namespace spz {
 	    }
 
 	    public void DoLoadProject(){
+	        // Align with FastPath_API.LoadProject — Ctrl+L / UI must not load over an in-flight export
+	        // or open a second dialog that clears _isLoading while the first load still runs.
+	        if( _isSaving || _isLoading ){
+		        Viewport_StatusText.instance?.ShowStatusText(
+			        _isSaving
+				        ? "Can't load while a save/export is still writing."
+				        : "Load already in progress.",
+			        false, 5f, false );
+		        return;
+	        }
+	        if( StableDiffusion_Hub.instance != null && StableDiffusion_Hub.instance._generating ){
+		        Viewport_StatusText.instance?.ShowStatusText(
+			        "Can't load while generating.", false, 5f, false );
+		        return;
+	        }
+
 	        _isLoading = true;
         
 	        // CHANGED: LoadProject is now Async, so we use a callback instead of 'out string'
