@@ -1076,13 +1076,12 @@ namespace spz {
 			if (_nomadSkyboxCaptured)
 				return;
 			var skybox = SkyboxBackground_MGR.instance;
-			if (skybox != null) {
-				_nomadSkyboxTopBefore = skybox.GetTopColor();
-				_nomadSkyboxBottomBefore = skybox.GetBottomColor();
-			} else {
-				_nomadSkyboxTopBefore = Color.clear;
-				_nomadSkyboxBottomBefore = Color.clear;
+			if (skybox == null) {
+				// Do not mark captured with Color.clear — Restore would wipe the live skybox once mgr exists.
+				return;
 			}
+			_nomadSkyboxTopBefore = skybox.GetTopColor();
+			_nomadSkyboxBottomBefore = skybox.GetBottomColor();
 			_nomadSkyboxCaptured = true;
 		}
 
