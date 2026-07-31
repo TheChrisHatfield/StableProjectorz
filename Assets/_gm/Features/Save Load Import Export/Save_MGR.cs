@@ -271,6 +271,12 @@ namespace spz {
 
 
 	    public void Save2DArt_ExactPath(Texture2D saveMe, string pathAbs, bool destroyTex){
+	        // Do not clear an in-flight 3D/export: this path always sets _isSaving false when done.
+	        if( _isSaving ){
+		        Viewport_StatusText.instance?.ShowStatusText(
+			        "Can't save icon while a save/export is still writing.", false, 5f, false );
+		        return;
+	        }
 	        _isSaving = true;
 	        TextureTools_SPZ.EncodeAndSaveTexture(saveMe, pathAbs);
 	        if(destroyTex){  DestroyImmediate(saveMe);  }
@@ -279,6 +285,12 @@ namespace spz {
 
 
 	    public void Save2DArt( Dictionary<Texture2D,UDIM_Sector> saveMe, bool destroyTexs){
+	        // Same shared _isSaving as SaveViewTextures: cancel of this dialog must not clear an export.
+	        if( _isSaving ){
+		        Viewport_StatusText.instance?.ShowStatusText(
+			        "Can't save icon while a save/export is still writing.", false, 5f, false );
+		        return;
+	        }
 	        _isSaving = true;
 	        string defaultName = "Tex_StableProjectorz";
 	        GetBasePathForTextures(defaultName, OnReady);
