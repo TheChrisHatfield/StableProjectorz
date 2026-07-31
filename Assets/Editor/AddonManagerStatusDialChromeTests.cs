@@ -112,6 +112,9 @@ public sealed class AddonManagerStatusDialChromeTests {
 		Assert.That(src, Does.Contain("prefRowHLG.childControlHeight = false"));
 		Assert.That(src, Does.Contain("PrefRow_ShowInRibbon"));
 		Assert.That(src, Does.Contain("ApplyResponsivePrefsDropdownLayout"));
+		Assert.That(src, Does.Contain("ResolveOrCaptureDesignFontPt(header"),
+			"Responsive prefs must not stomp BoundChrome fontScale with bare fontSize writes.");
+		Assert.That(src, Does.Contain("ResolveOrCaptureDesignFontPt(label"));
 		Assert.That(src, Does.Contain("horizontalLayout.childControlHeight = false"));
 		Assert.That(src, Does.Contain("Preferences ▾"));
 		Assert.That(src, Does.Contain("verticalLayout.childControlHeight = false"));
