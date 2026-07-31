@@ -1486,7 +1486,7 @@ public sealed class SpzUiThemeOpsTests {
 
 			Assert.That(panel, Is.Not.Null);
 			overlay = panel.GetComponentInParent<Canvas>(true)?.gameObject;
-			Assert.That(panel.transform.Find("StichAddonManager_v9"), Is.Not.Null);
+			Assert.That(panel.transform.Find("StichAddonManager_v10"), Is.Not.Null);
 			Assert.That(panel.transform.Find("Header/InstallButton")?.GetComponent<Button>(), Is.Not.Null);
 			Assert.That(panel.transform.Find("Header/InstallButton/LineIcon")?.GetComponent<Image>()?.sprite, Is.Not.Null);
 			Assert.That(panel.transform.Find("Header/RefreshButton")?.GetComponent<Button>(), Is.Not.Null);

@@ -71,8 +71,11 @@ public sealed class AddonManagerPrefsRibbonTests {
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("PreferencesButton"));
 		Assert.That(src, Does.Contain("PreferencesBody"));
+		Assert.That(src, Does.Contain("PrefRow_ShowInRibbon"));
+		Assert.That(src, Does.Contain("PrefsDropdownHeader"));
 		Assert.That(src, Does.Contain("ShowInRibbonToggle"));
 		Assert.That(src, Does.Contain("Show in Command Ribbon"));
+		Assert.That(src, Does.Contain("ApplyResponsivePrefsDropdownLayout"));
 		Assert.That(src, Does.Contain("PersistAddonPrefsNow"));
 		Assert.That(src, Does.Contain("SetShowInCommandRibbon"));
 	}

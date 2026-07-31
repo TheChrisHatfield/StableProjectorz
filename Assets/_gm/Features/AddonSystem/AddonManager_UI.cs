@@ -322,7 +322,7 @@ namespace spz {
 	bool AddonManagerPanelSetupIsComplete() {
 		if (_panel == null || _addonsListParent == null) return false;
 		if (!_addonsListParent.transform.IsChildOf(_panel.transform)) return false;
-		return _panel.transform.Find("StichAddonManager_v9") != null
+		return _panel.transform.Find("StichAddonManager_v10") != null
 			&& _panel.transform.Find("FilterBar/FilterPills") != null;
 	}
 
@@ -608,7 +608,7 @@ namespace spz {
 		verticalLayout.childForceExpandHeight = false;
 		verticalLayout.childForceExpandWidth = true;
 
-		var versionMarker = new GameObject("StichAddonManager_v9");
+		var versionMarker = new GameObject("StichAddonManager_v10");
 		versionMarker.transform.SetParent(panelObj.transform, false);
 		var markerLE = versionMarker.AddComponent<LayoutElement>();
 		markerLE.ignoreLayout = true;
@@ -1749,7 +1749,22 @@ namespace spz {
 					body.a = Mathf.Clamp01(Mathf.Max(0.85f, body.a));
 					TintStatusDialGraphic(prefsBodyImg, body);
 				}
-				LockPreferencesBodyLayout(prefsBodyT);
+				var prefRowBg = prefsBodyT.Find("PrefRow_ShowInRibbon")?.GetComponent<Image>();
+				if (prefRowBg != null) {
+					Color row = t.controlBg;
+					row.a = Mathf.Clamp01(Mathf.Max(0.75f, row.a));
+					TintStatusDialGraphic(prefRowBg, row);
+				}
+				var prefsHdr = prefsBodyT.Find("PrefsDropdownHeader")?.GetComponent<TextMeshProUGUI>();
+				if (prefsHdr != null) {
+					float hdrBase = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(prefsHdr, 11f);
+					SpzUiThemeOps.ApplyBoundChromeTmp(prefsHdr, t.textMuted, hdrBase);
+					prefsHdr.fontStyle = FontStyles.Bold;
+				}
+				if (prefsBodyT.gameObject.activeSelf)
+					ApplyResponsivePrefsDropdownLayout(prefsBodyT);
+				else
+					LockPreferencesBodyLayout(prefsBodyT);
 			}
 			var ribbonToggle = FindChildRecursive(item.transform, "ShowInRibbonToggle")?.GetComponent<Toggle>();
 			if (ribbonToggle != null && ribbonToggle.gameObject.activeSelf) {
@@ -1761,9 +1776,9 @@ namespace spz {
 				var ribbonLabel = FindChildRecursive(item.transform, "ShowInRibbonLabel")?.GetComponent<TextMeshProUGUI>();
 				if (ribbonLabel != null) {
 					float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(ribbonLabel, 13f);
-					SpzUiThemeOps.ApplyBoundChromeTmp(ribbonLabel, t.textMuted, basePt);
-					ribbonLabel.enableWordWrapping = false;
-					ribbonLabel.overflowMode = TextOverflowModes.Ellipsis;
+					SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(ribbonLabel, t.textMuted, basePt);
+					ribbonLabel.enableWordWrapping = true;
+					ribbonLabel.overflowMode = TextOverflowModes.Overflow;
 					ribbonLabel.fontStyle = FontStyles.Normal;
 				}
 			}
@@ -1992,21 +2007,143 @@ namespace spz {
 			if (prefsBody == null) return;
 			var le = prefsBody.GetComponent<LayoutElement>();
 			if (le != null) {
-				le.preferredHeight = 36f;
-				le.minHeight = 36f;
+				// Nested dropdown height is set by ApplyResponsivePrefsDropdownLayout / SetItemExpandedHeight.
 				le.flexibleHeight = 0f;
 				le.flexibleWidth = 1f;
 			}
-			var hlg = prefsBody.GetComponent<HorizontalLayoutGroup>();
-			if (hlg != null) {
-				hlg.childControlHeight = false;
-				hlg.childForceExpandHeight = false;
-				hlg.childControlWidth = true;
-				hlg.childForceExpandWidth = false;
-				hlg.childAlignment = TextAnchor.MiddleLeft;
-				hlg.padding = new RectOffset(38, 10, 6, 6);
-				hlg.spacing = 8f;
+			var vlg = prefsBody.GetComponent<VerticalLayoutGroup>();
+			if (vlg != null) {
+				vlg.childControlHeight = false;
+				vlg.childForceExpandHeight = false;
+				vlg.childControlWidth = true;
+				vlg.childForceExpandWidth = true;
+				vlg.childAlignment = TextAnchor.UpperLeft;
 			}
+			var row = prefsBody.Find("PrefRow_ShowInRibbon");
+			if (row != null) {
+				var rowHlg = row.GetComponent<HorizontalLayoutGroup>();
+				if (rowHlg != null) {
+					rowHlg.childControlHeight = false;
+					rowHlg.childForceExpandHeight = false;
+					rowHlg.childControlWidth = true;
+					rowHlg.childForceExpandWidth = false;
+					rowHlg.childAlignment = TextAnchor.MiddleLeft;
+				}
+			}
+		}
+
+		/// <summary>
+		/// Nested Preferences dropdown: indent, wrap, and row height follow <see cref="ProjectUiScale"/> bands
+		/// so narrow manager panels stay readable without green-capsule stretch.
+		/// </summary>
+		void ApplyResponsivePrefsDropdownLayout(Transform prefsBody) {
+			if (prefsBody == null) return;
+			float panelW = 800f;
+			if (_panel != null) {
+				var pr = _panel.GetComponent<RectTransform>();
+				if (pr != null && pr.rect.width > 1f)
+					panelW = pr.rect.width;
+			}
+			var band = ProjectUiScale.GetBand(panelW);
+			bool narrow = band <= ProjectUiScale.Band.Sm;
+			int leftIndent = Mathf.RoundToInt(ProjectUiScale.Space(narrow ? 4 : 5));
+			int padY = Mathf.RoundToInt(ProjectUiScale.Space(narrow ? 2 : 1));
+			int padRight = Mathf.RoundToInt(ProjectUiScale.Space(2));
+			float sectionGap = ProjectUiScale.Space(narrow ? 2 : 1);
+			float rowH = narrow ? 48f : 36f;
+			float labelMinW = narrow ? 120f : 160f;
+
+			var bodyLE = prefsBody.GetComponent<LayoutElement>();
+			var bodyVlg = prefsBody.GetComponent<VerticalLayoutGroup>();
+			if (bodyVlg != null) {
+				bodyVlg.padding = new RectOffset(leftIndent, padRight, padY, padY);
+				bodyVlg.spacing = sectionGap;
+				bodyVlg.childControlHeight = false;
+				bodyVlg.childForceExpandHeight = false;
+				bodyVlg.childControlWidth = true;
+				bodyVlg.childForceExpandWidth = true;
+				bodyVlg.childAlignment = TextAnchor.UpperLeft;
+			}
+
+			var header = prefsBody.Find("PrefsDropdownHeader")?.GetComponent<TextMeshProUGUI>();
+			if (header != null) {
+				var headerLE = header.GetComponent<LayoutElement>();
+				if (headerLE != null) {
+					headerLE.preferredHeight = narrow ? 22f : 18f;
+					headerLE.minHeight = headerLE.preferredHeight;
+				}
+				header.fontSize = narrow ? 12f : 11f;
+				header.enableWordWrapping = true;
+				header.overflowMode = TextOverflowModes.Overflow;
+			}
+
+			var row = prefsBody.Find("PrefRow_ShowInRibbon");
+			if (row != null) {
+				var rowLE = row.GetComponent<LayoutElement>();
+				if (rowLE != null) {
+					rowLE.preferredHeight = rowH;
+					rowLE.minHeight = rowH;
+					rowLE.flexibleWidth = 1f;
+				}
+				var rowHlg = row.GetComponent<HorizontalLayoutGroup>();
+				if (rowHlg != null) {
+					rowHlg.spacing = ProjectUiScale.Space(1);
+					rowHlg.padding = new RectOffset(
+						Mathf.RoundToInt(ProjectUiScale.Space(1)),
+						Mathf.RoundToInt(ProjectUiScale.Space(1)),
+						Mathf.RoundToInt(ProjectUiScale.Space(1) * 0.5f),
+						Mathf.RoundToInt(ProjectUiScale.Space(1) * 0.5f));
+					rowHlg.childControlHeight = false;
+					rowHlg.childForceExpandHeight = false;
+					rowHlg.childControlWidth = true;
+					rowHlg.childForceExpandWidth = false;
+					rowHlg.childAlignment = TextAnchor.MiddleLeft;
+				}
+				var label = row.Find("ShowInRibbonLabel")?.GetComponent<TextMeshProUGUI>();
+				if (label != null) {
+					var labelLE = label.GetComponent<LayoutElement>();
+					if (labelLE != null) {
+						labelLE.flexibleWidth = 1f;
+						labelLE.minWidth = labelMinW;
+						labelLE.preferredHeight = rowH - 8f;
+					}
+					label.enableWordWrapping = true;
+					label.overflowMode = TextOverflowModes.Overflow;
+					label.fontSize = narrow ? 13f : 13f;
+				}
+			}
+
+			float bodyH = MeasurePreferencesBodyHeight(prefsBody);
+			if (bodyLE != null) {
+				bodyLE.preferredHeight = bodyH;
+				bodyLE.minHeight = bodyH;
+				bodyLE.flexibleHeight = 0f;
+				bodyLE.flexibleWidth = 1f;
+			}
+		}
+
+		static float MeasurePreferencesBodyHeight(Transform prefsBody) {
+			if (prefsBody == null) return 36f;
+			var vlg = prefsBody.GetComponent<VerticalLayoutGroup>();
+			float pad = 0f;
+			float spacing = 0f;
+			if (vlg != null) {
+				pad = vlg.padding.top + vlg.padding.bottom;
+				spacing = vlg.spacing;
+			}
+			float rows = 0f;
+			int active = 0;
+			for (int i = 0; i < prefsBody.childCount; i++) {
+				var ch = prefsBody.GetChild(i);
+				if (ch == null || !ch.gameObject.activeSelf) continue;
+				var le = ch.GetComponent<LayoutElement>();
+				float h = le != null && le.preferredHeight > 0f ? le.preferredHeight : 24f;
+				rows += h;
+				active++;
+			}
+			if (active > 1)
+				rows += spacing * (active - 1);
+			return Mathf.Max(36f, pad + rows);
 		}
 
 		void ReapplyAuthoredStatusDialsAfterThemeRestore() {
@@ -2142,8 +2279,8 @@ namespace spz {
 			var prefsBtnObj = new GameObject("PreferencesButton");
 			prefsBtnObj.transform.SetParent(headerObj.transform, false);
 			var prefsBtnLE = prefsBtnObj.AddComponent<LayoutElement>();
-			prefsBtnLE.preferredWidth = 96f;
-			prefsBtnLE.minWidth = 88f;
+			prefsBtnLE.preferredWidth = 108f;
+			prefsBtnLE.minWidth = 96f;
 			prefsBtnLE.flexibleWidth = 0f;
 			prefsBtnLE.preferredHeight = 28f;
 			prefsBtnLE.minHeight = 28f;
@@ -2162,13 +2299,13 @@ namespace spz {
 			prefsBtnLabelRect.anchorMax = Vector2.one;
 			prefsBtnLabelRect.sizeDelta = Vector2.zero;
 			var prefsBtnLabel = prefsBtnLabelGo.AddComponent<TextMeshProUGUI>();
-			prefsBtnLabel.text = "Preferences";
+			prefsBtnLabel.text = "Preferences ▾";
 			prefsBtnLabel.fontSize = 11f;
 			prefsBtnLabel.alignment = TextAlignmentOptions.Center;
 			prefsBtnLabel.color = new Color(0.88f, 0.88f, 0.9f, 1f);
 			prefsBtnLabel.raycastTarget = false;
 			AttachTooltip(prefsBtnObj,
-				"Expand host preferences for this add-on (Show in Command Ribbon, and future settings).");
+				"Expand nested host preferences for this add-on (Show in Command Ribbon, and future settings).");
 
 			var removeBtnObj = new GameObject("RemoveButton");
 			removeBtnObj.transform.SetParent(headerObj.transform, false);
@@ -2200,33 +2337,73 @@ namespace spz {
 			removeBtn.onClick.AddListener(() => OnRemoveAddon(addonId));
 			AttachTooltip(removeBtnObj, "Uninstall this add-on from StreamingAssets/Addons (cannot be undone).");
 
+			// Nested dropdown under the add-on row (not a flat overlay over the dial/name).
 			var prefsBody = new GameObject("PreferencesBody");
 			prefsBody.transform.SetParent(itemObj.transform, false);
-			// Let VerticalLayoutGroup own placement — fixed top anchors previously stacked prefs over the header dial/name.
 			prefsBody.AddComponent<RectTransform>();
 			var prefsBodyLE = prefsBody.AddComponent<LayoutElement>();
-			prefsBodyLE.preferredHeight = 36f;
-			prefsBodyLE.minHeight = 36f;
+			prefsBodyLE.preferredHeight = 64f;
+			prefsBodyLE.minHeight = 48f;
 			prefsBodyLE.flexibleHeight = 0f;
 			prefsBodyLE.flexibleWidth = 1f;
 			var prefsBodyBg = prefsBody.AddComponent<Image>();
-			// Plain fill — markEligible/SolidSquare on this full-width row helped grey/green overlays.
 			prefsBodyBg.sprite = UiRuntimeSprites.SolidRect;
 			prefsBodyBg.type = Image.Type.Simple;
-			prefsBodyBg.color = new Color(0.14f, 0.14f, 0.16f, 0.92f);
+			prefsBodyBg.color = new Color(0.12f, 0.12f, 0.14f, 0.94f);
 			prefsBodyBg.raycastTarget = false;
-			var prefsBodyHLG = prefsBody.AddComponent<HorizontalLayoutGroup>();
-			prefsBodyHLG.spacing = 8f;
-			prefsBodyHLG.padding = new RectOffset(38, 10, 6, 6);
-			prefsBodyHLG.childAlignment = TextAnchor.MiddleLeft;
-			prefsBodyHLG.childControlWidth = true;
-			prefsBodyHLG.childControlHeight = false;
-			prefsBodyHLG.childForceExpandWidth = false;
-			prefsBodyHLG.childForceExpandHeight = false;
+			var prefsBodyVLG = prefsBody.AddComponent<VerticalLayoutGroup>();
+			prefsBodyVLG.spacing = ProjectUiScale.Space(1);
+			prefsBodyVLG.padding = new RectOffset(
+				Mathf.RoundToInt(ProjectUiScale.Space(5)),
+				Mathf.RoundToInt(ProjectUiScale.Space(2)),
+				Mathf.RoundToInt(ProjectUiScale.Space(1)),
+				Mathf.RoundToInt(ProjectUiScale.Space(1)));
+			prefsBodyVLG.childAlignment = TextAnchor.UpperLeft;
+			prefsBodyVLG.childControlWidth = true;
+			prefsBodyVLG.childControlHeight = false;
+			prefsBodyVLG.childForceExpandWidth = true;
+			prefsBodyVLG.childForceExpandHeight = false;
 			prefsBody.SetActive(false);
 
+			var prefsHeaderObj = new GameObject("PrefsDropdownHeader");
+			prefsHeaderObj.transform.SetParent(prefsBody.transform, false);
+			var prefsHeaderLE = prefsHeaderObj.AddComponent<LayoutElement>();
+			prefsHeaderLE.preferredHeight = 18f;
+			prefsHeaderLE.minHeight = 18f;
+			prefsHeaderLE.flexibleWidth = 1f;
+			var prefsHeader = prefsHeaderObj.AddComponent<TextMeshProUGUI>();
+			prefsHeader.text = "Host preferences";
+			prefsHeader.fontSize = 11f;
+			prefsHeader.fontStyle = FontStyles.Bold;
+			prefsHeader.color = new Color(0.55f, 0.55f, 0.6f, 1f);
+			prefsHeader.alignment = TextAlignmentOptions.MidlineLeft;
+			prefsHeader.enableWordWrapping = true;
+			prefsHeader.overflowMode = TextOverflowModes.Overflow;
+			prefsHeader.raycastTarget = false;
+
+			var prefRow = new GameObject("PrefRow_ShowInRibbon");
+			prefRow.transform.SetParent(prefsBody.transform, false);
+			prefRow.AddComponent<RectTransform>();
+			var prefRowLE = prefRow.AddComponent<LayoutElement>();
+			prefRowLE.preferredHeight = 36f;
+			prefRowLE.minHeight = 36f;
+			prefRowLE.flexibleWidth = 1f;
+			var prefRowBg = prefRow.AddComponent<Image>();
+			prefRowBg.sprite = UiRuntimeSprites.SolidRect;
+			prefRowBg.type = Image.Type.Simple;
+			prefRowBg.color = new Color(0.16f, 0.16f, 0.18f, 0.9f);
+			prefRowBg.raycastTarget = false;
+			var prefRowHLG = prefRow.AddComponent<HorizontalLayoutGroup>();
+			prefRowHLG.spacing = ProjectUiScale.Space(1);
+			prefRowHLG.padding = new RectOffset(8, 8, 4, 4);
+			prefRowHLG.childAlignment = TextAnchor.MiddleLeft;
+			prefRowHLG.childControlWidth = true;
+			prefRowHLG.childControlHeight = false;
+			prefRowHLG.childForceExpandWidth = false;
+			prefRowHLG.childForceExpandHeight = false;
+
 			var ribbonToggleObj = new GameObject("ShowInRibbonToggle");
-			ribbonToggleObj.transform.SetParent(prefsBody.transform, false);
+			ribbonToggleObj.transform.SetParent(prefRow.transform, false);
 			ribbonToggleObj.AddComponent<RectTransform>().sizeDelta = new Vector2(22f, 22f);
 			var ribbonToggleLE = ribbonToggleObj.AddComponent<LayoutElement>();
 			ribbonToggleLE.preferredWidth = 22f;
@@ -2266,11 +2443,11 @@ namespace spz {
 			}
 
 			var ribbonLabelObj = new GameObject("ShowInRibbonLabel");
-			ribbonLabelObj.transform.SetParent(prefsBody.transform, false);
+			ribbonLabelObj.transform.SetParent(prefRow.transform, false);
 			var ribbonLabelLE = ribbonLabelObj.AddComponent<LayoutElement>();
 			ribbonLabelLE.flexibleWidth = 1f;
 			ribbonLabelLE.minWidth = 160f;
-			ribbonLabelLE.preferredHeight = 24f;
+			ribbonLabelLE.preferredHeight = 28f;
 			ribbonLabelLE.flexibleHeight = 0f;
 			var ribbonLabel = ribbonLabelObj.AddComponent<TextMeshProUGUI>();
 			ribbonLabel.text = ribbonOnly
@@ -2279,8 +2456,8 @@ namespace spz {
 			ribbonLabel.fontSize = 13f;
 			ribbonLabel.color = new Color(0.78f, 0.78f, 0.82f, 1f);
 			ribbonLabel.alignment = TextAlignmentOptions.MidlineLeft;
-			ribbonLabel.enableWordWrapping = false;
-			ribbonLabel.overflowMode = TextOverflowModes.Ellipsis;
+			ribbonLabel.enableWordWrapping = true;
+			ribbonLabel.overflowMode = TextOverflowModes.Overflow;
 			ribbonLabel.raycastTarget = false;
 			AttachTooltip(ribbonOnly ? ribbonLabelObj : ribbonToggleObj, ribbonOnly
 				? "RibbonOnlyFullscreen uses the viewport Gen Art dock — it never appears as a Command Ribbon tab."
@@ -2292,9 +2469,12 @@ namespace spz {
 					itemLayout.minHeight = 38f;
 					return;
 				}
-				// Header + prefs body + VLG spacing/padding — keep prefs below the name dial row.
+				ApplyResponsivePrefsDropdownLayout(prefsBody.transform);
+				float bodyH = prefsBodyLE.preferredHeight > 0f
+					? prefsBodyLE.preferredHeight
+					: MeasurePreferencesBodyHeight(prefsBody.transform);
 				float h = headerLE.preferredHeight
-					+ prefsBodyLE.preferredHeight
+					+ bodyH
 					+ verticalLayout.spacing
 					+ verticalLayout.padding.top
 					+ verticalLayout.padding.bottom;
@@ -2303,15 +2483,15 @@ namespace spz {
 			}
 
 			void SetPrefsButtonLabel(bool expanded) {
-				prefsBtnLabel.text = expanded ? "Hide" : "Preferences";
+				prefsBtnLabel.text = expanded ? "Preferences ▴" : "Preferences ▾";
 				prefsBtnLabel.fontStyle = FontStyles.Normal;
-				prefsBtnLE.preferredWidth = expanded ? 64f : 96f;
-				prefsBtnLE.minWidth = expanded ? 56f : 88f;
+				prefsBtnLE.preferredWidth = 108f;
+				prefsBtnLE.minWidth = 96f;
 			}
 
 			prefsBtn.onClick.AddListener(() => {
 				bool next = !prefsBody.activeSelf;
-				// One expanded prefs row at a time — multiple open bodies stack grey panels over dials/names.
+				// One expanded prefs dropdown at a time — multiple open bodies stack over dials/names.
 				if (next && _addonsListParent != null) {
 					for (int i = 0; i < _addonsListParent.childCount; i++) {
 						var other = _addonsListParent.GetChild(i);
@@ -2328,19 +2508,20 @@ namespace spz {
 						var otherLabel = otherPrefsBtn != null
 							? otherPrefsBtn.GetComponentInChildren<TextMeshProUGUI>(true) : null;
 						if (otherLabel != null) {
-							otherLabel.text = "Preferences";
+							otherLabel.text = "Preferences ▾";
 							otherLabel.fontStyle = FontStyles.Normal;
 						}
 						var otherBtnLe = otherPrefsBtn != null ? otherPrefsBtn.GetComponent<LayoutElement>() : null;
 						if (otherBtnLe != null) {
-							otherBtnLe.preferredWidth = 96f;
-							otherBtnLe.minWidth = 88f;
+							otherBtnLe.preferredWidth = 108f;
+							otherBtnLe.minWidth = 96f;
 						}
 					}
 				}
 				prefsBody.SetActive(next);
 				if (next) {
 					prefsBody.transform.SetAsLastSibling();
+					ApplyResponsivePrefsDropdownLayout(prefsBody.transform);
 					LockPreferencesBodyLayout(prefsBody.transform);
 					if (!ribbonOnly)
 						ThemeShowInRibbonCheckbox(ribbonToggle,
