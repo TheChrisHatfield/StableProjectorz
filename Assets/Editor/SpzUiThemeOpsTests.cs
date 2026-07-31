@@ -1486,7 +1486,7 @@ public sealed class SpzUiThemeOpsTests {
 
 			Assert.That(panel, Is.Not.Null);
 			overlay = panel.GetComponentInParent<Canvas>(true)?.gameObject;
-			Assert.That(panel.transform.Find("StichAddonManager_v8"), Is.Not.Null);
+			Assert.That(panel.transform.Find("StichAddonManager_v9"), Is.Not.Null);
 			Assert.That(panel.transform.Find("Header/InstallButton")?.GetComponent<Button>(), Is.Not.Null);
 			Assert.That(panel.transform.Find("Header/InstallButton/LineIcon")?.GetComponent<Image>()?.sprite, Is.Not.Null);
 			Assert.That(panel.transform.Find("Header/RefreshButton")?.GetComponent<Button>(), Is.Not.Null);
@@ -1497,6 +1497,8 @@ public sealed class SpzUiThemeOpsTests {
 			Assert.That(panel.transform.Find("FilterBar/FilterPills")?.GetComponent<ToggleGroup>(), Is.Not.Null);
 			Assert.That(panel.transform.Find("RememberEnabledRow"), Is.Null);
 			Assert.That(panel.transform.Find("ScrollView/ShortcutHints"), Is.Null);
+			Assert.That(panel.transform.Find("ScrollView/Viewport/Content"), Is.Not.Null,
+				"List Content must live under Viewport so ScrollRect can reach the last rows.");
 			Assert.That(panel.transform.Find("StatusText")?.GetComponent<TextMeshProUGUI>(), Is.Not.Null);
 			panel.transform.parent.gameObject.SetActive(true);
 			panel.SetActive(true);
