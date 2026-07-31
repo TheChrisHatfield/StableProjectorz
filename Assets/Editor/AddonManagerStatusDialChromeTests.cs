@@ -82,6 +82,8 @@ public sealed class AddonManagerStatusDialChromeTests {
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("ThemeShowInRibbonCheckbox"),
 			"Show-in-Ribbon must use ThemeShowInRibbonCheckbox (no SolidSquare stretch).");
+		Assert.That(src, Does.Contain("Leave SPZ: do not restomp authored sprites"),
+			"ThemeShowInRibbonCheckbox must early-out when !ShouldRecolorBoundChrome.");
 		int themeItem = src.IndexOf("void ThemeAddonListItem(", System.StringComparison.Ordinal);
 		int next = src.IndexOf("static Transform FindChildRecursive(", themeItem, System.StringComparison.Ordinal);
 		string body = src.Substring(themeItem, next - themeItem);

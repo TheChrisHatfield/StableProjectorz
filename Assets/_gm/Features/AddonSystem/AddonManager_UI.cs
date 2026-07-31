@@ -1952,20 +1952,24 @@ namespace spz {
 				le.flexibleWidth = 0f;
 				le.flexibleHeight = 0f;
 			}
+			Image ck = toggle.graphic as Image;
+			if (ck == null)
+				ck = toggle.transform.Find("Checkmark")?.GetComponent<Image>();
+			// Leave SPZ: do not restomp authored sprites after RestoreBoundChrome — only sync on/off alpha.
+			if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+				if (ck != null)
+					ck.canvasRenderer.SetAlpha(toggle.isOn ? 1f : 0f);
+				return;
+			}
 			if (toggle.targetGraphic is Image bg) {
-				if (SpzUiThemeOps.ShouldRecolorBoundChrome)
-					SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(bg);
+				SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(bg);
 				bg.sprite = UiRuntimeSprites.SolidRect;
 				bg.color = face;
 				bg.type = Image.Type.Simple;
 				bg.preserveAspect = false;
 			}
-			Image ck = toggle.graphic as Image;
-			if (ck == null)
-				ck = toggle.transform.Find("Checkmark")?.GetComponent<Image>();
 			if (ck != null) {
-				if (SpzUiThemeOps.ShouldRecolorBoundChrome)
-					SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(ck);
+				SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(ck);
 				ck.sprite = UiRuntimeSprites.CircleFilled;
 				ck.type = Image.Type.Simple;
 				ck.preserveAspect = true;
