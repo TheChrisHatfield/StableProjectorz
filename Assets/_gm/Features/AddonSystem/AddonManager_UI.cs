@@ -322,7 +322,7 @@ namespace spz {
 	bool AddonManagerPanelSetupIsComplete() {
 		if (_panel == null || _addonsListParent == null) return false;
 		if (!_addonsListParent.transform.IsChildOf(_panel.transform)) return false;
-		return _panel.transform.Find("StichAddonManager_v8") != null
+		return _panel.transform.Find("StichAddonManager_v9") != null
 			&& _panel.transform.Find("FilterBar/FilterPills") != null;
 	}
 
@@ -495,7 +495,11 @@ namespace spz {
 	/// </summary>
 	void TryResolveAddonsListParentFromPanel() {
 		if (_panel == null || _addonsListParent != null) return;
-		Transform t = _panel.transform.Find("ListArea/ScrollView/Content");
+		Transform t = _panel.transform.Find("ListArea/ScrollView/Viewport/Content");
+		if (t == null)
+			t = _panel.transform.Find("ScrollView/Viewport/Content");
+		if (t == null)
+			t = _panel.transform.Find("ListArea/ScrollView/Content");
 		if (t == null)
 			t = _panel.transform.Find("ScrollView/Content");
 		if (t is RectTransform rt) {
@@ -604,7 +608,7 @@ namespace spz {
 		verticalLayout.childForceExpandHeight = false;
 		verticalLayout.childForceExpandWidth = true;
 
-		var versionMarker = new GameObject("StichAddonManager_v8");
+		var versionMarker = new GameObject("StichAddonManager_v9");
 		versionMarker.transform.SetParent(panelObj.transform, false);
 		var markerLE = versionMarker.AddComponent<LayoutElement>();
 		markerLE.ignoreLayout = true;
@@ -768,11 +772,6 @@ namespace spz {
 		layoutElementScroll.preferredHeight = 360f;
 		layoutElementScroll.minHeight = 180f;
 		layoutElementScroll.flexibleHeight = 1f;
-		var scrollViewImage = scrollViewObj.AddComponent<UnityEngine.UI.Image>();
-		scrollViewImage.color = new Color(0f, 0f, 0f, 0.01f);
-		scrollViewImage.raycastTarget = true;
-		var scrollViewMask = scrollViewObj.AddComponent<UnityEngine.UI.Mask>();
-		scrollViewMask.showMaskGraphic = false;
 		var scrollView = scrollViewObj.AddComponent<UnityEngine.UI.ScrollRect>();
 		scrollView.horizontal = false;
 		scrollView.vertical = true;
@@ -780,12 +779,26 @@ namespace spz {
 		scrollView.movementType = ScrollRect.MovementType.Clamped;
 		scrollView.inertia = true;
 		scrollView.decelerationRate = 0.135f;
-		scrollView.viewport = scrollViewRect;
-		scrollView.content = null;
-		
+
+		// Nested Viewport (Mask) — viewport=self made content bounds fight the panel VLG so the
+		// list could not scroll far enough to reach the last add-on / expanded Preferences.
+		GameObject viewportObj = new GameObject("Viewport");
+		viewportObj.layer = UILayer;
+		viewportObj.transform.SetParent(scrollViewObj.transform, false);
+		var viewportRect = viewportObj.AddComponent<RectTransform>();
+		viewportRect.anchorMin = Vector2.zero;
+		viewportRect.anchorMax = Vector2.one;
+		viewportRect.sizeDelta = Vector2.zero;
+		viewportRect.pivot = new Vector2(0.5f, 0.5f);
+		var viewportImage = viewportObj.AddComponent<UnityEngine.UI.Image>();
+		viewportImage.color = new Color(0f, 0f, 0f, 0.01f);
+		viewportImage.raycastTarget = true;
+		var viewportMask = viewportObj.AddComponent<UnityEngine.UI.Mask>();
+		viewportMask.showMaskGraphic = false;
+
 		GameObject contentObj = new GameObject("Content");
 		contentObj.layer = UILayer;
-		contentObj.transform.SetParent(scrollViewObj.transform, false);
+		contentObj.transform.SetParent(viewportObj.transform, false);
 		var contentRect = contentObj.AddComponent<RectTransform>();
 		contentRect.anchorMin = new Vector2(0, 1);
 		contentRect.anchorMax = new Vector2(1, 1);
@@ -794,7 +807,8 @@ namespace spz {
 		contentRect.anchoredPosition = Vector2.zero;
 		var contentLayout = contentObj.AddComponent<UnityEngine.UI.VerticalLayoutGroup>();
 		contentLayout.spacing = RowSpacing;
-		contentLayout.padding = new RectOffset(0, 0, (int)Grid, (int)Grid);
+		// Extra bottom pad so the last row's Uninstall / Preferences stay clear of the clip edge.
+		contentLayout.padding = new RectOffset(0, 0, (int)Grid, (int)(Grid * 3));
 		contentLayout.childControlHeight = false;
 		contentLayout.childControlWidth = true;
 		contentLayout.childForceExpandHeight = false;
@@ -802,6 +816,7 @@ namespace spz {
 		var contentSizeFitter = contentObj.AddComponent<UnityEngine.UI.ContentSizeFitter>();
 		contentSizeFitter.verticalFit = UnityEngine.UI.ContentSizeFitter.FitMode.PreferredSize;
 		contentSizeFitter.horizontalFit = UnityEngine.UI.ContentSizeFitter.FitMode.Unconstrained;
+		scrollView.viewport = viewportRect;
 		scrollView.content = contentRect;
 		_addonsListParent = contentRect;
 		
@@ -1348,8 +1363,7 @@ namespace spz {
 				CreateAddonListItem(kvp.Key, kvp.Value);
 			
 			if (_addonsListParent != null) {
-				LayoutRebuilder.ForceRebuildLayoutImmediate(_addonsListParent);
-				Canvas.ForceUpdateCanvases();
+				RebuildAddonListScrollLayout(null);
 			}
 			
 			string filterText = _filterState == 0 ? "All" : (_filterState == 1 ? "Enabled" : "Disabled");
@@ -2338,13 +2352,7 @@ namespace spz {
 				}
 				SetPrefsButtonLabel(next);
 				SetItemExpandedHeight(next);
-				LayoutRebuilder.ForceRebuildLayoutImmediate(itemObj.transform as RectTransform);
-				if (_addonsListParent != null)
-					LayoutRebuilder.ForceRebuildLayoutImmediate(_addonsListParent);
-				var scroll = _addonsListParent != null
-					? _addonsListParent.GetComponentInParent<ScrollRect>() : null;
-				if (scroll != null && scroll.viewport != null)
-					LayoutRebuilder.ForceRebuildLayoutImmediate(scroll.viewport);
+				RebuildAddonListScrollLayout(next ? itemObj.transform as RectTransform : null);
 			});
 
 			ribbonToggle.onValueChanged.AddListener((isOn) => {
@@ -2458,6 +2466,52 @@ namespace spz {
 		/// <summary>
 		/// Cleanup when object is destroyed
 		/// </summary>
+		/// <summary>
+		/// Rebuild content + viewport so ScrollRect bounds match the list, then optionally scroll
+		/// <paramref name="ensureVisible"/> into the viewport (expanded Preferences near the bottom).
+		/// </summary>
+		void RebuildAddonListScrollLayout(RectTransform ensureVisible) {
+			if (_addonsListParent == null) return;
+			if (ensureVisible != null)
+				LayoutRebuilder.ForceRebuildLayoutImmediate(ensureVisible);
+			LayoutRebuilder.ForceRebuildLayoutImmediate(_addonsListParent);
+			var scroll = _addonsListParent.GetComponentInParent<ScrollRect>();
+			if (scroll != null && scroll.viewport != null)
+				LayoutRebuilder.ForceRebuildLayoutImmediate(scroll.viewport);
+			Canvas.ForceUpdateCanvases();
+			if (ensureVisible != null)
+				EnsureAddonItemVisibleInScroll(ensureVisible);
+		}
+
+		/// <summary>Scroll the add-on list so <paramref name="item"/> is fully inside the viewport.</summary>
+		void EnsureAddonItemVisibleInScroll(RectTransform item) {
+			if (item == null || _addonsListParent == null) return;
+			var scroll = _addonsListParent.GetComponentInParent<ScrollRect>();
+			if (scroll == null || scroll.viewport == null || scroll.content == null) return;
+			RectTransform viewport = scroll.viewport;
+			Bounds itemBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(viewport, item);
+			float viewH = viewport.rect.height;
+			if (viewH < 1f) return;
+			float contentH = scroll.content.rect.height;
+			float overflow = contentH - viewH;
+			if (overflow <= 1f) {
+				scroll.verticalNormalizedPosition = 1f;
+				return;
+			}
+			// itemBounds is in viewport space; yMax above 0 / yMin below -viewH means clipped.
+			float pad = 8f;
+			float delta = 0f;
+			if (itemBounds.max.y > -pad)
+				delta = itemBounds.max.y + pad;
+			else if (itemBounds.min.y < -viewH + pad)
+				delta = itemBounds.min.y + viewH - pad;
+			if (Mathf.Abs(delta) < 0.5f) return;
+			Vector2 pos = scroll.content.anchoredPosition;
+			pos.y = Mathf.Clamp(pos.y - delta, 0f, overflow);
+			scroll.content.anchoredPosition = pos;
+			scroll.StopMovement();
+		}
+
 		void OnDestroy() {
 			if (instance != this) return;
 			if (_deferredListRefresh != null) {
