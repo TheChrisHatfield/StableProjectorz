@@ -809,7 +809,9 @@ namespace spz {
 		contentLayout.spacing = RowSpacing;
 		// Extra bottom pad so the last row's Uninstall / Preferences stay clear of the clip edge.
 		contentLayout.padding = new RectOffset(0, 0, (int)Grid, (int)(Grid * 3));
-		contentLayout.childControlHeight = false;
+		// Must control height: with false, items keep sizeDelta.y=40 while LayoutElement grows →
+		// expanded PreferencesBody paints over HeaderRow (name + "Host preferences" overlap).
+		contentLayout.childControlHeight = true;
 		contentLayout.childControlWidth = true;
 		contentLayout.childForceExpandHeight = false;
 		contentLayout.childForceExpandWidth = true;
@@ -1514,6 +1516,9 @@ namespace spz {
 					const int listBottomClearance = 24;
 					listVlg.spacing = SpzUiThemeOps.ScaledSpace(2);
 					listVlg.padding = new RectOffset(0, 0, listPad, Mathf.Max(listPad, listBottomClearance));
+					// Theme scale must not leave height uncontrolled (prefs overlay dial/name).
+					listVlg.childControlHeight = true;
+					listVlg.childForceExpandHeight = false;
 				}
 			}
 			foreach (var item in _addonUIItems.Values) {
@@ -1661,7 +1666,23 @@ namespace spz {
 		}
 
 		void ThemeAddonListItem(GameObject item, SpzUiThemeOps.ThemeTokens t) {
+			// Keep nested prefs under the header — theme must not leave item height uncontrolled.
+			var itemVlg = item.GetComponent<VerticalLayoutGroup>();
+			if (itemVlg != null) {
+				itemVlg.childControlHeight = true;
+				itemVlg.childForceExpandHeight = false;
+			}
 			Transform header = item.transform.Find("HeaderRow");
+			if (header != null) {
+				var headerLe = header.GetComponent<LayoutElement>();
+				if (headerLe != null)
+					headerLe.flexibleHeight = 0f;
+				var headerHlg = header.GetComponent<HorizontalLayoutGroup>();
+				if (headerHlg != null) {
+					headerHlg.childControlHeight = false;
+					headerHlg.childForceExpandHeight = false;
+				}
+			}
 			Transform remove = header != null ? header.Find("RemoveBtn") : null;
 			if (remove == null && header != null) remove = header.Find("RemoveButton");
 			if (remove == null) remove = item.transform.Find("RemoveBtn");
@@ -2020,7 +2041,8 @@ namespace spz {
 			}
 			var vlg = prefsBody.GetComponent<VerticalLayoutGroup>();
 			if (vlg != null) {
-				vlg.childControlHeight = false;
+				// true so PrefsDropdownHeader + PrefRow stack by LayoutElement heights (not overlapping rects).
+				vlg.childControlHeight = true;
 				vlg.childForceExpandHeight = false;
 				vlg.childControlWidth = true;
 				vlg.childForceExpandWidth = true;
@@ -2030,6 +2052,7 @@ namespace spz {
 			if (row != null) {
 				var rowHlg = row.GetComponent<HorizontalLayoutGroup>();
 				if (rowHlg != null) {
+					// false: checkbox/label keep authored sizes (true + missing LE stretches the face).
 					rowHlg.childControlHeight = false;
 					rowHlg.childForceExpandHeight = false;
 					rowHlg.childControlWidth = true;
@@ -2065,7 +2088,7 @@ namespace spz {
 			if (bodyVlg != null) {
 				bodyVlg.padding = new RectOffset(leftIndent, padRight, padY, padY);
 				bodyVlg.spacing = sectionGap;
-				bodyVlg.childControlHeight = false;
+				bodyVlg.childControlHeight = true;
 				bodyVlg.childForceExpandHeight = false;
 				bodyVlg.childControlWidth = true;
 				bodyVlg.childForceExpandWidth = true;
@@ -2206,8 +2229,9 @@ namespace spz {
 			verticalLayout.padding = new RectOffset(0, 0, 2, 2);
 			verticalLayout.childAlignment = TextAnchor.UpperLeft;
 			verticalLayout.childControlWidth = true;
-			// Prefer LayoutElement heights — childControlHeight=true stretched dials/prefs into grey bars.
-			verticalLayout.childControlHeight = false;
+			// true: assign HeaderRow / PreferencesBody heights from LayoutElement so prefs nest under the name.
+			// HeaderRow HLG stays childControlHeight=false so dials are not stretched into grey bars.
+			verticalLayout.childControlHeight = true;
 			verticalLayout.childForceExpandWidth = true;
 			verticalLayout.childForceExpandHeight = false;
 
@@ -2354,7 +2378,7 @@ namespace spz {
 			removeBtn.onClick.AddListener(() => OnRemoveAddon(addonId));
 			AttachTooltip(removeBtnObj, "Uninstall this add-on from StreamingAssets/Addons (cannot be undone).");
 
-			// Nested dropdown under the add-on row (not a flat overlay over the dial/name).
+			// Nested dropdown under HeaderRow (same item VLG) — never stretch-overlay the dial/name.
 			var prefsBody = new GameObject("PreferencesBody");
 			prefsBody.transform.SetParent(itemObj.transform, false);
 			prefsBody.AddComponent<RectTransform>();
@@ -2377,7 +2401,7 @@ namespace spz {
 				Mathf.RoundToInt(ProjectUiScale.Space(1)));
 			prefsBodyVLG.childAlignment = TextAnchor.UpperLeft;
 			prefsBodyVLG.childControlWidth = true;
-			prefsBodyVLG.childControlHeight = false;
+			prefsBodyVLG.childControlHeight = true;
 			prefsBodyVLG.childForceExpandWidth = true;
 			prefsBodyVLG.childForceExpandHeight = false;
 			prefsBody.SetActive(false);
@@ -2388,6 +2412,7 @@ namespace spz {
 			prefsHeaderLE.preferredHeight = 18f;
 			prefsHeaderLE.minHeight = 18f;
 			prefsHeaderLE.flexibleWidth = 1f;
+			prefsHeaderLE.flexibleHeight = 0f;
 			var prefsHeader = prefsHeaderObj.AddComponent<TextMeshProUGUI>();
 			prefsHeader.text = "Host preferences";
 			prefsHeader.fontSize = 11f;
@@ -2405,6 +2430,7 @@ namespace spz {
 			prefRowLE.preferredHeight = 36f;
 			prefRowLE.minHeight = 36f;
 			prefRowLE.flexibleWidth = 1f;
+			prefRowLE.flexibleHeight = 0f;
 			var prefRowBg = prefRow.AddComponent<Image>();
 			prefRowBg.sprite = UiRuntimeSprites.SolidRect;
 			prefRowBg.type = Image.Type.Simple;
@@ -2487,22 +2513,28 @@ namespace spz {
 			}
 
 			void SetItemExpandedHeight(bool expanded) {
+				float h;
 				if (!expanded) {
-					itemLayout.preferredHeight = 40f;
+					h = 40f;
+					itemLayout.preferredHeight = h;
 					itemLayout.minHeight = 38f;
-					return;
+				} else {
+					ApplyResponsivePrefsDropdownLayout(prefsBody.transform);
+					float bodyH = prefsBodyLE.preferredHeight > 0f
+						? prefsBodyLE.preferredHeight
+						: MeasurePreferencesBodyHeight(prefsBody.transform);
+					h = headerLE.preferredHeight
+						+ bodyH
+						+ verticalLayout.spacing
+						+ verticalLayout.padding.top
+						+ verticalLayout.padding.bottom;
+					itemLayout.preferredHeight = h;
+					itemLayout.minHeight = h;
 				}
-				ApplyResponsivePrefsDropdownLayout(prefsBody.transform);
-				float bodyH = prefsBodyLE.preferredHeight > 0f
-					? prefsBodyLE.preferredHeight
-					: MeasurePreferencesBodyHeight(prefsBody.transform);
-				float h = headerLE.preferredHeight
-					+ bodyH
-					+ verticalLayout.spacing
-					+ verticalLayout.padding.top
-					+ verticalLayout.padding.bottom;
-				itemLayout.preferredHeight = h;
-				itemLayout.minHeight = h;
+				// Belt-and-suspenders: list CSF reads LayoutElement, but keep the rect in sync immediately.
+				var itemRt = itemObj.GetComponent<RectTransform>();
+				if (itemRt != null)
+					itemRt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, h);
 			}
 
 			void SetPrefsButtonLabel(bool expanded) {
@@ -2527,6 +2559,9 @@ namespace spz {
 							otherItemLe.preferredHeight = 40f;
 							otherItemLe.minHeight = 38f;
 						}
+						var otherRt = other as RectTransform;
+						if (otherRt != null)
+							otherRt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 40f);
 						var otherPrefsBtn = other.Find("HeaderRow/PreferencesButton");
 						var otherLabel = otherPrefsBtn != null
 							? otherPrefsBtn.GetComponentInChildren<TextMeshProUGUI>(true) : null;
