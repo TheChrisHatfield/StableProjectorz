@@ -1509,8 +1509,11 @@ namespace spz {
 				if (listVlg != null) {
 					SpzUiThemeOps.ApplyScaledLayoutGroup(listVlg);
 					int listPad = Mathf.RoundToInt(SpzUiThemeOps.ScaledSpace(1));
+					// Keep authored bottom clearance (Grid*3 at create) so last Uninstall / expanded
+					// Preferences stay above the Mask clip edge under Nomad.
+					const int listBottomClearance = 24;
 					listVlg.spacing = SpzUiThemeOps.ScaledSpace(2);
-					listVlg.padding = new RectOffset(0, 0, listPad, listPad);
+					listVlg.padding = new RectOffset(0, 0, listPad, Mathf.Max(listPad, listBottomClearance));
 				}
 			}
 			foreach (var item in _addonUIItems.Values) {

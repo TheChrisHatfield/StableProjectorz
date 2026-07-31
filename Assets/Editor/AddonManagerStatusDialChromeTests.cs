@@ -140,6 +140,8 @@ public sealed class AddonManagerStatusDialChromeTests {
 		Assert.That(padWrite, Is.GreaterThan(snapshot), "Absolute Nomad padding must follow ApplyScaledLayoutGroup snapshot.");
 		Assert.That(src.IndexOf("ApplyScaledLayoutGroup(headerHlg)", apply, System.StringComparison.Ordinal), Is.GreaterThan(0));
 		Assert.That(src.IndexOf("ApplyScaledLayoutGroup(listVlg)", apply, System.StringComparison.Ordinal), Is.GreaterThan(0));
+		Assert.That(src, Does.Contain("listBottomClearance"),
+			"Nomad list padding must preserve bottom clearance so last rows are not Mask-clipped.");
 	}
 
 	[Test]
