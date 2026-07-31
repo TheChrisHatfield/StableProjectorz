@@ -112,6 +112,7 @@ namespace spz {
 	        }
 	        if(ModelsHandler_3D.instance._isImportingModel){
 	            Viewport_StatusText.instance.ShowStatusText("Can't Bake AO while loading a 3D model file. Please wait.", false, 1.5f, false);
+	            onBakeComplete?.Invoke(false);
 	            return;
 	        }
 	        isGeneratingAO = true;
