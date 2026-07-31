@@ -72,7 +72,8 @@ namespace spz {
 	        Viewport_StatusText.instance.ShowStatusText(message, false, 10, false);
 
 
-	        yield return StartCoroutine( RunCommand_crtn(shadowR_path, fullCommand, isCanFinish) );
+	        bool ranOk = false;
+	        yield return StartCoroutine( RunCommand_crtn(shadowR_path, fullCommand, isCanFinish, ok => ranOk = ok) );
 
 
 	        bool isCanFinish(){
@@ -80,6 +81,14 @@ namespace spz {
 	            if (fileCount != numFilesNeeded){ return false; }
 	            // Only if we have the right number of files, check if they're all ready
 	            return SD_FileUtils.IsAllFilesReady(outputDir, ".png", ".jpg", ".tga");
+	        }
+
+	        if (!ranOk){
+	            Viewport_StatusText.instance?.ShowStatusText(
+	                "Shadow R failed to start (see log).", false, 6, true);
+	            GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:true);
+	            StableDiffusion_Hub.instance.MarkCustomWorkflow_Done();
+	            yield break;
 	        }
 
 	        Get_OutputTextures_from_Dir(originalGen, outputDir);
@@ -129,7 +138,8 @@ namespace spz {
 
 
 
-	    IEnumerator RunCommand_crtn( string workingDirectory,  string fullCommand,  Func<bool> func_isCanFinish)
+	    // Invokes <paramref name="reportOk"/> with false if spawn fails (caller must not treat as success).
+	    IEnumerator RunCommand_crtn( string workingDirectory,  string fullCommand,  Func<bool> func_isCanFinish, Action<bool> reportOk)
 	    {
 	        Debug.Log($"Attempting to run command in directory: {workingDirectory}");
 	        Debug.Log($"Full command: {fullCommand}");
@@ -137,6 +147,7 @@ namespace spz {
 
 	        if (processId == 0){
 	            Debug.LogError("Failed to start process. Process ID is 0.");
+	            reportOk?.Invoke(false);
 	            yield break;
 	        }
 	        Debug.Log($"Process started with ID: {processId}");
@@ -144,6 +155,7 @@ namespace spz {
 	        while( func_isCanFinish() == false ){
 	            yield return new WaitForSeconds(0.2f);
 	        }
+	        reportOk?.Invoke(true);
 	    }
 
 	}
