@@ -15,6 +15,9 @@ namespace spz {
     
 	    [SerializeField] ShadowR_RepoInit _repoInit;//can download repo
 
+	    /// <summary>Active Shadow R CMD process — killed on cancel so VRAM/IO is not left racing the next run.</summary>
+	    uint _activeProcessId;
+
 
 	    void Start(){
 	        GenerateButtons_UI.OnCancelGenerationButton += OnCancelShadowR_Button;
@@ -22,6 +25,7 @@ namespace spz {
 
 	    void OnDestroy(){
 	        GenerateButtons_UI.OnCancelGenerationButton -= OnCancelShadowR_Button;
+	        KillActiveShadowRProcess();
 	    }
 
 
@@ -102,9 +106,22 @@ namespace spz {
 	        if(StableDiffusion_Hub.instance._isGeneratingWhat != Generate_RequestingWhat.Shadow_R_delighting){
 	            return;//someone else's generation.
 	        }
+	        KillActiveShadowRProcess();
 	        StopAllCoroutines();
 	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:true);
 	        StableDiffusion_Hub.instance.MarkCustomWorkflow_Done();
+	    }
+
+	    void KillActiveShadowRProcess(){
+	        if (_activeProcessId == 0) return;
+	        uint pid = _activeProcessId;
+	        _activeProcessId = 0;
+	        try {
+	            StartExternalProcess.KillProcessTree(pid);
+	            Debug.Log($"[ShadowR_PythonRunner] Killed process tree {pid} on cancel.");
+	        } catch (Exception ex) {
+	            Debug.LogWarning($"[ShadowR_PythonRunner] KillProcessTree({pid}) failed: {ex.Message}");
+	        }
 	    }
 
 
@@ -150,12 +167,18 @@ namespace spz {
 	            reportOk?.Invoke(false);
 	            yield break;
 	        }
+	        _activeProcessId = processId;
 	        Debug.Log($"Process started with ID: {processId}");
 
-	        while( func_isCanFinish() == false ){
-	            yield return new WaitForSeconds(0.2f);
+	        try {
+	            while( func_isCanFinish() == false ){
+	                yield return new WaitForSeconds(0.2f);
+	            }
+	            reportOk?.Invoke(true);
+	        } finally {
+	            if (_activeProcessId == processId)
+	                _activeProcessId = 0;
 	        }
-	        reportOk?.Invoke(true);
 	    }
 
 	}
