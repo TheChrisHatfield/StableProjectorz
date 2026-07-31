@@ -366,10 +366,20 @@ namespace spz {
 	        string dir = Path.GetDirectoryName(basePath);
 	        string filenameWithoutExtension = Path.GetFileNameWithoutExtension(basePath);
 	        string extension = Path.GetExtension(basePath);
+	        if (string.IsNullOrEmpty(dir))
+		        dir = ".";
 
-	        //make it unique:
+	        // First candidate: base + optional suffix. If that exists, append " 2", " 3", …
 	        string baseFilename = $"{filenameWithoutExtension}{suffix}";
-	        return Path.Combine(dir, baseFilename + extension);
+	        string candidate = Path.Combine(dir, baseFilename + extension);
+	        if (!File.Exists(candidate))
+		        return candidate;
+	        for (int n = 2; n < 10000; n++) {
+		        candidate = Path.Combine(dir, $"{baseFilename} {n}{extension}");
+		        if (!File.Exists(candidate))
+			        return candidate;
+	        }
+	        return Path.Combine(dir, $"{baseFilename} {System.Guid.NewGuid():N}{extension}");
 	    }
 
 
@@ -503,7 +513,7 @@ namespace spz {
 	    void Start(){
 	        ExportSave_UI_MGR.OnSaveProject_Button += DoSaveProject;
 	        ExportSave_UI_MGR.OnLoadProject_Button += DoLoadProject;
-	        ExportSave_UI_MGR.OnExport3D_Button += Export3D_with_textures;
+	        ExportSave_UI_MGR.OnExport3D_Button += () => { Export3D_with_textures(); };
 	    }
 	    void Update(){
 	        if(Input.GetKey(KeyCode.LeftControl) && Input.GetKeyDown(KeyCode.S)){  DoSaveProject();  }
