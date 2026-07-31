@@ -2075,7 +2075,12 @@ namespace spz {
 					headerLE.preferredHeight = narrow ? 22f : 18f;
 					headerLE.minHeight = headerLE.preferredHeight;
 				}
-				header.fontSize = narrow ? 12f : 11f;
+				float hdrDesign = narrow ? 12f : 11f;
+				float hdrBase = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(header, hdrDesign);
+				if (SpzUiThemeOps.ShouldRecolorBoundChrome)
+					SpzUiThemeOps.ApplyBoundChromeTmp(header, SpzUiThemeOps.Active.textMuted, hdrBase);
+				else
+					header.fontSize = hdrBase;
 				header.enableWordWrapping = true;
 				header.overflowMode = TextOverflowModes.Overflow;
 			}
@@ -2112,7 +2117,12 @@ namespace spz {
 					}
 					label.enableWordWrapping = true;
 					label.overflowMode = TextOverflowModes.Overflow;
-					label.fontSize = narrow ? 13f : 13f;
+					const float labelDesign = 13f;
+					float labelBase = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(label, labelDesign);
+					if (SpzUiThemeOps.ShouldRecolorBoundChrome)
+						SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(label, SpzUiThemeOps.Active.textMuted, labelBase);
+					else
+						label.fontSize = labelBase;
 				}
 			}
 
