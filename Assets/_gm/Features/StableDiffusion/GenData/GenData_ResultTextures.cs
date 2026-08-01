@@ -151,12 +151,31 @@ namespace spz {
 	        for (int i = 0; i < generatedTexs.Length; i++){
 	            var outTex = generatedTexs[i];
 	            if (outTex == null) continue;
-	            if (outTex.width != initTex.width || outTex.height != initTex.height) continue;
-	            if (maskTex.width != initTex.width || maskTex.height != initTex.height) continue;
+
+	            Texture2D initFit = initTex;
+	            Texture2D maskFit = maskTex;
+	            Texture2D disposeInit = null;
+	            Texture2D disposeMask = null;
+	            if (outTex.width != initTex.width || outTex.height != initTex.height){
+	                disposeInit = TextureTools_SPZ.FitTexture2D_CropAndResize_KeepSrc(
+	                    initTex, outTex.width, outTex.height);
+	                if (disposeInit != null && !ReferenceEquals(disposeInit, initTex))
+	                    initFit = disposeInit;
+	                else
+	                    continue; // cannot fit
+	            }
+	            if (maskFit.width != outTex.width || maskFit.height != outTex.height){
+	                disposeMask = TextureTools_SPZ.ResizeTexture2D_Exact_KeepSrc(
+	                    maskTex, outTex.width, outTex.height);
+	                if (disposeMask != null && !ReferenceEquals(disposeMask, maskTex))
+	                    maskFit = disposeMask;
+	                else if (maskFit.width != outTex.width || maskFit.height != outTex.height)
+	                    continue;
+	            }
 
 	            Color32[] outPx = outTex.GetPixels32();
-	            Color32[] initPx = initTex.GetPixels32();
-	            Color32[] maskPx = maskTex.GetPixels32();
+	            Color32[] initPx = initFit.GetPixels32();
+	            Color32[] maskPx = maskFit.GetPixels32();
 	            int n = Mathf.Min(outPx.Length, Mathf.Min(initPx.Length, maskPx.Length));
 	            bool flipInvertMask = PaintTab_StrictIsolationBrushOptions.FlipInvertIsolationMask;
 	            for (int p = 0; p < n; p++){
@@ -170,6 +189,10 @@ namespace spz {
 	            }
 	            outTex.SetPixels32(outPx);
 	            outTex.Apply(updateMipmaps:false, makeNoLongerReadable:false);
+	            if (disposeInit != null && !ReferenceEquals(disposeInit, initTex))
+	                UnityEngine.Object.Destroy(disposeInit);
+	            if (disposeMask != null && !ReferenceEquals(disposeMask, maskTex))
+	                UnityEngine.Object.Destroy(disposeMask);
 	        }
 	    }
 
