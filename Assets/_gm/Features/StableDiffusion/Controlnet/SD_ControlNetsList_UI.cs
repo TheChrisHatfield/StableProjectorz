@@ -78,9 +78,10 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Flux.2 Klein: find a ControlNet unit whose "what to send" is ContentCam or CustomFile
-	    /// and return a disposable RGB copy for img2img init (CN weights are not used).
+	    /// Flux.2 Klein: find an activated ControlNet unit (model None) whose "what to send"
+	    /// is ContentCam or CustomFile and return a disposable RGB copy for img2img init.
 	    /// Prefers CustomFile over ContentCam; scans unit 0..N in order within each preference.
+	    /// Collapsed/disabled units and units with a real CN model selected are ignored.
 	    /// </summary>
 	    public bool TryGetDisposableKleinImg2ImgInit(out Texture2D tex, out int unitIndex, out string sourceLabel){
 	        tex = null;
