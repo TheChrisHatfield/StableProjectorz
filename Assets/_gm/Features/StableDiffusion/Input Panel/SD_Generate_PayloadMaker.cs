@@ -214,11 +214,19 @@ namespace spz {
 	        // Klein/Neo: Soft Inpainting scripts often stall or inflate ETA — skip on Flux.2 Klein.
 	        SoftInpaintingArgs softInpaint_args =  WorkflowRibbon_UI.instance != null && WorkflowRibbon_UI.instance.is_allow_SoftInpaint()
 	            && !StableDiffusion_Hub.IsActiveCheckpointKlein()
+	            && !isMakingBackgrounds
+	            && inpaint_fill != InpaintingFill.LatentNothing
 	            && Inpaint_MaskPainter.instance != null
 	                ? Inpaint_MaskPainter.instance.GetArgs_for_SoftInpaint_GenRequest() : null;
 	        if (softInpaint_args != null){
 	            payload_.alwayson_scripts.Add("Soft Inpainting", softInpaint_args);
 	            intermediates_.isScreenMask_forSoftInpaint = true;
+	        } else if (StableDiffusion_Hub.IsActiveCheckpointKlein()
+	                   && SD_WorkflowOptionsRibbon_UI.instance != null
+	                   && SD_WorkflowOptionsRibbon_UI.instance.isSoftInpaint
+	                   && Viewport_StatusText.instance != null){
+	            Viewport_StatusText.instance.ShowStatusText(
+	                "Soft Inpaint skipped on Flux.2 Klein (Neo compatibility).", false, 3f, false);
 	        }
 	        ControlNet_NetworkArgs ctrlNets_args = SD_ControlNetsList_UI.instance != null
 	            ? SD_ControlNetsList_UI.instance.GetArgs_forGenerationRequest(intermediates_) : null;
