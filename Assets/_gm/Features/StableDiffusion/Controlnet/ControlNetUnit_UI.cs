@@ -209,6 +209,12 @@ namespace spz {
 	        Texture2D imageToSend = getDisposableTexture_toSend(intermediates);
 
 	        string inputImgStr = TextureTools_SPZ.TextureToBase64(imageToSend);
+	        // CustomFile copies are not stored on intermediates — free after encode.
+	        if (_imgsDisplay != null
+	            && _imgsDisplay._whatImageToSend == WhatImageToSend_CTRLNET.CustomFile
+	            && imageToSend != null){
+	            UnityEngine.Object.Destroy(imageToSend);
+	        }
 	        HowToResizeImg_CTRLNET resizeMode =  _imgsDisplay._whatImageToSend==WhatImageToSend_CTRLNET.CustomFile?
 	                                                                            _imgsDisplay._customImg_howResize 
 	                                                                          : HowToResizeImg_CTRLNET.ScaleToFit_InnerFit;
