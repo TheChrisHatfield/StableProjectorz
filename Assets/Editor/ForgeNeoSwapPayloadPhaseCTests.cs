@@ -119,6 +119,19 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 	}
 
 	[Test]
+	public void Img2img_Klein_SkipsSoftInpaintScript() {
+		string maker = File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs"));
+		Assert.That(maker, Does.Contain("!StableDiffusion_Hub.IsActiveCheckpointKlein()"));
+		Assert.That(maker, Does.Contain("Soft Inpainting"));
+		int kleinGate = maker.IndexOf("!StableDiffusion_Hub.IsActiveCheckpointKlein()");
+		int softAdd = maker.IndexOf("alwayson_scripts.Add(\"Soft Inpainting\"");
+		Assert.That(kleinGate, Is.GreaterThan(0));
+		Assert.That(softAdd, Is.GreaterThan(kleinGate));
+	}
+
+	[Test]
 	public void SoftInpaint_OnlyAddedOnImg2imgPath() {
 		string path = Path.Combine(
 			Directory.GetCurrentDirectory(),

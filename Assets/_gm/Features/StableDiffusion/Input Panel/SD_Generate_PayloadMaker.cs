@@ -200,7 +200,9 @@ namespace spz {
 	        // Avoid softInpaint if rendering 'EntireShape' (when we have background active).
 	        // We will use LatentNothing, and soft inpaint doesn't work with it.
 	        // For more info - see comment inside img2img_GetTextures_andFill().
+	        // Klein/Neo: Soft Inpainting scripts often stall or inflate ETA — skip on Flux.2 Klein.
 	        SoftInpaintingArgs softInpaint_args =  WorkflowRibbon_UI.instance != null && WorkflowRibbon_UI.instance.is_allow_SoftInpaint()
+	            && !StableDiffusion_Hub.IsActiveCheckpointKlein()
 	            && Inpaint_MaskPainter.instance != null
 	                ? Inpaint_MaskPainter.instance.GetArgs_for_SoftInpaint_GenRequest() : null;
 	        if (softInpaint_args != null){
