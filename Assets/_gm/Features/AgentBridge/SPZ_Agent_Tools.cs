@@ -538,6 +538,11 @@ namespace spz {
 	        hub.isCanGenerate(out bool canArt, out bool canBg);
 	        if (backgrounds && !canBg){ fail("Cannot Gen BG right now (cooldown, disconnected, or busy)."); return; }
 	        if (!backgrounds && !canArt){ fail("Cannot Gen Art right now (need depth/normals CN, or Klein bypass; or busy/disconnected)."); return; }
+	        // Match UI DenyWithMessage gates the agent can_* snapshot misses (empty CustomFile, CN download, import…).
+	        if (hub.DenyWithMessage_ifCantGenerate(allow_without_controlnets: backgrounds)){
+	            fail("Generation denied (see viewport status: ControlNet/CustomFile/import/download/busy).");
+	            return;
+	        }
 	        hub.Generate(backgrounds);
 	        // Confirm the request was actually POSTed — empty init / start failures abort asynchronously.
 	        if (Coroutines_MGR.instance == null){
