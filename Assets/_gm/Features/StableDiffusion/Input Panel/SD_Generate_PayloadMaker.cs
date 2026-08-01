@@ -119,15 +119,11 @@ namespace spz {
 	                    "img2img aborted: invalid width/height in SD input panel.", false, 5f, false);
 	            return;
 	        }
-	        // Neo Flux/Klein: init + mask must share aspect (uniform scale). CustomFile/ContentCam
-	        // often disagree with the screen mask — stretch both outbound bitmaps to payload WxH.
-	        // Keep withAntiEdge at native size for SPZ projection compositing.
-	        viewTex = TextureTools_SPZ.ResizeTexture2D_Exact_DestroySrc(viewTex, outW, outH);
-	        screenMask_skipAntiEdge = TextureTools_SPZ.ResizeTexture2D_Exact_DestroySrc(
-	            screenMask_skipAntiEdge, outW, outH);
-	        // Init without mask: Neo img2img still expects a mask; synthesize full-white at payload size.
+	        // Pre-Neo / SD1.5 path: keep ContentCam + masks at native capture size for projection.
+	        // Neo only needs matching init/mask *encode* sizes — see PrepareImg2ImgEncodePair below.
 	        if (viewTex != null && screenMask_skipAntiEdge == null)
-	            screenMask_skipAntiEdge = TextureTools_SPZ.CreateSolidColorRGBA32(outW, outH, Color.white);
+	            screenMask_skipAntiEdge = TextureTools_SPZ.CreateSolidColorRGBA32(
+	                viewTex.width, viewTex.height, Color.white);
 
 	        intermediates_ =  new SD_GenRequestArgs_byproducts{
 	            screenSpaceMask_NE_disposableTex = screenMask_skipAntiEdge,
@@ -140,6 +136,18 @@ namespace spz {
 	        string negativePrompt = StableDiffusion_Prompts_UI.instance != null
 	            ? StableDiffusion_Prompts_UI.instance.negativePrompt : "";
 	        PostProcess_Prompt(ref positivePrompt, ref negativePrompt);
+
+	        Texture2D encodeInit;
+	        Texture2D encodeMask;
+	        Texture2D encodeDisposeA;
+	        Texture2D encodeDisposeB;
+	        TextureTools_SPZ.PrepareImg2ImgEncodePair(
+	            viewTex, screenMask_skipAntiEdge,
+	            out encodeInit, out encodeMask, out encodeDisposeA, out encodeDisposeB);
+	        string initB64 = TextureTools_SPZ.TextureToBase64(encodeInit);
+	        string maskB64 = encodeMask == null ? "" : TextureTools_SPZ.TextureToBase64(encodeMask);
+	        if (encodeDisposeA != null) UnityEngine.Object.Destroy(encodeDisposeA);
+	        if (encodeDisposeB != null) UnityEngine.Object.Destroy(encodeDisposeB);
 
 	        payload_ = new SD_img2img_payload {
 	            prompt = positivePrompt,
@@ -178,8 +186,8 @@ namespace spz {
 	            inpaint_full_res_padding = 0, //how many pixels to add to the mask.  Note, in case of entireShape, silhuette was already dilated by correct number of pixels.
 	                                          //For brushed masks, padding is undesirable, could mess up around brushed borders in StableProjectorz (in projection shader)
 	            include_init_images = true,
-	            init_images = new string[]{  TextureTools_SPZ.TextureToBase64(intermediates_.usualView_disposableTexture), },
-	            mask = screenMask_skipAntiEdge == null?"" : TextureTools_SPZ.TextureToBase64(screenMask_skipAntiEdge), //send the SKIP-anti-edge. Avoids revealing any black untextured areas to SD.
+	            init_images = new string[]{ initB64 },
+	            mask = maskB64, //send the SKIP-anti-edge. Avoids revealing any black untextured areas to SD.
 	            alwayson_scripts = new Dictionary<string,AlwaysOn_Value>(),
 
 	            mask_blur = 0,//ZERO. we don't want to add blur - we probably already added to the mask before by our BlurTextures_MGR.

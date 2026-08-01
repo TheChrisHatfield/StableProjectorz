@@ -81,8 +81,26 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "TextureTools", "TextureTools_SPZ.cs"));
 		Assert.That(tools, Does.Contain("CreateSolidColorRGBA32"));
-		Assert.That(maker, Does.Contain("CreateSolidColorRGBA32(outW, outH, Color.white)"));
+		Assert.That(maker, Does.Contain("CreateSolidColorRGBA32("));
+		Assert.That(maker, Does.Contain("viewTex.width, viewTex.height, Color.white"));
 		Assert.That(maker, Does.Contain("viewTex != null && screenMask_skipAntiEdge == null"));
+	}
+
+	[Test]
+	public void Img2img_KeepsNativeByproducts_EncodePairOnlyWhenMismatch() {
+		string maker = File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs"));
+		string tools = File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "TextureTools", "TextureTools_SPZ.cs"));
+		Assert.That(tools, Does.Contain("PrepareImg2ImgEncodePair"));
+		Assert.That(tools, Does.Contain("ResizeTexture2D_Exact_KeepSrc"));
+		Assert.That(maker, Does.Contain("PrepareImg2ImgEncodePair"));
+		Assert.That(maker, Does.Contain("Pre-Neo / SD1.5 path"));
+		// Must not stretch byproducts to panel WxH (broke projection after Neo workaround).
+		Assert.That(maker, Does.Not.Contain("ResizeTexture2D_Exact_DestroySrc(viewTex, outW, outH)"));
+		Assert.That(maker, Does.Not.Contain("ResizeTexture2D_Exact_DestroySrc(\n\t            screenMask_skipAntiEdge, outW, outH)"));
 	}
 
 	[Test]
@@ -94,10 +112,10 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 		int badSize = src.IndexOf("outW <= 0 || outH <= 0");
 		Assert.That(badSize, Is.GreaterThan(0));
 		int earlyReturn = src.IndexOf("return;", badSize);
-		int resize = src.IndexOf("ResizeTexture2D_Exact_DestroySrc", badSize);
+		int encodePair = src.IndexOf("PrepareImg2ImgEncodePair", badSize);
 		Assert.That(earlyReturn, Is.GreaterThan(badSize));
-		Assert.That(resize, Is.GreaterThan(earlyReturn),
-			"Invalid WxH must return before stretching/encoding init+mask.");
+		Assert.That(encodePair, Is.GreaterThan(earlyReturn),
+			"Invalid WxH must return before encoding init+mask.");
 	}
 
 	[Test]
