@@ -225,6 +225,9 @@ namespace spz {
 	        if (what == WhatImageToSend_CTRLNET.CustomFile  &&  allowOpenFileNow){
 	            LoadCustomImage( onChosen );
 	            void onChosen() =>_contextMenu_resize_ifCustom_go.SetActive(_myCustomImg_from_sysFile != null);
+	        }else if (what == WhatImageToSend_CTRLNET.CustomFile){
+	            // Agent/MCP / restore path: keep existing file, show resize controls when a bitmap is present.
+	            _contextMenu_resize_ifCustom_go.SetActive(_myCustomImg_from_sysFile != null);
 	        }else{
 	            _contextMenu_resize_ifCustom_go.SetActive(false);
 	        }

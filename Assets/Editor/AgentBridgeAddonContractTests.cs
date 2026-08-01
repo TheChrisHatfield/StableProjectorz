@@ -137,6 +137,7 @@ public sealed class AgentBridgeAddonContractTests {
 		string imgs = File.ReadAllText(RepoPath(
 			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "ControlNetUnit_ImagesDisplay.cs"));
 		Assert.That(imgs, Does.Contain("HasValidKleinImg2ImgInit"));
+		Assert.That(imgs, Does.Contain("Agent/MCP / restore path"));
 		string unit = File.ReadAllText(RepoPath(
 			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "ControlNetUnit_UI.cs"));
 		Assert.That(unit, Does.Contain("isActivated"));
