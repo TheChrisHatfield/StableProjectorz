@@ -43,19 +43,63 @@ namespace spz {
 
 	    public string currPreprocessorName(){
 	        if(_preprocessor_dropdown.options.Count == 0){ return "None"; }
-	        return _preprocessor_dropdown.options[_preprocessor_dropdown.value].text;
+	        string chosen = _preprocessor_dropdown.options[_preprocessor_dropdown.value].text;
+	        // True Forge Neo lookup is case-sensitive: supported_preprocessors["None"] — lowercase "none" KeyErrors and CN is skipped.
+	        if (string.IsNullOrEmpty(chosen) || chosen.Equals("none", System.StringComparison.OrdinalIgnoreCase))
+	            return "None";
+	        return chosen;
 	    }
 	    public string currModelName(){
 	        if(_model_dropdown.options.Count == 0){ return "None"; }
 	        string chosen = _model_dropdown.options[_model_dropdown.value].text;
 	        if(SdDisconnectPlaceholder.IsPlaceholder(chosen)){  return "None"; }
-	        return chosen.ToLower().Contains("none") ? "None" : chosen;//because sometimes None or none conflict or don't get recognized.
+	        // Exact None only — Contains("none") false-positives models whose names embed that substring.
+	        if (string.IsNullOrEmpty(chosen) || chosen.Equals("none", System.StringComparison.OrdinalIgnoreCase))
+	            return "None";
+	        return chosen;
 	    }
 
 	    public bool is_currPreprocessor_none => currPreprocessorName().ToLower()=="none";
 	    public bool is_currModel_none => currModelName().ToLower()=="none";
 	    public bool isReferencePreprocessor() => currPreprocessorName().ToLower().Contains("reference");
 	    public static bool hasAtLeastSomeModel { get; private set; } = false;
+
+	    /// <summary>Agent / MCP: set model dropdown to None (disable this unit's CN weights).</summary>
+	    public bool TrySelectModelNone() => TrySelectModelByName("None", out _, out _);
+
+	    /// <summary>Agent / MCP: select ControlNet model by name (partial match). Use "None" to clear.</summary>
+	    public bool TrySelectModelByName(string name, out string resolvedName, out string error){
+	        resolvedName = "";
+	        error = null;
+	        if (string.IsNullOrEmpty(name)){ error = "ControlNet model name is empty"; return false; }
+	        if (_model_dropdown == null){ error = "ControlNet model dropdown missing"; return false; }
+	        string want = name.Trim();
+	        if (_model_dropdown.options.Count == 0 && want.Equals("None", StringComparison.OrdinalIgnoreCase)){
+	            _model_dropdown.options.Insert(0, new TMP_Dropdown.OptionData("None"));
+	        }
+	        if (_model_dropdown.options.Count == 0){ error = "ControlNet model dropdown empty"; return false; }
+	        if (want.Equals("None", StringComparison.OrdinalIgnoreCase)
+	            && !_model_dropdown.options.Exists(o => o.text != null && o.text.Equals("None", StringComparison.OrdinalIgnoreCase))){
+	            _model_dropdown.options.Insert(0, new TMP_Dropdown.OptionData("None"));
+	        }
+	        int ix = _model_dropdown.options.FindIndex(o =>
+	            o.text != null && string.Equals(o.text, want, StringComparison.OrdinalIgnoreCase));
+	        if (ix < 0){
+	            ix = FindIndex_matchingBaseName(_model_dropdown.options, want);
+	        }
+	        if (ix < 0){
+	            ix = _model_dropdown.options.FindIndex(o =>
+	                o.text != null && o.text.IndexOf(want, StringComparison.OrdinalIgnoreCase) >= 0);
+	        }
+	        if (ix < 0){
+	            error = "ControlNet model not in dropdown: " + want;
+	            return false;
+	        }
+	        _model_dropdown.value = ix;
+	        _model_dropdown.RefreshShownValue();
+	        resolvedName = currModelName();
+	        return true;
+	    }
 
 
     
@@ -82,9 +126,16 @@ namespace spz {
 	        UpdateDropdown( _preprocessor_dropdown,  SD_ControlNetsList_UI.instance._preprocessors_list.module_list,
 	                        pickDepth_ifWasNone,  ref _prefferedPreProcessor_viaLoad );
 
-	        //force dropdown to pick depth, if was none.
-	        //But 'none' is actually allowed if preprocessor is 'reference_only'. People requested it Apr 2024:
-	        pickDepth_ifWasNone =  true;
+	        // First populate only: prefer a depth model when the list was empty.
+	        // Do NOT treat user-chosen "None" as empty — refreshes were re-forcing depth and blocking disable.
+	        // Skip auto-depth for Flux.2 Klein (SD/SDXL CN does not apply).
+	        pickDepth_ifWasNone = true;
+	        try {
+	            string sd = SD_InputPanel_UI.instance != null ? SD_InputPanel_UI.instance.models?.selectedModel_name : null;
+	            if (SD_OptionsPacket.CheckpointNeedsKleinModules(sd))
+	                pickDepth_ifWasNone = false;
+	        } catch { /* input panel may be unset during early refresh */ }
+	        // 'None' model is allowed with preprocessor 'reference_only' (Apr 2024).
 	        pickDepth_ifWasNone &= currPreprocessorName().ToLower().Contains("ref")==false;
 
 	        UpdateDropdown( _model_dropdown,  SD_ControlNetsList_UI.instance._models.model_list,
@@ -110,7 +161,7 @@ namespace spz {
 	        //ensure 'none' option exists. Users might need it (for "ReferenceOnly"), and some webui don't return it explicitly.
 	        //NOTICE: A1111 uses lowercase 'none' ('None' isn't working).
 	        var newOptions = choices.Select(c=>new TMP_Dropdown.OptionData(c)).ToList();
-	        if(!newOptions.Exists(opt => opt.text.ToLower()=="none")){ newOptions.Insert(0, new TMP_Dropdown.OptionData("none")); }
+	        if(!newOptions.Exists(opt => opt.text.ToLower()=="none")){ newOptions.Insert(0, new TMP_Dropdown.OptionData("None")); }
 
 	        dropdown.ClearOptions();
 	        dropdown.AddOptions(newOptions);
@@ -126,7 +177,8 @@ namespace spz {
 	            }
 	            else{ dropdown.SetValueWithoutNotify(prevIx); }
 
-	            pickDepth_ifWasNone &=  (prevChoice == "" || prevChoice.ToLower()=="none");
+	            // Only auto-pick depth on first fill (no prior selection). Explicit "None" must stick.
+	            pickDepth_ifWasNone &= string.IsNullOrEmpty(prevChoice);
 	            if(pickDepth_ifWasNone){//if we didn't have a value, ensure the dropdown defaults to 'Depth', rather than to 'None'.
 	                // Prefer XL depth when the active checkpoint looks like SDXL — first "*depth*" is often SD1.5 and causes Forge "cannot be multiplied" / SPZ "incorrect ControlNet" hint.
 	                // Map through option text: dropdown may have inserted lowercase "none" at index 0 while `choices` did not.
@@ -154,7 +206,7 @@ namespace spz {
 	        bool wantXl = false;
 	        try {
 	            string sd = SD_InputPanel_UI.instance != null ? SD_InputPanel_UI.instance.models?.selectedModel_name : null;
-	            wantXl = !string.IsNullOrEmpty(sd) && sd.IndexOf("xl", StringComparison.OrdinalIgnoreCase) >= 0;
+	            wantXl = CheckpointLooksXl(sd);
 	        } catch { /* dropdown refresh can run before input panel is ready */ }
 
 	        int anyDepth = -1, bestXl = -1, bestNonXl = -1;
@@ -162,14 +214,37 @@ namespace spz {
 	            string c = choices[i] ?? "";
 	            if (c.IndexOf("depth", StringComparison.OrdinalIgnoreCase) < 0) continue;
 	            if (anyDepth < 0) anyDepth = i;
-	            bool isXl = c.IndexOf("xl", StringComparison.OrdinalIgnoreCase) >= 0;
-	            if (isXl){ if (bestXl < 0) bestXl = i; }
+	            if (ControlNetModelLooksXl(c)){ if (bestXl < 0) bestXl = i; }
 	            else if (bestNonXl < 0) bestNonXl = i;
 	        }
 
 	        if (wantXl && bestXl >= 0) return bestXl;
 	        if (!wantXl && bestNonXl >= 0) return bestNonXl;
 	        return anyDepth;
+	    }
+
+	    public static bool CheckpointLooksXl(string checkpointName){
+	        if (string.IsNullOrEmpty(checkpointName)) return false;
+	        string n = checkpointName.ToLowerInvariant();
+	        return n.Contains("sdxl") || n.Contains("juggernautxl") || n.IndexOf("xl", StringComparison.Ordinal) >= 0;
+	    }
+
+	    public static bool ControlNetModelLooksXl(string cnModelName){
+	        if (string.IsNullOrEmpty(cnModelName)) return false;
+	        string n = cnModelName.ToLowerInvariant();
+	        if (n.Contains("sd15") || n.Contains("sd1.5") || n.Contains("v11")) return false;
+	        return n.Contains("sdxl") || n.Contains("diffusers_xl") || n.Contains("_xl_") || n.Contains("-xl-");
+	    }
+
+	    /// <summary>True when CN weight family does not match active SD checkpoint (Neo crashes: y is None).</summary>
+	    public static bool IsControlNetCheckpointFamilyMismatch(string cnModelName, string checkpointName){
+	        if (string.IsNullOrEmpty(cnModelName) || cnModelName.Equals("None", StringComparison.OrdinalIgnoreCase))
+	            return false;
+	        if (string.IsNullOrEmpty(checkpointName)) return false;
+	        // Flux.2 Klein: no SD1.5/SDXL ControlNet path — always skip legacy CN units.
+	        if (SD_OptionsPacket.CheckpointNeedsKleinModules(checkpointName))
+	            return true;
+	        return ControlNetModelLooksXl(cnModelName) != CheckpointLooksXl(checkpointName);
 	    }
 
 
