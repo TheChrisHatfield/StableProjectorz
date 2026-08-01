@@ -89,8 +89,9 @@ namespace spz {
 	    /// <summary>
 	    /// Flux.2 Klein: find an activated ControlNet unit (model None) whose "what to send"
 	    /// is ContentCam or CustomFile and return a disposable RGB copy for img2img init.
-	    /// Prefers CustomFile over ContentCam; scans unit 0..N in order within each preference.
-	    /// Collapsed/disabled units and units with a real CN model selected are ignored.
+	    /// Prefers ContentCam over CustomFile (mesh frustum for projection); scans unit 0..N
+	    /// in order within each preference. Collapsed/disabled units and units with a real CN
+	    /// model selected are ignored.
 	    /// </summary>
 	    public bool TryGetDisposableKleinImg2ImgInit(out Texture2D tex, out int unitIndex, out string sourceLabel){
 	        tex = null;
@@ -98,9 +99,9 @@ namespace spz {
 	        sourceLabel = "";
 	        if (_controlNet_units == null) return false;
 
-	        if (TryPickKleinInit(WhatImageToSend_CTRLNET.CustomFile, out tex, out unitIndex, out sourceLabel))
-	            return true;
 	        if (TryPickKleinInit(WhatImageToSend_CTRLNET.ContentCam, out tex, out unitIndex, out sourceLabel))
+	            return true;
+	        if (TryPickKleinInit(WhatImageToSend_CTRLNET.CustomFile, out tex, out unitIndex, out sourceLabel))
 	            return true;
 	        return false;
 	    }
@@ -111,15 +112,15 @@ namespace spz {
 
 	    /// <summary>
 	    /// Describes the preferred Klein init source without allocating a texture.
-	    /// Same preference order as TryGetDisposableKleinImg2ImgInit (CustomFile then ContentCam).
+	    /// Same preference order as TryGetDisposableKleinImg2ImgInit (ContentCam then CustomFile).
 	    /// </summary>
 	    public bool TryPeekKleinImg2ImgInitSource(out int unitIndex, out string sourceLabel){
 	        unitIndex = -1;
 	        sourceLabel = "";
 	        if (_controlNet_units == null) return false;
-	        if (TryPeekKleinInit(WhatImageToSend_CTRLNET.CustomFile, out unitIndex, out sourceLabel))
-	            return true;
 	        if (TryPeekKleinInit(WhatImageToSend_CTRLNET.ContentCam, out unitIndex, out sourceLabel))
+	            return true;
+	        if (TryPeekKleinInit(WhatImageToSend_CTRLNET.CustomFile, out unitIndex, out sourceLabel))
 	            return true;
 	        return false;
 	    }
