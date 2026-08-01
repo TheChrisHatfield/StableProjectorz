@@ -111,6 +111,22 @@ namespace spz {
 	    }
 
 	    /// <summary>
+	    /// Activated Klein co-opt unit armed for CustomFile but with no bitmap loaded.
+	    /// </summary>
+	    public bool HasArmedEmptyKleinCustomFile(){
+	        if (_controlNet_units == null) return false;
+	        for (int i = 0; i < _controlNet_units.Count; i++){
+	            var u = _controlNet_units[i];
+	            if (u == null || !u.isActivated) continue;
+	            if (u._whatImageToSend != WhatImageToSend_CTRLNET.CustomFile) continue;
+	            if (!u.is_currModel_none) continue;
+	            if (u.IsKleinImg2ImgInitSource()) continue; // has valid bitmap
+	            return true;
+	        }
+	        return false;
+	    }
+
+	    /// <summary>
 	    /// Describes the preferred Klein init source without allocating a texture.
 	    /// Same preference order as TryGetDisposableKleinImg2ImgInit (ContentCam then CustomFile).
 	    /// </summary>
