@@ -125,6 +125,9 @@ namespace spz {
 	        viewTex = TextureTools_SPZ.ResizeTexture2D_Exact_DestroySrc(viewTex, outW, outH);
 	        screenMask_skipAntiEdge = TextureTools_SPZ.ResizeTexture2D_Exact_DestroySrc(
 	            screenMask_skipAntiEdge, outW, outH);
+	        // Init without mask: Neo img2img still expects a mask; synthesize full-white at payload size.
+	        if (viewTex != null && screenMask_skipAntiEdge == null)
+	            screenMask_skipAntiEdge = TextureTools_SPZ.CreateSolidColorRGBA32(outW, outH, Color.white);
 
 	        intermediates_ =  new SD_GenRequestArgs_byproducts{
 	            screenSpaceMask_NE_disposableTex = screenMask_skipAntiEdge,

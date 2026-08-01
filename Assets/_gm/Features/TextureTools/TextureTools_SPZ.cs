@@ -26,6 +26,19 @@ namespace spz {
 	        return Convert.ToBase64String(imageBytes);
 	    }
 
+	    /// <summary>CPU-readable solid fill (e.g. full-white img2img mask when painter capture failed).</summary>
+	    public static Texture2D CreateSolidColorRGBA32(int width, int height, Color color){
+	        if (width <= 0 || height <= 0) return null;
+	        var tex = new Texture2D(width, height, TextureFormat.RGBA32, false);
+	        var c32 = (Color32)color;
+	        var pixels = new Color32[width * height];
+	        for (int i = 0; i < pixels.Length; i++)
+	            pixels[i] = c32;
+	        tex.SetPixels32(pixels);
+	        tex.Apply(updateMipmaps: false, makeNoLongerReadable: false);
+	        return tex;
+	    }
+
 	    /// <summary>
 	    /// Stretch-resize to exact WxH (CPU-readable RGBA32). Destroys <paramref name="src"/> when a new texture is created.
 	    /// Forge Neo Flux/Klein img2img asserts init and mask share a uniform scale — mismatch throws
