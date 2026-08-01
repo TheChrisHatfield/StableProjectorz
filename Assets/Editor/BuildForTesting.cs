@@ -10,17 +10,23 @@ using Debug = UnityEngine.Debug;
 /// Builds Win64 player to Build_IL2CPP/StableProjectorz.exe for batch mode.
 /// Invoked by build_for_testing.bat with -executeMethod BuildForTesting.BuildWin64
 ///
-/// WebUI Forge: After a successful build, if stable-diffusion-webui-forge is missing in project root we
-/// automatically clone it (git clone), then copy it into Build_IL2CPP so run_noQuickEdit.bat is present for auto-launch.
-/// Requires Git installed.
-/// Clean step: When cleaning before build, Build_IL2CPP contents are removed EXCEPT stable-diffusion-webui-forge
-/// so venv/models/user data in that folder are never overwritten or deleted. The folder is only referenced; we do not write into it during build beyond updating the launcher bat when the folder already exists.
+/// WebUI Forge / Neo: After a successful build, if stable-diffusion-webui-forge is missing in project root we
+/// automatically clone classic Forge (git clone), then copy it into Build_IL2CPP so a launch bat is present.
+/// Requires Git installed. Launch discovery also accepts stable-diffusion-webui-reForge (forge-neo-swap Phase A).
+/// Clean step: When cleaning before build, Build_IL2CPP contents are removed EXCEPT WebUI candidate folders
+/// (classic forge + reForge Neo) so venv/models/user data are never overwritten or deleted.
 /// </summary>
 public static class BuildForTesting
 {
 	public const string RelativeOutputExe = "Build_IL2CPP/StableProjectorz.exe";
 	/// <summary>Folder name in project root; cloned automatically during build if missing, then copied into the build.</summary>
 	public const string WebuiForgeFolderName = "stable-diffusion-webui-forge";
+	/// <summary>reForge Neo folder — preserved on clean; not auto-cloned in Phase A.</summary>
+	public const string WebuiForgeNeoFolderName = "stable-diffusion-webui-reForge";
+	static readonly string[] WebuiPreserveFolderNames = {
+		WebuiForgeNeoFolderName,
+		WebuiForgeFolderName,
+	};
 	const string WebuiForgeCloneUrl = "https://github.com/lllyasviel/stable-diffusion-webui-forge.git";
 	static readonly string[] BeeStateFilesRelative =
 	{
@@ -239,14 +245,23 @@ public static class BuildForTesting
 		}
 	}
 
-	/// <summary>Delete all contents of the build output directory except stable-diffusion-webui-forge so venv/models/user data are never overwritten or deleted by the build.</summary>
+	/// <summary>Delete all contents of the build output directory except WebUI candidate folders (classic Forge + reForge Neo) so venv/models/user data are never overwritten or deleted by the build.</summary>
 	static void DeleteBuildOutputExceptForgeFolder(string outputDir)
 	{
 		if (!Directory.Exists(outputDir)) return;
 		foreach (string path in Directory.GetFileSystemEntries(outputDir))
 		{
 			string name = Path.GetFileName(path);
-			if (string.Equals(name, WebuiForgeFolderName, System.StringComparison.OrdinalIgnoreCase))
+			bool preserve = false;
+			foreach (string keep in WebuiPreserveFolderNames)
+			{
+				if (string.Equals(name, keep, System.StringComparison.OrdinalIgnoreCase))
+				{
+					preserve = true;
+					break;
+				}
+			}
+			if (preserve)
 			{
 				// Preserve this folder; do not delete or write into it during clean.
 				continue;

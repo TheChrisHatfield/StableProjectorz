@@ -13,11 +13,20 @@ namespace spz {
 	/// When the built exe runs, this component auto-launches the WebUI batch file (run_noQuickEdit.bat).
 	/// Aggressive: env SPZ_WEBUI_RUN_PATH, then search exe dir + dataPath + CurrentDirectory, each up to 10 parent levels.
 	/// Retries at 0.5s, 1.5s, 3s, 6s, 12s until bat is found and launched.
+	/// Folder candidates: reForge Neo preferred, then classic Forge (spec forge-neo-swap R1).
 	/// </summary>
 	public class LaunchWebUIBatFile : MonoBehaviour{
 	    public static LaunchWebUIBatFile instance { get; private set; } = null;
 
+	    /// <summary>Legacy classic Forge folder (serialized RestartTheWebui defaults, Build_IL2CPP classic installs).</summary>
 	    public const string WebuiFolderName = "stable-diffusion-webui-forge";
+	    /// <summary>reForge Neo folder name (preferred discovery when both exist).</summary>
+	    public const string WebuiFolderNameNeo = "stable-diffusion-webui-reForge";
+	    /// <summary>Search order: Neo first, then classic. Env <c>SPZ_WEBUI_RUN_PATH</c> still wins.</summary>
+	    public static readonly string[] WebuiCandidateFolderNames = new string[] {
+	        WebuiFolderNameNeo,
+	        WebuiFolderName,
+	    };
 	    public static readonly string[] WebuiLaunchFileNames = new string[] { "run_noQuickEdit.bat", "run.bat", "run_forge.bat", "run_noQuickEdit.lnk" };
 	    /// <summary>Gradio: prefer not to open a browser (some versions).</summary>
 	    const string GradioSuppressInBrowser_bat = "set \"GRADIO_INBROWSER=0\"\r\n";
@@ -317,28 +326,15 @@ namespace spz {
             string currentDir = root;
             for (int depth = 0; depth < MaxParentDepth; depth++) {
                 if (string.IsNullOrEmpty(currentDir)) break;
-                string forgeDir = Path.Combine(currentDir, WebuiFolderName);
-                bool exists = false;
-                try { exists = Directory.Exists(forgeDir); } catch { }
-                if (exists) {
-                    string found = TryPickLaunchFileInForgeDir(forgeDir, checkedPaths);
-                    if (!string.IsNullOrEmpty(found)) {
-                        UnityEngine.Debug.Log($"[LaunchWebUI] Search [{depth}] {forgeDir} → FOUND: {found}");
-                        return found;
-                    }
-                    UnityEngine.Debug.LogWarning(
-                        $"[LaunchWebUI] Search [{depth}] {forgeDir} → EMPTY (folder exists but no run_noQuickEdit.bat / run.bat / .lnk). Skipping stub.");
-                } else {
-                    UnityEngine.Debug.Log($"[LaunchWebUI] Search [{depth}] {forgeDir} → not found");
-                }
+                string foundAtDepth = TryPickLaunchAmongCandidateFolders(currentDir, depth, checkedPaths, underBuildIl2Cpp: false);
+                if (!string.IsNullOrEmpty(foundAtDepth))
+                    return foundAtDepth;
                 // Built player often lives under Build_IL2CPP/; empty repo-root forge stub must not hide that install.
-                string buildIl2CppForge = Path.Combine(currentDir, "Build_IL2CPP", WebuiFolderName);
-                if (Directory.Exists(buildIl2CppForge)) {
-                    string foundBuild = TryPickLaunchFileInForgeDir(buildIl2CppForge, checkedPaths);
-                    if (!string.IsNullOrEmpty(foundBuild)) {
-                        UnityEngine.Debug.Log($"[LaunchWebUI] Search [{depth}] Build_IL2CPP fallback → FOUND: {foundBuild}");
+                string buildIl2CppRoot = Path.Combine(currentDir, "Build_IL2CPP");
+                if (Directory.Exists(buildIl2CppRoot)) {
+                    string foundBuild = TryPickLaunchAmongCandidateFolders(buildIl2CppRoot, depth, checkedPaths, underBuildIl2Cpp: true);
+                    if (!string.IsNullOrEmpty(foundBuild))
                         return foundBuild;
-                    }
                 }
                 try {
                     var parent = Directory.GetParent(currentDir);
@@ -348,10 +344,52 @@ namespace spz {
             }
         }
 
-        string msg = $"[LaunchWebUI] Bat NOT FOUND. Roots: [{string.Join(", ", roots)}]. Up to {MaxParentDepth} levels each (also checks Build_IL2CPP/{WebuiFolderName}). Set {EnvVarWebuiPath} to full bat path. Note: repo-root {WebuiFolderName} may be an empty stub.";
+        string candidates = string.Join(" | ", WebuiCandidateFolderNames);
+        string msg = $"[LaunchWebUI] Bat NOT FOUND. Roots: [{string.Join(", ", roots)}]. Up to {MaxParentDepth} levels each (also checks Build_IL2CPP/{{{candidates}}}). Set {EnvVarWebuiPath} to full bat path. Note: empty stub folders are skipped.";
         UnityEngine.Debug.LogWarning(msg);
         if (printStatusText_ifNotFound && Viewport_StatusText.instance != null)
             Viewport_StatusText.instance.ShowStatusText(msg, false, 10, false);
+        return "";
+    }
+
+    /// <summary>Candidate folder names under <paramref name="parentDir"/> in Neo-first order (pure helper for tests).</summary>
+    public static string[] GetCandidateWebuiDirsUnder(string parentDir) {
+        if (string.IsNullOrEmpty(parentDir))
+            return System.Array.Empty<string>();
+        var dirs = new string[WebuiCandidateFolderNames.Length];
+        for (int i = 0; i < WebuiCandidateFolderNames.Length; i++)
+            dirs[i] = Path.Combine(parentDir, WebuiCandidateFolderNames[i]);
+        return dirs;
+    }
+
+    /// <summary>Resolve a launch file under one parent directory (Neo-first). Public for EditMode contracts / forge-neo-swap R1.</summary>
+    public static string TryResolveLaunchFileUnderParent(string parentDir) {
+        return TryPickLaunchAmongCandidateFolders(parentDir, depth: 0, checkedPaths: null, underBuildIl2Cpp: false);
+    }
+
+    static string TryPickLaunchAmongCandidateFolders(
+        string parentDir,
+        int depth,
+        System.Collections.Generic.List<string> checkedPaths,
+        bool underBuildIl2Cpp) {
+        if (string.IsNullOrEmpty(parentDir)) return "";
+        foreach (string folderName in WebuiCandidateFolderNames) {
+            string forgeDir = Path.Combine(parentDir, folderName);
+            bool exists = false;
+            try { exists = Directory.Exists(forgeDir); } catch { }
+            string label = underBuildIl2Cpp ? $"Build_IL2CPP/{folderName}" : folderName;
+            if (!exists) {
+                UnityEngine.Debug.Log($"[LaunchWebUI] Search [{depth}] {forgeDir} → not found");
+                continue;
+            }
+            string found = TryPickLaunchFileInForgeDir(forgeDir, checkedPaths);
+            if (!string.IsNullOrEmpty(found)) {
+                UnityEngine.Debug.Log($"[LaunchWebUI] Search [{depth}] {label} → FOUND: {found}");
+                return found;
+            }
+            UnityEngine.Debug.LogWarning(
+                $"[LaunchWebUI] Search [{depth}] {forgeDir} → EMPTY (folder exists but no run_noQuickEdit.bat / run.bat / .lnk). Skipping stub.");
+        }
         return "";
     }
 
@@ -521,7 +559,7 @@ namespace spz {
 	        if (string.IsNullOrEmpty(filePath)) {
 	            UnityEngine.Debug.Log("[LaunchWebUI] No bat file path; skipping launch (see above for search path).");
 	            ClearSdLoadingNotification(
-	                "Stable Diffusion bat not found next to the EXE (stable-diffusion-webui-forge). Set SPZ_WEBUI_RUN_PATH.",
+	                "Stable Diffusion bat not found next to the EXE (stable-diffusion-webui-reForge or stable-diffusion-webui-forge). Set SPZ_WEBUI_RUN_PATH.",
 	                false);
 	            _suppressBrowserOpenForCurrentLaunch = false;
 	            return false;
