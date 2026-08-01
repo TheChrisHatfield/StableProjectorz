@@ -65,7 +65,11 @@ namespace spz {
 
 	    public int Num_Active_Reference_CTRLUnit() => _controlNet_units.Count( u=>u.isActivated && u.isReferencePreprocessor() );
 
-	    /// <summary>Agent / MCP: set every unit model dropdown to None. Returns how many units were cleared.</summary>
+	    /// <summary>
+	    /// Agent / MCP: set every unit model dropdown to None and clear ContentCam/CustomFile
+	    /// what-to-send so Klein img2img co-opt is not left armed after a "clear CN" / Klein preset.
+	    /// Returns how many units had their model set to None.
+	    /// </summary>
 	    public int ClearAllUnitModelsToNone(){
 	        int n = 0;
 	        if (_controlNet_units == null) return 0;
@@ -73,6 +77,11 @@ namespace spz {
 	            var u = _controlNet_units[i];
 	            if (u == null || u.dropdowns == null) continue;
 	            if (u.dropdowns.TrySelectModelNone()) n++;
+	            // Model None + leftover ContentCam/CustomFile would still force Klein img2img.
+	            if (u._whatImageToSend == WhatImageToSend_CTRLNET.ContentCam
+	                || u._whatImageToSend == WhatImageToSend_CTRLNET.CustomFile){
+	                u.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.None, allowOpenFileDialog: false);
+	            }
 	        }
 	        return n;
 	    }
