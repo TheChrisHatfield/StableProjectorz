@@ -141,6 +141,7 @@ public sealed class AgentBridgeAddonContractTests {
 		Assert.That(unit, Does.Contain("isActivated"));
 		Assert.That(unit, Does.Contain("is_currModel_none"));
 		Assert.That(unit, Does.Contain("TryGetDisposableKleinImg2ImgInit"));
+		Assert.That(unit, Does.Contain("Bail out before allocating disposable bitmaps"));
 		Assert.That(list, Does.Contain("Collapsed/disabled units"));
 	}
 

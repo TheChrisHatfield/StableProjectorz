@@ -171,10 +171,7 @@ namespace spz {
 	        if(isForDepth() && ignoreDepthOrNorms){ return null; }
 	        if(isForNormals() && ignoreDepthOrNorms){ return null; }
 
-	        Texture2D imageToSend = getDisposableTexture_toSend(intermediates);
-
-	        // XL ControlNet + SD1.5 checkpoint (or reverse) crashes Neo CN forward (y is None / shape assert).
-	        // Flux.2 Klein: all legacy CN skipped (same helper). Image may still be used as Klein img2img init.
+	        // Bail out before allocating disposable bitmaps (CustomFile copies are not stored in intermediates).
 	        string cnModel = currModelName();
 	        string sdCkpt = null;
 	        try { sdCkpt = SD_InputPanel_UI.instance?.models?.selectedModel_name; } catch { /* */ }
@@ -190,7 +187,6 @@ namespace spz {
 
 	        if (isForInpaint()){
 	            var trib = WorkflowRibbon_UI.instance;
-	            bool hasMask = trib.has_brushed_mask() || trib.has_auto_mask();
 	            bool isImg2Img = trib.isMode_using_img2img();
 
 	            if(!isImg2Img || !trib.has_brushed_mask() ){ return null; }//indicate that we won't participate.
@@ -203,6 +199,8 @@ namespace spz {
 	                intermediates.screenSpaceMask_WE_disposableTex = withAntiEdge_;
 	            }
 	        }
+
+	        Texture2D imageToSend = getDisposableTexture_toSend(intermediates);
 
 	        string inputImgStr = TextureTools_SPZ.TextureToBase64(imageToSend);
 	        HowToResizeImg_CTRLNET resizeMode =  _imgsDisplay._whatImageToSend==WhatImageToSend_CTRLNET.CustomFile?
