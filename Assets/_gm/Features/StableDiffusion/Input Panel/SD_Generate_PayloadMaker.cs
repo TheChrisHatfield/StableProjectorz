@@ -99,18 +99,32 @@ namespace spz {
 	                UnityEngine.Object.Destroy(screenMask_skipAntiEdge);
 	                screenMask_skipAntiEdge = null;
 	            }
+	            if (screenMask_withAntiEdge != null){
+	                UnityEngine.Object.Destroy(screenMask_withAntiEdge);
+	                screenMask_withAntiEdge = null;
+	            }
+	            intermediates_ = new SD_GenRequestArgs_byproducts{
+	                screenSpaceMask_NE_disposableTex = null,
+	                screenSpaceMask_WE_disposableTex = null,
+	                usualView_disposableTexture = null,
+	            };
+	            payload_ = new SD_img2img_payload{
+	                width = 0, height = 0,
+	                init_images = new string[]{ "" },
+	                mask = "",
+	                alwayson_scripts = new Dictionary<string,AlwaysOn_Value>(),
+	            };
 	            if (Viewport_StatusText.instance != null)
 	                Viewport_StatusText.instance.ShowStatusText(
 	                    "img2img aborted: invalid width/height in SD input panel.", false, 5f, false);
+	            return;
 	        }
 	        // Neo Flux/Klein: init + mask must share aspect (uniform scale). CustomFile/ContentCam
 	        // often disagree with the screen mask — stretch both outbound bitmaps to payload WxH.
 	        // Keep withAntiEdge at native size for SPZ projection compositing.
-	        else {
-	            viewTex = TextureTools_SPZ.ResizeTexture2D_Exact_DestroySrc(viewTex, outW, outH);
-	            screenMask_skipAntiEdge = TextureTools_SPZ.ResizeTexture2D_Exact_DestroySrc(
-	                screenMask_skipAntiEdge, outW, outH);
-	        }
+	        viewTex = TextureTools_SPZ.ResizeTexture2D_Exact_DestroySrc(viewTex, outW, outH);
+	        screenMask_skipAntiEdge = TextureTools_SPZ.ResizeTexture2D_Exact_DestroySrc(
+	            screenMask_skipAntiEdge, outW, outH);
 
 	        intermediates_ =  new SD_GenRequestArgs_byproducts{
 	            screenSpaceMask_NE_disposableTex = screenMask_skipAntiEdge,

@@ -73,6 +73,21 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 	}
 
 	[Test]
+	public void Img2img_InvalidPanelSize_AbortsBeforePayloadEncode() {
+		string src = File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs"));
+		Assert.That(src, Does.Contain("invalid width/height in SD input panel"));
+		int badSize = src.IndexOf("outW <= 0 || outH <= 0");
+		Assert.That(badSize, Is.GreaterThan(0));
+		int earlyReturn = src.IndexOf("return;", badSize);
+		int resize = src.IndexOf("ResizeTexture2D_Exact_DestroySrc", badSize);
+		Assert.That(earlyReturn, Is.GreaterThan(badSize));
+		Assert.That(resize, Is.GreaterThan(earlyReturn),
+			"Invalid WxH must return before stretching/encoding init+mask.");
+	}
+
+	[Test]
 	public void SoftInpaint_OnlyAddedOnImg2imgPath() {
 		string path = Path.Combine(
 			Directory.GetCurrentDirectory(),
