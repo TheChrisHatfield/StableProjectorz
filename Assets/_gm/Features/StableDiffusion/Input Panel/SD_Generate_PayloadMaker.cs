@@ -240,6 +240,40 @@ namespace spz {
 	        }
 	        else
 		        denoiseStrength_ = 1.0f;
+
+	        // Flux.2 Klein: replace viewport init with ControlNet unit ContentCam/CustomFile when present.
+	        // CN model stays None — image is img2img init only. Use Original + redo denoise so LatentNothing
+	        // (ProjectionsMasking) does not wipe the reference at denoise=1.
+	        // Skip when forceFullWhiteMask (Gen BG / full-white path) — those must keep silhouette/view init.
+	        if (!forceFullWhiteMask
+	            && StableDiffusion_Hub.IsActiveCheckpointKlein()
+	            && SD_ControlNetsList_UI.instance != null
+	            && SD_ControlNetsList_UI.instance.TryGetDisposableKleinImg2ImgInit(
+	                out Texture2D kleinInit, out int unitIx, out string srcLabel)
+	            && kleinInit != null){
+	            if (viewTex_ != null){
+	                UnityEngine.Object.Destroy(viewTex_);
+	            }
+	            viewTex_ = kleinInit;
+	            inpaint_fill_ = InpaintingFill.Original;
+	            float redo = SD_WorkflowOptionsRibbon_UI.instance != null
+	                ? SD_WorkflowOptionsRibbon_UI.instance.denoisingStrength : 0.45f;
+	            denoiseStrength_ = Mathf.Clamp(Mathf.Max(redo, 0.15f), 0.15f, 0.85f);
+	            // Full-frame edit when no brush mask / projections mode.
+	            if (forceFullWhiteMask
+	                || WorkflowRibbon_UI.instance.currentMode() == WorkflowRibbon_CurrMode.ProjectionsMasking
+	                || !WorkflowRibbon_UI.instance.has_brushed_mask()){
+	                if (screenMask_skipAntiEdge_ != null) UnityEngine.Object.Destroy(screenMask_skipAntiEdge_);
+	                if (screenMask_withAntiEdge_ != null) UnityEngine.Object.Destroy(screenMask_withAntiEdge_);
+	                painter.GetDisposable_ScreenMask(forceFullWhite: true,
+	                    out screenMask_skipAntiEdge_, out screenMask_withAntiEdge_);
+	            }
+	            if (Viewport_StatusText.instance != null){
+	                Viewport_StatusText.instance.ShowStatusText(
+	                    $"Klein img2img init from ControlNet {unitIx} ({srcLabel}), denoise {denoiseStrength_:0.00}.",
+	                    false, 4f, false);
+	            }
+	        }
 	    }
 
 

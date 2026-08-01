@@ -125,10 +125,12 @@ public sealed class AgentBridgeAddonContractTests {
 		string hub = File.ReadAllText(RepoPath(
 			"Assets", "_gm", "Features", "StableDiffusion", "StableDiffusion_Hub.cs"));
 		Assert.That(hub, Does.Contain("HasKleinImg2ImgInitSource()"));
+		Assert.That(hub, Does.Contain("!isMakingBackgrounds"));
 		string payload = File.ReadAllText(RepoPath(
 			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs"));
 		Assert.That(payload, Does.Contain("TryGetDisposableKleinImg2ImgInit"));
 		Assert.That(payload, Does.Contain("Klein img2img init from ControlNet"));
+		Assert.That(payload, Does.Contain("!forceFullWhiteMask"));
 		string imgs = File.ReadAllText(RepoPath(
 			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "ControlNetUnit_ImagesDisplay.cs"));
 		Assert.That(imgs, Does.Contain("HasValidKleinImg2ImgInit"));
