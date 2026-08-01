@@ -244,5 +244,7 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 		Assert.That(src, Does.Not.Contain("prevChoice.ToLower()==\"none\")"));
 		Assert.That(src, Does.Contain("pickDepth_ifWasNone &= string.IsNullOrEmpty(prevChoice)"));
 		Assert.That(src, Does.Contain("CheckpointNeedsKleinModules(sd)"));
+		Assert.That(src, Does.Contain("chosen.Equals(\"none\""));
+		Assert.That(src, Does.Not.Contain("Contains(\"none\") ? \"None\""));
 	}
 }
