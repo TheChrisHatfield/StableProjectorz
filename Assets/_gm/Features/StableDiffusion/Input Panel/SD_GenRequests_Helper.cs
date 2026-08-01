@@ -143,6 +143,24 @@ namespace spz {
 	            SD_GenRequestArgs_byproducts intermediates;
 	            _payload_maker.Create_img2img_payload(isMakingBackgrounds, out payload, out intermediates);
 
+	            // Empty init_images crashes / no-ops Neo img2img (e.g. ContentCam capture failed after Klein force).
+	            if (payload == null
+	                || payload.init_images == null
+	                || payload.init_images.Length == 0
+	                || string.IsNullOrEmpty(payload.init_images[0])){
+	                intermediates?.Dispose();
+	                _finalPreparations_beforeGen = false;
+	                _isGeneratingWhat = Generate_RequestingWhat.nothing;
+	                if (SceneResolution_MGR.LastImg2imgWillAppliedPrep)
+		                SceneResolution_MGR.RevertImg2ImgAccumBoostIfPreRequestFailed();
+	                if (Viewport_StatusText.instance != null)
+	                    Viewport_StatusText.instance.ShowStatusText(
+	                        "img2img aborted: missing init image (ContentCam/CustomFile capture failed).",
+	                        false, 5f, false);
+	                UserCameras_Permissions.Force_KeepRenderingCameras(false);
+	                yield break;
+	            }
+
 	            _generate_sender.Send_GenerateRequest(payload, OnProgressResponse, OnGeneratedResult);
 
 	            _latestGenData = GenData2D_Maker.make_img2img(payload, intermediates, genData_kind);

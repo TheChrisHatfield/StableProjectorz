@@ -136,6 +136,9 @@ public sealed class AgentBridgeAddonContractTests {
 		Assert.That(payload, Does.Contain("Klein img2img init from ControlNet"));
 		Assert.That(payload, Does.Contain("do not TryGet again"));
 		Assert.That(payload, Does.Contain("!forceFullWhiteMask"));
+		string genReq = File.ReadAllText(RepoPath(
+			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_GenRequests_Helper.cs"));
+		Assert.That(genReq, Does.Contain("img2img aborted: missing init image"));
 		string imgs = File.ReadAllText(RepoPath(
 			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "ControlNetUnit_ImagesDisplay.cs"));
 		Assert.That(imgs, Does.Contain("HasValidKleinImg2ImgInit"));
