@@ -73,6 +73,19 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 	}
 
 	[Test]
+	public void Img2img_InitWithoutMask_SynthesizesFullWhiteMask() {
+		string maker = File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs"));
+		string tools = File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "TextureTools", "TextureTools_SPZ.cs"));
+		Assert.That(tools, Does.Contain("CreateSolidColorRGBA32"));
+		Assert.That(maker, Does.Contain("CreateSolidColorRGBA32(outW, outH, Color.white)"));
+		Assert.That(maker, Does.Contain("viewTex != null && screenMask_skipAntiEdge == null"));
+	}
+
+	[Test]
 	public void Img2img_InvalidPanelSize_AbortsBeforePayloadEncode() {
 		string src = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
