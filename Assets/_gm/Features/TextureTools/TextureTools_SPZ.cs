@@ -27,7 +27,7 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Stretch-resize to exact WxH (readable RGBA). Destroys <paramref name="src"/> when a new texture is created.
+	    /// Stretch-resize to exact WxH (CPU-readable RGBA32). Destroys <paramref name="src"/> when a new texture is created.
 	    /// Forge Neo Flux/Klein img2img asserts init and mask share a uniform scale — mismatch throws
 	    /// "Only uniform Scaling is supported".
 	    /// </summary>
@@ -37,7 +37,15 @@ namespace spz {
 	        if (src.width == width && src.height == height) return src;
 	        var rt = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32);
 	        Graphics.Blit(src, rt);
-	        Texture2D resized = RenderTextureToTexture2D(rt);
+	        // Explicit RGBA32 + ReadPixels so EncodeToPNG/TextureToBase64 always see CPU pixels
+	        // (RenderTextureToTexture2D graphicsFormat can be non-PNG-friendly on some GPUs).
+	        var resized = new Texture2D(width, height, TextureFormat.RGBA32, false);
+	        resized.filterMode = FilterMode.Bilinear;
+	        var prev = RenderTexture.active;
+	        RenderTexture.active = rt;
+	        resized.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+	        resized.Apply(updateMipmaps: false, makeNoLongerReadable: false);
+	        RenderTexture.active = prev;
 	        RenderTexture.ReleaseTemporary(rt);
 	        UnityEngine.Object.Destroy(src);
 	        return resized;

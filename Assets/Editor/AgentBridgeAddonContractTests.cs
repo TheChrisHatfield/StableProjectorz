@@ -145,6 +145,8 @@ public sealed class AgentBridgeAddonContractTests {
 		string texTools = File.ReadAllText(RepoPath(
 			"Assets", "_gm", "Features", "TextureTools", "TextureTools_SPZ.cs"));
 		Assert.That(texTools, Does.Contain("ResizeTexture2D_Exact_DestroySrc"));
+		Assert.That(texTools, Does.Contain("TextureFormat.RGBA32"));
+		Assert.That(texTools, Does.Contain("ReadPixels"));
 		string genReq = File.ReadAllText(RepoPath(
 			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_GenRequests_Helper.cs"));
 		Assert.That(genReq, Does.Contain("img2img aborted: missing init image"));
