@@ -503,6 +503,14 @@ namespace spz {
 	                return;
 	            }
 	            applied["what_to_send"] = unit._whatImageToSend.ToString();
+	            if (want == WhatImageToSend_CTRLNET.CustomFile
+	                && unit.isActivated
+	                && unit.is_currModel_none
+	                && !unit.IsKleinImg2ImgInitSource()){
+	                fail("what_to_send=CustomFile but no image is loaded on unit " + unitIx
+	                     + ". Load a CustomFile or use ContentCam.");
+	                return;
+	            }
 	        }
 	        if (HasBool(prms, "activated")){
 	            bool wantOpen = prms["activated"].Value<bool>();
@@ -609,7 +617,21 @@ namespace spz {
 	            ["width"] = w,
 	            ["height"] = h,
 	            ["clear_controlnet_models"] = true,
-	        }, ok, fail);
+	        }, result => {
+	            // Arm ContentCam co-opt so Klein Gen Art uses mesh-aligned img2img, not bare txt2img.
+	            var cn = SD_ControlNetsList_UI.instance;
+	            var unit = cn != null ? cn.GetUnit(0) : null;
+	            bool armed = false;
+	            if (unit != null){
+	                armed = unit.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.ContentCam, allowOpenFileDialog: false);
+	                if (armed) unit.TrySetActivated(true);
+	            }
+	            if (result is Dictionary<string, object> dict){
+	                dict["klein_contentcam_armed"] = armed && unit != null && unit.IsKleinImg2ImgInitSource();
+	                if (unit != null) dict["klein_what_to_send"] = unit._whatImageToSend.ToString();
+	            }
+	            ok(result);
+	        }, fail);
 	    }
 
 
