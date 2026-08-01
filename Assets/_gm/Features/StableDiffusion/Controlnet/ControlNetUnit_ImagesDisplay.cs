@@ -109,11 +109,22 @@ namespace spz {
 
 
 	    public Texture2D GetCustomImg_sysFile_disposableCpy(){
-	        if(_myCustomImg_from_sysFile == null){ return null; }
-	        var copy = new Texture2D( _myCustomImg_from_sysFile.tex.width,  _myCustomImg_from_sysFile.tex.height, 
-	                                  _myCustomImg_from_sysFile.tex.format,  mipChain:_myCustomImg_from_sysFile.tex.mipmapCount>1);
-	        Graphics.CopyTexture(_myCustomImg_from_sysFile.tex, copy);
-	        return copy;
+	        if(_myCustomImg_from_sysFile == null || _myCustomImg_from_sysFile.tex == null){ return null; }
+	        Texture2D src = _myCustomImg_from_sysFile.tex;
+	        // EncodeToPNG / TextureToBase64 need a CPU-readable RGBA bitmap.
+	        // Graphics.CopyTexture only updates GPU memory and leaves EncodeToPNG with blank/garbage pixels.
+	        if (src.isReadable){
+	            var copy = new Texture2D(src.width, src.height, TextureFormat.RGBA32, false);
+	            copy.filterMode = src.filterMode;
+	            copy.SetPixels32(src.GetPixels32());
+	            copy.Apply(updateMipmaps: false, makeNoLongerReadable: false);
+	            return copy;
+	        }
+	        var rt = RenderTexture.GetTemporary(src.width, src.height, 0, RenderTextureFormat.ARGB32);
+	        Graphics.Blit(src, rt);
+	        Texture2D fromRt = TextureTools_SPZ.RenderTextureToTexture2D(rt);
+	        RenderTexture.ReleaseTemporary(rt);
+	        return fromRt;
 	    }
 
 	    /// <summary>
