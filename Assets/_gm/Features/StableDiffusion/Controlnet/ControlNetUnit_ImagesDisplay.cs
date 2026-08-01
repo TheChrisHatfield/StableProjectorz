@@ -116,6 +116,42 @@ namespace spz {
 	        return copy;
 	    }
 
+	    /// <summary>
+	    /// Flux.2 Klein has no SD/SDXL ControlNet — co-opt ContentCam / CustomFile "what to send"
+	    /// as img2img init instead of alwayson ControlNet.
+	    /// </summary>
+	    public bool IsKleinImg2ImgInitSource(){
+	        return HasValidKleinImg2ImgInit();
+	    }
+
+	    /// <summary>True only when a real init bitmap can be produced (not an empty CustomFile slot).</summary>
+	    public bool HasValidKleinImg2ImgInit(){
+	        if (_whatImageToSend == WhatImageToSend_CTRLNET.CustomFile)
+	            return _myCustomImg_from_sysFile != null && _myCustomImg_from_sysFile.tex != null;
+	        if (_whatImageToSend == WhatImageToSend_CTRLNET.ContentCam)
+	            return UserCameras_MGR.instance != null && UserCameras_MGR.instance.camTextures != null;
+	        return false;
+	    }
+
+	    /// <summary>Disposable RGB init for Klein img2img. Caller must Destroy.</summary>
+	    public Texture2D TryGetDisposableKleinImg2ImgInit(out string sourceLabel){
+	        sourceLabel = "";
+	        if (!HasValidKleinImg2ImgInit()) return null;
+	        if (_whatImageToSend == WhatImageToSend_CTRLNET.CustomFile){
+	            Texture2D cpy = GetCustomImg_sysFile_disposableCpy();
+	            if (cpy == null) return null;
+	            sourceLabel = "CustomFile";
+	            return cpy;
+	        }
+	        if (_whatImageToSend == WhatImageToSend_CTRLNET.ContentCam){
+	            Texture2D view = UserCameras_MGR.instance.camTextures.GetDisposable_ContentCamTexture();
+	            if (view == null) return null;
+	            sourceLabel = "ContentCam";
+	            return view;
+	        }
+	        return null;
+	    }
+
 
 
 	    // For example to also show this texture in some preview-thumbnail elsewhere.

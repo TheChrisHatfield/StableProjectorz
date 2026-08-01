@@ -20,6 +20,12 @@ namespace spz {
 
 	    public static string API_URL => Connection_MGR.A1111_IP_AND_PORT + "/controlnet";
 
+	    /// <summary>
+	    /// Neo/Forge UI default when <c>/controlnet/settings</c> is absent and sysinfo Config is still 0
+	    /// (forge-neo-swap R3). Matches Forge Neo / reForge <c>control_net_unit_count</c> default.
+	    /// </summary>
+	    public const int DefaultCtrlNetUnitCountWhenUnknown = 3;
+
 	    //will be fetched from network, via API json:
 	    public CTRLnets_ModelList _models { get; private set; }  = new CTRLnets_ModelList();
 	    public CTRLnets_PreprocessorsList _preprocessors_list { get; private set; }  = new CTRLnets_PreprocessorsList();
@@ -58,6 +64,63 @@ namespace spz {
 	    }
 
 	    public int Num_Active_Reference_CTRLUnit() => _controlNet_units.Count( u=>u.isActivated && u.isReferencePreprocessor() );
+
+	    /// <summary>Agent / MCP: set every unit model dropdown to None. Returns how many units were cleared.</summary>
+	    public int ClearAllUnitModelsToNone(){
+	        int n = 0;
+	        if (_controlNet_units == null) return 0;
+	        for (int i = 0; i < _controlNet_units.Count; i++){
+	            var u = _controlNet_units[i];
+	            if (u == null || u.dropdowns == null) continue;
+	            if (u.dropdowns.TrySelectModelNone()) n++;
+	        }
+	        return n;
+	    }
+
+	    /// <summary>
+	    /// Flux.2 Klein: find a ControlNet unit whose "what to send" is ContentCam or CustomFile
+	    /// and return a disposable RGB copy for img2img init (CN weights are not used).
+	    /// Prefers CustomFile over ContentCam; scans unit 0..N in order within each preference.
+	    /// </summary>
+	    public bool TryGetDisposableKleinImg2ImgInit(out Texture2D tex, out int unitIndex, out string sourceLabel){
+	        tex = null;
+	        unitIndex = -1;
+	        sourceLabel = "";
+	        if (_controlNet_units == null) return false;
+
+	        if (TryPickKleinInit(WhatImageToSend_CTRLNET.CustomFile, out tex, out unitIndex, out sourceLabel))
+	            return true;
+	        if (TryPickKleinInit(WhatImageToSend_CTRLNET.ContentCam, out tex, out unitIndex, out sourceLabel))
+	            return true;
+	        return false;
+	    }
+
+	    public bool HasKleinImg2ImgInitSource(){
+	        if (_controlNet_units == null) return false;
+	        for (int i = 0; i < _controlNet_units.Count; i++){
+	            var u = _controlNet_units[i];
+	            // Must be able to produce a bitmap — empty CustomFile must not force img2img.
+	            if (u != null && u.IsKleinImg2ImgInitSource()) return true;
+	        }
+	        return false;
+	    }
+
+	    bool TryPickKleinInit(WhatImageToSend_CTRLNET want, out Texture2D tex, out int unitIndex, out string sourceLabel){
+	        tex = null;
+	        unitIndex = -1;
+	        sourceLabel = "";
+	        for (int i = 0; i < _controlNet_units.Count; i++){
+	            var u = _controlNet_units[i];
+	            if (u == null || u._whatImageToSend != want) continue;
+	            Texture2D got = u.TryGetDisposableKleinImg2ImgInit(out string label);
+	            if (got == null) continue;
+	            tex = got;
+	            unitIndex = i;
+	            sourceLabel = label;
+	            return true;
+	        }
+	        return false;
+	    }
 
 	    public List<string> curentModels_of_DepthOrNormal_units(){
 	        var names = new List<string>();
@@ -197,7 +260,11 @@ namespace spz {
 	        int num_ctrlnetUnits = 0;
 	        System.Action<int> on_set_numUnits = (int num)=>{ num_ctrlnetUnits=num; };
 	        yield return crtnMgr.StartCoroutine( FetchData_numCtrlUnits(on_set_numUnits) );
-	        if(num_ctrlnetUnits==0){ yield break; }//wasn't able to get the number.
+	        // Resolve never returns 0 under normal Neo/Forge defaults; keep guard for safety.
+	        if(num_ctrlnetUnits==0){
+	            UnityEngine.Debug.LogWarning("[ControlNet] Unit count resolved to 0; skipping EnsureExact this pass (will retry on next fetch).");
+	            yield break;
+	        }
 
 	        EnsureExact_num_CTRLnets( num_ctrlnetUnits, instantDestroy_excess:true );
 
@@ -228,31 +295,65 @@ namespace spz {
 
 
 	    // Attempts to get parameter 'number of control units', from webui.
-	    // Tries to get using legacy api (automatic1111),
-	    // and if failed, fetches from new Forge webui instead (we started using it since March 2024)
+	    // Tries legacy A1111 GET /controlnet/settings; Neo/reForge omit that route (404 expected).
+	    // Then sysinfo Config; brief retry for race; then keep existing units or Neo default 3 (forge-neo-swap R3).
 	    IEnumerator FetchData_numCtrlUnits( System.Action<int> on_set_numUnits ){
 
 	        DEBUG_FetchInfo(5);
-	        //settings:
-	        bool legacy_A1111webui_success = false;
+	        bool settingsOk = false;
+	        int settingsUnits = 0;
 
 	        System.Action<bool,string> onResult =  (isSuccess,text) => { 
-	            legacy_A1111webui_success=isSuccess;
+	            settingsOk=isSuccess;
 	            if (!isSuccess){ return; }
 	            CTRLnets_Settings settings = CTRLnets_Settings.CreateFromJSON(text);
-	            on_set_numUnits( settings.num_units() );
+	            settingsUnits = settings != null ? settings.num_units() : 0;
 	        };
 
 	        yield return crtnMgr.StartCoroutine(FetchData_crtn(API_URL+"/settings", onResult));
-	        if (legacy_A1111webui_success){
+	        if (settingsOk && settingsUnits > 0){
+	            on_set_numUnits( settingsUnits );
 	            DEBUG_FetchInfo(6, "success");
 	            yield break; 
-	        }//user is still using legacy Automatic1111.
-        
-	        //use new info, via forge:
-	        int num = SD_SysInfo_MGR.instance.sysInfo.Config.num_units();
-	        on_set_numUnits( num );
-	        DEBUG_FetchInfo(7, "success");
+	        }
+	        if (settingsOk && settingsUnits <= 0){
+	            UnityEngine.Debug.LogWarning("[ControlNet] /controlnet/settings returned 0 units; falling through to sysinfo/default.");
+	        } else {
+	            // Neo: missing /settings is expected — do not treat as “no ControlNet.”
+	            UnityEngine.Debug.Log("[ControlNet] /controlnet/settings unavailable (expected on Forge Neo / reForge); using sysinfo/default.");
+	        }
+
+	        int sysinfoUnits = 0;
+	        if (SD_SysInfo_MGR.instance != null && SD_SysInfo_MGR.instance.sysInfo != null
+	            && SD_SysInfo_MGR.instance.sysInfo.Config != null) {
+	            sysinfoUnits = SD_SysInfo_MGR.instance.sysInfo.Config.num_units();
+	        }
+	        // Sysinfo polls every ~5s; CN fetch can win the race with Config still zero.
+	        for (int attempt = 0; attempt < 6 && sysinfoUnits <= 0; attempt++) {
+	            yield return new WaitForSeconds(0.5f);
+	            if (SD_SysInfo_MGR.instance == null || SD_SysInfo_MGR.instance.sysInfo?.Config == null)
+	                continue;
+	            sysinfoUnits = SD_SysInfo_MGR.instance.sysInfo.Config.num_units();
+	        }
+
+	        int existing = _controlNet_units != null ? _controlNet_units.Count : 0;
+	        int resolved = ResolveCtrlNetUnitCount(settingsOk, settingsUnits, sysinfoUnits, existing);
+	        on_set_numUnits( resolved );
+	        DEBUG_FetchInfo(7, resolved.ToString());
+	    }
+
+	    /// <summary>
+	    /// Pure unit-count resolver for Neo/Forge/A1111 (forge-neo-swap R3). Prefer settings &gt;0,
+	    /// then sysinfo &gt;0, then keep existing UI units, else Neo default.
+	    /// </summary>
+	    public static int ResolveCtrlNetUnitCount(bool settingsOk, int settingsUnits, int sysinfoUnits, int existingUnits) {
+	        if (settingsOk && settingsUnits > 0)
+	            return settingsUnits;
+	        if (sysinfoUnits > 0)
+	            return sysinfoUnits;
+	        if (existingUnits > 0)
+	            return existingUnits;
+	        return DefaultCtrlNetUnitCountWhenUnknown;
 	    }
 
 
