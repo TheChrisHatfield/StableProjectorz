@@ -623,17 +623,25 @@ namespace spz {
 	            ["height"] = h,
 	            ["clear_controlnet_models"] = true,
 	        }, result => {
-	            // Arm ContentCam co-opt so Klein Gen Art uses mesh-aligned img2img, not bare txt2img.
+	            // Do not force ContentCam — CustomFile is the preferred Klein img2img ref when present.
+	            // Only arm ContentCam as fallback when no valid CustomFile co-opt is available.
 	            var cn = SD_ControlNetsList_UI.instance;
-	            var unit = cn != null ? cn.GetUnit(0) : null;
-	            bool armed = false;
-	            if (unit != null){
-	                armed = unit.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.ContentCam, allowOpenFileDialog: false);
-	                if (armed) unit.TrySetActivated(true);
+	            bool armedContentCam = false;
+	            bool hasCustom = cn != null && cn.TryPeekKleinImg2ImgInitSource(out _, out string src)
+	                && string.Equals(src, "CustomFile", System.StringComparison.Ordinal);
+	            if (!hasCustom){
+	                var unit = cn != null ? cn.GetUnit(0) : null;
+	                if (unit != null){
+	                    armedContentCam = unit.TrySetWhatImageToSend(
+	                        WhatImageToSend_CTRLNET.ContentCam, allowOpenFileDialog: false);
+	                    if (armedContentCam) unit.TrySetActivated(true);
+	                }
 	            }
 	            if (result is Dictionary<string, object> dict){
-	                dict["klein_contentcam_armed"] = armed && unit != null && unit.IsKleinImg2ImgInitSource();
-	                if (unit != null) dict["klein_what_to_send"] = unit._whatImageToSend.ToString();
+	                dict["klein_customfile_preferred"] = hasCustom;
+	                dict["klein_contentcam_armed"] = armedContentCam;
+	                if (cn != null && cn.TryPeekKleinImg2ImgInitSource(out _, out string label))
+	                    dict["klein_init_source"] = label;
 	            }
 	            ok(result);
 	        }, fail);
