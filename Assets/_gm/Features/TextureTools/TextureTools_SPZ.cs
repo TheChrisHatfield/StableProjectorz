@@ -26,6 +26,23 @@ namespace spz {
 	        return Convert.ToBase64String(imageBytes);
 	    }
 
+	    /// <summary>
+	    /// Stretch-resize to exact WxH (readable RGBA). Destroys <paramref name="src"/> when a new texture is created.
+	    /// Forge Neo Flux/Klein img2img asserts init and mask share a uniform scale — mismatch throws
+	    /// "Only uniform Scaling is supported".
+	    /// </summary>
+	    public static Texture2D ResizeTexture2D_Exact_DestroySrc(Texture2D src, int width, int height){
+	        if (src == null) return null;
+	        if (width <= 0 || height <= 0) return src;
+	        if (src.width == width && src.height == height) return src;
+	        var rt = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32);
+	        Graphics.Blit(src, rt);
+	        Texture2D resized = RenderTextureToTexture2D(rt);
+	        RenderTexture.ReleaseTemporary(rt);
+	        UnityEngine.Object.Destroy(src);
+	        return resized;
+	    }
+
 
 	    // forceAlpha1_ifSingleChannel: can be super important, for depth.
 	    // StableDiffusion distorts things out when depth has alpha other than 1 (Aug 2024)

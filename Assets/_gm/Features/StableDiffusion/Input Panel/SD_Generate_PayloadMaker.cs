@@ -72,6 +72,18 @@ namespace spz {
 	        if (!isMakingBackgrounds && Settings_MGR.instance != null && Settings_MGR.instance.get_sd_inpaintingMaskInvert())
 		        inpaintMaskInvert01 = 1;
 
+	        var input = SD_InputPanel_UI.instance;
+	        int outW = input != null ? Mathf.RoundToInt(input.width) : 0;
+	        int outH = input != null ? Mathf.RoundToInt(input.height) : 0;
+	        // Neo Flux/Klein: init + mask must share aspect (uniform scale). CustomFile/ContentCam
+	        // often disagree with the screen mask — stretch both outbound bitmaps to payload WxH.
+	        // Keep withAntiEdge at native size for SPZ projection compositing.
+	        if (outW > 0 && outH > 0){
+	            viewTex = TextureTools_SPZ.ResizeTexture2D_Exact_DestroySrc(viewTex, outW, outH);
+	            screenMask_skipAntiEdge = TextureTools_SPZ.ResizeTexture2D_Exact_DestroySrc(
+	                screenMask_skipAntiEdge, outW, outH);
+	        }
+
 	        intermediates_ =  new SD_GenRequestArgs_byproducts{
 	            screenSpaceMask_NE_disposableTex = screenMask_skipAntiEdge,
 	            screenSpaceMask_WE_disposableTex = screenMask_withAntiEdge,//so that we can use it later, during projections etc.
@@ -81,8 +93,6 @@ namespace spz {
 	        string positivePrompt = StableDiffusion_Prompts_UI.instance.positivePrompt;
 	        string negativePrompt = StableDiffusion_Prompts_UI.instance.negativePrompt;
 	        PostProcess_Prompt(ref positivePrompt, ref negativePrompt);
-
-	        var input = SD_InputPanel_UI.instance;
 
 	        payload_ = new SD_img2img_payload {
 	            prompt = positivePrompt,
@@ -95,8 +105,8 @@ namespace spz {
 	            cfg_scale = input.CFG_scale_slider.value,
 	            seed   = input.seed_intField.recentVal>0?  input.seed_intField.recentVal : Random.Range(0, int.MaxValue),//manual (not -1), so we can show it in our icon instead of -1.
 
-	            width  = Mathf.RoundToInt(input.width),
-	            height = Mathf.RoundToInt(input.height),
+	            width  = outW,
+	            height = outH,
 
 	            // Nov 2024: Turned off, - user will manually press x2 and x4 to upscale images using the img2extra url.
 	            //     width = Mathf.RoundToInt(input.width * SD_Upscalers.instance.upscaleBy),
