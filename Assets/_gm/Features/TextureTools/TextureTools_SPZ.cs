@@ -74,9 +74,45 @@ namespace spz {
 	    }
 
 	    /// <summary>
+	    /// ControlNet-style "Crop and Resize" / InnerFit: uniform scale to cover WxH, center-crop.
+	    /// Does not destroy <paramref name="src"/>. Same size returns <paramref name="src"/>.
+	    /// </summary>
+	    public static Texture2D FitTexture2D_CropAndResize_KeepSrc(Texture2D src, int width, int height){
+	        if (src == null) return null;
+	        if (width <= 0 || height <= 0) return null;
+	        if (src.width == width && src.height == height) return src;
+
+	        float srcAspect = src.width / (float)src.height;
+	        float dstAspect = width / (float)height;
+	        float scaleX = 1f, scaleY = 1f, offX = 0f, offY = 0f;
+	        if (srcAspect > dstAspect){
+	            // Source wider than target — crop left/right.
+	            scaleX = dstAspect / srcAspect;
+	            offX = (1f - scaleX) * 0.5f;
+	        } else if (srcAspect < dstAspect){
+	            // Source taller — crop top/bottom.
+	            scaleY = srcAspect / dstAspect;
+	            offY = (1f - scaleY) * 0.5f;
+	        }
+
+	        var rt = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32);
+	        Graphics.Blit(src, rt, new Vector2(scaleX, scaleY), new Vector2(offX, offY));
+	        var resized = new Texture2D(width, height, TextureFormat.RGBA32, false);
+	        resized.filterMode = FilterMode.Bilinear;
+	        var prev = RenderTexture.active;
+	        RenderTexture.active = rt;
+	        resized.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+	        resized.Apply(updateMipmaps: false, makeNoLongerReadable: false);
+	        RenderTexture.active = prev;
+	        RenderTexture.ReleaseTemporary(rt);
+	        return resized;
+	    }
+
+	    /// <summary>
 	    /// Neo Flux/Klein requires init+mask same pixel size (uniform scale). Build encode refs without
-	    /// mutating projection byproducts. Prefer screen-mask size (viewport frustum). Caller must
-	    /// Destroy <paramref name="disposeA"/> / <paramref name="disposeB"/> when non-null.
+	    /// mutating projection byproducts. Prefer screen-mask size (viewport frustum). Init is fitted with
+	    /// Crop-and-Resize (not stretch) so CustomFile aspect is preserved. Caller must Destroy
+	    /// <paramref name="disposeA"/> / <paramref name="disposeB"/> when non-null.
 	    /// </summary>
 	    public static void PrepareImg2ImgEncodePair(
 	        Texture2D srcInit, Texture2D srcMask,
@@ -96,7 +132,7 @@ namespace spz {
 	            th = srcInit.height;
 	        }
 	        if (srcInit.width != tw || srcInit.height != th){
-	            disposeA = ResizeTexture2D_Exact_KeepSrc(srcInit, tw, th);
+	            disposeA = FitTexture2D_CropAndResize_KeepSrc(srcInit, tw, th);
 	            encodeInit = disposeA;
 	        }
 	        if (srcMask.width != tw || srcMask.height != th){

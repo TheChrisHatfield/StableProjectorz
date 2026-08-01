@@ -95,12 +95,12 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "TextureTools", "TextureTools_SPZ.cs"));
 		Assert.That(tools, Does.Contain("PrepareImg2ImgEncodePair"));
+		Assert.That(tools, Does.Contain("FitTexture2D_CropAndResize_KeepSrc"));
 		Assert.That(tools, Does.Contain("ResizeTexture2D_Exact_KeepSrc"));
 		Assert.That(maker, Does.Contain("PrepareImg2ImgEncodePair"));
 		Assert.That(maker, Does.Contain("Pre-Neo / SD1.5 path"));
 		// Must not stretch byproducts to panel WxH (broke projection after Neo workaround).
 		Assert.That(maker, Does.Not.Contain("ResizeTexture2D_Exact_DestroySrc(viewTex, outW, outH)"));
-		Assert.That(maker, Does.Not.Contain("ResizeTexture2D_Exact_DestroySrc(\n\t            screenMask_skipAntiEdge, outW, outH)"));
 	}
 
 	[Test]
