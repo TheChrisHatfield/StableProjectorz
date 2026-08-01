@@ -547,12 +547,15 @@ namespace spz {
 
 	    static IEnumerator ConfirmGenerateStarted_crtn(
 	        StableDiffusion_Hub hub, bool backgrounds, Action<object> ok, Action<string> fail){
+	        bool sawBusy = false;
 	        for (int i = 0; i < 120; i++){
 	            yield return null;
 	            if (hub == null){
 	                fail("StableDiffusion_Hub disappeared while confirming generate.");
 	                yield break;
 	            }
+	            if (hub._generating || hub._finalPreparations_beforeGen)
+	                sawBusy = true;
 	            // Finalize_GenerationRequest clears prep and leaves _generating true until Neo finishes.
 	            if (hub._generating && !hub._finalPreparations_beforeGen){
 	                ok(new Dictionary<string, object>{
@@ -563,13 +566,25 @@ namespace spz {
 	                });
 	                yield break;
 	            }
-	            // Empty-init abort (and Start_GenerationRequest failure) clears both flags.
-	            if (!hub._generating && !hub._finalPreparations_beforeGen && i >= 2){
+	            // Only treat as abort after we actually observed prep/busy — avoids racing Start_GenerationRequest.
+	            if (sawBusy && !hub._generating && !hub._finalPreparations_beforeGen){
 	                fail("Generation aborted before the request was sent (missing init image or start failed).");
 	                yield break;
 	            }
 	        }
-	        fail("Timed out waiting for generation to start.");
+	        if (hub._generating){
+	            ok(new Dictionary<string, object>{
+	                { "started", backgrounds ? "gen_bg" : "gen_art" },
+	                { "is_generating", true },
+	                { "confirmed", true },
+	                { "generating_what", hub._isGeneratingWhat.ToString() },
+	                { "note", "still_preparing_after_wait" },
+	            });
+	        } else {
+	            fail(sawBusy
+	                ? "Generation aborted before the request was sent (missing init image or start failed)."
+	                : "Generation did not start (denied or never entered prep).");
+	        }
 	    }
 
 

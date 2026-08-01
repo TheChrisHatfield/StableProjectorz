@@ -91,7 +91,11 @@ public sealed class AgentBridgeAddonContractTests {
 		Assert.That(src, Does.Contain("\"generate\""));
 		Assert.That(src, Does.Contain("ConfirmGenerateStarted_crtn"));
 		Assert.That(src, Does.Contain("aborted before the request was sent"));
+		Assert.That(src, Does.Contain("sawBusy"));
 		Assert.That(src, Does.Contain("prepare_flux_klein_test"));
+		Assert.That(File.ReadAllText(RepoPath(
+			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs")),
+			Does.Contain("invalid width/height"));
 		Assert.That(src, Does.Contain("positive_prompt"));
 		Assert.That(src, Does.Contain("TrySelectVAEByName"));
 		Assert.That(File.ReadAllText(RepoPath(

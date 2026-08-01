@@ -93,10 +93,20 @@ namespace spz {
 
 	        int outW = Mathf.RoundToInt(input.width);
 	        int outH = Mathf.RoundToInt(input.height);
+	        if (outW <= 0 || outH <= 0){
+	            if (viewTex != null){ UnityEngine.Object.Destroy(viewTex); viewTex = null; }
+	            if (screenMask_skipAntiEdge != null){
+	                UnityEngine.Object.Destroy(screenMask_skipAntiEdge);
+	                screenMask_skipAntiEdge = null;
+	            }
+	            if (Viewport_StatusText.instance != null)
+	                Viewport_StatusText.instance.ShowStatusText(
+	                    "img2img aborted: invalid width/height in SD input panel.", false, 5f, false);
+	        }
 	        // Neo Flux/Klein: init + mask must share aspect (uniform scale). CustomFile/ContentCam
 	        // often disagree with the screen mask — stretch both outbound bitmaps to payload WxH.
 	        // Keep withAntiEdge at native size for SPZ projection compositing.
-	        if (outW > 0 && outH > 0){
+	        else {
 	            viewTex = TextureTools_SPZ.ResizeTexture2D_Exact_DestroySrc(viewTex, outW, outH);
 	            screenMask_skipAntiEdge = TextureTools_SPZ.ResizeTexture2D_Exact_DestroySrc(
 	                screenMask_skipAntiEdge, outW, outH);
@@ -332,6 +342,7 @@ namespace spz {
 
 
 	    void PostProcess_Prompt(ref string positive, ref string negative){
+	        if (Settings_MGR.instance == null) return;
 	        negative += Settings_MGR.instance.get_avoid_NSFW_generations() ? 
 	                       ", NSFW, sex, porn, penis, vagina"//don't allow (adding to negative prompt)
 	                      : ""; //allow
