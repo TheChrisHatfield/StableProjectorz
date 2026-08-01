@@ -40,18 +40,15 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Stretch-resize to exact WxH (CPU-readable RGBA32). Destroys <paramref name="src"/> when a new texture is created.
-	    /// Forge Neo Flux/Klein img2img asserts init and mask share a uniform scale — mismatch throws
-	    /// "Only uniform Scaling is supported".
+	    /// Stretch-resize to exact WxH (CPU-readable RGBA32). Does not destroy <paramref name="src"/>.
+	    /// When size already matches, returns <paramref name="src"/> (not a copy).
 	    /// </summary>
-	    public static Texture2D ResizeTexture2D_Exact_DestroySrc(Texture2D src, int width, int height){
+	    public static Texture2D ResizeTexture2D_Exact_KeepSrc(Texture2D src, int width, int height){
 	        if (src == null) return null;
-	        if (width <= 0 || height <= 0) return src;
+	        if (width <= 0 || height <= 0) return null;
 	        if (src.width == width && src.height == height) return src;
 	        var rt = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32);
 	        Graphics.Blit(src, rt);
-	        // Explicit RGBA32 + ReadPixels so EncodeToPNG/TextureToBase64 always see CPU pixels
-	        // (RenderTextureToTexture2D graphicsFormat can be non-PNG-friendly on some GPUs).
 	        var resized = new Texture2D(width, height, TextureFormat.RGBA32, false);
 	        resized.filterMode = FilterMode.Bilinear;
 	        var prev = RenderTexture.active;
@@ -60,8 +57,52 @@ namespace spz {
 	        resized.Apply(updateMipmaps: false, makeNoLongerReadable: false);
 	        RenderTexture.active = prev;
 	        RenderTexture.ReleaseTemporary(rt);
+	        return resized;
+	    }
+
+	    /// <summary>
+	    /// Stretch-resize to exact WxH (CPU-readable RGBA32). Destroys <paramref name="src"/> when a new texture is created.
+	    /// Prefer <see cref="ResizeTexture2D_Exact_KeepSrc"/> for Neo encode copies so projection byproducts stay native.
+	    /// </summary>
+	    public static Texture2D ResizeTexture2D_Exact_DestroySrc(Texture2D src, int width, int height){
+	        if (src == null) return null;
+	        if (width <= 0 || height <= 0) return src;
+	        if (src.width == width && src.height == height) return src;
+	        var resized = ResizeTexture2D_Exact_KeepSrc(src, width, height);
 	        UnityEngine.Object.Destroy(src);
 	        return resized;
+	    }
+
+	    /// <summary>
+	    /// Neo Flux/Klein requires init+mask same pixel size (uniform scale). Build encode refs without
+	    /// mutating projection byproducts. Prefer screen-mask size (viewport frustum). Caller must
+	    /// Destroy <paramref name="disposeA"/> / <paramref name="disposeB"/> when non-null.
+	    /// </summary>
+	    public static void PrepareImg2ImgEncodePair(
+	        Texture2D srcInit, Texture2D srcMask,
+	        out Texture2D encodeInit, out Texture2D encodeMask,
+	        out Texture2D disposeA, out Texture2D disposeB){
+	        encodeInit = srcInit;
+	        encodeMask = srcMask;
+	        disposeA = null;
+	        disposeB = null;
+	        if (srcInit == null || srcMask == null) return;
+	        if (srcInit.width == srcMask.width && srcInit.height == srcMask.height) return;
+
+	        int tw = srcMask.width;
+	        int th = srcMask.height;
+	        if (tw <= 0 || th <= 0){
+	            tw = srcInit.width;
+	            th = srcInit.height;
+	        }
+	        if (srcInit.width != tw || srcInit.height != th){
+	            disposeA = ResizeTexture2D_Exact_KeepSrc(srcInit, tw, th);
+	            encodeInit = disposeA;
+	        }
+	        if (srcMask.width != tw || srcMask.height != th){
+	            disposeB = ResizeTexture2D_Exact_KeepSrc(srcMask, tw, th);
+	            encodeMask = disposeB;
+	        }
 	    }
 
 
