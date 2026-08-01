@@ -305,19 +305,19 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 	}
 
 	[Test]
-	public void ControlNet_Klein_PrefersContentCamOverCustomFile() {
+	public void ControlNet_Klein_PrefersCustomFileOverContentCam() {
 		string src = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "SD_ControlNetsList_UI.cs"));
-		Assert.That(src, Does.Contain("Prefers ContentCam over CustomFile"));
-		int peekCam = src.IndexOf("TryPeekKleinInit(WhatImageToSend_CTRLNET.ContentCam");
+		Assert.That(src, Does.Contain("Prefers CustomFile over ContentCam"));
 		int peekFile = src.IndexOf("TryPeekKleinInit(WhatImageToSend_CTRLNET.CustomFile");
-		int pickCam = src.IndexOf("TryPickKleinInit(WhatImageToSend_CTRLNET.ContentCam");
+		int peekCam = src.IndexOf("TryPeekKleinInit(WhatImageToSend_CTRLNET.ContentCam");
 		int pickFile = src.IndexOf("TryPickKleinInit(WhatImageToSend_CTRLNET.CustomFile");
-		Assert.That(peekCam, Is.GreaterThan(0));
-		Assert.That(peekFile, Is.GreaterThan(peekCam), "Peek must try ContentCam before CustomFile.");
-		Assert.That(pickCam, Is.GreaterThan(0));
-		Assert.That(pickFile, Is.GreaterThan(pickCam), "Pick must try ContentCam before CustomFile.");
+		int pickCam = src.IndexOf("TryPickKleinInit(WhatImageToSend_CTRLNET.ContentCam");
+		Assert.That(peekFile, Is.GreaterThan(0));
+		Assert.That(peekCam, Is.GreaterThan(peekFile), "Peek must try CustomFile before ContentCam.");
+		Assert.That(pickFile, Is.GreaterThan(0));
+		Assert.That(pickCam, Is.GreaterThan(pickFile), "Pick must try CustomFile before ContentCam.");
 	}
 
 	[Test]

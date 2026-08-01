@@ -94,6 +94,7 @@ public sealed class AgentBridgeAddonContractTests {
 		Assert.That(src, Does.Contain("sawBusy"));
 		Assert.That(src, Does.Contain("never entered prep"));
 		Assert.That(src, Does.Contain("prepare_flux_klein_test"));
+		Assert.That(src, Does.Contain("klein_customfile_preferred"));
 		Assert.That(src, Does.Contain("klein_contentcam_armed"));
 		Assert.That(src, Does.Contain("DenyWithMessage_ifCantGenerate"));
 		Assert.That(src, Does.Contain("CustomFile but no image is loaded"));
