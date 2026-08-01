@@ -362,8 +362,9 @@ namespace spz {
 	            float redo = SD_WorkflowOptionsRibbon_UI.instance != null
 	                ? SD_WorkflowOptionsRibbon_UI.instance.denoisingStrength : 0.45f;
 	            denoiseStrength_ = Mathf.Clamp(Mathf.Max(redo, 0.15f), 0.15f, 0.85f);
-	            if (WorkflowRibbon_UI.instance.currentMode() == WorkflowRibbon_CurrMode.ProjectionsMasking
-	                || !WorkflowRibbon_UI.instance.has_brushed_mask()){
+	            // Full-white only for ProjectionsMasking (silhouette bake). WhereEmpty/TotalObject
+	            // auto-masks must stay — !has_brushed_mask() used to wipe them.
+	            if (WorkflowRibbon_UI.instance.currentMode() == WorkflowRibbon_CurrMode.ProjectionsMasking){
 	                if (screenMask_skipAntiEdge_ != null) UnityEngine.Object.Destroy(screenMask_skipAntiEdge_);
 	                if (screenMask_withAntiEdge_ != null) UnityEngine.Object.Destroy(screenMask_withAntiEdge_);
 	                painter.GetDisposable_ScreenMask(forceFullWhite: true,
