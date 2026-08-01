@@ -86,6 +86,8 @@ public sealed class AgentBridgeAddonContractTests {
 		Assert.That(src, Does.Contain("\"set_sd_gen_settings\""));
 		Assert.That(src, Does.Contain("\"list_sd_options\""));
 		Assert.That(src, Does.Contain("\"set_controlnet_unit\""));
+		Assert.That(src, Does.Contain("what_to_send"));
+		Assert.That(src, Does.Contain("TrySetWhatImageToSend"));
 		Assert.That(src, Does.Contain("\"generate\""));
 		Assert.That(src, Does.Contain("\"prepare_flux_klein_test\""));
 		Assert.That(src, Does.Contain("positive_prompt"));
