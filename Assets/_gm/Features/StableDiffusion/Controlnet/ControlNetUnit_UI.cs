@@ -49,6 +49,14 @@ namespace spz {
 
 	    public bool isActivated => _collapsableSection._isExpanded;
 
+	    /// <summary>Agent / MCP: expand or collapse this unit (activation gates Klein co-opt).</summary>
+	    public bool TrySetActivated(bool wantOpen){
+	        if (_collapsableSection == null) return false;
+	        if (isActivated == wantOpen) return true;
+	        _collapsableSection.OpenOrCloseSelf(wantOpen, dur: 0f);
+	        return isActivated == wantOpen;
+	    }
+
 	    /// <summary>
 	    /// Toggle the collapsable section open/closed
 	    /// </summary>
