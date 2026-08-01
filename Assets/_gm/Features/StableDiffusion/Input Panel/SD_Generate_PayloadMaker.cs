@@ -219,6 +219,20 @@ namespace spz {
 	        var camerasMGR = UserCameras_MGR.instance;
 	        var painter    = Inpaint_MaskPainter.instance;
 
+	        screenMask_skipAntiEdge_ = null;
+	        screenMask_withAntiEdge_ = null;
+	        viewTex_ = null;
+	        inpaint_fill_ = InpaintingFill.Original;
+	        denoiseStrength_ = 0.5f;
+
+	        if (camerasMGR == null || camerasMGR.camTextures == null || painter == null
+	            || WorkflowRibbon_UI.instance == null){
+	            if (Viewport_StatusText.instance != null)
+	                Viewport_StatusText.instance.ShowStatusText(
+	                    "img2img aborted: cameras/mask painter/workflow not ready.", false, 5f, false);
+	            return;
+	        }
+
 	        // Peek Klein CN init before any ReadPixels so CustomFile can skip ContentCam entirely,
 	        // and ContentCam uses a single post-Ensure capture (not a duplicate from TryGet).
 	        int kleinUnitIx = -1;
