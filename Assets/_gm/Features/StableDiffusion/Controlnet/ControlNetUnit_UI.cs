@@ -128,6 +128,12 @@ namespace spz {
 	        return _imgsDisplay.TryGetDisposableKleinImg2ImgInit(out sourceLabel);
 	    }
 
+	    /// <summary>Agent / MCP: set what-to-send (ContentCam / CustomFile / None / …).</summary>
+	    public bool TrySetWhatImageToSend(WhatImageToSend_CTRLNET what, bool allowOpenFileDialog = false){
+	        if (_imgsDisplay == null) return false;
+	        return _imgsDisplay.TrySetWhatImageToSend(what, allowOpenFileDialog);
+	    }
+
 
 	    // Usually for copying values between this unit-ui and a Thumbnail-ui
 	    // (next to the text prompts, inside input panel).

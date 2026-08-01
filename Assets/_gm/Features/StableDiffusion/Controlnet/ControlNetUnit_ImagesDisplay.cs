@@ -314,6 +314,30 @@ namespace spz {
 	    }
 
 
+	    /// <summary>
+	    /// Set "what to send" without opening the CustomFile picker unless requested.
+	    /// Used by agent/MCP and Klein preset cleanup.
+	    /// </summary>
+	    public bool TrySetWhatImageToSend(WhatImageToSend_CTRLNET what, bool allowOpenFileDialog = false){
+	        Toggle target = null;
+	        switch (what){
+	            case WhatImageToSend_CTRLNET.None: target = _imgToSend_none_toggle; break;
+	            case WhatImageToSend_CTRLNET.Depth: target = _imgToSend_depth_toggle; break;
+	            case WhatImageToSend_CTRLNET.Normals: target = _imgToSend_normals_toggle; break;
+	            case WhatImageToSend_CTRLNET.VertexColors: target = _imgToSend_vertexColors_toggle; break;
+	            case WhatImageToSend_CTRLNET.ContentCam: target = _imgToSend_contentCam_toggle; break;
+	            case WhatImageToSend_CTRLNET.CustomFile: target = _imgToSend_customFile_toggle; break;
+	            default: return false;
+	        }
+	        if (target == null) return false;
+	        bool menuWas = _contextMenu_gameObj != null && _contextMenu_gameObj.activeSelf;
+	        if (_contextMenu_gameObj != null) _contextMenu_gameObj.SetActive(true);
+	        OnWhatToSendToggle(true, what, allowOpenFileNow: allowOpenFileDialog);
+	        if (!target.isOn) target.isOn = true;
+	        if (_contextMenu_gameObj != null) _contextMenu_gameObj.SetActive(menuWas);
+	        return _whatImageToSend == what;
+	    }
+
 	    public void Save(int ix, ControlNetUnit_SL unit_sl, string dataDir){
 	        unit_sl.whatImageToSend = _whatImageToSend.ToString();
 	        unit_sl.customImg_howResize = _customImg_howResize.ToString();

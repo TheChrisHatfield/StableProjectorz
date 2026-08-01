@@ -123,6 +123,7 @@ public sealed class AgentBridgeAddonContractTests {
 		Assert.That(list, Does.Contain("TryGetDisposableKleinImg2ImgInit"));
 		Assert.That(list, Does.Contain("HasKleinImg2ImgInitSource"));
 		Assert.That(list, Does.Contain("TryPeekKleinImg2ImgInitSource"));
+		Assert.That(list, Does.Contain("leftover ContentCam/CustomFile"));
 		string hub = File.ReadAllText(RepoPath(
 			"Assets", "_gm", "Features", "StableDiffusion", "StableDiffusion_Hub.cs"));
 		Assert.That(hub, Does.Contain("HasKleinImg2ImgInitSource()"));
