@@ -144,6 +144,17 @@ namespace spz {
 	        TextureTools_SPZ.PrepareImg2ImgEncodePair(
 	            viewTex, screenMask_skipAntiEdge,
 	            out encodeInit, out encodeMask, out encodeDisposeA, out encodeDisposeB);
+	        // Neo output size must match encode init/mask (ContentCam frustum). Using panel WxH when
+	        // capture aspect differs stretches the result and warps projection bake.
+	        int payloadW = outW;
+	        int payloadH = outH;
+	        if (encodeInit != null && encodeInit.width > 0 && encodeInit.height > 0){
+	            payloadW = encodeInit.width;
+	            payloadH = encodeInit.height;
+	        } else if (encodeMask != null && encodeMask.width > 0 && encodeMask.height > 0){
+	            payloadW = encodeMask.width;
+	            payloadH = encodeMask.height;
+	        }
 	        string initB64 = TextureTools_SPZ.TextureToBase64(encodeInit);
 	        string maskB64 = encodeMask == null ? "" : TextureTools_SPZ.TextureToBase64(encodeMask);
 	        if (encodeDisposeA != null) UnityEngine.Object.Destroy(encodeDisposeA);
@@ -161,8 +172,8 @@ namespace spz {
 	            seed   = input.seed_intField != null && input.seed_intField.recentVal>0
 	                ? input.seed_intField.recentVal : Random.Range(0, int.MaxValue),
 
-	            width  = outW,
-	            height = outH,
+	            width  = payloadW,
+	            height = payloadH,
 
 	            // Nov 2024: Turned off, - user will manually press x2 and x4 to upscale images using the img2extra url.
 	            //     width = Mathf.RoundToInt(input.width * SD_Upscalers.instance.upscaleBy),
