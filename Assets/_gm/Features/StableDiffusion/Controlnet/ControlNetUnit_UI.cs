@@ -112,6 +112,22 @@ namespace spz {
 	    // DO NOT USE THIS FOR SD-GENERATION ARGUMENTS, instead use GetArgs_forGenerationRequest().
 	    public WhatImageToSend_CTRLNET _whatImageToSend  => _imgsDisplay._whatImageToSend;
 
+	    /// <summary>
+	    /// True when this unit can seed Klein img2img (CustomFile / ContentCam).
+	    /// Unit must be open/activated and CN model None — co-opt replaces alwayson CN, not a live CN unit.
+	    /// </summary>
+	    public bool IsKleinImg2ImgInitSource() =>
+	        isActivated
+	        && is_currModel_none
+	        && _imgsDisplay != null
+	        && _imgsDisplay.IsKleinImg2ImgInitSource();
+
+	    public Texture2D TryGetDisposableKleinImg2ImgInit(out string sourceLabel){
+	        sourceLabel = "";
+	        if (!isActivated || !is_currModel_none || _imgsDisplay == null) return null;
+	        return _imgsDisplay.TryGetDisposableKleinImg2ImgInit(out sourceLabel);
+	    }
+
 
 	    // Usually for copying values between this unit-ui and a Thumbnail-ui
 	    // (next to the text prompts, inside input panel).
@@ -148,11 +164,29 @@ namespace spz {
 	    public ControlNetUnit_NetworkArgs GetArgs_forGenerationRequest( SD_GenRequestArgs_byproducts intermediates ){
 	        if (!isActivated){ return null; }//show that we are not participating
 
+	        // No CN weights selected — never send alwayson ControlNet (preprocessor alone is not enough).
+	        if (is_currModel_none){ return null; }
+
 	        bool ignoreDepthOrNorms  = SD_WorkflowOptionsRibbon_UI.instance.ignoreDepthOrNormals;
 	        if(isForDepth() && ignoreDepthOrNorms){ return null; }
 	        if(isForNormals() && ignoreDepthOrNorms){ return null; }
 
 	        Texture2D imageToSend = getDisposableTexture_toSend(intermediates);
+
+	        // XL ControlNet + SD1.5 checkpoint (or reverse) crashes Neo CN forward (y is None / shape assert).
+	        // Flux.2 Klein: all legacy CN skipped (same helper). Image may still be used as Klein img2img init.
+	        string cnModel = currModelName();
+	        string sdCkpt = null;
+	        try { sdCkpt = SD_InputPanel_UI.instance?.models?.selectedModel_name; } catch { /* */ }
+	        if (ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(cnModel, sdCkpt)){
+	            if (Viewport_StatusText.instance != null){
+	                string msg = SD_OptionsPacket.CheckpointNeedsKleinModules(sdCkpt)
+	                    ? "Skipped ControlNet: Flux.2 Klein has no SD/SDXL ControlNet — generating without it."
+	                    : "Skipped ControlNet: model family mismatch (use SD1.5 CN with SD1.5 checkpoint, XL CN with XL).";
+	                Viewport_StatusText.instance.ShowStatusText(msg, false, 4f, false);
+	            }
+	            return null;
+	        }
 
 	        if (isForInpaint()){
 	            var trib = WorkflowRibbon_UI.instance;
