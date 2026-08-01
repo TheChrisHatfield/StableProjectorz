@@ -73,8 +73,26 @@ namespace spz {
 		        inpaintMaskInvert01 = 1;
 
 	        var input = SD_InputPanel_UI.instance;
-	        int outW = input != null ? Mathf.RoundToInt(input.width) : 0;
-	        int outH = input != null ? Mathf.RoundToInt(input.height) : 0;
+	        if (input == null){
+	            intermediates_ = new SD_GenRequestArgs_byproducts{
+	                screenSpaceMask_NE_disposableTex = screenMask_skipAntiEdge,
+	                screenSpaceMask_WE_disposableTex = screenMask_withAntiEdge,
+	                usualView_disposableTexture = viewTex,
+	            };
+	            payload_ = new SD_img2img_payload{
+	                width = 0, height = 0,
+	                init_images = new string[]{ "" },
+	                mask = "",
+	                alwayson_scripts = new Dictionary<string,AlwaysOn_Value>(),
+	            };
+	            if (Viewport_StatusText.instance != null)
+	                Viewport_StatusText.instance.ShowStatusText(
+	                    "img2img aborted: SD input panel not ready.", false, 5f, false);
+	            return;
+	        }
+
+	        int outW = Mathf.RoundToInt(input.width);
+	        int outH = Mathf.RoundToInt(input.height);
 	        // Neo Flux/Klein: init + mask must share aspect (uniform scale). CustomFile/ContentCam
 	        // often disagree with the screen mask — stretch both outbound bitmaps to payload WxH.
 	        // Keep withAntiEdge at native size for SPZ projection compositing.
@@ -90,20 +108,23 @@ namespace spz {
 	            usualView_disposableTexture   = viewTex,
 	        };
         
-	        string positivePrompt = StableDiffusion_Prompts_UI.instance.positivePrompt;
-	        string negativePrompt = StableDiffusion_Prompts_UI.instance.negativePrompt;
+	        string positivePrompt = StableDiffusion_Prompts_UI.instance != null
+	            ? StableDiffusion_Prompts_UI.instance.positivePrompt : "";
+	        string negativePrompt = StableDiffusion_Prompts_UI.instance != null
+	            ? StableDiffusion_Prompts_UI.instance.negativePrompt : "";
 	        PostProcess_Prompt(ref positivePrompt, ref negativePrompt);
 
 	        payload_ = new SD_img2img_payload {
 	            prompt = positivePrompt,
 	            negative_prompt = negativePrompt,
-	            sampler_name = input.samplers.value?.name??"",
-	            scheduler = input.scheduler.value?.name??"",
+	            sampler_name = input.samplers?.value?.name??"",
+	            scheduler = input.scheduler?.value?.name??"",
 	            batch_size = Mathf.RoundToInt(input.batch_size),
 	            n_iter = Mathf.RoundToInt(input.batch_count),
-	            steps  = Mathf.RoundToInt(input.sampleSteps_slider.value),
-	            cfg_scale = input.CFG_scale_slider.value,
-	            seed   = input.seed_intField.recentVal>0?  input.seed_intField.recentVal : Random.Range(0, int.MaxValue),//manual (not -1), so we can show it in our icon instead of -1.
+	            steps  = Mathf.RoundToInt(input.sampleSteps_slider != null ? input.sampleSteps_slider.value : 0f),
+	            cfg_scale = input.CFG_scale_slider != null ? input.CFG_scale_slider.value : 1f,
+	            seed   = input.seed_intField != null && input.seed_intField.recentVal>0
+	                ? input.seed_intField.recentVal : Random.Range(0, int.MaxValue),
 
 	            width  = outW,
 	            height = outH,
@@ -122,7 +143,7 @@ namespace spz {
 
 	            //webui also wants tiling to be enabled via Options, that are sent separately.
 	            //This has to be sent too though (else tiling might remain enabled at current webui version, May 2024)
-	            tiling = SD_WorkflowOptionsRibbon_UI.instance.isTileable, 
+	            tiling = SD_WorkflowOptionsRibbon_UI.instance != null && SD_WorkflowOptionsRibbon_UI.instance.isTileable, 
 
 	            inpaint_full_res = (int)0,//whole picture always. User can zoom up if they need to.
 	            inpainting_mask_invert = inpaintMaskInvert01, //0 = WebUI inpaint masked (white); 1 = inpaint outside mask (Settings).
@@ -144,14 +165,16 @@ namespace spz {
 	        // Avoid softInpaint if rendering 'EntireShape' (when we have background active).
 	        // We will use LatentNothing, and soft inpaint doesn't work with it.
 	        // For more info - see comment inside img2img_GetTextures_andFill().
-	        SoftInpaintingArgs softInpaint_args =  WorkflowRibbon_UI.instance.is_allow_SoftInpaint() ?
-	                                                 Inpaint_MaskPainter.instance.GetArgs_for_SoftInpaint_GenRequest() : null;
+	        SoftInpaintingArgs softInpaint_args =  WorkflowRibbon_UI.instance != null && WorkflowRibbon_UI.instance.is_allow_SoftInpaint()
+	            && Inpaint_MaskPainter.instance != null
+	                ? Inpaint_MaskPainter.instance.GetArgs_for_SoftInpaint_GenRequest() : null;
 	        if (softInpaint_args != null){
 	            payload_.alwayson_scripts.Add("Soft Inpainting", softInpaint_args);
 	            intermediates_.isScreenMask_forSoftInpaint = true;
 	        }
-	        ControlNet_NetworkArgs ctrlNets_args = SD_ControlNetsList_UI.instance.GetArgs_forGenerationRequest(intermediates_);
-	        if(ctrlNets_args.args.Length > 0){ 
+	        ControlNet_NetworkArgs ctrlNets_args = SD_ControlNetsList_UI.instance != null
+	            ? SD_ControlNetsList_UI.instance.GetArgs_forGenerationRequest(intermediates_) : null;
+	        if(ctrlNets_args != null && ctrlNets_args.args != null && ctrlNets_args.args.Length > 0){ 
 	            payload_.alwayson_scripts.Add("controlnet", ctrlNets_args);//https://github.com/Mikubill/sd-webui-controlnet/wiki/API#examples-1
 	        }
 	    }
