@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
@@ -530,10 +531,45 @@ namespace spz {
 	        if (backgrounds && !canBg){ fail("Cannot Gen BG right now (cooldown, disconnected, or busy)."); return; }
 	        if (!backgrounds && !canArt){ fail("Cannot Gen Art right now (need depth/normals CN, or Klein bypass; or busy/disconnected)."); return; }
 	        hub.Generate(backgrounds);
-	        ok(new Dictionary<string, object>{
-	            { "started", backgrounds ? "gen_bg" : "gen_art" },
-	            { "is_generating", hub._generating },
-	        });
+	        // Confirm the request was actually POSTed — empty init / start failures abort asynchronously.
+	        if (Coroutines_MGR.instance == null){
+	            ok(new Dictionary<string, object>{
+	                { "started", backgrounds ? "gen_bg" : "gen_art" },
+	                { "is_generating", hub._generating },
+	                { "confirmed", false },
+	                { "warning", "Coroutines_MGR missing; could not confirm request was sent." },
+	            });
+	            return;
+	        }
+	        Coroutines_MGR.instance.StartCoroutine(ConfirmGenerateStarted_crtn(hub, backgrounds, ok, fail));
+	    }
+
+
+	    static IEnumerator ConfirmGenerateStarted_crtn(
+	        StableDiffusion_Hub hub, bool backgrounds, Action<object> ok, Action<string> fail){
+	        for (int i = 0; i < 120; i++){
+	            yield return null;
+	            if (hub == null){
+	                fail("StableDiffusion_Hub disappeared while confirming generate.");
+	                yield break;
+	            }
+	            // Finalize_GenerationRequest clears prep and leaves _generating true until Neo finishes.
+	            if (hub._generating && !hub._finalPreparations_beforeGen){
+	                ok(new Dictionary<string, object>{
+	                    { "started", backgrounds ? "gen_bg" : "gen_art" },
+	                    { "is_generating", true },
+	                    { "confirmed", true },
+	                    { "generating_what", hub._isGeneratingWhat.ToString() },
+	                });
+	                yield break;
+	            }
+	            // Empty-init abort (and Start_GenerationRequest failure) clears both flags.
+	            if (!hub._generating && !hub._finalPreparations_beforeGen && i >= 2){
+	                fail("Generation aborted before the request was sent (missing init image or start failed).");
+	                yield break;
+	            }
+	        }
+	        fail("Timed out waiting for generation to start.");
 	    }
 
 
