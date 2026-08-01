@@ -11,10 +11,54 @@ namespace spz {
 	public class SD_OptionsPacket{
 	    public string sd_model_checkpoint; //currently used neural net (base model) for stable diffusion. For example "ema-pruned-1.5"
 	    public string sd_vae;
+	    /// <summary>Classic A1111/Forge only. Neo has no such opt — must not be POSTed (KeyError).</summary>
 	    public string hires_fix_refiner_pass;
 	    public string upscaler_for_img2img;
 	    public bool tiling;
+	    /// <summary>Forge Neo extra weights (text encoder / VAE). Required for Flux.2 Klein.</summary>
+	    public string[] forge_additional_modules;
 	    //there are a lot more fields, see GET /sdapi/v1/options
+
+	    public const string KleinTextEncoderModule = "qwen3_4b_flux2_klein.safetensors";
+	    public const string KleinVaeModule = "flux2_klein_4b_vae.safetensors";
+
+	    public static bool CheckpointNeedsKleinModules(string checkpointName){
+	        if (string.IsNullOrEmpty(checkpointName)) return false;
+	        string n = checkpointName.ToLowerInvariant();
+	        // Modules are Klein-4B specific (qwen3_4b_flux2_klein + flux2_klein_4b_vae).
+	        // Bare FLUX.2 / flux2 names must not pull those — different stack, would KeyError/assert.
+	        bool hasKlein = n.Contains("klein");
+	        bool hasFlux2 = n.Contains("flux2") || n.Contains("flux-2") || n.Contains("flux.2");
+	        return hasKlein && hasFlux2;
+	    }
+
+	    /// <summary>
+	    /// True Forge Neo <c>set_config</c> KeyErrors on unknown option keys.
+	    /// Only emit keys SPZ intentionally manages (forge-neo-swap).
+	    /// </summary>
+	    public string ToOutboundJson(){
+	        var parts = new System.Collections.Generic.List<string>(5);
+	        if (!string.IsNullOrEmpty(sd_model_checkpoint))
+	            parts.Add("\"sd_model_checkpoint\":" + QuoteJson(sd_model_checkpoint));
+	        if (!string.IsNullOrEmpty(sd_vae))
+	            parts.Add("\"sd_vae\":" + QuoteJson(sd_vae));
+	        parts.Add("\"tiling\":" + (tiling ? "true" : "false"));
+	        if (!string.IsNullOrEmpty(upscaler_for_img2img))
+	            parts.Add("\"upscaler_for_img2img\":" + QuoteJson(upscaler_for_img2img));
+	        if (forge_additional_modules != null){
+	            var quoted = new string[forge_additional_modules.Length];
+	            for (int i = 0; i < forge_additional_modules.Length; i++)
+	                quoted[i] = QuoteJson(forge_additional_modules[i] ?? "");
+	            parts.Add("\"forge_additional_modules\":[" + string.Join(",", quoted) + "]");
+	        }
+	        // Omit hires_fix_refiner_pass — absent from Neo shared.opts.data_labels.
+	        return "{" + string.Join(",", parts) + "}";
+	    }
+
+	    static string QuoteJson(string s){
+	        if (s == null) return "\"\"";
+	        return "\"" + s.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+	    }
 	}
 
 	public class SD_Options_Fetcher : MonoBehaviour{
@@ -87,7 +131,7 @@ namespace spz {
         
 	        Act_onWillSendOptions_AmmendPlz?.Invoke(currentOptions);
 
-	        string json = JsonUtility.ToJson(currentOptions);
+	        string json = currentOptions.ToOutboundJson();
 	        byte[] jsonToSend = new System.Text.UTF8Encoding().GetBytes(json);
 	        UnityWebRequest request = new UnityWebRequest(Connection_MGR.A1111_SD_API_URL + "/options", "POST");
 	        request.uploadHandler = new UploadHandlerRaw(jsonToSend);
