@@ -47,6 +47,16 @@ namespace spz {
 
 	            alwayson_scripts = new Dictionary<string,AlwaysOn_Value>(),
 	        };
+
+	        // Projection bake needs a screen mask; txt2img had null WE/NE and relied on shader default white.
+	        int tw = payload_.width;
+	        int th = payload_.height;
+	        if (tw > 0 && th > 0){
+	            intermediates_.screenSpaceMask_NE_disposableTex =
+	                TextureTools_SPZ.CreateSolidColorRGBA32(tw, th, Color.white);
+	            intermediates_.screenSpaceMask_WE_disposableTex =
+	                TextureTools_SPZ.CreateSolidColorRGBA32(tw, th, Color.white);
+	        }
        
 	        ControlNet_NetworkArgs ctrlNets_args = SD_ControlNetsList_UI.instance.GetArgs_forGenerationRequest(intermediates_);
 	        if (ctrlNets_args.args.Length > 0) {
