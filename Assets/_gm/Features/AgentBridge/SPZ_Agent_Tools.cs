@@ -571,6 +571,11 @@ namespace spz {
 	                fail("Generation aborted before the request was sent (missing init image or start failed).");
 	                yield break;
 	            }
+	            // DenyWithMessage / no coroutine: never enters prep — fail soon instead of waiting ~120 frames.
+	            if (!sawBusy && i >= 12){
+	                fail("Generation did not start (denied or never entered prep).");
+	                yield break;
+	            }
 	        }
 	        if (hub._generating){
 	            ok(new Dictionary<string, object>{
