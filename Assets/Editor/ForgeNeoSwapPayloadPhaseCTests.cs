@@ -121,6 +121,16 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 	}
 
 	[Test]
+	public void Img2img_Klein_WhiteMaskOnlyOnProjectionsMasking() {
+		string maker = File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs"));
+		Assert.That(maker, Does.Contain("Full-white only for ProjectionsMasking"));
+		Assert.That(maker, Does.Not.Contain("|| !WorkflowRibbon_UI.instance.has_brushed_mask()"));
+		Assert.That(maker, Does.Contain("currentMode() == WorkflowRibbon_CurrMode.ProjectionsMasking"));
+	}
+
+	[Test]
 	public void Img2img_Klein_SkipsSoftInpaintScript() {
 		string maker = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
