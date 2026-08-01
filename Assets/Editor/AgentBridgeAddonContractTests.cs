@@ -141,6 +141,7 @@ public sealed class AgentBridgeAddonContractTests {
 		Assert.That(payload, Does.Contain("cameras/mask painter/workflow not ready"));
 		Assert.That(payload, Does.Contain("ResizeTexture2D_Exact_DestroySrc"));
 		Assert.That(payload, Does.Contain("Only uniform Scaling"));
+		Assert.That(payload, Does.Contain("SD input panel not ready"));
 		string texTools = File.ReadAllText(RepoPath(
 			"Assets", "_gm", "Features", "TextureTools", "TextureTools_SPZ.cs"));
 		Assert.That(texTools, Does.Contain("ResizeTexture2D_Exact_DestroySrc"));
