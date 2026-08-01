@@ -94,6 +94,9 @@ public sealed class AgentBridgeAddonContractTests {
 		Assert.That(src, Does.Contain("sawBusy"));
 		Assert.That(src, Does.Contain("never entered prep"));
 		Assert.That(src, Does.Contain("prepare_flux_klein_test"));
+		Assert.That(src, Does.Contain("klein_contentcam_armed"));
+		Assert.That(src, Does.Contain("DenyWithMessage_ifCantGenerate"));
+		Assert.That(src, Does.Contain("CustomFile but no image is loaded"));
 		Assert.That(File.ReadAllText(RepoPath(
 			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs")),
 			Does.Contain("invalid width/height"));
