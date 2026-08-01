@@ -81,7 +81,7 @@ namespace spz {
 	        return false;
 	    }
 
-	    /// <summary>True when the SD dropdown is Flux.2 Klein (or flux-2) — Gen Art may skip depth/normals CN.</summary>
+	    /// <summary>True when the SD dropdown is Flux.2 Klein — Gen Art may skip depth/normals CN.</summary>
 	    public static bool IsActiveCheckpointKlein(){
 	        try {
 	            string sd = SD_InputPanel_UI.instance != null ? SD_InputPanel_UI.instance.models?.selectedModel_name : null;

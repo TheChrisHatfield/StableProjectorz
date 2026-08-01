@@ -1,0 +1,248 @@
+using System.IO;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using NUnit.Framework;
+using spz;
+
+/// <summary>
+/// forge-neo-swap Phase C: Soft Inpaint positional scalars, no $type under alwayson, DataPath download gate.
+/// </summary>
+public sealed class ForgeNeoSwapPayloadPhaseCTests {
+
+	[Test]
+	public void SoftInpaint_ToPositionalArgs_IsSevenScalars() {
+		object[] args = SoftInpaintingArgs.ToPositionalArgs(new SoftInpaintingArgsEntry());
+		Assert.That(args.Length, Is.EqualTo(7));
+		Assert.That(args[0], Is.TypeOf<bool>());
+		Assert.That(args[1], Is.TypeOf<float>().Or.TypeOf<double>().Or.TypeOf<int>());
+		string json = JsonConvert.SerializeObject(SoftInpaintingArgs.FromEntry(new SoftInpaintingArgsEntry()),
+			new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.None });
+		JObject root = JObject.Parse(json);
+		JArray arr = (JArray)root["args"];
+		Assert.That(arr.Count, Is.EqualTo(7));
+		Assert.That(arr[0].Type, Is.EqualTo(JTokenType.Boolean));
+		for (int i = 1; i < 7; i++)
+			Assert.That(arr[i].Type, Is.EqualTo(JTokenType.Float).Or.EqualTo(JTokenType.Integer),
+				"args[" + i + "] must be a JSON number, not an object");
+	}
+
+	[Test]
+	public void SoftInpaint_MustNotSerializeLabeledObjectAtArgs0() {
+		string json = JsonConvert.SerializeObject(SoftInpaintingArgs.FromEntry(new SoftInpaintingArgsEntry()),
+			new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.None });
+		Assert.That(json, Does.Not.Contain("Schedule bias"));
+		Assert.That(json, Does.Not.Contain("Soft inpainting\":"));
+	}
+
+	[Test]
+	public void GenerateSender_UsesTypeNameHandlingNone() {
+		string path = Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_NetworkSender.cs");
+		Assert.That(File.Exists(path), Is.True);
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("TypeNameHandling.None"));
+		Assert.That(src, Does.Not.Contain("TypeNameHandling.Auto //automatically resolve"));
+	}
+
+	[Test]
+	public void AlwaysOn_ControlNet_SerializesWithoutTypeName() {
+		var cn = new ControlNet_NetworkArgs {
+			args = new[] {
+				new ControlNetUnit_NetworkArgs {
+					enabled = true,
+					module = "depth",
+					model = "control_v11f1p_sd15_depth",
+					weight = 1f,
+				}
+			}
+		};
+		var payload = new SD_txt2img_payload {
+			prompt = "t",
+			alwayson_scripts = new System.Collections.Generic.Dictionary<string, AlwaysOn_Value> {
+				{ "controlnet", cn }
+			}
+		};
+		string json = JsonConvert.SerializeObject(payload, new JsonSerializerSettings {
+			TypeNameHandling = TypeNameHandling.None,
+			Formatting = Formatting.None
+		});
+		Assert.That(json, Does.Not.Contain("$type"));
+		Assert.That(json, Does.Contain("\"enabled\":true"));
+		Assert.That(json, Does.Contain("\"module\":\"depth\""));
+	}
+
+	[Test]
+	public void SoftInpaint_OnlyAddedOnImg2imgPath() {
+		string path = Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs");
+		string src = File.ReadAllText(path);
+		int softIdx = src.IndexOf("Soft Inpainting");
+		Assert.That(softIdx, Is.GreaterThan(0));
+		// Soft Inpaint add must sit in img2img builder, not before first Create_txt2img / make_txt2img.
+		int img2imgMarker = src.IndexOf("Create_img2img_payload");
+		if (img2imgMarker < 0) img2imgMarker = src.IndexOf("make_img2img");
+		Assert.That(img2imgMarker, Is.GreaterThan(0));
+		Assert.That(softIdx, Is.GreaterThan(img2imgMarker),
+			"Soft Inpainting alwayson must only be wired on img2img path (Neo img2img-only).");
+	}
+
+	[Test]
+	public void SysInfo_TryResolveControlNetModelsDir_RequiresDataPath() {
+		// Pure helper: with no instance / empty path, resolve fails (cannot call instance methods easily).
+		// Contract: source contains gate + forge-neo-swap R2 helpers.
+		string path = Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "SD_SysInfo_MGR.cs");
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("TryGetSdDataPath"));
+		Assert.That(src, Does.Contain("TryResolveControlNetModelsDir"));
+		Assert.That(src, Does.Contain("isForgeFamilyWebui_detected"));
+	}
+
+	[Test]
+	public void SysInfo_ForgeFamilyDetect_RecognizesBareNeoCheckoutPath() {
+		// True Haoming02 DataPath often ends in \neo without substring "forge" (triangulation G1).
+		string path = Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "SD_SysInfo_MGR.cs");
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("PathLooksForgeFamily"));
+		Assert.That(src, Does.Contain("EndsWith(\"/neo\")"));
+		Assert.That(src, Does.Contain("StartsWith(\"neo\""));
+		Assert.That(src, Does.Contain("forge_neo_true").Or.Contain("/neo/"));
+	}
+
+	[Test]
+	public void DownloadAndOpenUrl_GateOnEmptyDataPath() {
+		string dl = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "_Core", "IO", "Download", "DownloadFile_if_NotYetExist.cs");
+		string open = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "_Core", "IO", "Download", "OpenURL_and_Subdirectory.cs");
+		Assert.That(File.ReadAllText(dl), Does.Contain("TryResolveControlNetModelsDir"));
+		Assert.That(File.ReadAllText(open), Does.Contain("TryResolveControlNetModelsDir"));
+	}
+
+	[Test]
+	public void MaskPainter_UsesFromEntryPositional() {
+		string path = Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "Paint", "Inpaint", "Inpaint_MaskPainter.cs");
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("SoftInpaintingArgs.FromEntry"));
+		Assert.That(src, Does.Not.Contain("new SoftInpaintingArgsEntry[1]"));
+	}
+
+	[Test]
+	public void ControlNet_PreprocessorNone_NormalizedForNeoCaseSensitiveLookup() {
+		string path = Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "ControlNetUnit_Dropdowns.cs");
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("currPreprocessorName"));
+		Assert.That(src, Does.Contain("Equals(\"none\""));
+		Assert.That(src, Does.Contain("return \"None\""));
+		Assert.That(src, Does.Contain("new TMP_Dropdown.OptionData(\"None\")"));
+	}
+
+	[Test]
+	public void ControlNet_DetectAndNetworkArgs_DefaultModuleIsCapitalNone() {
+		string path = Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Serialization", "SD_JSON_Payloads.cs");
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("controlnet_module = \"None\""));
+		Assert.That(src, Does.Contain("module = \"None\""));
+		Assert.That(src, Does.Not.Contain("controlnet_module = \"none\""));
+	}
+
+	[Test]
+	public void ControlNetUnit_GenArgs_UsesCurrPreprocessorName() {
+		string path = Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "ControlNetUnit_UI.cs");
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("module = _preprocessor.currPreprocessorName()"));
+	}
+
+	[Test]
+	public void OptionsPost_OmitsHiresFixRefinerPass_ForNeoCompat() {
+		var opt = new SD_OptionsPacket {
+			sd_model_checkpoint = "realisticvisionv51_v51vae.safetensors",
+			sd_vae = "None",
+			hires_fix_refiner_pass = "first pass",
+			tiling = false,
+		};
+		string json = opt.ToOutboundJson();
+		Assert.That(json, Does.Contain("sd_model_checkpoint"));
+		Assert.That(json, Does.Contain("tiling"));
+		Assert.That(json, Does.Not.Contain("hires_fix_refiner_pass"));
+		Assert.That(File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Options_Fetcher.cs")),
+			Does.Contain("ToOutboundJson()"));
+	}
+
+	[Test]
+	public void OptionsPost_KleinModules_WhenCheckpointNeedsThem() {
+		Assert.That(SD_OptionsPacket.CheckpointNeedsKleinModules("flux-2-klein-4b"), Is.True);
+		Assert.That(SD_OptionsPacket.CheckpointNeedsKleinModules("FLUX.2-klein-4B.safetensors"), Is.True);
+		Assert.That(SD_OptionsPacket.CheckpointNeedsKleinModules("realisticvisionv51_v51vae"), Is.False);
+		Assert.That(SD_OptionsPacket.CheckpointNeedsKleinModules("flux-2-dev"), Is.False);
+		Assert.That(SD_OptionsPacket.CheckpointNeedsKleinModules("flux2"), Is.False);
+		Assert.That(SD_OptionsPacket.CheckpointNeedsKleinModules("some-klein-only"), Is.False);
+		var opt = new SD_OptionsPacket {
+			sd_model_checkpoint = "flux-2-klein-4b.safetensors",
+			tiling = false,
+			forge_additional_modules = new[] {
+				SD_OptionsPacket.KleinTextEncoderModule,
+				SD_OptionsPacket.KleinVaeModule,
+			},
+		};
+		string json = opt.ToOutboundJson();
+		Assert.That(json, Does.Contain("forge_additional_modules"));
+		Assert.That(json, Does.Contain(SD_OptionsPacket.KleinTextEncoderModule));
+		Assert.That(json, Does.Contain(SD_OptionsPacket.KleinVaeModule));
+		Assert.That(File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Neural_Models.cs")),
+			Does.Contain("CheckpointNeedsKleinModules"));
+	}
+
+	[Test]
+	public void ControlNet_FamilyMismatch_XlCnWithSd15Detected() {
+		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
+			"diffusers_xl_depth_full", "realisticvisionv51_v51vae.safetensors"), Is.True);
+		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
+			"control_v11f1p_sd15_depth", "realisticvisionv51_v51vae.safetensors"), Is.False);
+		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
+			"diffusers_xl_depth_full", "juggernautXL_ragnarokBy.safetensors"), Is.False);
+	}
+
+	[Test]
+	public void ControlNet_Klein_SkipsLegacyCnAndBypassesDepthGate() {
+		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
+			"diffusers_xl_depth_full", "flux-2-klein-4b"), Is.True);
+		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
+			"control_v11f1p_sd15_depth", "flux-2-klein-4b.safetensors"), Is.True);
+		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
+			"None", "flux-2-klein-4b"), Is.False);
+		string hub = File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "StableDiffusion_Hub.cs"));
+		Assert.That(hub, Does.Contain("IsActiveCheckpointKlein()"));
+		Assert.That(hub, Does.Contain("has_Depth_or_Norm_or_RefOnly() || IsActiveCheckpointKlein()"));
+		Assert.That(hub, Does.Contain("!klein && has_Depth_or_Norm_or_RefOnly()==false"));
+	}
+
+	[Test]
+	public void ControlNet_ModelNone_NotForcedBackToDepth_OnRefresh() {
+		string src = File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "ControlNetUnit_Dropdowns.cs"));
+		Assert.That(src, Does.Not.Contain("prevChoice.ToLower()==\"none\")"));
+		Assert.That(src, Does.Contain("pickDepth_ifWasNone &= string.IsNullOrEmpty(prevChoice)"));
+		Assert.That(src, Does.Contain("CheckpointNeedsKleinModules(sd)"));
+	}
+}
