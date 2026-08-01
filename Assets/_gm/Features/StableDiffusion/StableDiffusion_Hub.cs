@@ -37,7 +37,8 @@ namespace spz {
 
 	        canGenBG_  =  !isOnCooldown  &&  !_generating  &&  isConnected;
 	        canGenArt_ =  !isOnCooldown  &&  !_generating  &&  isConnected;
-	        canGenArt_ &= has_Depth_or_Norm_or_RefOnly();
+	        // Flux.2 Klein has no SD/SDXL ControlNet family — Gen Art runs without depth/normals CN.
+	        canGenArt_ &= has_Depth_or_Norm_or_RefOnly() || IsActiveCheckpointKlein();
 	    }
 
 
@@ -55,7 +56,8 @@ namespace spz {
 	            Viewport_StatusText.instance.ShowStatusText(SdDisconnectPlaceholder.StatusText, false, 2, true);
 	            return true;
 	        }
-	        if(allow_without_controlnets==false &&  ControlNetUnit_UI.hasAtLeastSomeModel == false){
+	        bool klein = IsActiveCheckpointKlein();
+	        if(allow_without_controlnets==false && !klein && ControlNetUnit_UI.hasAtLeastSomeModel == false){
 	            string msg = "Can't Generate images yet. You need to download a Depth Control Net.\nGo to ControlNet tab, open unit, and download it.";
 	            CommandRibbon_UI.instance.Attention_toCtrlNetButton();
 	            Viewport_StatusText.instance.ShowStatusText(msg, false, 5, true);
@@ -69,7 +71,7 @@ namespace spz {
 	        if(_finalPreparations_beforeGen){ return true; }
 	        if (Time.unscaledTime < _generationCooldownUntil){ return true; }
 
-	        if (has_Depth_or_Norm_or_RefOnly()==false){
+	        if (!klein && has_Depth_or_Norm_or_RefOnly()==false){
 	            string msg = "To generate projections you need  a Depth or a Normals Control Net." +
 	                        "\nGo to ControlNet tab, open a unit and assign depth or normals";
 	            CommandRibbon_UI.instance.Attention_toCtrlNetButton();
@@ -77,6 +79,16 @@ namespace spz {
 	            return true;
 	        }
 	        return false;
+	    }
+
+	    /// <summary>True when the SD dropdown is Flux.2 Klein (or flux-2) — Gen Art may skip depth/normals CN.</summary>
+	    public static bool IsActiveCheckpointKlein(){
+	        try {
+	            string sd = SD_InputPanel_UI.instance != null ? SD_InputPanel_UI.instance.models?.selectedModel_name : null;
+	            return SD_OptionsPacket.CheckpointNeedsKleinModules(sd);
+	        } catch {
+	            return false;
+	        }
 	    }
 
     
@@ -118,6 +130,13 @@ namespace spz {
 
 	        bool do_img2Img  =  isMode_Img2Img && (hasAutoMask || hasBrushedMask);
 	             do_img2Img |=  hasBackground || hasBackgroundColors;
+	        // Flux.2 Klein: co-opt ControlNet ContentCam/CustomFile as img2img init (no CN weights).
+	        // Gen BG must not steal a face/custom CN image as its init.
+	        bool kleinCnInit = !isMakingBackgrounds
+	                          && IsActiveCheckpointKlein()
+	                          && SD_ControlNetsList_UI.instance != null
+	                          && SD_ControlNetsList_UI.instance.HasKleinImg2ImgInitSource();
+	        do_img2Img |= kleinCnInit;
 
 	        if(do_img2Img){
 	            _Act_img2img_willRequest?.Invoke();
