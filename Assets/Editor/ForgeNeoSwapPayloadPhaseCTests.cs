@@ -292,6 +292,19 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 	}
 
 	[Test]
+	public void Hub_Klein_DeniesEmptyCustomFileCoOpt() {
+		string hub = File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "StableDiffusion_Hub.cs"));
+		string list = File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "SD_ControlNetsList_UI.cs"));
+		Assert.That(list, Does.Contain("HasArmedEmptyKleinCustomFile"));
+		Assert.That(hub, Does.Contain("HasArmedEmptyKleinCustomFile"));
+		Assert.That(hub, Does.Contain("CustomFile but no image is loaded"));
+	}
+
+	[Test]
 	public void ControlNet_Klein_PrefersContentCamOverCustomFile() {
 		string src = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
