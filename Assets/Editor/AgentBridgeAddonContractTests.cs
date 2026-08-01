@@ -144,12 +144,14 @@ public sealed class AgentBridgeAddonContractTests {
 		Assert.That(payload, Does.Contain("do not TryGet again"));
 		Assert.That(payload, Does.Contain("!forceFullWhiteMask"));
 		Assert.That(payload, Does.Contain("cameras/mask painter/workflow not ready"));
-		Assert.That(payload, Does.Contain("ResizeTexture2D_Exact_DestroySrc"));
-		Assert.That(payload, Does.Contain("Only uniform Scaling"));
+		Assert.That(payload, Does.Contain("PrepareImg2ImgEncodePair"));
+		Assert.That(payload, Does.Contain("payloadW"));
 		Assert.That(payload, Does.Contain("SD input panel not ready"));
 		string texTools = File.ReadAllText(RepoPath(
 			"Assets", "_gm", "Features", "TextureTools", "TextureTools_SPZ.cs"));
-		Assert.That(texTools, Does.Contain("ResizeTexture2D_Exact_DestroySrc"));
+		Assert.That(texTools, Does.Contain("PrepareImg2ImgEncodePair"));
+		Assert.That(texTools, Does.Contain("FitTexture2D_CropAndResize_KeepSrc"));
+		Assert.That(texTools, Does.Contain("ResizeTexture2D_Exact_KeepSrc"));
 		Assert.That(texTools, Does.Contain("TextureFormat.RGBA32"));
 		Assert.That(texTools, Does.Contain("ReadPixels"));
 		string genReq = File.ReadAllText(RepoPath(
