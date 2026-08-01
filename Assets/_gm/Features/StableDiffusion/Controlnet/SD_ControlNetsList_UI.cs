@@ -97,11 +97,34 @@ namespace spz {
 	    }
 
 	    public bool HasKleinImg2ImgInitSource(){
+	        return TryPeekKleinImg2ImgInitSource(out _, out _);
+	    }
+
+	    /// <summary>
+	    /// Describes the preferred Klein init source without allocating a texture.
+	    /// Same preference order as TryGetDisposableKleinImg2ImgInit (CustomFile then ContentCam).
+	    /// </summary>
+	    public bool TryPeekKleinImg2ImgInitSource(out int unitIndex, out string sourceLabel){
+	        unitIndex = -1;
+	        sourceLabel = "";
 	        if (_controlNet_units == null) return false;
+	        if (TryPeekKleinInit(WhatImageToSend_CTRLNET.CustomFile, out unitIndex, out sourceLabel))
+	            return true;
+	        if (TryPeekKleinInit(WhatImageToSend_CTRLNET.ContentCam, out unitIndex, out sourceLabel))
+	            return true;
+	        return false;
+	    }
+
+	    bool TryPeekKleinInit(WhatImageToSend_CTRLNET want, out int unitIndex, out string sourceLabel){
+	        unitIndex = -1;
+	        sourceLabel = "";
 	        for (int i = 0; i < _controlNet_units.Count; i++){
 	            var u = _controlNet_units[i];
-	            // Must be able to produce a bitmap — empty CustomFile must not force img2img.
-	            if (u != null && u.IsKleinImg2ImgInitSource()) return true;
+	            if (u == null || u._whatImageToSend != want) continue;
+	            if (!u.IsKleinImg2ImgInitSource()) continue;
+	            unitIndex = i;
+	            sourceLabel = want == WhatImageToSend_CTRLNET.CustomFile ? "CustomFile" : "ContentCam";
+	            return true;
 	        }
 	        return false;
 	    }

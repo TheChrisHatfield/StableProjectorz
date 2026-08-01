@@ -219,13 +219,32 @@ namespace spz {
 	        var camerasMGR = UserCameras_MGR.instance;
 	        var painter    = Inpaint_MaskPainter.instance;
 
-	        // Apply layer stack to accumulation immediately before content-cam capture so init_image matches the viewport
-	        // regardless of Update vs coroutine order (Objects_Renderer can rebuild accumulation in OnUpdate the same frame).
-	        if (!forceFullWhiteMask && Objects_Renderer_MGR.instance != null)
-		        Objects_Renderer_MGR.instance.EnsureInpaintColorLayerAppliedForCapture();
+	        // Peek Klein CN init before any ReadPixels so CustomFile can skip ContentCam entirely,
+	        // and ContentCam uses a single post-Ensure capture (not a duplicate from TryGet).
+	        int kleinUnitIx = -1;
+	        string kleinSrcLabel = "";
+	        bool kleinFromCn = !forceFullWhiteMask
+	            && StableDiffusion_Hub.IsActiveCheckpointKlein()
+	            && SD_ControlNetsList_UI.instance != null
+	            && SD_ControlNetsList_UI.instance.TryPeekKleinImg2ImgInitSource(out kleinUnitIx, out kleinSrcLabel);
+	        bool kleinUsesCustomFile = kleinFromCn
+	            && string.Equals(kleinSrcLabel, "CustomFile", System.StringComparison.Ordinal);
 
-	        // Layer paint: also applied one frame earlier in Generate_img2img_crtn; this call is the authoritative sync before ReadPixels.
-	        viewTex_    = camerasMGR.camTextures.GetDisposable_ContentCamTexture();
+	        if (kleinUsesCustomFile){
+	            if (!SD_ControlNetsList_UI.instance.TryGetDisposableKleinImg2ImgInit(
+	                    out viewTex_, out kleinUnitIx, out kleinSrcLabel) || viewTex_ == null){
+	                kleinFromCn = false;
+	                if (!forceFullWhiteMask && Objects_Renderer_MGR.instance != null)
+		                Objects_Renderer_MGR.instance.EnsureInpaintColorLayerAppliedForCapture();
+	                viewTex_ = camerasMGR.camTextures.GetDisposable_ContentCamTexture();
+	            }
+	        } else {
+	            // Apply layer stack immediately before content-cam capture so init matches the viewport
+	            // (Objects_Renderer can rebuild accumulation in OnUpdate the same frame).
+	            if (!forceFullWhiteMask && Objects_Renderer_MGR.instance != null)
+		            Objects_Renderer_MGR.instance.EnsureInpaintColorLayerAppliedForCapture();
+	            viewTex_ = camerasMGR.camTextures.GetDisposable_ContentCamTexture();
+	        }
 
 	        painter.GetDisposable_ScreenMask( forceFullWhite:forceFullWhiteMask, 
 	                                          out screenMask_skipAntiEdge_, out screenMask_withAntiEdge_ );
@@ -241,27 +260,14 @@ namespace spz {
 	        else
 		        denoiseStrength_ = 1.0f;
 
-	        // Flux.2 Klein: replace viewport init with ControlNet unit ContentCam/CustomFile when present.
-	        // CN model stays None — image is img2img init only. Use Original + redo denoise so LatentNothing
-	        // (ProjectionsMasking) does not wipe the reference at denoise=1.
-	        // Skip when forceFullWhiteMask (Gen BG / full-white path) — those must keep silhouette/view init.
-	        if (!forceFullWhiteMask
-	            && StableDiffusion_Hub.IsActiveCheckpointKlein()
-	            && SD_ControlNetsList_UI.instance != null
-	            && SD_ControlNetsList_UI.instance.TryGetDisposableKleinImg2ImgInit(
-	                out Texture2D kleinInit, out int unitIx, out string srcLabel)
-	            && kleinInit != null){
-	            if (viewTex_ != null){
-	                UnityEngine.Object.Destroy(viewTex_);
-	            }
-	            viewTex_ = kleinInit;
+	        // Klein CN co-opt: Original + redo denoise so LatentNothing (ProjectionsMasking) does not wipe the ref.
+	        // ContentCam init is the single post-Ensure capture above — do not TryGet again.
+	        if (kleinFromCn && viewTex_ != null){
 	            inpaint_fill_ = InpaintingFill.Original;
 	            float redo = SD_WorkflowOptionsRibbon_UI.instance != null
 	                ? SD_WorkflowOptionsRibbon_UI.instance.denoisingStrength : 0.45f;
 	            denoiseStrength_ = Mathf.Clamp(Mathf.Max(redo, 0.15f), 0.15f, 0.85f);
-	            // Full-frame edit when no brush mask / projections mode.
-	            if (forceFullWhiteMask
-	                || WorkflowRibbon_UI.instance.currentMode() == WorkflowRibbon_CurrMode.ProjectionsMasking
+	            if (WorkflowRibbon_UI.instance.currentMode() == WorkflowRibbon_CurrMode.ProjectionsMasking
 	                || !WorkflowRibbon_UI.instance.has_brushed_mask()){
 	                if (screenMask_skipAntiEdge_ != null) UnityEngine.Object.Destroy(screenMask_skipAntiEdge_);
 	                if (screenMask_withAntiEdge_ != null) UnityEngine.Object.Destroy(screenMask_withAntiEdge_);
@@ -270,7 +276,7 @@ namespace spz {
 	            }
 	            if (Viewport_StatusText.instance != null){
 	                Viewport_StatusText.instance.ShowStatusText(
-	                    $"Klein img2img init from ControlNet {unitIx} ({srcLabel}), denoise {denoiseStrength_:0.00}.",
+	                    $"Klein img2img init from ControlNet {kleinUnitIx} ({kleinSrcLabel}), denoise {denoiseStrength_:0.00}.",
 	                    false, 4f, false);
 	            }
 	        }
