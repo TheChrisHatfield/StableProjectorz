@@ -365,6 +365,7 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 		Assert.That(dropdowns, Does.Contain("Klein must not fall through to SD1.5/XL depth"));
 		Assert.That(dropdowns, Does.Contain("drop legacy depth_* preprocessors"));
 		Assert.That(list, Does.Contain("Do not arm Depth with leftover SD1.5/XL weights"));
+		Assert.That(list, Does.Contain("Depth CN then has no effect"));
 		string neural = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Neural_Models.cs"));
