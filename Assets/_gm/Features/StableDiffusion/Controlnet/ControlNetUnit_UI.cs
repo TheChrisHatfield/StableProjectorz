@@ -219,8 +219,23 @@ namespace spz {
 	        }
 
 	        Texture2D imageToSend = getDisposableTexture_toSend(intermediates);
+	        // Depth/ContentCam/etc. with a null capture would encode to "" and Neo often fails the whole job.
+	        if (imageToSend == null && !isForInpaint()){
+	            if (Viewport_StatusText.instance != null){
+	                Viewport_StatusText.instance.ShowStatusText(
+	                    "Skipped ControlNet: no control image available for this unit.", false, 4f, false);
+	            }
+	            return null;
+	        }
 
 	        string inputImgStr = TextureTools_SPZ.TextureToBase64(imageToSend);
+	        if (string.IsNullOrEmpty(inputImgStr) && !isForInpaint()){
+	            if (Viewport_StatusText.instance != null){
+	                Viewport_StatusText.instance.ShowStatusText(
+	                    "Skipped ControlNet: control image encode failed.", false, 4f, false);
+	            }
+	            return null;
+	        }
 	        // CustomFile copies are not stored on intermediates — free after encode.
 	        if (_imgsDisplay != null
 	            && _imgsDisplay._whatImageToSend == WhatImageToSend_CTRLNET.CustomFile

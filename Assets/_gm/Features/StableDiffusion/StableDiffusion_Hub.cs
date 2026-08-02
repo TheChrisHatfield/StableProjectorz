@@ -138,7 +138,8 @@ namespace spz {
 
 	        bool do_img2Img  =  isMode_Img2Img && (hasAutoMask || hasBrushedMask);
 	             do_img2Img |=  hasBackground || hasBackgroundColors;
-	        // Flux.2 Klein: co-opt ControlNet ContentCam/CustomFile as img2img init (no CN weights).
+	        // Flux.2 Klein: ContentCam/CustomFile (model None) co-opt as img2img init; unit0 may still
+	        // send Flux2 ControlNet depth separately via alwayson_scripts.
 	        // Gen BG must not steal a face/custom CN image as its init.
 	        bool kleinCnInit = !isMakingBackgrounds
 	                          && IsActiveCheckpointKlein()
