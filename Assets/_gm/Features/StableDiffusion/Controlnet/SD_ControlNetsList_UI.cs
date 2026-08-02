@@ -115,10 +115,12 @@ namespace spz {
 	        bool armedDepth = false;
 	        if (u0 != null){
 	            if (u0.dropdowns != null) u0.dropdowns.TrySelectModelNone();
-	            armedDepth = u0.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false);
-	            if (armedDepth){
+	            bool setDepth = u0.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false);
+	            if (setDepth){
 	                u0.TrySetActivated(true);
-	                initSourceLabel = "Depth";
+	                armedDepth = u0.isActivated && u0._whatImageToSend == WhatImageToSend_CTRLNET.Depth
+	                    && u0.is_currModel_none;
+	                if (armedDepth) initSourceLabel = "Depth";
 	            }
 	        }
 
@@ -150,15 +152,33 @@ namespace spz {
 	            // Restore Depth on u0 after any CopyFromAnother side effects.
 	            if (u0 != null){
 	                u0.dropdowns?.TrySelectModelNone();
-	                u0.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false);
-	                u0.TrySetActivated(true);
-	                initSourceLabel = "Depth";
-	                armedDepth = true;
+	                bool setDepth = u0.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false);
+	                if (setDepth){
+	                    u0.TrySetActivated(true);
+	                    armedDepth = u0.isActivated && u0._whatImageToSend == WhatImageToSend_CTRLNET.Depth
+	                        && u0.is_currModel_none;
+	                    initSourceLabel = armedDepth ? "Depth" : "";
+	                } else {
+	                    armedDepth = false;
+	                    initSourceLabel = "";
+	                }
 	            }
 	        }
 
 	        if (string.IsNullOrEmpty(initSourceLabel) && TryPeekKleinImg2ImgInitSource(out _, out string label))
 	            initSourceLabel = label;
+	        // Ensure depth RT is allocated before readiness checks (same-frame prepare/gen).
+	        if (armedDepth){
+	            object lockOwner = this;
+	            UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.DepthUserCamera, lockOwner, isLock: true);
+	            try { Update_callbacks_MGR.content_depthRender?.Invoke(); }
+	            finally {
+	                UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.DepthUserCamera, lockOwner, isLock: false);
+	            }
+	        }
+	        // Prefer live peek over optimistic flags — callers must not see armed when init is missing.
+	        if (armedDepth && !HasKleinImg2ImgInitSource())
+	            armedDepth = false;
 	        return armedDepth;
 	    }
 

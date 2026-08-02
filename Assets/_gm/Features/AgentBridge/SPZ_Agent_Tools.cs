@@ -503,14 +503,6 @@ namespace spz {
 	                return;
 	            }
 	            applied["what_to_send"] = unit._whatImageToSend.ToString();
-	            if (want == WhatImageToSend_CTRLNET.CustomFile
-	                && unit.isActivated
-	                && unit.is_currModel_none
-	                && !unit.IsKleinImg2ImgInitSource()){
-	                fail("what_to_send=CustomFile but no image is loaded on unit " + unitIx
-	                     + ". Load a CustomFile or use ContentCam.");
-	                return;
-	            }
 	        }
 	        if (HasBool(prms, "activated")){
 	            bool wantOpen = prms["activated"].Value<bool>();
@@ -519,6 +511,15 @@ namespace spz {
 	                return;
 	            }
 	            applied["activated"] = unit.isActivated;
+	        }
+	        // Re-check after activated — common call sets what_to_send then activated:true.
+	        if (unit._whatImageToSend == WhatImageToSend_CTRLNET.CustomFile
+	            && unit.isActivated
+	            && unit.is_currModel_none
+	            && !unit.IsKleinImg2ImgInitSource()){
+	            fail("what_to_send=CustomFile but no image is loaded on unit " + unitIx
+	                 + ". Load a CustomFile or use Depth/ContentCam.");
+	            return;
 	        }
 	        ok(new Dictionary<string, object>{
 	            { "applied", applied },
@@ -630,6 +631,11 @@ namespace spz {
 	            string initLabel = "";
 	            if (cn != null)
 	                depthArmed = cn.TryApplyKleinControlNetLayout(out fluxCn, out initLabel);
+	            bool initReady = cn != null && cn.HasKleinImg2ImgInitSource();
+	            if (!depthArmed || !initReady){
+	                fail("Klein Depth img2img layout failed (need unit 0 Depth + model None, depth RT ready).");
+	                return;
+	            }
 	            if (result is Dictionary<string, object> dict){
 	                dict["klein_depth_img2img_armed"] = depthArmed;
 	                // Legacy keys kept for older capture scripts.
