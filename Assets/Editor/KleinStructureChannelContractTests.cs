@@ -29,11 +29,11 @@ public sealed class KleinStructureChannelContractTests {
 		Assert.That(ch, Does.Contain("FromReferenceBase64List"));
 		Assert.That(ch, Does.Contain("style_ref_missing"));
 		Assert.That(ch, Does.Contain("TryGetDisposableLoadedCustomFileBitmap"));
-		// ContentCam / img2img init before CustomFile — leftover CustomFile is often a depth plate.
-		int contentCamReuse = ch.IndexOf("ContentCam_reuse", StringComparison.Ordinal);
+		// Loaded CustomFile (even deactivated) before ContentCam for intentional style refs.
 		int customFile = ch.IndexOf("kind = \"CustomFile\"", StringComparison.Ordinal);
-		Assert.That(contentCamReuse, Is.GreaterThanOrEqualTo(0));
-		Assert.That(customFile, Is.GreaterThan(contentCamReuse));
+		int contentCam = ch.IndexOf("kind = style != null ? \"ContentCam\"", StringComparison.Ordinal);
+		Assert.That(customFile, Is.GreaterThanOrEqualTo(0));
+		Assert.That(contentCam, Is.GreaterThan(customFile));
 		Assert.That(ch, Does.Contain("(float)maxSide"));
 		Assert.That(ch, Does.Not.Contain("init_images"));
 		string payload = Read("Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs");
