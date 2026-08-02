@@ -690,7 +690,15 @@ namespace spz {
 	            { "sd_connected", Connection_MGR.is_sd_connected },
 	            { "sd_checkpoint", ckpt },
 	            { "klein_checkpoint", SD_OptionsPacket.CheckpointNeedsKleinModules(ckpt) },
-	            { "klein_gen_art_bypass", StableDiffusion_Hub.IsActiveCheckpointKlein() },
+	            // Legacy key: true only when Klein Gen Art is actually armed (Depth/CustomFile/ContentCam init).
+	            { "klein_gen_art_bypass",
+	                StableDiffusion_Hub.IsActiveCheckpointKlein()
+	                && SD_ControlNetsList_UI.instance != null
+	                && SD_ControlNetsList_UI.instance.HasKleinImg2ImgInitSource() },
+	            { "klein_img2img_from_cn",
+	                StableDiffusion_Hub.IsActiveCheckpointKlein()
+	                && SD_ControlNetsList_UI.instance != null
+	                && SD_ControlNetsList_UI.instance.HasKleinImg2ImgInitSource() },
 	            { "is_importing", ModelsHandler_3D.instance != null && ModelsHandler_3D.instance._isImportingModel },
 	            { "is_project_busy", Save_MGR.instance != null && Save_MGR.instance._isSaving },
 	        });
@@ -821,7 +829,11 @@ namespace spz {
 	            { "can_gen_art", canArt },
 	            { "can_gen_bg", canBg },
 	            { "klein_checkpoint", SD_OptionsPacket.CheckpointNeedsKleinModules(ckpt) },
-	            { "klein_gen_art_bypass", StableDiffusion_Hub.IsActiveCheckpointKlein() },
+	            // Legacy key: true only when Klein Gen Art is actually armed (not checkpoint alone).
+	            { "klein_gen_art_bypass",
+	                StableDiffusion_Hub.IsActiveCheckpointKlein()
+	                && SD_ControlNetsList_UI.instance != null
+	                && SD_ControlNetsList_UI.instance.HasKleinImg2ImgInitSource() },
 	            { "klein_img2img_from_cn",
 	                StableDiffusion_Hub.IsActiveCheckpointKlein()
 	                && SD_ControlNetsList_UI.instance != null

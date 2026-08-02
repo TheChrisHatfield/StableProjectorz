@@ -419,6 +419,8 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			"Assets", "_gm", "Features", "AgentBridge", "SPZ_Agent_Tools.cs"));
 		Assert.That(agent, Does.Contain("klein_depth_img2img_armed"));
 		Assert.That(agent, Does.Contain("depth-as-img2img layout"));
+		Assert.That(agent, Does.Contain("Legacy key: true only when Klein Gen Art is actually armed"));
+		Assert.That(agent, Does.Contain("HasKleinImg2ImgInitSource()"));
 	}
 
 	[Test]
