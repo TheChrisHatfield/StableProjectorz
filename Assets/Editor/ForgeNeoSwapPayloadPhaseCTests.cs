@@ -370,6 +370,7 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 		Assert.That(list, Does.Contain("TryApplyKleinControlNetLayout"));
 		Assert.That(list, Does.Contain("no Fun-Union ControlNet"));
 		Assert.That(list, Does.Contain("ClearAllUnitModelsToNone"));
+		Assert.That(list, Does.Contain("leftover Depth/ContentCam/CustomFile would still force Klein img2img"));
 		Assert.That(list, Does.Contain("WhatImageToSend_CTRLNET.Depth"));
 		Assert.That(list, Does.Contain("IsUnitModelValidForActiveCheckpoint"));
 		Assert.That(list, Does.Contain("TryHealFamilyMismatchedModels"));
