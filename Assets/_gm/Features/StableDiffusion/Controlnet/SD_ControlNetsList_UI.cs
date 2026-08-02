@@ -293,14 +293,28 @@ namespace spz {
 
 
 	    /// <summary>
-	    /// Swap family-mismatched CN weights (e.g. leftover SD1.5 depth on Klein) to a compatible model
+	    /// Swap family-mismatched CN weights (e.g. leftover SD1.5 depth on XL) to a compatible model
 	    /// before payload build so Gen Art does not silently drop depth.
+	    /// Klein-4B: no compatible CN — disarm models to None so UI matches skipped alwayson payload.
 	    /// </summary>
 	    public int TryHealFamilyMismatchedModels(){
 	        if (_controlNet_units == null) return 0;
 	        string sdCkpt = null;
 	        try { sdCkpt = SD_InputPanel_UI.instance?.models?.selectedModel_name; } catch { /* */ }
 	        if (string.IsNullOrEmpty(sdCkpt)) return 0;
+
+	        // Klein: Fun-Union / any CN weight is mismatch — clear model, keep Depth what-to-send for img2img.
+	        if (SD_OptionsPacket.CheckpointNeedsKleinModules(sdCkpt)){
+	            int cleared = 0;
+	            for (int i = 0; i < _controlNet_units.Count; i++){
+	                var u = _controlNet_units[i];
+	                if (u == null || u.dropdowns == null || u.is_currModel_none) continue;
+	                if (!u.dropdowns.TrySelectModelNone()) continue;
+	                cleared++;
+	            }
+	            return cleared;
+	        }
+
 	        string[] models = _models != null ? _models.model_list : null;
 	        if (models == null || models.Length == 0) return 0;
 
@@ -328,9 +342,6 @@ namespace spz {
 	            } else if (wasNorms){
 	                u.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Normals, allowOpenFileDialog: false);
 	            }
-	            if (SD_OptionsPacket.CheckpointNeedsKleinModules(sdCkpt)
-	                && ControlNetUnit_Dropdowns.ControlNetModelLooksFlux2(replacement))
-	                u.dropdowns.TrySelectPreprocessorByName("None", out _, out _);
 	            healed++;
 	        }
 	        return healed;
