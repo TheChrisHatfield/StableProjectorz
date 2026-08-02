@@ -69,6 +69,8 @@ namespace spz {
 	                payload_.alwayson_scripts.Add("controlnet", ctrlNets_args);//https://github.com/Mikubill/sd-webui-controlnet/wiki/API#examples-1
 	            }
 	        } else {
+	            // Still heal Fun-Union / family mismatch to None so UI matches skipped CN alwayson.
+	            SD_ControlNetsList_UI.instance?.TryHealFamilyMismatchedModels();
 	            if (!SD_KleinStructureChannel.TryAttachMeshDepthStructure(
 	                    payload_.alwayson_scripts, intermediates_, "txt2img", "txt2img_noise")){
 	                intermediates_.kleinStructureAttachFailed = true;
@@ -281,6 +283,8 @@ namespace spz {
 	                payload_.alwayson_scripts.Add("controlnet", ctrlNets_args);//https://github.com/Mikubill/sd-webui-controlnet/wiki/API#examples-1
 	            }
 	        } else {
+	            // Still heal Fun-Union / family mismatch to None so UI matches skipped CN alwayson.
+	            SD_ControlNetsList_UI.instance?.TryHealFamilyMismatchedModels();
 	            string pixelKind = "none";
 	            if (SD_ControlNetsList_UI.instance != null
 	                && SD_ControlNetsList_UI.instance.TryPeekKleinImg2ImgInitSource(out _, out string peekLabel)

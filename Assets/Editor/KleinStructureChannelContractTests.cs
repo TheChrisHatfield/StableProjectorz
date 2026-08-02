@@ -30,6 +30,7 @@ public sealed class KleinStructureChannelContractTests {
 		string payload = Read("Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs");
 		Assert.That(payload, Does.Contain("TryAttachMeshDepthStructure"));
 		Assert.That(payload, Does.Contain("kleinGenArt"));
+		Assert.That(payload, Does.Contain("TryHealFamilyMismatchedModels"));
 		Assert.That(payload, Does.Contain("Depth is never pixel init"));
 		Assert.That(payload, Does.Contain("\"CustomFile\""));
 		Assert.That(payload.IndexOf("TryPeekKleinInit(WhatImageToSend_CTRLNET.Depth", StringComparison.Ordinal),
