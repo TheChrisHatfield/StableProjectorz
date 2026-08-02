@@ -53,11 +53,11 @@ When a token is set, every request must include it: `{"params":{"token":"..."}}`
 | `set_sd_gen_settings` | Set those fields + prompts; optional `clear_controlnet_models` |
 | `set_controlnet_unit` | Set one unit's model / weight by index |
 | `generate` | Start Gen Art or Gen BG (`backgrounds: true`) |
-| `get_generation_status` | Busy / can_gen / cooldown / Klein bypass |
+| `get_generation_status` | Busy / can_gen / cooldown / Klein init armed |
 | `stop_generation` | Interrupt Gen Art |
 | `focus_camera` | Frame selection (F-key) |
 | `show_status` | Viewport HUD text |
-| `prepare_flux_klein_test` | Klein preset: Euler / 4 steps / CFG 1 / 512² / Flux2 CN depth on unit 0 + img2img on unit 1 |
+| `prepare_flux_klein_test` | Klein preset: Euler / 4 steps / CFG 1 / 512²; all CN None; unit 0 Depth as img2img init |
 | `list_spz_commands` | Full `spz.cmd` / `spz.ui` catalogue (same as add-on JSON-RPC) |
 | `spz_cmd` | Call **any** `spz.cmd.*` / `spz.ui.*` via `Addon_SocketServer.ProcessRequestDirect` — full autonomy |
 
