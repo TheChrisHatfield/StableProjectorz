@@ -37,9 +37,10 @@ namespace spz {
 
 	        canGenBG_  =  !isOnCooldown  &&  !_generating  &&  isConnected;
 	        canGenArt_ =  !isOnCooldown  &&  !_generating  &&  isConnected;
-	        // Flux.2 Klein: Gen Art needs mesh-depth structure channel (ImageStitch), not Fun-Union.
-	        // Use HasMeshDepthRt (no render) — CanCaptureMeshDepth forces content_depthRender and must not run every poll.
-	        bool kleinReady = IsActiveCheckpointKlein() && SD_KleinStructureChannel.HasMeshDepthRt();
+	        // Flux.2 Klein: Gen Art uses ImageStitch structure (not Fun-Union). Button enable = Klein ckpt;
+	        // fail-closed structure attach runs on Deny/payload (HasMeshDepthRt alone stays false until a
+	        // depth lock holder exists — would permanently disable Gen Art).
+	        bool kleinReady = IsActiveCheckpointKlein();
 	        canGenArt_ &= has_Depth_or_Norm_or_RefOnly() || kleinReady;
 	    }
 

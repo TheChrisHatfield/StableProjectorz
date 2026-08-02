@@ -37,14 +37,15 @@ public sealed class KleinStructureChannelContractTests {
 	}
 
 	[Test]
-	public void Hub_ReadyUsesHasMeshDepthRt_NotForceRenderOnPoll() {
+	public void Hub_KleinGenArtEnable_IsCheckpoint_StructureOnDeny() {
 		string hub = Read("Assets", "_gm", "Features", "StableDiffusion", "StableDiffusion_Hub.cs");
-		Assert.That(hub, Does.Contain("SD_KleinStructureChannel.HasMeshDepthRt()"));
+		Assert.That(hub, Does.Contain("bool kleinReady = IsActiveCheckpointKlein();"));
 		Assert.That(hub, Does.Contain("ImageStitch"));
 		Assert.That(hub, Does.Contain("never Depth"));
 		Assert.That(hub, Does.Not.Contain("Klein Gen Art needs an img2img init"));
-		// Deny path may still force-render once; interactable poll must not.
+		// Deny/payload still force-capture; interactable poll must not call CanCaptureMeshDepth.
 		Assert.That(hub, Does.Contain("CanCaptureMeshDepth()"));
+		Assert.That(hub, Does.Not.Contain("HasMeshDepthRt()"));
 		string ch = Read("Assets", "_gm", "Features", "StableDiffusion", "Klein", "SD_KleinStructureChannel.cs");
 		Assert.That(ch, Does.Contain("HasMeshDepthRt"));
 		Assert.That(ch, Does.Contain("Do not call from per-frame"));
