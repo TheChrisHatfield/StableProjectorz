@@ -228,10 +228,7 @@ namespace spz {
 	        } catch { /* dropdown refresh can run before input panel is ready */ }
 
 	        if (wantFlux2){
-	            int fluxIx = -1;
-	            for (int i = 0; i < choices.Length; i++){
-	                if (ControlNetModelLooksFlux2(choices[i])){ fluxIx = i; break; }
-	            }
+	            int fluxIx = FindPreferredFlux2ModelIndex(choices);
 	            if (fluxIx >= 0) return fluxIx;
 	        }
 
@@ -249,6 +246,27 @@ namespace spz {
 	        return anyDepth;
 	    }
 
+	    /// <summary>Prefer Fun-Controlnet-Union, else any Flux2 ControlNet name.</summary>
+	    public static int FindPreferredFlux2ModelIndex(string[] choices){
+	        if (choices == null || choices.Length == 0) return -1;
+	        int anyFlux = -1, bestFun = -1;
+	        for (int i = 0; i < choices.Length; i++){
+	            if (!ControlNetModelLooksFlux2(choices[i])) continue;
+	            if (anyFlux < 0) anyFlux = i;
+	            string n = (choices[i] ?? "").ToLowerInvariant();
+	            if (n.Contains("fun-controlnet") || n.Contains("fun_controlnet")){
+	                bestFun = i;
+	                break;
+	            }
+	        }
+	        return bestFun >= 0 ? bestFun : anyFlux;
+	    }
+
+	    public static string FindPreferredDepthModelName(string[] choices){
+	        int ix = FindPreferredDepthModelIndex(choices);
+	        return ix >= 0 && choices != null ? choices[ix] : null;
+	    }
+
 	    public static bool CheckpointLooksXl(string checkpointName){
 	        if (string.IsNullOrEmpty(checkpointName)) return false;
 	        string n = checkpointName.ToLowerInvariant();
@@ -262,14 +280,14 @@ namespace spz {
 	        return n.Contains("sdxl") || n.Contains("diffusers_xl") || n.Contains("_xl_") || n.Contains("-xl-");
 	    }
 
-	    /// <summary>Flux.2 Fun-Controlnet-Union / flux2 controlnet weights (depth-capable).</summary>
+	    /// <summary>Flux.2 / Fun-Controlnet weights (depth-capable). Requires flux2 or fun-controlnet marker.</summary>
 	    public static bool ControlNetModelLooksFlux2(string cnModelName){
 	        if (string.IsNullOrEmpty(cnModelName)) return false;
 	        string n = cnModelName.ToLowerInvariant().Replace('\\', '/');
 	        if (n.Equals("none")) return false;
-	        return n.Contains("flux.2") || n.Contains("flux2") || n.Contains("fun-controlnet")
-	            || n.Contains("fun_controlnet") || n.Contains("controlnet-union")
-	            || n.Contains("controlnet_union");
+	        // Do not match bare "controlnet-union" — too broad vs InstantX / other unions.
+	        return n.Contains("flux.2") || n.Contains("flux2")
+	            || n.Contains("fun-controlnet") || n.Contains("fun_controlnet");
 	    }
 
 	    /// <summary>True when CN weight family does not match active SD checkpoint (Neo crashes: y is None).</summary>

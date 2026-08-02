@@ -267,6 +267,38 @@ namespace spz {
 	        return chosen;
 	    }
 
+	    public List<string> ListCheckpointNames(){
+	        var list = new List<string>();
+	        if (_modelsDropdown == null) return list;
+	        for (int i = 0; i < _modelsDropdown.options.Count; i++)
+	            list.Add(_modelsDropdown.options[i].text);
+	        return list;
+	    }
+
+	    /// <summary>Agent / MCP: select checkpoint by dropdown label or basename (e.g. flux-2-klein-4b).</summary>
+	    public bool TrySelectModelByName(string name, out string resolvedName, out string error){
+	        resolvedName = "";
+	        error = null;
+	        if (string.IsNullOrEmpty(name)){ error = "checkpoint name is empty"; return false; }
+	        if (_modelsDropdown == null || _modelsDropdown.options.Count == 0){
+	            error = "SD model dropdown is empty (not connected?)";
+	            return false;
+	        }
+	        string want = StripExtensions(name.Trim());
+	        int ix = _modelsDropdown.options.FindIndex(opt =>
+	            string.Equals(StripExtensions(opt.text), want, StringComparison.OrdinalIgnoreCase)
+	            || (opt.text != null && opt.text.IndexOf(want, StringComparison.OrdinalIgnoreCase) >= 0));
+	        if (ix < 0){
+	            error = "checkpoint not in dropdown: " + want;
+	            return false;
+	        }
+	        _modelsDropdown.value = ix;
+	        _modelsDropdown.RefreshShownValue();
+	        resolvedName = GetSelectedModel_name();
+	        SD_Options_Fetcher.instance?.SubmitOptions_Asap();
+	        return true;
+	    }
+
 
 
 	    void OnWillSendOptions_AmmendPlz(SD_OptionsPacket payload){
@@ -274,6 +306,16 @@ namespace spz {
 	        string selectedModel_name = GetSelectedModel_name();
 	        if(selectedModel_name == ""){ return; }
 	        payload.sd_model_checkpoint = selectedModel_name;
+	        // Flux.2 Klein checkpoint is DiT-only — Neo needs Qwen3 TE + Flux2 VAE as additional modules.
+	        if (SD_OptionsPacket.CheckpointNeedsKleinModules(selectedModel_name)){
+	            payload.forge_additional_modules = new[] {
+	                SD_OptionsPacket.KleinTextEncoderModule,
+	                SD_OptionsPacket.KleinVaeModule,
+	            };
+	        } else {
+	            // Leaving Klein without clearing modules leaves Qwen3/VAE stuck on SD1.5/XL loads.
+	            payload.forge_additional_modules = System.Array.Empty<string>();
+	        }
 	    }
 
 
@@ -281,6 +323,11 @@ namespace spz {
 	        string selectedModel = GetSelectedModel_name();
 	        if(selectedModel == ""){ return; }
 	        SD_Options_Fetcher.instance.SubmitOptions_Asap();
+
+	        // Klein ↔ SD1.5/XL: swap leftover ControlNet weights that would be skipped at generate time.
+	        try {
+	            SD_ControlNetsList_UI.instance?.TryHealFamilyMismatchedModels();
+	        } catch { /* CN list may be unavailable during early boot */ }
 
 	        _timeOf_SelectedTheModel =  Time.time;
 	        ActivateDropdown(false);
