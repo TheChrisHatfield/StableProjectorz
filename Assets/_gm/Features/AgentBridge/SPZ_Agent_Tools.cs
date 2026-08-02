@@ -705,14 +705,19 @@ namespace spz {
 	            { "klein_checkpoint", SD_OptionsPacket.CheckpointNeedsKleinModules(ckpt) },
 	            // Legacy bypass: Klein checkpoint selected (structure fail-closed on generate).
 	            { "klein_gen_art_bypass", StableDiffusion_Hub.IsActiveCheckpointKlein() },
-	            { "klein_structure_ready", StableDiffusion_Hub.IsActiveCheckpointKlein() },
-	            // Warm = depth contrast RT currently allocated (preview lock); not required for generate.
+	            // Ready = Klein + depth RT warm (cheap poll). Payload still CanCaptureMeshDepth fail-closed.
+	            { "klein_structure_ready",
+	                StableDiffusion_Hub.IsActiveCheckpointKlein()
+	                && SD_KleinStructureChannel.HasMeshDepthRt() },
+	            // Warm = depth contrast RT currently allocated (preview lock).
 	            { "klein_depth_rt_warm", SD_KleinStructureChannel.HasMeshDepthRt() },
 	            { "klein_img2img_from_cn",
 	                StableDiffusion_Hub.IsActiveCheckpointKlein()
 	                && SD_ControlNetsList_UI.instance != null
 	                && SD_ControlNetsList_UI.instance.HasKleinImg2ImgInitSource() },
 	            { "klein_structure_channel", SD_KleinStructureChannel.AlwaysOnScriptName },
+	            { "klein_refcontrol_lora", SD_KleinStructureChannel.RefControlLoraName },
+	            { "klein_last_reject_reason", KleinStructureTrace.LastRejectReason },
 	            { "is_importing", ModelsHandler_3D.instance != null && ModelsHandler_3D.instance._isImportingModel },
 	            { "is_project_busy", Save_MGR.instance != null && Save_MGR.instance._isSaving },
 	            { "klein_structure_trace", KleinStructureTrace.SnapshotOrNull() },
@@ -846,13 +851,18 @@ namespace spz {
 	            { "klein_checkpoint", SD_OptionsPacket.CheckpointNeedsKleinModules(ckpt) },
 	            // Legacy bypass: Klein checkpoint selected (structure fail-closed on generate).
 	            { "klein_gen_art_bypass", StableDiffusion_Hub.IsActiveCheckpointKlein() },
-	            { "klein_structure_ready", StableDiffusion_Hub.IsActiveCheckpointKlein() },
+	            // Ready = Klein + depth RT warm (cheap). Payload still CanCaptureMeshDepth fail-closed.
+	            { "klein_structure_ready",
+	                StableDiffusion_Hub.IsActiveCheckpointKlein()
+	                && SD_KleinStructureChannel.HasMeshDepthRt() },
 	            { "klein_depth_rt_warm", SD_KleinStructureChannel.HasMeshDepthRt() },
 	            { "klein_img2img_from_cn",
 	                StableDiffusion_Hub.IsActiveCheckpointKlein()
 	                && SD_ControlNetsList_UI.instance != null
 	                && SD_ControlNetsList_UI.instance.HasKleinImg2ImgInitSource() },
 	            { "klein_structure_channel", SD_KleinStructureChannel.AlwaysOnScriptName },
+	            { "klein_refcontrol_lora", SD_KleinStructureChannel.RefControlLoraName },
+	            { "klein_last_reject_reason", KleinStructureTrace.LastRejectReason },
 	            { "klein_structure_trace", KleinStructureTrace.SnapshotOrNull() },
 	        };
 	    }
