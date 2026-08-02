@@ -289,14 +289,22 @@ namespace spz {
 	        for (int i = 0; i < _controlNet_units.Count; i++){
 	            var u = _controlNet_units[i];
 	            if (u == null || !u.isActivated || u.dropdowns == null) continue;
+	            // Capture role before model swap — Fun-Union names lack "depth"/"norm" substrings.
+	            bool wasDepth = u.isForDepth();
+	            bool wasNorms = u.isForNormals();
 	            // Only depth/normals gates participate in Gen Art projection — leave other CN slots alone.
-	            if (!u.isForDepth() && !u.isForNormals()) continue;
+	            if (!wasDepth && !wasNorms) continue;
 	            if (u.is_currModel_none) continue;
 	            if (!ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(u.currModelName(), sdCkpt))
 	                continue;
 	            if (!u.dropdowns.TrySelectModelByName(replacement, out _, out _)) continue;
-	            if (SD_OptionsPacket.CheckpointNeedsKleinModules(sdCkpt) && u.isForDepth())
-	                u.dropdowns.TrySelectPreprocessorByName("None", out _, out _);
+	            if (wasDepth){
+	                u.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false);
+	                if (SD_OptionsPacket.CheckpointNeedsKleinModules(sdCkpt))
+	                    u.dropdowns.TrySelectPreprocessorByName("None", out _, out _);
+	            } else if (wasNorms){
+	                u.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Normals, allowOpenFileDialog: false);
+	            }
 	            healed++;
 	        }
 	        return healed;
