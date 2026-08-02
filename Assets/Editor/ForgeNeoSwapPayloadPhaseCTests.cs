@@ -393,6 +393,8 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 		Assert.That(list, Does.Contain("TryHealFamilyMismatchedModels"));
 		Assert.That(list, Does.Contain("Klein-4B: no compatible CN — disarm models to None"));
 		Assert.That(list, Does.Contain("must not leave Gen Art gated with no init"));
+		Assert.That(list, Does.Contain("Prefer live peek over optimistic flags"));
+		Assert.That(list, Does.Contain("Ensure depth RT is allocated before readiness checks"));
 		Assert.That(list, Does.Contain("Capture role before model swap"));
 		Assert.That(list, Does.Contain("Refuse a \"heal\" that would still mismatch"));
 		string dropdowns = File.ReadAllText(Path.Combine(
@@ -425,6 +427,8 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			"Assets", "_gm", "Features", "AgentBridge", "SPZ_Agent_Tools.cs"));
 		Assert.That(agent, Does.Contain("klein_depth_img2img_armed"));
 		Assert.That(agent, Does.Contain("depth-as-img2img layout"));
+		Assert.That(agent, Does.Contain("Klein Depth img2img layout failed"));
+		Assert.That(agent, Does.Contain("Re-check after activated"));
 		Assert.That(agent, Does.Contain("Legacy key: true only when Klein Gen Art is actually armed"));
 		Assert.That(agent, Does.Contain("HasKleinImg2ImgInitSource()"));
 	}
