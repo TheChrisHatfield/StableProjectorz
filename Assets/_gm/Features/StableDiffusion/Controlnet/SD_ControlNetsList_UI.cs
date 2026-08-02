@@ -160,6 +160,15 @@ namespace spz {
 	            }
 	        }
 
+	        // Disarm leftover empty CustomFile slots so they cannot hard-block Gen Art after ContentCam arming.
+	        for (int i = 0; i < _controlNet_units.Count; i++){
+	            var u = _controlNet_units[i];
+	            if (u == null || !u.isActivated || !u.is_currModel_none) continue;
+	            if (u._whatImageToSend != WhatImageToSend_CTRLNET.CustomFile) continue;
+	            if (u.IsKleinImg2ImgInitSource()) continue;
+	            u.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.None, allowOpenFileDialog: false);
+	        }
+
 	        if (string.IsNullOrEmpty(initSourceLabel) && TryPeekKleinImg2ImgInitSource(out _, out string label))
 	            initSourceLabel = label;
 	        return selectedFlux;
