@@ -355,6 +355,7 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 		Assert.That(list, Does.Contain("cannot safely arm CustomFile co-opt without a second unit"));
 		Assert.That(list, Does.Contain("IsUnitModelValidForActiveCheckpoint"));
 		Assert.That(list, Does.Contain("TryHealFamilyMismatchedModels"));
+		Assert.That(list, Does.Contain("Capture role before model swap"));
 		string neural = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Neural_Models.cs"));
