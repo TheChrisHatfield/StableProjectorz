@@ -407,13 +407,18 @@ namespace spz {
 	        SD_txt2imgResponse response = JsonConvert.DeserializeObject<SD_txt2imgResponse>(json, settings);
 
 	        // Klein: reject depth-plate false success before projection bake.
+	        // Complete_PendingImages(null) is a no-op — dispose pending GenData like interrupt.
 	        if (RejectKleinDepthLikeResult(response)){
-	            _latestGenData?.Complete_PendingImages(null);
+	            if (GenData2D_Archive.instance != null)
+	                GenData2D_Archive.instance.OnTerminatedGeneration(_latestGenData);
 	            _latestGenData = null;
+	            _isGeneratingWhat = Generate_RequestingWhat.nothing;
+	            _generationCooldownUntil = Time.unscaledTime + _generationCooldown;
+	            if (Objects_Renderer_MGR.instance != null)
+	                Objects_Renderer_MGR.instance.ReRenderAll_soon();
 	            Viewport_StatusText.instance.ShowStatusText(
 	                "Klein Gen Art rejected: Neo result looks like depth plate (structure channel, not albedo).",
 	                false, 8, progressVisibility:false);
-	            _isGeneratingWhat = Generate_RequestingWhat.nothing;
 	            return;
 	        }
 
