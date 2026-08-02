@@ -141,12 +141,13 @@ namespace spz {
 
 	    /// <summary>True only when a real init bitmap can be produced (not an empty CustomFile slot).</summary>
 	    public bool HasValidKleinImg2ImgInit(){
+	        var cams = UserCameras_MGR.instance != null ? UserCameras_MGR.instance.camTextures : null;
 	        if (_whatImageToSend == WhatImageToSend_CTRLNET.Depth)
-	            return UserCameras_MGR.instance != null && UserCameras_MGR.instance.camTextures != null;
+	            return cams != null && cams._SD_depthCam_RT_R32_contrast != null;
 	        if (_whatImageToSend == WhatImageToSend_CTRLNET.CustomFile)
 	            return HasLoadedCustomFileBitmap();
 	        if (_whatImageToSend == WhatImageToSend_CTRLNET.ContentCam)
-	            return UserCameras_MGR.instance != null && UserCameras_MGR.instance.camTextures != null;
+	            return cams != null && cams._contentCam_RT_ref != null;
 	        return false;
 	    }
 
