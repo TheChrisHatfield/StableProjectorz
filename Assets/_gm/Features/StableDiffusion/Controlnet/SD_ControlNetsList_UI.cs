@@ -121,6 +121,9 @@ namespace spz {
 	            if (selectedFlux){
 	                u0.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false);
 	                u0.TrySetActivated(true);
+	                // Saved/copied units often leave weight at 0 — Depth CN then has no effect and bake looks "off".
+	                if (u0.GetControlWeight() < 0.05f)
+	                    u0.SetControlWeight(1f);
 	            } else {
 	                // Do not arm Depth with leftover SD1.5/XL weights — GetArgs would skip them anyway.
 	                string sdCkpt = null;
