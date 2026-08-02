@@ -24,14 +24,44 @@ namespace spz {
 
 	    /// <summary>
 	    /// True when mesh depth can be captured. Forces one depth render so RT is allocated/fresh.
+	    /// Checks RT while the depth lock is still held — unlocking can Destroy the RT immediately.
 	    /// Do not call from per-frame Gen Art interactable polls — use <see cref="HasMeshDepthRt"/> there.
 	    /// </summary>
 	    public static bool CanCaptureMeshDepth(){
-	        EnsureDepthRendered();
-	        return HasMeshDepthRt();
+	        Texture2D probe = null;
+	        bool ok = TryCaptureMeshDepthDisposable(out probe, out _);
+	        if (probe != null) Object.DestroyImmediate(probe);
+	        return ok;
+	    }
+
+	    /// <summary>
+	    /// Lock depth cams, allocate/render, return CPU RGBA copy. Safe after unlock (copy owns pixels).
+	    /// </summary>
+	    public static bool TryCaptureMeshDepthDisposable(out Texture2D depthRgba, out string failReason){
+	        depthRgba = null;
+	        failReason = "";
+	        object lockOwner = typeof(SD_KleinStructureChannel);
+	        UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.DepthUserCamera, lockOwner, isLock: true);
+	        try {
+	            Update_callbacks_MGR.content_depthRender?.Invoke();
+	            var cams = UserCameras_MGR.instance != null ? UserCameras_MGR.instance.camTextures : null;
+	            if (cams == null || cams._SD_depthCam_RT_R32_contrast == null){
+	                failReason = "depth_rt_missing";
+	                return false;
+	            }
+	            depthRgba = cams.GetDisposable_DepthTexture();
+	            if (depthRgba == null){
+	                failReason = "depth_capture_null";
+	                return false;
+	            }
+	            return true;
+	        } finally {
+	            UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.DepthUserCamera, lockOwner, isLock: false);
+	        }
 	    }
 
 	    public static void EnsureDepthRendered(){
+	        // Prefer TryCaptureMeshDepthDisposable for attach — unlock can destroy the RT.
 	        object lockOwner = typeof(SD_KleinStructureChannel);
 	        UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.DepthUserCamera, lockOwner, isLock: true);
 	        try {
@@ -63,23 +93,14 @@ namespace spz {
 	            return false;
 	        }
 
-	        EnsureDepthRendered();
-	        var cams = UserCameras_MGR.instance != null ? UserCameras_MGR.instance.camTextures : null;
-	        bool rtPresent = cams != null && cams._SD_depthCam_RT_R32_contrast != null;
-	        KleinStructureTrace.Set("depth_rt_present", rtPresent);
-	        if (!rtPresent){
+	        if (!TryCaptureMeshDepthDisposable(out Texture2D depth, out string failReason)){
+	            KleinStructureTrace.Set("depth_rt_present", failReason != "depth_rt_missing");
 	            KleinStructureTrace.Set("structure_attached", false);
-	            KleinStructureTrace.Set("reject_reason", "depth_rt_missing");
+	            KleinStructureTrace.Set("reject_reason", string.IsNullOrEmpty(failReason) ? "depth_capture_null" : failReason);
 	            return false;
 	        }
 
-	        Texture2D depth = cams.GetDisposable_DepthTexture();
-	        if (depth == null){
-	            KleinStructureTrace.Set("structure_attached", false);
-	            KleinStructureTrace.Set("reject_reason", "depth_capture_null");
-	            return false;
-	        }
-
+	        KleinStructureTrace.Set("depth_rt_present", true);
 	        KleinStructureTrace.Set("depth_w", depth.width);
 	        KleinStructureTrace.Set("depth_h", depth.height);
 
@@ -93,8 +114,18 @@ namespace spz {
 	        if (string.IsNullOrEmpty(b64)){
 	            KleinStructureTrace.Set("structure_attached", false);
 	            KleinStructureTrace.Set("reject_reason", "depth_encode_failed");
+	            if (intermediates == null || !ReferenceEquals(intermediates.depth_disposableTex, depth))
+	                Object.DestroyImmediate(depth);
+	            else {
+	                intermediates.depth_disposableTex = null;
+	                Object.DestroyImmediate(depth);
+	            }
 	            return false;
 	        }
+
+	        // Encode succeeded; if caller passed no intermediates, we still need to free the CPU copy.
+	        if (intermediates == null)
+	            Object.DestroyImmediate(depth);
 
 	        var stitch = ImageStitch_AlwaysOnArgs.FromReferenceBase64(b64, DefaultMaxSide);
 	        alwayson[AlwaysOnScriptName] = stitch;

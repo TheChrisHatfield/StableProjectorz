@@ -48,6 +48,8 @@ public sealed class KleinStructureChannelContractTests {
 		string ch = Read("Assets", "_gm", "Features", "StableDiffusion", "Klein", "SD_KleinStructureChannel.cs");
 		Assert.That(ch, Does.Contain("HasMeshDepthRt"));
 		Assert.That(ch, Does.Contain("Do not call from per-frame"));
+		Assert.That(ch, Does.Contain("TryCaptureMeshDepthDisposable"));
+		Assert.That(ch, Does.Contain("Checks RT while the depth lock is still held"));
 	}
 
 	[Test]
