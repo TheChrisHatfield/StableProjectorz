@@ -293,6 +293,9 @@ namespace spz {
 
 	        string replacement = ControlNetUnit_Dropdowns.FindPreferredDepthModelName(models);
 	        if (string.IsNullOrEmpty(replacement)) return 0;
+	        // Refuse a "heal" that would still mismatch (e.g. Klein with only SD1.5 depth installed).
+	        if (ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(replacement, sdCkpt))
+	            return 0;
 
 	        int healed = 0;
 	        for (int i = 0; i < _controlNet_units.Count; i++){

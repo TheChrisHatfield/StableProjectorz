@@ -228,8 +228,8 @@ namespace spz {
 	        } catch { /* dropdown refresh can run before input panel is ready */ }
 
 	        if (wantFlux2){
-	            int fluxIx = FindPreferredFlux2ModelIndex(choices);
-	            if (fluxIx >= 0) return fluxIx;
+	            // Klein must not fall through to SD1.5/XL depth — those are family-mismatched and GetArgs skips them.
+	            return FindPreferredFlux2ModelIndex(choices);
 	        }
 
 	        int anyDepth = -1, bestXl = -1, bestNonXl = -1;
