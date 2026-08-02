@@ -295,8 +295,28 @@ namespace spz {
 	        _modelsDropdown.value = ix;
 	        _modelsDropdown.RefreshShownValue();
 	        resolvedName = GetSelectedModel_name();
+	        EnsureKleinSdVaeSelected(resolvedName);
 	        SD_Options_Fetcher.instance?.SubmitOptions_Asap();
 	        return true;
+	    }
+
+	    /// <summary>
+	    /// Klein ImageStitch / RefControl encode refs through the SD VAE dropdown.
+	    /// forge_additional_modules alone is not enough — sd_vae=None breaks depth structure.
+	    /// </summary>
+	    public static bool EnsureKleinSdVaeSelected(string checkpointName = null){
+	        if (string.IsNullOrEmpty(checkpointName))
+	            checkpointName = instance != null ? instance.GetSelectedModel_name() : null;
+	        if (!SD_OptionsPacket.CheckpointNeedsKleinModules(checkpointName)) return false;
+	        var vae = SD_VAE.instance;
+	        if (vae == null) return false;
+	        string cur = vae.selectedVAE_name ?? "";
+	        if (cur.IndexOf("flux2_klein_4b_vae", StringComparison.OrdinalIgnoreCase) >= 0)
+	            return true;
+	        // Prefer exact module filename, then stem.
+	        if (vae.TrySelectVAEByName(SD_OptionsPacket.KleinVaeModule, out _, out _))
+	            return true;
+	        return vae.TrySelectVAEByName("flux2_klein_4b_vae", out _, out _);
 	    }
 
 
@@ -312,6 +332,11 @@ namespace spz {
 	                SD_OptionsPacket.KleinTextEncoderModule,
 	                SD_OptionsPacket.KleinVaeModule,
 	            };
+	            // Keep sd_vae aligned when dropdown already shows Klein VAE (agent/UI may set it).
+	            string vaeName = SD_VAE.instance != null ? SD_VAE.instance.selectedVAE_name : null;
+	            if (!string.IsNullOrEmpty(vaeName)
+	                && vaeName.IndexOf("flux2_klein_4b_vae", StringComparison.OrdinalIgnoreCase) >= 0)
+	                payload.sd_vae = vaeName;
 	        } else {
 	            // Leaving Klein without clearing modules leaves Qwen3/VAE stuck on SD1.5/XL loads.
 	            payload.forge_additional_modules = System.Array.Empty<string>();
@@ -322,6 +347,7 @@ namespace spz {
 	    void OnDropdown_EntryPicked(int ix){
 	        string selectedModel = GetSelectedModel_name();
 	        if(selectedModel == ""){ return; }
+	        EnsureKleinSdVaeSelected(selectedModel);
 	        SD_Options_Fetcher.instance.SubmitOptions_Asap();
 
 	        // Klein ↔ SD1.5/XL: swap leftover ControlNet weights that would be skipped at generate time.

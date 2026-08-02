@@ -23,6 +23,7 @@ Flux.2 Klein Gen Art must condition on **live mesh depth** (content-frustum 3D g
 | LoRA | `flux2_klein_4b_refcontrol_depth` + trigger `refcontrol` (required) |
 | Why LoRA | Depth-only ImageStitch makes Klein **copy the depth plate**; RefControl teaches depth-as-structure |
 | Not used | Fun-Union CN; Depth as `init_images` |
+| **sd_vae** | **`flux2_klein_4b_vae.safetensors` required** — `None` breaks ImageStitch depth encode even if `forge_additional_modules` lists the VAE |
 
 ## SPZ flow
 

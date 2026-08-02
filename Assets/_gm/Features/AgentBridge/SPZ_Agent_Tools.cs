@@ -621,6 +621,8 @@ namespace spz {
 	        }
 	        Tool_SetSdGenSettings(new JObject{
 	            ["checkpoint"] = ckpt,
+	            // ImageStitch/RefControl encode depth through sd_vae — None breaks structure lock.
+	            ["vae"] = "flux2_klein_4b_vae",
 	            ["sampler"] = "Euler",
 	            ["steps"] = 4,
 	            ["cfg_scale"] = 1.0,
@@ -629,6 +631,7 @@ namespace spz {
 	            // Keep CustomFile bitmaps; layout arms Depth as ImageStitch structure (no Fun-Union).
 	            ["clear_controlnet_models"] = false,
 	        }, result => {
+	            SD_Neural_Models.EnsureKleinSdVaeSelected(ckpt);
 	            var cn = SD_ControlNetsList_UI.instance;
 	            bool structureArmed = false;
 	            string fluxCn = "";
