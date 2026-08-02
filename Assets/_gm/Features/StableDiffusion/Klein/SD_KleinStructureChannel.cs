@@ -25,13 +25,18 @@ namespace spz {
 	    /// <summary>
 	    /// True when mesh depth can be captured. Forces one depth render so RT is allocated/fresh.
 	    /// Checks RT while the depth lock is still held — unlocking can Destroy the RT immediately.
+	    /// Does not allocate a CPU Texture2D (Deny/heal/prepare); attach uses TryCaptureMeshDepthDisposable.
 	    /// Do not call from per-frame Gen Art interactable polls — use <see cref="HasMeshDepthRt"/> there.
 	    /// </summary>
 	    public static bool CanCaptureMeshDepth(){
-	        Texture2D probe = null;
-	        bool ok = TryCaptureMeshDepthDisposable(out probe, out _);
-	        if (probe != null) Object.DestroyImmediate(probe);
-	        return ok;
+	        object lockOwner = typeof(SD_KleinStructureChannel);
+	        UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.DepthUserCamera, lockOwner, isLock: true);
+	        try {
+	            Update_callbacks_MGR.content_depthRender?.Invoke();
+	            return HasMeshDepthRt();
+	        } finally {
+	            UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.DepthUserCamera, lockOwner, isLock: false);
+	        }
 	    }
 
 	    /// <summary>
