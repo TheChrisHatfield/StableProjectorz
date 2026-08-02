@@ -187,8 +187,10 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Prefer any loaded CustomFile bitmap (even if unit deactivated), else ContentCam RGB
-	    /// as RefControl image2. Do not use IsKleinImg2ImgInitSource — prepare leaves CustomFile off.
+	    /// RefControl image2 = RGB identity/style. Prefer ContentCam (current view / img2img init)
+	    /// over CustomFile — a leftover CustomFile is often a depth plate from XL CN workflows and
+	    /// would make ImageStitch reproduce grayscale again. CustomFile is last-resort when
+	    /// ContentCam cannot be captured (still OK if unit is deactivated — prepare clears activation).
 	    /// </summary>
 	    static bool TryCaptureStyleRefBase64(SD_GenRequestArgs_byproducts intermediates, out string b64, out string kind){
 	        b64 = null;
@@ -197,17 +199,13 @@ namespace spz {
 	        bool destroyStyle = false;
 	        object contentLock = typeof(SD_KleinStructureChannel);
 	        try {
-	            if (SD_ControlNetsList_UI.instance != null
-	                && SD_ControlNetsList_UI.instance.TryGetDisposableLoadedCustomFileBitmap(out style, out _)){
-	                kind = "CustomFile";
-	                destroyStyle = true;
-	            } else if (intermediates != null && intermediates.usualView_disposableTexture != null){
-	                // Reuse ContentCam already captured for img2img when present.
+	            if (intermediates != null && intermediates.usualView_disposableTexture != null){
+	                // Reuse pixel init already captured for img2img (ContentCam or intentional CustomFile init).
 	                style = intermediates.usualView_disposableTexture;
 	                kind = "ContentCam_reuse";
 	                destroyStyle = false;
 	            } else if (UserCameras_MGR.instance != null && UserCameras_MGR.instance.camTextures != null){
-	                // Ensure content RT exists (same unlock-destroys pattern as depth — capture under lock).
+	                // Same unlock-destroys pattern as depth — capture under lock.
 	                UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.ContentUserCam, contentLock, isLock: true);
 	                try {
 	                    if (Objects_Renderer_MGR.instance != null)
@@ -220,6 +218,12 @@ namespace spz {
 	                }
 	                kind = style != null ? "ContentCam" : "none";
 	                destroyStyle = style != null;
+	            }
+	            if (style == null
+	                && SD_ControlNetsList_UI.instance != null
+	                && SD_ControlNetsList_UI.instance.TryGetDisposableLoadedCustomFileBitmap(out style, out _)){
+	                kind = "CustomFile";
+	                destroyStyle = true;
 	            }
 	            if (style == null) return false;
 	            b64 = TextureTools_SPZ.TextureToBase64(style);
