@@ -358,6 +358,11 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 		Assert.That(list, Does.Contain("IsUnitModelValidForActiveCheckpoint"));
 		Assert.That(list, Does.Contain("TryHealFamilyMismatchedModels"));
 		Assert.That(list, Does.Contain("Capture role before model swap"));
+		Assert.That(list, Does.Contain("Refuse a \"heal\" that would still mismatch"));
+		string dropdowns = File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "ControlNetUnit_Dropdowns.cs"));
+		Assert.That(dropdowns, Does.Contain("Klein must not fall through to SD1.5/XL depth"));
 		string neural = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Neural_Models.cs"));
