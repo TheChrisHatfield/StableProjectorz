@@ -276,10 +276,12 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 		Assert.That(json, Does.Contain("forge_additional_modules"));
 		Assert.That(json, Does.Contain(SD_OptionsPacket.KleinTextEncoderModule));
 		Assert.That(json, Does.Contain(SD_OptionsPacket.KleinVaeModule));
-		Assert.That(File.ReadAllText(Path.Combine(
+		string neural = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
-			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Neural_Models.cs")),
-			Does.Contain("CheckpointNeedsKleinModules"));
+			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Neural_Models.cs"));
+		Assert.That(neural, Does.Contain("CheckpointNeedsKleinModules"));
+		Assert.That(neural, Does.Contain("EnsureKleinSdVaeSelected"));
+		Assert.That(neural, Does.Contain("sd_vae=None breaks depth structure"));
 	}
 
 	[Test]

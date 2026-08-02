@@ -66,6 +66,10 @@ public sealed class KleinStructureChannelContractTests {
 		Assert.That(hub, Does.Contain("do_img2Img = false"));
 		Assert.That(hub, Does.Contain("ini_latent"));
 		Assert.That(hub, Does.Not.Contain("kleinPixelInit"));
+		Assert.That(hub, Does.Contain("flux2_klein_4b_vae"));
+		Assert.That(hub, Does.Contain("EnsureKleinSdVaeSelected"));
+		string agent = Read("Assets", "_gm", "Features", "AgentBridge", "SPZ_Agent_Tools.cs");
+		Assert.That(agent, Does.Contain("[\"vae\"] = \"flux2_klein_4b_vae\""));
 		// Deny/payload still force-capture; interactable poll must not call CanCaptureMeshDepth.
 		Assert.That(hub, Does.Contain("CanCaptureMeshDepth()"));
 		Assert.That(hub, Does.Not.Contain("HasMeshDepthRt()"));
