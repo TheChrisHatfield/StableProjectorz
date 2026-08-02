@@ -444,6 +444,7 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 		Assert.That(agent, Does.Contain("klein_depth_img2img_armed"));
 		Assert.That(agent, Does.Contain("Klein structure layout failed"));
 		Assert.That(agent, Does.Contain("klein_structure_trace"));
+		Assert.That(agent, Does.Contain("klein_depth_rt_warm"));
 		Assert.That(agent, Does.Contain("SD_KleinStructureChannel.HasMeshDepthRt()"));
 		Assert.That(agent, Does.Contain("SD_KleinStructureChannel.CanCaptureMeshDepth()"));
 		string trace = File.ReadAllText(Path.Combine(

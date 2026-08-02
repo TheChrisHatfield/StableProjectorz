@@ -703,14 +703,11 @@ namespace spz {
 	            { "sd_connected", Connection_MGR.is_sd_connected },
 	            { "sd_checkpoint", ckpt },
 	            { "klein_checkpoint", SD_OptionsPacket.CheckpointNeedsKleinModules(ckpt) },
-	            // Legacy key: true when Klein Gen Art structure (mesh depth) is ready.
-	            // HasMeshDepthRt only — status polls must not force content_depthRender.
-	            { "klein_gen_art_bypass",
-	                StableDiffusion_Hub.IsActiveCheckpointKlein()
-	                && SD_KleinStructureChannel.HasMeshDepthRt() },
-	            { "klein_structure_ready",
-	                StableDiffusion_Hub.IsActiveCheckpointKlein()
-	                && SD_KleinStructureChannel.HasMeshDepthRt() },
+	            // Legacy bypass: Klein checkpoint selected (structure fail-closed on generate).
+	            { "klein_gen_art_bypass", StableDiffusion_Hub.IsActiveCheckpointKlein() },
+	            { "klein_structure_ready", StableDiffusion_Hub.IsActiveCheckpointKlein() },
+	            // Warm = depth contrast RT currently allocated (preview lock); not required for generate.
+	            { "klein_depth_rt_warm", SD_KleinStructureChannel.HasMeshDepthRt() },
 	            { "klein_img2img_from_cn",
 	                StableDiffusion_Hub.IsActiveCheckpointKlein()
 	                && SD_ControlNetsList_UI.instance != null
@@ -847,14 +844,10 @@ namespace spz {
 	            { "can_gen_art", canArt },
 	            { "can_gen_bg", canBg },
 	            { "klein_checkpoint", SD_OptionsPacket.CheckpointNeedsKleinModules(ckpt) },
-	            // Legacy key: true when Klein Gen Art structure (mesh depth) is ready.
-	            // HasMeshDepthRt only — status polls must not force content_depthRender.
-	            { "klein_gen_art_bypass",
-	                StableDiffusion_Hub.IsActiveCheckpointKlein()
-	                && SD_KleinStructureChannel.HasMeshDepthRt() },
-	            { "klein_structure_ready",
-	                StableDiffusion_Hub.IsActiveCheckpointKlein()
-	                && SD_KleinStructureChannel.HasMeshDepthRt() },
+	            // Legacy bypass: Klein checkpoint selected (structure fail-closed on generate).
+	            { "klein_gen_art_bypass", StableDiffusion_Hub.IsActiveCheckpointKlein() },
+	            { "klein_structure_ready", StableDiffusion_Hub.IsActiveCheckpointKlein() },
+	            { "klein_depth_rt_warm", SD_KleinStructureChannel.HasMeshDepthRt() },
 	            { "klein_img2img_from_cn",
 	                StableDiffusion_Hub.IsActiveCheckpointKlein()
 	                && SD_ControlNetsList_UI.instance != null
