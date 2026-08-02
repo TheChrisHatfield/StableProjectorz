@@ -128,8 +128,8 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Flux.2 Klein img2img co-opt with model None: Depth (structure), CustomFile (style),
-	    /// or ContentCam. Fun-Union ControlNet is not used for Klein depth lock.
+	    /// Flux.2 Klein img2img pixel co-opt (model None): CustomFile / ContentCam only.
+	    /// Mesh Depth is structure via SD_KleinStructureChannel (ImageStitch), never init_images.
 	    /// </summary>
 	    public bool IsKleinImg2ImgInitSource(){
 	        return HasValidKleinImg2ImgInit();
@@ -139,11 +139,9 @@ namespace spz {
 	    public bool HasLoadedCustomFileBitmap() =>
 	        _myCustomImg_from_sysFile != null && _myCustomImg_from_sysFile.tex != null;
 
-	    /// <summary>True only when a real init bitmap can be produced (not an empty CustomFile slot).</summary>
+	    /// <summary>True only when a real pixel init bitmap can be produced (not Depth structure).</summary>
 	    public bool HasValidKleinImg2ImgInit(){
 	        var cams = UserCameras_MGR.instance != null ? UserCameras_MGR.instance.camTextures : null;
-	        if (_whatImageToSend == WhatImageToSend_CTRLNET.Depth)
-	            return cams != null && cams._SD_depthCam_RT_R32_contrast != null;
 	        if (_whatImageToSend == WhatImageToSend_CTRLNET.CustomFile)
 	            return HasLoadedCustomFileBitmap();
 	        if (_whatImageToSend == WhatImageToSend_CTRLNET.ContentCam)
@@ -151,24 +149,10 @@ namespace spz {
 	        return false;
 	    }
 
-	    /// <summary>Disposable RGB init for Klein img2img. Caller must Destroy.</summary>
+	    /// <summary>Disposable RGB pixel init for Klein img2img. Caller must Destroy. Never Depth.</summary>
 	    public Texture2D TryGetDisposableKleinImg2ImgInit(out string sourceLabel){
 	        sourceLabel = "";
 	        if (!HasValidKleinImg2ImgInit()) return null;
-	        if (_whatImageToSend == WhatImageToSend_CTRLNET.Depth){
-	            // Thumb OnUpdate may not have locked depth yet same-frame as Gen Art — lock + force SD depth render.
-	            object lockOwner = this;
-	            UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.DepthUserCamera, lockOwner, isLock: true);
-	            try {
-	                Update_callbacks_MGR.content_depthRender?.Invoke();
-	                Texture2D depth = UserCameras_MGR.instance.camTextures.GetDisposable_DepthTexture();
-	                if (depth == null) return null;
-	                sourceLabel = "Depth";
-	                return depth;
-	            } finally {
-	                UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.DepthUserCamera, lockOwner, isLock: false);
-	            }
-	        }
 	        if (_whatImageToSend == WhatImageToSend_CTRLNET.CustomFile){
 	            Texture2D cpy = GetCustomImg_sysFile_disposableCpy();
 	            if (cpy == null) return null;

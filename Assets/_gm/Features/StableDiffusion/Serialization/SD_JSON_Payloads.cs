@@ -132,7 +132,8 @@ namespace spz {
 	// For example, to detect depth from a usual image
 	[Serializable]
 	public class SD_ControlnetDetect_payload{
-	    public string controlnet_module = "none";
+	    // True Forge Neo get_preprocessor is case-sensitive — "none" KeyErrors (forge-neo-swap Boot5).
+	    public string controlnet_module = "None";
 	    public string[] controlnet_input_images;
 	    public int controlnet_processor_res = -1;
 	    public float controlnet_threshold_a = 0.5f;
@@ -239,6 +240,7 @@ namespace spz {
 
 
 	//parameters for using the Soft Inpainting (Differential Inpainting).
+	// Neo / A1111 alwayson copies args[] positionally into Gradio slots (forge-neo-swap R4.2).
 	[Serializable]
 	public class SoftInpaintingArgsEntry{
 	    [JsonProperty("Soft inpainting")] public bool Soft_inpainting = true;
@@ -253,11 +255,30 @@ namespace spz {
 
 	[Serializable]
 	public class SoftInpaintingArgs : AlwaysOn_Value{
-	    public SoftInpaintingArgsEntry[] args;
+	    /// <summary>Positional Gradio args: [enabled, power, scale, detail, mask_inf, dif_thresh, dif_contr]. JSON scalars only.</summary>
+	    public object[] args;
 	    public override AlwaysOn_Value Clone(){
 	        var clone  = (SoftInpaintingArgs)this.MemberwiseClone();
-	        clone.args = args.Select(a=>a.Clone()).ToArray();
+	        clone.args = args != null ? (object[])args.Clone() : null;
 	        return clone;
+	    }
+
+	    /// <summary>Build Neo/Forge-compliant Soft Inpaint alwayson args (forge-neo-swap R4.2).</summary>
+	    public static object[] ToPositionalArgs(SoftInpaintingArgsEntry entry = null){
+	        if (entry == null) entry = new SoftInpaintingArgsEntry();
+	        return new object[] {
+	            entry.Soft_inpainting,
+	            entry.Schedule_bias,
+	            entry.Preservation_strength,
+	            entry.Transition_contrast_boost,
+	            entry.Mask_influence,
+	            entry.Difference_threshold,
+	            entry.Difference_contrast,
+	        };
+	    }
+
+	    public static SoftInpaintingArgs FromEntry(SoftInpaintingArgsEntry entry = null){
+	        return new SoftInpaintingArgs { args = ToPositionalArgs(entry) };
 	    }
 	}
 
@@ -274,6 +295,8 @@ namespace spz {
 	    public Texture2D screenSpaceMask_NE_disposableTex = null;//optional, can be useful for image2image, inpainting. (NE = no anti-edge applied).
 	    public Texture2D screenSpaceMask_WE_disposableTex = null;//optional, can be useful for image2image, inpainting. (WE= With anti-edge)
 	    public bool isScreenMask_forSoftInpaint = false; //was our 'screenSpaceMask_disposableTex' sent to SD for soft inpaint, or for usual.
+	    /// <summary>Klein Gen Art: set when mesh-depth structure channel failed to attach (fail closed).</summary>
+	    public bool kleinStructureAttachFailed = false;
 
 	    public void Dispose(){
 	        DisposeTexture_maybe(usualView_disposableTexture);

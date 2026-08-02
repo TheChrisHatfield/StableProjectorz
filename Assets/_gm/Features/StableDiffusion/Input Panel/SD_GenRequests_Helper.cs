@@ -102,7 +102,15 @@ namespace spz {
 	                                                                  : GenerationData_Kind.SD_ProjTextures;
 	            SD_txt2img_payload payload;
 	            SD_GenRequestArgs_byproducts intermediates;
-	            _payload_maker.Create_txt2img_payload(out payload, out intermediates);
+	            _payload_maker.Create_txt2img_payload(out payload, out intermediates, isMakingBackgrounds);
+
+	            if (intermediates != null && intermediates.kleinStructureAttachFailed){
+	                intermediates.Dispose();
+	                _finalPreparations_beforeGen = false;
+	                _isGeneratingWhat = Generate_RequestingWhat.nothing;
+	                UserCameras_Permissions.Force_KeepRenderingCameras(false);
+	                yield break;
+	            }
 
 	            _generate_sender.Send_GenerateRequest(payload, OnProgressResponse, OnGeneratedResult);
 
@@ -144,16 +152,18 @@ namespace spz {
 	            _payload_maker.Create_img2img_payload(isMakingBackgrounds, out payload, out intermediates);
 
 	            // Empty init_images crashes / no-ops Neo img2img (e.g. ContentCam capture failed after Klein force).
+	            bool structureFailed = intermediates != null && intermediates.kleinStructureAttachFailed;
 	            if (payload == null
 	                || payload.init_images == null
 	                || payload.init_images.Length == 0
-	                || string.IsNullOrEmpty(payload.init_images[0])){
+	                || string.IsNullOrEmpty(payload.init_images[0])
+	                || structureFailed){
 	                intermediates?.Dispose();
 	                _finalPreparations_beforeGen = false;
 	                _isGeneratingWhat = Generate_RequestingWhat.nothing;
 	                if (SceneResolution_MGR.LastImg2imgWillAppliedPrep)
 		                SceneResolution_MGR.RevertImg2ImgAccumBoostIfPreRequestFailed();
-	                if (Viewport_StatusText.instance != null)
+	                if (Viewport_StatusText.instance != null && !structureFailed)
 	                    Viewport_StatusText.instance.ShowStatusText(
 	                        "img2img aborted: missing init image (ContentCam/CustomFile capture failed).",
 	                        false, 5f, false);
@@ -396,6 +406,17 @@ namespace spz {
 	        var settings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Auto, };
 	        SD_txt2imgResponse response = JsonConvert.DeserializeObject<SD_txt2imgResponse>(json, settings);
 
+	        // Klein: reject depth-plate false success before projection bake.
+	        if (RejectKleinDepthLikeResult(response)){
+	            _latestGenData?.Complete_PendingImages(null);
+	            _latestGenData = null;
+	            Viewport_StatusText.instance.ShowStatusText(
+	                "Klein Gen Art rejected: Neo result looks like depth plate (structure channel, not albedo).",
+	                false, 8, progressVisibility:false);
+	            _isGeneratingWhat = Generate_RequestingWhat.nothing;
+	            return;
+	        }
+
 	        _latestGenData?.Complete_PendingImages( response.images ); //using ? in case SD had exception
 
 	        // Ensure new Gen Art is visible in viewport: clear Solo for all, and ensure this generation's group is not hidden. Then request re-render (and again after 2 frames so projection picks up the new texture).
@@ -419,6 +440,32 @@ namespace spz {
 	        Viewport_StatusText.instance.ShowStatusText(genCompleted_text, false, 4, progressVisibility:false);
 
 	        _isGeneratingWhat = Generate_RequestingWhat.nothing;
+	    }
+
+	    /// <summary>
+	    /// When Klein Gen Art used mesh-depth structure, block bake if Neo returned a depth-like plate.
+	    /// </summary>
+	    bool RejectKleinDepthLikeResult(SD_txt2imgResponse response){
+	        if (!StableDiffusion_Hub.IsActiveCheckpointKlein()) return false;
+	        if (_latestDepthTex_sent == null) return false;
+	        if (response?.images == null || response.images.Length == 0
+	            || string.IsNullOrEmpty(response.images[0])) return false;
+
+	        Texture2D result = null;
+	        try {
+	            result = TextureTools_SPZ.Base64ToTexture(response.images[0]);
+	            if (result == null) return false;
+	            Texture2D depth = _latestDepthTex_sent as Texture2D;
+	            if (depth == null) return false;
+	            bool reject = SD_KleinStructureChannel.LooksLikeDepthPlate(result, depth, out float diff01);
+	            KleinStructureTrace.Set("similarity_to_depth", diff01);
+	            KleinStructureTrace.Set("bake_allowed", !reject);
+	            if (reject)
+	                KleinStructureTrace.Set("reject_reason", "result_looks_like_depth_plate");
+	            return reject;
+	        } finally {
+	            if (result != null) UnityEngine.Object.Destroy(result);
+	        }
 	    }
 
 
