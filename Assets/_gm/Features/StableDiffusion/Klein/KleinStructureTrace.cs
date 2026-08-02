@@ -31,9 +31,17 @@ namespace spz {
 
 	    public static void ForceEnableForProbe() => Enabled = true;
 
-	    public static void Clear(){ _last = null; }
+	    public static void Clear(){ _last = null; LastRejectReason = ""; }
+
+	    /// <summary>
+	    /// Last structure-channel reject_reason (always updated, even when verbose trace is off).
+	    /// Used by payload abort messaging so style_ref_missing is not mislabeled as depth-missing.
+	    /// </summary>
+	    public static string LastRejectReason { get; private set; } = "";
 
 	    public static void Set(string key, object value){
+	        if (key == "reject_reason")
+	            LastRejectReason = value != null ? value.ToString() : "";
 	        if (!Enabled) return;
 	        if (_last == null) _last = new Dictionary<string, object>();
 	        _last[key] = value;
@@ -45,6 +53,7 @@ namespace spz {
 	    }
 
 	    public static void BeginRequest(){
+	        LastRejectReason = "";
 	        if (!Enabled) return;
 	        _last = new Dictionary<string, object>();
 	    }

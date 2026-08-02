@@ -130,4 +130,37 @@ public sealed class KleinStructureChannelContractTests {
 			UnityEngine.Object.DestroyImmediate(b);
 		}
 	}
+
+	[Test]
+	public void Similarity_NearGrayRemap_StillLooksLikeDepthPlate() {
+		var depth = new Texture2D(8, 8, TextureFormat.RGBA32, false);
+		var remap = new Texture2D(8, 8, TextureFormat.RGBA32, false);
+		try {
+			for (int y = 0; y < 8; y++)
+				for (int x = 0; x < 8; x++) {
+					float g = (x + y) / 14f;
+					depth.SetPixel(x, y, new Color(g, g, g, 1f));
+					float g2 = Mathf.Clamp01(g * 0.5f + 0.25f); // level remap past 0.08 luma MAD, still gray
+					remap.SetPixel(x, y, new Color(g2, g2, g2, 1f));
+				}
+			depth.Apply();
+			remap.Apply();
+			Assert.That(SD_KleinStructureChannel.LooksLikeDepthPlate(remap, depth, out float diff), Is.True);
+			Assert.That(diff, Is.GreaterThanOrEqualTo(0.08f)); // would miss tight luma-only gate
+			Assert.That(SD_KleinStructureChannel.MeanChroma01(remap), Is.LessThan(0.035f));
+		} finally {
+			UnityEngine.Object.DestroyImmediate(depth);
+			UnityEngine.Object.DestroyImmediate(remap);
+		}
+	}
+
+	[Test]
+	public void Trace_LastRejectReason_UpdatesWhenTraceDisabled() {
+		string trace = Read("Assets", "_gm", "Features", "StableDiffusion", "Klein", "KleinStructureTrace.cs");
+		Assert.That(trace, Does.Contain("LastRejectReason"));
+		Assert.That(trace, Does.Contain("key == \"reject_reason\""));
+		string payload = Read("Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs");
+		Assert.That(payload, Does.Contain("LastRejectReason"));
+		Assert.That(payload, Does.Contain("style_ref_missing"));
+	}
 }
