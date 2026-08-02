@@ -386,6 +386,7 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 		Assert.That(list, Does.Contain("WhatImageToSend_CTRLNET.Depth"));
 		Assert.That(list, Does.Contain("IsUnitModelValidForActiveCheckpoint"));
 		Assert.That(list, Does.Contain("TryHealFamilyMismatchedModels"));
+		Assert.That(list, Does.Contain("Klein-4B: no compatible CN — disarm models to None"));
 		Assert.That(list, Does.Contain("Capture role before model swap"));
 		Assert.That(list, Does.Contain("Refuse a \"heal\" that would still mismatch"));
 		string dropdowns = File.ReadAllText(Path.Combine(
