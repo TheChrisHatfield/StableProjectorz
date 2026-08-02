@@ -37,8 +37,11 @@ namespace spz {
 
 	        canGenBG_  =  !isOnCooldown  &&  !_generating  &&  isConnected;
 	        canGenArt_ =  !isOnCooldown  &&  !_generating  &&  isConnected;
-	        // Flux.2 Klein: prefer Flux2 ControlNet depth; still allow Gen Art without it (img2img-only path).
-	        canGenArt_ &= has_Depth_or_Norm_or_RefOnly() || IsActiveCheckpointKlein();
+	        // Flux.2 Klein: Gen Art needs Depth/CustomFile/ContentCam img2img co-opt (no Fun-Union CN).
+	        bool kleinReady = IsActiveCheckpointKlein()
+	            && SD_ControlNetsList_UI.instance != null
+	            && SD_ControlNetsList_UI.instance.HasKleinImg2ImgInitSource();
+	        canGenArt_ &= has_Depth_or_Norm_or_RefOnly() || kleinReady;
 	    }
 
 
@@ -78,12 +81,21 @@ namespace spz {
 	            Viewport_StatusText.instance.ShowStatusText(msg, false, 5, true);
 	            return true;
 	        }
-	        // Empty CustomFile only blocks when there is no other valid Klein init (ContentCam / loaded file).
+	        // Empty CustomFile only blocks when there is no other valid Klein init (Depth / ContentCam / loaded file).
 	        if (klein && allow_without_controlnets==false
 	            && SD_ControlNetsList_UI.instance != null
 	            && SD_ControlNetsList_UI.instance.HasArmedEmptyKleinCustomFile()
 	            && !SD_ControlNetsList_UI.instance.HasKleinImg2ImgInitSource()){
 	            string msg = "Can't Generate: a ControlNet unit is set to CustomFile but no image is loaded.\nLoad a file or switch What-to-send to Depth/ContentCam.";
+	            CommandRibbon_UI.instance.Attention_toCtrlNetButton();
+	            Viewport_StatusText.instance.ShowStatusText(msg, false, 5, true);
+	            return true;
+	        }
+	        // Klein Gen Art without init = unstructured txt2img (Fun-Union path removed).
+	        if (klein && allow_without_controlnets==false
+	            && (SD_ControlNetsList_UI.instance == null
+	                || !SD_ControlNetsList_UI.instance.HasKleinImg2ImgInitSource())){
+	            string msg = "Flux.2 Klein Gen Art needs an img2img init:\nControlNet unit → model None → What-to-send Depth (or CustomFile / ContentCam), activated.";
 	            CommandRibbon_UI.instance.Attention_toCtrlNetButton();
 	            Viewport_StatusText.instance.ShowStatusText(msg, false, 5, true);
 	            return true;
