@@ -333,7 +333,10 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs"));
 		Assert.That(payload, Does.Contain("kleinUsesDedicatedInit"));
+		Assert.That(payload, Does.Contain("TryGetDisposableKleinImg2ImgInitForLabel"));
 		Assert.That(payload, Does.Contain("\"Depth\""));
+		Assert.That(src, Does.Contain("TryGetDisposableKleinImg2ImgInitForLabel"));
+		Assert.That(src, Does.Contain("Avoids silently substituting CustomFile"));
 	}
 
 	[Test]
