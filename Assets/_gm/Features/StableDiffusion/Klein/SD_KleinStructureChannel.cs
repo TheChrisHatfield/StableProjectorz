@@ -154,7 +154,7 @@ namespace spz {
 	        // Depth-only ImageStitch reproduces the depth plate — fail closed without style ref.
 	        string styleB64 = null;
 	        string styleKind = "none";
-	        if (!TryCaptureStyleRefBase64(intermediates, out styleB64, out styleKind)
+	        if (!TryCaptureStyleRefBase64(intermediates, pixelInitKind, out styleB64, out styleKind)
 	            || string.IsNullOrEmpty(styleB64)){
 	            KleinStructureTrace.Set("style_ref_kind", styleKind);
 	            KleinStructureTrace.Set("structure_attached", false);
@@ -187,20 +187,28 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// RefControl image2 = RGB identity/style. Prefer ContentCam (current view / img2img init)
+	    /// RefControl image2 = RGB identity/style. Prefer ContentCam (current view)
 	    /// over CustomFile — a leftover CustomFile is often a depth plate from XL CN workflows and
 	    /// would make ImageStitch reproduce grayscale again. CustomFile is last-resort when
 	    /// ContentCam cannot be captured (still OK if unit is deactivated — prepare clears activation).
+	    /// Never reuse usualView when pixel init was CustomFile (depth-plate risk).
 	    /// </summary>
-	    static bool TryCaptureStyleRefBase64(SD_GenRequestArgs_byproducts intermediates, out string b64, out string kind){
+	    static bool TryCaptureStyleRefBase64(
+	        SD_GenRequestArgs_byproducts intermediates,
+	        string pixelInitKind,
+	        out string b64,
+	        out string kind){
 	        b64 = null;
 	        kind = "none";
 	        Texture2D style = null;
 	        bool destroyStyle = false;
 	        object contentLock = typeof(SD_KleinStructureChannel);
+	        bool skipUsualViewReuse = !string.IsNullOrEmpty(pixelInitKind)
+	            && pixelInitKind.IndexOf("CustomFile", System.StringComparison.OrdinalIgnoreCase) >= 0;
 	        try {
-	            if (intermediates != null && intermediates.usualView_disposableTexture != null){
-	                // Reuse pixel init already captured for img2img (ContentCam or intentional CustomFile init).
+	            if (!skipUsualViewReuse
+	                && intermediates != null
+	                && intermediates.usualView_disposableTexture != null){
 	                style = intermediates.usualView_disposableTexture;
 	                kind = "ContentCam_reuse";
 	                destroyStyle = false;

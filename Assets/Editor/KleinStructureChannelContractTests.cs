@@ -61,6 +61,11 @@ public sealed class KleinStructureChannelContractTests {
 		Assert.That(hub, Does.Contain("ImageStitch"));
 		Assert.That(hub, Does.Contain("never Depth"));
 		Assert.That(hub, Does.Not.Contain("Klein Gen Art needs an img2img init"));
+		// Neo prepends img2img ini_latent ahead of ImageStitch — Gen Art must stay txt2img.
+		Assert.That(hub, Does.Contain("bool kleinGenArt = !isMakingBackgrounds && IsActiveCheckpointKlein();"));
+		Assert.That(hub, Does.Contain("do_img2Img = false"));
+		Assert.That(hub, Does.Contain("ini_latent"));
+		Assert.That(hub, Does.Not.Contain("kleinPixelInit"));
 		// Deny/payload still force-capture; interactable poll must not call CanCaptureMeshDepth.
 		Assert.That(hub, Does.Contain("CanCaptureMeshDepth()"));
 		Assert.That(hub, Does.Not.Contain("HasMeshDepthRt()"));
@@ -69,6 +74,7 @@ public sealed class KleinStructureChannelContractTests {
 		Assert.That(ch, Does.Contain("Do not call from per-frame"));
 		Assert.That(ch, Does.Contain("TryCaptureMeshDepthDisposable"));
 		Assert.That(ch, Does.Contain("Checks RT while the depth lock is still held"));
+		Assert.That(ch, Does.Contain("skipUsualViewReuse"));
 	}
 
 	[Test]
