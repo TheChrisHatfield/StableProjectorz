@@ -301,7 +301,9 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "SD_ControlNetsList_UI.cs"));
 		Assert.That(list, Does.Contain("HasArmedEmptyKleinCustomFile"));
 		Assert.That(hub, Does.Contain("HasArmedEmptyKleinCustomFile"));
+		Assert.That(hub, Does.Contain("!SD_ControlNetsList_UI.instance.HasKleinImg2ImgInitSource()"));
 		Assert.That(hub, Does.Contain("CustomFile but no image is loaded"));
+		Assert.That(list, Does.Contain("Disarm leftover empty CustomFile slots"));
 	}
 
 	[Test]

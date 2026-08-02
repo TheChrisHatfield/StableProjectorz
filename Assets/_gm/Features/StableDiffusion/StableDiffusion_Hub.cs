@@ -78,9 +78,11 @@ namespace spz {
 	            Viewport_StatusText.instance.ShowStatusText(msg, false, 5, true);
 	            return true;
 	        }
+	        // Empty CustomFile only blocks when there is no other valid Klein init (ContentCam / loaded file).
 	        if (klein && allow_without_controlnets==false
 	            && SD_ControlNetsList_UI.instance != null
-	            && SD_ControlNetsList_UI.instance.HasArmedEmptyKleinCustomFile()){
+	            && SD_ControlNetsList_UI.instance.HasArmedEmptyKleinCustomFile()
+	            && !SD_ControlNetsList_UI.instance.HasKleinImg2ImgInitSource()){
 	            string msg = "Can't Generate: a ControlNet unit is set to CustomFile but no image is loaded.\nLoad a file or switch What-to-send to ContentCam.";
 	            CommandRibbon_UI.instance.Attention_toCtrlNetButton();
 	            Viewport_StatusText.instance.ShowStatusText(msg, false, 5, true);
