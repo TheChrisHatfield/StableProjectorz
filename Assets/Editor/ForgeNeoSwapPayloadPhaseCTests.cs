@@ -345,6 +345,7 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "SD_ControlNetsList_UI.cs"));
 		Assert.That(list, Does.Contain("TryApplyKleinControlNetLayout"));
 		Assert.That(list, Does.Contain("cannot safely arm CustomFile co-opt without a second unit"));
+		Assert.That(list, Does.Contain("IsUnitModelValidForActiveCheckpoint"));
 	}
 
 	[Test]
