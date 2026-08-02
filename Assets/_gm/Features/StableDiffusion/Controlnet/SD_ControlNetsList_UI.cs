@@ -87,6 +87,79 @@ namespace spz {
 	    }
 
 	    /// <summary>
+	    /// Klein Gen Art layout: unit 0 = Flux2 ControlNet + mesh Depth; unit 1 = model None +
+	    /// CustomFile (preferred) or ContentCam for img2img co-opt. Unit 2 left for IP-Adapter later.
+	    /// Returns true when a Flux2 CN model was selected on unit 0.
+	    /// </summary>
+	    public bool TryApplyKleinControlNetLayout(out string fluxCnResolved, out string initSourceLabel){
+	        fluxCnResolved = "";
+	        initSourceLabel = "";
+	        if (_controlNet_units == null || _controlNet_units.Count == 0) return false;
+
+	        var u0 = GetUnit(0);
+	        bool selectedFlux = false;
+	        if (u0 != null && u0.dropdowns != null){
+	            string[] models = _models != null ? _models.model_list : null;
+	            int fluxIx = -1;
+	            if (models != null){
+	                for (int i = 0; i < models.Length; i++){
+	                    if (ControlNetUnit_Dropdowns.ControlNetModelLooksFlux2(models[i])){ fluxIx = i; break; }
+	                }
+	            }
+	            if (fluxIx >= 0){
+	                selectedFlux = u0.dropdowns.TrySelectModelByName(models[fluxIx], out fluxCnResolved, out _);
+	                // Mesh depth is already the control image — skip SD1.5 depth preprocessors on Flux2 Union.
+	                if (selectedFlux)
+	                    u0.dropdowns.TrySelectPreprocessorByName("None", out _, out _);
+	            }
+	            u0.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false);
+	            u0.TrySetActivated(true);
+	        }
+
+	        // Img2img co-opt must not share unit 0 with Flux depth CN (model None is required for co-opt).
+	        ControlNetUnit_UI customUnit = null;
+	        for (int i = 0; i < _controlNet_units.Count; i++){
+	            var u = _controlNet_units[i];
+	            if (u != null && u.HasLoadedCustomFileBitmap()){ customUnit = u; break; }
+	        }
+	        if (customUnit != null && selectedFlux && customUnit == u0){
+	            var u1 = GetUnit(1);
+	            if (u1 == null){
+	                // Keep Flux+Depth on unit 0; cannot safely arm CustomFile co-opt without a second unit.
+	                customUnit = null;
+	            } else {
+	                u1.CopyFromAnother(customUnit);
+	                customUnit = u1;
+	                // CopyFromAnother may have overwritten u0 toggles via shared listeners — restore depth CN.
+	                if (u0.dropdowns != null && !string.IsNullOrEmpty(fluxCnResolved))
+	                    u0.dropdowns.TrySelectModelByName(fluxCnResolved, out fluxCnResolved, out _);
+	                u0.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false);
+	                u0.TrySetActivated(true);
+	            }
+	        }
+	        if (customUnit != null && !(selectedFlux && customUnit == u0)){
+	            if (customUnit.dropdowns != null) customUnit.dropdowns.TrySelectModelNone();
+	            if (customUnit.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.CustomFile, allowOpenFileDialog: false)){
+	                customUnit.TrySetActivated(true);
+	                initSourceLabel = "CustomFile";
+	            }
+	        } else if (customUnit == null) {
+	            var initUnit = GetUnit(1) ?? (selectedFlux ? null : u0);
+	            if (initUnit != null){
+	                if (initUnit.dropdowns != null) initUnit.dropdowns.TrySelectModelNone();
+	                if (initUnit.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.ContentCam, allowOpenFileDialog: false)){
+	                    initUnit.TrySetActivated(true);
+	                    initSourceLabel = "ContentCam";
+	                }
+	            }
+	        }
+
+	        if (string.IsNullOrEmpty(initSourceLabel) && TryPeekKleinImg2ImgInitSource(out _, out string label))
+	            initSourceLabel = label;
+	        return selectedFlux;
+	    }
+
+	    /// <summary>
 	    /// Flux.2 Klein: find an activated ControlNet unit (model None) whose "what to send"
 	    /// is ContentCam or CustomFile and return a disposable RGB copy for img2img init.
 	    /// Prefers CustomFile over ContentCam (user ref for Klein img2img); scans unit 0..N

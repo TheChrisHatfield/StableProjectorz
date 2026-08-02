@@ -537,7 +537,7 @@ namespace spz {
 	        bool backgrounds = HasBool(prms, "backgrounds") && prms["backgrounds"].Value<bool>();
 	        hub.isCanGenerate(out bool canArt, out bool canBg);
 	        if (backgrounds && !canBg){ fail("Cannot Gen BG right now (cooldown, disconnected, or busy)."); return; }
-	        if (!backgrounds && !canArt){ fail("Cannot Gen Art right now (need depth/normals CN, or Klein bypass; or busy/disconnected)."); return; }
+	        if (!backgrounds && !canArt){ fail("Cannot Gen Art right now (need depth/normals CN, or Klein with Flux2 CN / img2img; or busy/disconnected)."); return; }
 	        // Match UI DenyWithMessage gates the agent can_* snapshot misses (empty CustomFile, CN download, import…).
 	        if (hub.DenyWithMessage_ifCantGenerate(allow_without_controlnets: backgrounds)){
 	            fail("Generation denied (see viewport status: ControlNet/CustomFile/import/download/busy).");
@@ -621,27 +621,23 @@ namespace spz {
 	            ["cfg_scale"] = 1.0,
 	            ["width"] = w,
 	            ["height"] = h,
-	            ["clear_controlnet_models"] = true,
+	            // Keep CustomFile bitmaps; layout below selects Flux2 CN on unit 0 + img2img on unit 1.
+	            ["clear_controlnet_models"] = false,
 	        }, result => {
-	            // Do not force ContentCam — CustomFile is the preferred Klein img2img ref when present.
-	            // Only arm ContentCam as fallback when no valid CustomFile co-opt is available.
 	            var cn = SD_ControlNetsList_UI.instance;
-	            bool armedContentCam = false;
-	            bool hasCustom = cn != null && cn.TryPeekKleinImg2ImgInitSource(out _, out string src)
-	                && string.Equals(src, "CustomFile", System.StringComparison.Ordinal);
-	            if (!hasCustom){
-	                var unit = cn != null ? cn.GetUnit(0) : null;
-	                if (unit != null){
-	                    armedContentCam = unit.TrySetWhatImageToSend(
-	                        WhatImageToSend_CTRLNET.ContentCam, allowOpenFileDialog: false);
-	                    if (armedContentCam) unit.TrySetActivated(true);
-	                }
-	            }
+	            bool fluxSelected = false;
+	            string fluxCn = "";
+	            string initLabel = "";
+	            if (cn != null)
+	                fluxSelected = cn.TryApplyKleinControlNetLayout(out fluxCn, out initLabel);
 	            if (result is Dictionary<string, object> dict){
-	                dict["klein_customfile_preferred"] = hasCustom;
-	                dict["klein_contentcam_armed"] = armedContentCam;
-	                if (cn != null && cn.TryPeekKleinImg2ImgInitSource(out _, out string label))
-	                    dict["klein_init_source"] = label;
+	                dict["klein_flux_controlnet_selected"] = fluxSelected;
+	                if (!string.IsNullOrEmpty(fluxCn)) dict["klein_flux_controlnet"] = fluxCn;
+	                dict["klein_customfile_preferred"] =
+	                    string.Equals(initLabel, "CustomFile", System.StringComparison.Ordinal);
+	                dict["klein_contentcam_armed"] =
+	                    string.Equals(initLabel, "ContentCam", System.StringComparison.Ordinal);
+	                if (!string.IsNullOrEmpty(initLabel)) dict["klein_init_source"] = initLabel;
 	            }
 	            ok(result);
 	        }, fail);

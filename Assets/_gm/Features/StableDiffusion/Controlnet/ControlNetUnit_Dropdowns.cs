@@ -67,6 +67,27 @@ namespace spz {
 	    /// <summary>Agent / MCP: set model dropdown to None (disable this unit's CN weights).</summary>
 	    public bool TrySelectModelNone() => TrySelectModelByName("None", out _, out _);
 
+	    /// <summary>Select preprocessor by name (partial match). Flux2 Union expects None + ready control image.</summary>
+	    public bool TrySelectPreprocessorByName(string name, out string resolvedName, out string error){
+	        resolvedName = "";
+	        error = null;
+	        if (string.IsNullOrEmpty(name)){ error = "Preprocessor name is empty"; return false; }
+	        if (_preprocessor_dropdown == null){ error = "ControlNet preprocessor dropdown missing"; return false; }
+	        string want = name.Trim();
+	        if (_preprocessor_dropdown.options.Count == 0){ error = "ControlNet preprocessor dropdown empty"; return false; }
+	        int ix = _preprocessor_dropdown.options.FindIndex(o =>
+	            o.text != null && string.Equals(o.text, want, StringComparison.OrdinalIgnoreCase));
+	        if (ix < 0){
+	            ix = _preprocessor_dropdown.options.FindIndex(o =>
+	                o.text != null && o.text.IndexOf(want, StringComparison.OrdinalIgnoreCase) >= 0);
+	        }
+	        if (ix < 0){ error = "Preprocessor not in dropdown: " + want; return false; }
+	        _preprocessor_dropdown.value = ix;
+	        _preprocessor_dropdown.RefreshShownValue();
+	        resolvedName = currPreprocessorName();
+	        return true;
+	    }
+
 	    /// <summary>Agent / MCP: select ControlNet model by name (partial match). Use "None" to clear.</summary>
 	    public bool TrySelectModelByName(string name, out string resolvedName, out string error){
 	        resolvedName = "";
@@ -126,15 +147,10 @@ namespace spz {
 	        UpdateDropdown( _preprocessor_dropdown,  SD_ControlNetsList_UI.instance._preprocessors_list.module_list,
 	                        pickDepth_ifWasNone,  ref _prefferedPreProcessor_viaLoad );
 
-	        // First populate only: prefer a depth model when the list was empty.
+	        // First populate only: prefer a depth / Flux2-CN model when the list was empty.
 	        // Do NOT treat user-chosen "None" as empty — refreshes were re-forcing depth and blocking disable.
-	        // Skip auto-depth for Flux.2 Klein (SD/SDXL CN does not apply).
+	        // Klein + Flux2 Fun-Controlnet-Union: FindPreferredDepthModelIndex picks Flux2 CN when checkpoint is Klein.
 	        pickDepth_ifWasNone = true;
-	        try {
-	            string sd = SD_InputPanel_UI.instance != null ? SD_InputPanel_UI.instance.models?.selectedModel_name : null;
-	            if (SD_OptionsPacket.CheckpointNeedsKleinModules(sd))
-	                pickDepth_ifWasNone = false;
-	        } catch { /* input panel may be unset during early refresh */ }
 	        // 'None' model is allowed with preprocessor 'reference_only' (Apr 2024).
 	        pickDepth_ifWasNone &= currPreprocessorName().ToLower().Contains("ref")==false;
 
@@ -199,15 +215,25 @@ namespace spz {
 	    }
 
 
-	    /// <summary>Pick a depth ControlNet that matches the active SD checkpoint family (SDXL vs SD1.5).</summary>
+	    /// <summary>Pick a depth ControlNet that matches the active SD checkpoint family (SDXL vs SD1.5 vs Flux2).</summary>
 	    static int FindPreferredDepthModelIndex(string[] choices){
 	        if (choices == null || choices.Length == 0) return -1;
 
 	        bool wantXl = false;
+	        bool wantFlux2 = false;
 	        try {
 	            string sd = SD_InputPanel_UI.instance != null ? SD_InputPanel_UI.instance.models?.selectedModel_name : null;
 	            wantXl = CheckpointLooksXl(sd);
+	            wantFlux2 = SD_OptionsPacket.CheckpointNeedsKleinModules(sd);
 	        } catch { /* dropdown refresh can run before input panel is ready */ }
+
+	        if (wantFlux2){
+	            int fluxIx = -1;
+	            for (int i = 0; i < choices.Length; i++){
+	                if (ControlNetModelLooksFlux2(choices[i])){ fluxIx = i; break; }
+	            }
+	            if (fluxIx >= 0) return fluxIx;
+	        }
 
 	        int anyDepth = -1, bestXl = -1, bestNonXl = -1;
 	        for (int i = 0; i < choices.Length; i++){
@@ -236,13 +262,26 @@ namespace spz {
 	        return n.Contains("sdxl") || n.Contains("diffusers_xl") || n.Contains("_xl_") || n.Contains("-xl-");
 	    }
 
+	    /// <summary>Flux.2 Fun-Controlnet-Union / flux2 controlnet weights (depth-capable).</summary>
+	    public static bool ControlNetModelLooksFlux2(string cnModelName){
+	        if (string.IsNullOrEmpty(cnModelName)) return false;
+	        string n = cnModelName.ToLowerInvariant().Replace('\\', '/');
+	        if (n.Equals("none")) return false;
+	        return n.Contains("flux.2") || n.Contains("flux2") || n.Contains("fun-controlnet")
+	            || n.Contains("fun_controlnet") || n.Contains("controlnet-union")
+	            || n.Contains("controlnet_union");
+	    }
+
 	    /// <summary>True when CN weight family does not match active SD checkpoint (Neo crashes: y is None).</summary>
 	    public static bool IsControlNetCheckpointFamilyMismatch(string cnModelName, string checkpointName){
 	        if (string.IsNullOrEmpty(cnModelName) || cnModelName.Equals("None", StringComparison.OrdinalIgnoreCase))
 	            return false;
 	        if (string.IsNullOrEmpty(checkpointName)) return false;
-	        // Flux.2 Klein: no SD1.5/SDXL ControlNet path — always skip legacy CN units.
+	        // Flux.2 Klein: allow Flux2 ControlNet; reject legacy SD1.5/SDXL CN weights.
 	        if (SD_OptionsPacket.CheckpointNeedsKleinModules(checkpointName))
+	            return !ControlNetModelLooksFlux2(cnModelName);
+	        // Flux2 CN on non-Klein checkpoints is also a mismatch.
+	        if (ControlNetModelLooksFlux2(cnModelName))
 	            return true;
 	        return ControlNetModelLooksXl(cnModelName) != CheckpointLooksXl(checkpointName);
 	    }

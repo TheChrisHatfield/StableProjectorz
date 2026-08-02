@@ -37,7 +37,7 @@ namespace spz {
 
 	        canGenBG_  =  !isOnCooldown  &&  !_generating  &&  isConnected;
 	        canGenArt_ =  !isOnCooldown  &&  !_generating  &&  isConnected;
-	        // Flux.2 Klein has no SD/SDXL ControlNet family — Gen Art runs without depth/normals CN.
+	        // Flux.2 Klein: prefer Flux2 ControlNet depth; still allow Gen Art without it (img2img-only path).
 	        canGenArt_ &= has_Depth_or_Norm_or_RefOnly() || IsActiveCheckpointKlein();
 	    }
 

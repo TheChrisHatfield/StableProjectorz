@@ -321,19 +321,30 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 	}
 
 	[Test]
-	public void ControlNet_Klein_SkipsLegacyCnAndBypassesDepthGate() {
+	public void ControlNet_Klein_AllowsFlux2Cn_RejectsLegacy_AndBypassesDepthGate() {
 		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
 			"diffusers_xl_depth_full", "flux-2-klein-4b"), Is.True);
 		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
 			"control_v11f1p_sd15_depth", "flux-2-klein-4b.safetensors"), Is.True);
 		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
 			"None", "flux-2-klein-4b"), Is.False);
+		Assert.That(ControlNetUnit_Dropdowns.ControlNetModelLooksFlux2(
+			"FLUX.2-dev-Fun-Controlnet-Union.safetensors"), Is.True);
+		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
+			"FLUX.2-dev-Fun-Controlnet-Union.safetensors", "flux-2-klein-4b"), Is.False);
+		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
+			"FLUX.2-dev-Fun-Controlnet-Union.safetensors", "realisticvisionv51_v51vae"), Is.True);
 		string hub = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "StableDiffusion", "StableDiffusion_Hub.cs"));
 		Assert.That(hub, Does.Contain("IsActiveCheckpointKlein()"));
 		Assert.That(hub, Does.Contain("has_Depth_or_Norm_or_RefOnly() || IsActiveCheckpointKlein()"));
 		Assert.That(hub, Does.Contain("!klein && has_Depth_or_Norm_or_RefOnly()==false"));
+		string list = File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "SD_ControlNetsList_UI.cs"));
+		Assert.That(list, Does.Contain("TryApplyKleinControlNetLayout"));
+		Assert.That(list, Does.Contain("cannot safely arm CustomFile co-opt without a second unit"));
 	}
 
 	[Test]

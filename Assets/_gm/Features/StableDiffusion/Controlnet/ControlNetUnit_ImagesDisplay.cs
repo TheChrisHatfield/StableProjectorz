@@ -128,17 +128,21 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Flux.2 Klein has no SD/SDXL ControlNet — co-opt ContentCam / CustomFile "what to send"
-	    /// as img2img init instead of alwayson ControlNet.
+	    /// Flux.2 Klein img2img co-opt: ContentCam / CustomFile with model None (unit 1+).
+	    /// Unit 0 can still run Flux2 ControlNet depth separately.
 	    /// </summary>
 	    public bool IsKleinImg2ImgInitSource(){
 	        return HasValidKleinImg2ImgInit();
 	    }
 
+	    /// <summary>True when a CustomFile bitmap is still loaded (even if what-to-send was cleared).</summary>
+	    public bool HasLoadedCustomFileBitmap() =>
+	        _myCustomImg_from_sysFile != null && _myCustomImg_from_sysFile.tex != null;
+
 	    /// <summary>True only when a real init bitmap can be produced (not an empty CustomFile slot).</summary>
 	    public bool HasValidKleinImg2ImgInit(){
 	        if (_whatImageToSend == WhatImageToSend_CTRLNET.CustomFile)
-	            return _myCustomImg_from_sysFile != null && _myCustomImg_from_sysFile.tex != null;
+	            return HasLoadedCustomFileBitmap();
 	        if (_whatImageToSend == WhatImageToSend_CTRLNET.ContentCam)
 	            return UserCameras_MGR.instance != null && UserCameras_MGR.instance.camTextures != null;
 	        return false;
