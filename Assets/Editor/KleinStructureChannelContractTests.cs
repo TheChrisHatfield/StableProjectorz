@@ -56,6 +56,8 @@ public sealed class KleinStructureChannelContractTests {
 		Assert.That(helper, Does.Contain("RejectKleinDepthLikeResult"));
 		Assert.That(helper, Does.Contain("LooksLikeDepthPlate"));
 		Assert.That(helper, Does.Contain("result looks like depth plate"));
+		Assert.That(helper, Does.Contain("OnTerminatedGeneration(_latestGenData)"));
+		Assert.That(helper, Does.Contain("Complete_PendingImages(null) is a no-op"));
 	}
 
 	[Test]

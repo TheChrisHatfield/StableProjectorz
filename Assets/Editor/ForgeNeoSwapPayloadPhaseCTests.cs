@@ -430,6 +430,7 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_GenRequests_Helper.cs"));
 		Assert.That(helper, Does.Contain("RejectKleinDepthLikeResult"));
 		Assert.That(helper, Does.Contain("LooksLikeDepthPlate"));
+		Assert.That(helper, Does.Contain("OnTerminatedGeneration(_latestGenData)"));
 		Assert.That(helper, Does.Contain("kleinStructureAttachFailed"));
 		string hubTxt = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
