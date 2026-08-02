@@ -147,9 +147,9 @@ namespace spz {
 	        UpdateDropdown( _preprocessor_dropdown,  SD_ControlNetsList_UI.instance._preprocessors_list.module_list,
 	                        pickDepth_ifWasNone,  ref _prefferedPreProcessor_viaLoad );
 
-	        // First populate only: prefer a depth / Flux2-CN model when the list was empty.
+	        // First populate only: prefer a family-matching depth CN when the list was empty.
 	        // Do NOT treat user-chosen "None" as empty — refreshes were re-forcing depth and blocking disable.
-	        // Klein + Flux2 Fun-Controlnet-Union: FindPreferredDepthModelIndex picks Flux2 CN when checkpoint is Klein.
+	        // Klein: FindPreferredDepthModelIndex returns -1 (no auto CN; Depth img2img co-opt instead).
 	        pickDepth_ifWasNone = true;
 	        // 'None' model is allowed with preprocessor 'reference_only' (Apr 2024).
 	        pickDepth_ifWasNone &= currPreprocessorName().ToLower().Contains("ref")==false;
