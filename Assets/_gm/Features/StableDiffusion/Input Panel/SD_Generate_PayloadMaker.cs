@@ -78,6 +78,24 @@ namespace spz {
 	        img2img_GetTextures_andFill( forceFullWhiteMask:isMakingBackgrounds,  out screenMask_skipAntiEdge, out screenMask_withAntiEdge,
 	                                     out viewTex, out inpaint_fill, out denoise_strength);
 
+	        // Dedicated Klein init abort leaves viewTex null — do not encode empty / ContentCam-substitute.
+	        if (viewTex == null){
+	            if (screenMask_skipAntiEdge != null){ UnityEngine.Object.Destroy(screenMask_skipAntiEdge); screenMask_skipAntiEdge = null; }
+	            if (screenMask_withAntiEdge != null){ UnityEngine.Object.Destroy(screenMask_withAntiEdge); screenMask_withAntiEdge = null; }
+	            intermediates_ = new SD_GenRequestArgs_byproducts{
+	                screenSpaceMask_NE_disposableTex = null,
+	                screenSpaceMask_WE_disposableTex = null,
+	                usualView_disposableTexture = null,
+	            };
+	            payload_ = new SD_img2img_payload{
+	                width = 0, height = 0,
+	                init_images = new string[]{ "" },
+	                mask = "",
+	                alwayson_scripts = new Dictionary<string,AlwaysOn_Value>(),
+	            };
+	            return;
+	        }
+
 	        int inpaintMaskInvert01 = 0;
 	        // Background / full-white mask paths keep WebUI default (inpaint inside mask). User toggle applies to main viewport img2img only.
 	        if (!isMakingBackgrounds && Settings_MGR.instance != null && Settings_MGR.instance.get_sd_inpaintingMaskInvert())
@@ -346,17 +364,17 @@ namespace spz {
 	                || string.Equals(kleinSrcLabel, "CustomFile", System.StringComparison.Ordinal));
 
 	        if (kleinUsesDedicatedInit){
-	            // Stick to the peeked source — do not fall through Depth→CustomFile inside TryGet.
+	            // Stick to the peeked source — do not substitute ContentCam (would drop Klein Original/denoise
+	            // and LatentNothing can wipe the init under ProjectionsMasking).
 	            if (!SD_ControlNetsList_UI.instance.TryGetDisposableKleinImg2ImgInitForLabel(
 	                    kleinSrcLabel, out viewTex_, out kleinUnitIx) || viewTex_ == null){
 	                kleinFromCn = false;
-	                if (!forceFullWhiteMask && Objects_Renderer_MGR.instance != null)
-		                Objects_Renderer_MGR.instance.EnsureInpaintColorLayerAppliedForCapture();
-	                viewTex_ = camerasMGR.camTextures.GetDisposable_ContentCamTexture();
+	                viewTex_ = null;
 	                if (Viewport_StatusText.instance != null){
 	                    Viewport_StatusText.instance.ShowStatusText(
-	                        $"Klein {kleinSrcLabel} init unavailable — fell back to ContentCam.", false, 4f, false);
+	                        $"img2img aborted: Klein {kleinSrcLabel} init unavailable.", false, 5f, false);
 	                }
+	                return;
 	            }
 	        } else {
 	            // Apply layer stack immediately before content-cam capture so init matches the viewport

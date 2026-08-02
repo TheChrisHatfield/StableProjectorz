@@ -340,6 +340,9 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs"));
 		Assert.That(payload, Does.Contain("kleinUsesDedicatedInit"));
 		Assert.That(payload, Does.Contain("TryGetDisposableKleinImg2ImgInitForLabel"));
+		Assert.That(payload, Does.Contain("do not substitute ContentCam"));
+		Assert.That(payload, Does.Contain("Klein {kleinSrcLabel} init unavailable"));
+		Assert.That(payload, Does.Contain("Dedicated Klein init abort leaves viewTex null"));
 		Assert.That(payload, Does.Contain("\"Depth\""));
 		Assert.That(src, Does.Contain("TryGetDisposableKleinImg2ImgInitForLabel"));
 		Assert.That(src, Does.Contain("Avoids silently substituting CustomFile"));
