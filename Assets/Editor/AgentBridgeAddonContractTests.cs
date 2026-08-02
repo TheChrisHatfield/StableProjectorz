@@ -141,8 +141,14 @@ public sealed class AgentBridgeAddonContractTests {
 		string hub = File.ReadAllText(RepoPath(
 			"Assets", "_gm", "Features", "StableDiffusion", "StableDiffusion_Hub.cs"));
 		Assert.That(hub, Does.Contain("HasKleinImg2ImgInitSource()"));
-		Assert.That(hub, Does.Contain("SD_KleinStructureChannel.HasMeshDepthRt()"));
+		Assert.That(hub, Does.Contain("SD_KleinStructureChannel.CanCaptureMeshDepth()"));
 		Assert.That(hub, Does.Contain("!isMakingBackgrounds"));
+		string agent = File.ReadAllText(RepoPath(
+			"Assets", "_gm", "Features", "AgentBridge", "SPZ_Agent_Tools.cs"));
+		Assert.That(agent, Does.Contain("SD_KleinStructureChannel.HasMeshDepthRt()"));
+		Assert.That(agent, Does.Contain("klein_structure_ready"));
+		Assert.That(agent, Does.Contain("klein_refcontrol_lora"));
+		Assert.That(agent, Does.Contain("&& SD_KleinStructureChannel.HasMeshDepthRt()"));
 		string payload = File.ReadAllText(RepoPath(
 			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs"));
 		Assert.That(payload, Does.Contain("TryPeekKleinImg2ImgInitSource"));
