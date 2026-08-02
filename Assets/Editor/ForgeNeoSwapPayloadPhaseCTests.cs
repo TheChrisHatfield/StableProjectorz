@@ -363,6 +363,11 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "ControlNetUnit_UI.cs"));
 		Assert.That(unitUi, Does.Contain("no control image available for this unit"));
+		string payload = File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs"));
+		Assert.That(payload, Does.Contain("SD_ControlNetsList_UI.instance != null"));
+		Assert.That(payload, Does.Contain("ctrlNets_args != null && ctrlNets_args.args != null"));
 	}
 
 	[Test]

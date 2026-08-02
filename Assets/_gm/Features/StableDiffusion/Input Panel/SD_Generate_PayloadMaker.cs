@@ -58,8 +58,9 @@ namespace spz {
 	                TextureTools_SPZ.CreateSolidColorRGBA32(tw, th, Color.white);
 	        }
        
-	        ControlNet_NetworkArgs ctrlNets_args = SD_ControlNetsList_UI.instance.GetArgs_forGenerationRequest(intermediates_);
-	        if (ctrlNets_args.args.Length > 0) {
+	        ControlNet_NetworkArgs ctrlNets_args = SD_ControlNetsList_UI.instance != null
+	            ? SD_ControlNetsList_UI.instance.GetArgs_forGenerationRequest(intermediates_) : null;
+	        if (ctrlNets_args != null && ctrlNets_args.args != null && ctrlNets_args.args.Length > 0) {
 	            payload_.alwayson_scripts.Add("controlnet", ctrlNets_args);//https://github.com/Mikubill/sd-webui-controlnet/wiki/API#examples-1
 	        }
 	    }

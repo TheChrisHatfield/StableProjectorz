@@ -312,10 +312,15 @@ namespace spz {
 	        TryHealFamilyMismatchedModels();
 
 	        var args_ofValid_units = new List<ControlNetUnit_NetworkArgs>();
+	        if (_controlNet_units == null){
+	            return new ControlNet_NetworkArgs{ args = args_ofValid_units.ToArray() };
+	        }
 
 	        int numUnits = _controlNet_units.Count;
 	        for(int i=0; i<numUnits; ++i){
-	            ControlNetUnit_NetworkArgs arg = _controlNet_units[i].GetArgs_forGenerationRequest(intermediates);
+	            var unit = _controlNet_units[i];
+	            if (unit == null) continue;
+	            ControlNetUnit_NetworkArgs arg = unit.GetArgs_forGenerationRequest(intermediates);
 	            if(arg!=null){ args_ofValid_units.Add(arg); }
 	        }
 	        ControlNet_NetworkArgs cnArgs = new ControlNet_NetworkArgs{
