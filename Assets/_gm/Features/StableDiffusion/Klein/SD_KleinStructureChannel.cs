@@ -189,9 +189,8 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// RefControl reference image (RGB). Prefer colorful ContentCam / CustomFile; reject
-	    /// near-gray or depth-like plates (blank mesh ContentCam). Fall back to a soft synthetic
-	    /// warm albedo seed so depth stays structure, not content.
+	    /// RefControl reference image (RGB). Prefer loaded CustomFile (prepare arms it), then
+	    /// ContentCam; reject near-gray / depth-like plates. Fall back to synthetic warm seed.
 	    /// </summary>
 	    static bool TryCaptureStyleRefBase64(
 	        SD_GenRequestArgs_byproducts intermediates,
@@ -204,16 +203,33 @@ namespace spz {
 	        Texture2D style = null;
 	        bool destroyStyle = false;
 	        object contentLock = typeof(SD_KleinStructureChannel);
-	        bool skipUsualViewReuse = !string.IsNullOrEmpty(pixelInitKind)
-	            && pixelInitKind.IndexOf("CustomFile", System.StringComparison.OrdinalIgnoreCase) >= 0;
 	        try {
-	            if (!skipUsualViewReuse
+	            // CustomFile first — layout may deactivate the unit but keep the bitmap.
+	            if (SD_ControlNetsList_UI.instance != null
+	                && SD_ControlNetsList_UI.instance.TryGetDisposableLoadedCustomFileBitmap(out style, out _)){
+	                kind = "CustomFile";
+	                destroyStyle = true;
+	                if (!IsUsableStyleRef(style, depthForCompare)){
+	                    Object.DestroyImmediate(style);
+	                    style = null;
+	                    kind = "none";
+	                    destroyStyle = false;
+	                }
+	            }
+	            if (style == null
 	                && intermediates != null
 	                && intermediates.usualView_disposableTexture != null){
 	                style = intermediates.usualView_disposableTexture;
 	                kind = "ContentCam_reuse";
 	                destroyStyle = false;
-	            } else if (UserCameras_MGR.instance != null && UserCameras_MGR.instance.camTextures != null){
+	                if (!IsUsableStyleRef(style, depthForCompare)){
+	                    style = null;
+	                    kind = "none";
+	                }
+	            }
+	            if (style == null
+	                && UserCameras_MGR.instance != null
+	                && UserCameras_MGR.instance.camTextures != null){
 	                UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.ContentUserCam, contentLock, isLock: true);
 	                try {
 	                    if (Objects_Renderer_MGR.instance != null)
@@ -226,24 +242,8 @@ namespace spz {
 	                }
 	                kind = style != null ? "ContentCam" : "none";
 	                destroyStyle = style != null;
-	            }
-	            if (!IsUsableStyleRef(style, depthForCompare)){
-	                if (destroyStyle && style != null){
-	                    Object.DestroyImmediate(style);
-	                    style = null;
-	                } else {
-	                    style = null; // do not destroy usualView
-	                }
-	                destroyStyle = false;
-	                kind = "none";
-	            }
-	            if (style == null
-	                && SD_ControlNetsList_UI.instance != null
-	                && SD_ControlNetsList_UI.instance.TryGetDisposableLoadedCustomFileBitmap(out style, out _)){
-	                kind = "CustomFile";
-	                destroyStyle = true;
 	                if (!IsUsableStyleRef(style, depthForCompare)){
-	                    Object.DestroyImmediate(style);
+	                    if (destroyStyle && style != null) Object.DestroyImmediate(style);
 	                    style = null;
 	                    kind = "none";
 	                    destroyStyle = false;
@@ -272,7 +272,11 @@ namespace spz {
 	        if (style == null) return false;
 	        float chroma = MeanChroma01(style);
 	        if (chroma >= 0f && chroma < 0.04f) return false;
-	        if (depth != null && LooksLikeDepthPlate(style, depth, out _)) return false;
+	        if (depth == null) return true;
+	        // Silent compare — do not write result_mean_chroma into the request trace.
+	        float diff = MeanAbsLumaDiff01(style, depth);
+	        if (diff >= 0f && diff < 0.08f) return false;
+	        if (chroma >= 0f && chroma < 0.035f && diff >= 0f && diff < 0.18f) return false;
 	        return true;
 	    }
 
