@@ -343,6 +343,12 @@ namespace spz {
 	        _threshSliders.OnUnitAltered();
 
 	        string modelText = _model_dropdown.options[ix].text;
+	        // Klein + Flux2 Fun-Union: control image is already mesh depth — drop legacy depth_* preprocessors.
+	        try {
+	            string sd = SD_InputPanel_UI.instance != null ? SD_InputPanel_UI.instance.models?.selectedModel_name : null;
+	            if (SD_OptionsPacket.CheckpointNeedsKleinModules(sd) && ControlNetModelLooksFlux2(modelText))
+	                TrySelectPreprocessorByName("None", out _, out _);
+	        } catch { /* input panel may be unset */ }
 	        if (modelText.ToLower().Contains("xl_depth")){
 	            string msg = "SDXL depth can make Low-Poly-Wireframe renders.  If so, fix it by blurring the Depth:" +
 	                        "\nhover the Depth Button (next to the wireframe button) and use its sliders.";

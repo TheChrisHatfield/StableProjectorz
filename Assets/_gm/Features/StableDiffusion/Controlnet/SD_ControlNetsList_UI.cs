@@ -118,8 +118,17 @@ namespace spz {
 	                if (selectedFlux)
 	                    u0.dropdowns.TrySelectPreprocessorByName("None", out _, out _);
 	            }
-	            u0.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false);
-	            u0.TrySetActivated(true);
+	            if (selectedFlux){
+	                u0.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false);
+	                u0.TrySetActivated(true);
+	            } else {
+	                // Do not arm Depth with leftover SD1.5/XL weights — GetArgs would skip them anyway.
+	                string sdCkpt = null;
+	                try { sdCkpt = SD_InputPanel_UI.instance?.models?.selectedModel_name; } catch { /* */ }
+	                if (!u0.is_currModel_none
+	                    && ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(u0.currModelName(), sdCkpt))
+	                    u0.dropdowns.TrySelectModelNone();
+	            }
 	        }
 
 	        // Img2img co-opt must not share unit 0 with Flux depth CN (model None is required for co-opt).
@@ -312,11 +321,12 @@ namespace spz {
 	            if (!u.dropdowns.TrySelectModelByName(replacement, out _, out _)) continue;
 	            if (wasDepth){
 	                u.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false);
-	                if (SD_OptionsPacket.CheckpointNeedsKleinModules(sdCkpt))
-	                    u.dropdowns.TrySelectPreprocessorByName("None", out _, out _);
 	            } else if (wasNorms){
 	                u.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Normals, allowOpenFileDialog: false);
 	            }
+	            if (SD_OptionsPacket.CheckpointNeedsKleinModules(sdCkpt)
+	                && ControlNetUnit_Dropdowns.ControlNetModelLooksFlux2(replacement))
+	                u.dropdowns.TrySelectPreprocessorByName("None", out _, out _);
 	            healed++;
 	        }
 	        return healed;
