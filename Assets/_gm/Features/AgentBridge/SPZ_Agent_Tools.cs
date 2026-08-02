@@ -127,7 +127,7 @@ namespace spz {
 	            readOnly: false, idempotent: false, destructive: true);
 
 	        Add("prepare_flux_klein_test", "Preset Flux.2 Klein Gen Art test",
-	            "Convenience: flux-2-klein-4b, Euler, 4 steps, CFG 1.0, 512x512, clears ControlNet models.",
+	            "Convenience: flux-2-klein-4b, Euler, 4 steps, CFG 1.0, 512x512; applies Klein CN layout (Flux2 depth on unit 0 + CustomFile/ContentCam img2img on unit 1). Does not clear CustomFile bitmaps.",
 	            new List<AgentParamDesc>{
 	                new AgentParamDesc("checkpoint", "string", false, "Override checkpoint name. Default flux-2-klein-4b."),
 	                new AgentParamDesc("width", "number", false, "Width. Default 512."),
