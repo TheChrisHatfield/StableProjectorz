@@ -27,9 +27,19 @@ public sealed class KleinStructureChannelContractTests {
 		Assert.That(ch, Does.Contain("flux2_klein_4b_refcontrol_depth"));
 		Assert.That(ch, Does.Contain("AppendRefControlToPrompt"));
 		Assert.That(ch, Does.Contain("FromReferenceBase64List"));
+		Assert.That(ch, Does.Contain("style_ref_missing"));
+		Assert.That(ch, Does.Contain("TryGetDisposableLoadedCustomFileBitmap"));
+		// ContentCam / img2img init before CustomFile — leftover CustomFile is often a depth plate.
+		int contentCamReuse = ch.IndexOf("ContentCam_reuse", StringComparison.Ordinal);
+		int customFile = ch.IndexOf("kind = \"CustomFile\"", StringComparison.Ordinal);
+		Assert.That(contentCamReuse, Is.GreaterThanOrEqualTo(0));
+		Assert.That(customFile, Is.GreaterThan(contentCamReuse));
+		Assert.That(ch, Does.Contain("(float)maxSide"));
 		Assert.That(ch, Does.Not.Contain("init_images"));
 		string payload = Read("Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs");
 		Assert.That(payload, Does.Contain("AppendRefControlToPrompt"));
+		string listUi = Read("Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "SD_ControlNetsList_UI.cs");
+		Assert.That(listUi, Does.Contain("TryGetDisposableLoadedCustomFileBitmap"));
 	}
 
 	[Test]
