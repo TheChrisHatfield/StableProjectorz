@@ -197,11 +197,16 @@ namespace spz {
 	    }
 
 	    public static ImageStitch_AlwaysOnArgs FromReferenceBase64(string base64, int maxSide){
-	        // extract_images accepts list[str] of base64 (see Neo image_stitch.py).
+	        // Neo extract_images → decode_base64_to_image accepts raw or data-URI base64.
+	        // Prefer data-URI so Gradio Gallery / API paths treat the entry as an image.
+	        string asDataUri = base64;
+	        if (!string.IsNullOrEmpty(base64)
+	            && !base64.StartsWith("data:image/", System.StringComparison.OrdinalIgnoreCase))
+	            asDataUri = "data:image/png;base64," + base64;
 	        return new ImageStitch_AlwaysOnArgs {
 	            args = new object[] {
 	                true,
-	                new object[] { base64 },
+	                new object[] { asDataUri },
 	                maxSide,
 	            }
 	        };
