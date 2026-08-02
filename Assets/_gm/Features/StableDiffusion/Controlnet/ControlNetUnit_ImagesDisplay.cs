@@ -128,8 +128,8 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Flux.2 Klein img2img co-opt: ContentCam / CustomFile with model None (unit 1+).
-	    /// Unit 0 can still run Flux2 ControlNet depth separately.
+	    /// Flux.2 Klein img2img co-opt with model None: Depth (structure), CustomFile (style),
+	    /// or ContentCam. Fun-Union ControlNet is not used for Klein depth lock.
 	    /// </summary>
 	    public bool IsKleinImg2ImgInitSource(){
 	        return HasValidKleinImg2ImgInit();
@@ -141,6 +141,8 @@ namespace spz {
 
 	    /// <summary>True only when a real init bitmap can be produced (not an empty CustomFile slot).</summary>
 	    public bool HasValidKleinImg2ImgInit(){
+	        if (_whatImageToSend == WhatImageToSend_CTRLNET.Depth)
+	            return UserCameras_MGR.instance != null && UserCameras_MGR.instance.camTextures != null;
 	        if (_whatImageToSend == WhatImageToSend_CTRLNET.CustomFile)
 	            return HasLoadedCustomFileBitmap();
 	        if (_whatImageToSend == WhatImageToSend_CTRLNET.ContentCam)
@@ -152,6 +154,12 @@ namespace spz {
 	    public Texture2D TryGetDisposableKleinImg2ImgInit(out string sourceLabel){
 	        sourceLabel = "";
 	        if (!HasValidKleinImg2ImgInit()) return null;
+	        if (_whatImageToSend == WhatImageToSend_CTRLNET.Depth){
+	            Texture2D depth = UserCameras_MGR.instance.camTextures.GetDisposable_DepthTexture();
+	            if (depth == null) return null;
+	            sourceLabel = "Depth";
+	            return depth;
+	        }
 	        if (_whatImageToSend == WhatImageToSend_CTRLNET.CustomFile){
 	            Texture2D cpy = GetCustomImg_sysFile_disposableCpy();
 	            if (cpy == null) return null;

@@ -98,101 +98,75 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Klein Gen Art layout: unit 0 = Flux2 ControlNet + mesh Depth; unit 1 = model None +
-	    /// CustomFile (preferred) or ContentCam for img2img co-opt. Unit 2 left for IP-Adapter later.
-	    /// Returns true when a Flux2 CN model was selected on unit 0.
+	    /// Klein Gen Art layout (structure probe): no Fun-Union ControlNet — mesh Depth is fed as
+	    /// img2img init (model None). Optional CustomFile on unit 1 for style later / RefControl.
+	    /// Returns true when unit 0 was armed for Depth img2img co-opt.
 	    /// </summary>
 	    public bool TryApplyKleinControlNetLayout(out string fluxCnResolved, out string initSourceLabel){
 	        fluxCnResolved = "";
 	        initSourceLabel = "";
 	        if (_controlNet_units == null || _controlNet_units.Count == 0) return false;
 
+	        // Fun-Controlnet-Union does not lock Klein-4B — clear CN weights on all units.
+	        ClearAllUnitModelsToNone();
+
 	        var u0 = GetUnit(0);
-	        bool selectedFlux = false;
-	        if (u0 != null && u0.dropdowns != null){
-	            string[] models = _models != null ? _models.model_list : null;
-	            int fluxIx = ControlNetUnit_Dropdowns.FindPreferredFlux2ModelIndex(models);
-	            if (fluxIx >= 0 && models != null){
-	                selectedFlux = u0.dropdowns.TrySelectModelByName(models[fluxIx], out fluxCnResolved, out _);
-	                // Mesh depth is already the control image — skip SD1.5 depth preprocessors on Flux2 Union.
-	                if (selectedFlux)
-	                    u0.dropdowns.TrySelectPreprocessorByName("None", out _, out _);
-	            }
-	            if (selectedFlux){
-	                u0.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false);
+	        bool armedDepth = false;
+	        if (u0 != null){
+	            if (u0.dropdowns != null) u0.dropdowns.TrySelectModelNone();
+	            armedDepth = u0.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false);
+	            if (armedDepth){
 	                u0.TrySetActivated(true);
-	                // Saved/copied units often leave weight at 0 — Depth CN then has no effect and bake looks "off".
-	                if (u0.GetControlWeight() < 0.05f)
-	                    u0.SetControlWeight(1f);
-	            } else {
-	                // Do not arm Depth with leftover SD1.5/XL weights — GetArgs would skip them anyway.
-	                string sdCkpt = null;
-	                try { sdCkpt = SD_InputPanel_UI.instance?.models?.selectedModel_name; } catch { /* */ }
-	                if (!u0.is_currModel_none
-	                    && ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(u0.currModelName(), sdCkpt))
-	                    u0.dropdowns.TrySelectModelNone();
+	                initSourceLabel = "Depth";
 	            }
 	        }
 
-	        // Img2img co-opt must not share unit 0 with Flux depth CN (model None is required for co-opt).
+	        // Keep a loaded CustomFile on unit 1 (style ref) but model None — Depth wins peek order for init.
 	        ControlNetUnit_UI customUnit = null;
 	        for (int i = 0; i < _controlNet_units.Count; i++){
 	            var u = _controlNet_units[i];
 	            if (u != null && u.HasLoadedCustomFileBitmap()){ customUnit = u; break; }
 	        }
-	        if (customUnit != null && selectedFlux && customUnit == u0){
-	            var u1 = GetUnit(1);
-	            if (u1 == null){
-	                // Keep Flux+Depth on unit 0; cannot safely arm CustomFile co-opt without a second unit.
-	                customUnit = null;
-	            } else {
-	                u1.CopyFromAnother(customUnit);
-	                customUnit = u1;
-	                // CopyFromAnother may have overwritten u0 toggles via shared listeners — restore depth CN.
-	                if (u0.dropdowns != null && !string.IsNullOrEmpty(fluxCnResolved))
-	                    u0.dropdowns.TrySelectModelByName(fluxCnResolved, out fluxCnResolved, out _);
-	                u0.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false);
-	                u0.TrySetActivated(true);
+	        if (customUnit != null){
+	            var styleUnit = GetUnit(1) ?? customUnit;
+	            if (styleUnit != customUnit && customUnit == u0){
+	                // Depth owns unit 0 — move style bitmap handling to unit 1 if present.
+	                styleUnit = GetUnit(1);
 	            }
-	        }
-	        if (customUnit != null && !(selectedFlux && customUnit == u0)){
-	            if (customUnit.dropdowns != null) customUnit.dropdowns.TrySelectModelNone();
-	            if (customUnit.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.CustomFile, allowOpenFileDialog: false)){
-	                customUnit.TrySetActivated(true);
-	                initSourceLabel = "CustomFile";
-	            }
-	        } else if (customUnit == null) {
-	            var initUnit = GetUnit(1) ?? (selectedFlux ? null : u0);
-	            if (initUnit != null){
-	                if (initUnit.dropdowns != null) initUnit.dropdowns.TrySelectModelNone();
-	                if (initUnit.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.ContentCam, allowOpenFileDialog: false)){
-	                    initUnit.TrySetActivated(true);
-	                    initSourceLabel = "ContentCam";
+	            if (styleUnit != null && styleUnit != u0){
+	                if (styleUnit.dropdowns != null) styleUnit.dropdowns.TrySelectModelNone();
+	                // Re-arm CustomFile only if this unit already holds the bitmap or is unit 1 after copy.
+	                if (styleUnit.HasLoadedCustomFileBitmap()
+	                    || (customUnit != styleUnit && customUnit.HasLoadedCustomFileBitmap())){
+	                    if (!styleUnit.HasLoadedCustomFileBitmap() && customUnit != styleUnit)
+	                        styleUnit.CopyFromAnother(customUnit);
+	                    styleUnit.dropdowns?.TrySelectModelNone();
+	                    styleUnit.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.CustomFile, allowOpenFileDialog: false);
+	                    // Do not activate style unit for init — Depth on u0 is the structure source.
+	                    styleUnit.TrySetActivated(false);
 	                }
 	            }
-	        }
-
-	        // Disarm leftover empty CustomFile slots so they cannot hard-block Gen Art after ContentCam arming.
-	        for (int i = 0; i < _controlNet_units.Count; i++){
-	            var u = _controlNet_units[i];
-	            if (u == null || !u.isActivated || !u.is_currModel_none) continue;
-	            if (u._whatImageToSend != WhatImageToSend_CTRLNET.CustomFile) continue;
-	            if (u.IsKleinImg2ImgInitSource()) continue;
-	            u.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.None, allowOpenFileDialog: false);
+	            // Restore Depth on u0 after any CopyFromAnother side effects.
+	            if (u0 != null){
+	                u0.dropdowns?.TrySelectModelNone();
+	                u0.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false);
+	                u0.TrySetActivated(true);
+	                initSourceLabel = "Depth";
+	                armedDepth = true;
+	            }
 	        }
 
 	        if (string.IsNullOrEmpty(initSourceLabel) && TryPeekKleinImg2ImgInitSource(out _, out string label))
 	            initSourceLabel = label;
-	        return selectedFlux;
+	        return armedDepth;
 	    }
 
 	    /// <summary>
 	    /// Flux.2 Klein: find an activated ControlNet unit (model None) whose "what to send"
-	    /// is ContentCam or CustomFile and return a disposable RGB copy for img2img init.
-	    /// Prefers CustomFile over ContentCam (user ref for Klein img2img); scans unit 0..N
-	    /// in order within each preference. Encode path Crop-and-Resizes into the screen-mask
-	    /// frustum so projection bake stays viewport-aligned. Collapsed/disabled units and
-	    /// units with a real CN model selected are ignored.
+	    /// is Depth, CustomFile, or ContentCam and return a disposable RGB copy for img2img init.
+	    /// Prefers mesh Depth (structure) over CustomFile (style) over ContentCam.
+	    /// Encode path Crop-and-Resizes into the screen-mask frustum so projection bake stays
+	    /// viewport-aligned. Collapsed/disabled units and units with a real CN model are ignored.
 	    /// </summary>
 	    public bool TryGetDisposableKleinImg2ImgInit(out Texture2D tex, out int unitIndex, out string sourceLabel){
 	        tex = null;
@@ -200,6 +174,8 @@ namespace spz {
 	        sourceLabel = "";
 	        if (_controlNet_units == null) return false;
 
+	        if (TryPickKleinInit(WhatImageToSend_CTRLNET.Depth, out tex, out unitIndex, out sourceLabel))
+	            return true;
 	        if (TryPickKleinInit(WhatImageToSend_CTRLNET.CustomFile, out tex, out unitIndex, out sourceLabel))
 	            return true;
 	        if (TryPickKleinInit(WhatImageToSend_CTRLNET.ContentCam, out tex, out unitIndex, out sourceLabel))
@@ -229,12 +205,14 @@ namespace spz {
 
 	    /// <summary>
 	    /// Describes the preferred Klein init source without allocating a texture.
-	    /// Same preference order as TryGetDisposableKleinImg2ImgInit (CustomFile then ContentCam).
+	    /// Same preference order as TryGetDisposableKleinImg2ImgInit (Depth, CustomFile, ContentCam).
 	    /// </summary>
 	    public bool TryPeekKleinImg2ImgInitSource(out int unitIndex, out string sourceLabel){
 	        unitIndex = -1;
 	        sourceLabel = "";
 	        if (_controlNet_units == null) return false;
+	        if (TryPeekKleinInit(WhatImageToSend_CTRLNET.Depth, out unitIndex, out sourceLabel))
+	            return true;
 	        if (TryPeekKleinInit(WhatImageToSend_CTRLNET.CustomFile, out unitIndex, out sourceLabel))
 	            return true;
 	        if (TryPeekKleinInit(WhatImageToSend_CTRLNET.ContentCam, out unitIndex, out sourceLabel))
@@ -250,7 +228,9 @@ namespace spz {
 	            if (u == null || u._whatImageToSend != want) continue;
 	            if (!u.IsKleinImg2ImgInitSource()) continue;
 	            unitIndex = i;
-	            sourceLabel = want == WhatImageToSend_CTRLNET.CustomFile ? "CustomFile" : "ContentCam";
+	            if (want == WhatImageToSend_CTRLNET.Depth) sourceLabel = "Depth";
+	            else if (want == WhatImageToSend_CTRLNET.CustomFile) sourceLabel = "CustomFile";
+	            else sourceLabel = "ContentCam";
 	            return true;
 	        }
 	        return false;
