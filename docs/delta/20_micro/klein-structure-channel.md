@@ -27,11 +27,16 @@ Flux.2 Klein Gen Art must condition on **live mesh depth** (content-frustum 3D g
 ## SPZ flow
 
 1. Capture `UserCameras_MGR.camTextures.GetDisposable_DepthTexture()` after depth lock + `content_depthRender`.
-2. Attach via `SD_KleinStructureChannel.TryAttachMeshDepthStructure` on Gen Art txt2img/img2img.
-3. Pixel stream: txt2img noise, or optional CustomFile/ContentCam img2img — **never Depth**.
-4. `RejectKleinDepthLikeResult` blocks bake when Neo result ≈ depth plate.
-5. Dev traceback: `KleinStructureTrace` / PlayerPrefs `spz.klein.structure_trace.v1` (default off).
+2. Attach via `SD_KleinStructureChannel.TryAttachMeshDepthStructure` on Gen Art **txt2img only**.
+3. Style ref (ImageStitch image2): ContentCam first; CustomFile last-resort — **never Depth as init**.
+4. Hub forces `do_img2Img = false` for Klein Gen Art (see Neo caveat below).
+5. `RejectKleinDepthLikeResult` (+ near-gray remap) blocks bake when Neo result ≈ depth plate.
+6. Dev traceback: `KleinStructureTrace` / PlayerPrefs `spz.klein.structure_trace.v1` (default off). `LastRejectReason` always recorded.
+
+## Neo caveat (must stay txt2img)
+
+`backend/diffusion_engine/flux2.py` `get_learned_conditioning` **prepends** img2img `ini_latent` ahead of ImageStitch `ref_latents`. That turns SPZ’s `[depth, style]` into `[init, depth, style]` and breaks RefControl Depth LoRA. Gen Art therefore never uses img2img for Klein.
 
 ## Fail closed
 
-Missing depth RT → Gen Art denied / payload aborted (`kleinStructureAttachFailed`).
+Missing depth RT or style ref → Gen Art denied / payload aborted (`kleinStructureAttachFailed` / `style_ref_missing`).
