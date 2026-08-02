@@ -107,7 +107,9 @@ namespace spz {
 	        SD_GenRequestArgs_byproducts intermediates,
 	        string neoEndpoint,
 	        string pixelInitKind){
-	        KleinStructureTrace.BeginRequest();
+	        // Do not BeginRequest here — PayloadMaker begins before AppendRefControl so
+	        // refcontrol_* keys are not wiped. Ensure a request dict exists for Set().
+	        KleinStructureTrace.EnsureRequestStarted();
 	        KleinStructureTrace.Set("geometry_source", GeometrySourceId);
 	        KleinStructureTrace.Set("neo_endpoint", neoEndpoint ?? "");
 	        KleinStructureTrace.Set("pixel_init_kind", pixelInitKind ?? "none");

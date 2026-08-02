@@ -201,8 +201,18 @@ public sealed class KleinStructureChannelContractTests {
 		string trace = Read("Assets", "_gm", "Features", "StableDiffusion", "Klein", "KleinStructureTrace.cs");
 		Assert.That(trace, Does.Contain("LastRejectReason"));
 		Assert.That(trace, Does.Contain("key == \"reject_reason\""));
+		Assert.That(trace, Does.Contain("EnsureRequestStarted"));
 		string payload = Read("Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs");
 		Assert.That(payload, Does.Contain("LastRejectReason"));
 		Assert.That(payload, Does.Contain("style_ref_missing"));
+		// Begin before Append so attach cannot wipe RefControl keys.
+		Assert.That(payload, Does.Contain("KleinStructureTrace.BeginRequest()"));
+		int begin = payload.IndexOf("KleinStructureTrace.BeginRequest()", StringComparison.Ordinal);
+		int append = payload.IndexOf("AppendRefControlToPrompt", StringComparison.Ordinal);
+		Assert.That(begin, Is.GreaterThanOrEqualTo(0));
+		Assert.That(append, Is.GreaterThan(begin));
+		string ch = Read("Assets", "_gm", "Features", "StableDiffusion", "Klein", "SD_KleinStructureChannel.cs");
+		Assert.That(ch, Does.Contain("EnsureRequestStarted"));
+		Assert.That(ch, Does.Not.Contain("KleinStructureTrace.BeginRequest();"));
 	}
 }

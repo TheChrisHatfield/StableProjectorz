@@ -18,9 +18,11 @@ namespace spz {
 	        string positivePrompt = StableDiffusion_Prompts_UI.instance.positivePrompt;
 	        string negativePrompt = StableDiffusion_Prompts_UI.instance.negativePrompt;
 	        PostProcess_Prompt(ref positivePrompt, ref negativePrompt);
-	        // RefControl Depth LoRA: depth-as-structure (ImageStitch depth alone → depth plate).
-	        if (!isMakingBackgrounds && StableDiffusion_Hub.IsActiveCheckpointKlein())
+	        // RefControl Depth LoRA: begin trace first so attach cannot wipe LoRA keys.
+	        if (!isMakingBackgrounds && StableDiffusion_Hub.IsActiveCheckpointKlein()){
+	            KleinStructureTrace.BeginRequest();
 	            SD_KleinStructureChannel.AppendRefControlToPrompt(ref positivePrompt);
+	        }
 
 	        payload_ = new SD_txt2img_payload{
 	            prompt = positivePrompt,
@@ -190,8 +192,10 @@ namespace spz {
 	        string negativePrompt = StableDiffusion_Prompts_UI.instance != null
 	            ? StableDiffusion_Prompts_UI.instance.negativePrompt : "";
 	        PostProcess_Prompt(ref positivePrompt, ref negativePrompt);
-	        if (!isMakingBackgrounds && StableDiffusion_Hub.IsActiveCheckpointKlein())
+	        if (!isMakingBackgrounds && StableDiffusion_Hub.IsActiveCheckpointKlein()){
+	            KleinStructureTrace.BeginRequest();
 	            SD_KleinStructureChannel.AppendRefControlToPrompt(ref positivePrompt);
+	        }
 
 	        Texture2D encodeInit;
 	        Texture2D encodeMask;
