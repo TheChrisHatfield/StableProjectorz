@@ -163,8 +163,8 @@ namespace spz {
 	             do_img2Img |=  hasBackground || hasBackgroundColors;
 	        // Flux.2 Klein Gen Art MUST stay on txt2img.
 	        // Neo flux2.get_learned_conditioning prepends img2img ini_latent ahead of ImageStitch
-	        // ref_latents → [init, depth, style], which breaks RefControl Depth LoRA ([depth, style]).
-	        // CustomFile/ContentCam belong in ImageStitch style (image2), never as img2img init.
+	        // ref_latents → [init, style, depth], which breaks RefControl order ([style, depth]).
+	        // CustomFile/ContentCam belong in ImageStitch style (image1), never as img2img init.
 	        // Gen BG keeps normal img2img routing (no structure RefControl contract).
 	        bool kleinGenArt = !isMakingBackgrounds && IsActiveCheckpointKlein();
 	        if (kleinGenArt)

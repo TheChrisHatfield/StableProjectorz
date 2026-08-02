@@ -99,8 +99,8 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Capture mesh depth (+ ContentCam/CustomFile style ref), attach ImageStitch alwayson.
-	    /// Ref order: [depth, style] per RefControl Depth LoRA. Returns false if depth missing.
+	    /// Capture mesh depth (+ CustomFile/ContentCam/synthetic style), attach ImageStitch alwayson.
+	    /// Ref order: [style, depth] per RefControl left/right. Returns false if depth missing.
 	    /// </summary>
 	    public static bool TryAttachMeshDepthStructure(
 	        Dictionary<string, AlwaysOn_Value> alwayson,
