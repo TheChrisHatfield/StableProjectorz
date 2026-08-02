@@ -124,6 +124,12 @@ namespace spz {
 	    public bool HasLoadedCustomFileBitmap() =>
 	        _imgsDisplay != null && _imgsDisplay.HasLoadedCustomFileBitmap();
 
+	    /// <summary>Disposable CustomFile copy regardless of activation / what-to-send. Caller destroys.</summary>
+	    public Texture2D TryGetDisposableLoadedCustomFileBitmap(){
+	        if (_imgsDisplay == null || !_imgsDisplay.HasLoadedCustomFileBitmap()) return null;
+	        return _imgsDisplay.GetCustomImg_sysFile_disposableCpy();
+	    }
+
 	    /// <summary>
 	    /// True when this unit can seed Klein img2img pixel init (CustomFile / ContentCam).
 	    /// Depth is structure via SD_KleinStructureChannel, not pixel init.

@@ -188,6 +188,26 @@ namespace spz {
 	    }
 
 	    /// <summary>
+	    /// Any unit with a loaded CustomFile bitmap (activation / what-to-send ignored).
+	    /// Used for RefControl ImageStitch style ref — prepare deactivates CustomFile slots.
+	    /// </summary>
+	    public bool TryGetDisposableLoadedCustomFileBitmap(out Texture2D tex, out int unitIndex){
+	        tex = null;
+	        unitIndex = -1;
+	        if (_controlNet_units == null) return false;
+	        for (int i = 0; i < _controlNet_units.Count; i++){
+	            var u = _controlNet_units[i];
+	            if (u == null) continue;
+	            Texture2D cpy = u.TryGetDisposableLoadedCustomFileBitmap();
+	            if (cpy == null) continue;
+	            tex = cpy;
+	            unitIndex = i;
+	            return true;
+	        }
+	        return false;
+	    }
+
+	    /// <summary>
 	    /// Activated Klein co-opt unit armed for CustomFile but with no bitmap loaded.
 	    /// </summary>
 	    public bool HasArmedEmptyKleinCustomFile(){

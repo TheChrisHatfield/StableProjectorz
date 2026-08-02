@@ -176,32 +176,37 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Prefer CustomFile style bitmap, else ContentCam RGB (mesh view) as RefControl image2.
+	    /// Prefer any loaded CustomFile bitmap (even if unit deactivated), else ContentCam RGB
+	    /// as RefControl image2. Do not use IsKleinImg2ImgInitSource — prepare leaves CustomFile off.
 	    /// </summary>
 	    static bool TryCaptureStyleRefBase64(SD_GenRequestArgs_byproducts intermediates, out string b64, out string kind){
 	        b64 = null;
 	        kind = "none";
 	        Texture2D style = null;
 	        bool destroyStyle = false;
+	        object contentLock = typeof(SD_KleinStructureChannel);
 	        try {
 	            if (SD_ControlNetsList_UI.instance != null
-	                && SD_ControlNetsList_UI.instance.TryGetDisposableKleinImg2ImgInitForLabel(
-	                    "CustomFile", out style, out _)){
+	                && SD_ControlNetsList_UI.instance.TryGetDisposableLoadedCustomFileBitmap(out style, out _)){
 	                kind = "CustomFile";
 	                destroyStyle = true;
-	            } else {
+	            } else if (intermediates != null && intermediates.usualView_disposableTexture != null){
 	                // Reuse ContentCam already captured for img2img when present.
-	                if (intermediates != null && intermediates.usualView_disposableTexture != null){
-	                    style = intermediates.usualView_disposableTexture;
-	                    kind = "ContentCam_reuse";
-	                    destroyStyle = false;
-	                } else if (UserCameras_MGR.instance != null && UserCameras_MGR.instance.camTextures != null){
+	                style = intermediates.usualView_disposableTexture;
+	                kind = "ContentCam_reuse";
+	                destroyStyle = false;
+	            } else if (UserCameras_MGR.instance != null && UserCameras_MGR.instance.camTextures != null){
+	                // Ensure content RT exists (same unlock-destroys pattern as depth — capture under lock).
+	                UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.ContentUserCam, contentLock, isLock: true);
+	                try {
 	                    if (Objects_Renderer_MGR.instance != null)
 	                        Objects_Renderer_MGR.instance.EnsureInpaintColorLayerAppliedForCapture();
 	                    style = UserCameras_MGR.instance.camTextures.GetDisposable_ContentCamTexture();
-	                    kind = style != null ? "ContentCam" : "none";
-	                    destroyStyle = style != null;
+	                } finally {
+	                    UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.ContentUserCam, contentLock, isLock: false);
 	                }
+	                kind = style != null ? "ContentCam" : "none";
+	                destroyStyle = style != null;
 	            }
 	            if (style == null) return false;
 	            b64 = TextureTools_SPZ.TextureToBase64(style);
