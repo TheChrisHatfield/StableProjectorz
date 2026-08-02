@@ -271,11 +271,51 @@ namespace spz {
 	        }
 	    }
 
-	    /// <summary>True when result looks like the depth plate (too similar).</summary>
+	    /// <summary>
+	    /// Mean chroma (max-min RGB channel) in [0,1]. Near 0 = grayscale (depth-like).
+	    /// Returns -1 if sample impossible.
+	    /// </summary>
+	    public static float MeanChroma01(Texture2D tex){
+	        if (tex == null) return -1f;
+	        int w = Mathf.Min(tex.width, 64);
+	        int h = Mathf.Min(tex.height, 64);
+	        if (w < 4 || h < 4) return -1f;
+	        try {
+	            Color[] c = tex.GetPixels();
+	            if (c == null || c.Length == 0) return -1f;
+	            float sum = 0f;
+	            int n = 0;
+	            for (int y = 0; y < h; y++){
+	                int yy = (y * (tex.height - 1)) / Mathf.Max(1, h - 1);
+	                for (int x = 0; x < w; x++){
+	                    int xx = (x * (tex.width - 1)) / Mathf.Max(1, w - 1);
+	                    Color p = c[yy * tex.width + xx];
+	                    float mx = Mathf.Max(p.r, Mathf.Max(p.g, p.b));
+	                    float mn = Mathf.Min(p.r, Mathf.Min(p.g, p.b));
+	                    sum += mx - mn;
+	                    n++;
+	                }
+	            }
+	            return n > 0 ? sum / n : -1f;
+	        } catch (System.Exception){
+	            return -1f;
+	        }
+	    }
+
+	    /// <summary>
+	    /// True when result looks like the depth plate (too similar), including near-grayscale
+	    /// remaps that keep structure but shift levels past the tight luma threshold.
+	    /// </summary>
 	    public static bool LooksLikeDepthPlate(Texture2D result, Texture2D depthStructure, out float diff01){
 	        diff01 = MeanAbsLumaDiff01(result, depthStructure);
 	        if (diff01 < 0f) return false;
-	        return diff01 < 0.08f;
+	        if (diff01 < 0.08f) return true;
+	        float chroma = MeanChroma01(result);
+	        KleinStructureTrace.Set("result_mean_chroma", chroma);
+	        // Mild remaps of a depth plate stay nearly gray and still track depth luma.
+	        if (chroma >= 0f && chroma < 0.035f && diff01 < 0.18f)
+	            return true;
+	        return false;
 	    }
 	}
 

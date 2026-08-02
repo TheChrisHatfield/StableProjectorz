@@ -77,9 +77,13 @@ namespace spz {
 	            if (!SD_KleinStructureChannel.TryAttachMeshDepthStructure(
 	                    payload_.alwayson_scripts, intermediates_, "txt2img", "txt2img_noise")){
 	                intermediates_.kleinStructureAttachFailed = true;
-	                if (Viewport_StatusText.instance != null)
+	                // Style-missing path already shows a specific status; avoid a misleading depth-only message.
+	                if (Viewport_StatusText.instance != null
+	                    && !string.Equals(KleinStructureTrace.LastRejectReason, "style_ref_missing",
+	                        System.StringComparison.Ordinal)){
 	                    Viewport_StatusText.instance.ShowStatusText(
 	                        "Klein Gen Art aborted: mesh depth structure channel unavailable.", false, 5f, false);
+	                }
 	            } else {
 	                KleinStructureTrace.Set("bake_allowed", true);
 	            }
@@ -300,9 +304,12 @@ namespace spz {
 	            if (!SD_KleinStructureChannel.TryAttachMeshDepthStructure(
 	                    payload_.alwayson_scripts, intermediates_, "img2img", pixelKind)){
 	                intermediates_.kleinStructureAttachFailed = true;
-	                if (Viewport_StatusText.instance != null)
+	                if (Viewport_StatusText.instance != null
+	                    && !string.Equals(KleinStructureTrace.LastRejectReason, "style_ref_missing",
+	                        System.StringComparison.Ordinal)){
 	                    Viewport_StatusText.instance.ShowStatusText(
 	                        "Klein Gen Art aborted: mesh depth structure channel unavailable.", false, 5f, false);
+	                }
 	            } else {
 	                KleinStructureTrace.Set("bake_allowed", true);
 	            }
