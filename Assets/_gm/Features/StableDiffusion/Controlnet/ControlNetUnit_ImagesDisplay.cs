@@ -155,10 +155,18 @@ namespace spz {
 	        sourceLabel = "";
 	        if (!HasValidKleinImg2ImgInit()) return null;
 	        if (_whatImageToSend == WhatImageToSend_CTRLNET.Depth){
-	            Texture2D depth = UserCameras_MGR.instance.camTextures.GetDisposable_DepthTexture();
-	            if (depth == null) return null;
-	            sourceLabel = "Depth";
-	            return depth;
+	            // Thumb OnUpdate may not have locked depth yet same-frame as Gen Art — lock + force SD depth render.
+	            object lockOwner = this;
+	            UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.DepthUserCamera, lockOwner, isLock: true);
+	            try {
+	                Update_callbacks_MGR.content_depthRender?.Invoke();
+	                Texture2D depth = UserCameras_MGR.instance.camTextures.GetDisposable_DepthTexture();
+	                if (depth == null) return null;
+	                sourceLabel = "Depth";
+	                return depth;
+	            } finally {
+	                UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.DepthUserCamera, lockOwner, isLock: false);
+	            }
 	        }
 	        if (_whatImageToSend == WhatImageToSend_CTRLNET.CustomFile){
 	            Texture2D cpy = GetCustomImg_sysFile_disposableCpy();
