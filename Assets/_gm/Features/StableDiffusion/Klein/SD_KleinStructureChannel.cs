@@ -5,9 +5,9 @@ namespace spz {
 
 	/// <summary>
 	/// Neo Flux.2 Klein structure channel:
-	/// ImageStitch refs = [mesh depth, ContentCam/style] + RefControl Depth LoRA.
-	/// Depth alone as a stitch ref makes Klein reproduce a depth plate — LoRA + second
-	/// ref teaches depth-as-structure (see thedeoxen/refcontrol-FLUX.2-klein-4B-...).
+	/// ImageStitch refs = [style/reference, mesh depth] + RefControl Depth LoRA.
+	/// RefControl card: reference (left) + depth (right). Depth-first / gray ContentCam
+	/// makes distilled Klein copy the depth plate.
 	/// Never Fun-Union CN; never Depth as img2img init_images.
 	/// </summary>
 	public static class SD_KleinStructureChannel {
@@ -150,11 +150,11 @@ namespace spz {
 	            return false;
 	        }
 
-	        // RefControl: image1 = depth (structure), image2 = RGB identity/style (required).
-	        // Depth-only ImageStitch reproduces the depth plate — fail closed without style ref.
+	        // RefControl: [0]=RGB reference/style, [1]=depth structure (HF left/right).
+	        // Gray ContentCam ≈ depth → Neo copies the plate; reject and fall back.
 	        string styleB64 = null;
 	        string styleKind = "none";
-	        if (!TryCaptureStyleRefBase64(intermediates, pixelInitKind, out styleB64, out styleKind)
+	        if (!TryCaptureStyleRefBase64(intermediates, pixelInitKind, depth, out styleB64, out styleKind)
 	            || string.IsNullOrEmpty(styleB64)){
 	            KleinStructureTrace.Set("style_ref_kind", styleKind);
 	            KleinStructureTrace.Set("structure_attached", false);
@@ -167,14 +167,14 @@ namespace spz {
 	            }
 	            if (Viewport_StatusText.instance != null){
 	                Viewport_StatusText.instance.ShowStatusText(
-	                    "Klein Gen Art aborted: RefControl needs depth + ContentCam/CustomFile style ref.",
+	                    "Klein Gen Art aborted: RefControl needs a colorful style ref + mesh depth (gray ContentCam rejected).",
 	                    false, 5f, false);
 	            }
 	            return false;
 	        }
 	        KleinStructureTrace.Set("style_ref_kind", styleKind);
 
-	        var refs = new List<string> { depthB64, styleB64 };
+	        var refs = new List<string> { styleB64, depthB64 };
 
 	        if (intermediates == null)
 	            Object.DestroyImmediate(depth);
@@ -187,15 +187,14 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// RefControl image2 = RGB identity/style. Prefer ContentCam (current view)
-	    /// over CustomFile — a leftover CustomFile is often a depth plate from XL CN workflows and
-	    /// would make ImageStitch reproduce grayscale again. CustomFile is last-resort when
-	    /// ContentCam cannot be captured (still OK if unit is deactivated — prepare clears activation).
-	    /// Never reuse usualView when pixel init was CustomFile (depth-plate risk).
+	    /// RefControl reference image (RGB). Prefer colorful ContentCam / CustomFile; reject
+	    /// near-gray or depth-like plates (blank mesh ContentCam). Fall back to a soft synthetic
+	    /// warm albedo seed so depth stays structure, not content.
 	    /// </summary>
 	    static bool TryCaptureStyleRefBase64(
 	        SD_GenRequestArgs_byproducts intermediates,
 	        string pixelInitKind,
+	        Texture2D depthForCompare,
 	        out string b64,
 	        out string kind){
 	        b64 = null;
@@ -213,7 +212,6 @@ namespace spz {
 	                kind = "ContentCam_reuse";
 	                destroyStyle = false;
 	            } else if (UserCameras_MGR.instance != null && UserCameras_MGR.instance.camTextures != null){
-	                // Same unlock-destroys pattern as depth — capture under lock.
 	                UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.ContentUserCam, contentLock, isLock: true);
 	                try {
 	                    if (Objects_Renderer_MGR.instance != null)
@@ -227,18 +225,81 @@ namespace spz {
 	                kind = style != null ? "ContentCam" : "none";
 	                destroyStyle = style != null;
 	            }
+	            if (!IsUsableStyleRef(style, depthForCompare)){
+	                if (destroyStyle && style != null){
+	                    Object.DestroyImmediate(style);
+	                    style = null;
+	                } else {
+	                    style = null; // do not destroy usualView
+	                }
+	                destroyStyle = false;
+	                kind = "none";
+	            }
 	            if (style == null
 	                && SD_ControlNetsList_UI.instance != null
 	                && SD_ControlNetsList_UI.instance.TryGetDisposableLoadedCustomFileBitmap(out style, out _)){
 	                kind = "CustomFile";
 	                destroyStyle = true;
+	                if (!IsUsableStyleRef(style, depthForCompare)){
+	                    Object.DestroyImmediate(style);
+	                    style = null;
+	                    kind = "none";
+	                    destroyStyle = false;
+	                }
+	            }
+	            if (style == null){
+	                int w = depthForCompare != null ? Mathf.Max(64, depthForCompare.width) : 512;
+	                int h = depthForCompare != null ? Mathf.Max(64, depthForCompare.height) : 512;
+	                style = MakeSyntheticAlbedoStyle(w, h);
+	                kind = style != null ? "synthetic_albedo_seed" : "none";
+	                destroyStyle = style != null;
 	            }
 	            if (style == null) return false;
+	            float chroma = MeanChroma01(style);
+	            KleinStructureTrace.Set("style_mean_chroma", chroma);
 	            b64 = TextureTools_SPZ.TextureToBase64(style);
 	            return !string.IsNullOrEmpty(b64);
 	        } finally {
 	            if (destroyStyle && style != null)
 	                Object.DestroyImmediate(style);
+	        }
+	    }
+
+	    /// <summary>False when style is missing, near-gray, or too similar to the depth plate.</summary>
+	    public static bool IsUsableStyleRef(Texture2D style, Texture2D depth){
+	        if (style == null) return false;
+	        float chroma = MeanChroma01(style);
+	        if (chroma >= 0f && chroma < 0.04f) return false;
+	        if (depth != null && LooksLikeDepthPlate(style, depth, out _)) return false;
+	        return true;
+	    }
+
+	    /// <summary>
+	    /// Soft warm RGB seed (not depth-shaped) so RefControl has a colorful reference when
+	    /// ContentCam is blank/gray mesh. Prompt drives final albedo identity.
+	    /// </summary>
+	    public static Texture2D MakeSyntheticAlbedoStyle(int width, int height){
+	        width = Mathf.Clamp(width, 64, 1024);
+	        height = Mathf.Clamp(height, 64, 1024);
+	        var tex = new Texture2D(width, height, TextureFormat.RGBA32, false);
+	        try {
+	            for (int y = 0; y < height; y++){
+	                for (int x = 0; x < width; x++){
+	                    float u = x / (float)Mathf.Max(1, width - 1);
+	                    float v = y / (float)Mathf.Max(1, height - 1);
+	                    // Warm skin-tone field + gentle chroma variation (no silhouette).
+	                    float n = 0.5f + 0.5f * Mathf.Sin(u * 17.3f) * Mathf.Cos(v * 13.1f);
+	                    float r = Mathf.Clamp01(0.72f + 0.12f * n + 0.04f * u);
+	                    float g = Mathf.Clamp01(0.52f + 0.10f * n + 0.03f * v);
+	                    float b = Mathf.Clamp01(0.42f + 0.08f * n);
+	                    tex.SetPixel(x, y, new Color(r, g, b, 1f));
+	                }
+	            }
+	            tex.Apply(false, false);
+	            return tex;
+	        } catch (System.Exception){
+	            Object.DestroyImmediate(tex);
+	            return null;
 	        }
 	    }
 

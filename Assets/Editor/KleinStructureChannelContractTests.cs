@@ -79,6 +79,38 @@ public sealed class KleinStructureChannelContractTests {
 		Assert.That(ch, Does.Contain("TryCaptureMeshDepthDisposable"));
 		Assert.That(ch, Does.Contain("Checks RT while the depth lock is still held"));
 		Assert.That(ch, Does.Contain("skipUsualViewReuse"));
+		Assert.That(ch, Does.Contain("synthetic_albedo_seed"));
+		Assert.That(ch, Does.Contain("IsUsableStyleRef"));
+		// RefControl HF: reference left, depth right → style then depth in ImageStitch list.
+		Assert.That(ch, Does.Contain("styleB64, depthB64"));
+	}
+
+	[Test]
+	public void StyleRef_GrayTexture_IsNotUsable() {
+		var gray = new Texture2D(8, 8, TextureFormat.RGBA32, false);
+		var depth = new Texture2D(8, 8, TextureFormat.RGBA32, false);
+		try {
+			for (int y = 0; y < 8; y++)
+				for (int x = 0; x < 8; x++) {
+					float g = (x + y) / 14f;
+					gray.SetPixel(x, y, new Color(g, g, g, 1f));
+					depth.SetPixel(x, y, new Color(g, g, g, 1f));
+				}
+			gray.Apply();
+			depth.Apply();
+			Assert.That(SD_KleinStructureChannel.IsUsableStyleRef(gray, depth), Is.False);
+			var synth = SD_KleinStructureChannel.MakeSyntheticAlbedoStyle(64, 64);
+			try {
+				Assert.That(synth, Is.Not.Null);
+				Assert.That(SD_KleinStructureChannel.IsUsableStyleRef(synth, depth), Is.True);
+				Assert.That(SD_KleinStructureChannel.MeanChroma01(synth), Is.GreaterThan(0.04f));
+			} finally {
+				if (synth != null) UnityEngine.Object.DestroyImmediate(synth);
+			}
+		} finally {
+			UnityEngine.Object.DestroyImmediate(gray);
+			UnityEngine.Object.DestroyImmediate(depth);
+		}
 	}
 
 	[Test]
