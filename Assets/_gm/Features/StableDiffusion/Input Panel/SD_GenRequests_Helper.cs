@@ -458,7 +458,13 @@ namespace spz {
 
 	        Texture2D result = null;
 	        try {
-	            result = TextureTools_SPZ.Base64ToTexture(response.images[0]);
+	            string b64 = response.images[0];
+	            // Neo/A1111 usually send raw base64; tolerate data-URI if present.
+	            if (b64.StartsWith("data:image/", System.StringComparison.OrdinalIgnoreCase)){
+	                int comma = b64.IndexOf(',');
+	                if (comma >= 0 && comma + 1 < b64.Length) b64 = b64.Substring(comma + 1);
+	            }
+	            result = TextureTools_SPZ.Base64ToTexture(b64);
 	            if (result == null) return false;
 	            Texture2D depth = _latestDepthTex_sent as Texture2D;
 	            if (depth == null) return false;
@@ -468,6 +474,9 @@ namespace spz {
 	            if (reject)
 	                KleinStructureTrace.Set("reject_reason", "result_looks_like_depth_plate");
 	            return reject;
+	        } catch (System.Exception){
+	            // Fail open on compare errors — do not strand Gen Art completion.
+	            return false;
 	        } finally {
 	            if (result != null) UnityEngine.Object.Destroy(result);
 	        }
