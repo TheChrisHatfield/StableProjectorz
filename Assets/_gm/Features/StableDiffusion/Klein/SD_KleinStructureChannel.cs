@@ -289,18 +289,24 @@ namespace spz {
 	        height = Mathf.Clamp(height, 64, 1024);
 	        var tex = new Texture2D(width, height, TextureFormat.RGBA32, false);
 	        try {
+	            var pixels = new Color[width * height];
+	            float invW = 1f / Mathf.Max(1, width - 1);
+	            float invH = 1f / Mathf.Max(1, height - 1);
 	            for (int y = 0; y < height; y++){
+	                float v = y * invH;
+	                int row = y * width;
 	                for (int x = 0; x < width; x++){
-	                    float u = x / (float)Mathf.Max(1, width - 1);
-	                    float v = y / (float)Mathf.Max(1, height - 1);
+	                    float u = x * invW;
 	                    // Warm skin-tone field + gentle chroma variation (no silhouette).
 	                    float n = 0.5f + 0.5f * Mathf.Sin(u * 17.3f) * Mathf.Cos(v * 13.1f);
-	                    float r = Mathf.Clamp01(0.72f + 0.12f * n + 0.04f * u);
-	                    float g = Mathf.Clamp01(0.52f + 0.10f * n + 0.03f * v);
-	                    float b = Mathf.Clamp01(0.42f + 0.08f * n);
-	                    tex.SetPixel(x, y, new Color(r, g, b, 1f));
+	                    pixels[row + x] = new Color(
+	                        Mathf.Clamp01(0.72f + 0.12f * n + 0.04f * u),
+	                        Mathf.Clamp01(0.52f + 0.10f * n + 0.03f * v),
+	                        Mathf.Clamp01(0.42f + 0.08f * n),
+	                        1f);
 	                }
 	            }
+	            tex.SetPixels(pixels);
 	            tex.Apply(false, false);
 	            return tex;
 	        } catch (System.Exception){
