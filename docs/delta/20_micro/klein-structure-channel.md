@@ -19,8 +19,10 @@ Flux.2 Klein Gen Art must condition on **live mesh depth** (content-frustum 3D g
 |-------|--------|
 | alwayson script name | `imagestitch integrated` |
 | args | `[enable:bool, reference_images:list[base64], max_side:int]` |
-| Klein behavior | refs encode as reference latents; txt2img = empty latent + refs |
-| Not used | RefControl Depth LoRA (not installed); Fun-Union CN |
+| Ref order | **[0]=mesh depth**, **[1]=ContentCam/CustomFile** (RefControl) |
+| LoRA | `flux2_klein_4b_refcontrol_depth` + trigger `refcontrol` (required) |
+| Why LoRA | Depth-only ImageStitch makes Klein **copy the depth plate**; RefControl teaches depth-as-structure |
+| Not used | Fun-Union CN; Depth as `init_images` |
 
 ## SPZ flow
 

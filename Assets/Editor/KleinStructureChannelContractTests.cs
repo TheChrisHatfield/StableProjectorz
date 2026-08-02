@@ -24,7 +24,12 @@ public sealed class KleinStructureChannelContractTests {
 		Assert.That(ch, Does.Contain("LooksLikeDepthPlate"));
 		Assert.That(ch, Does.Contain("data:image/png;base64,"));
 		Assert.That(ch, Does.Contain("TryCaptureMeshDepthDisposable"));
+		Assert.That(ch, Does.Contain("flux2_klein_4b_refcontrol_depth"));
+		Assert.That(ch, Does.Contain("AppendRefControlToPrompt"));
+		Assert.That(ch, Does.Contain("FromReferenceBase64List"));
 		Assert.That(ch, Does.Not.Contain("init_images"));
+		string payload = Read("Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs");
+		Assert.That(payload, Does.Contain("AppendRefControlToPrompt"));
 	}
 
 	[Test]
