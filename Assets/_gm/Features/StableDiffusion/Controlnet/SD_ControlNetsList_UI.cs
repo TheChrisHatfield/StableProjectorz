@@ -47,7 +47,7 @@ namespace spz {
 	        foreach(var u in _controlNet_units){
 	            if(!u.isForDepth()){ continue; }
 	            if(onlyActive && !u.isActivated){ continue; }
-	            if(only_if_validModel && u.is_currModel_none){ continue; }
+	            if(only_if_validModel && !IsUnitModelValidForActiveCheckpoint(u)){ continue; }
 	            return true;
 	        }
 	        return false;
@@ -57,10 +57,21 @@ namespace spz {
 	        foreach(var u in _controlNet_units){
 	            if(!u.isForNormals()){ continue; }
 	            if(onlyActive && !u.isActivated){ continue; }
-	            if(only_if_validModel && u.is_currModel_none){ continue; }
+	            if(only_if_validModel && !IsUnitModelValidForActiveCheckpoint(u)){ continue; }
 	            return true;
 	        }
 	        return false;
+	    }
+
+	    /// <summary>
+	    /// Model None is invalid for depth/normals gates. Family-mismatched weights (e.g. SD1.5 CN on
+	    /// Klein) are also invalid — GetArgs skips them, so the gate must not treat them as ready.
+	    /// </summary>
+	    static bool IsUnitModelValidForActiveCheckpoint(ControlNetUnit_UI u){
+	        if (u == null || u.is_currModel_none) return false;
+	        string sdCkpt = null;
+	        try { sdCkpt = SD_InputPanel_UI.instance?.models?.selectedModel_name; } catch { /* */ }
+	        return !ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(u.currModelName(), sdCkpt);
 	    }
 
 	    public int Num_Active_Reference_CTRLUnit() => _controlNet_units.Count( u=>u.isActivated && u.isReferencePreprocessor() );
