@@ -359,6 +359,10 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Neural_Models.cs"));
 		Assert.That(neural, Does.Contain("TryHealFamilyMismatchedModels"));
+		string unitUi = File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "ControlNetUnit_UI.cs"));
+		Assert.That(unitUi, Does.Contain("no control image available for this unit"));
 	}
 
 	[Test]
