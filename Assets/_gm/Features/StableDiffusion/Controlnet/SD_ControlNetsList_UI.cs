@@ -339,6 +339,12 @@ namespace spz {
 	                    u0.dropdowns?.TrySelectModelNone();
 	                    if (u0.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false)){
 	                        u0.TrySetActivated(true);
+	                        object lockOwner = this;
+	                        UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.DepthUserCamera, lockOwner, isLock: true);
+	                        try { Update_callbacks_MGR.content_depthRender?.Invoke(); }
+	                        finally {
+	                            UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.DepthUserCamera, lockOwner, isLock: false);
+	                        }
 	                        cleared = Mathf.Max(cleared, 1);
 	                    }
 	                }
