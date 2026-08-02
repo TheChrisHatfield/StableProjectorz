@@ -147,6 +147,9 @@ namespace spz {
 	        }
 	        Act_OnSendOptions_done?.Invoke(request.result, request.error);
 	        _isSendingReceiving = false;
+	        // Drain coalesced SubmitOptions_Asap calls that arrived mid-POST (e.g. Klein VAE heal).
+	        if (_wantsToSend_Asap && currentOptions != null)
+	            yield return SendOptionsRequest();
 	    }
 	}
 }//end namespace

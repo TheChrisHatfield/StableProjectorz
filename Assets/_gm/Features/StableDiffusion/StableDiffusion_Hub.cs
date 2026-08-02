@@ -101,14 +101,8 @@ namespace spz {
 	        }
 	        // ImageStitch encodes depth through sd_vae — None / wrong VAE silently drops structure lock.
 	        if (klein && allow_without_controlnets==false){
-	            string vae = SD_VAE.instance != null ? SD_VAE.instance.selectedVAE_name : "";
-	            bool hasKleinVae = !string.IsNullOrEmpty(vae)
-	                && vae.IndexOf("flux2_klein_4b_vae", System.StringComparison.OrdinalIgnoreCase) >= 0;
-	            if (!hasKleinVae){
-	                // Auto-heal once; if dropdown lacks the file, deny with a clear message.
-	                if (SD_Neural_Models.EnsureKleinSdVaeSelected())
-	                    hasKleinVae = true;
-	            }
+	            // Always Ensure+SubmitOptions so Neo gets sd_vae even when UI already shows Klein VAE.
+	            bool hasKleinVae = SD_Neural_Models.EnsureKleinSdVaeSelected();
 	            if (!hasKleinVae){
 	                string msg = "Flux.2 Klein Gen Art needs VAE flux2_klein_4b_vae.safetensors.\nSelect it in the SD VAE dropdown (sd_vae=None breaks depth structure).";
 	                Viewport_StatusText.instance.ShowStatusText(msg, false, 6, true);

@@ -282,6 +282,12 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 		Assert.That(neural, Does.Contain("CheckpointNeedsKleinModules"));
 		Assert.That(neural, Does.Contain("EnsureKleinSdVaeSelected"));
 		Assert.That(neural, Does.Contain("sd_vae=None breaks depth structure"));
+		Assert.That(neural, Does.Contain("SubmitOptions_Asap"));
+		Assert.That(neural, Does.Contain("payload.sd_vae = SD_OptionsPacket.KleinVaeModule"));
+		string fetcher = File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Options_Fetcher.cs"));
+		Assert.That(fetcher, Does.Contain("Drain coalesced SubmitOptions_Asap"));
 	}
 
 	[Test]
