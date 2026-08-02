@@ -144,28 +144,32 @@ namespace spz {
 	        int h = Mathf.Min(a.height, b.height, 64);
 	        if (w < 4 || h < 4) return -1f;
 
-	        // Sample a coarse grid without full ReadPixels realloc when possible.
-	        Color[] ca = a.GetPixels();
-	        Color[] cb = b.GetPixels();
-	        if (ca == null || cb == null || ca.Length == 0 || cb.Length == 0) return -1f;
+	        try {
+	            // Sample a coarse grid; GetPixels throws if either tex is non-readable.
+	            Color[] ca = a.GetPixels();
+	            Color[] cb = b.GetPixels();
+	            if (ca == null || cb == null || ca.Length == 0 || cb.Length == 0) return -1f;
 
-	        float sum = 0f;
-	        int n = 0;
-	        for (int y = 0; y < h; y++){
-	            int ya = (y * (a.height - 1)) / Mathf.Max(1, h - 1);
-	            int yb = (y * (b.height - 1)) / Mathf.Max(1, h - 1);
-	            for (int x = 0; x < w; x++){
-	                int xa = (x * (a.width - 1)) / Mathf.Max(1, w - 1);
-	                int xb = (x * (b.width - 1)) / Mathf.Max(1, w - 1);
-	                Color pa = ca[ya * a.width + xa];
-	                Color pb = cb[yb * b.width + xb];
-	                float la = 0.299f * pa.r + 0.587f * pa.g + 0.114f * pa.b;
-	                float lb = 0.299f * pb.r + 0.587f * pb.g + 0.114f * pb.b;
-	                sum += Mathf.Abs(la - lb);
-	                n++;
+	            float sum = 0f;
+	            int n = 0;
+	            for (int y = 0; y < h; y++){
+	                int ya = (y * (a.height - 1)) / Mathf.Max(1, h - 1);
+	                int yb = (y * (b.height - 1)) / Mathf.Max(1, h - 1);
+	                for (int x = 0; x < w; x++){
+	                    int xa = (x * (a.width - 1)) / Mathf.Max(1, w - 1);
+	                    int xb = (x * (b.width - 1)) / Mathf.Max(1, w - 1);
+	                    Color pa = ca[ya * a.width + xa];
+	                    Color pb = cb[yb * b.width + xb];
+	                    float la = 0.299f * pa.r + 0.587f * pa.g + 0.114f * pa.b;
+	                    float lb = 0.299f * pb.r + 0.587f * pb.g + 0.114f * pb.b;
+	                    sum += Mathf.Abs(la - lb);
+	                    n++;
+	                }
 	            }
+	            return n > 0 ? sum / n : -1f;
+	        } catch (System.Exception){
+	            return -1f;
 	        }
-	        return n > 0 ? sum / n : -1f;
 	    }
 
 	    /// <summary>True when result looks like the depth plate (too similar).</summary>
