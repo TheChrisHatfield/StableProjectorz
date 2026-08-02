@@ -228,8 +228,9 @@ namespace spz {
 	        } catch { /* dropdown refresh can run before input panel is ready */ }
 
 	        if (wantFlux2){
-	            // Klein must not fall through to SD1.5/XL depth — those are family-mismatched and GetArgs skips them.
-	            return FindPreferredFlux2ModelIndex(choices);
+	            // Klein-4B: Fun-Union / Flux2 CN does not lock geometry — use Depth img2img co-opt instead.
+	            // Do not auto-pick any CN weight (would re-arm ineffective Fun-Union on refresh/heal).
+	            return -1;
 	        }
 
 	        int anyDepth = -1, bestXl = -1, bestNonXl = -1;
@@ -295,9 +296,9 @@ namespace spz {
 	        if (string.IsNullOrEmpty(cnModelName) || cnModelName.Equals("None", StringComparison.OrdinalIgnoreCase))
 	            return false;
 	        if (string.IsNullOrEmpty(checkpointName)) return false;
-	        // Flux.2 Klein: allow Flux2 ControlNet; reject legacy SD1.5/SDXL CN weights.
+	        // Flux.2 Klein-4B: no alwayson ControlNet (Fun-Union ineffective). Structure via Depth img2img.
 	        if (SD_OptionsPacket.CheckpointNeedsKleinModules(checkpointName))
-	            return !ControlNetModelLooksFlux2(cnModelName);
+	            return true;
 	        // Flux2 CN on non-Klein checkpoints is also a mismatch.
 	        if (ControlNetModelLooksFlux2(cnModelName))
 	            return true;

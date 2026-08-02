@@ -337,7 +337,7 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 	}
 
 	[Test]
-	public void ControlNet_Klein_AllowsFlux2Cn_RejectsLegacy_AndBypassesDepthGate() {
+	public void ControlNet_Klein_RejectsAllCnWeights_IncludingFunUnion_AndBypassesDepthGate() {
 		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
 			"diffusers_xl_depth_full", "flux-2-klein-4b"), Is.True);
 		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
@@ -354,8 +354,9 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			"flux2-alt.safetensors",
 			"FLUX.2-dev-Fun-Controlnet-Union.safetensors",
 		}), Is.EqualTo(2));
+		// Fun-Union is for FLUX.2-dev, not Klein-4B — treat as mismatch so GetArgs never sends it.
 		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
-			"FLUX.2-dev-Fun-Controlnet-Union.safetensors", "flux-2-klein-4b"), Is.False);
+			"FLUX.2-dev-Fun-Controlnet-Union.safetensors", "flux-2-klein-4b"), Is.True);
 		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
 			"FLUX.2-dev-Fun-Controlnet-Union.safetensors", "realisticvisionv51_v51vae"), Is.True);
 		string hub = File.ReadAllText(Path.Combine(
@@ -379,7 +380,8 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 		string dropdowns = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "ControlNetUnit_Dropdowns.cs"));
-		Assert.That(dropdowns, Does.Contain("Klein must not fall through to SD1.5/XL depth"));
+		Assert.That(dropdowns, Does.Contain("Do not auto-pick any CN weight"));
+		Assert.That(dropdowns, Does.Contain("no alwayson ControlNet (Fun-Union ineffective)"));
 		Assert.That(dropdowns, Does.Contain("drop legacy depth_* preprocessors"));
 		string neural = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
@@ -390,6 +392,7 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "ControlNetUnit_UI.cs"));
 		Assert.That(unitUi, Does.Contain("no control image available for this unit"));
 		Assert.That(unitUi, Does.Contain("force None at payload time"));
+		Assert.That(unitUi, Does.Contain("uses Depth/CustomFile img2img init"));
 		string payload = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs"));

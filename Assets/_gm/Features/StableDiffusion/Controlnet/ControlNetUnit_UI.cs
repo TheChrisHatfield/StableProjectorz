@@ -196,7 +196,7 @@ namespace spz {
 	        if (ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(cnModel, sdCkpt)){
 	            if (Viewport_StatusText.instance != null){
 	                string msg = SD_OptionsPacket.CheckpointNeedsKleinModules(sdCkpt)
-	                    ? "Skipped ControlNet: Flux.2 Klein needs a Flux2 ControlNet (e.g. Fun-Controlnet-Union), not SD1.5/XL."
+	                    ? "Skipped ControlNet: Flux.2 Klein uses Depth/CustomFile img2img init (not Fun-Union / SD1.5/XL CN)."
 	                    : "Skipped ControlNet: model family mismatch (use SD1.5 CN with SD1.5 checkpoint, XL CN with XL).";
 	                Viewport_StatusText.instance.ShowStatusText(msg, false, 4f, false);
 	            }
