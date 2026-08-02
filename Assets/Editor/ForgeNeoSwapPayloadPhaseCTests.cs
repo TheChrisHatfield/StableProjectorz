@@ -363,7 +363,9 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "StableDiffusion", "StableDiffusion_Hub.cs"));
 		Assert.That(hub, Does.Contain("IsActiveCheckpointKlein()"));
-		Assert.That(hub, Does.Contain("has_Depth_or_Norm_or_RefOnly() || IsActiveCheckpointKlein()"));
+		Assert.That(hub, Does.Contain("has_Depth_or_Norm_or_RefOnly() || kleinReady"));
+		Assert.That(hub, Does.Contain("HasKleinImg2ImgInitSource()"));
+		Assert.That(hub, Does.Contain("Klein Gen Art needs an img2img init"));
 		Assert.That(hub, Does.Contain("!klein && has_Depth_or_Norm_or_RefOnly()==false"));
 		string list = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
