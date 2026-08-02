@@ -151,14 +151,14 @@ namespace spz {
 
 	        bool do_img2Img  =  isMode_Img2Img && (hasAutoMask || hasBrushedMask);
 	             do_img2Img |=  hasBackground || hasBackgroundColors;
-	        // Flux.2 Klein: structure = ImageStitch mesh depth on txt2img by default.
-	        // Optional pixel init (CustomFile/ContentCam only) may force img2img — never Depth.
-	        // Gen BG must not steal a face/custom CN image as its init.
-	        bool kleinPixelInit = !isMakingBackgrounds
-	                             && IsActiveCheckpointKlein()
-	                             && SD_ControlNetsList_UI.instance != null
-	                             && SD_ControlNetsList_UI.instance.HasKleinImg2ImgInitSource();
-	        do_img2Img |= kleinPixelInit;
+	        // Flux.2 Klein Gen Art MUST stay on txt2img.
+	        // Neo flux2.get_learned_conditioning prepends img2img ini_latent ahead of ImageStitch
+	        // ref_latents → [init, depth, style], which breaks RefControl Depth LoRA ([depth, style]).
+	        // CustomFile/ContentCam belong in ImageStitch style (image2), never as img2img init.
+	        // Gen BG keeps normal img2img routing (no structure RefControl contract).
+	        bool kleinGenArt = !isMakingBackgrounds && IsActiveCheckpointKlein();
+	        if (kleinGenArt)
+	            do_img2Img = false;
 
 	        if(do_img2Img){
 	            _Act_img2img_willRequest?.Invoke();
