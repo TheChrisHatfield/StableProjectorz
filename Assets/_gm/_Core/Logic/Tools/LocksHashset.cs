@@ -65,16 +65,22 @@ namespace spz {
 	        int prevCount = lockers.Count;
 	        lockers.Add(requestor);
 	        if(prevCount==0 && lockers.Count==1){ 
-	            OnLocked();   
-	            onLockStatusChanged?.Invoke(true);
+	            OnLocked();
+	            // Already "locked" via keep_pretending (Force_KeepRenderingCameras) — avoid double want.
+	            if (!_keep_pretending_isLocked)
+	                onLockStatusChanged?.Invoke(true);
 	        }
 	    }
 	    public void Unlock(object originalRequestor){
 	        int prevCount = lockers.Count;
 	        lockers.Remove(originalRequestor);
 	        if(prevCount==1 && lockers.Count==0){ 
-	            OnUnlocked(); 
-	            onLockStatusChanged?.Invoke(false);
+	            OnUnlocked();
+	            // Critical: while Force_KeepRenderingCameras pretends locked, do NOT fire unlocked.
+	            // Otherwise set_is_Want(false) destroys ContentCam/Depth RTs mid Klein Gen Art
+	            // (style/depth capture Lock→Unlock under pretend).
+	            if (!_keep_pretending_isLocked)
+	                onLockStatusChanged?.Invoke(false);
 	        }
 	    }
 
