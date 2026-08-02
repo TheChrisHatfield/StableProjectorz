@@ -149,6 +149,9 @@ public sealed class AgentBridgeAddonContractTests {
 		Assert.That(agent, Does.Contain("klein_structure_ready"));
 		Assert.That(agent, Does.Contain("klein_refcontrol_lora"));
 		Assert.That(agent, Does.Contain("&& SD_KleinStructureChannel.HasMeshDepthRt()"));
+		Assert.That(agent, Does.Contain("klein_vae_ok"));
+		Assert.That(agent, Does.Contain("klein_customfile_loaded"));
+		Assert.That(agent, Does.Contain("TryGetDisposableLoadedCustomFileBitmap"));
 		string payload = File.ReadAllText(RepoPath(
 			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs"));
 		Assert.That(payload, Does.Contain("TryPeekKleinImg2ImgInitSource"));

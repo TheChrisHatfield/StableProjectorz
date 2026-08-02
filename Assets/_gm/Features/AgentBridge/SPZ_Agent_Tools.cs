@@ -631,7 +631,12 @@ namespace spz {
 	            // Keep CustomFile bitmaps; layout arms Depth as ImageStitch structure (no Fun-Union).
 	            ["clear_controlnet_models"] = false,
 	        }, result => {
-	            SD_Neural_Models.EnsureKleinSdVaeSelected(ckpt);
+	            bool vaeOk = SD_Neural_Models.EnsureKleinSdVaeSelected(ckpt);
+	            string vaeName = SD_VAE.instance != null ? SD_VAE.instance.selectedVAE_name : "";
+	            if (!vaeOk){
+	                fail("Klein prepare failed: VAE flux2_klein_4b_vae not in dropdown / not selected.");
+	                return;
+	            }
 	            var cn = SD_ControlNetsList_UI.instance;
 	            bool structureArmed = false;
 	            string fluxCn = "";
@@ -643,18 +648,24 @@ namespace spz {
 	                fail("Klein structure layout failed (need mesh depth RT; CN models None; ImageStitch channel).");
 	                return;
 	            }
+	            bool hasCustomFileBitmap = cn != null
+	                && cn.TryGetDisposableLoadedCustomFileBitmap(out Texture2D styleProbe, out _);
+	            if (styleProbe != null) Object.DestroyImmediate(styleProbe);
 	            if (result is Dictionary<string, object> dict){
 	                dict["klein_structure_armed"] = structureArmed;
 	                // Legacy key: was depth-as-img2img; now means structure channel ready.
 	                dict["klein_depth_img2img_armed"] = structureArmed;
 	                dict["klein_flux_controlnet_selected"] = false;
 	                if (!string.IsNullOrEmpty(fluxCn)) dict["klein_flux_controlnet"] = fluxCn;
-	                dict["klein_customfile_preferred"] =
-	                    initLabel != null && initLabel.IndexOf("CustomFile", System.StringComparison.Ordinal) >= 0;
+	                // Style readiness: loaded bitmap (unit may be deactivated after layout).
+	                dict["klein_customfile_preferred"] = hasCustomFileBitmap;
+	                dict["klein_customfile_loaded"] = hasCustomFileBitmap;
 	                dict["klein_contentcam_armed"] =
 	                    initLabel != null && initLabel.IndexOf("ContentCam", System.StringComparison.Ordinal) >= 0;
 	                dict["klein_depth_armed"] = structureReady;
 	                dict["klein_structure_channel"] = SD_KleinStructureChannel.AlwaysOnScriptName;
+	                dict["sd_vae"] = vaeName ?? "";
+	                dict["klein_vae_ok"] = vaeOk;
 	                if (!string.IsNullOrEmpty(initLabel)) dict["klein_init_source"] = initLabel;
 	                var trace = KleinStructureTrace.SnapshotOrNull();
 	                if (trace != null) dict["klein_structure_trace"] = trace;
