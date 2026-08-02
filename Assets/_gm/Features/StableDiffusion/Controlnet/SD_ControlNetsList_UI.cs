@@ -184,6 +184,26 @@ namespace spz {
 	        return false;
 	    }
 
+	    /// <summary>
+	    /// Fetch only the peeked Klein init kind (Depth / CustomFile / ContentCam).
+	    /// Avoids silently substituting CustomFile when Depth capture fails.
+	    /// </summary>
+	    public bool TryGetDisposableKleinImg2ImgInitForLabel(string sourceLabel, out Texture2D tex, out int unitIndex){
+	        tex = null;
+	        unitIndex = -1;
+	        if (_controlNet_units == null || string.IsNullOrEmpty(sourceLabel)) return false;
+	        WhatImageToSend_CTRLNET want;
+	        if (string.Equals(sourceLabel, "Depth", System.StringComparison.Ordinal))
+	            want = WhatImageToSend_CTRLNET.Depth;
+	        else if (string.Equals(sourceLabel, "CustomFile", System.StringComparison.Ordinal))
+	            want = WhatImageToSend_CTRLNET.CustomFile;
+	        else if (string.Equals(sourceLabel, "ContentCam", System.StringComparison.Ordinal))
+	            want = WhatImageToSend_CTRLNET.ContentCam;
+	        else
+	            return false;
+	        return TryPickKleinInit(want, out tex, out unitIndex, out _);
+	    }
+
 	    public bool HasKleinImg2ImgInitSource(){
 	        return TryPeekKleinImg2ImgInitSource(out _, out _);
 	    }

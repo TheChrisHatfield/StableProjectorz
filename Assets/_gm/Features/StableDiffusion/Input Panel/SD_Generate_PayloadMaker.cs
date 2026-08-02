@@ -346,12 +346,17 @@ namespace spz {
 	                || string.Equals(kleinSrcLabel, "CustomFile", System.StringComparison.Ordinal));
 
 	        if (kleinUsesDedicatedInit){
-	            if (!SD_ControlNetsList_UI.instance.TryGetDisposableKleinImg2ImgInit(
-	                    out viewTex_, out kleinUnitIx, out kleinSrcLabel) || viewTex_ == null){
+	            // Stick to the peeked source — do not fall through Depth→CustomFile inside TryGet.
+	            if (!SD_ControlNetsList_UI.instance.TryGetDisposableKleinImg2ImgInitForLabel(
+	                    kleinSrcLabel, out viewTex_, out kleinUnitIx) || viewTex_ == null){
 	                kleinFromCn = false;
 	                if (!forceFullWhiteMask && Objects_Renderer_MGR.instance != null)
 		                Objects_Renderer_MGR.instance.EnsureInpaintColorLayerAppliedForCapture();
 	                viewTex_ = camerasMGR.camTextures.GetDisposable_ContentCamTexture();
+	                if (Viewport_StatusText.instance != null){
+	                    Viewport_StatusText.instance.ShowStatusText(
+	                        $"Klein {kleinSrcLabel} init unavailable — fell back to ContentCam.", false, 4f, false);
+	                }
 	            }
 	        } else {
 	            // Apply layer stack immediately before content-cam capture so init matches the viewport
