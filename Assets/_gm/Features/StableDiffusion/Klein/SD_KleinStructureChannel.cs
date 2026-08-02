@@ -4,13 +4,19 @@ using UnityEngine;
 namespace spz {
 
 	/// <summary>
-	/// Neo Flux.2 Klein structure channel: mesh depth via alwayson "imagestitch integrated"
-	/// (reference latents) — not ControlNet Fun-Union and never as img2img init_images.
-	/// Geometry source: UserCameras content-frustum depth RT (actual 3D mesh).
+	/// Neo Flux.2 Klein structure channel:
+	/// ImageStitch refs = [mesh depth, ContentCam/style] + RefControl Depth LoRA.
+	/// Depth alone as a stitch ref makes Klein reproduce a depth plate — LoRA + second
+	/// ref teaches depth-as-structure (see thedeoxen/refcontrol-FLUX.2-klein-4B-...).
+	/// Never Fun-Union CN; never Depth as img2img init_images.
 	/// </summary>
 	public static class SD_KleinStructureChannel {
 	    public const string AlwaysOnScriptName = "imagestitch integrated";
 	    public const string GeometrySourceId = "mesh_depth_content_frustum";
+	    /// <summary>Neo models/Lora file stem (no extension).</summary>
+	    public const string RefControlLoraName = "flux2_klein_4b_refcontrol_depth";
+	    public const string RefControlTrigger = "refcontrol";
+	    public const float RefControlLoraWeight = 0.9f;
 	    const int DefaultMaxSide = 1024;
 
 	    /// <summary>
@@ -25,7 +31,6 @@ namespace spz {
 	    /// <summary>
 	    /// True when mesh depth can be captured. Forces one depth render so RT is allocated/fresh.
 	    /// Checks RT while the depth lock is still held — unlocking can Destroy the RT immediately.
-	    /// Does not allocate a CPU Texture2D (Deny/heal/prepare); attach uses TryCaptureMeshDepthDisposable.
 	    /// Do not call from per-frame Gen Art interactable polls — use <see cref="HasMeshDepthRt"/> there.
 	    /// </summary>
 	    public static bool CanCaptureMeshDepth(){
@@ -66,7 +71,6 @@ namespace spz {
 	    }
 
 	    public static void EnsureDepthRendered(){
-	        // Prefer TryCaptureMeshDepthDisposable for attach — unlock can destroy the RT.
 	        object lockOwner = typeof(SD_KleinStructureChannel);
 	        UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.DepthUserCamera, lockOwner, isLock: true);
 	        try {
@@ -77,8 +81,26 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Capture mesh depth, store on intermediates, attach ImageStitch alwayson args.
-	    /// Returns false if depth missing (fail closed for Klein Gen Art).
+	    /// Inject RefControl LoRA + trigger so Neo treats ImageStitch depth as structure, not content.
+	    /// </summary>
+	    public static void AppendRefControlToPrompt(ref string positive){
+	        if (positive == null) positive = "";
+	        string loraTag = $"<lora:{RefControlLoraName}:{RefControlLoraWeight:0.##}>";
+	        bool hasLora = positive.IndexOf("<lora:" + RefControlLoraName, System.StringComparison.OrdinalIgnoreCase) >= 0;
+	        bool hasTrigger = positive.IndexOf(RefControlTrigger, System.StringComparison.OrdinalIgnoreCase) >= 0;
+	        if (!hasLora && !hasTrigger)
+	            positive = $"{loraTag} {RefControlTrigger}, {positive}".Trim();
+	        else if (!hasLora)
+	            positive = $"{loraTag} {positive}".Trim();
+	        else if (!hasTrigger)
+	            positive = $"{RefControlTrigger}, {positive}".Trim();
+	        KleinStructureTrace.Set("refcontrol_lora", RefControlLoraName);
+	        KleinStructureTrace.Set("refcontrol_in_prompt", true);
+	    }
+
+	    /// <summary>
+	    /// Capture mesh depth (+ ContentCam/CustomFile style ref), attach ImageStitch alwayson.
+	    /// Ref order: [depth, style] per RefControl Depth LoRA. Returns false if depth missing.
 	    /// </summary>
 	    public static bool TryAttachMeshDepthStructure(
 	        Dictionary<string, AlwaysOn_Value> alwayson,
@@ -115,8 +137,8 @@ namespace spz {
 	            intermediates.depth_disposableTex = depth;
 	        }
 
-	        string b64 = TextureTools_SPZ.TextureToBase64(depth);
-	        if (string.IsNullOrEmpty(b64)){
+	        string depthB64 = TextureTools_SPZ.TextureToBase64(depth);
+	        if (string.IsNullOrEmpty(depthB64)){
 	            KleinStructureTrace.Set("structure_attached", false);
 	            KleinStructureTrace.Set("reject_reason", "depth_encode_failed");
 	            if (intermediates == null || !ReferenceEquals(intermediates.depth_disposableTex, depth))
@@ -128,15 +150,66 @@ namespace spz {
 	            return false;
 	        }
 
-	        // Encode succeeded; if caller passed no intermediates, we still need to free the CPU copy.
+	        // RefControl: image1 = depth (structure), image2 = RGB identity/style.
+	        string styleB64 = null;
+	        string styleKind = "none";
+	        TryCaptureStyleRefBase64(intermediates, out styleB64, out styleKind);
+	        KleinStructureTrace.Set("style_ref_kind", styleKind);
+
+	        var refs = new List<string> { depthB64 };
+	        if (!string.IsNullOrEmpty(styleB64))
+	            refs.Add(styleB64);
+
 	        if (intermediates == null)
 	            Object.DestroyImmediate(depth);
 
-	        var stitch = ImageStitch_AlwaysOnArgs.FromReferenceBase64(b64, DefaultMaxSide);
-	        alwayson[AlwaysOnScriptName] = stitch;
+	        alwayson[AlwaysOnScriptName] = ImageStitch_AlwaysOnArgs.FromReferenceBase64List(refs, DefaultMaxSide);
 	        KleinStructureTrace.Set("structure_attached", true);
+	        KleinStructureTrace.Set("structure_ref_count", refs.Count);
 	        KleinStructureTrace.Set("reject_reason", "");
+	        if (refs.Count < 2 && Viewport_StatusText.instance != null){
+	            Viewport_StatusText.instance.ShowStatusText(
+	                "Klein structure: depth only (no ContentCam/CustomFile style ref). RefControl works best with two refs.",
+	                false, 4f, false);
+	        }
 	        return true;
+	    }
+
+	    /// <summary>
+	    /// Prefer CustomFile style bitmap, else ContentCam RGB (mesh view) as RefControl image2.
+	    /// </summary>
+	    static bool TryCaptureStyleRefBase64(SD_GenRequestArgs_byproducts intermediates, out string b64, out string kind){
+	        b64 = null;
+	        kind = "none";
+	        Texture2D style = null;
+	        bool destroyStyle = false;
+	        try {
+	            if (SD_ControlNetsList_UI.instance != null
+	                && SD_ControlNetsList_UI.instance.TryGetDisposableKleinImg2ImgInitForLabel(
+	                    "CustomFile", out style, out _)){
+	                kind = "CustomFile";
+	                destroyStyle = true;
+	            } else {
+	                // Reuse ContentCam already captured for img2img when present.
+	                if (intermediates != null && intermediates.usualView_disposableTexture != null){
+	                    style = intermediates.usualView_disposableTexture;
+	                    kind = "ContentCam_reuse";
+	                    destroyStyle = false;
+	                } else if (UserCameras_MGR.instance != null && UserCameras_MGR.instance.camTextures != null){
+	                    if (Objects_Renderer_MGR.instance != null)
+	                        Objects_Renderer_MGR.instance.EnsureInpaintColorLayerAppliedForCapture();
+	                    style = UserCameras_MGR.instance.camTextures.GetDisposable_ContentCamTexture();
+	                    kind = style != null ? "ContentCam" : "none";
+	                    destroyStyle = style != null;
+	                }
+	            }
+	            if (style == null) return false;
+	            b64 = TextureTools_SPZ.TextureToBase64(style);
+	            return !string.IsNullOrEmpty(b64);
+	        } finally {
+	            if (destroyStyle && style != null)
+	                Object.DestroyImmediate(style);
+	        }
 	    }
 
 	    /// <summary>
@@ -150,7 +223,6 @@ namespace spz {
 	        if (w < 4 || h < 4) return -1f;
 
 	        try {
-	            // Sample a coarse grid; GetPixels throws if either tex is non-readable.
 	            Color[] ca = a.GetPixels();
 	            Color[] cb = b.GetPixels();
 	            if (ca == null || cb == null || ca.Length == 0 || cb.Length == 0) return -1f;
@@ -181,7 +253,6 @@ namespace spz {
 	    public static bool LooksLikeDepthPlate(Texture2D result, Texture2D depthStructure, out float diff01){
 	        diff01 = MeanAbsLumaDiff01(result, depthStructure);
 	        if (diff01 < 0f) return false;
-	        // Depth plate copies stay very close; albedo Gen Art should diverge more.
 	        return diff01 < 0.08f;
 	    }
 	}
@@ -197,16 +268,24 @@ namespace spz {
 	    }
 
 	    public static ImageStitch_AlwaysOnArgs FromReferenceBase64(string base64, int maxSide){
-	        // Neo extract_images → decode_base64_to_image accepts raw or data-URI base64.
-	        // Prefer data-URI so Gradio Gallery / API paths treat the entry as an image.
-	        string asDataUri = base64;
-	        if (!string.IsNullOrEmpty(base64)
-	            && !base64.StartsWith("data:image/", System.StringComparison.OrdinalIgnoreCase))
-	            asDataUri = "data:image/png;base64," + base64;
+	        return FromReferenceBase64List(new List<string> { base64 }, maxSide);
+	    }
+
+	    public static ImageStitch_AlwaysOnArgs FromReferenceBase64List(IList<string> base64Refs, int maxSide){
+	        var uris = new List<object>();
+	        if (base64Refs != null){
+	            for (int i = 0; i < base64Refs.Count; i++){
+	                string base64 = base64Refs[i];
+	                if (string.IsNullOrEmpty(base64)) continue;
+	                if (!base64.StartsWith("data:image/", System.StringComparison.OrdinalIgnoreCase))
+	                    base64 = "data:image/png;base64," + base64;
+	                uris.Add(base64);
+	            }
+	        }
 	        return new ImageStitch_AlwaysOnArgs {
 	            args = new object[] {
 	                true,
-	                new object[] { asDataUri },
+	                uris.ToArray(),
 	                maxSide,
 	            }
 	        };
