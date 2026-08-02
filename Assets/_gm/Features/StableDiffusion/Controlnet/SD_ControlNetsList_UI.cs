@@ -312,6 +312,17 @@ namespace spz {
 	                if (!u.dropdowns.TrySelectModelNone()) continue;
 	                cleared++;
 	            }
+	            // Switching Klein↔XL must not leave Gen Art gated with no init (heal cleared Fun-Union).
+	            if (!HasKleinImg2ImgInitSource()){
+	                var u0 = GetUnit(0);
+	                if (u0 != null){
+	                    u0.dropdowns?.TrySelectModelNone();
+	                    if (u0.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false)){
+	                        u0.TrySetActivated(true);
+	                        cleared = Mathf.Max(cleared, 1);
+	                    }
+	                }
+	            }
 	            return cleared;
 	        }
 
