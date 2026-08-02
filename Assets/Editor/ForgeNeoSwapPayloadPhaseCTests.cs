@@ -385,7 +385,7 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			"Assets", "_gm", "Features", "StableDiffusion", "StableDiffusion_Hub.cs"));
 		Assert.That(hub, Does.Contain("IsActiveCheckpointKlein()"));
 		Assert.That(hub, Does.Contain("has_Depth_or_Norm_or_RefOnly() || kleinReady"));
-		Assert.That(hub, Does.Contain("SD_KleinStructureChannel.HasMeshDepthRt()"));
+		Assert.That(hub, Does.Contain("bool kleinReady = IsActiveCheckpointKlein();"));
 		Assert.That(hub, Does.Contain("SD_KleinStructureChannel.CanCaptureMeshDepth()"));
 		Assert.That(hub, Does.Contain("mesh depth structure"));
 		Assert.That(hub, Does.Contain("!klein && has_Depth_or_Norm_or_RefOnly()==false"));
