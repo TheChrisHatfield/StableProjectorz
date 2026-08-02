@@ -329,6 +329,8 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "ControlNetUnit_ImagesDisplay.cs"));
 		Assert.That(imgs, Does.Contain("WhatImageToSend_CTRLNET.Depth"));
 		Assert.That(imgs, Does.Contain("GetDisposable_DepthTexture"));
+		Assert.That(imgs, Does.Contain("_SD_depthCam_RT_R32_contrast != null"));
+		Assert.That(imgs, Does.Contain("_contentCam_RT_ref != null"));
 		Assert.That(imgs, Does.Contain("content_depthRender"));
 		Assert.That(imgs, Does.Contain("LockOrUnlock_ByType(CameraTexType.DepthUserCamera"));
 		string camTex = File.ReadAllText(Path.Combine(
