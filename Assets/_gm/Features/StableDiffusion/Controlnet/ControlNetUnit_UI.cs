@@ -125,7 +125,7 @@ namespace spz {
 	        _imgsDisplay != null && _imgsDisplay.HasLoadedCustomFileBitmap();
 
 	    /// <summary>
-	    /// True when this unit can seed Klein img2img (CustomFile / ContentCam).
+	    /// True when this unit can seed Klein img2img (Depth / CustomFile / ContentCam).
 	    /// Unit must be open/activated and CN model None — co-opt replaces alwayson CN, not a live CN unit.
 	    /// </summary>
 	    public bool IsKleinImg2ImgInitSource() =>

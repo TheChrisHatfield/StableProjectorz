@@ -83,7 +83,7 @@ namespace spz {
 	            && SD_ControlNetsList_UI.instance != null
 	            && SD_ControlNetsList_UI.instance.HasArmedEmptyKleinCustomFile()
 	            && !SD_ControlNetsList_UI.instance.HasKleinImg2ImgInitSource()){
-	            string msg = "Can't Generate: a ControlNet unit is set to CustomFile but no image is loaded.\nLoad a file or switch What-to-send to ContentCam.";
+	            string msg = "Can't Generate: a ControlNet unit is set to CustomFile but no image is loaded.\nLoad a file or switch What-to-send to Depth/ContentCam.";
 	            CommandRibbon_UI.instance.Attention_toCtrlNetButton();
 	            Viewport_StatusText.instance.ShowStatusText(msg, false, 5, true);
 	            return true;
@@ -140,8 +140,8 @@ namespace spz {
 
 	        bool do_img2Img  =  isMode_Img2Img && (hasAutoMask || hasBrushedMask);
 	             do_img2Img |=  hasBackground || hasBackgroundColors;
-	        // Flux.2 Klein: ContentCam/CustomFile (model None) co-opt as img2img init; unit0 may still
-	        // send Flux2 ControlNet depth separately via alwayson_scripts.
+	        // Flux.2 Klein: Depth/CustomFile/ContentCam (model None) co-opt as img2img init.
+	        // Fun-Union ControlNet is not used for Klein-4B depth lock.
 	        // Gen BG must not steal a face/custom CN image as its init.
 	        bool kleinCnInit = !isMakingBackgrounds
 	                          && IsActiveCheckpointKlein()

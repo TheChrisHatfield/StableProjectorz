@@ -307,19 +307,33 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 	}
 
 	[Test]
-	public void ControlNet_Klein_PrefersCustomFileOverContentCam() {
+	public void ControlNet_Klein_PrefersDepthThenCustomFileThenContentCam() {
 		string src = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "SD_ControlNetsList_UI.cs"));
-		Assert.That(src, Does.Contain("Prefers CustomFile over ContentCam"));
+		Assert.That(src, Does.Contain("Prefers mesh Depth (structure) over CustomFile (style) over ContentCam"));
+		int peekDepth = src.IndexOf("TryPeekKleinInit(WhatImageToSend_CTRLNET.Depth");
 		int peekFile = src.IndexOf("TryPeekKleinInit(WhatImageToSend_CTRLNET.CustomFile");
 		int peekCam = src.IndexOf("TryPeekKleinInit(WhatImageToSend_CTRLNET.ContentCam");
+		int pickDepth = src.IndexOf("TryPickKleinInit(WhatImageToSend_CTRLNET.Depth");
 		int pickFile = src.IndexOf("TryPickKleinInit(WhatImageToSend_CTRLNET.CustomFile");
 		int pickCam = src.IndexOf("TryPickKleinInit(WhatImageToSend_CTRLNET.ContentCam");
-		Assert.That(peekFile, Is.GreaterThan(0));
+		Assert.That(peekDepth, Is.GreaterThan(0));
+		Assert.That(peekFile, Is.GreaterThan(peekDepth), "Peek must try Depth before CustomFile.");
 		Assert.That(peekCam, Is.GreaterThan(peekFile), "Peek must try CustomFile before ContentCam.");
-		Assert.That(pickFile, Is.GreaterThan(0));
+		Assert.That(pickDepth, Is.GreaterThan(0));
+		Assert.That(pickFile, Is.GreaterThan(pickDepth), "Pick must try Depth before CustomFile.");
 		Assert.That(pickCam, Is.GreaterThan(pickFile), "Pick must try CustomFile before ContentCam.");
+		string imgs = File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "ControlNetUnit_ImagesDisplay.cs"));
+		Assert.That(imgs, Does.Contain("WhatImageToSend_CTRLNET.Depth"));
+		Assert.That(imgs, Does.Contain("GetDisposable_DepthTexture"));
+		string payload = File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs"));
+		Assert.That(payload, Does.Contain("kleinUsesDedicatedInit"));
+		Assert.That(payload, Does.Contain("\"Depth\""));
 	}
 
 	[Test]
@@ -354,7 +368,9 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "SD_ControlNetsList_UI.cs"));
 		Assert.That(list, Does.Contain("TryApplyKleinControlNetLayout"));
-		Assert.That(list, Does.Contain("cannot safely arm CustomFile co-opt without a second unit"));
+		Assert.That(list, Does.Contain("no Fun-Union ControlNet"));
+		Assert.That(list, Does.Contain("ClearAllUnitModelsToNone"));
+		Assert.That(list, Does.Contain("WhatImageToSend_CTRLNET.Depth"));
 		Assert.That(list, Does.Contain("IsUnitModelValidForActiveCheckpoint"));
 		Assert.That(list, Does.Contain("TryHealFamilyMismatchedModels"));
 		Assert.That(list, Does.Contain("Capture role before model swap"));
@@ -364,8 +380,6 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "ControlNetUnit_Dropdowns.cs"));
 		Assert.That(dropdowns, Does.Contain("Klein must not fall through to SD1.5/XL depth"));
 		Assert.That(dropdowns, Does.Contain("drop legacy depth_* preprocessors"));
-		Assert.That(list, Does.Contain("Do not arm Depth with leftover SD1.5/XL weights"));
-		Assert.That(list, Does.Contain("Depth CN then has no effect"));
 		string neural = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Neural_Models.cs"));
@@ -380,6 +394,15 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs"));
 		Assert.That(payload, Does.Contain("SD_ControlNetsList_UI.instance != null"));
 		Assert.That(payload, Does.Contain("ctrlNets_args != null && ctrlNets_args.args != null"));
+		string hubTxt = File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "StableDiffusion_Hub.cs"));
+		Assert.That(hubTxt, Does.Contain("Fun-Union ControlNet is not used for Klein-4B"));
+		string agent = File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AgentBridge", "SPZ_Agent_Tools.cs"));
+		Assert.That(agent, Does.Contain("klein_depth_img2img_armed"));
+		Assert.That(agent, Does.Contain("depth-as-img2img layout"));
 	}
 
 	[Test]

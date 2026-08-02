@@ -107,7 +107,7 @@ namespace spz {
 	            readOnly: false, idempotent: true, destructive: false);
 
 	        Add("set_controlnet_unit", "Set one ControlNet unit",
-	            "Change a ControlNet unit's model, weight, what-to-send, and/or activation by index (0-based). For Klein img2img co-opt: model None, what_to_send ContentCam or CustomFile, activated true.",
+	            "Change a ControlNet unit's model, weight, what-to-send, and/or activation by index (0-based). For Klein img2img co-opt: model None, what_to_send Depth (structure) / CustomFile / ContentCam, activated true.",
 	            new List<AgentParamDesc>{
 	                new AgentParamDesc("unit", "number", true, "ControlNet unit index (0-based)."),
 	                new AgentParamDesc("model", "string", false, "ControlNet model name, or None to clear."),
@@ -127,7 +127,7 @@ namespace spz {
 	            readOnly: false, idempotent: false, destructive: true);
 
 	        Add("prepare_flux_klein_test", "Preset Flux.2 Klein Gen Art test",
-	            "Convenience: flux-2-klein-4b, Euler, 4 steps, CFG 1.0, 512x512; applies Klein CN layout (Flux2 depth on unit 0 + CustomFile/ContentCam img2img on unit 1). Does not clear CustomFile bitmaps.",
+	            "Convenience: flux-2-klein-4b, Euler, 4 steps, CFG 1.0, 512x512; applies Klein depth-as-img2img layout (all CN models None; unit 0 Depth init). Does not clear CustomFile bitmaps.",
 	            new List<AgentParamDesc>{
 	                new AgentParamDesc("checkpoint", "string", false, "Override checkpoint name. Default flux-2-klein-4b."),
 	                new AgentParamDesc("width", "number", false, "Width. Default 512."),
@@ -537,7 +537,7 @@ namespace spz {
 	        bool backgrounds = HasBool(prms, "backgrounds") && prms["backgrounds"].Value<bool>();
 	        hub.isCanGenerate(out bool canArt, out bool canBg);
 	        if (backgrounds && !canBg){ fail("Cannot Gen BG right now (cooldown, disconnected, or busy)."); return; }
-	        if (!backgrounds && !canArt){ fail("Cannot Gen Art right now (need depth/normals CN, or Klein with Flux2 CN / img2img; or busy/disconnected)."); return; }
+	        if (!backgrounds && !canArt){ fail("Cannot Gen Art right now (need depth/normals CN, or Klein with Depth/CustomFile/ContentCam img2img init; or busy/disconnected)."); return; }
 	        // Match UI DenyWithMessage gates the agent can_* snapshot misses (empty CustomFile, CN download, import…).
 	        if (hub.DenyWithMessage_ifCantGenerate(allow_without_controlnets: backgrounds)){
 	            fail("Generation denied (see viewport status: ControlNet/CustomFile/import/download/busy).");
@@ -621,22 +621,26 @@ namespace spz {
 	            ["cfg_scale"] = 1.0,
 	            ["width"] = w,
 	            ["height"] = h,
-	            // Keep CustomFile bitmaps; layout below selects Flux2 CN on unit 0 + img2img on unit 1.
+	            // Keep CustomFile bitmaps; layout arms Depth as Klein img2img init (no Fun-Union).
 	            ["clear_controlnet_models"] = false,
 	        }, result => {
 	            var cn = SD_ControlNetsList_UI.instance;
-	            bool fluxSelected = false;
+	            bool depthArmed = false;
 	            string fluxCn = "";
 	            string initLabel = "";
 	            if (cn != null)
-	                fluxSelected = cn.TryApplyKleinControlNetLayout(out fluxCn, out initLabel);
+	                depthArmed = cn.TryApplyKleinControlNetLayout(out fluxCn, out initLabel);
 	            if (result is Dictionary<string, object> dict){
-	                dict["klein_flux_controlnet_selected"] = fluxSelected;
+	                dict["klein_depth_img2img_armed"] = depthArmed;
+	                // Legacy keys kept for older capture scripts.
+	                dict["klein_flux_controlnet_selected"] = false;
 	                if (!string.IsNullOrEmpty(fluxCn)) dict["klein_flux_controlnet"] = fluxCn;
 	                dict["klein_customfile_preferred"] =
 	                    string.Equals(initLabel, "CustomFile", System.StringComparison.Ordinal);
 	                dict["klein_contentcam_armed"] =
 	                    string.Equals(initLabel, "ContentCam", System.StringComparison.Ordinal);
+	                dict["klein_depth_armed"] =
+	                    string.Equals(initLabel, "Depth", System.StringComparison.Ordinal);
 	                if (!string.IsNullOrEmpty(initLabel)) dict["klein_init_source"] = initLabel;
 	            }
 	            ok(result);

@@ -333,7 +333,7 @@ namespace spz {
 	            return;
 	        }
 
-	        // Peek Klein CN init before any ReadPixels so CustomFile can skip ContentCam entirely,
+	        // Peek Klein CN init before any ReadPixels so Depth/CustomFile can skip ContentCam entirely,
 	        // and ContentCam uses a single post-Ensure capture (not a duplicate from TryGet).
 	        int kleinUnitIx = -1;
 	        string kleinSrcLabel = "";
@@ -341,10 +341,11 @@ namespace spz {
 	            && StableDiffusion_Hub.IsActiveCheckpointKlein()
 	            && SD_ControlNetsList_UI.instance != null
 	            && SD_ControlNetsList_UI.instance.TryPeekKleinImg2ImgInitSource(out kleinUnitIx, out kleinSrcLabel);
-	        bool kleinUsesCustomFile = kleinFromCn
-	            && string.Equals(kleinSrcLabel, "CustomFile", System.StringComparison.Ordinal);
+	        bool kleinUsesDedicatedInit = kleinFromCn
+	            && (string.Equals(kleinSrcLabel, "Depth", System.StringComparison.Ordinal)
+	                || string.Equals(kleinSrcLabel, "CustomFile", System.StringComparison.Ordinal));
 
-	        if (kleinUsesCustomFile){
+	        if (kleinUsesDedicatedInit){
 	            if (!SD_ControlNetsList_UI.instance.TryGetDisposableKleinImg2ImgInit(
 	                    out viewTex_, out kleinUnitIx, out kleinSrcLabel) || viewTex_ == null){
 	                kleinFromCn = false;
