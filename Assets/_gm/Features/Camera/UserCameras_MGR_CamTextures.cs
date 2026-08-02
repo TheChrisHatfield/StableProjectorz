@@ -51,7 +51,10 @@ namespace spz {
 
 	    //you can destroy the returned texture as you wish. Don't forget to destroy it, else will memory leak.
 	    public Texture2D GetDisposable_DepthTexture() //forceAlpha1: SUPER IMPORTANT. (July 2024) Otherwise high contrast = StableDiffusion generates bad images.
-	        => TextureTools_SPZ.R_to_RGBA_Texture2D( _SD_depthCam_RT_R32_contrast,  forceAlpha1:true, forceFullWhite:false );
+	    {
+	        if (_SD_depthCam_RT_R32_contrast == null) return null;
+	        return TextureTools_SPZ.R_to_RGBA_Texture2D( _SD_depthCam_RT_R32_contrast,  forceAlpha1:true, forceFullWhite:false );
+	    }
     
 	    public Texture2D GetDisposable_NormalsTexture()
 	        => TextureTools_SPZ.RenderTextureToTexture2D(_normalsCam_RT_ref);
