@@ -57,5 +57,14 @@ namespace spz {
 	        if (!Enabled) return;
 	        _last = new Dictionary<string, object>();
 	    }
+
+	    /// <summary>
+	    /// Start a fresh request dict only when none exists. Used after PayloadMaker
+	    /// BeginRequest+AppendRefControl so attach does not wipe LoRA keys.
+	    /// </summary>
+	    public static void EnsureRequestStarted(){
+	        if (!Enabled) return;
+	        if (_last == null) _last = new Dictionary<string, object>();
+	    }
 	}
 }
