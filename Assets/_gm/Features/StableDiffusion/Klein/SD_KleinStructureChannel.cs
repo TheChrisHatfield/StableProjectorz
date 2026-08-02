@@ -150,15 +150,31 @@ namespace spz {
 	            return false;
 	        }
 
-	        // RefControl: image1 = depth (structure), image2 = RGB identity/style.
+	        // RefControl: image1 = depth (structure), image2 = RGB identity/style (required).
+	        // Depth-only ImageStitch reproduces the depth plate — fail closed without style ref.
 	        string styleB64 = null;
 	        string styleKind = "none";
-	        TryCaptureStyleRefBase64(intermediates, out styleB64, out styleKind);
+	        if (!TryCaptureStyleRefBase64(intermediates, out styleB64, out styleKind)
+	            || string.IsNullOrEmpty(styleB64)){
+	            KleinStructureTrace.Set("style_ref_kind", styleKind);
+	            KleinStructureTrace.Set("structure_attached", false);
+	            KleinStructureTrace.Set("reject_reason", "style_ref_missing");
+	            if (intermediates == null || !ReferenceEquals(intermediates.depth_disposableTex, depth))
+	                Object.DestroyImmediate(depth);
+	            else {
+	                intermediates.depth_disposableTex = null;
+	                Object.DestroyImmediate(depth);
+	            }
+	            if (Viewport_StatusText.instance != null){
+	                Viewport_StatusText.instance.ShowStatusText(
+	                    "Klein Gen Art aborted: RefControl needs depth + ContentCam/CustomFile style ref.",
+	                    false, 5f, false);
+	            }
+	            return false;
+	        }
 	        KleinStructureTrace.Set("style_ref_kind", styleKind);
 
-	        var refs = new List<string> { depthB64 };
-	        if (!string.IsNullOrEmpty(styleB64))
-	            refs.Add(styleB64);
+	        var refs = new List<string> { depthB64, styleB64 };
 
 	        if (intermediates == null)
 	            Object.DestroyImmediate(depth);
@@ -167,11 +183,6 @@ namespace spz {
 	        KleinStructureTrace.Set("structure_attached", true);
 	        KleinStructureTrace.Set("structure_ref_count", refs.Count);
 	        KleinStructureTrace.Set("reject_reason", "");
-	        if (refs.Count < 2 && Viewport_StatusText.instance != null){
-	            Viewport_StatusText.instance.ShowStatusText(
-	                "Klein structure: depth only (no ContentCam/CustomFile style ref). RefControl works best with two refs.",
-	                false, 4f, false);
-	        }
 	        return true;
 	    }
 
