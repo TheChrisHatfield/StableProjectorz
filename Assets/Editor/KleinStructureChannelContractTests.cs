@@ -22,6 +22,8 @@ public sealed class KleinStructureChannelContractTests {
 		Assert.That(ch, Does.Contain("GetDisposable_DepthTexture"));
 		Assert.That(ch, Does.Contain("ImageStitch_AlwaysOnArgs"));
 		Assert.That(ch, Does.Contain("LooksLikeDepthPlate"));
+		Assert.That(ch, Does.Contain("data:image/png;base64,"));
+		Assert.That(ch, Does.Contain("TryCaptureMeshDepthDisposable"));
 		Assert.That(ch, Does.Not.Contain("init_images"));
 	}
 
