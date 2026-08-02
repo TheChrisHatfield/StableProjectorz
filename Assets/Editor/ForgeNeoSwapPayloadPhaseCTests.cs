@@ -330,6 +330,14 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			"None", "flux-2-klein-4b"), Is.False);
 		Assert.That(ControlNetUnit_Dropdowns.ControlNetModelLooksFlux2(
 			"FLUX.2-dev-Fun-Controlnet-Union.safetensors"), Is.True);
+		Assert.That(ControlNetUnit_Dropdowns.ControlNetModelLooksFlux2(
+			"some-controlnet-union.safetensors"), Is.False,
+			"Bare controlnet-union without flux/fun marker must not match.");
+		Assert.That(ControlNetUnit_Dropdowns.FindPreferredFlux2ModelIndex(new[] {
+			"other.safetensors",
+			"flux2-alt.safetensors",
+			"FLUX.2-dev-Fun-Controlnet-Union.safetensors",
+		}), Is.EqualTo(2));
 		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
 			"FLUX.2-dev-Fun-Controlnet-Union.safetensors", "flux-2-klein-4b"), Is.False);
 		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
@@ -346,6 +354,11 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 		Assert.That(list, Does.Contain("TryApplyKleinControlNetLayout"));
 		Assert.That(list, Does.Contain("cannot safely arm CustomFile co-opt without a second unit"));
 		Assert.That(list, Does.Contain("IsUnitModelValidForActiveCheckpoint"));
+		Assert.That(list, Does.Contain("TryHealFamilyMismatchedModels"));
+		string neural = File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Neural_Models.cs"));
+		Assert.That(neural, Does.Contain("TryHealFamilyMismatchedModels"));
 	}
 
 	[Test]

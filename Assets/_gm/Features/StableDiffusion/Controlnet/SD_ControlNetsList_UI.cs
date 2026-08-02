@@ -111,13 +111,8 @@ namespace spz {
 	        bool selectedFlux = false;
 	        if (u0 != null && u0.dropdowns != null){
 	            string[] models = _models != null ? _models.model_list : null;
-	            int fluxIx = -1;
-	            if (models != null){
-	                for (int i = 0; i < models.Length; i++){
-	                    if (ControlNetUnit_Dropdowns.ControlNetModelLooksFlux2(models[i])){ fluxIx = i; break; }
-	                }
-	            }
-	            if (fluxIx >= 0){
+	            int fluxIx = ControlNetUnit_Dropdowns.FindPreferredFlux2ModelIndex(models);
+	            if (fluxIx >= 0 && models != null){
 	                selectedFlux = u0.dropdowns.TrySelectModelByName(models[fluxIx], out fluxCnResolved, out _);
 	                // Mesh depth is already the control image — skip SD1.5 depth preprocessors on Flux2 Union.
 	                if (selectedFlux)
@@ -275,12 +270,46 @@ namespace spz {
 	    }
 
 
+	    /// <summary>
+	    /// Swap family-mismatched CN weights (e.g. leftover SD1.5 depth on Klein) to a compatible model
+	    /// before payload build so Gen Art does not silently drop depth.
+	    /// </summary>
+	    public int TryHealFamilyMismatchedModels(){
+	        if (_controlNet_units == null) return 0;
+	        string sdCkpt = null;
+	        try { sdCkpt = SD_InputPanel_UI.instance?.models?.selectedModel_name; } catch { /* */ }
+	        if (string.IsNullOrEmpty(sdCkpt)) return 0;
+	        string[] models = _models != null ? _models.model_list : null;
+	        if (models == null || models.Length == 0) return 0;
+
+	        string replacement = ControlNetUnit_Dropdowns.FindPreferredDepthModelName(models);
+	        if (string.IsNullOrEmpty(replacement)) return 0;
+
+	        int healed = 0;
+	        for (int i = 0; i < _controlNet_units.Count; i++){
+	            var u = _controlNet_units[i];
+	            if (u == null || !u.isActivated || u.dropdowns == null) continue;
+	            // Only depth/normals gates participate in Gen Art projection — leave other CN slots alone.
+	            if (!u.isForDepth() && !u.isForNormals()) continue;
+	            if (u.is_currModel_none) continue;
+	            if (!ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(u.currModelName(), sdCkpt))
+	                continue;
+	            if (!u.dropdowns.TrySelectModelByName(replacement, out _, out _)) continue;
+	            if (SD_OptionsPacket.CheckpointNeedsKleinModules(sdCkpt) && u.isForDepth())
+	                u.dropdowns.TrySelectPreprocessorByName("None", out _, out _);
+	            healed++;
+	        }
+	        return healed;
+	    }
+
 	    // Provides a summary of the current settings for All ControlNet units,
 	    // so that we can send a Generate request to stable diffusion.
 	    // We can use what's already in 'intermediates' arg, or actually add stuff to it.
 	    // NOTICE: some unit might refuse to participate (if some conditions are not met). 
 	    // If so, the array inside the args will be shorter.
 	    public ControlNet_NetworkArgs GetArgs_forGenerationRequest( SD_GenRequestArgs_byproducts intermediates ){
+
+	        TryHealFamilyMismatchedModels();
 
 	        var args_ofValid_units = new List<ControlNetUnit_NetworkArgs>();
 
