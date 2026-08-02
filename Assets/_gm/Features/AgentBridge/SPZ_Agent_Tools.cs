@@ -127,11 +127,12 @@ namespace spz {
 	            readOnly: false, idempotent: false, destructive: true);
 
 	        Add("prepare_flux_klein_test", "Preset Flux.2 Klein Gen Art test",
-	            "Convenience: flux-2-klein-4b, Euler, 4 steps, CFG 1.0, 512x512; applies Klein depth-as-img2img layout (all CN models None; unit 0 Depth init). Does not clear CustomFile bitmaps.",
+	            "Convenience: flux-2-klein-4b, Euler, 4 steps, CFG 1.0, 512x512; applies Klein structure layout (all CN models None; unit 0 Depth as ImageStitch structure intent, not img2img init). Does not clear CustomFile bitmaps.",
 	            new List<AgentParamDesc>{
 	                new AgentParamDesc("checkpoint", "string", false, "Override checkpoint name. Default flux-2-klein-4b."),
 	                new AgentParamDesc("width", "number", false, "Width. Default 512."),
 	                new AgentParamDesc("height", "number", false, "Height. Default 512."),
+	                new AgentParamDesc("structure_trace", "boolean", false, "If true, enable dev klein_structure_trace for this session."),
 	            },
 	            Tool_PrepareFluxKleinTest,
 	            readOnly: false, idempotent: true, destructive: false);
@@ -538,7 +539,7 @@ namespace spz {
 	        bool backgrounds = HasBool(prms, "backgrounds") && prms["backgrounds"].Value<bool>();
 	        hub.isCanGenerate(out bool canArt, out bool canBg);
 	        if (backgrounds && !canBg){ fail("Cannot Gen BG right now (cooldown, disconnected, or busy)."); return; }
-	        if (!backgrounds && !canArt){ fail("Cannot Gen Art right now (need depth/normals CN, or Klein with Depth/CustomFile/ContentCam img2img init; or busy/disconnected)."); return; }
+	        if (!backgrounds && !canArt){ fail("Cannot Gen Art right now (need depth/normals CN, or Klein mesh-depth structure channel; or busy/disconnected)."); return; }
 	        // Match UI DenyWithMessage gates the agent can_* snapshot misses (empty CustomFile, CN download, import…).
 	        if (hub.DenyWithMessage_ifCantGenerate(allow_without_controlnets: backgrounds)){
 	            fail("Generation denied (see viewport status: ControlNet/CustomFile/import/download/busy).");
@@ -614,6 +615,9 @@ namespace spz {
 	        if (prms != null){
 	            if (HasNum(prms, "width")) w = Mathf.RoundToInt(prms["width"].Value<float>());
 	            if (HasNum(prms, "height")) h = Mathf.RoundToInt(prms["height"].Value<float>());
+	            if (prms["structure_trace"] != null && prms["structure_trace"].Type == JTokenType.Boolean
+	                && prms["structure_trace"].Value<bool>())
+	                KleinStructureTrace.ForceEnableForProbe();
 	        }
 	        Tool_SetSdGenSettings(new JObject{
 	            ["checkpoint"] = ckpt,
@@ -622,32 +626,35 @@ namespace spz {
 	            ["cfg_scale"] = 1.0,
 	            ["width"] = w,
 	            ["height"] = h,
-	            // Keep CustomFile bitmaps; layout arms Depth as Klein img2img init (no Fun-Union).
+	            // Keep CustomFile bitmaps; layout arms Depth as ImageStitch structure (no Fun-Union).
 	            ["clear_controlnet_models"] = false,
 	        }, result => {
 	            var cn = SD_ControlNetsList_UI.instance;
-	            bool depthArmed = false;
+	            bool structureArmed = false;
 	            string fluxCn = "";
 	            string initLabel = "";
 	            if (cn != null)
-	                depthArmed = cn.TryApplyKleinControlNetLayout(out fluxCn, out initLabel);
-	            bool initReady = cn != null && cn.HasKleinImg2ImgInitSource();
-	            if (!depthArmed || !initReady){
-	                fail("Klein Depth img2img layout failed (need unit 0 Depth + model None, depth RT ready).");
+	                structureArmed = cn.TryApplyKleinControlNetLayout(out fluxCn, out initLabel);
+	            bool structureReady = SD_KleinStructureChannel.CanCaptureMeshDepth();
+	            if (!structureArmed || !structureReady){
+	                fail("Klein structure layout failed (need mesh depth RT; CN models None; ImageStitch channel).");
 	                return;
 	            }
 	            if (result is Dictionary<string, object> dict){
-	                dict["klein_depth_img2img_armed"] = depthArmed;
-	                // Legacy keys kept for older capture scripts.
+	                dict["klein_structure_armed"] = structureArmed;
+	                // Legacy key: was depth-as-img2img; now means structure channel ready.
+	                dict["klein_depth_img2img_armed"] = structureArmed;
 	                dict["klein_flux_controlnet_selected"] = false;
 	                if (!string.IsNullOrEmpty(fluxCn)) dict["klein_flux_controlnet"] = fluxCn;
 	                dict["klein_customfile_preferred"] =
-	                    string.Equals(initLabel, "CustomFile", System.StringComparison.Ordinal);
+	                    initLabel != null && initLabel.IndexOf("CustomFile", System.StringComparison.Ordinal) >= 0;
 	                dict["klein_contentcam_armed"] =
-	                    string.Equals(initLabel, "ContentCam", System.StringComparison.Ordinal);
-	                dict["klein_depth_armed"] =
-	                    string.Equals(initLabel, "Depth", System.StringComparison.Ordinal);
+	                    initLabel != null && initLabel.IndexOf("ContentCam", System.StringComparison.Ordinal) >= 0;
+	                dict["klein_depth_armed"] = structureReady;
+	                dict["klein_structure_channel"] = SD_KleinStructureChannel.AlwaysOnScriptName;
 	                if (!string.IsNullOrEmpty(initLabel)) dict["klein_init_source"] = initLabel;
+	                var trace = KleinStructureTrace.SnapshotOrNull();
+	                if (trace != null) dict["klein_structure_trace"] = trace;
 	            }
 	            ok(result);
 	        }, fail);
@@ -696,17 +703,22 @@ namespace spz {
 	            { "sd_connected", Connection_MGR.is_sd_connected },
 	            { "sd_checkpoint", ckpt },
 	            { "klein_checkpoint", SD_OptionsPacket.CheckpointNeedsKleinModules(ckpt) },
-	            // Legacy key: true only when Klein Gen Art is actually armed (Depth/CustomFile/ContentCam init).
+	            // Legacy key: true when Klein Gen Art structure (mesh depth) is ready.
+	            // HasMeshDepthRt only — status polls must not force content_depthRender.
 	            { "klein_gen_art_bypass",
 	                StableDiffusion_Hub.IsActiveCheckpointKlein()
-	                && SD_ControlNetsList_UI.instance != null
-	                && SD_ControlNetsList_UI.instance.HasKleinImg2ImgInitSource() },
+	                && SD_KleinStructureChannel.HasMeshDepthRt() },
+	            { "klein_structure_ready",
+	                StableDiffusion_Hub.IsActiveCheckpointKlein()
+	                && SD_KleinStructureChannel.HasMeshDepthRt() },
 	            { "klein_img2img_from_cn",
 	                StableDiffusion_Hub.IsActiveCheckpointKlein()
 	                && SD_ControlNetsList_UI.instance != null
 	                && SD_ControlNetsList_UI.instance.HasKleinImg2ImgInitSource() },
+	            { "klein_structure_channel", SD_KleinStructureChannel.AlwaysOnScriptName },
 	            { "is_importing", ModelsHandler_3D.instance != null && ModelsHandler_3D.instance._isImportingModel },
 	            { "is_project_busy", Save_MGR.instance != null && Save_MGR.instance._isSaving },
+	            { "klein_structure_trace", KleinStructureTrace.SnapshotOrNull() },
 	        });
 	    }
 
@@ -835,15 +847,20 @@ namespace spz {
 	            { "can_gen_art", canArt },
 	            { "can_gen_bg", canBg },
 	            { "klein_checkpoint", SD_OptionsPacket.CheckpointNeedsKleinModules(ckpt) },
-	            // Legacy key: true only when Klein Gen Art is actually armed (not checkpoint alone).
+	            // Legacy key: true when Klein Gen Art structure (mesh depth) is ready.
+	            // HasMeshDepthRt only — status polls must not force content_depthRender.
 	            { "klein_gen_art_bypass",
 	                StableDiffusion_Hub.IsActiveCheckpointKlein()
-	                && SD_ControlNetsList_UI.instance != null
-	                && SD_ControlNetsList_UI.instance.HasKleinImg2ImgInitSource() },
+	                && SD_KleinStructureChannel.HasMeshDepthRt() },
+	            { "klein_structure_ready",
+	                StableDiffusion_Hub.IsActiveCheckpointKlein()
+	                && SD_KleinStructureChannel.HasMeshDepthRt() },
 	            { "klein_img2img_from_cn",
 	                StableDiffusion_Hub.IsActiveCheckpointKlein()
 	                && SD_ControlNetsList_UI.instance != null
 	                && SD_ControlNetsList_UI.instance.HasKleinImg2ImgInitSource() },
+	            { "klein_structure_channel", SD_KleinStructureChannel.AlwaysOnScriptName },
+	            { "klein_structure_trace", KleinStructureTrace.SnapshotOrNull() },
 	        };
 	    }
 

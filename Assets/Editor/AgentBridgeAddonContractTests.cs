@@ -136,14 +136,17 @@ public sealed class AgentBridgeAddonContractTests {
 		Assert.That(list, Does.Contain("TryGetDisposableKleinImg2ImgInit"));
 		Assert.That(list, Does.Contain("HasKleinImg2ImgInitSource"));
 		Assert.That(list, Does.Contain("TryPeekKleinImg2ImgInitSource"));
-		Assert.That(list, Does.Contain("leftover Depth/ContentCam/CustomFile"));
+		Assert.That(list, Does.Contain("leftover ContentCam/CustomFile"));
+		Assert.That(list, Does.Contain("SD_KleinStructureChannel"));
 		string hub = File.ReadAllText(RepoPath(
 			"Assets", "_gm", "Features", "StableDiffusion", "StableDiffusion_Hub.cs"));
 		Assert.That(hub, Does.Contain("HasKleinImg2ImgInitSource()"));
+		Assert.That(hub, Does.Contain("SD_KleinStructureChannel.HasMeshDepthRt()"));
 		Assert.That(hub, Does.Contain("!isMakingBackgrounds"));
 		string payload = File.ReadAllText(RepoPath(
 			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs"));
 		Assert.That(payload, Does.Contain("TryPeekKleinImg2ImgInitSource"));
+		Assert.That(payload, Does.Contain("TryAttachMeshDepthStructure"));
 		Assert.That(payload, Does.Contain("Klein img2img init from ControlNet"));
 		Assert.That(payload, Does.Contain("do not TryGet again"));
 		Assert.That(payload, Does.Contain("!forceFullWhiteMask"));

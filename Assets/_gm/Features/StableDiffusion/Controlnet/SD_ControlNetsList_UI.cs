@@ -78,7 +78,8 @@ namespace spz {
 
 	    /// <summary>
 	    /// Agent / MCP: set every unit model dropdown to None and clear Depth/ContentCam/CustomFile
-	    /// what-to-send so Klein img2img co-opt is not left armed after a "clear CN" / Klein preset.
+	    /// what-to-send so leftover CustomFile/ContentCam does not force Klein img2img after clear CN.
+	    /// Depth structure is re-armed by TryApplyKleinControlNetLayout (ImageStitch, not init).
 	    /// Returns how many units had their model set to None.
 	    /// </summary>
 	    public int ClearAllUnitModelsToNone(){
@@ -88,7 +89,7 @@ namespace spz {
 	            var u = _controlNet_units[i];
 	            if (u == null || u.dropdowns == null) continue;
 	            if (u.dropdowns.TrySelectModelNone()) n++;
-	            // Model None + leftover Depth/ContentCam/CustomFile would still force Klein img2img.
+	            // Model None + leftover ContentCam/CustomFile would still force Klein img2img pixel init.
 	            if (u._whatImageToSend == WhatImageToSend_CTRLNET.Depth
 	                || u._whatImageToSend == WhatImageToSend_CTRLNET.ContentCam
 	                || u._whatImageToSend == WhatImageToSend_CTRLNET.CustomFile){
@@ -99,95 +100,57 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Klein Gen Art layout (structure probe): no Fun-Union ControlNet — mesh Depth is fed as
-	    /// img2img init (model None). Optional CustomFile on unit 1 for style later / RefControl.
-	    /// Returns true when unit 0 was armed for Depth img2img co-opt.
+	    /// Klein Gen Art layout: clear Fun-Union; mark unit 0 Depth as structure intent (UI);
+	    /// mesh depth attaches via SD_KleinStructureChannel (ImageStitch), not img2img init.
+	    /// Returns true when mesh depth structure can be captured.
 	    /// </summary>
 	    public bool TryApplyKleinControlNetLayout(out string fluxCnResolved, out string initSourceLabel){
 	        fluxCnResolved = "";
 	        initSourceLabel = "";
 	        if (_controlNet_units == null || _controlNet_units.Count == 0) return false;
 
-	        // Fun-Controlnet-Union does not lock Klein-4B — clear CN weights on all units.
 	        ClearAllUnitModelsToNone();
 
 	        var u0 = GetUnit(0);
-	        bool armedDepth = false;
 	        if (u0 != null){
-	            if (u0.dropdowns != null) u0.dropdowns.TrySelectModelNone();
-	            bool setDepth = u0.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false);
-	            if (setDepth){
+	            u0.dropdowns?.TrySelectModelNone();
+	            // Structure intent preview on thumb — not pixel init (Depth excluded from Klein init peek).
+	            if (u0.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false))
 	                u0.TrySetActivated(true);
-	                armedDepth = u0.isActivated && u0._whatImageToSend == WhatImageToSend_CTRLNET.Depth
-	                    && u0.is_currModel_none;
-	                if (armedDepth) initSourceLabel = "Depth";
-	            }
 	        }
 
-	        // Keep a loaded CustomFile on unit 1 (style ref) but model None — Depth wins peek order for init.
 	        ControlNetUnit_UI customUnit = null;
 	        for (int i = 0; i < _controlNet_units.Count; i++){
 	            var u = _controlNet_units[i];
 	            if (u != null && u.HasLoadedCustomFileBitmap()){ customUnit = u; break; }
 	        }
 	        if (customUnit != null){
-	            var styleUnit = GetUnit(1) ?? customUnit;
-	            if (styleUnit != customUnit && customUnit == u0){
-	                // Depth owns unit 0 — move style bitmap handling to unit 1 if present.
-	                styleUnit = GetUnit(1);
-	            }
+	            var styleUnit = GetUnit(1);
 	            if (styleUnit != null && styleUnit != u0){
-	                if (styleUnit.dropdowns != null) styleUnit.dropdowns.TrySelectModelNone();
-	                // Re-arm CustomFile only if this unit already holds the bitmap or is unit 1 after copy.
-	                if (styleUnit.HasLoadedCustomFileBitmap()
-	                    || (customUnit != styleUnit && customUnit.HasLoadedCustomFileBitmap())){
-	                    if (!styleUnit.HasLoadedCustomFileBitmap() && customUnit != styleUnit)
-	                        styleUnit.CopyFromAnother(customUnit);
-	                    styleUnit.dropdowns?.TrySelectModelNone();
-	                    styleUnit.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.CustomFile, allowOpenFileDialog: false);
-	                    // Do not activate style unit for init — Depth on u0 is the structure source.
-	                    styleUnit.TrySetActivated(false);
-	                }
+	                if (!styleUnit.HasLoadedCustomFileBitmap())
+	                    styleUnit.CopyFromAnother(customUnit);
+	                styleUnit.dropdowns?.TrySelectModelNone();
+	                styleUnit.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.CustomFile, allowOpenFileDialog: false);
+	                styleUnit.TrySetActivated(false);
 	            }
-	            // Restore Depth on u0 after any CopyFromAnother side effects.
 	            if (u0 != null){
 	                u0.dropdowns?.TrySelectModelNone();
-	                bool setDepth = u0.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false);
-	                if (setDepth){
-	                    u0.TrySetActivated(true);
-	                    armedDepth = u0.isActivated && u0._whatImageToSend == WhatImageToSend_CTRLNET.Depth
-	                        && u0.is_currModel_none;
-	                    initSourceLabel = armedDepth ? "Depth" : "";
-	                } else {
-	                    armedDepth = false;
-	                    initSourceLabel = "";
-	                }
+	                u0.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false);
+	                u0.TrySetActivated(true);
 	            }
 	        }
 
-	        if (string.IsNullOrEmpty(initSourceLabel) && TryPeekKleinImg2ImgInitSource(out _, out string label))
-	            initSourceLabel = label;
-	        // Ensure depth RT is allocated before readiness checks (same-frame prepare/gen).
-	        if (armedDepth){
-	            object lockOwner = this;
-	            UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.DepthUserCamera, lockOwner, isLock: true);
-	            try { Update_callbacks_MGR.content_depthRender?.Invoke(); }
-	            finally {
-	                UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.DepthUserCamera, lockOwner, isLock: false);
-	            }
-	        }
-	        // Prefer live peek over optimistic flags — callers must not see armed when init is missing.
-	        if (armedDepth && !HasKleinImg2ImgInitSource())
-	            armedDepth = false;
-	        return armedDepth;
+	        bool structureReady = SD_KleinStructureChannel.CanCaptureMeshDepth();
+	        initSourceLabel = structureReady ? "Structure:Depth" : "";
+	        if (TryPeekKleinImg2ImgInitSource(out _, out string pixelLabel) && !string.IsNullOrEmpty(pixelLabel))
+	            initSourceLabel = string.IsNullOrEmpty(initSourceLabel)
+	                ? pixelLabel
+	                : initSourceLabel + "+" + pixelLabel;
+	        return structureReady;
 	    }
 
 	    /// <summary>
-	    /// Flux.2 Klein: find an activated ControlNet unit (model None) whose "what to send"
-	    /// is Depth, CustomFile, or ContentCam and return a disposable RGB copy for img2img init.
-	    /// Prefers mesh Depth (structure) over CustomFile (style) over ContentCam.
-	    /// Encode path Crop-and-Resizes into the screen-mask frustum so projection bake stays
-	    /// viewport-aligned. Collapsed/disabled units and units with a real CN model are ignored.
+	    /// Flux.2 Klein pixel init only: CustomFile then ContentCam (never Depth — structure channel).
 	    /// </summary>
 	    public bool TryGetDisposableKleinImg2ImgInit(out Texture2D tex, out int unitIndex, out string sourceLabel){
 	        tex = null;
@@ -195,8 +158,6 @@ namespace spz {
 	        sourceLabel = "";
 	        if (_controlNet_units == null) return false;
 
-	        if (TryPickKleinInit(WhatImageToSend_CTRLNET.Depth, out tex, out unitIndex, out sourceLabel))
-	            return true;
 	        if (TryPickKleinInit(WhatImageToSend_CTRLNET.CustomFile, out tex, out unitIndex, out sourceLabel))
 	            return true;
 	        if (TryPickKleinInit(WhatImageToSend_CTRLNET.ContentCam, out tex, out unitIndex, out sourceLabel))
@@ -205,17 +166,15 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Fetch only the peeked Klein init kind (Depth / CustomFile / ContentCam).
-	    /// Avoids silently substituting CustomFile when Depth capture fails.
+	    /// Fetch only the peeked Klein pixel init kind (CustomFile / ContentCam — never Depth).
+	    /// Avoids silently substituting ContentCam when CustomFile capture fails.
 	    /// </summary>
 	    public bool TryGetDisposableKleinImg2ImgInitForLabel(string sourceLabel, out Texture2D tex, out int unitIndex){
 	        tex = null;
 	        unitIndex = -1;
 	        if (_controlNet_units == null || string.IsNullOrEmpty(sourceLabel)) return false;
 	        WhatImageToSend_CTRLNET want;
-	        if (string.Equals(sourceLabel, "Depth", System.StringComparison.Ordinal))
-	            want = WhatImageToSend_CTRLNET.Depth;
-	        else if (string.Equals(sourceLabel, "CustomFile", System.StringComparison.Ordinal))
+	        if (string.Equals(sourceLabel, "CustomFile", System.StringComparison.Ordinal))
 	            want = WhatImageToSend_CTRLNET.CustomFile;
 	        else if (string.Equals(sourceLabel, "ContentCam", System.StringComparison.Ordinal))
 	            want = WhatImageToSend_CTRLNET.ContentCam;
@@ -245,15 +204,13 @@ namespace spz {
 	    }
 
 	    /// <summary>
-	    /// Describes the preferred Klein init source without allocating a texture.
-	    /// Same preference order as TryGetDisposableKleinImg2ImgInit (Depth, CustomFile, ContentCam).
+	    /// Describes the preferred Klein pixel init without allocating a texture.
+	    /// CustomFile then ContentCam — Depth is never a pixel init.
 	    /// </summary>
 	    public bool TryPeekKleinImg2ImgInitSource(out int unitIndex, out string sourceLabel){
 	        unitIndex = -1;
 	        sourceLabel = "";
 	        if (_controlNet_units == null) return false;
-	        if (TryPeekKleinInit(WhatImageToSend_CTRLNET.Depth, out unitIndex, out sourceLabel))
-	            return true;
 	        if (TryPeekKleinInit(WhatImageToSend_CTRLNET.CustomFile, out unitIndex, out sourceLabel))
 	            return true;
 	        if (TryPeekKleinInit(WhatImageToSend_CTRLNET.ContentCam, out unitIndex, out sourceLabel))
@@ -269,8 +226,7 @@ namespace spz {
 	            if (u == null || u._whatImageToSend != want) continue;
 	            if (!u.IsKleinImg2ImgInitSource()) continue;
 	            unitIndex = i;
-	            if (want == WhatImageToSend_CTRLNET.Depth) sourceLabel = "Depth";
-	            else if (want == WhatImageToSend_CTRLNET.CustomFile) sourceLabel = "CustomFile";
+	            if (want == WhatImageToSend_CTRLNET.CustomFile) sourceLabel = "CustomFile";
 	            else sourceLabel = "ContentCam";
 	            return true;
 	        }
@@ -323,7 +279,7 @@ namespace spz {
 	        try { sdCkpt = SD_InputPanel_UI.instance?.models?.selectedModel_name; } catch { /* */ }
 	        if (string.IsNullOrEmpty(sdCkpt)) return 0;
 
-	        // Klein: Fun-Union / any CN weight is mismatch — clear model, keep Depth what-to-send for img2img.
+	        // Klein: Fun-Union / any CN weight is mismatch — clear model; Depth what-to-send is structure UI only.
 	        if (SD_OptionsPacket.CheckpointNeedsKleinModules(sdCkpt)){
 	            int cleared = 0;
 	            for (int i = 0; i < _controlNet_units.Count; i++){
@@ -332,22 +288,16 @@ namespace spz {
 	                if (!u.dropdowns.TrySelectModelNone()) continue;
 	                cleared++;
 	            }
-	            // Switching Klein↔XL must not leave Gen Art gated with no init (heal cleared Fun-Union).
-	            if (!HasKleinImg2ImgInitSource()){
+	            // Ensure mesh depth structure RT after clearing Fun-Union (not Depth-as-init).
+	            if (!SD_KleinStructureChannel.CanCaptureMeshDepth()){
 	                var u0 = GetUnit(0);
 	                if (u0 != null){
 	                    u0.dropdowns?.TrySelectModelNone();
-	                    if (u0.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false)){
-	                        u0.TrySetActivated(true);
-	                        object lockOwner = this;
-	                        UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.DepthUserCamera, lockOwner, isLock: true);
-	                        try { Update_callbacks_MGR.content_depthRender?.Invoke(); }
-	                        finally {
-	                            UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.DepthUserCamera, lockOwner, isLock: false);
-	                        }
-	                        cleared = Mathf.Max(cleared, 1);
-	                    }
+	                    u0.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false);
+	                    u0.TrySetActivated(true);
 	                }
+	                SD_KleinStructureChannel.EnsureDepthRendered();
+	                cleared = Mathf.Max(cleared, 1);
 	            }
 	            return cleared;
 	        }

@@ -125,8 +125,8 @@ namespace spz {
 	        _imgsDisplay != null && _imgsDisplay.HasLoadedCustomFileBitmap();
 
 	    /// <summary>
-	    /// True when this unit can seed Klein img2img (Depth / CustomFile / ContentCam).
-	    /// Unit must be open/activated and CN model None — co-opt replaces alwayson CN, not a live CN unit.
+	    /// True when this unit can seed Klein img2img pixel init (CustomFile / ContentCam).
+	    /// Depth is structure via SD_KleinStructureChannel, not pixel init.
 	    /// </summary>
 	    public bool IsKleinImg2ImgInitSource() =>
 	        isActivated
@@ -196,7 +196,7 @@ namespace spz {
 	        if (ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(cnModel, sdCkpt)){
 	            if (Viewport_StatusText.instance != null){
 	                string msg = SD_OptionsPacket.CheckpointNeedsKleinModules(sdCkpt)
-	                    ? "Skipped ControlNet: Flux.2 Klein uses Depth/CustomFile img2img init (not Fun-Union / SD1.5/XL CN)."
+	                    ? "Skipped ControlNet: Flux.2 Klein uses mesh-depth ImageStitch structure (not Fun-Union / SD1.5/XL CN)."
 	                    : "Skipped ControlNet: model family mismatch (use SD1.5 CN with SD1.5 checkpoint, XL CN with XL).";
 	                Viewport_StatusText.instance.ShowStatusText(msg, false, 4f, false);
 	            }

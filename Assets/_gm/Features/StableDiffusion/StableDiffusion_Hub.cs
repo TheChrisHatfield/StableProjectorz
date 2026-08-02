@@ -37,10 +37,9 @@ namespace spz {
 
 	        canGenBG_  =  !isOnCooldown  &&  !_generating  &&  isConnected;
 	        canGenArt_ =  !isOnCooldown  &&  !_generating  &&  isConnected;
-	        // Flux.2 Klein: Gen Art needs Depth/CustomFile/ContentCam img2img co-opt (no Fun-Union CN).
-	        bool kleinReady = IsActiveCheckpointKlein()
-	            && SD_ControlNetsList_UI.instance != null
-	            && SD_ControlNetsList_UI.instance.HasKleinImg2ImgInitSource();
+	        // Flux.2 Klein: Gen Art needs mesh-depth structure channel (ImageStitch), not Fun-Union.
+	        // Use HasMeshDepthRt (no render) — CanCaptureMeshDepth forces content_depthRender and must not run every poll.
+	        bool kleinReady = IsActiveCheckpointKlein() && SD_KleinStructureChannel.HasMeshDepthRt();
 	        canGenArt_ &= has_Depth_or_Norm_or_RefOnly() || kleinReady;
 	    }
 
@@ -81,21 +80,20 @@ namespace spz {
 	            Viewport_StatusText.instance.ShowStatusText(msg, false, 5, true);
 	            return true;
 	        }
-	        // Empty CustomFile only blocks when there is no other valid Klein init (Depth / ContentCam / loaded file).
+	        // Empty CustomFile only blocks when there is no other valid Klein pixel init.
 	        if (klein && allow_without_controlnets==false
 	            && SD_ControlNetsList_UI.instance != null
 	            && SD_ControlNetsList_UI.instance.HasArmedEmptyKleinCustomFile()
 	            && !SD_ControlNetsList_UI.instance.HasKleinImg2ImgInitSource()){
-	            string msg = "Can't Generate: a ControlNet unit is set to CustomFile but no image is loaded.\nLoad a file or switch What-to-send to Depth/ContentCam.";
+	            string msg = "Can't Generate: a ControlNet unit is set to CustomFile but no image is loaded.\nLoad a file or switch What-to-send to ContentCam / None.";
 	            CommandRibbon_UI.instance.Attention_toCtrlNetButton();
 	            Viewport_StatusText.instance.ShowStatusText(msg, false, 5, true);
 	            return true;
 	        }
-	        // Klein Gen Art without init = unstructured txt2img (Fun-Union path removed).
+	        // Klein Gen Art requires mesh depth structure (ImageStitch), not Depth-as-init.
 	        if (klein && allow_without_controlnets==false
-	            && (SD_ControlNetsList_UI.instance == null
-	                || !SD_ControlNetsList_UI.instance.HasKleinImg2ImgInitSource())){
-	            string msg = "Flux.2 Klein Gen Art needs an img2img init:\nControlNet unit → model None → What-to-send Depth (or CustomFile / ContentCam), activated.";
+	            && !SD_KleinStructureChannel.CanCaptureMeshDepth()){
+	            string msg = "Flux.2 Klein Gen Art needs mesh depth structure (3D geometry depth RT).\nEnsure a mesh is loaded and depth cameras can render.";
 	            CommandRibbon_UI.instance.Attention_toCtrlNetButton();
 	            Viewport_StatusText.instance.ShowStatusText(msg, false, 5, true);
 	            return true;
@@ -152,14 +150,14 @@ namespace spz {
 
 	        bool do_img2Img  =  isMode_Img2Img && (hasAutoMask || hasBrushedMask);
 	             do_img2Img |=  hasBackground || hasBackgroundColors;
-	        // Flux.2 Klein: Depth/CustomFile/ContentCam (model None) co-opt as img2img init.
-	        // Fun-Union ControlNet is not used for Klein-4B depth lock.
+	        // Flux.2 Klein: structure = ImageStitch mesh depth on txt2img by default.
+	        // Optional pixel init (CustomFile/ContentCam only) may force img2img — never Depth.
 	        // Gen BG must not steal a face/custom CN image as its init.
-	        bool kleinCnInit = !isMakingBackgrounds
-	                          && IsActiveCheckpointKlein()
-	                          && SD_ControlNetsList_UI.instance != null
-	                          && SD_ControlNetsList_UI.instance.HasKleinImg2ImgInitSource();
-	        do_img2Img |= kleinCnInit;
+	        bool kleinPixelInit = !isMakingBackgrounds
+	                             && IsActiveCheckpointKlein()
+	                             && SD_ControlNetsList_UI.instance != null
+	                             && SD_ControlNetsList_UI.instance.HasKleinImg2ImgInitSource();
+	        do_img2Img |= kleinPixelInit;
 
 	        if(do_img2Img){
 	            _Act_img2img_willRequest?.Invoke();

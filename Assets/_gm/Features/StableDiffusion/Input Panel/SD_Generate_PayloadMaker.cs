@@ -7,7 +7,8 @@ namespace spz {
 	public class SD_Generate_PayloadMaker : MonoBehaviour{
     
 	    public void Create_txt2img_payload( out SD_txt2img_payload payload_,
-	                                        out SD_GenRequestArgs_byproducts intermediates_){
+	                                        out SD_GenRequestArgs_byproducts intermediates_,
+	                                        bool isMakingBackgrounds = false){
 	        var input = SD_InputPanel_UI.instance;
 	        string samplerName = input.samplers.value?.name??"";
 	        string scheduler = input.scheduler.value?.name??"";
@@ -58,10 +59,25 @@ namespace spz {
 	                TextureTools_SPZ.CreateSolidColorRGBA32(tw, th, Color.white);
 	        }
        
-	        ControlNet_NetworkArgs ctrlNets_args = SD_ControlNetsList_UI.instance != null
-	            ? SD_ControlNetsList_UI.instance.GetArgs_forGenerationRequest(intermediates_) : null;
-	        if (ctrlNets_args != null && ctrlNets_args.args != null && ctrlNets_args.args.Length > 0) {
-	            payload_.alwayson_scripts.Add("controlnet", ctrlNets_args);//https://github.com/Mikubill/sd-webui-controlnet/wiki/API#examples-1
+	        // Flux.2 Klein Gen Art: mesh depth → ImageStitch structure (not Fun-Union CN).
+	        // Skip controlnet alwayson when Klein — CN models are None / family-mismatched.
+	        bool kleinGenArt = !isMakingBackgrounds && StableDiffusion_Hub.IsActiveCheckpointKlein();
+	        if (!kleinGenArt){
+	            ControlNet_NetworkArgs ctrlNets_args = SD_ControlNetsList_UI.instance != null
+	                ? SD_ControlNetsList_UI.instance.GetArgs_forGenerationRequest(intermediates_) : null;
+	            if (ctrlNets_args != null && ctrlNets_args.args != null && ctrlNets_args.args.Length > 0) {
+	                payload_.alwayson_scripts.Add("controlnet", ctrlNets_args);//https://github.com/Mikubill/sd-webui-controlnet/wiki/API#examples-1
+	            }
+	        } else {
+	            if (!SD_KleinStructureChannel.TryAttachMeshDepthStructure(
+	                    payload_.alwayson_scripts, intermediates_, "txt2img", "txt2img_noise")){
+	                intermediates_.kleinStructureAttachFailed = true;
+	                if (Viewport_StatusText.instance != null)
+	                    Viewport_StatusText.instance.ShowStatusText(
+	                        "Klein Gen Art aborted: mesh depth structure channel unavailable.", false, 5f, false);
+	            } else {
+	                KleinStructureTrace.Set("bake_allowed", true);
+	            }
 	        }
 	    }
 
@@ -257,10 +273,30 @@ namespace spz {
 	            Viewport_StatusText.instance.ShowStatusText(
 	                "Soft Inpaint skipped on Flux.2 Klein (Neo compatibility).", false, 3f, false);
 	        }
-	        ControlNet_NetworkArgs ctrlNets_args = SD_ControlNetsList_UI.instance != null
-	            ? SD_ControlNetsList_UI.instance.GetArgs_forGenerationRequest(intermediates_) : null;
-	        if(ctrlNets_args != null && ctrlNets_args.args != null && ctrlNets_args.args.Length > 0){ 
-	            payload_.alwayson_scripts.Add("controlnet", ctrlNets_args);//https://github.com/Mikubill/sd-webui-controlnet/wiki/API#examples-1
+	        bool kleinGenArt = !isMakingBackgrounds && StableDiffusion_Hub.IsActiveCheckpointKlein();
+	        if (!kleinGenArt){
+	            ControlNet_NetworkArgs ctrlNets_args = SD_ControlNetsList_UI.instance != null
+	                ? SD_ControlNetsList_UI.instance.GetArgs_forGenerationRequest(intermediates_) : null;
+	            if(ctrlNets_args != null && ctrlNets_args.args != null && ctrlNets_args.args.Length > 0){
+	                payload_.alwayson_scripts.Add("controlnet", ctrlNets_args);//https://github.com/Mikubill/sd-webui-controlnet/wiki/API#examples-1
+	            }
+	        } else {
+	            string pixelKind = "none";
+	            if (SD_ControlNetsList_UI.instance != null
+	                && SD_ControlNetsList_UI.instance.TryPeekKleinImg2ImgInitSource(out _, out string peekLabel)
+	                && !string.IsNullOrEmpty(peekLabel))
+	                pixelKind = peekLabel;
+	            else if (intermediates_.usualView_disposableTexture != null)
+	                pixelKind = "ContentCam";
+	            if (!SD_KleinStructureChannel.TryAttachMeshDepthStructure(
+	                    payload_.alwayson_scripts, intermediates_, "img2img", pixelKind)){
+	                intermediates_.kleinStructureAttachFailed = true;
+	                if (Viewport_StatusText.instance != null)
+	                    Viewport_StatusText.instance.ShowStatusText(
+	                        "Klein Gen Art aborted: mesh depth structure channel unavailable.", false, 5f, false);
+	            } else {
+	                KleinStructureTrace.Set("bake_allowed", true);
+	            }
 	        }
 	    }
 
@@ -351,17 +387,17 @@ namespace spz {
 	            return;
 	        }
 
-	        // Peek Klein CN init before any ReadPixels so Depth/CustomFile can skip ContentCam entirely,
-	        // and ContentCam uses a single post-Ensure capture (not a duplicate from TryGet).
+	        // Peek Klein pixel init before ReadPixels so CustomFile can skip ContentCam entirely.
+	        // Depth is never pixel init (structure via SD_KleinStructureChannel / ImageStitch).
 	        int kleinUnitIx = -1;
 	        string kleinSrcLabel = "";
 	        bool kleinFromCn = !forceFullWhiteMask
 	            && StableDiffusion_Hub.IsActiveCheckpointKlein()
 	            && SD_ControlNetsList_UI.instance != null
 	            && SD_ControlNetsList_UI.instance.TryPeekKleinImg2ImgInitSource(out kleinUnitIx, out kleinSrcLabel);
+	        // CustomFile only: dedicated bitmap. ContentCam uses the single post-Ensure capture below.
 	        bool kleinUsesDedicatedInit = kleinFromCn
-	            && (string.Equals(kleinSrcLabel, "Depth", System.StringComparison.Ordinal)
-	                || string.Equals(kleinSrcLabel, "CustomFile", System.StringComparison.Ordinal));
+	            && string.Equals(kleinSrcLabel, "CustomFile", System.StringComparison.Ordinal);
 
 	        if (kleinUsesDedicatedInit){
 	            // Stick to the peeked source — do not substitute ContentCam (would drop Klein Original/denoise
