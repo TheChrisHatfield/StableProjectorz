@@ -22,7 +22,7 @@ namespace spz {
 		/// (<c>GenerateButtons_UI.UpdateTooltips_GenButtons</c>).
 		/// </summary>
 		public const string TooltipText =
-			"Not yet connected to the Diffusion Model.\nTo quick-view the black box: open Settings and enable Show external process windows.";
+			"Not yet connected to the Diffusion Model.\nTo quick-view the Black box: open Settings and enable Show Black box (external process windows).";
 
 		/// <summary>
 		/// True for legacy ("Not Connected yet") and current ("Not Yet Connected") placeholder copy,

@@ -203,7 +203,7 @@ namespace spz {
 	        // Bound in Start() (avoid duplicate onValueChanged if Ensure runs first).
 	    }
 
-	    /// <summary>Creates "Show external process windows" row (WebUI + addon Python server console visibility) unless scene already provides it.</summary>
+	    /// <summary>Creates "Show Black box / external process windows" row (WebUI + addon Python server console visibility) unless scene already provides it.</summary>
 	    void EnsureExternalProcessWindowsRowExists() {
 	        if (_showExternalProcessWindows_toggle != null) return;
 	        if (_settingsPanel_go == null) return;
@@ -231,7 +231,7 @@ namespace spz {
 	        labelLE.preferredWidth = 360f;
 	        labelLE.preferredHeight = 24f;
 	        var labelText = labelGo.AddComponent<TMPro.TextMeshProUGUI>();
-	        labelText.text = "Show external process windows (WebUI + add-on Python server):";
+	        labelText.text = "Show Black box (external process windows: WebUI + add-on Python server):";
 	        labelText.fontSize = 14;
 	        labelText.color = new Color(0.9f, 0.9f, 0.9f, 1f);
 	        labelText.raycastTarget = false;

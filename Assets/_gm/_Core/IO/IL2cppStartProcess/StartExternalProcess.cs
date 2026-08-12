@@ -1,5 +1,6 @@
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
@@ -64,6 +65,19 @@ namespace Lavender.Systems
 	    [DllImport("kernel32.dll", SetLastError = true)]
 	    static extern uint GetCurrentProcessId();
 
+	    [DllImport("user32.dll")]
+	    static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+	    [DllImport("user32.dll")]
+	    static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+	    [DllImport("user32.dll", SetLastError = true)]
+	    static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+	    [DllImport("user32.dll")]
+	    static extern bool IsWindowVisible(IntPtr hWnd);
+
+	    delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
 	    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
 	    struct STARTUPINFO{
@@ -237,6 +251,32 @@ namespace Lavender.Systems
 	        CloseHandle(hProcess);
 
 	        return result && exitCode == STILL_ACTIVE;
+	    }
+
+	    /// <summary>
+	    /// Show or hide top-level windows owned by any of <paramref name="processIds"/>.
+	    /// Returns how many windows were toggled. Processes started with CREATE_NO_WINDOW have no HWND (returns 0).
+	    /// </summary>
+	    public static int TrySetWindowsVisibleForProcessIds(IEnumerable<uint> processIds, bool visible) {
+	        if (processIds == null) return 0;
+	        var want = new HashSet<uint>();
+	        foreach (uint pid in processIds) {
+	            if (pid != 0) want.Add(pid);
+	        }
+	        if (want.Count == 0) return 0;
+
+	        int showCmd = visible ? SW_SHOW : SW_HIDE;
+	        int changed = 0;
+	        EnumWindows((hWnd, _) => {
+	            if (GetWindowThreadProcessId(hWnd, out uint ownerPid) == 0) return true;
+	            if (!want.Contains(ownerPid)) return true;
+	            // When hiding, only touch currently visible windows; when showing, also raise hidden ones.
+	            if (!visible && !IsWindowVisible(hWnd)) return true;
+	            if (ShowWindow(hWnd, showCmd))
+	                changed++;
+	            return true;
+	        }, IntPtr.Zero);
+	        return changed;
 	    }
 
 	    public static bool WaitForProcessExit(uint processId, int timeoutMs = -1){

@@ -13,6 +13,9 @@ namespace spz {
 	{
 	    public static Settings_MGR instance { get; private set; }
 
+	    /// <summary>False during Awake tryLoad so restoring prefs does not relaunch WebUI/addon; true after load for live Settings toggles.</summary>
+	    bool _settingsInSessionApplyEnabled;
+
 	    int _idleFramerate = 2; //when the window isn't focused. 5 was too much
 	    bool _hasFocus = true;
 
@@ -185,10 +188,14 @@ namespace spz {
 	    bool _showExternalProcessWindows = false;
 	    public bool get_showExternalProcessWindows() => _showExternalProcessWindows;
 	    void set_showExternalProcessWindows(bool show) {
+	        bool changed = show != _showExternalProcessWindows;
 	        _showExternalProcessWindows = show;
 	        PlayerPrefs.SetInt("ShowExternalProcessWindows", _showExternalProcessWindows ? 1 : 0); PlayerPrefs.Save();
 	        var toggle = EventsBinder.FindComponent<Toggle>("Settings:set_showExternalProcessWindows");
 	        if (toggle != null) toggle.SetIsOnWithoutNotify(show);
+	        // Prefs alone only affect next spawn — apply live when the user flips the toggle (not Awake tryLoad).
+	        if (changed && _settingsInSessionApplyEnabled)
+	            LaunchWebUIBatFile.ApplyExternalProcessWindowsSettingInSession(show);
 	    }
 	    void tryLoad_showExternalProcessWindows()
 	        => set_showExternalProcessWindows(PlayerPrefs.GetInt("ShowExternalProcessWindows", 0) == 1);
@@ -198,10 +205,13 @@ namespace spz {
 	    bool _webUiOpenBrowserOnStartup = false;
 	    public bool get_webUiOpenBrowserOnStartup() => _webUiOpenBrowserOnStartup;
 	    void set_webUiOpenBrowserOnStartup(bool isOn) {
+	        bool changed = isOn != _webUiOpenBrowserOnStartup;
 	        _webUiOpenBrowserOnStartup = isOn;
 	        PlayerPrefs.SetInt("WebUI_OpenBrowserOnStartup", _webUiOpenBrowserOnStartup ? 1 : 0); PlayerPrefs.Save();
 	        var toggle = EventsBinder.FindComponent<Toggle>("Settings:set_webUiOpenBrowserOnStartup");
 	        if (toggle != null) toggle.SetIsOnWithoutNotify(isOn);
+	        if (changed && _settingsInSessionApplyEnabled)
+	            LaunchWebUIBatFile.ApplyOpenBrowserSettingInSession(isOn);
 	    }
 	    void tryLoad_webUiOpenBrowserOnStartup()
 	        => set_webUiOpenBrowserOnStartup(PlayerPrefs.GetInt("WebUI_OpenBrowserOnStartup", 0) == 1);
@@ -740,6 +750,7 @@ namespace spz {
 	        tryLoad_paintUndo_enabled();
 	        tryLoad_paintUndo_maxDepth();
 	        isLaunchFastWebui = PlayerPrefs.GetInt("isLaunchFastWebui", 0) > 0;
+	        _settingsInSessionApplyEnabled = true;
 	    }
 
 	    void Start() {
