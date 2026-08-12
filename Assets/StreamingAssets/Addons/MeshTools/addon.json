@@ -1,4 +1,5 @@
 {
   "version": "0.8.5",
-  "description": "Mesh selection, bounds, and scene helpers with SD hooks."
+  "description": "Mesh selection, bounds, and scene helpers with SD hooks.",
+  "author": "StableProjectorz"
 }

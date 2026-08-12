@@ -1925,25 +1925,16 @@ namespace spz {
 				if (removeBtn != null)
 					SpzUiThemeOps.ClearNonFaceRaycastsForTheme(removeBtn);
 			}
-			Transform prefsBtnT = header != null ? header.Find("PreferencesButton") : item.transform.Find("PreferencesButton");
-			if (prefsBtnT != null) {
-				var prefsBtn = prefsBtnT.GetComponent<Button>();
-				if (prefsBtn != null) {
-					SpzUiThemeOps.EnsureSelectableHitFace(prefsBtn);
-					SpzUiThemeOps.ApplyBoundChromeSelectable(prefsBtn, t.controlBg, Color.Lerp(t.controlBg, t.accent, 0.22f));
+			Transform expandT = header != null ? header.Find("ExpandChevron") : item.transform.Find("ExpandChevron");
+			if (expandT != null) {
+				var expandBtn = expandT.GetComponent<Button>();
+				var expandLabel = expandT.Find("Text")?.GetComponent<TextMeshProUGUI>();
+				if (expandLabel != null) {
+					float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(expandLabel, 14f);
+					SpzUiThemeOps.ApplyBoundChromeTmp(expandLabel, t.textMuted, basePt);
 				}
-				var prefsLabel = prefsBtnT.GetComponentInChildren<TextMeshProUGUI>(true);
-				if (prefsLabel != null) {
-					float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(prefsLabel, 11f);
-					SpzUiThemeOps.ApplyBoundChromeTmp(prefsLabel, t.textPrimary, basePt);
-					prefsLabel.enableWordWrapping = false;
-					prefsLabel.overflowMode = TextOverflowModes.Ellipsis;
-					prefsLabel.fontStyle = FontStyles.Normal;
-					prefsLabel.characterSpacing = 0f;
-					prefsLabel.maxVisibleCharacters = int.MaxValue;
-				}
-				if (prefsBtn != null)
-					SpzUiThemeOps.ClearNonFaceRaycastsForTheme(prefsBtn);
+				if (expandBtn != null)
+					SpzUiThemeOps.ClearNonFaceRaycastsForTheme(expandBtn);
 			}
 			var toggle = (header != null ? header.Find("StatusToggle") : null)?.GetComponent<Toggle>();
 			if (toggle == null)
@@ -1993,22 +1984,35 @@ namespace spz {
 			if (prefsBodyT != null) {
 				var prefsBodyImg = prefsBodyT.GetComponent<Image>();
 				if (prefsBodyImg != null) {
-					Color body = t.panelBg;
-					body.a = Mathf.Clamp01(Mathf.Max(0.85f, body.a));
-					TintStatusDialGraphic(prefsBodyImg, body);
+					prefsBodyImg.color = Color.clear;
+					prefsBodyImg.raycastTarget = false;
 				}
-				var prefRowBg = prefsBodyT.Find("PrefRow_ShowInRibbon")?.GetComponent<Image>();
+				var prefsCardT = prefsBodyT.Find("PreferencesCard");
+				if (prefsCardT != null) {
+					var cardImg = prefsCardT.GetComponent<Image>();
+					if (cardImg != null) {
+						Color card = t.panelBg;
+						card.a = 0.72f;
+						cardImg.color = card;
+						cardImg.raycastTarget = false;
+					}
+				}
+				var prefRowBg = (prefsCardT != null ? prefsCardT.Find("PrefRow_ShowInRibbon") : prefsBodyT.Find("PrefRow_ShowInRibbon"))
+					?.GetComponent<Image>();
 				if (prefRowBg != null) {
-					// Keep transparent — no square/row plate under Host preferences.
 					prefRowBg.color = Color.clear;
 					prefRowBg.raycastTarget = false;
 				}
-				var prefsHdr = prefsBodyT.Find("PrefsDropdownHeader")?.GetComponent<TextMeshProUGUI>();
+				Transform metaRoot = prefsCardT != null ? prefsCardT : prefsBodyT;
+				var prefsHdr = metaRoot.Find("PrefsDropdownHeader")?.GetComponent<TextMeshProUGUI>();
 				if (prefsHdr != null) {
 					float hdrBase = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(prefsHdr, 11f);
 					SpzUiThemeOps.ApplyBoundChromeTmp(prefsHdr, t.textMuted, hdrBase);
 					prefsHdr.fontStyle = FontStyles.Bold;
 				}
+				ThemePrefsMetaTmp(metaRoot.Find("AddonSummary")?.GetComponent<TextMeshProUGUI>(), t.textMuted, 13f);
+				ThemePrefsMetaTmp(metaRoot.Find("AddonVersion")?.GetComponent<TextMeshProUGUI>(), t.textMuted, 12f);
+				ThemePrefsMetaTmp(metaRoot.Find("AddonAuthor")?.GetComponent<TextMeshProUGUI>(), t.textMuted, 12f);
 				if (prefsBodyT.gameObject.activeSelf)
 					ApplyResponsivePrefsDropdownLayout(prefsBodyT);
 				else
@@ -2251,32 +2255,74 @@ namespace spz {
 			LockShowInRibbonDialLayout(toggle);
 		}
 
+		static void ThemePrefsMetaTmp(TextMeshProUGUI tmp, Color color, float designPt) {
+			if (tmp == null) return;
+			float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(tmp, designPt);
+			if (SpzUiThemeOps.ShouldRecolorBoundChrome)
+				SpzUiThemeOps.ApplyBoundChromeTmp(tmp, color, basePt);
+			else
+				tmp.fontSize = basePt;
+		}
+
+		static void AddPrefsMetaLine(Transform parent, string name, string text, float fontSize, Color color, float height, bool bold) {
+			var go = new GameObject(name);
+			go.transform.SetParent(parent, false);
+			var le = go.AddComponent<LayoutElement>();
+			le.preferredHeight = height;
+			le.minHeight = Mathf.Min(18f, height);
+			le.flexibleWidth = 1f;
+			le.flexibleHeight = 0f;
+			var tmp = go.AddComponent<TextMeshProUGUI>();
+			tmp.text = text ?? "";
+			tmp.fontSize = fontSize;
+			tmp.fontStyle = bold ? FontStyles.Bold : FontStyles.Normal;
+			tmp.color = color;
+			tmp.alignment = TextAlignmentOptions.TopLeft;
+			tmp.enableWordWrapping = true;
+			tmp.overflowMode = TextOverflowModes.Ellipsis;
+			tmp.raycastTarget = false;
+		}
+
+		static string FormatAddonVersionDisplay(string version) {
+			if (string.IsNullOrWhiteSpace(version)) return "—";
+			version = version.Trim();
+			return version.StartsWith("v", StringComparison.OrdinalIgnoreCase) ? version : "v" + version;
+		}
+
 		static void LockPreferencesBodyLayout(Transform prefsBody) {
 			if (prefsBody == null) return;
 			var le = prefsBody.GetComponent<LayoutElement>();
 			if (le != null) {
 				SpzUiThemeOps.SnapshotLayoutElementForTheme(le);
-				// Nested dropdown height is set by ApplyResponsivePrefsDropdownLayout / SetItemExpandedHeight.
 				le.flexibleHeight = 0f;
 				le.flexibleWidth = 1f;
 			}
-			var vlg = prefsBody.GetComponent<VerticalLayoutGroup>();
-			if (vlg != null) {
-				// true so PrefsDropdownHeader + PrefRow stack by LayoutElement heights (not overlapping rects).
-				vlg.childControlHeight = true;
-				vlg.childForceExpandHeight = false;
-				vlg.childControlWidth = true;
-				vlg.childForceExpandWidth = true;
-				vlg.childAlignment = TextAnchor.UpperLeft;
+			var hlg = prefsBody.GetComponent<HorizontalLayoutGroup>();
+			if (hlg != null) {
+				hlg.childControlHeight = true;
+				hlg.childForceExpandHeight = false;
+				hlg.childControlWidth = true;
+				hlg.childForceExpandWidth = true;
+				hlg.childAlignment = TextAnchor.UpperLeft;
 			}
-			var row = prefsBody.Find("PrefRow_ShowInRibbon");
+			var card = prefsBody.Find("PreferencesCard");
+			if (card != null) {
+				var cardVlg = card.GetComponent<VerticalLayoutGroup>();
+				if (cardVlg != null) {
+					cardVlg.childControlHeight = true;
+					cardVlg.childForceExpandHeight = false;
+					cardVlg.childControlWidth = true;
+					cardVlg.childForceExpandWidth = true;
+					cardVlg.childAlignment = TextAnchor.UpperLeft;
+				}
+			}
+			var row = card != null ? card.Find("PrefRow_ShowInRibbon") : prefsBody.Find("PrefRow_ShowInRibbon");
 			if (row != null) {
 				var rowLe = row.GetComponent<LayoutElement>();
 				if (rowLe != null)
 					SpzUiThemeOps.SnapshotLayoutElementForTheme(rowLe);
 				var rowHlg = row.GetComponent<HorizontalLayoutGroup>();
 				if (rowHlg != null) {
-					// false: checkbox/label keep authored sizes (true + missing LE stretches the face).
 					rowHlg.childControlHeight = false;
 					rowHlg.childForceExpandHeight = false;
 					rowHlg.childControlWidth = true;
@@ -2287,8 +2333,7 @@ namespace spz {
 		}
 
 		/// <summary>
-		/// Nested Preferences dropdown: indent, wrap, and row height follow <see cref="ProjectUiScale"/> bands
-		/// so narrow manager panels stay readable without green-capsule stretch.
+		/// Nested Preferences dropdown: inset card, wrap, and row height follow <see cref="ProjectUiScale"/> bands.
 		/// </summary>
 		void ApplyResponsivePrefsDropdownLayout(Transform prefsBody) {
 			if (prefsBody == null) return;
@@ -2300,28 +2345,43 @@ namespace spz {
 			}
 			var band = ProjectUiScale.GetBand(panelW);
 			bool narrow = band <= ProjectUiScale.Band.Sm;
-			int leftIndent = Mathf.RoundToInt(ProjectUiScale.Space(narrow ? 4 : 5));
+			int leftGutter = narrow ? 24 : 30;
+			int rightGutter = narrow ? 16 : 28;
 			int padY = Mathf.RoundToInt(ProjectUiScale.Space(narrow ? 2 : 1));
-			int padRight = Mathf.RoundToInt(ProjectUiScale.Space(2));
 			float sectionGap = ProjectUiScale.Space(narrow ? 2 : 1);
 			float rowH = narrow ? 40f : 32f;
 			float labelMinW = narrow ? 120f : 160f;
 
 			var bodyLE = prefsBody.GetComponent<LayoutElement>();
-			var bodyVlg = prefsBody.GetComponent<VerticalLayoutGroup>();
-			if (bodyVlg != null) {
-				// Snapshot before responsive pads so Restore SPZ does not treat Nomad/narrow pads as authored.
-				SpzUiThemeOps.ApplyScaledLayoutGroup(bodyVlg);
-				bodyVlg.padding = new RectOffset(leftIndent, padRight, padY, padY);
-				bodyVlg.spacing = sectionGap;
-				bodyVlg.childControlHeight = true;
-				bodyVlg.childForceExpandHeight = false;
-				bodyVlg.childControlWidth = true;
-				bodyVlg.childForceExpandWidth = true;
-				bodyVlg.childAlignment = TextAnchor.UpperLeft;
+			var bodyHlg = prefsBody.GetComponent<HorizontalLayoutGroup>();
+			if (bodyHlg != null) {
+				bodyHlg.padding = new RectOffset(leftGutter, rightGutter, 0, 2);
+				bodyHlg.childControlHeight = true;
+				bodyHlg.childForceExpandHeight = false;
+				bodyHlg.childControlWidth = true;
+				bodyHlg.childForceExpandWidth = true;
+				bodyHlg.childAlignment = TextAnchor.UpperLeft;
 			}
 
-			var header = prefsBody.Find("PrefsDropdownHeader")?.GetComponent<TextMeshProUGUI>();
+			var card = prefsBody.Find("PreferencesCard");
+			Transform metaRoot = card != null ? card : prefsBody;
+			var cardVlg = card != null ? card.GetComponent<VerticalLayoutGroup>() : prefsBody.GetComponent<VerticalLayoutGroup>();
+			if (cardVlg != null) {
+				SpzUiThemeOps.ApplyScaledLayoutGroup(cardVlg);
+				cardVlg.padding = new RectOffset(
+					Mathf.RoundToInt(ProjectUiScale.Space(2)),
+					Mathf.RoundToInt(ProjectUiScale.Space(2)),
+					padY,
+					padY);
+				cardVlg.spacing = sectionGap;
+				cardVlg.childControlHeight = true;
+				cardVlg.childForceExpandHeight = false;
+				cardVlg.childControlWidth = true;
+				cardVlg.childForceExpandWidth = true;
+				cardVlg.childAlignment = TextAnchor.UpperLeft;
+			}
+
+			var header = metaRoot.Find("PrefsDropdownHeader")?.GetComponent<TextMeshProUGUI>();
 			if (header != null) {
 				var headerLE = header.GetComponent<LayoutElement>();
 				if (headerLE != null) {
@@ -2339,7 +2399,13 @@ namespace spz {
 				header.overflowMode = TextOverflowModes.Overflow;
 			}
 
-			var row = prefsBody.Find("PrefRow_ShowInRibbon");
+			var summaryLe = metaRoot.Find("AddonSummary")?.GetComponent<LayoutElement>();
+			if (summaryLe != null) {
+				summaryLe.preferredHeight = narrow ? 44f : 36f;
+				summaryLe.minHeight = 28f;
+			}
+
+			var row = metaRoot.Find("PrefRow_ShowInRibbon");
 			if (row != null) {
 				var rowLE = row.GetComponent<LayoutElement>();
 				if (rowLE != null) {
@@ -2381,6 +2447,14 @@ namespace spz {
 				}
 			}
 
+			if (card != null) {
+				var cardLe = card.GetComponent<LayoutElement>();
+				if (cardLe != null) {
+					float cardH = MeasurePreferencesBodyHeight(card);
+					cardLe.preferredHeight = cardH;
+					cardLe.minHeight = cardH;
+				}
+			}
 			float bodyH = MeasurePreferencesBodyHeight(prefsBody);
 			if (bodyLE != null) {
 				bodyLE.preferredHeight = bodyH;
@@ -2393,11 +2467,14 @@ namespace spz {
 		static float MeasurePreferencesBodyHeight(Transform prefsBody) {
 			if (prefsBody == null) return 36f;
 			var vlg = prefsBody.GetComponent<VerticalLayoutGroup>();
+			var hlg = prefsBody.GetComponent<HorizontalLayoutGroup>();
 			float pad = 0f;
 			float spacing = 0f;
 			if (vlg != null) {
 				pad = vlg.padding.top + vlg.padding.bottom;
 				spacing = vlg.spacing;
+			} else if (hlg != null) {
+				pad = hlg.padding.top + hlg.padding.bottom;
 			}
 			float rows = 0f;
 			int active = 0;
@@ -2406,10 +2483,14 @@ namespace spz {
 				if (ch == null || !ch.gameObject.activeSelf) continue;
 				var le = ch.GetComponent<LayoutElement>();
 				float h = le != null && le.preferredHeight > 0f ? le.preferredHeight : 24f;
-				rows += h;
-				active++;
+				if (hlg != null)
+					rows = Mathf.Max(rows, h);
+				else {
+					rows += h;
+					active++;
+				}
 			}
-			if (active > 1)
+			if (vlg != null && active > 1)
 				rows += spacing * (active - 1);
 			return Mathf.Max(36f, pad + rows);
 		}
@@ -2478,13 +2559,46 @@ namespace spz {
 			headerLE.flexibleWidth = 1f;
 			headerLE.flexibleHeight = 0f;
 			var horizontalLayout = headerObj.AddComponent<HorizontalLayoutGroup>();
-			horizontalLayout.spacing = 10f;
+			horizontalLayout.spacing = 8f;
 			horizontalLayout.padding = new RectOffset(0, 0, 4, 4);
 			horizontalLayout.childAlignment = TextAnchor.MiddleLeft;
 			horizontalLayout.childControlWidth = true;
 			horizontalLayout.childControlHeight = false;
 			horizontalLayout.childForceExpandWidth = false;
 			horizontalLayout.childForceExpandHeight = false;
+
+			// Blender-like expand chevron (replaces Preferences label button).
+			const float chevronHit = 22f;
+			var expandObj = new GameObject("ExpandChevron");
+			expandObj.transform.SetParent(headerObj.transform, false);
+			var expandRt = expandObj.AddComponent<RectTransform>();
+			expandRt.sizeDelta = new Vector2(chevronHit, chevronHit);
+			var expandLE = expandObj.AddComponent<LayoutElement>();
+			expandLE.preferredWidth = chevronHit;
+			expandLE.minWidth = chevronHit;
+			expandLE.preferredHeight = chevronHit;
+			expandLE.minHeight = chevronHit;
+			expandLE.flexibleWidth = 0f;
+			var expandHit = expandObj.AddComponent<Image>();
+			expandHit.color = Color.clear;
+			expandHit.raycastTarget = true;
+			var expandBtn = expandObj.AddComponent<Button>();
+			expandBtn.targetGraphic = expandHit;
+			expandBtn.transition = Selectable.Transition.None;
+			var expandLabelGo = new GameObject("Text");
+			expandLabelGo.transform.SetParent(expandObj.transform, false);
+			var expandLabelRt = expandLabelGo.AddComponent<RectTransform>();
+			expandLabelRt.anchorMin = Vector2.zero;
+			expandLabelRt.anchorMax = Vector2.one;
+			expandLabelRt.offsetMin = Vector2.zero;
+			expandLabelRt.offsetMax = Vector2.zero;
+			var expandLabel = expandLabelGo.AddComponent<TextMeshProUGUI>();
+			expandLabel.text = "▸";
+			expandLabel.fontSize = 14f;
+			expandLabel.alignment = TextAlignmentOptions.Center;
+			expandLabel.color = new Color(0.72f, 0.72f, 0.76f, 1f);
+			expandLabel.raycastTarget = false;
+			AttachTooltip(expandObj, "Show add-on details and host preferences.");
 
 			var toggleObj = new GameObject("StatusToggle");
 			toggleObj.transform.SetParent(headerObj.transform, false);
@@ -2551,37 +2665,6 @@ namespace spz {
 			nameText.overflowMode = TMPro.TextOverflowModes.Ellipsis;
 			nameText.raycastTarget = false;
 
-			var prefsBtnObj = new GameObject("PreferencesButton");
-			prefsBtnObj.transform.SetParent(headerObj.transform, false);
-			var prefsBtnLE = prefsBtnObj.AddComponent<LayoutElement>();
-			prefsBtnLE.preferredWidth = 108f;
-			prefsBtnLE.minWidth = 96f;
-			prefsBtnLE.flexibleWidth = 0f;
-			prefsBtnLE.preferredHeight = 28f;
-			prefsBtnLE.minHeight = 28f;
-			var prefsBtnImage = prefsBtnObj.AddComponent<Image>();
-			// Assign a real face before markEligible so Restore SPZ does not rewind authoredSprite=null.
-			AssignSolidFaceThenMarkRounded(prefsBtnImage);
-			prefsBtnImage.color = new Color(61f / 255f, 61f / 255f, 61f / 255f, 1f);
-			prefsBtnImage.raycastTarget = true;
-			var prefsBtn = prefsBtnObj.AddComponent<Button>();
-			prefsBtn.targetGraphic = prefsBtnImage;
-			prefsBtn.transition = Selectable.Transition.ColorTint;
-			var prefsBtnLabelGo = new GameObject("Text");
-			prefsBtnLabelGo.transform.SetParent(prefsBtnObj.transform, false);
-			var prefsBtnLabelRect = prefsBtnLabelGo.AddComponent<RectTransform>();
-			prefsBtnLabelRect.anchorMin = Vector2.zero;
-			prefsBtnLabelRect.anchorMax = Vector2.one;
-			prefsBtnLabelRect.sizeDelta = Vector2.zero;
-			var prefsBtnLabel = prefsBtnLabelGo.AddComponent<TextMeshProUGUI>();
-			prefsBtnLabel.text = "Preferences ▾";
-			prefsBtnLabel.fontSize = 11f;
-			prefsBtnLabel.alignment = TextAlignmentOptions.Center;
-			prefsBtnLabel.color = new Color(0.88f, 0.88f, 0.9f, 1f);
-			prefsBtnLabel.raycastTarget = false;
-			AttachTooltip(prefsBtnObj,
-				"Expand nested host preferences for this add-on (Show in Command Ribbon, and future settings).");
-
 			var removeBtnObj = new GameObject("RemoveButton");
 			removeBtnObj.transform.SetParent(headerObj.transform, false);
 			var removeBtnLE = removeBtnObj.AddComponent<LayoutElement>();
@@ -2612,36 +2695,82 @@ namespace spz {
 			removeBtn.onClick.AddListener(() => OnRemoveAddon(addonId));
 			AttachTooltip(removeBtnObj, "Uninstall this add-on from StreamingAssets/Addons (cannot be undone).");
 
-			// Nested dropdown under HeaderRow (same item VLG) — never stretch-overlay the dial/name.
+			// Nested Blender-like details under HeaderRow — inset card (not full-bleed grey band).
 			var prefsBody = new GameObject("PreferencesBody");
 			prefsBody.transform.SetParent(itemObj.transform, false);
 			prefsBody.AddComponent<RectTransform>();
 			var prefsBodyLE = prefsBody.AddComponent<LayoutElement>();
-			prefsBodyLE.preferredHeight = 64f;
-			prefsBodyLE.minHeight = 48f;
+			prefsBodyLE.preferredHeight = 120f;
+			prefsBodyLE.minHeight = 72f;
 			prefsBodyLE.flexibleHeight = 0f;
 			prefsBodyLE.flexibleWidth = 1f;
 			var prefsBodyBg = prefsBody.AddComponent<Image>();
 			prefsBodyBg.sprite = UiRuntimeSprites.SolidRect;
 			prefsBodyBg.type = Image.Type.Simple;
-			prefsBodyBg.color = new Color(0.12f, 0.12f, 0.14f, 0.94f);
+			prefsBodyBg.color = Color.clear;
 			prefsBodyBg.raycastTarget = false;
-			var prefsBodyVLG = prefsBody.AddComponent<VerticalLayoutGroup>();
-			prefsBodyVLG.spacing = ProjectUiScale.Space(1);
-			prefsBodyVLG.padding = new RectOffset(
-				Mathf.RoundToInt(ProjectUiScale.Space(5)),
+			var prefsBodyHLG = prefsBody.AddComponent<HorizontalLayoutGroup>();
+			// Left gutter aligns card under the name (chevron + dial), right gutter keeps overlay off the full width.
+			prefsBodyHLG.padding = new RectOffset(30, 28, 0, 2);
+			prefsBodyHLG.spacing = 0;
+			prefsBodyHLG.childAlignment = TextAnchor.UpperLeft;
+			prefsBodyHLG.childControlWidth = true;
+			prefsBodyHLG.childControlHeight = true;
+			prefsBodyHLG.childForceExpandWidth = true;
+			prefsBodyHLG.childForceExpandHeight = false;
+			prefsBody.SetActive(false);
+
+			var prefsCard = new GameObject("PreferencesCard");
+			prefsCard.transform.SetParent(prefsBody.transform, false);
+			prefsCard.AddComponent<RectTransform>();
+			var prefsCardLE = prefsCard.AddComponent<LayoutElement>();
+			prefsCardLE.flexibleWidth = 1f;
+			prefsCardLE.minWidth = 200f;
+			prefsCardLE.flexibleHeight = 0f;
+			var prefsCardBg = prefsCard.AddComponent<Image>();
+			prefsCardBg.sprite = UiRuntimeSprites.SolidRect;
+			prefsCardBg.type = Image.Type.Simple;
+			prefsCardBg.color = new Color(0.14f, 0.14f, 0.16f, 0.72f);
+			prefsCardBg.raycastTarget = false;
+			var prefsCardVLG = prefsCard.AddComponent<VerticalLayoutGroup>();
+			prefsCardVLG.spacing = ProjectUiScale.Space(1);
+			prefsCardVLG.padding = new RectOffset(
+				Mathf.RoundToInt(ProjectUiScale.Space(2)),
 				Mathf.RoundToInt(ProjectUiScale.Space(2)),
 				Mathf.RoundToInt(ProjectUiScale.Space(1)),
 				Mathf.RoundToInt(ProjectUiScale.Space(1)));
-			prefsBodyVLG.childAlignment = TextAnchor.UpperLeft;
-			prefsBodyVLG.childControlWidth = true;
-			prefsBodyVLG.childControlHeight = true;
-			prefsBodyVLG.childForceExpandWidth = true;
-			prefsBodyVLG.childForceExpandHeight = false;
-			prefsBody.SetActive(false);
+			prefsCardVLG.childAlignment = TextAnchor.UpperLeft;
+			prefsCardVLG.childControlWidth = true;
+			prefsCardVLG.childControlHeight = true;
+			prefsCardVLG.childForceExpandWidth = true;
+			prefsCardVLG.childForceExpandHeight = false;
+
+			string summaryText = !string.IsNullOrWhiteSpace(addonInfo.description)
+				? addonInfo.description
+				: (!string.IsNullOrWhiteSpace(addonInfo.listSubtitle)
+					? addonInfo.listSubtitle
+					: "Installed add-on.");
+			AddPrefsMetaLine(prefsCard.transform, "AddonSummary", summaryText, 13f, new Color(0.78f, 0.78f, 0.82f, 1f), 36f, bold: false);
+
+			var sep = new GameObject("PrefsSeparator");
+			sep.transform.SetParent(prefsCard.transform, false);
+			var sepLE = sep.AddComponent<LayoutElement>();
+			sepLE.preferredHeight = 1f;
+			sepLE.minHeight = 1f;
+			sepLE.flexibleWidth = 1f;
+			var sepImg = sep.AddComponent<Image>();
+			sepImg.sprite = UiRuntimeSprites.SolidRect;
+			sepImg.type = Image.Type.Simple;
+			sepImg.color = new Color(1f, 1f, 1f, 0.08f);
+			sepImg.raycastTarget = false;
+
+			string verDisp = FormatAddonVersionDisplay(addonInfo.version);
+			string authorDisp = !string.IsNullOrWhiteSpace(addonInfo.author) ? addonInfo.author.Trim() : "—";
+			AddPrefsMetaLine(prefsCard.transform, "AddonVersion", "Version:  " + verDisp, 12f, new Color(0.62f, 0.62f, 0.66f, 1f), 18f, bold: false);
+			AddPrefsMetaLine(prefsCard.transform, "AddonAuthor", "Author:  " + authorDisp, 12f, new Color(0.62f, 0.62f, 0.66f, 1f), 18f, bold: false);
 
 			var prefsHeaderObj = new GameObject("PrefsDropdownHeader");
-			prefsHeaderObj.transform.SetParent(prefsBody.transform, false);
+			prefsHeaderObj.transform.SetParent(prefsCard.transform, false);
 			var prefsHeaderLE = prefsHeaderObj.AddComponent<LayoutElement>();
 			prefsHeaderLE.preferredHeight = 18f;
 			prefsHeaderLE.minHeight = 18f;
@@ -2658,7 +2787,7 @@ namespace spz {
 			prefsHeader.raycastTarget = false;
 
 			var prefRow = new GameObject("PrefRow_ShowInRibbon");
-			prefRow.transform.SetParent(prefsBody.transform, false);
+			prefRow.transform.SetParent(prefsCard.transform, false);
 			prefRow.AddComponent<RectTransform>();
 			var prefRowLE = prefRow.AddComponent<LayoutElement>();
 			prefRowLE.preferredHeight = 32f;
@@ -2786,45 +2915,36 @@ namespace spz {
 					itemRt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, h);
 			}
 
-			void SetPrefsButtonLabel(bool expanded) {
-				prefsBtnLabel.text = expanded ? "Preferences ▴" : "Preferences ▾";
-				prefsBtnLabel.fontStyle = FontStyles.Normal;
-				prefsBtnLE.preferredWidth = 108f;
-				prefsBtnLE.minWidth = 96f;
+			void SetExpandChevron(bool expanded) {
+				expandLabel.text = expanded ? "▾" : "▸";
 			}
 
-			prefsBtn.onClick.AddListener(() => {
-				bool next = !prefsBody.activeSelf;
-				// One expanded prefs dropdown at a time — multiple open bodies stack over dials/names.
-				if (next && _addonsListParent != null) {
-					for (int i = 0; i < _addonsListParent.childCount; i++) {
-						var other = _addonsListParent.GetChild(i);
-						if (other == null || other == itemObj.transform) continue;
-						var otherBody = other.Find("PreferencesBody");
-						if (otherBody == null || !otherBody.gameObject.activeSelf) continue;
-						otherBody.gameObject.SetActive(false);
-						var otherItemLe = other.GetComponent<LayoutElement>();
-						if (otherItemLe != null) {
-							otherItemLe.preferredHeight = 48f;
-							otherItemLe.minHeight = 44f;
-						}
-						var otherRt = other as RectTransform;
-						if (otherRt != null)
-							otherRt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 48f);
-						var otherPrefsBtn = other.Find("HeaderRow/PreferencesButton");
-						var otherLabel = otherPrefsBtn != null
-							? otherPrefsBtn.GetComponentInChildren<TextMeshProUGUI>(true) : null;
-						if (otherLabel != null) {
-							otherLabel.text = "Preferences ▾";
-							otherLabel.fontStyle = FontStyles.Normal;
-						}
-						var otherBtnLe = otherPrefsBtn != null ? otherPrefsBtn.GetComponent<LayoutElement>() : null;
-						if (otherBtnLe != null) {
-							otherBtnLe.preferredWidth = 108f;
-							otherBtnLe.minWidth = 96f;
-						}
+			void CollapseOtherExpandedItems() {
+				if (_addonsListParent == null) return;
+				for (int i = 0; i < _addonsListParent.childCount; i++) {
+					var other = _addonsListParent.GetChild(i);
+					if (other == null || other == itemObj.transform) continue;
+					var otherBody = other.Find("PreferencesBody");
+					if (otherBody == null || !otherBody.gameObject.activeSelf) continue;
+					otherBody.gameObject.SetActive(false);
+					var otherItemLe = other.GetComponent<LayoutElement>();
+					if (otherItemLe != null) {
+						otherItemLe.preferredHeight = 48f;
+						otherItemLe.minHeight = 44f;
 					}
+					var otherRt = other as RectTransform;
+					if (otherRt != null)
+						otherRt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 48f);
+					var otherChevron = other.Find("HeaderRow/ExpandChevron/Text")?.GetComponent<TextMeshProUGUI>();
+					if (otherChevron != null)
+						otherChevron.text = "▸";
 				}
+			}
+
+			expandBtn.onClick.AddListener(() => {
+				bool next = !prefsBody.activeSelf;
+				if (next)
+					CollapseOtherExpandedItems();
 				prefsBody.SetActive(next);
 				if (next) {
 					prefsBody.transform.SetAsLastSibling();
@@ -2834,7 +2954,7 @@ namespace spz {
 						ThemeShowInRibbonDial(ribbonToggle, ribbonToggle.isOn, _statusOk, _statusMuted, _statusOk);
 					LockStatusDialLayout(rowToggle);
 				}
-				SetPrefsButtonLabel(next);
+				SetExpandChevron(next);
 				SetItemExpandedHeight(next);
 				RebuildAddonListScrollLayout(next ? itemObj.transform as RectTransform : null);
 			});
