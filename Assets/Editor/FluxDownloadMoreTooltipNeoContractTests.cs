@@ -24,11 +24,15 @@ public sealed class FluxDownloadMoreTooltipNeoContractTests {
 		string path = RepoPath(
 			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet",
 			"Controlnet Download More NeuralNets (Slide widget).prefab");
-		AssertTooltip(File.ReadAllText(path));
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("alibaba-pai/FLUX.2-dev-Fun-Controlnet-Union"));
+		Assert.That(src, Does.Contain("Fun-Union (FLUX.2-dev)"));
+		Assert.That(src, Does.Not.Contain("xlabs-ai"));
+		AssertTooltip(src);
 	}
 
 	static void AssertTooltip(string src) {
-		Assert.That(src, Does.Contain("supports Flux ControlNet"));
+		Assert.That(src, Does.Contain("download Fun-Union"));
 		Assert.That(src, Does.Contain("FLUX.2-dev"));
 		Assert.That(src, Does.Contain("ImageStitch"));
 		Assert.That(src, Does.Contain("RefControl"));
@@ -37,7 +41,5 @@ public sealed class FluxDownloadMoreTooltipNeoContractTests {
 			"Outdated wait-for-classic-Forge copy must not remain.");
 		Assert.That(src, Does.Not.Contain("doesn''t work yet with Forge Webui"),
 			"Outdated Flux-CN-unsupported-on-Forge copy must not remain.");
-		Assert.That(src, Does.Not.Contain("is not the Gen Art depth path"),
-			"Must not imply Neo lacks Flux CN support entirely.");
 	}
 }
