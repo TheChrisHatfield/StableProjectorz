@@ -142,6 +142,8 @@ namespace spz {
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
 		private uint _pythonServerPid; // When started via StartExternalProcess (IL2CPP-safe path)
 #endif
+		/// <summary>True when the current addon Python process was started with a visible Black box console.</summary>
+		bool _pythonServerStartedWithVisibleConsole;
 		private Dictionary<string, AddonInfo> _registeredAddons = new Dictionary<string, AddonInfo>();
 		private bool _isServerRunning = false;
 		/// <summary>One in-flight load/unload HTTP op per addon — rapid toggle must not race register/unregister.</summary>
@@ -531,6 +533,7 @@ namespace spz {
 			}
 #endif
 			_isServerRunning = false;
+			_pythonServerStartedWithVisibleConsole = false;
 			InvalidateSharedAddonReadyCache();
 		}
 
@@ -553,20 +556,27 @@ namespace spz {
 			int touched = StartExternalProcess.TrySetWindowsVisibleForProcessIds(pids, wantShow);
 			UnityEngine.Debug.Log($"[Addon_MGR] In-session external windows {(wantShow ? "show" : "hide")}: touched={touched}, pids={pids.Count}");
 
-			// Hidden CREATE_NO_WINDOW launches have no window to raise — restart with current pref.
 			bool serverAlive = _isServerRunning || pids.Count > 0;
 #if UNITY_EDITOR
 			if (_pythonProcess != null && !_pythonProcess.HasExited)
 				serverAlive = true;
 #endif
-			if (wantShow && touched == 0 && serverAlive) {
-				UnityEngine.Debug.Log("[Addon_MGR] No visible console HWND — restarting addon Python server with Settings visibility.");
+			// CREATE_NO_WINDOW has no HWND to raise; console HWNDs are often owned by conhost (PID mismatch).
+			// Restart when show cannot raise a window, or hide cannot hide a console we started visible.
+			bool needRestartForShow = wantShow && touched == 0 && serverAlive;
+			bool needRestartForHide = !wantShow && _pythonServerStartedWithVisibleConsole && serverAlive && touched == 0;
+			if (needRestartForShow || needRestartForHide) {
+				UnityEngine.Debug.Log(needRestartForHide
+					? "[Addon_MGR] Black box still visible (no HWND on Python PID) — restarting addon server hidden."
+					: "[Addon_MGR] No visible console HWND — restarting addon Python server with Settings visibility.");
 				TerminatePythonAddonServerProcess(waitForExit: true);
 				TryClearAddonHttpFailMarker();
 				StartPythonServer();
 				// New Python process has no loaded add-ons — same path as cold start auto-load.
 				if (_enableHttpServer && _isServerRunning)
 					StartCoroutine(RequestLoadEnabledAddonsAfterDelay());
+			} else if (!wantShow && touched > 0) {
+				_pythonServerStartedWithVisibleConsole = false;
 			}
 #endif
 		}
@@ -1103,6 +1113,7 @@ namespace spz {
 					_pythonServerPid = pid;
 					// Launcher PID only — HTTP :5557 /ready is verified later. Do not treat spawn as FastAPI-ready.
 					_isServerRunning = true;
+					_pythonServerStartedWithVisibleConsole = showExternalWindows;
 					UnityEngine.Debug.Log(
 						$"[Addon_MGR] Python server launcher started (PID {pid}); waiting for HTTP :{_httpServerPort} /ready (not verified yet).");
 				} else {
@@ -1145,6 +1156,7 @@ namespace spz {
 				_pythonProcess.BeginOutputReadLine();
 				_pythonProcess.BeginErrorReadLine();
 				_isServerRunning = true;
+				_pythonServerStartedWithVisibleConsole = showExternalWindows;
 				UnityEngine.Debug.Log($"[Addon_MGR] Python server started on port {_serverPort} (SPZ_SOCKET_BOUND={socketBound})");
 			} catch (Exception e) {
 				UnityEngine.Debug.LogError($"[Addon_MGR] Failed to start Python server: {e.Message}");

@@ -43,6 +43,8 @@ namespace spz {
 	    static readonly float[] AutoLaunchRetryDelays = new float[] { 0.5f, 1.5f, 3f, 6f, 12f };
 
 	    static uint _lastLaunchedWebUiPid;
+	    /// <summary>True when the last WebUI launch used a visible Black box console (CREATE_NEW_CONSOLE).</summary>
+	    static bool _lastWebUiLaunchedWithVisibleConsole;
 	    // Classic Forge/WebUI Gradio+API port (matches ConnectionPanel default).
 	    const int WebUiHttpPort = 7860;
 	    Coroutine _waitForWebUiReady_crtn;
@@ -92,12 +94,18 @@ namespace spz {
 	            UnityEngine.Debug.Log("[LaunchWebUI] No tracked WebUI PID; performed port-based cleanup before relaunch.");
 	        }
 	        _lastLaunchedWebUiPid = 0;
+	        _lastWebUiLaunchedWithVisibleConsole = false;
 #endif
 	    }
 
 	    /// <summary>Record the PID of the WebUI launcher we just started so we can close it on next restart.</summary>
 	    public static void SetLastLaunchedWebUiPid(uint pid) {
 	        _lastLaunchedWebUiPid = pid;
+	    }
+
+	    /// <summary>Record whether the last WebUI spawn used a visible Black box (for in-session hide).</summary>
+	    public static void SetLastWebUiLaunchedWithVisibleConsole(bool visible) {
+	        _lastWebUiLaunchedWithVisibleConsole = visible;
 	    }
 
 	    const string SdLoadingStickyMsg = "Diffusion Model is loading";
@@ -246,28 +254,35 @@ namespace spz {
 	    public static void ApplyExternalProcessWindowsSettingInSession(bool wantShow) {
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
 	        var pids = new System.Collections.Generic.HashSet<uint>();
-	        if (_lastLaunchedWebUiPid != 0)
+	        if (_lastLaunchedWebUiPid != 0 && StartExternalProcess.IsProcessRunning(_lastLaunchedWebUiPid))
 	            pids.Add(_lastLaunchedWebUiPid);
 	        foreach (uint p in AddonPortHelper.TryGetListeningPidsOnPort(WebUiHttpPort))
 	            pids.Add(p);
 
 	        int touched = StartExternalProcess.TrySetWindowsVisibleForProcessIds(pids, wantShow);
-	        UnityEngine.Debug.Log($"[LaunchWebUI] In-session external windows {(wantShow ? "show" : "hide")}: touched={touched}, pids={pids.Count}");
+	        UnityEngine.Debug.Log($"[LaunchWebUI] In-session Black box {(wantShow ? "show" : "hide")}: touched={touched}, pids={pids.Count}");
 
-	        if (wantShow && touched == 0 && pids.Count > 0) {
-	            // CREATE_NO_WINDOW → no HWND to raise. Relaunch with visible console when not mid-gen.
+	        bool liveWebUi = pids.Count > 0 || Connection_MGR.is_sd_connected;
+	        bool needRestartForShow = wantShow && touched == 0 && liveWebUi;
+	        bool needRestartForHide = !wantShow && _lastWebUiLaunchedWithVisibleConsole && liveWebUi && touched == 0;
+	        if (needRestartForShow || needRestartForHide) {
 	            bool busy = GenerateButtons_UI.isGenerating;
 	            if (busy) {
 	                if (Viewport_StatusText.instance != null)
 	                    Viewport_StatusText.instance.ShowStatusText(
-	                        "Show external windows saved — restart WebUI after generation to open the console.", false, 5f, false);
+	                        "Black box setting saved — restart WebUI after generation to apply.", false, 5f, false);
 	            } else if (instance != null) {
 	                if (Viewport_StatusText.instance != null)
 	                    Viewport_StatusText.instance.ShowStatusText(
-	                        "Restarting WebUI so the console can appear…", false, 4f, false);
+	                        needRestartForHide
+	                            ? "Restarting WebUI to hide the Black box…"
+	                            : "Restarting WebUI so the Black box can appear…",
+	                        false, 4f, false);
 	                bool suppressBrowser = UnityEngine.PlayerPrefs.GetInt("WebUI_OpenBrowserOnStartup", 0) == 0;
 	                instance.LaunchWebui_Manually(printStatusText_ifNotFound: false, suppressBrowserOpenForThisLaunch: suppressBrowser);
 	            }
+	        } else if (!wantShow && touched > 0) {
+	            _lastWebUiLaunchedWithVisibleConsole = false;
 	        }
 #endif
 	        if (Addon_MGR.instance != null)
@@ -662,6 +677,7 @@ namespace spz {
 	            );
 	            if (pid != 0) {
 	                SetLastLaunchedWebUiPid(pid);
+	                SetLastWebUiLaunchedWithVisibleConsole(showExternalWindows);
 	                UnityEngine.Debug.Log($"[LaunchWebUI] Process launched successfully with PID: {pid} (showWindow={showExternalWindows})");
 	                NotifyWebUiLaunchStarted();
 	                return true;

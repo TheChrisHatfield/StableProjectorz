@@ -25,6 +25,8 @@ public sealed class ExternalProcessSettingsInSessionContractTests {
 		Assert.That(src, Does.Contain("ApplyOpenBrowserSettingInSession"));
 		Assert.That(src, Does.Contain("ApplyExternalProcessWindowsSettingInSession"));
 		Assert.That(src, Does.Contain("OpenWebUiInBrowserNow"));
+		Assert.That(src, Does.Contain("_lastWebUiLaunchedWithVisibleConsole"));
+		Assert.That(src, Does.Contain("needRestartForHide"));
 		// Ready path must honor live prefs (toggle during wait).
 		int i = src.IndexOf("void TryOpenBrowserWhenReady()", System.StringComparison.Ordinal);
 		Assert.That(i, Is.GreaterThanOrEqualTo(0));
@@ -45,6 +47,8 @@ public sealed class ExternalProcessSettingsInSessionContractTests {
 		if (j < 0) j = Math.Min(src.Length, i + 2500);
 		string body = src.Substring(i, j - i);
 		Assert.That(body, Does.Contain("RequestLoadEnabledAddonsAfterDelay"));
+		Assert.That(body, Does.Contain("_pythonServerStartedWithVisibleConsole"));
+		Assert.That(body, Does.Contain("needRestartForHide"));
 	}
 
 	[Test]
