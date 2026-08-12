@@ -475,8 +475,12 @@ namespace spz {
 	        if (_choicesPanel_rectTransf == null)
 	            return;
 	        var raycaster = _choicesPanel_rectTransf.GetComponent<GraphicRaycaster>();
-	        if (raycaster != null)
-	            raycaster.enabled = enabled;
+	        if (raycaster == null)
+	            return;
+	        raycaster.enabled = enabled;
+	        // Re-assert ignoreReversed after enable — flip may have been applied while disabled.
+	        if (enabled)
+	            ApplyChoicesPanelRaycasterForMirror(_choicesFanFlipped);
 	    }
 
 	    IEnumerator ShowHidePanel_crtn(bool hide){
