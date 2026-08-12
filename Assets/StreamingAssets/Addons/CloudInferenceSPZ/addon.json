@@ -1,0 +1,5 @@
+{
+  "displayName": "Cloud Inference",
+  "version": "0.1.0",
+  "description": "Paste a key or session URL to run SPZ Generate against cloud GPUs via a local Forge-compatible shim on 127.0.0.1:7860 (Demo, Remote Forge/Colab tunnel). Leave the SD connection panel at default."
+}
