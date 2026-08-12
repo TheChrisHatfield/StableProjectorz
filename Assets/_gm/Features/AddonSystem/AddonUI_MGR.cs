@@ -106,14 +106,32 @@ namespace spz {
 		System.Collections.IEnumerator CoRestorePersistedThemeNextFrame() {
 			// Let other ThemeChanged subscribers finish Awake/Start first.
 			yield return null;
+			// Wait until add-on discovery has registered ids so Nomad enable gate is meaningful.
+			for (int i = 0; i < 120; i++) {
+				if (Addon_MGR.instance != null && Addon_MGR.instance.GetAddons().Count > 0)
+					break;
+				yield return null;
+			}
+
+			string themeId = UnityEngine.PlayerPrefs.GetString("SpzUiTheme.ActiveThemeId", "");
+			bool discovered = Addon_MGR.instance != null && Addon_MGR.instance.GetAddons().Count > 0;
+			if (discovered
+			    && string.Equals(themeId, "nomad-inspired", System.StringComparison.Ordinal)
+			    && !Addon_MGR.IsAddonEnabledStatic("NomadThemeSPZ")) {
+				UnityEngine.Debug.Log(
+					"[AddonUI_MGR] Theme restore skipped: NomadThemeSPZ disabled — clearing persisted Nomad for default SPZ.");
+				SpzUiThemeOps.ResetTheme();
+				SpzUiThemeOps.ClearPersistedTheme();
+				yield break;
+			}
 			if (!SpzUiThemeOps.TryRestorePersistedTheme(out string detail)) {
 				if (!string.IsNullOrEmpty(detail) && detail.IndexOf("no persisted", StringComparison.OrdinalIgnoreCase) < 0)
 					UnityEngine.Debug.LogWarning($"[AddonUI_MGR] Theme restore skipped: {detail}");
 				yield break;
 			}
 			UnityEngine.Debug.Log($"[AddonUI_MGR] Theme restore: {detail}");
-			if (SpzUiThemeOps.ShouldRecolorBoundChrome) {
-				// Do not compose charcoal skybox — SPZ background stays with BoundChrome.
+			if (SpzUiThemeOps.ShouldRecolorBoundChrome
+			    && Addon_MGR.IsAddonEnabledStatic("NomadThemeSPZ")) {
 				ComposeNomadStripIconsNative();
 			}
 		}
