@@ -14,6 +14,11 @@ namespace spz {
 	    Coroutine _gen_or_resume_crtn = null;
 	    Coroutine _progress_crtn = null;
 	    Coroutine _getSupportedOper_crtn = null;
+	    Coroutine _submit_crtn = null;
+	    Coroutine _download_crtn = null;
+
+	    /// <summary>Set by <see cref="CancelGeneration"/> — nested submit/poll/download must not deliver mesh after cancel.</summary>
+	    bool _cancelRequested;
 
 	    TaskStatus _generateStatus = TaskStatus.COMPLETE;
 	    GenerationResponse _generateResponse = null;
@@ -26,7 +31,7 @@ namespace spz {
 	                          _generateStatus!=TaskStatus.FAILED  &&
 	                          _gen_or_resume_crtn!=null;
 
-    
+
 	    //uppercase, must ensure the capitalization exactly matches the one in python script.
 	    public enum TaskStatus{
 	        PROCESSING,
@@ -77,9 +82,24 @@ namespace spz {
 
 
 	    public void CancelGeneration(){
-	        if (_gen_or_resume_crtn == null){ return; }
-	        StopCoroutine(_gen_or_resume_crtn);
-	        _gen_or_resume_crtn = null;
+	        _cancelRequested = true;
+	        _generateStatus = TaskStatus.FAILED;
+	        if (_progress_crtn != null) {
+	            try { StopCoroutine(_progress_crtn); } catch { /* already stopped */ }
+	            _progress_crtn = null;
+	        }
+	        if (_submit_crtn != null) {
+	            try { StopCoroutine(_submit_crtn); } catch { /* already stopped */ }
+	            _submit_crtn = null;
+	        }
+	        if (_download_crtn != null) {
+	            try { StopCoroutine(_download_crtn); } catch { /* already stopped */ }
+	            _download_crtn = null;
+	        }
+	        if (_gen_or_resume_crtn != null) {
+	            try { StopCoroutine(_gen_or_resume_crtn); } catch { /* already stopped */ }
+	            _gen_or_resume_crtn = null;
+	        }
 	        // Also call the server's /interrupt endpoint:
 	        StartCoroutine( InterruptOnServer() );
 	    }
@@ -91,7 +111,11 @@ namespace spz {
 	            callbacks.onError?.Invoke("Server is not available");
 	            return;
 	        }
+	        _cancelRequested = false;
 	        if(_gen_or_resume_crtn!=null){ StopCoroutine(_gen_or_resume_crtn);  }
+	        if(_progress_crtn!=null){ StopCoroutine(_progress_crtn); _progress_crtn = null; }
+	        if(_submit_crtn!=null){ StopCoroutine(_submit_crtn); _submit_crtn = null; }
+	        if(_download_crtn!=null){ StopCoroutine(_download_crtn); _download_crtn = null; }
 	        _gen_or_resume_crtn = StartCoroutine( Generate_crtn(what, inputs, callbacks) );
 	    }
 
@@ -131,15 +155,20 @@ namespace spz {
 	        // Start the generation, but don't yield yet:
 	        _generateStatus = TaskStatus.PROCESSING;
 	        _generateResponse = null;
-	        StartCoroutine( GenerateSubmit_crtn(destin_url, jsonString) );
+	        _submit_crtn = StartCoroutine( GenerateSubmit_crtn(destin_url, jsonString) );
 
 	        {//keep checking the progress:
 	            if(_progress_crtn != null){  StopCoroutine(_progress_crtn); }
 	            _progress_crtn = StartCoroutine( PollGenerationProgress(callbacks.onProgress) );
-	            while(_generateStatus == TaskStatus.PROCESSING){ yield return null; }
+	            while(_generateStatus == TaskStatus.PROCESSING && !_cancelRequested){ yield return null; }
         
 	            if(_progress_crtn!=null){ StopCoroutine(_progress_crtn); }
 	            _progress_crtn = null;
+	        }
+
+	        if (_cancelRequested) {
+	            _gen_or_resume_crtn = null;
+	            yield break;
 	        }
 
 	        if (_generateResponse == null){
@@ -159,9 +188,12 @@ namespace spz {
 	        if (_generateStatus == TaskStatus.FAILED){// Show the error from the server (if any)
 	            callbacks.onError?.Invoke($"Generation failed: {_generateResponse.message}");
 	        }
-	        else if (_generateStatus == TaskStatus.COMPLETE){// Download the final mesh
-	            yield return StartCoroutine(Gen_downloadFinalData(callbacks, download_endpoint));
-	            yield return GpuFlowUnityHooks.PaceFromAddonHttpCoroutine(source: "gen3d", phase: "post_download");
+	        else if (_generateStatus == TaskStatus.COMPLETE && !_cancelRequested){// Download the final mesh
+	            _download_crtn = StartCoroutine(Gen_downloadFinalData(callbacks, download_endpoint));
+	            yield return _download_crtn;
+	            _download_crtn = null;
+	            if (!_cancelRequested)
+	                yield return GpuFlowUnityHooks.PaceFromAddonHttpCoroutine(source: "gen3d", phase: "post_download");
 	        }
 	        _gen_or_resume_crtn = null;
 	    }
@@ -171,11 +203,16 @@ namespace spz {
 
 	        using (UnityWebRequest www = UnityWebRequest.Post(url, jsonString, "application/json")){
 	            yield return www.SendWebRequest();
+	            if (_cancelRequested) {
+	                _submit_crtn = null;
+	                yield break;
+	            }
 
 	            if (www.result != UnityWebRequest.Result.Success){
 	                Debug.LogError($"Generation request failed: {www.error}");
 	                _generateResponse = null;
 	                _generateStatus = TaskStatus.FAILED;
+	                _submit_crtn = null;
 	                yield break;
 	            }
 	            try{
@@ -188,6 +225,7 @@ namespace spz {
 	                _generateResponse = null;
 	            }
 	        }
+	        _submit_crtn = null;
 	    }
 
 
@@ -197,10 +235,12 @@ namespace spz {
 	        float spacing_sec = 1f;
 
 	        while (true){
+	            if (_cancelRequested) break;
 	            string endpoint = $"{Connection_MGR.GEN3D_URL}/status"; 
 	            using (UnityWebRequest www = UnityWebRequest.Get(endpoint))
 	            {
 	                yield return www.SendWebRequest();
+	                if (_cancelRequested) break;
 	                if (www.result != UnityWebRequest.Result.Success){
 	                    Debug.LogError($"PollGenerationProgress => WebRequest {www.result} ");
 	                    break; 
@@ -321,6 +361,9 @@ namespace spz {
 	    {
 	        using (UnityWebRequest www = UnityWebRequest.Get($"{Connection_MGR.GEN3D_URL}{download_endpoint}")){
 	            yield return www.SendWebRequest();
+	            if (_cancelRequested) {
+	                yield break;
+	            }
 
 	            if (www.result == UnityWebRequest.Result.Success){
 	                callbacks.onDataDownloaded?.Invoke(www.downloadHandler.data);
