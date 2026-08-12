@@ -266,8 +266,13 @@ namespace spz {
 				verticalLayout.childForceExpandHeight = false;
 				verticalLayout.childForceExpandWidth = true;
 			}
-			
-			// Set title if panel has a text component
+
+			// Shell LayoutElement so Nomad panel_width applies here — not to every AddButton face.
+			var shellLe = panelObj.GetComponent<LayoutElement>();
+			if (shellLe == null)
+				shellLe = panelObj.AddComponent<LayoutElement>();
+			SpzUiThemeOps.ApplyPanelWidth(shellLe);
+			shellLe.flexibleWidth = 1f;
 			var titleText = panelObj.GetComponentInChildren<TextMeshProUGUI>();
 			if (titleText == null) {
 				// Try to find or create title
@@ -896,12 +901,13 @@ namespace spz {
 				buttonObj.transform.SetParent(panelObj.transform, false);
 				
 				var rectTransform = buttonObj.AddComponent<RectTransform>();
-				float panelW = Mathf.Clamp(SpzUiThemeOps.Active.panelWidth, SpzUiThemeOps.PanelWidthMin, SpzUiThemeOps.PanelWidthMax);
-				rectTransform.sizeDelta = new Vector2(panelW, ProjectUiScale.Space(4) + 4f); // ~36
+				// Do not use panel_width for button preferredWidth — Nomad 400px blows up ribbon rows.
+				const float btnW = 280f;
+				rectTransform.sizeDelta = new Vector2(btnW, ProjectUiScale.Space(4) + 4f); // ~36
 				var layoutElement = buttonObj.AddComponent<LayoutElement>();
 				layoutElement.preferredHeight = ProjectUiScale.Space(4) + 4f;
 				layoutElement.minHeight = ProjectUiScale.Space(4);
-				layoutElement.preferredWidth = panelW;
+				layoutElement.preferredWidth = btnW;
 				layoutElement.flexibleWidth = 1f;
 				
 				var image = buttonObj.AddComponent<Image>();
