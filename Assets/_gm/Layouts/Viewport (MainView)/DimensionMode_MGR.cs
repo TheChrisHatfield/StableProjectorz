@@ -95,28 +95,42 @@ namespace spz {
 	    void Awake(){
 	        if(instance != null){ DestroyImmediate(this.gameObject); return; }
 	        instance = this;
-	        var sensor = _3d_choice_button.GetComponentInParent<MouseHoverSensor_UI>();
-	        sensor.onSurfaceEnter += p=>OnSurfaceEnter(_3d_choice_button, p);
-	        sensor.onSurfaceExit += p=>OnSurfaceExit(_3d_choice_button, p);
-	        _3d_choice_button.onClick.AddListener( ()=>OnButtonPressed(_3d_choice_button) );
-
-	        sensor = _sd_choice_button.GetComponentInParent<MouseHoverSensor_UI>();
-	        sensor.onSurfaceEnter += p=>OnSurfaceEnter(_sd_choice_button, p);
-	        sensor.onSurfaceExit += p=>OnSurfaceExit(_sd_choice_button, p);
-	        _sd_choice_button.onClick.AddListener( ()=>OnButtonPressed(_sd_choice_button) );
-
-	        sensor = _uv_choice_button.GetComponentInParent<MouseHoverSensor_UI>();
-	        sensor.onSurfaceEnter += p=>OnSurfaceEnter(_uv_choice_button, p);
-	        sensor.onSurfaceExit += p=>OnSurfaceExit(_uv_choice_button, p);
-	        _uv_choice_button.onClick.AddListener( ()=>OnButtonPressed(_uv_choice_button) );
-
-	        sensor = _bg_choice_button.GetComponentInParent<MouseHoverSensor_UI>(includeInactive:true);
-	        sensor.onSurfaceEnter += p=>OnSurfaceEnter(_bg_choice_button, p);
-	        sensor.onSurfaceExit += p=>OnSurfaceExit(_bg_choice_button, p);
-	        _bg_choice_button.onClick.AddListener( ()=>OnButtonPressed(_bg_choice_button) );
-        
-	        _choice_originalScale = _3d_choice_button.transform.parent.localScale;
-	        _choicesPanel_anim.SetBool("ShowPanel", false);
+	        if (_3d_choice_button != null) {
+	            var sensor = _3d_choice_button.GetComponentInParent<MouseHoverSensor_UI>();
+	            if (sensor != null) {
+	                sensor.onSurfaceEnter += p=>OnSurfaceEnter(_3d_choice_button, p);
+	                sensor.onSurfaceExit += p=>OnSurfaceExit(_3d_choice_button, p);
+	            }
+	            _3d_choice_button.onClick.AddListener( ()=>OnButtonPressed(_3d_choice_button) );
+	            if (_3d_choice_button.transform.parent != null)
+	                _choice_originalScale = _3d_choice_button.transform.parent.localScale;
+	        }
+	        if (_sd_choice_button != null) {
+	            var sensor = _sd_choice_button.GetComponentInParent<MouseHoverSensor_UI>();
+	            if (sensor != null) {
+	                sensor.onSurfaceEnter += p=>OnSurfaceEnter(_sd_choice_button, p);
+	                sensor.onSurfaceExit += p=>OnSurfaceExit(_sd_choice_button, p);
+	            }
+	            _sd_choice_button.onClick.AddListener( ()=>OnButtonPressed(_sd_choice_button) );
+	        }
+	        if (_uv_choice_button != null) {
+	            var sensor = _uv_choice_button.GetComponentInParent<MouseHoverSensor_UI>();
+	            if (sensor != null) {
+	                sensor.onSurfaceEnter += p=>OnSurfaceEnter(_uv_choice_button, p);
+	                sensor.onSurfaceExit += p=>OnSurfaceExit(_uv_choice_button, p);
+	            }
+	            _uv_choice_button.onClick.AddListener( ()=>OnButtonPressed(_uv_choice_button) );
+	        }
+	        if (_bg_choice_button != null) {
+	            var sensor = _bg_choice_button.GetComponentInParent<MouseHoverSensor_UI>(includeInactive:true);
+	            if (sensor != null) {
+	                sensor.onSurfaceEnter += p=>OnSurfaceEnter(_bg_choice_button, p);
+	                sensor.onSurfaceExit += p=>OnSurfaceExit(_bg_choice_button, p);
+	            }
+	            _bg_choice_button.onClick.AddListener( ()=>OnButtonPressed(_bg_choice_button) );
+	        }
+	        if (_choicesPanel_anim != null)
+	            _choicesPanel_anim.SetBool("ShowPanel", false);
 	        // Prefab leaves choice panel active; block hits until hover opens the fan.
 	        SetChoicesPanelRaycastsEnabled(false);
 	    }
@@ -423,7 +437,8 @@ namespace spz {
 	            bool panelHovered = RectTransformUtility.RectangleContainsScreenPoint(_choicesPanel_rectTransf, mousePos);
 	            if(_mainChoiceHoverSurf.isHovering==false && !panelHovered){
 	                _ishowingChoicePanel = false;
-	                _choicesPanel_anim.SetBool("ShowPanel", false);
+	                if (_choicesPanel_anim != null)
+	                    _choicesPanel_anim.SetBool("ShowPanel", false);
 	                // Drop hits immediately — close anim still runs for 0.4s before deactivate.
 	                SetChoicesPanelRaycastsEnabled(false);
 	                if(_showHidePanel_crtn!=null){ StopCoroutine(_showHidePanel_crtn); }
@@ -443,7 +458,8 @@ namespace spz {
 	                if(_showHidePanel_crtn!=null){ StopCoroutine(_showHidePanel_crtn); }
 	                _showHidePanel_crtn  = StartCoroutine(ShowHidePanel_crtn(hide:false));
 	                _ishowingChoicePanel = true;
-	                _choicesPanel_anim.SetBool("ShowPanel", true);
+	                if (_choicesPanel_anim != null)
+	                    _choicesPanel_anim.SetBool("ShowPanel", true);
 	                SetChoicesPanelRaycastsEnabled(true);
 	            }
 	        }
