@@ -42,7 +42,7 @@ namespace spz {
 	    [SerializeField] Color _inactiveColor = new Color(0.59f, 0.54f, 0.63f, 1);
 	    [SerializeField] Color _activeColor = Color.white;
 
-	    Vector3 _choice_originalScale;
+	    Vector3 _choice_originalScale = Vector3.one;
 
 	    bool _ishowingChoicePanel;
 
