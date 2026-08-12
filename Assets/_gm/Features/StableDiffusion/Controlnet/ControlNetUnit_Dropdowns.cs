@@ -161,10 +161,14 @@ namespace spz {
 
 	        //When StableProjectorz was launched for the first time, there are no models at all.
 	        //In this case, show big button, prompting the user to install a first model for this ControlNetUnit:
-	        hasAtLeastSomeModel = _model_dropdown.options.Count > 0;
+	        // Inserted synthetic "None" alone is not a real weight — treat like empty for Gen Art gates.
+	        bool onlySyntheticNone = _model_dropdown.options.Count == 1
+	            && _model_dropdown.options[0].text != null
+	            && _model_dropdown.options[0].text.Equals("none", StringComparison.OrdinalIgnoreCase);
+	        hasAtLeastSomeModel = _model_dropdown.options.Count > 0 && !onlySyntheticNone;
 
 	        bool mustDownload  =  _model_dropdown.options.Count == 0;
-	             mustDownload |=  _model_dropdown.options.Count==1 && _model_dropdown.options[0].text.ToLower()=="none";
+	             mustDownload |=  onlySyntheticNone;
 	             mustDownload |= ControlNetUnit_DownloadHelper.isSomeUnit_downloadingModels;
 
 	        _model_dropdown.gameObject.SetActive(!mustDownload);

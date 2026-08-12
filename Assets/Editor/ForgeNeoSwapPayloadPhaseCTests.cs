@@ -455,6 +455,7 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "ControlNetUnit_Dropdowns.cs"));
 		Assert.That(dropdowns, Does.Contain("pairs with FLUX.2-dev"));
+		Assert.That(dropdowns, Does.Contain("onlySyntheticNone"));
 		Assert.That(dropdowns, Does.Contain("CheckpointLooksFlux2Dev(sd))"));
 		Assert.That(dropdowns, Does.Contain("return FindPreferredFlux2ModelIndex(choices)"));
 		Assert.That(dropdowns, Does.Contain("MaybeArmDepthSendForFlux2Pick"));
