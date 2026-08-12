@@ -519,7 +519,7 @@ namespace spz {
 	                EncodeAndSaveTextures(albedo, pathAlbedo);
 	                EncodeAndSaveTextures(ao, pathAO);
 	                Viewport_StatusText.instance?.ShowStatusText("Saved to "+ pathAlbedo.Replace("\\", "\\\\"), 
-	                                                             false, 10, displayVisibility:false);
+	                                                             false, 10, progressVisibility:false);
 	            }
 	            if(albedo_destroyWhenDone && albedo != null){ foreach(var kvp in albedo){Texture.DestroyImmediate(kvp.Key);}  }
 	            if(ao_destroyWhenDone && ao != null){     foreach(var kvp in ao){Texture.DestroyImmediate(kvp.Key);}   }
