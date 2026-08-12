@@ -210,6 +210,8 @@ namespace spz {
 	            if (_mainChoice_text != null)
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_mainChoice_text.transform);
 	            ApplyAuthoredSelectionColors();
+	            if (_choicesFanFlipped)
+	                ApplyChoiceLabelMirrorState(true);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
@@ -264,6 +266,9 @@ namespace spz {
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_sd_choice_button);
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_uv_choice_button);
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_bg_choice_button);
+	        // RestoreBoundChrome / Compact labels can reset TMP scale — re-assert readable mirror state.
+	        if (_choicesFanFlipped)
+	            ApplyChoiceLabelMirrorState(true);
 	    }
 
 	    static void EnsureDimChoiceHitFace(Button btn) {
@@ -386,7 +391,9 @@ namespace spz {
 	            if(_mainChoiceHoverSurf.isHovering==false && !panelHovered){
 	                _ishowingChoicePanel = false;
 	                _choicesPanel_anim.SetBool("ShowPanel", false);
-	                _showHidePanel_crtn = StartCoroutine(ShowHidePanel_crtn(hide: false));
+	                // hide:true — after close anim, deactivate so flipped/invisible graphics do not steal hits.
+	                if(_showHidePanel_crtn!=null){ StopCoroutine(_showHidePanel_crtn); }
+	                _showHidePanel_crtn = StartCoroutine(ShowHidePanel_crtn(hide: true));
 	            }
 	            ScaleChoice_ifHovered(_3d_choice_button.transform.parent, _3d_choice_sensor);
 	            ScaleChoice_ifHovered(_sd_choice_button.transform.parent, _2d_choice_sensor);
