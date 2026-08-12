@@ -253,6 +253,13 @@ namespace spz {
 	            }
 	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_commitButton);
 	        }
+	        // Final-color swatch is product RGB — never SolidSquare; only keep hits after label clears.
+	        if (_finalColor_button != null) {
+	            SpzUiThemeOps.EnsureSelectableHitFace(_finalColor_button);
+	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_finalColor_button);
+	        }
+	        if (_hexColor_inputText != null && _hexColor_inputText.placeholder is TextMeshProUGUI ph)
+	            SpzUiThemeOps.ApplyBoundChromeTmp(ph, t.textMuted, 12f);
 	    }
 
 
