@@ -182,7 +182,7 @@ namespace spz {
 	        SpzUiThemeOps.EnsureSelectableHitFace(btn);
 	        if (SpzUiThemeOps.IsAuthoredIconFace(btn.targetGraphic)) {
 	            if (btn.targetGraphic is Image glyph)
-	                SpzUiThemeOps.ApplyBoundChromeGraphic(glyph, fill);
+	                SpzUiThemeOps.ApplyBoundChromeIconTint(glyph, fill);
 	        } else {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, fill, t.accent);
 	            if (btn.targetGraphic is Image face) {

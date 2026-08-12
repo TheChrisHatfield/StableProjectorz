@@ -90,7 +90,7 @@ namespace spz {
 	            // Trash glyph often IS the face — SolidSquare blanks remove under Nomad (mesh select litmus).
 	            if (SpzUiThemeOps.IsAuthoredIconFace(_rmvButton.targetGraphic)) {
 	                if (_rmvButton.targetGraphic is Image rmvFace)
-	                    SpzUiThemeOps.ApplyBoundChromeGraphic(rmvFace, t.danger);
+	                    SpzUiThemeOps.ApplyBoundChromeIconTint(rmvFace, t.danger);
 	            } else {
 	                SpzUiThemeOps.ApplyBoundChromeSelectable(_rmvButton, t.controlBg, t.danger);
 	            }

@@ -125,6 +125,8 @@ namespace spz {
 	                if (btn == null) continue;
 	                if (SpzUiThemeOps.IsAuthoredIconFace(btn.targetGraphic)) {
 	                    SpzUiThemeOps.EnsureSelectableHitFace(btn);
+	                    if (btn.targetGraphic is Image optFace)
+	                        SpzUiThemeOps.ApplyBoundChromeIconTint(optFace, t.iconTint);
 	                    SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	                    continue;
 	                }
