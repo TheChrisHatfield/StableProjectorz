@@ -59,6 +59,10 @@ namespace spz {
 	    }
 
 
+	    bool IsProjectSaveDialogOrWriteInFlight() {
+		    return _saveLoad_helper != null && _saveLoad_helper.IsProjectSaveInFlight;
+	    }
+
 	    public void DoSaveProject(){
 	        // Must not set _isSaving before SaveProject: that helper refuses while _isSaving and
 	        // would invoke saveFinalTex(null) without ever clearing a flag we already set (self-deadlock).
@@ -109,11 +113,12 @@ namespace spz {
 	    public void DoLoadProject(){
 	        // Align with FastPath_API.LoadProject — Ctrl+L / UI must not load over an in-flight export
 	        // or open a second dialog that clears _isLoading while the first load still runs.
-	        if( _isSaving || _isLoading ){
+	        // Also refuse while Save Project dialog is open (_projectSaveInFlight before _isSaving).
+	        if( _isSaving || _isLoading || IsProjectSaveDialogOrWriteInFlight() ){
 		        Viewport_StatusText.instance?.ShowStatusText(
-			        _isSaving
-				        ? "Can't load while a save/export is still writing."
-				        : "Load already in progress.",
+			        _isLoading
+				        ? "Load already in progress."
+				        : "Can't load while a save/export is still writing.",
 			        false, 5f, false );
 		        return;
 	        }
@@ -157,7 +162,7 @@ namespace spz {
 	        if( ModelsHandler_3D.instance==null ){
 		        return false;
 	        }
-	        if( _isSaving ){
+	        if( _isSaving || IsProjectSaveDialogOrWriteInFlight() ){
 		        UnityEngine.Debug.LogWarning("[Save_MGR] Export3D_with_textures: refused — another save/export is in progress.");
 		        return false;
 	        }
@@ -207,7 +212,7 @@ namespace spz {
 		    if( mh==null ){
 			    return false;
 		    }
-		    if( _isSaving ){
+		    if( _isSaving || IsProjectSaveDialogOrWriteInFlight() ){
 			    UnityEngine.Debug.LogWarning("[Save_MGR] Export3D_with_textures_ToPath: refused — another save/export is in progress.");
 			    return false;
 		    }
@@ -306,7 +311,7 @@ namespace spz {
 
 	    public void Save2DArt_ExactPath(Texture2D saveMe, string pathAbs, bool destroyTex){
 	        // Do not clear an in-flight 3D/export: this path always sets _isSaving false when done.
-	        if( _isSaving ){
+	        if( _isSaving || IsProjectSaveDialogOrWriteInFlight() ){
 		        Viewport_StatusText.instance?.ShowStatusText(
 			        "Can't save icon while a save/export is still writing.", false, 5f, false );
 		        return;
@@ -320,7 +325,7 @@ namespace spz {
 
 	    public void Save2DArt( Dictionary<Texture2D,UDIM_Sector> saveMe, bool destroyTexs){
 	        // Same shared _isSaving as SaveViewTextures: cancel of this dialog must not clear an export.
-	        if( _isSaving ){
+	        if( _isSaving || IsProjectSaveDialogOrWriteInFlight() ){
 		        Viewport_StatusText.instance?.ShowStatusText(
 			        "Can't save icon while a save/export is still writing.", false, 5f, false );
 		        return;
@@ -337,7 +342,7 @@ namespace spz {
 
 	    public void SaveViewTextures(){ //save whatever the camera is observing (view,depth,normals,etc)
 	        // Do not clobber an in-flight 3D/export save: cancel of this dialog would clear shared _isSaving.
-	        if( _isSaving ){
+	        if( _isSaving || IsProjectSaveDialogOrWriteInFlight() ){
 		        Viewport_StatusText.instance?.ShowStatusText(
 			        "Can't export view textures while a save/export is still writing.", false, 5f, false );
 		        return;
@@ -351,7 +356,7 @@ namespace spz {
 
 	    //dilation allows to "spread" the texture outwards from uv-chunks. Helps to avoid seams.
 	    public void SaveProjectionTextures(bool isDilate){
-	        if( _isSaving ){
+	        if( _isSaving || IsProjectSaveDialogOrWriteInFlight() ){
 		        Viewport_StatusText.instance?.ShowStatusText(
 			        "Can't export projection textures while a save/export is still writing.", false, 5f, false );
 		        return;
