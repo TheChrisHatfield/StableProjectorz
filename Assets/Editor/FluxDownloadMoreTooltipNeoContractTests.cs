@@ -28,13 +28,16 @@ public sealed class FluxDownloadMoreTooltipNeoContractTests {
 	}
 
 	static void AssertTooltip(string src) {
+		Assert.That(src, Does.Contain("supports Flux ControlNet"));
+		Assert.That(src, Does.Contain("FLUX.2-dev"));
 		Assert.That(src, Does.Contain("ImageStitch"));
 		Assert.That(src, Does.Contain("RefControl"));
-		Assert.That(src, Does.Contain("Forge Neo"));
-		Assert.That(src, Does.Contain("SD1.5/XL ControlNet still works"));
+		Assert.That(src, Does.Contain("Klein"));
 		Assert.That(src, Does.Not.Contain("Illyasviel"),
 			"Outdated wait-for-classic-Forge copy must not remain.");
 		Assert.That(src, Does.Not.Contain("doesn''t work yet with Forge Webui"),
 			"Outdated Flux-CN-unsupported-on-Forge copy must not remain.");
+		Assert.That(src, Does.Not.Contain("is not the Gen Art depth path"),
+			"Must not imply Neo lacks Flux CN support entirely.");
 	}
 }
