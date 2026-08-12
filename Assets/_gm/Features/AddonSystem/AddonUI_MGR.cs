@@ -978,12 +978,12 @@ namespace spz {
 			GameObject toggleObj = new GameObject($"Toggle_{label}");
 			toggleObj.transform.SetParent(panelObj.transform, false);
 			var toggleRect = toggleObj.AddComponent<RectTransform>();
-			float panelW = Mathf.Clamp(SpzUiThemeOps.Active.panelWidth, SpzUiThemeOps.PanelWidthMin, SpzUiThemeOps.PanelWidthMax);
-			toggleRect.sizeDelta = new Vector2(panelW, 32);
+			const float rowW = 280f;
+			toggleRect.sizeDelta = new Vector2(rowW, 32);
 			var layoutElement = toggleObj.AddComponent<LayoutElement>();
 			layoutElement.preferredHeight = 32f;
 			layoutElement.minHeight = 28f;
-			layoutElement.preferredWidth = panelW;
+			layoutElement.preferredWidth = rowW;
 			layoutElement.flexibleWidth = 1f;
 
 			var bg = toggleObj.AddComponent<Image>();
@@ -1641,7 +1641,12 @@ namespace spz {
 			sliderObj.transform.SetParent(panelObj.transform, false);
 			
 			var sliderRect = sliderObj.AddComponent<RectTransform>();
-			sliderRect.sizeDelta = new Vector2(200, 40);
+			sliderRect.sizeDelta = new Vector2(280, 48);
+			var sliderLe = sliderObj.AddComponent<LayoutElement>();
+			sliderLe.preferredHeight = 48f;
+			sliderLe.minHeight = 40f;
+			sliderLe.preferredWidth = 280f;
+			sliderLe.flexibleWidth = 1f;
 			
 			// Add label
 			var labelObj = new GameObject("Label");
@@ -1654,6 +1659,8 @@ namespace spz {
 			labelText.text = label;
 			labelText.fontSize = 12;
 			labelText.color = Color.white;
+			labelText.enableWordWrapping = false;
+			labelText.overflowMode = TextOverflowModes.Ellipsis;
 			labelText.raycastTarget = false;
 			ApplyRuntimeTmpFont(labelText);
 			
@@ -1913,7 +1920,12 @@ namespace spz {
 			dropdownObj.transform.SetParent(panelObj.transform, false);
 			
 			var dropdownRect = dropdownObj.AddComponent<RectTransform>();
-			dropdownRect.sizeDelta = new Vector2(200, 40);
+			dropdownRect.sizeDelta = new Vector2(280, 48);
+			var dropdownLe = dropdownObj.AddComponent<LayoutElement>();
+			dropdownLe.preferredHeight = 48f;
+			dropdownLe.minHeight = 40f;
+			dropdownLe.preferredWidth = 280f;
+			dropdownLe.flexibleWidth = 1f;
 			// Ensure entire row can receive pointer events (not only inner field).
 			// Null sprite Images often fail raycasts — assign SolidRect with near-clear alpha.
 			var rowBg = dropdownObj.AddComponent<Image>();
@@ -1922,17 +1934,19 @@ namespace spz {
 			rowBg.color = new Color(0f, 0f, 0f, 0.001f);
 			rowBg.raycastTarget = true;
 			
-			// Add label
+			// Add label (stacked top band — side 30% clipped long Nomad labels).
 			var labelObj = new GameObject("Label");
 			labelObj.transform.SetParent(dropdownObj.transform, false);
 			var labelRect = labelObj.AddComponent<RectTransform>();
 			labelRect.anchorMin = new Vector2(0, 0.5f);
-			labelRect.anchorMax = new Vector2(0.3f, 1);
+			labelRect.anchorMax = new Vector2(1, 1);
 			labelRect.sizeDelta = Vector2.zero;
 			var labelText = labelObj.AddComponent<TextMeshProUGUI>();
 			labelText.text = label;
 			labelText.fontSize = 12;
 			labelText.color = Color.white;
+			labelText.enableWordWrapping = false;
+			labelText.overflowMode = TextOverflowModes.Ellipsis;
 			labelText.raycastTarget = false;
 			ApplyRuntimeTmpFont(labelText);
 			
@@ -1940,8 +1954,8 @@ namespace spz {
 			var fieldObj = new GameObject("Dropdown");
 			fieldObj.transform.SetParent(dropdownObj.transform, false);
 			var fieldRect = fieldObj.AddComponent<RectTransform>();
-			fieldRect.anchorMin = new Vector2(0.3f, 0);
-			fieldRect.anchorMax = new Vector2(1, 1);
+			fieldRect.anchorMin = new Vector2(0, 0);
+			fieldRect.anchorMax = new Vector2(1, 0.5f);
 			fieldRect.sizeDelta = Vector2.zero;
 			
 			var fieldBg = fieldObj.AddComponent<Image>();
