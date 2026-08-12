@@ -163,9 +163,9 @@ namespace spz {
 			var vc = mgr?.GetViewCamera(cameraIndex);
 			if (vc == null || vc.myCamera == null) return null;
 			var cam = vc.myCamera;
-			float fovReport = vc.fovMgr._trueCameraFov >= 1f && vc.fovMgr._trueCameraFov <= 179f
-				? vc.fovMgr._trueCameraFov
-				: cam.fieldOfView;
+			float fovReport = cam.fieldOfView;
+			if (vc.fovMgr != null && vc.fovMgr._trueCameraFov >= 1f && vc.fovMgr._trueCameraFov <= 179f)
+				fovReport = vc.fovMgr._trueCameraFov;
 			return new JObject {
 				["orthographic"] = cam.orthographic,
 				["orthographic_size"] = cam.orthographicSize,
@@ -225,7 +225,10 @@ namespace spz {
 				if (orthographic == false || (orthographic == null && !cam.orthographic)) {
 					cam.orthographic = false;
 				}
-				vc.fovMgr.SetFieldOfView(f);
+				if (vc.fovMgr != null)
+					vc.fovMgr.SetFieldOfView(f);
+				else
+					cam.fieldOfView = f;
 				any = true;
 			}
 			return any;
