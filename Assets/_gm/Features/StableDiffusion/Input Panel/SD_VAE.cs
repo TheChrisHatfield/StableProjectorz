@@ -132,20 +132,28 @@ namespace spz {
 	        SD_Options_Fetcher.instance?.SubmitOptions_Asap();
 	    }
 
-	    /// <summary>True when screen point is over VAE dropdown, slide-out, or this panel.</summary>
+	    /// <summary>True when screen point is over VAE dropdown, visible slide-out, or this panel.</summary>
 	    public bool ScreenPointHitsOwnership(Vector2 screenPoint){
+	        Camera cam = UiCameraFor(transform);
 	        if (transform is RectTransform root
-	            && RectTransformUtility.RectangleContainsScreenPoint(root, screenPoint))
+	            && RectTransformUtility.RectangleContainsScreenPoint(root, screenPoint, cam))
 	            return true;
 	        if (_vaeDropdown != null
 	            && _vaeDropdown.transform is RectTransform dd
-	            && RectTransformUtility.RectangleContainsScreenPoint(dd, screenPoint))
+	            && RectTransformUtility.RectangleContainsScreenPoint(dd, screenPoint, cam))
 	            return true;
-	        if (_getMore_slideout != null
+	        if (_getMore_slideout != null && _getMore_slideout.isShowing
 	            && _getMore_slideout.transform is RectTransform slide
-	            && RectTransformUtility.RectangleContainsScreenPoint(slide, screenPoint))
+	            && RectTransformUtility.RectangleContainsScreenPoint(slide, screenPoint, cam))
 	            return true;
 	        return false;
+	    }
+
+	    static Camera UiCameraFor(Transform t){
+	        var canvas = t != null ? t.GetComponentInParent<Canvas>() : null;
+	        if (canvas == null) return null;
+	        if (canvas.renderMode == RenderMode.ScreenSpaceOverlay) return null;
+	        return canvas.worldCamera;
 	    }
 
 	    IEnumerator EnsureFetchLoopStarted_crtn(){
