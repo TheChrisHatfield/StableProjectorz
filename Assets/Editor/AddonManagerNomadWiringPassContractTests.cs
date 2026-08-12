@@ -40,11 +40,25 @@ public sealed class AddonManagerNomadWiringPassContractTests {
 		int method = src.IndexOf("void ApplyResponsivePrefsDropdownLayout(", System.StringComparison.Ordinal);
 		int next = src.IndexOf("static float MeasurePreferencesBodyHeight(", method, System.StringComparison.Ordinal);
 		string body = src.Substring(method, next - method);
-		int snap = body.IndexOf("ApplyScaledLayoutGroup(bodyVlg)", System.StringComparison.Ordinal);
-		int pad = body.IndexOf("bodyVlg.padding = new RectOffset", System.StringComparison.Ordinal);
-		Assert.That(snap, Is.GreaterThan(0));
-		Assert.That(pad, Is.GreaterThan(snap),
-			"Must snapshot prefs VLG before responsive Nomad/narrow pads.");
+		int snapBody = body.IndexOf("ApplyScaledLayoutGroup(bodyHlg)", System.StringComparison.Ordinal);
+		int padBody = body.IndexOf("bodyHlg.padding = new RectOffset", System.StringComparison.Ordinal);
+		Assert.That(snapBody, Is.GreaterThan(0));
+		Assert.That(padBody, Is.GreaterThan(snapBody),
+			"Must snapshot PreferencesBody HLG before responsive gutters.");
+		int snapCard = body.IndexOf("ApplyScaledLayoutGroup(cardVlg)", System.StringComparison.Ordinal);
+		Assert.That(snapCard, Is.GreaterThan(0), "PreferencesCard VLG must still snapshot before pads.");
+	}
+
+	[Test]
+	public void PreferencesCard_UsesBoundChromeGraphicForRestore() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "AddonManager_UI.cs");
+		string src = File.ReadAllText(path);
+		int i = src.IndexOf("void ThemeAddonListItem(", System.StringComparison.Ordinal);
+		string body = src.Substring(i, System.Math.Min(2800, src.Length - i));
+		Assert.That(body, Does.Contain("PreferencesCard"));
+		Assert.That(body, Does.Contain("ApplyBoundChromeGraphic(cardImg, card)"),
+			"Raw cardImg.color sticks after Restore SPZ.");
 	}
 
 	[Test]

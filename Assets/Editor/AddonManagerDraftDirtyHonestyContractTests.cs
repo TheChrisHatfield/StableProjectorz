@@ -4,7 +4,7 @@ using NUnit.Framework;
 public sealed class AddonManagerDraftDirtyHonestyContractTests {
 
 	[Test]
-	public void ShowInRibbon_MarksDraftDirty() {
+	public void ShowInRibbon_RecomputesDraftDirtyVsSnapshot() {
 		string path = Path.Combine(Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "AddonSystem", "AddonManager_UI.cs");
 		string src = File.ReadAllText(path);
@@ -12,7 +12,8 @@ public sealed class AddonManagerDraftDirtyHonestyContractTests {
 		Assert.That(i, Is.GreaterThanOrEqualTo(0));
 		int j = src.IndexOf("rowToggle.onValueChanged.AddListener", i, System.StringComparison.Ordinal);
 		string body = src.Substring(i, j - i);
-		Assert.That(body, Does.Contain("_draftDirty = true"));
+		Assert.That(body, Does.Contain("RecomputeDraftDirtyFromLive()"),
+			"Flip Show-in-Ribbon back to open-time value must clear false Close warnings.");
 	}
 
 	[Test]
