@@ -28,6 +28,9 @@ public sealed class ExternalProcessSettingsInSessionContractTests {
 		Assert.That(src, Does.Contain("OpenWebUiInBrowserNow"));
 		Assert.That(src, Does.Contain("_lastWebUiLaunchedWithVisibleConsole"));
 		Assert.That(src, Does.Contain("needRestartForHide"));
+		Assert.That(src, Does.Contain("A1111_IP_AND_PORT"));
+		Assert.That(src, Does.Contain("ResetLaunchWebUiStatics"));
+		Assert.That(src, Does.Contain("isGeneratingPaused"));
 		// Ready path must honor live prefs (toggle during wait).
 		int i = src.IndexOf("void TryOpenBrowserWhenReady()", System.StringComparison.Ordinal);
 		Assert.That(i, Is.GreaterThanOrEqualTo(0));
