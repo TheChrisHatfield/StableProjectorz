@@ -97,6 +97,8 @@ namespace spz {
 	    }
 
 	    void EnsureLoadFromDiskButton(){
+	        if (_loadFromDiskButton == null)
+	            _loadFromDiskWired = false;
 	        if (_loadFromDiskWired && _loadFromDiskButton != null) return;
 	        if (_getMore_slideout == null) return;
 	        if (_loadFromDiskButton == null)

@@ -289,6 +289,7 @@ namespace spz {
 		}
 
 		static void EnsurePump() {
+			// Unity destroyed objects compare equal to null via overloaded ==.
 			if (_pump != null) return;
 			var go = new GameObject("SD_WeightFileImportPump");
 			UnityEngine.Object.DontDestroyOnLoad(go);
@@ -304,6 +305,10 @@ namespace spz {
 
 		sealed class SD_WeightFileImportPump : MonoBehaviour {
 			void Update() => PumpMainThread();
+			void OnDestroy() {
+				if (_pump == this)
+					_pump = null;
+			}
 		}
 	}
 }
