@@ -406,7 +406,7 @@ namespace spz {
 			labelLE.preferredHeight = 22f;
 			labelLE.minHeight = 20f;
 			var labelT = labelObj.AddComponent<TextMeshProUGUI>();
-			labelT.text = "Restore saved selection next launch (after Save settings)";
+			labelT.text = "Restore saved selection next launch (saves immediately when toggled)";
 			labelT.fontSize = 12;
 			labelT.color = new Color(0.65f, 0.65f, 0.68f, 1f);
 			labelT.alignment = TextAlignmentOptions.MidlineLeft;
@@ -454,7 +454,7 @@ namespace spz {
 		}
 
 		const string RememberRowTooltip =
-			"When on, the next launch restores which add-ons were enabled (after Save settings). Preferences such as Show in Command Ribbon are always saved with Save settings.";
+			"When on, this preference saves immediately and the next launch restores which add-ons were enabled. Preferences such as Show in Command Ribbon still need Save settings.";
 
 		void EnsureRememberRowTooltip(GameObject rowOrToggle) {
 			if (rowOrToggle == null)
@@ -759,9 +759,9 @@ namespace spz {
 		pillsLayout.spacing = 0f;
 		pillsLayout.padding = new RectOffset(3, 3, 3, 3);
 		pillsLayout.childControlWidth = false;
-		pillsLayout.childControlHeight = true;
+		pillsLayout.childControlHeight = false;
 		pillsLayout.childForceExpandWidth = false;
-		pillsLayout.childForceExpandHeight = true;
+		pillsLayout.childForceExpandHeight = false;
 		var toggleGroup = filterPillsObj.AddComponent<ToggleGroup>();
 		toggleGroup.allowSwitchOff = false;
 		_filterAllToggle = CreateFilterToggle("All", filterPillsObj.transform, toggleGroup, 0).GetComponent<Toggle>();
@@ -1466,6 +1466,8 @@ namespace spz {
 						headerHlg.childAlignment = TextAnchor.MiddleLeft;
 						int hPad = Mathf.RoundToInt(SpzUiThemeOps.ScaledSpace(2));
 						headerHlg.padding = new RectOffset(hPad, hPad, 0, 0);
+						headerHlg.childControlHeight = false;
+						headerHlg.childForceExpandHeight = false;
 					}
 				}
 				var title = _panel.transform.Find("Header/Title")?.GetComponent<TextMeshProUGUI>();
@@ -1747,6 +1749,11 @@ namespace spz {
 				if (removeBtn != null) {
 					Color dangerBg = Color.Lerp(t.panelBg, t.danger, 0.18f);
 					SpzUiThemeOps.ApplyBoundChromeSelectable(removeBtn, dangerBg, Color.Lerp(dangerBg, t.danger, 0.28f));
+					var removeLe = remove.GetComponent<LayoutElement>();
+					if (removeLe != null) {
+						removeLe.preferredWidth = 92f;
+						removeLe.minWidth = 88f;
+					}
 				}
 				var removeLabel = remove.GetComponentInChildren<TextMeshProUGUI>(true);
 				if (removeLabel != null) {
@@ -1796,7 +1803,10 @@ namespace spz {
 				name = item.transform.Find("Name")?.GetComponent<TextMeshProUGUI>();
 			if (name != null) {
 				float nameBase = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(name, 14f);
-				SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(name, t.textPrimary, nameBase);
+				// Not ReadableBody — wrap+Overflow stomps single-line Ellipsis and spills into prefs under Nomad.
+				SpzUiThemeOps.ApplyBoundChromeTmp(name, t.textPrimary, nameBase);
+				name.enableWordWrapping = false;
+				name.overflowMode = TextOverflowModes.Ellipsis;
 				name.raycastTarget = false;
 			}
 			if (toggle != null) {
@@ -2149,6 +2159,8 @@ namespace spz {
 			var bodyLE = prefsBody.GetComponent<LayoutElement>();
 			var bodyVlg = prefsBody.GetComponent<VerticalLayoutGroup>();
 			if (bodyVlg != null) {
+				// Snapshot before responsive pads so Restore SPZ does not treat Nomad/narrow pads as authored.
+				SpzUiThemeOps.ApplyScaledLayoutGroup(bodyVlg);
 				bodyVlg.padding = new RectOffset(leftIndent, padRight, padY, padY);
 				bodyVlg.spacing = sectionGap;
 				bodyVlg.childControlHeight = true;
@@ -2256,6 +2268,10 @@ namespace spz {
 				var toggle = (header != null ? header.Find("StatusToggle") : null)?.GetComponent<Toggle>();
 				if (toggle != null)
 					ApplyStatusDialVisual(toggle, toggle.isOn);
+				// Show-in-Ribbon dials also TintStatusDialGraphic under Nomad — restore must re-tint or green sticks.
+				var ribbonToggle = FindChildRecursive(item.transform, "ShowInRibbonToggle")?.GetComponent<Toggle>();
+				if (ribbonToggle != null && ribbonToggle.gameObject.activeSelf)
+					ThemeShowInRibbonDial(ribbonToggle, ribbonToggle.isOn, _statusOk, _statusMuted, _statusOk);
 			}
 		}
 		
@@ -2416,8 +2432,8 @@ namespace spz {
 			var removeBtnObj = new GameObject("RemoveButton");
 			removeBtnObj.transform.SetParent(headerObj.transform, false);
 			var removeBtnLE = removeBtnObj.AddComponent<LayoutElement>();
-			removeBtnLE.preferredWidth = 76f;
-			removeBtnLE.minWidth = 76f;
+			removeBtnLE.preferredWidth = 92f;
+			removeBtnLE.minWidth = 88f;
 			removeBtnLE.flexibleWidth = 0f;
 			removeBtnLE.preferredHeight = 28f;
 			removeBtnLE.minHeight = 28f;
