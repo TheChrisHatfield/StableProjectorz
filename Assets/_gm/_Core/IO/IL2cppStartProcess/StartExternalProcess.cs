@@ -255,7 +255,8 @@ namespace Lavender.Systems
 
 	    /// <summary>
 	    /// Show or hide top-level windows owned by any of <paramref name="processIds"/>.
-	    /// Returns how many windows were toggled. Processes started with CREATE_NO_WINDOW have no HWND (returns 0).
+	    /// Returns how many matching windows were targeted. Processes started with CREATE_NO_WINDOW have no HWND (returns 0).
+	    /// Note: Win32 ShowWindow's BOOL is "was previously visible", not success — do not use it as a success check.
 	    /// </summary>
 	    public static int TrySetWindowsVisibleForProcessIds(IEnumerable<uint> processIds, bool visible) {
 	        if (processIds == null) return 0;
@@ -272,8 +273,8 @@ namespace Lavender.Systems
 	            if (!want.Contains(ownerPid)) return true;
 	            // When hiding, only touch currently visible windows; when showing, also raise hidden ones.
 	            if (!visible && !IsWindowVisible(hWnd)) return true;
-	            if (ShowWindow(hWnd, showCmd))
-	                changed++;
+	            ShowWindow(hWnd, showCmd);
+	            changed++;
 	            return true;
 	        }, IntPtr.Zero);
 	        return changed;
