@@ -412,6 +412,9 @@ namespace spz {
 				+ on
 				+ " matched and enabled)."
 			);
+			// isEnabled alone does not create tabs — mirror EnableAddon's ribbon half without HTTP load.
+			if (instance != null)
+				instance.EnsureRibbonShellsForAllEnabledAddons();
 		}
 
 		static void HandleApplicationQuitting() {
@@ -606,6 +609,11 @@ namespace spz {
 			// Request Python to load each enabled addon (server exposes POST /load_addon)
 			if (_enableHttpServer) {
 				StartCoroutine(RequestLoadEnabledAddonsAfterDelay());
+			} else {
+				// No HTTP auto-load — still wire ribbon shells / FULL dock for remember-restored enables.
+				EnsureRibbonShellsForAllEnabledAddons();
+				if (IsAddonEnabled(RibbonOnlyFullscreenAddonId))
+					StartEnsureRibbonOnlyFullscreenViewportDock();
 			}
 			
 			// Start legacy C# HTTP server if enabled (deprecated - use FastAPI instead)
