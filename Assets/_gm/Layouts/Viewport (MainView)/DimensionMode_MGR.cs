@@ -100,6 +100,8 @@ namespace spz {
         
 	        _choice_originalScale = _3d_choice_button.transform.parent.localScale;
 	        _choicesPanel_anim.SetBool("ShowPanel", false);
+	        // Prefab leaves choice panel active; block hits until hover opens the fan.
+	        SetChoicesPanelRaycastsEnabled(false);
 	    }
 
 	    void Start(){
