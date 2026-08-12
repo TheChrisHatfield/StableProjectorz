@@ -204,8 +204,11 @@ namespace spz {
 	                    int optIx = dropdown.options.FindIndex(o => o.text == pickName);
 	                    if (optIx < 0)
 	                        optIx = FindIndex_matchingBaseName(dropdown.options, pickName);
-	                    if (optIx >= 0)
+	                    if (optIx >= 0){
 	                        dropdown.value = optIx;
+	                        // Fun-Union names lack "depth" — arm Depth send so Gen Art depth gate / isForDepth() work.
+	                        MaybeArmDepthSendForFlux2Pick(pickName);
+	                    }
 	                }
 	            }
 	        }
@@ -247,20 +250,31 @@ namespace spz {
 	        return anyDepth;
 	    }
 
-	    /// <summary>Prefer Fun-Controlnet-Union, else any Flux2 ControlNet name.</summary>
+	    /// <summary>Prefer Fun-Controlnet-Union (2602 if present), else any Flux2 ControlNet name.</summary>
 	    public static int FindPreferredFlux2ModelIndex(string[] choices){
 	        if (choices == null || choices.Length == 0) return -1;
-	        int anyFlux = -1, bestFun = -1;
+	        int anyFlux = -1, bestFun = -1, bestFun2602 = -1;
 	        for (int i = 0; i < choices.Length; i++){
 	            if (!ControlNetModelLooksFlux2(choices[i])) continue;
 	            if (anyFlux < 0) anyFlux = i;
 	            string n = (choices[i] ?? "").ToLowerInvariant();
 	            if (n.Contains("fun-controlnet") || n.Contains("fun_controlnet")){
-	                bestFun = i;
-	                break;
+	                if (n.Contains("2602")){ bestFun2602 = i; break; }
+	                if (bestFun < 0) bestFun = i;
 	            }
 	        }
+	        if (bestFun2602 >= 0) return bestFun2602;
 	        return bestFun >= 0 ? bestFun : anyFlux;
+	    }
+
+	    void MaybeArmDepthSendForFlux2Pick(string pickName){
+	        if (_myUnit == null || string.IsNullOrEmpty(pickName)) return;
+	        if (!ControlNetModelLooksFlux2(pickName)) return;
+	        string sd = null;
+	        try { sd = SD_InputPanel_UI.instance?.models?.selectedModel_name; } catch { /* */ }
+	        if (!SD_OptionsPacket.CheckpointLooksFlux2Dev(sd)) return;
+	        _myUnit.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false);
+	        TrySelectPreprocessorByName("None", out _, out _);
 	    }
 
 	    public static string FindPreferredDepthModelName(string[] choices){
@@ -344,11 +358,17 @@ namespace spz {
 	        _threshSliders.OnUnitAltered();
 
 	        string modelText = _model_dropdown.options[ix].text;
-	        // Klein + Flux2 Fun-Union: control image is already mesh depth — drop legacy depth_* preprocessors.
+	        // Flux2 Fun-Union: control image is already mesh depth — drop legacy depth_* preprocessors.
 	        try {
 	            string sd = SD_InputPanel_UI.instance != null ? SD_InputPanel_UI.instance.models?.selectedModel_name : null;
-	            if (SD_OptionsPacket.CheckpointNeedsKleinModules(sd) && ControlNetModelLooksFlux2(modelText))
+	            if (ControlNetModelLooksFlux2(modelText)
+	                && (SD_OptionsPacket.CheckpointNeedsKleinModules(sd)
+	                    || SD_OptionsPacket.CheckpointLooksFlux2Dev(sd))){
 	                TrySelectPreprocessorByName("None", out _, out _);
+	                if (SD_OptionsPacket.CheckpointLooksFlux2Dev(sd) && _myUnit != null
+	                    && !_myUnit.isForDepth() && !_myUnit.isForNormals())
+	                    _myUnit.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false);
+	            }
 	        } catch { /* input panel may be unset */ }
 	        if (modelText.ToLower().Contains("xl_depth")){
 	            string msg = "SDXL depth can make Low-Poly-Wireframe renders.  If so, fix it by blurring the Depth:" +

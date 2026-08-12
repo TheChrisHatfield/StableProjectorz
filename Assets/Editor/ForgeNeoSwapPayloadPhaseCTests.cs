@@ -425,9 +425,11 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 		Assert.That(dropdowns, Does.Contain("pairs with FLUX.2-dev"));
 		Assert.That(dropdowns, Does.Contain("CheckpointLooksFlux2Dev(sd))"));
 		Assert.That(dropdowns, Does.Contain("return FindPreferredFlux2ModelIndex(choices)"));
+		Assert.That(dropdowns, Does.Contain("MaybeArmDepthSendForFlux2Pick"));
+		Assert.That(dropdowns, Does.Contain("bestFun2602"));
 		Assert.That(dropdowns, Does.Contain("Do not auto-pick any CN weight").Or.Contain("ImageStitch structure instead"));
 		Assert.That(dropdowns, Does.Contain("no alwayson ControlNet (Fun-Union ineffective)").Or.Contain("does not lock geometry"));
-		Assert.That(dropdowns, Does.Contain("drop legacy depth_* preprocessors"));
+		Assert.That(dropdowns, Does.Contain("drop legacy depth_* preprocessors").Or.Contain("control image is already mesh depth"));
 		string options = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Options_Fetcher.cs"));
