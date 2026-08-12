@@ -453,6 +453,8 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "ControlNetUnit_UI.cs"));
 		Assert.That(unitUi, Does.Contain("no control image available for this unit"));
 		Assert.That(unitUi, Does.Contain("force None at payload time"));
+		Assert.That(unitUi, Does.Contain("CheckpointLooksFlux2Dev(sdCkpt)"),
+			"Fun-Union preprocessor None force must target FLUX.2-dev (Klein mismatches earlier).");
 		Assert.That(unitUi, Does.Contain("mesh-depth ImageStitch structure"));
 		string payload = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
