@@ -75,6 +75,8 @@ namespace spz {
 	    /// <summary>Colors save/export/load menu buttons from the active palette (ownership refs only).</summary>
 	    void ApplyThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            if (_options_slideOut != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_options_slideOut.transform);
 	            RestoreMenuButton(_save_button);
 	            RestoreMenuButton(_export_finalTex_dilate_button);
 	            RestoreMenuButton(_export_finalTex_NoDilate_button);
@@ -87,6 +89,11 @@ namespace spz {
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
+	        if (_options_slideOut != null) {
+	            var panelImg = _options_slideOut.GetComponent<UnityEngine.UI.Image>();
+	            if (panelImg != null)
+	                SpzUiThemeOps.ApplyBoundChromeGraphic(panelImg, t.panelBg);
+	        }
 	        ThemeMenuButton(_save_button, t);
 	        ThemeMenuButton(_export_finalTex_dilate_button, t);
 	        ThemeMenuButton(_export_finalTex_NoDilate_button, t);
