@@ -1485,10 +1485,13 @@ namespace spz {
 				return;
 			}
 
-			if (!_draftDirty)
+			if (!_draftDirty) {
 				SeedDraftFromLiveAddons();
-			else
+				// Re-baseline after install/refresh so new add-on ids are discardable if the user dirties later.
+				SnapshotShowInRibbonPrefs();
+			} else {
 				EnsureShowInRibbonSnapshotCoversAllAddons();
+			}
 			
 			var addons = Addon_MGR.instance.GetAddons();
 			var filteredAddons = new List<KeyValuePair<string, Addon_MGR.AddonInfo>>();
