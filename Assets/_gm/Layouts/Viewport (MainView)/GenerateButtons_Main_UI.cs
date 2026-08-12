@@ -252,7 +252,10 @@ namespace spz {
 	        foreach (var img in btn.GetComponentsInChildren<Image>(true)) {
 	            if (img == null || img == btn.targetGraphic) continue;
 	            string n = img.gameObject.name ?? "";
-	            if (n.IndexOf("triangle", System.StringComparison.OrdinalIgnoreCase) >= 0)
+	            if (n.IndexOf("triangle", System.StringComparison.OrdinalIgnoreCase) >= 0
+	                || n.IndexOf("bevel", System.StringComparison.OrdinalIgnoreCase) >= 0
+	                || n.IndexOf("chevron", System.StringComparison.OrdinalIgnoreCase) >= 0
+	                || SpzUiThemeOps.IsAuthoredIconFace(img))
 	                SpzUiThemeOps.HideAuthoredGraphicForTheme(img);
 	        }
 	        var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
