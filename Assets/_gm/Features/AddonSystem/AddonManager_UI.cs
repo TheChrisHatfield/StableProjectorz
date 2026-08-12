@@ -393,15 +393,18 @@ namespace spz {
 			rowH.spacing = grid;
 			rowH.childAlignment = TextAnchor.MiddleLeft;
 			rowH.childControlWidth = true;
-			rowH.childControlHeight = true;
+			// false: Nomad BoundChrome + force-expand stretched the Remember face into a green capsule.
+			rowH.childControlHeight = false;
 			rowH.childForceExpandWidth = true;
-			rowH.childForceExpandHeight = true;
+			rowH.childForceExpandHeight = false;
 			var labelObj = new GameObject("Label");
 			labelObj.transform.SetParent(row.transform, false);
 			var labelLE = labelObj.AddComponent<LayoutElement>();
 			labelLE.minWidth = 200f;
 			labelLE.preferredWidth = 420f;
 			labelLE.flexibleWidth = 1f;
+			labelLE.preferredHeight = 22f;
+			labelLE.minHeight = 20f;
 			var labelT = labelObj.AddComponent<TextMeshProUGUI>();
 			labelT.text = "Restore saved selection next launch (after Save settings)";
 			labelT.fontSize = 12;
@@ -411,11 +414,12 @@ namespace spz {
 			var toggleContainer = new GameObject("ToggleWrap");
 			toggleContainer.transform.SetParent(row.transform, false);
 			var tLE = toggleContainer.AddComponent<LayoutElement>();
-			tLE.preferredWidth = 44f;
-			tLE.minWidth = 40f;
+			tLE.preferredWidth = 22f;
+			tLE.minWidth = 22f;
 			tLE.flexibleWidth = 0f;
-			tLE.preferredHeight = 20f;
-			tLE.minHeight = 18f;
+			tLE.preferredHeight = 22f;
+			tLE.minHeight = 22f;
+			tLE.flexibleHeight = 0f;
 			var bg = new GameObject("Background");
 			bg.transform.SetParent(toggleContainer.transform, false);
 			var bgR = bg.AddComponent<RectTransform>();
@@ -1562,6 +1566,32 @@ namespace spz {
 			if (_rememberEnabledAddonToggle != null) {
 				SpzUiThemeOps.ThemeCheckboxToggle(
 					_rememberEnabledAddonToggle, t.controlBg, t.accent, t.success);
+				LockRememberToggleSquare(_rememberEnabledAddonToggle);
+			}
+		}
+
+		/// <summary>Keep Remember checkbox square after Nomad ThemeCheckboxToggle / SolidSquare.</summary>
+		static void LockRememberToggleSquare(Toggle toggle) {
+			if (toggle == null) return;
+			var le = toggle.GetComponent<LayoutElement>();
+			if (le != null) {
+				le.preferredWidth = 22f;
+				le.minWidth = 22f;
+				le.preferredHeight = 22f;
+				le.minHeight = 22f;
+				le.flexibleWidth = 0f;
+				le.flexibleHeight = 0f;
+			}
+			var rt = toggle.transform as RectTransform;
+			if (rt != null)
+				rt.sizeDelta = new Vector2(22f, 22f);
+			var row = toggle.transform.parent;
+			if (row != null) {
+				var hlg = row.GetComponent<HorizontalLayoutGroup>();
+				if (hlg != null) {
+					hlg.childControlHeight = false;
+					hlg.childForceExpandHeight = false;
+				}
 			}
 		}
 
