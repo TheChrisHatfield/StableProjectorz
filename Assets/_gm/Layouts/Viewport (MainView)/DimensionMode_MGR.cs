@@ -53,6 +53,8 @@ namespace spz {
 	    bool _capturedChoicesPanelAuthored;
 	    bool _choicesFanFlipped;
 	    bool _lastWantChoicesFanFlip;
+	    bool _choicesPanelRaycasterAuthoredIgnoreReversed;
+	    bool _capturedChoicesPanelRaycaster;
 
 	    public static Action<DimensionMode> _Act_OnDimensionChanged { get; set; } = null;
 
@@ -154,8 +156,23 @@ namespace spz {
 	        if (flip)
 	            scale.x = -Mathf.Abs(scale.x == 0f ? 1f : scale.x);
 	        _choicesPanel_rectTransf.localScale = scale;
+	        // Prefab GraphicRaycaster has ignoreReversedGraphics=true — with scale.x<0 hits die (SD/3D/UV dead).
+	        ApplyChoicesPanelRaycasterForMirror(flip);
 	        UnflipChoiceLabelsForMirror();
 	        _choicesFanFlipped = flip;
+	    }
+
+	    void ApplyChoicesPanelRaycasterForMirror(bool flip) {
+	        var raycaster = _choicesPanel_rectTransf != null
+	            ? _choicesPanel_rectTransf.GetComponent<GraphicRaycaster>()
+	            : null;
+	        if (raycaster == null)
+	            return;
+	        if (!_capturedChoicesPanelRaycaster) {
+	            _choicesPanelRaycasterAuthoredIgnoreReversed = raycaster.ignoreReversedGraphics;
+	            _capturedChoicesPanelRaycaster = true;
+	        }
+	        raycaster.ignoreReversedGraphics = flip ? false : _choicesPanelRaycasterAuthoredIgnoreReversed;
 	    }
 
 	    void UnflipChoiceLabelsForMirror() {
