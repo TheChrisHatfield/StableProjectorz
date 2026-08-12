@@ -1263,10 +1263,28 @@ namespace spz {
 
 		/// <summary>
 		/// Ensures a centered <c>MonolithLineIcon</c> under <paramref name="owner"/> and hides authored
-		/// icon Images named icon/Icon. Restores when builtin default is active.
+		/// icon Images named icon/Icon (and preserveAspect glyph faces). Restores when builtin default is active.
 		/// </summary>
 		public static void ApplyControlLineIcon(Transform owner, StudioLineIcon glyph, float sizePx = 22f) {
 			ApplyControlLineIconAt(owner, glyph, sizePx, Vector2.zero);
+		}
+
+		/// <summary>
+		/// Horizontal label buttons (SD SERV / 3D SERV): Monolith on the left so a centered glyph
+		/// cannot stamp over the label. Authored folder silhouettes are hidden via <see cref="HideAuthoredIconsUnder"/>.
+		/// </summary>
+		public static void ApplyControlLineIconLeading(Transform owner, StudioLineIcon glyph, float sizePx = 16f, float padLeft = 6f) {
+			if (owner == null) return;
+			ApplyControlLineIconAt(owner, glyph, sizePx, Vector2.zero);
+			if (!ShouldRecolorBoundChrome) return;
+			Transform iconT = FindDirectChildIncludingInactive(owner, ControlLineIconChildName);
+			var rt = iconT as RectTransform;
+			if (rt == null) return;
+			rt.anchorMin = new Vector2(0f, 0.5f);
+			rt.anchorMax = new Vector2(0f, 0.5f);
+			rt.pivot = new Vector2(0.5f, 0.5f);
+			rt.anchoredPosition = new Vector2(padLeft + sizePx * 0.5f, 0f);
+			rt.sizeDelta = new Vector2(sizePx, sizePx);
 		}
 
 		/// <summary>Same as <see cref="ApplyControlLineIcon"/> with an explicit anchored position (icon-above-label cells).</summary>
@@ -1463,7 +1481,8 @@ namespace spz {
 				// Never disable a Selectable's targetGraphic — dead clicks under Nomad (name may contain "Icon").
 				if (IsSelectableTargetGraphic(img))
 					continue;
-				if (!IsAuthoredIconImageName(n))
+				// Name match OR preserveAspect non-solid glyph (SERV folder sprites often lack "Icon" in name).
+				if (!IsAuthoredIconImageName(n) && !IsAuthoredIconFace(img))
 					continue;
 				var tag = img.GetComponent<SpzUiThemeHiddenGraphic>();
 				if (tag == null) {

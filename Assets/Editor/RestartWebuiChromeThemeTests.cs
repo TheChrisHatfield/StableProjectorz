@@ -24,6 +24,7 @@ public sealed class RestartWebuiChromeThemeTests {
 		Assert.That(src, Does.Contain("ThemeChanged += ApplyThemeTokens"));
 		Assert.That(src, Does.Contain("ApplyBoundChromeSelectable"));
 		Assert.That(src, Does.Contain("ApplyBoundChromeCompactToolLabelTmp"));
+		Assert.That(src, Does.Contain("ApplyControlLineIconLeading"));
 		Assert.That(src, Does.Contain("StudioLineIcon.Folder"));
 		Assert.That(src, Does.Contain("RestoreBoundChromeUnder"));
 	}
@@ -63,7 +64,7 @@ public sealed class RestartWebuiChromeThemeTests {
 		var root = new GameObject("RestartWebui", typeof(RectTransform));
 		root.SetActive(false);
 		try {
-			Button MakeBtn(string name, string labelText, out TextMeshProUGUI label) {
+			Button MakeBtn(string name, string labelText, out TextMeshProUGUI label, out Image authoredFolder) {
 				var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
 				go.transform.SetParent(root.transform, false);
 				var face = go.GetComponent<Image>();
@@ -71,6 +72,12 @@ public sealed class RestartWebuiChromeThemeTests {
 				face.color = new Color(0.85f, 0.85f, 0.85f, 1f);
 				var btn = go.GetComponent<Button>();
 				btn.targetGraphic = face;
+				var folderGo = new GameObject("Image", typeof(RectTransform), typeof(Image));
+				folderGo.transform.SetParent(go.transform, false);
+				authoredFolder = folderGo.GetComponent<Image>();
+				authoredFolder.sprite = UiRuntimeSprites.GetLineIcon(StudioLineIcon.Folder);
+				authoredFolder.preserveAspect = true;
+				authoredFolder.enabled = true;
 				var labelGo = new GameObject("Text", typeof(RectTransform));
 				labelGo.transform.SetParent(go.transform, false);
 				label = labelGo.AddComponent<TextMeshProUGUI>();
@@ -80,8 +87,8 @@ public sealed class RestartWebuiChromeThemeTests {
 				return btn;
 			}
 
-			var launch = MakeBtn("SD SERV", "SD SERV", out var launchLabel);
-			var file = MakeBtn("Folder", "", out var fileLabel);
+			var launch = MakeBtn("SD SERV", "SD SERV", out var launchLabel, out var launchAuthored);
+			var file = MakeBtn("Folder", "", out var fileLabel, out var fileAuthored);
 			fileLabel.text = "";
 
 			var ui = root.AddComponent<RestartTheWebui>();
@@ -101,11 +108,22 @@ public sealed class RestartWebuiChromeThemeTests {
 			Assert.That(launchLabel.characterSpacing, Is.LessThan(4f), "SD SERV must not use strip tracking 18");
 			Assert.That(launchLabel.enableWordWrapping, Is.False);
 			Assert.That(launch.targetGraphic.raycastTarget, Is.True);
+			Assert.That(launchAuthored.enabled, Is.False, "authored folder must hide (was ghosting under SERV)");
+			Assert.That(fileAuthored.enabled, Is.False);
+
+			var launchIcon = SpzUiThemeOps.FindDirectChildIncludingInactive(launch.transform, "MonolithLineIcon");
+			Assert.That(launchIcon, Is.Not.Null);
+			Assert.That(launchIcon.GetComponent<Image>().sprite,
+				Is.EqualTo(UiRuntimeSprites.GetLineIcon(StudioLineIcon.Bullseye)));
+			var launchRt = launchIcon as RectTransform;
+			Assert.That(launchRt.anchorMin.x, Is.EqualTo(0f).Within(0.001f), "SERV Monolith must lead left, not center over label");
+			Assert.That(launchRt.anchoredPosition.x, Is.GreaterThan(0f));
 
 			var folderIcon = SpzUiThemeOps.FindDirectChildIncludingInactive(file.transform, "MonolithLineIcon");
 			Assert.That(folderIcon, Is.Not.Null);
 			Assert.That(folderIcon.GetComponent<Image>().sprite,
 				Is.EqualTo(UiRuntimeSprites.GetLineIcon(StudioLineIcon.Folder)));
+			Assert.That((folderIcon as RectTransform).anchorMin.x, Is.EqualTo(0f).Within(0.001f));
 		}
 		finally {
 			Object.DestroyImmediate(root);
