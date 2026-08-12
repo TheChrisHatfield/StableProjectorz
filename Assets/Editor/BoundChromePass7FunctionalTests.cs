@@ -169,6 +169,8 @@ public sealed class BoundChromePass7FunctionalTests {
 			"Leave must overwrite Nomad first-write TMP color so Restore keeps Gen Art black");
 		Assert.That(src, Does.Contain("ApplyFaceRectLayout(faceRt, genArt, genRefImg)"),
 			"OPEN RIGHT must use the same Gen Art face insets as FULL/SRN");
+		Assert.That(src, Does.Not.Contain("preferredHeight = 52f"),
+			"OPEN RIGHT menu/row height must track Gen Art face height, not hardcoded 52");
 		int onDestroy = src.IndexOf("void OnDestroy()", System.StringComparison.Ordinal);
 		Assert.That(onDestroy, Is.GreaterThan(0));
 		string destroyBody = src.Substring(onDestroy, System.Math.Min(500, src.Length - onDestroy));

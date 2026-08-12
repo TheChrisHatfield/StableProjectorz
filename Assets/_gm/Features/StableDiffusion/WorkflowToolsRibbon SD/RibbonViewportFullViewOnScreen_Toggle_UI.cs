@@ -889,10 +889,12 @@ namespace spz {
 				_fullViewMenuRt.anchorMin = Vector2.zero;
 				_fullViewMenuRt.anchorMax = Vector2.zero;
 				_fullViewMenuRt.pivot = new Vector2(0.5f, 0.5f);
-				_fullViewMenuRt.sizeDelta = new Vector2(0f, 52f);
+				float menuSlotH = GetVisualGenArtFaceHeightPx(
+					ResolveGenerateButtonsMain()?.GenArtButtonRectTransform, genRefImg);
+				_fullViewMenuRt.sizeDelta = new Vector2(0f, menuSlotH);
 				var menuLe = menuGo.AddComponent<LayoutElement>();
-				menuLe.preferredHeight = 52f;
-				menuLe.minHeight = 52f;
+				menuLe.preferredHeight = menuSlotH;
+				menuLe.minHeight = menuSlotH;
 				menuLe.flexibleHeight = 0f;
 				menuLe.flexibleWidth = 0f;
 				var vlg = menuGo.AddComponent<VerticalLayoutGroup>();
@@ -939,7 +941,7 @@ namespace spz {
 			if (show && _builtRowRt != null && _fullViewMenuRt.parent == _builtRowRt.parent) {
 				_fullViewMenuRt.SetSiblingIndex(_builtRowRt.GetSiblingIndex() + 1);
 			}
-			// OPEN RIGHT adds/removes 52px — only re-fit when visibility actually changes.
+			// OPEN RIGHT adds/removes Gen Art face-height slot — only re-fit when visibility actually changes.
 			if (wasShown != show)
 				ApplyAdaptiveBottomGap(force: true);
 		}
@@ -964,15 +966,18 @@ namespace spz {
 			rowGo.layer = parent.gameObject.layer;
 			var rowRt = rowGo.AddComponent<RectTransform>();
 			rowRt.SetParent(parent, false);
-			rowRt.sizeDelta = new Vector2(144f, 52f);
+			var genArt = ResolveGenerateButtonsMain()?.GenArtButtonRectTransform;
+			float slotH = GetVisualGenArtFaceHeightPx(genArt, genRefImg);
+			rowRt.sizeDelta = new Vector2(0f, slotH);
 			var le = rowGo.AddComponent<LayoutElement>();
-			le.preferredHeight = 52f;
+			le.preferredHeight = slotH;
+			le.minHeight = slotH;
+			le.flexibleHeight = 0f;
 			// Same inset face as FULL/SRN / GEN ART — do not paint the full VLG child width.
 			var faceGo = new GameObject("DockButtonFace");
 			faceGo.layer = rowGo.layer;
 			var faceRt = faceGo.AddComponent<RectTransform>();
 			faceRt.SetParent(rowRt, false);
-			var genArt = ResolveGenerateButtonsMain()?.GenArtButtonRectTransform;
 			ApplyFaceRectLayout(faceRt, genArt, genRefImg);
 			var img = faceGo.AddComponent<Image>();
 			if (genRefImg != null && genRefImg.sprite != null) {
@@ -985,6 +990,13 @@ namespace spz {
 			}
 			var btn = faceGo.AddComponent<Button>();
 			btn.targetGraphic = img;
+			var genBtn = genArt != null ? genArt.GetComponent<Button>() : null;
+			if (genBtn != null) {
+				btn.transition = genBtn.transition;
+				btn.colors = genBtn.colors;
+				btn.spriteState = genBtn.spriteState;
+				btn.animationTriggers = genBtn.animationTriggers;
+			}
 			btn.onClick.AddListener(onClick);
 			var txtGo = new GameObject("Text (TMP)");
 			txtGo.layer = faceGo.layer;
