@@ -128,7 +128,23 @@ class RemoteForgeBackend(CloudBackend):
         if not path.startswith("/"):
             path = "/" + path
         url = self.base_url + path
-        req_headers = {k: v for k, v in headers.items() if k.lower() not in ("host", "content-length")}
+        req_headers = {
+            k: v
+            for k, v in headers.items()
+            if k.lower()
+            not in (
+                "host",
+                "content-length",
+                "transfer-encoding",
+                "connection",
+                "keep-alive",
+                "proxy-connection",
+                "te",
+                "trailers",
+                "upgrade",
+                "expect",
+            )
+        }
         req = urllib.request.Request(url, data=body, headers=req_headers, method=method.upper())
         try:
             with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
