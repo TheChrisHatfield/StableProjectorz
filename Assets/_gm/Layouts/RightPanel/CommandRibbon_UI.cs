@@ -646,6 +646,9 @@ namespace spz {
 	        if (strip != null) {
 	            if (!recolorChrome) {
 	                SpzUiThemeOps.RestoreBoundChromeUnder(strip);
+	                // ComposeNomadStripIconsNative plants SpzStripLineIconOverride — clear so Leave SPZ
+	                // uses ResolveStripTabLineIcon (Nomad Brush/Layers glyphs must not stick on addon icon strip).
+	                ClearStripLineIconOverridesUnder(strip);
 	                // Keep SPZ line icons when add-on tabs are on the strip; otherwise match OG text tabs.
 	                if (!builtinAddonIconStrip)
 	                    HideMonolithOverlaysUnder(strip);
