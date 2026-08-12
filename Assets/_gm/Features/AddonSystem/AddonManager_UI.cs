@@ -1122,10 +1122,20 @@ namespace spz {
 				_suppressEnabledListRefresh = false;
 			}
 			RefreshAddonsList();
-			if (changed == 0)
-				ShowStatus("Settings saved. Selection and preferences persisted for next launch.", true);
-			else
-				ShowStatus($"Settings saved — {changed} add-on(s) applied; preferences persisted.", true);
+			bool rememberOn = Addon_MGR.GetRememberEnabledAddonsPreference();
+			if (changed == 0) {
+				ShowStatus(
+					rememberOn
+						? "Settings saved. Selection and preferences persisted for next launch."
+						: "Settings saved. Preferences persisted; enable selection restore is off (Remember).",
+					true);
+			} else {
+				ShowStatus(
+					rememberOn
+						? $"Settings saved — {changed} add-on(s) applied; selection and preferences persisted."
+						: $"Settings saved — {changed} add-on(s) applied; preferences persisted (Remember off — selection not restored next launch).",
+					true);
+			}
 		}
 
 		bool GetDraftEnabled(string addonId, bool fallbackActual) {
