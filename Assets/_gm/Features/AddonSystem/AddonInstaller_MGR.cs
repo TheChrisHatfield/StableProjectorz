@@ -498,16 +498,20 @@ namespace spz {
 		/// Removes an add-on by ID
 		/// </summary>
 		public void RemoveAddon(string addonId, Action<bool, string> onComplete) {
+			StartCoroutine(RemoveAddonCrtn(addonId, onComplete));
+		}
+
+		IEnumerator RemoveAddonCrtn(string addonId, Action<bool, string> onComplete) {
 			if (string.IsNullOrEmpty(addonId)) {
 				onComplete?.Invoke(false, "Invalid add-on ID");
-				return;
+				yield break;
 			}
 			
 			// Check if streamingAssetsPath is valid first
 			if (string.IsNullOrEmpty(Application.streamingAssetsPath)) {
 				UnityEngine.Debug.LogError("[AddonInstaller] Application.streamingAssetsPath is null or empty");
 				onComplete?.Invoke(false, "StreamingAssets path is not available");
-				return;
+				yield break;
 			}
 			
 			string addonPath = null;
@@ -516,12 +520,12 @@ namespace spz {
 			} catch (Exception e) {
 				UnityEngine.Debug.LogError($"[AddonInstaller] Failed to combine addon path: {e.Message}");
 				onComplete?.Invoke(false, $"Failed to construct addon path: {e.Message}");
-				return;
+				yield break;
 			}
 			
 			if (string.IsNullOrEmpty(addonPath)) {
 				onComplete?.Invoke(false, "Addon path is null or empty");
-				return;
+				yield break;
 			}
 			
 			bool dirExists = false;
@@ -530,35 +534,36 @@ namespace spz {
 			} catch (Exception e) {
 				UnityEngine.Debug.LogError($"[AddonInstaller] Failed to check if addon directory exists: {e.Message}");
 				onComplete?.Invoke(false, $"Failed to check addon directory: {e.Message}");
-				return;
+				yield break;
 			}
 			
 			if (!dirExists) {
 				onComplete?.Invoke(false, $"Add-on '{addonId}' not found");
-				return;
+				yield break;
+			}
+			
+			// Must finish Python unregister + UI tear-down before deleting the folder (HTTP unload is async).
+			if (Addon_MGR.instance != null) {
+				bool unloadDone = false;
+				Addon_MGR.instance.UnloadAddon(addonId, () => unloadDone = true);
+				while (!unloadDone)
+					yield return null;
 			}
 			
 			try {
-				// Unload add-on first if it's loaded
-				if (Addon_MGR.instance != null) {
-					Addon_MGR.instance.UnloadAddon(addonId);
-				}
-				
-				// Delete directory
 				try {
 					Directory.Delete(addonPath, true);
 				} catch (Exception e) {
 					UnityEngine.Debug.LogError($"[AddonInstaller] Failed to delete addon directory: {e.Message}");
-					throw;
+					onComplete?.Invoke(false, $"Removal failed: {e.Message}");
+					yield break;
 				}
 				
-				// Refresh discovery
 				if (Addon_MGR.instance != null) {
 					Addon_MGR.instance.DiscoverAddons();
 				}
 				
 				onComplete?.Invoke(true, $"Add-on '{addonId}' removed successfully");
-				
 			} catch (Exception e) {
 				UnityEngine.Debug.LogError($"[AddonInstaller] Error removing add-on: {e.Message}");
 				onComplete?.Invoke(false, $"Removal failed: {e.Message}");

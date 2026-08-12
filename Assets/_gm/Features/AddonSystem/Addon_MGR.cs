@@ -818,7 +818,12 @@ namespace spz {
 					if (!foundIds.Contains(key)) toRemove.Add(key);
 				}
 				foreach (var key in toRemove) {
-					UnloadAddon(key);
+					// Already unloaded (e.g. RemoveAddon waited) — only shell cleanup + drop registry.
+					if (_registeredAddons.TryGetValue(key, out var gone) && gone != null && !gone.isEnabled) {
+						DestroyAddonUiShell(key);
+					} else {
+						UnloadAddon(key);
+					}
 					_registeredAddons.Remove(key);
 				}
 
@@ -1680,8 +1685,12 @@ namespace spz {
 		/// Unloads an add-on and destroys its UI elements (panel content, ribbon tab, and clears all registries).
 		/// When HTTP is up, waits for Python <c>unregister()</c> first so panel get_value/save can still run.
 		/// </summary>
-		public void UnloadAddon(string addonId) {
-			if (!_registeredAddons.ContainsKey(addonId)) return;
+		/// <param name="onComplete">Fired after UI tear-down (and HTTP unload when enabled). May run sync when HTTP is off.</param>
+		public void UnloadAddon(string addonId, Action onComplete = null) {
+			if (!_registeredAddons.ContainsKey(addonId)) {
+				onComplete?.Invoke();
+				return;
+			}
 			
 			var addon = _registeredAddons[addonId];
 			addon.isEnabled = false;
@@ -1693,27 +1702,33 @@ namespace spz {
 			if (_enableHttpServer) {
 				// Do not DestroyAddonUI before POST /unload_addon — GenerationDoneAudio/GpuFlow unregister
 				// still read panel values via get_value (AddonDebug showed get_value after RemoveAddonPanel).
-				StartCoroutine(CoPythonUnloadThenDestroyUi(addonId));
+				StartCoroutine(CoPythonUnloadThenDestroyUi(addonId, onComplete));
 				return;
 			}
 
 			DestroyAddonUiShell(addonId);
 			UnityEngine.Debug.Log($"[Addon_MGR] Unloaded add-on: {addonId}");
 			OnAddonEnabledStateChanged?.Invoke(addonId);
+			onComplete?.Invoke();
 		}
 
-		IEnumerator CoPythonUnloadThenDestroyUi(string addonId) {
+		IEnumerator CoPythonUnloadThenDestroyUi(string addonId, Action onComplete = null) {
 			int epoch = BumpLifecycleEpoch(addonId);
 			Coroutine op = StartCoroutine(RequestUnloadAddon(addonId, epoch));
 			_addonLifecycleOpById[addonId] = op;
 			yield return op;
-			if (IsAddonEnabled(addonId))
+			if (IsAddonEnabled(addonId)) {
+				onComplete?.Invoke();
 				yield break;
-			if (!IsLifecycleEpochCurrent(addonId, epoch))
+			}
+			if (!IsLifecycleEpochCurrent(addonId, epoch)) {
+				onComplete?.Invoke();
 				yield break;
+			}
 			DestroyAddonUiShell(addonId);
 			UnityEngine.Debug.Log($"[Addon_MGR] Unloaded add-on: {addonId}");
 			OnAddonEnabledStateChanged?.Invoke(addonId);
+			onComplete?.Invoke();
 		}
 
 		void DestroyAddonUiShell(string addonId) {

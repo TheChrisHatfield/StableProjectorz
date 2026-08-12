@@ -23,11 +23,12 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 	}
 
 	[Test]
-	public void EmptyShellStatus_DistinguishesLoadingVsHttpDown() {
+	public void RemoveAddon_WaitsForUnloadBeforeDelete() {
 		string path = Path.Combine(Directory.GetCurrentDirectory(),
-			"Assets", "_gm", "Layouts", "RightPanel", "CommandRibbon_UI.cs");
+			"Assets", "_gm", "Features", "AddonSystem", "AddonInstaller_MGR.cs");
 		string src = File.ReadAllText(path);
-		Assert.That(src, Does.Contain("ShouldSeedNativeAddonFallbackStatic"));
-		Assert.That(src, Does.Contain("still loading"));
+		Assert.That(src, Does.Contain("RemoveAddonCrtn"));
+		Assert.That(src, Does.Contain("UnloadAddon(addonId, () => unloadDone = true)"));
+		Assert.That(src, Does.Contain("while (!unloadDone)"));
 	}
 }
