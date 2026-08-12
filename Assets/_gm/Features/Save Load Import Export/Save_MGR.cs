@@ -395,7 +395,15 @@ namespace spz {
 
     
 	    void OnBasePathForTextures_Chosen( string filepath,  Dictionary<Texture2D,UDIM_Sector> saveMe, bool destroyTexs ){
-	        if (string.IsNullOrEmpty(filepath)){ return; }
+	        if (string.IsNullOrEmpty(filepath)){
+	            // Dialog cancel / empty path — still dispose caller-owned disposable Texture2Ds.
+	            if (destroyTexs && saveMe != null){
+	                foreach (var kvp in saveMe){
+	                    if (kvp.Key != null) DestroyImmediate(kvp.Key);
+	                }
+	            }
+	            return;
+	        }
 
 	        filepath = MakeUniquePath(filepath,suffix:"");
 	        EncodeAndSaveTextures(saveMe, filepath);
