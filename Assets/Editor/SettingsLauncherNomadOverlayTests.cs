@@ -96,6 +96,13 @@ public sealed class SettingsLauncherNomadOverlayTests {
 			Assert.That(face.type, Is.EqualTo(Image.Type.Simple));
 			Assert.That(UiRuntimeSprites.IsSolidRect(face.sprite), Is.True);
 			Assert.That(triImg.enabled, Is.False);
+
+			// Leave via ApplySolidSquareChrome itself (callers often re-invoke on ThemeChanged).
+			SpzUiThemeOps.ResetTheme();
+			SpzUiThemeOps.ApplySolidSquareChrome(btn, Color.gray, Color.yellow);
+			Assert.That(triImg.enabled, Is.True, "leave ApplySolidSquareChrome must RestoreBoundChromeUnder (unhide triangle)");
+			Assert.That(UiRuntimeSprites.IsSolidRect(face.sprite), Is.False,
+				"leave must unwind SolidRect sprite via RestoreRoundedControlSpritesUnder");
 		}
 		finally {
 			SpzUiThemeOps.TryApplyTheme(SpzUiThemeOps.DefaultThemeId, null, "replace", out _);
