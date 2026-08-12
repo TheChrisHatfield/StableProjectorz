@@ -134,7 +134,7 @@ namespace spz {
 		void RebuildParentLayout()
 		{
 			var parent = transform.parent as RectTransform;
-			if (parent != null)
+			if (parent != null && parent.gameObject.activeInHierarchy)
 				LayoutRebuilder.ForceRebuildLayoutImmediate(parent);
 		}
 
