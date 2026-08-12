@@ -7,7 +7,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Builtin CommandRibbon with enabled add-on tabs: SPZ-styled line icons + hover name (not Nomad BoundChrome).
+/// Builtin CommandRibbon: only enabled add-on tabs borrow SPZ line icons; Art/Mesh/Paint stay OG text.
 /// </summary>
 public sealed class CommandRibbonBuiltinAddonIconStripTests {
 
@@ -17,20 +17,76 @@ public sealed class CommandRibbonBuiltinAddonIconStripTests {
 	}
 
 	[Test]
-	public void ApplyThemeTokens_Source_UsesBuiltinAddonIconStrip() {
+	public void ApplyThemeTokens_Source_ScopesIconsToAddonCellsOnly() {
 		string path = Path.Combine(Application.dataPath, "_gm", "Layouts", "RightPanel", "CommandRibbon_UI.cs");
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("StripHasEnabledAddonTabs"));
-		Assert.That(src, Does.Contain("builtinAddonIconStrip"));
+		Assert.That(src, Does.Contain("IsAddonStripTabCell"));
+		Assert.That(src, Does.Contain("allowBuiltinAddonIcons"));
+		Assert.That(src, Does.Contain("cellAddonIcon"));
 		Assert.That(src, Does.Contain("EnsureSpzDefaultStripLineIcon"));
-		Assert.That(src, Does.Contain("SpzDefaultStripIconTint"));
-		Assert.That(src, Does.Contain("Hide visible label glyphs in icon strip"));
-		Assert.That(src, Does.Contain("Attach to the raycast face"));
-		Assert.That(src, Does.Contain("Hidden labels must not steal hover/clicks"));
+		Assert.That(src, Does.Contain("only enabled add-on tabs borrow"));
 		Assert.That(src, Does.Contain("Harmonize-before-theme measured maxVisibleCharacters=0"));
 		Assert.That(src, Does.Contain("Deactivate before Destroy so StripHasEnabledAddonTabs"));
-		Assert.That(src, Does.Contain("ignore inactive / doomed GOs"));
-		Assert.That(src, Does.Contain("re-apply strip icon/text chrome after repair"));
+	}
+
+	[Test]
+	public void IsAddonStripTabCell_DetectsAddonTitleNotPaint() {
+		var paint = new GameObject("Tab: Paint", typeof(RectTransform), typeof(Button), typeof(TabsGroupElem_UI));
+		var addon = new GameObject("Tab: Demo", typeof(RectTransform), typeof(Button), typeof(TabsGroupElem_UI));
+		paint.SetActive(false);
+		addon.SetActive(false);
+		try {
+			paint.GetComponent<TabsGroupElem_UI>().InitForRuntime("paint", paint.GetComponent<Button>());
+			addon.GetComponent<TabsGroupElem_UI>().InitForRuntime("addon_Demo", addon.GetComponent<Button>());
+			Assert.That(CommandRibbon_UI.IsAddonStripTabCell(paint.transform), Is.False);
+			Assert.That(CommandRibbon_UI.IsAddonStripTabCell(addon.transform), Is.True);
+		}
+		finally {
+			Object.DestroyImmediate(paint);
+			Object.DestroyImmediate(addon);
+		}
+	}
+
+	[Test]
+	public void ThemeStripTabCell_BuiltinArt_KeepsTextEvenWhenAddonIconsAllowed() {
+		SpzUiThemeOps.ResetTheme();
+		var root = new GameObject("BuiltinArtWithAddons");
+		root.SetActive(false);
+		try {
+			var ribbon = root.AddComponent<CommandRibbon_UI>();
+			var cell = new GameObject("Tab: art list", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement), typeof(TabsGroupElem_UI));
+			cell.transform.SetParent(root.transform, false);
+			cell.GetComponent<TabsGroupElem_UI>().InitForRuntime("art list", cell.GetComponent<Button>());
+			cell.GetComponent<Button>().targetGraphic = cell.GetComponent<Image>();
+
+			var labelGo = new GameObject("Input (text)", typeof(RectTransform));
+			labelGo.transform.SetParent(cell.transform, false);
+			var label = labelGo.AddComponent<TextMeshProUGUI>();
+			label.text = "ART";
+			label.maxVisibleCharacters = int.MaxValue;
+
+			var iconGo = new GameObject("MonolithLineIcon", typeof(RectTransform), typeof(Image));
+			iconGo.transform.SetParent(cell.transform, false);
+			iconGo.SetActive(true);
+
+			var theme = typeof(CommandRibbon_UI).GetMethod("ThemeStripTabCell",
+				BindingFlags.Instance | BindingFlags.NonPublic);
+			// hideStripLabels=false, builtinAddonIconStrip=false — Art is not an add-on cell.
+			theme.Invoke(ribbon, new object[] {
+				cell.transform,
+				SpzUiThemeOps.Active,
+				false,
+				false,
+				false,
+			});
+
+			Assert.That(label.maxVisibleCharacters, Is.EqualTo(int.MaxValue));
+			Assert.That(iconGo.activeSelf, Is.False, "Art must not borrow Nomad/SPZ strip icons");
+		}
+		finally {
+			Object.DestroyImmediate(root);
+		}
 	}
 
 	[Test]
@@ -81,23 +137,22 @@ public sealed class CommandRibbonBuiltinAddonIconStripTests {
 
 	[Test]
 	public void ThemeStripTabCell_BuiltinAddonIcon_PrefabTmpOnly_KeepsLabelHitsAndTooltip() {
-		// Prefab Art pattern: null targetGraphic, no TabBg — OG hits landed on TMP.
-		// Builtin icon strip must not Ensure synthetic TabBg (sticky after Leave); keep TMP hits + tooltip on label.
+		// Addon tab with no TabBg — keep TMP hits; attach tooltip to label.
 		SpzUiThemeOps.ResetTheme();
 		var root = new GameObject("BuiltinAddonIconPrefabTab");
 		root.SetActive(false);
 		try {
 			var ribbon = root.AddComponent<CommandRibbon_UI>();
-			var cell = new GameObject("Tab: art list", typeof(RectTransform), typeof(Button), typeof(LayoutElement), typeof(TabsGroupElem_UI));
+			var cell = new GameObject("Tab: Demo", typeof(RectTransform), typeof(Button), typeof(LayoutElement), typeof(TabsGroupElem_UI));
 			cell.transform.SetParent(root.transform, false);
 			var btn = cell.GetComponent<Button>();
 			btn.targetGraphic = null;
-			cell.GetComponent<TabsGroupElem_UI>().InitForRuntime("art list", btn);
+			cell.GetComponent<TabsGroupElem_UI>().InitForRuntime("addon_Demo", btn);
 
 			var labelGo = new GameObject("Input (text)", typeof(RectTransform));
 			labelGo.transform.SetParent(cell.transform, false);
 			var label = labelGo.AddComponent<TextMeshProUGUI>();
-			label.text = "ART";
+			label.text = "Demo Addon";
 			label.raycastTarget = true;
 			label.maxVisibleCharacters = int.MaxValue;
 
@@ -112,7 +167,7 @@ public sealed class CommandRibbonBuiltinAddonIconStripTests {
 			});
 
 			Assert.That(label.maxVisibleCharacters, Is.EqualTo(0));
-			Assert.That(label.raycastTarget, Is.True, "TMP-only prefab must keep label hits (no Ensure TabBg)");
+			Assert.That(label.raycastTarget, Is.True, "TMP-only addon must keep label hits (no Ensure TabBg)");
 			Assert.That(cell.transform.Find("TabBg"), Is.Null, "must not inject sticky synthetic TabBg");
 			var tip = label.GetComponent<CanShowTooltip_UI>();
 			Assert.That(tip, Is.Not.Null, "hover name must attach to the hittable label");
@@ -203,7 +258,7 @@ public sealed class CommandRibbonBuiltinAddonIconStripTests {
 	}
 
 	[Test]
-	public void TrySetStripTabLineIcon_BuiltinWithAddons_KeepsMonolithActive() {
+	public void TrySetStripTabLineIcon_BuiltinPaintStaysText_AddonKeepsIcon() {
 		SpzUiThemeOps.ResetTheme();
 		Assert.That(SpzUiThemeOps.ShouldRecolorBoundChrome, Is.False);
 		var root = new GameObject("SetLineIconRibbon");
@@ -216,23 +271,28 @@ public sealed class CommandRibbonBuiltinAddonIconStripTests {
 			typeof(CommandRibbon_UI).GetField("_tabGroup", BindingFlags.Instance | BindingFlags.NonPublic)
 				?.SetValue(ribbon, tg);
 
-			var cell = new GameObject("Tab: Paint", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement), typeof(TabsGroupElem_UI));
-			cell.transform.SetParent(strip.transform, false);
-			cell.GetComponent<TabsGroupElem_UI>().InitForRuntime("paint", cell.GetComponent<Button>());
-			cell.GetComponent<Button>().targetGraphic = cell.GetComponent<Image>();
+			var paint = new GameObject("Tab: Paint", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement), typeof(TabsGroupElem_UI));
+			paint.transform.SetParent(strip.transform, false);
+			paint.GetComponent<TabsGroupElem_UI>().InitForRuntime("paint", paint.GetComponent<Button>());
+			paint.GetComponent<Button>().targetGraphic = paint.GetComponent<Image>();
 
-			var addon = new GameObject("Tab: Demo", typeof(RectTransform), typeof(Button), typeof(TabsGroupElem_UI));
+			var addon = new GameObject("Tab: Demo", typeof(RectTransform), typeof(Image), typeof(Button), typeof(TabsGroupElem_UI));
 			addon.transform.SetParent(strip.transform, false);
 			addon.GetComponent<TabsGroupElem_UI>().InitForRuntime("addon_Demo", addon.GetComponent<Button>());
+			addon.GetComponent<Button>().targetGraphic = addon.GetComponent<Image>();
 			var dict = typeof(CommandRibbon_UI).GetField("_addonTabById", BindingFlags.Instance | BindingFlags.NonPublic)
 				?.GetValue(ribbon) as System.Collections.IDictionary;
 			dict?.Add("Demo", addon);
 
-			Assert.That(ribbon.TrySetStripTabLineIcon("Paint", StudioLineIcon.Brush, out string err), Is.True, err);
-			var iconT = SpzUiThemeOps.FindDirectChildIncludingInactive(cell.transform, "MonolithLineIcon");
-			Assert.That(iconT, Is.Not.Null);
-			Assert.That(iconT.gameObject.activeSelf, Is.True, "set_line_icon must not hide Monolith on builtin addon strip");
-			Assert.That(iconT.GetComponent<Image>().raycastTarget, Is.False);
+			Assert.That(ribbon.TrySetStripTabLineIcon("Paint", StudioLineIcon.Brush, out string errPaint), Is.True, errPaint);
+			var paintIcon = SpzUiThemeOps.FindDirectChildIncludingInactive(paint.transform, "MonolithLineIcon");
+			Assert.That(paintIcon == null || !paintIcon.gameObject.activeSelf, Is.True,
+				"Paint must stay text — set_line_icon must not force Monolith on builtin tabs");
+
+			Assert.That(ribbon.TrySetStripTabLineIcon("Demo", StudioLineIcon.Settings, out string errAddon), Is.True, errAddon);
+			var addonIcon = SpzUiThemeOps.FindDirectChildIncludingInactive(addon.transform, "MonolithLineIcon");
+			Assert.That(addonIcon, Is.Not.Null);
+			Assert.That(addonIcon.gameObject.activeSelf, Is.True, "add-on tabs borrow strip icons");
 		}
 		finally {
 			Object.DestroyImmediate(root);
