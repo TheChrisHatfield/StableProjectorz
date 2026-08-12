@@ -149,7 +149,7 @@ namespace spz {
 
 	        // First populate only: prefer a family-matching depth CN when the list was empty.
 	        // Do NOT treat user-chosen "None" as empty — refreshes were re-forcing depth and blocking disable.
-	        // Klein: FindPreferredDepthModelIndex returns -1 (no auto CN; Depth img2img co-opt instead).
+	        // Klein: FindPreferredDepthModelIndex returns -1. FLUX.2-dev: prefers Fun-Union via same helper.
 	        pickDepth_ifWasNone = true;
 	        // 'None' model is allowed with preprocessor 'reference_only' (Apr 2024).
 	        pickDepth_ifWasNone &= currPreprocessorName().ToLower().Contains("ref")==false;
@@ -220,18 +220,18 @@ namespace spz {
 	        if (choices == null || choices.Length == 0) return -1;
 
 	        bool wantXl = false;
-	        bool wantFlux2 = false;
+	        string sd = null;
 	        try {
-	            string sd = SD_InputPanel_UI.instance != null ? SD_InputPanel_UI.instance.models?.selectedModel_name : null;
+	            sd = SD_InputPanel_UI.instance != null ? SD_InputPanel_UI.instance.models?.selectedModel_name : null;
 	            wantXl = CheckpointLooksXl(sd);
-	            wantFlux2 = SD_OptionsPacket.CheckpointNeedsKleinModules(sd);
 	        } catch { /* dropdown refresh can run before input panel is ready */ }
 
-	        if (wantFlux2){
-	            // Klein-4B: Fun-Union / Flux2 CN does not lock geometry — use Depth img2img co-opt instead.
-	            // Do not auto-pick any CN weight (would re-arm ineffective Fun-Union on refresh/heal).
+	        // Klein-4B: Fun-Union / Flux2 CN does not lock geometry — ImageStitch structure instead.
+	        if (SD_OptionsPacket.CheckpointNeedsKleinModules(sd))
 	            return -1;
-	        }
+	        // FLUX.2-dev: prefer Fun-Union (or any Flux2 CN) on first populate / heal path.
+	        if (SD_OptionsPacket.CheckpointLooksFlux2Dev(sd))
+	            return FindPreferredFlux2ModelIndex(choices);
 
 	        int anyDepth = -1, bestXl = -1, bestNonXl = -1;
 	        for (int i = 0; i < choices.Length; i++){
