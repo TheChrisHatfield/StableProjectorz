@@ -1609,13 +1609,29 @@ namespace spz {
 				return;
 			}
 			Vector2 p = KeyMousePenInput.cursorScreenPos();
-			if (RectTransformUtility.RectangleContainsScreenPoint(_fullViewMenuRt, p)) {
+			Camera uiCam = ResolveUiCameraForRect(_fullViewMenuRt);
+			if (RectTransformUtility.RectangleContainsScreenPoint(_fullViewMenuRt, p, uiCam)) {
 				return;
 			}
-			if (_dockButton != null && RectTransformUtility.RectangleContainsScreenPoint(_dockButton.transform as RectTransform, p)) {
+			if (_dockButton != null && RectTransformUtility.RectangleContainsScreenPoint(
+				    _dockButton.transform as RectTransform, p, uiCam)) {
 				return;
 			}
 			ToggleFullViewMenu(false);
+		}
+
+		static Camera ResolveUiCameraForRect(RectTransform rt) {
+			if (rt == null)
+				return null;
+			var canvas = rt.GetComponentInParent<Canvas>();
+			if (canvas == null)
+				return null;
+			var root = canvas.rootCanvas != null ? canvas.rootCanvas : canvas;
+			if (root.renderMode == RenderMode.ScreenSpaceOverlay)
+				return null;
+			if (root.worldCamera != null)
+				return root.worldCamera;
+			return Camera.main;
 		}
 
 		static bool HasNamedChild(Transform parent, string objectName) {
