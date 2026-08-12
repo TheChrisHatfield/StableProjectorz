@@ -547,8 +547,14 @@ namespace spz {
 		void EnsureRibbonMigrateCoroutine() {
 			if (_ribbonMigrateRunning || !isActiveAndEnabled)
 				return;
-			if (_ribbonMigrateRounds >= kRibbonMigrateMaxRounds)
-				return;
+			if (_ribbonMigrateRounds >= kRibbonMigrateMaxRounds) {
+				// Late ribbon after give-up: allow another migrate cycle when shell exists and panels await show.
+				if (AddonRibbonIntegration.ResolveCommandRibbon() == null || CountParkedAwaitingRibbonShow() == 0)
+					return;
+				UnityEngine.Debug.Log(
+					"[AddonUI_MGR] Ribbon became available after migrate give-up — resetting round counter.");
+				_ribbonMigrateRounds = 0;
+			}
 			_ribbonMigrateRunning = true;
 			StartCoroutine(MigrateParkedPanelsToRibbon_crtn());
 		}
@@ -613,8 +619,33 @@ namespace spz {
 		/// <summary>Re-run park→ribbon migrate (e.g. after host pref Show in Command Ribbon turns on).</summary>
 		public void RequestMigrateParkedPanelsNow() {
 			TryMigrateParkedPanelsNow();
-			if (CountParkedAwaitingRibbonShow() > 0)
-				EnsureRibbonMigrateCoroutine();
+			if (CountParkedAwaitingRibbonShow() == 0)
+				return;
+			// Pref flip / late ribbon must not be blocked by a prior give-up counter.
+			_ribbonMigrateRounds = 0;
+			EnsureRibbonMigrateCoroutine();
+		}
+
+		/// <summary>
+		/// True when the panel lives under the off-screen parking host (ribbon missing or Show-in-Ribbon off).
+		/// Python create_panel success must not be read as "visible tab".
+		/// </summary>
+		public bool IsPanelParkedOffRibbon(string panelId) {
+			GameObject go = FindUIElement(panelId);
+			if (go == null) return false;
+			for (int i = 0; i < _parkedForRibbon.Count; i++) {
+				var p = _parkedForRibbon[i];
+				if (p != null && p.panel == go)
+					return true;
+			}
+			Transform t = go.transform;
+			while (t != null) {
+				if (string.Equals(t.name, "AddonPanelsParking", StringComparison.Ordinal)
+				    || string.Equals(t.name, "HiddenAddonPanelsParking", StringComparison.Ordinal))
+					return true;
+				t = t.parent;
+			}
+			return false;
 		}
 
 		void TryMigrateParkedPanelsNow() {
