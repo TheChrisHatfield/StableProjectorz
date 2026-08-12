@@ -619,6 +619,7 @@ namespace spz {
 			} else {
 				// No HTTP auto-load — still wire ribbon shells / FULL dock for remember-restored enables.
 				EnsureRibbonShellsForAllEnabledAddons();
+				SeedNativeFallbacksForEnabledAddonsWhenHttpOff();
 				if (IsAddonEnabled(RibbonOnlyFullscreenAddonId))
 					StartEnsureRibbonOnlyFullscreenViewportDock();
 			}
@@ -1847,6 +1848,9 @@ namespace spz {
 			else {
 				UnityEngine.Debug.LogWarning(
 					"[Addon_MGR] Add-on HTTP is disabled: Python will not run register().");
+				// No create_panel race — seed known in-process UIs with the ribbon shell (connectivity).
+				if (SupportsNativeUiWithoutPython(addonId) && AddonUI_MGR.instance != null)
+					AddonUI_MGR.instance.EnsureNativeFallbackUiWhenPythonMissing(addonId, force: true);
 			}
 			// On-screen full view: must run from Unity (Python register may never run, or may race). No command-ribbon tab.
 			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal)) {
@@ -1883,6 +1887,17 @@ namespace spz {
 			}
 			if (AddonUI_MGR.instance != null)
 				AddonUI_MGR.instance.RequestMigrateParkedPanelsNow();
+		}
+
+		/// <summary>When FastAPI is off, Python never create_panel — fill SPZ GO/Nomad shells at enable/boot (not only on tab click).</summary>
+		void SeedNativeFallbacksForEnabledAddonsWhenHttpOff() {
+			if (_enableHttpServer || _registeredAddons == null || AddonUI_MGR.instance == null)
+				return;
+			foreach (var kvp in _registeredAddons) {
+				if (kvp.Value == null || !kvp.Value.isEnabled) continue;
+				if (!SupportsNativeUiWithoutPython(kvp.Key)) continue;
+				AddonUI_MGR.instance.EnsureNativeFallbackUiWhenPythonMissing(kvp.Key, force: true);
+			}
 		}
 
 		bool TryCreateRibbonShellNow(string addonId) {
