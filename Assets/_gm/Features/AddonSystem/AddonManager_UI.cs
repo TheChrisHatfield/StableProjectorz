@@ -2031,7 +2031,8 @@ namespace spz {
 					if (cardImg != null) {
 						Color card = t.panelBg;
 						card.a = 0.72f;
-						cardImg.color = card;
+						// Snapshot via BoundChrome so Restore SPZ can unwind Nomad panelBg tint.
+						SpzUiThemeOps.ApplyBoundChromeGraphic(cardImg, card);
 						cardImg.raycastTarget = false;
 					}
 				}
@@ -2399,6 +2400,8 @@ namespace spz {
 			var bodyLE = prefsBody.GetComponent<LayoutElement>();
 			var bodyHlg = prefsBody.GetComponent<HorizontalLayoutGroup>();
 			if (bodyHlg != null) {
+				// Snapshot design pads before responsive gutters so Restore SPZ / RefreshScaled cannot capture polluted values.
+				SpzUiThemeOps.ApplyScaledLayoutGroup(bodyHlg);
 				bodyHlg.padding = new RectOffset(leftGutter, rightGutter, 0, 2);
 				bodyHlg.childControlHeight = true;
 				bodyHlg.childForceExpandHeight = false;
@@ -2999,6 +3002,8 @@ namespace spz {
 					if (otherChevron != null)
 						otherChevron.text = "▸";
 				}
+				// Shrink siblings before measuring the newly expanded row so CSF content height is not briefly tall.
+				RebuildAddonListScrollLayout(null);
 			}
 
 			expandBtn.onClick.AddListener(() => {
@@ -3023,8 +3028,8 @@ namespace spz {
 				if (Addon_MGR.instance == null || ribbonOnly)
 					return;
 				Addon_MGR.instance.SetShowInCommandRibbon(addonId, isOn);
-				// In-memory until Save settings → PersistAddonPrefsNow — mark draft dirty for close warning.
-				_draftDirty = true;
+				// Live ribbon pref vs Open snapshot — clear false Close warnings when toggled back.
+				RecomputeDraftDirtyFromLive();
 				ThemeShowInRibbonDial(ribbonToggle, isOn, _statusOk, _statusMuted, _statusOk);
 				bool enabled = GetDraftEnabled(addonId, addonInfo.isEnabled);
 				ShowStatus(enabled
