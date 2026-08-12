@@ -306,8 +306,14 @@ namespace spz {
 	            SpzUiThemeOps.FlattenToolFaceImage(bg);
 	        }
 	        HideSecondaryChromeUnder(btn);
-	        if (applyIcon)
+	        if (applyIcon) {
 	            SpzUiThemeOps.ApplyControlLineIcon(btn.transform, glyph, 22f);
+	            foreach (var tmp in btn.GetComponentsInChildren<TMP_Text>(true)) {
+	                if (tmp == null) continue;
+	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary, 11f);
+	                SpzUiThemeOps.HideAuthoredGraphicForTheme(tmp);
+	            }
+	        }
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }
 

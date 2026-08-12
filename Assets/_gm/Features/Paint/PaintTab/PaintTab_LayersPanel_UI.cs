@@ -171,6 +171,7 @@ namespace spz {
 				{
 					var delBtn = del.GetComponent<Button>();
 					if (delBtn != null) {
+						SpzUiThemeOps.EnsureSelectableHitFace(delBtn);
 						SpzUiThemeOps.ApplyBoundChromeSelectable(delBtn, t.danger, t.accent);
 						foreach (var tmp in delBtn.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
 							if (tmp != null)
@@ -178,7 +179,8 @@ namespace spz {
 						}
 						SpzUiThemeOps.ClearNonFaceRaycastsForTheme(delBtn);
 					}
-					SpzUiThemeOps.ApplyControlLineIcon(del, StudioLineIcon.Trash, 16f);
+					// Lead Trash — centered Monolith stamps Delete caption.
+					SpzUiThemeOps.ApplyControlLineIconLeading(del, StudioLineIcon.Trash, 16f);
 				}
 				var vis = row.transform.Find("Visibility");
 				if (vis != null) {
