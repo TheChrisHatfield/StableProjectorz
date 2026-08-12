@@ -136,6 +136,7 @@ public sealed class BoundChromePass7FunctionalTests {
 		Assert.That(idx, Is.GreaterThan(0));
 		string body = src.Substring(idx, System.Math.Min(2200, src.Length - idx));
 		Assert.That(body, Does.Not.Contain("tmp.color = Color.black"));
+		Assert.That(body, Does.Contain("ApplyGenArtColumnLabelColor"));
 		Assert.That(body, Does.Contain("ShouldRecolorBoundChrome"));
 		Assert.That(body, Does.Contain("ApplyBoundChromeNarrowDockLabelTmp"));
 		Assert.That(body, Does.Contain("EnsureDesignFontPt"));
@@ -159,6 +160,11 @@ public sealed class BoundChromePass7FunctionalTests {
 		Assert.That(src, Does.Contain("EnsureAdaptiveFaceBorder"));
 		Assert.That(src, Does.Contain("DockFaceBorder"));
 		Assert.That(src, Does.Contain("FindDirectChildIncludingInactive(face, FaceBorderName)"));
+		Assert.That(src, Does.Contain("fillCenter = false"),
+			"DockFaceBorder must outline-only to avoid green atlas spill on dark ribbon");
+		Assert.That(src, Does.Contain("TryCacheFrameImageUnder(genArt.parent)"),
+			"Face border must prefer GEN ART group white frame over cream column frame");
+		Assert.That(src, Does.Contain("ApplyGenArtColumnLabelColor"));
 		int onDestroy = src.IndexOf("void OnDestroy()", System.StringComparison.Ordinal);
 		Assert.That(onDestroy, Is.GreaterThan(0));
 		string destroyBody = src.Substring(onDestroy, System.Math.Min(500, src.Length - onDestroy));

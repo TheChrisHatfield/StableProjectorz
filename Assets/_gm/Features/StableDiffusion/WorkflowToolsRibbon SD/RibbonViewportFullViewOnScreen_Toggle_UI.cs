@@ -73,7 +73,7 @@ namespace spz {
 		}
 
 		Sprite _cachedFaceBorderSprite;
-		Color _cachedFaceBorderColor = new Color(1f, 0.959f, 0.881f, 0.922f);
+		Color _cachedFaceBorderColor = new Color(1f, 1f, 1f, 0.95f);
 		float _cachedFaceBorderPpu = 6f;
 
 		RectTransform _genArtAnchorRestoreTarget;
@@ -1218,16 +1218,14 @@ namespace spz {
 					tmp.fontWeight = FontWeight.Bold;
 					tmp.lineSpacing = genRefTmp.lineSpacing;
 					tmp.characterSpacing = Mathf.Min(genRefTmp.characterSpacing, 2f);
-					// Match GEN ART label (authored black on peach) — do not keep a prior Nomad white snapshot.
-					tmp.color = genRefTmp.color;
 				} else {
 					tmp.fontSize = DockLabelBasePt;
-					tmp.color = Color.black;
 				}
 				tmp.outlineWidth = 0.012f;
 				tmp.outlineColor = new Color(0.12f, 0.12f, 0.12f, 0.92f);
 				tmp.fontStyle = FontStyles.Bold;
-				SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(tmp);
+				// Match GEN ART / GEN BG black on peach (and refresh BoundChrome leave snapshot).
+				ApplyGenArtColumnLabelColor(tmp);
 			}
 			tmp.alignment = TextAlignmentOptions.Center;
 			tmp.horizontalAlignment = HorizontalAlignmentOptions.Center;
@@ -1439,15 +1437,9 @@ namespace spz {
 			}
 			if (frameT == null)
 				return;
-			var frameImg = frameT.GetComponent<Image>();
-			if (frameImg != null) {
-				if (frameImg.sprite != null)
-					_cachedFaceBorderSprite = frameImg.sprite;
-				_cachedFaceBorderColor = frameImg.color;
-				_cachedFaceBorderPpu = frameImg.pixelsPerUnitMultiplier > 0.01f
-					? frameImg.pixelsPerUnitMultiplier
-					: 6f;
-			}
+			// Face stroke must match GEN ART group white outline — do not overwrite cache with cream column frame.
+			if (_cachedFaceBorderSprite == null)
+				CacheFaceBorderSpriteFromColumnIfNeeded();
 			if (s_columnFrameSuppressCount == 0) {
 				s_columnFrameGo = frameT.gameObject;
 				s_columnFrameWasActive = frameT.gameObject.activeSelf;
@@ -1508,11 +1500,11 @@ namespace spz {
 				borderImg.raycastTarget = false;
 				borderImg.preserveAspect = false;
 				borderImg.type = Image.Type.Sliced;
-				// Outline only — fillCenter sampled atlas padding as green/cyan fringe on the dark ribbon.
+				// Outline only — fillCenter on the dark ribbon sampled atlas padding as green/cyan corners.
 				borderImg.fillCenter = false;
-				// Match GEN ART column frame: cream/white stroke, not a brown bevel ring.
-				borderImg.color = new Color(1f, 1f, 1f, 0.95f);
-				borderImg.pixelsPerUnitMultiplier = Mathf.Max(4f, _cachedFaceBorderPpu);
+				// Prefer Gen Art group white frame color (not cream column frame / brown bevel).
+				borderImg.color = _cachedFaceBorderColor;
+				borderImg.pixelsPerUnitMultiplier = Mathf.Max(6f, _cachedFaceBorderPpu);
 				if (_cachedFaceBorderSprite != null)
 					borderImg.sprite = _cachedFaceBorderSprite;
 				borderImg.enabled = _cachedFaceBorderSprite != null;
@@ -1525,20 +1517,34 @@ namespace spz {
 			var gbm = ResolveGenerateButtonsMain();
 			if (gbm == null)
 				return;
-			for (int i = 0; i < gbm.transform.childCount; i++) {
-				var ch = gbm.transform.GetChild(i);
+			// Prefer the white group frame beside GEN ART / GEN BG (generate holder), not the cream column frame.
+			var genArt = gbm.GenArtButtonRectTransform;
+			if (genArt != null && genArt.parent != null
+			    && TryCacheFrameImageUnder(genArt.parent))
+				return;
+			TryCacheFrameImageUnder(gbm.transform);
+		}
+
+		bool TryCacheFrameImageUnder(Transform parent) {
+			if (parent == null)
+				return false;
+			for (int i = 0; i < parent.childCount; i++) {
+				var ch = parent.GetChild(i);
 				if (!string.Equals(ch.name, GenButtonsColumnFrameName, StringComparison.Ordinal))
 					continue;
 				var img = ch.GetComponent<Image>();
 				if (img == null || img.sprite == null)
-					break;
+					return false;
 				_cachedFaceBorderSprite = img.sprite;
-				_cachedFaceBorderColor = img.color;
+				_cachedFaceBorderColor = img.color.a > 0.01f
+					? img.color
+					: new Color(1f, 1f, 1f, 0.95f);
 				_cachedFaceBorderPpu = img.pixelsPerUnitMultiplier > 0.01f
 					? img.pixelsPerUnitMultiplier
 					: 6f;
-				break;
+				return true;
 			}
+			return false;
 		}
 
 		void RefreshActiveFill() {
