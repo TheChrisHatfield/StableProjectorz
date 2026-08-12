@@ -20,6 +20,7 @@ public sealed class Art2DImportToLayerChromeThemeTests {
 		Assert.That(File.Exists(path), Is.True, path);
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("ThemeImportToLayerButton"));
+		Assert.That(src, Does.Contain("EnsureSelectableHitFace(_button_importToLayer)"));
 		Assert.That(src, Does.Contain("ApplyBoundChromeGraphic"));
 		// Creation path must not call Selectable SolidSquare on the glyph face.
 		int ensureIx = src.IndexOf("void EnsureImportToLayerButton");
