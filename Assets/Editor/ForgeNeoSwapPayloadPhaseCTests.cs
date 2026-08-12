@@ -380,6 +380,11 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			"Bare controlnet-union without flux/fun marker must not match.");
 		Assert.That(ControlNetUnit_Dropdowns.FindPreferredFlux2ModelIndex(new[] {
 			"other.safetensors",
+			"flux2-alt.safetensors",
+			"FLUX.2-dev-Fun-Controlnet-Union.safetensors",
+		}), Is.EqualTo(2));
+		Assert.That(ControlNetUnit_Dropdowns.FindPreferredFlux2ModelIndex(new[] {
+			"other.safetensors",
 			"FLUX.2-dev-Fun-Controlnet-Union.safetensors",
 			"FLUX.2-dev-Fun-Controlnet-Union-2602.safetensors",
 		}), Is.EqualTo(2), "Prefer Fun-Union-2602 when both Fun-Union weights are listed.");
