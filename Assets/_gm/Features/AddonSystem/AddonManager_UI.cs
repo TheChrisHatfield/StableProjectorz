@@ -293,6 +293,7 @@ namespace spz {
 		EnsureChromeTooltips();
 		// Synchronous finish: no yield — avoids racing other coroutines that call OpenPanel the same frame.
 		FinishStartBootstrap();
+		ApplyThemeTokens();
 	}
 
 		/// <summary>Apply pending open, or ensure overlay is hidden when nothing asked to show (same frame as <see cref="Start"/>).</summary>
