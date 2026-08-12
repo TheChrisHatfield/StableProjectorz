@@ -267,8 +267,8 @@ namespace spz {
 	                        && (c.transform == _rembg_button.transform
 	                            || c.transform.IsChildOf(_rembg_button.transform)))
 	                        return true;
-	                    // BrushRibbon owns Gen3D direction strip — RolesUnder SolidSquare blanks it after BrushRibbon themes.
-	                    if (c.GetComponentInParent<BrushRibbon_UI_Direction>(true) != null) return true;
+	                    // BrushRibbon owns Gen3D direction / tool chrome — RolesUnder SolidSquare blanks it.
+	                    if (BrushRibbon_UI.IsBoundChromeOwnedByBrushRibbon(c)) return true;
 	                    return false;
 	                },
 	            });
