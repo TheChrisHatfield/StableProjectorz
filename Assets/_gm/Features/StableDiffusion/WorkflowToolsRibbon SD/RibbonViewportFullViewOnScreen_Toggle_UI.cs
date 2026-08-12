@@ -927,14 +927,44 @@ namespace spz {
 			}
 			var openRt = SpzUiThemeOps.FindDirectChildIncludingInactive(_fullViewMenuRt, "OpenRightDock") as RectTransform;
 			if (openRt != null) {
-				var openFace = SpzUiThemeOps.FindDirectChildIncludingInactive(openRt, "DockButtonFace") as RectTransform ?? openRt;
-				EnsureAdaptiveFaceBorder(openFace);
+				SyncOpenRightDockLayout(openRt, genRefImg);
 			}
 			_fullViewMenuCg = _fullViewMenuRt.GetComponent<CanvasGroup>();
 			if (_fullViewMenuCg == null) {
 				_fullViewMenuCg = _fullViewMenuRt.gameObject.AddComponent<CanvasGroup>();
 			}
 			ForceHideFullViewMenuInstant();
+		}
+
+		/// <summary>
+		/// Existing menus skip <see cref="CreateFullViewMenuButton"/> — re-apply Gen Art face insets + slot height
+		/// so OPEN RIGHT stays aligned with FULL/SRN after Gen Art layout changes.
+		/// </summary>
+		void SyncOpenRightDockLayout(RectTransform openRt, Image genRefImg) {
+			if (openRt == null)
+				return;
+			var genArt = ResolveGenerateButtonsMain()?.GenArtButtonRectTransform;
+			float slotH = GetVisualGenArtFaceHeightPx(genArt, genRefImg);
+			openRt.sizeDelta = new Vector2(0f, slotH);
+			var openLe = openRt.GetComponent<LayoutElement>();
+			if (openLe != null) {
+				openLe.preferredHeight = slotH;
+				openLe.minHeight = slotH;
+			}
+			if (_fullViewMenuRt != null) {
+				_fullViewMenuRt.sizeDelta = new Vector2(0f, slotH);
+				var menuLe = _fullViewMenuRt.GetComponent<LayoutElement>();
+				if (menuLe != null) {
+					menuLe.preferredHeight = slotH;
+					menuLe.minHeight = slotH;
+				}
+			}
+			var openFace = SpzUiThemeOps.FindDirectChildIncludingInactive(openRt, "DockButtonFace") as RectTransform;
+			if (openFace != null)
+				ApplyFaceRectLayout(openFace, genArt, genRefImg);
+			else
+				openFace = openRt;
+			EnsureAdaptiveFaceBorder(openFace);
 		}
 
 		void SetSecondaryButtonVisible(bool show) {
