@@ -356,7 +356,7 @@ namespace spz {
 	            SpzUiThemeOps.EnsureSelectableHitFace(_BlendCams_button);
 	            if (SpzUiThemeOps.IsAuthoredIconFace(_BlendCams_button.targetGraphic)) {
 	                if (_BlendCams_button.targetGraphic is Image blendFace)
-	                    SpzUiThemeOps.ApplyBoundChromeGraphic(blendFace, t.iconTint);
+	                    SpzUiThemeOps.ApplyBoundChromeIconTint(blendFace, t.iconTint);
 	            } else {
 	                SpzUiThemeOps.ApplyBoundChromeSelectable(_BlendCams_button, t.controlBg, t.accent);
 	            }

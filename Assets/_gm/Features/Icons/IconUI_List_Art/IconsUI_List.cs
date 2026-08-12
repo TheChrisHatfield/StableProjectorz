@@ -528,7 +528,7 @@ namespace spz {
 	                    && glyphFace.preserveAspect
 	                    && !UiRuntimeSprites.IsSolidRect(glyphFace.sprite)) {
 	                    SpzUiThemeOps.EnsureSelectableHitFace(btn);
-	                    SpzUiThemeOps.ApplyBoundChromeGraphic(glyphFace, t.iconTint);
+	                    SpzUiThemeOps.ApplyBoundChromeIconTint(glyphFace, t.iconTint);
 	                    var glyphLabel = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	                    if (glyphLabel != null)
 	                        SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(glyphLabel, t.textPrimary, 11f);
