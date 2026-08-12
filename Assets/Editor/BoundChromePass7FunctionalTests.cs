@@ -139,7 +139,10 @@ public sealed class BoundChromePass7FunctionalTests {
 		Assert.That(body, Does.Contain("ApplyGenArtColumnLabelColor"));
 		Assert.That(body, Does.Contain("ShouldRecolorBoundChrome"));
 		Assert.That(body, Does.Contain("ApplyBoundChromeNarrowDockLabelTmp"));
-		Assert.That(body, Does.Contain("EnsureDesignFontPt"));
+		Assert.That(body, Does.Not.Contain("EnsureDesignFontPt(tmp, DockLabelBasePt)"),
+			"Leave branch must not EnsureDesignFontPt — that lives in SeedBuiltinFullSrnNarrowLabel");
+		Assert.That(src, Does.Contain("SeedBuiltinFullSrnNarrowLabel"),
+			"Builtin build must seed 13pt stretch outside leave-safe ApplyFullSrnLabelStyle");
 		Assert.That(body, Does.Not.Contain("tmp.fontSize = 18f"));
 		Assert.That(body, Does.Not.Contain("Mathf.Max(12f, genRefTmp.fontSize)"));
 	}

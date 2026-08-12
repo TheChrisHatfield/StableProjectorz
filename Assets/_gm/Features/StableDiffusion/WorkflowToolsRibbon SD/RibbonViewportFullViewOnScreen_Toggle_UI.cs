@@ -339,6 +339,7 @@ namespace spz {
 			var tmp = face != null ? face.GetComponentInChildren<TextMeshProUGUI>(true) : null;
 			if (tmp == null) return;
 			ApplyFullSrnLabelStyle(tmp, null, tmp.rectTransform);
+			SeedBuiltinFullSrnNarrowLabel(tmp, null, tmp.rectTransform, DockLabelBasePt);
 		}
 
 		/// <summary>Stops wait/build, removes dock row(s), restores Gen Art anchors. Called on every <see cref="NotifyAttachRequested"/>, <see cref="ApplySpec"/> when spec changes, and <see cref="OnDestroy"/>.</summary>
@@ -877,6 +878,7 @@ namespace spz {
 			textRt.SetParent(faceRt, false);
 			var tmp = textGo.AddComponent<TextMeshProUGUI>();
 			ApplyFullSrnLabelStyle(tmp, genRefTmp, textRt);
+			SeedBuiltinFullSrnNarrowLabel(tmp, genRefTmp, textRt, DockLabelBasePt);
 			EnsureDockLineIcon(faceRt, ResolveFullViewDockIcon(), out _fullSrnLineIcon);
 			EnsureAdaptiveFaceBorder(faceRt);
 			EnsureFullViewMenu(faceRt, genRefImg, genRefTmp);
@@ -1055,11 +1057,9 @@ namespace spz {
 			const float openRightLabelPt = DockLabelBasePt - 1f;
 			ApplyFullSrnLabelStyle(txt, genRefTmp, txtRt);
 			txt.text = label;
-			SpzUiThemeOps.EnsureDesignFontPt(txt, openRightLabelPt);
+			SeedBuiltinFullSrnNarrowLabel(txt, genRefTmp, txtRt, openRightLabelPt);
 			if (SpzUiThemeOps.ShouldRecolorBoundChrome)
 				SpzUiThemeOps.ApplyBoundChromeNarrowDockLabelTmp(txt, SpzUiThemeOps.Active.textPrimary, openRightLabelPt);
-			else
-				txt.fontSize = openRightLabelPt;
 			EnsureAdaptiveFaceBorder(faceRt);
 			if (string.Equals(name, "OpenRightDock", StringComparison.Ordinal)) {
 				_openRightDockLabel = txt;
@@ -1310,10 +1310,44 @@ namespace spz {
 				tmp.textWrappingMode = TextWrappingModes.NoWrap;
 			} else {
 				// Leave: full BoundChrome unwind — do not re-force Bold/outline/tracking after Restore.
+				// Build-time size/stretch is SeedBuiltinFullSrnNarrowLabel (keeps ImportCn leave contract).
 				SpzUiThemeOps.RestoreBoundChromeUnder(tmp.transform);
 				ApplyGenArtColumnLabelColor(tmp);
 				tmp.raycastTarget = false;
 			}
+		}
+
+		/// <summary>
+		/// Builtin/default first paint: fresh TMP is ~36pt with no stretch — overflow on the Gen Art column.
+		/// Must stay outside <see cref="ApplyFullSrnLabelStyle"/> leave branch (ImportCn leave litmus).
+		/// </summary>
+		static void SeedBuiltinFullSrnNarrowLabel(TextMeshProUGUI tmp, TextMeshProUGUI genRefTmp, RectTransform textRt, float pt) {
+			if (tmp == null || SpzUiThemeOps.ShouldRecolorBoundChrome)
+				return;
+			const float padH = 4f;
+			const float padV = 2.5f;
+			if (textRt != null) {
+				textRt.anchorMin = Vector2.zero;
+				textRt.anchorMax = Vector2.one;
+				textRt.offsetMin = new Vector2(padH, padV);
+				textRt.offsetMax = new Vector2(-padH, -padV);
+			}
+			SpzUiThemeOps.EnsureDesignFontPt(tmp, pt);
+			if (genRefTmp != null) {
+				tmp.font = genRefTmp.font;
+				tmp.fontSharedMaterial = genRefTmp.fontSharedMaterial;
+				tmp.fontWeight = FontWeight.Bold;
+				tmp.lineSpacing = genRefTmp.lineSpacing;
+				tmp.characterSpacing = Mathf.Min(genRefTmp.characterSpacing, 2f);
+			}
+			tmp.fontSize = pt;
+			tmp.fontStyle = FontStyles.Bold | FontStyles.UpperCase;
+			tmp.alignment = TextAlignmentOptions.Center;
+			tmp.horizontalAlignment = HorizontalAlignmentOptions.Center;
+			tmp.verticalAlignment = VerticalAlignmentOptions.Middle;
+			tmp.textWrappingMode = TextWrappingModes.NoWrap;
+			tmp.raycastTarget = false;
+			ApplyGenArtColumnLabelColor(tmp);
 		}
 
 		/// <summary>Keep frame/fill/text under one RectTransform so vertical movement never splits the button visuals.</summary>
@@ -1829,6 +1863,7 @@ namespace spz {
 					NormalizeReusableRow(_builtRowRt, reuseFace);
 					ApplyFaceRectLayout(reuseFace, genArt, genRefImg);
 					ApplyFullSrnLabelStyle(reuseTmp, genRefTmp, reuseTmp.rectTransform);
+					SeedBuiltinFullSrnNarrowLabel(reuseTmp, genRefTmp, reuseTmp.rectTransform, DockLabelBasePt);
 					_spacerRowRt = EnsureSpacerRow(vlgRoot, _builtRowRt.GetSiblingIndex() + 1, ExtraBottomGapPx, _builtRowRt.gameObject.layer);
 					reuseBtn.onClick.RemoveAllListeners();
 					reuseBtn.onClick.AddListener(OnDockedButtonClicked);
