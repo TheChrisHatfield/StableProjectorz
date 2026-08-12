@@ -17,7 +17,7 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 			"Assets", "_gm", "Features", "AddonSystem", "AddonManager_UI.cs");
 		string src = File.ReadAllText(path);
 		int i = src.IndexOf("void OnRemoveAddon(", System.StringComparison.Ordinal);
-		string body = src.Substring(i, Math.Min(900, src.Length - i));
+		string body = src.Substring(i, System.Math.Min(900, src.Length - i));
 		Assert.That(body, Does.Contain("AddonManagerCanvasSortOrder + 100"));
 		Assert.That(body, Does.Contain("RestoreConfirmPopupSort"));
 	}
