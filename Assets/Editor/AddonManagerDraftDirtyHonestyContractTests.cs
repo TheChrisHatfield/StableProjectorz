@@ -38,6 +38,24 @@ public sealed class AddonManagerDraftDirtyHonestyContractTests {
 		Assert.That(body, Does.Contain("SeedDraftFromLiveAddons()"));
 		Assert.That(body, Does.Contain("SnapshotShowInRibbonPrefs()"),
 			"empty snapshot makes Close-without-Save Revert a no-op");
+		Assert.That(body, Does.Contain("RecomputeDraftDirtyFromLive()"),
+			"SoftLoad vs Remember must stay dirty after Open seed");
+	}
+
+	[Test]
+	public void ClosePanel_RecomputesDirtyAfterSeedClearsFlag() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "AddonManager_UI.cs");
+		string src = File.ReadAllText(path);
+		int i = src.IndexOf("public void ClosePanel()", System.StringComparison.Ordinal);
+		Assert.That(i, Is.GreaterThanOrEqualTo(0));
+		int j = src.IndexOf("bool _loadAddonsNowInFlight", i, System.StringComparison.Ordinal);
+		string body = src.Substring(i, j - i);
+		Assert.That(body, Does.Contain("RecomputeDraftDirtyFromLive()"),
+			"SeedDraftFromLiveAddons clears dirty; SoftLoad-vs-persisted must restore it");
+		int seed = body.IndexOf("SeedDraftFromLiveAddons()", System.StringComparison.Ordinal);
+		int recompute = body.LastIndexOf("RecomputeDraftDirtyFromLive()", System.StringComparison.Ordinal);
+		Assert.That(recompute, Is.GreaterThan(seed));
 	}
 
 	[Test]
