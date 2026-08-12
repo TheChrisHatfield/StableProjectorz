@@ -18,4 +18,12 @@ public sealed class BrushRibbonToolHelperLeaveTests {
 			Assert.That(body, Does.Contain("RestoreBoundChromeUnder"), name);
 		}
 	}
+
+	[Test]
+	public void LeavePath_RestoresAlphaPicker_Source() {
+		string path = Path.Combine(Application.dataPath, "_gm", "Features", "Paint", "BrushRibbon_UI", "BrushRibbon_UI.cs");
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("FindFirstObjectByType<BrushRibbon_UI_AlphaPicker>"));
+		Assert.That(src, Does.Contain("RestoreBoundChromeUnder(alphaPicker.transform)"));
+	}
 }
