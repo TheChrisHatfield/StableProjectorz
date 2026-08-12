@@ -217,7 +217,10 @@ namespace spz {
 	    }
 
 	    void OpenWebUiInBrowserNow() {
-	        const string webUiUrl = "http://127.0.0.1:7860";
+	        // Prefer the live Connection Panel host/port (user may not be on :7860).
+	        string webUiUrl = Connection_MGR.A1111_IP_AND_PORT;
+	        if (string.IsNullOrEmpty(webUiUrl))
+	            webUiUrl = "http://127.0.0.1:" + WebUiHttpPort;
 	        try {
 	            Application.OpenURL(webUiUrl);
 	            UnityEngine.Debug.Log($"[LaunchWebUI] Opened browser for WebUI: {webUiUrl}");
@@ -232,8 +235,8 @@ namespace spz {
 	    /// </summary>
 	    public static void ApplyOpenBrowserSettingInSession(bool wantOpen) {
 	        if (instance == null) {
-	            if (wantOpen && Connection_MGR.is_sd_connected) {
-	                try { Application.OpenURL("http://127.0.0.1:7860"); } catch { /* best-effort */ }
+	            if (wantOpen && Connection_MGR.is_sd_connected && !string.IsNullOrEmpty(Connection_MGR.A1111_IP_AND_PORT)) {
+	                try { Application.OpenURL(Connection_MGR.A1111_IP_AND_PORT); } catch { /* best-effort */ }
 	            }
 	            return;
 	        }
@@ -269,7 +272,7 @@ namespace spz {
 	        bool needRestartForShow = wantShow && touched == 0 && liveWebUi;
 	        bool needRestartForHide = !wantShow && _lastWebUiLaunchedWithVisibleConsole && liveWebUi && touched == 0;
 	        if (needRestartForShow || needRestartForHide) {
-	            bool busy = GenerateButtons_UI.isGenerating;
+	            bool busy = GenerateButtons_UI.isGenerating || GenerateButtons_UI.isGeneratingPaused;
 	            float since = Time.unscaledTime - _lastExternalWindowsRelaunchUnscaledTime;
 	            if (busy) {
 	                if (Viewport_StatusText.instance != null)
@@ -760,6 +763,16 @@ namespace spz {
 	        if (instance != null) { DestroyImmediate(this); return; }
 	        instance = this;
 	        UnityEngine.Debug.Log("[LaunchWebUI] Awake: instance set. Aggressive auto-launch (run_noQuickEdit.bat) will run from Start().");
+	    }
+
+	    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+	    static void ResetLaunchWebUiStatics() {
+	        // Enter Play Mode Without Domain Reload leaves stale PID/visibility flags.
+	        instance = null;
+	        _lastLaunchedWebUiPid = 0;
+	        _lastWebUiLaunchedWithVisibleConsole = false;
+	        _lastExternalWindowsRelaunchUnscaledTime = -999f;
+	        _cudaDeviceListString = null;
 	    }
 	}
 }//end namespace
