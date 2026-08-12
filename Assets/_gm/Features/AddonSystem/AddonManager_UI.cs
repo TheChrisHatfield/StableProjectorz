@@ -231,6 +231,8 @@ namespace spz {
 		/// <summary>Dial selection mirror (live enable/disable applies immediately; Save settings persists for next launch).</summary>
 		readonly Dictionary<string, bool> _draftEnabledById = new Dictionary<string, bool>(StringComparer.Ordinal);
 		bool _draftDirty;
+		/// <summary>Show-in-Ribbon prefs at last clean open/save — Close without Save reverts to these.</summary>
+		readonly Dictionary<string, bool> _showInRibbonSnapshotById = new Dictionary<string, bool>();
 		bool _hidViewportStatusForModal;
 		
 		// Filter state: 0 = All, 1 = Enabled, 2 = Disabled
@@ -333,7 +335,7 @@ namespace spz {
 			Addon_MGR.SetRememberEnabledAddonsPreference(remember);
 			ShowStatus(
 				remember
-					? "Remember on — next launch will restore enabled add-ons after Save writes the selection."
+					? "Remember on — current enabled set saved for next launch."
 					: "Remember off — next launch starts with add-ons disabled (prefs like Show in Ribbon still use Save).",
 				true);
 		}
@@ -1094,11 +1096,14 @@ namespace spz {
 		/// Closes the add-on manager panel
 		/// </summary>
 		public void ClosePanel() {
+			string closeWarn = null;
 			if (_draftDirty) {
-				ShowStatus(
-					"Closed without Save settings — enable selection / ribbon prefs may not persist next launch.",
-					false);
-				_draftDirty = false;
+				// Show-in-Ribbon was applied live — revert unsaved ribbon prefs so a later Save cannot persist a "discarded" flip.
+				RevertShowInRibbonPrefsFromSnapshot();
+				closeWarn =
+					"Closed without Save settings — enable selection may not persist next launch; ribbon prefs reverted.";
+				SeedDraftFromLiveAddons();
+				SnapshotShowInRibbonPrefs();
 			}
 			if (_hidViewportStatusForModal && Viewport_StatusText.instance != null) {
 				Viewport_StatusText.instance.PreferVIsible(this);
@@ -1106,6 +1111,9 @@ namespace spz {
 			}
 			if (_blocker != null) _blocker.SetActive(false);
 			if (_panel != null) _panel.SetActive(false);
+			// Panel status is hidden with the modal — mirror the close warning to the viewport toast.
+			if (!string.IsNullOrEmpty(closeWarn) && Viewport_StatusText.instance != null)
+				Viewport_StatusText.instance.ShowStatusText(closeWarn, false, 5f, false);
 		}
 		
 		bool _loadAddonsNowInFlight;
@@ -2190,33 +2198,8 @@ namespace spz {
 		}
 
 		static void LockStatusDialLayout(Toggle toggle) {
-			if (toggle == null) return;
-			var le = toggle.GetComponent<LayoutElement>();
-			if (le != null) {
-				le.preferredWidth = 28f;
-				le.minWidth = 28f;
-				le.preferredHeight = 28f;
-				le.minHeight = 28f;
-				le.flexibleWidth = 0f;
-				le.flexibleHeight = 0f;
-			}
-			var rt = toggle.transform as RectTransform;
-			if (rt != null)
-				rt.sizeDelta = new Vector2(28f, 28f);
-			var ring = toggle.transform.Find("Ring") as RectTransform;
-			if (ring != null) {
-				ring.anchorMin = ring.anchorMax = new Vector2(0.5f, 0.5f);
-				ring.pivot = new Vector2(0.5f, 0.5f);
-				ring.sizeDelta = new Vector2(14f, 14f);
-				ring.anchoredPosition = Vector2.zero;
-			}
-			var check = toggle.transform.Find("Ring/Checkmark") as RectTransform;
-			if (check != null) {
-				check.anchorMin = new Vector2(0.28f, 0.28f);
-				check.anchorMax = new Vector2(0.72f, 0.72f);
-				check.offsetMin = Vector2.zero;
-				check.offsetMax = Vector2.zero;
-			}
+			// Same geometry lock as Show-in-Ribbon — snapshot LE/RTs for Leave SPZ.
+			LockShowInRibbonDialLayout(toggle);
 		}
 
 		static void LockPreferencesBodyLayout(Transform prefsBody) {
