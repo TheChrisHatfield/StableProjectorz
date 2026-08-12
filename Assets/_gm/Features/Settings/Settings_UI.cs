@@ -135,8 +135,12 @@ namespace spz {
 	            bool show = LaunchWebUIBatFile.PrefsWantShowExternalProcessWindows();
 	            _showExternalProcessWindows_toggle.SetIsOnWithoutNotify(show);
 	        }
-	        if (_webUiOpenBrowserOnStartup_toggle != null)
+	        if (_webUiOpenBrowserOnStartup_toggle != null) {
 	            EventsBinder.Bind_Clickable_to_event("Settings:set_webUiOpenBrowserOnStartup", _webUiOpenBrowserOnStartup_toggle);
+	            // Match external-windows row: sync from PlayerPrefs after bind (tryLoad may run before UI exists).
+	            bool openBrowser = UnityEngine.PlayerPrefs.GetInt("WebUI_OpenBrowserOnStartup", 0) == 1;
+	            _webUiOpenBrowserOnStartup_toggle.SetIsOnWithoutNotify(openBrowser);
+	        }
 	        if (_sdStrictMaskIsolation_toggle != null)
 	            EventsBinder.Bind_Clickable_to_event("Settings:set_sd_strictMaskIsolation", _sdStrictMaskIsolation_toggle);
 	        if (_sdStrictIsolationFlipMask_toggle != null)
