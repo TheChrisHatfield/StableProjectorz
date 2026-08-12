@@ -1048,6 +1048,9 @@ namespace spz {
 		}
 
 		IEnumerator RequestLoadAllEnabledAddonsNowCrtn(Action<int, int> onComplete) {
+			// Same as auto-load: prefs-restored enables never called EnableAddon — shells must exist
+			// before Python create_panel or panels park off-ribbon with "Load finished" false success.
+			EnsureRibbonShellsForAllEnabledAddons();
 			int count = 0;
 			int hardFail = 0;
 			// Snapshot ids — MarkAddonLoadFailed may mutate enabled flags mid-loop.
