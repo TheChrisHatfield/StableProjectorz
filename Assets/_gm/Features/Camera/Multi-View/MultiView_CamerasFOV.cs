@@ -69,6 +69,11 @@ namespace spz {
 
 	        EnsureFovFillThumbMarker();
 	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        ApplyThemeTokens();
+	    }
+
+	    void OnEnable() {
+	        ApplyThemeTokens();
 	    }
 
 	    void Start(){

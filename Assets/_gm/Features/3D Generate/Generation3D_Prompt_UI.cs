@@ -54,6 +54,10 @@ namespace spz {
 	        ApplyThemeTokens();
 	    }
 
+	    void OnEnable() {
+	        ApplyThemeTokens();
+	    }
+
 	    void Start(){
 	        Settings_MGR._Act_onTextSize += OnChanged_textSize;
 	        OnChanged_textSize( Settings_MGR.instance.get_getPromptTextSize() );

@@ -738,7 +738,7 @@ namespace spz {
 				RequestReRender();
 			});
 			if (SpzUiThemeOps.ShouldRecolorBoundChrome)
-				SpzUiThemeOps.ApplyControlLineIcon(deleteGo.transform, StudioLineIcon.Trash, 16f);
+				SpzUiThemeOps.ApplyControlLineIconLeading(deleteGo.transform, StudioLineIcon.Trash, 16f);
 
 			return row;
 		}
