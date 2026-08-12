@@ -199,6 +199,7 @@ namespace spz {
 
 
 	    void OnDestroy(){
+	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 	        if(_wholeGraphic_button!=null){ _wholeGraphic_button._onMouseClick -= OnMyGraphicClick; }
 	        ControlNetUnit_ImagesDisplay.OnSome_CTRLNet_graphicClicked -= this.OnSomeCtrlNet_GraphicClicked;
 	        _myCustomImg_from_sysFile?.RmvOwner(this);
@@ -209,6 +210,17 @@ namespace spz {
 	        _wholeGraphic_button._onMouseClick += OnMyGraphicClick;
 	        ControlNetUnit_ImagesDisplay.OnSome_CTRLNet_graphicClicked += this.OnSomeCtrlNet_GraphicClicked;
 	        Init_GraphicContextMenu();
+	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        ApplyThemeTokens();
+	    }
+
+	    /// <summary>
+	    /// Context menu was only chrome'd on open — Leave SPZ while open left Nomad SolidSquare/TMP sticky
+	    /// until reopen. ApplyContextMenuChrome self-silos RestoreBoundChromeUnder on builtin.
+	    /// </summary>
+	    void ApplyThemeTokens() {
+	        if (_contextMenu_gameObj != null)
+	            SpzUiThemeOps.ApplyContextMenuChrome(_contextMenu_gameObj);
 	    }
 
     
@@ -279,7 +291,7 @@ namespace spz {
 	        bool wasActive = _contextMenu_gameObj.activeSelf;
 	        _contextMenu_gameObj.SetActive( !wasActive );
 	        if (_contextMenu_gameObj.activeSelf)
-	            SpzUiThemeOps.ApplyContextMenuChrome(_contextMenu_gameObj);
+	            ApplyThemeTokens();
 	    }
 
 
