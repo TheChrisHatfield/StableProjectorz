@@ -410,6 +410,23 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send_json(200, result)
                 return
 
+            if path == "/sdapi/v1/extra-batch-images":
+                # Upscale path: Demo returns a solid PNG; remote proxies.
+                payload = self._read_json()
+                if is_remote:
+                    try:
+                        result = backend.generate(path, payload)
+                    except BackendError as exc:
+                        self._send_json(exc.status, {"detail": str(exc), "error": str(exc)})
+                        return
+                    self._send_json(200, result)
+                    return
+                w = int(payload.get("resize_width") or payload.get("width") or 64)
+                h = int(payload.get("resize_height") or payload.get("height") or 64)
+                result = DemoBackend().generate("/sdapi/v1/txt2img", {"width": w, "height": h})
+                self._send_json(200, result)
+                return
+
             if path == "/controlnet/detect":
                 if is_remote:
                     length = int(self.headers.get("Content-Length") or 0)
