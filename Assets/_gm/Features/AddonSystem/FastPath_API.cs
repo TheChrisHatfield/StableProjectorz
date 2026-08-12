@@ -948,7 +948,8 @@ namespace spz {
 			if (sdHub._generating) return false; // Already generating
 			
 			sdHub.Generate(isMakingBackgrounds: isBackground);
-			return true;
+			// Generate() is void and may early-return from DenyWithMessage — only success if work started.
+			return sdHub._generating || sdHub._finalPreparations_beforeGen;
 		}
 		
 		/// <summary>
