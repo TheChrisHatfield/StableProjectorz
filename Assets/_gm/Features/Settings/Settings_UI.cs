@@ -232,13 +232,14 @@ namespace spz {
 	        var labelGo = new GameObject("Label");
 	        labelGo.transform.SetParent(row.transform, false);
 	        var labelLE = labelGo.AddComponent<UnityEngine.UI.LayoutElement>();
-	        labelLE.preferredWidth = 360f;
-	        labelLE.preferredHeight = 24f;
+	        labelLE.preferredWidth = 420f;
+	        labelLE.preferredHeight = 36f;
 	        var labelText = labelGo.AddComponent<TMPro.TextMeshProUGUI>();
 	        labelText.text = "Show Black box (external process windows: WebUI + add-on Python server):";
 	        labelText.fontSize = 14;
 	        labelText.color = new Color(0.9f, 0.9f, 0.9f, 1f);
 	        labelText.raycastTarget = false;
+	        labelText.enableWordWrapping = true;
 
 	        bool current = LaunchWebUIBatFile.PrefsWantShowExternalProcessWindows();
 	        var toggle = CreateRuntimeSpzStyledToggle(row.transform, "Toggle_ShowExternalProcessWindows", new Vector2(112f, 28f),

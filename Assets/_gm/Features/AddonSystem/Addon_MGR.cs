@@ -1009,6 +1009,7 @@ namespace spz {
 					$"[Addon_MGR] Addon server launcher PID {_pythonServerPid} is gone — clearing running flag so restart can proceed.");
 				_pythonServerPid = 0;
 				_isServerRunning = false;
+				_pythonServerStartedWithVisibleConsole = false;
 				InvalidateSharedAddonReadyCache();
 			}
 #elif UNITY_EDITOR
@@ -1017,6 +1018,7 @@ namespace spz {
 					"[Addon_MGR] Addon Python process has exited — clearing running flag so restart can proceed.");
 				_pythonProcess = null;
 				_isServerRunning = false;
+				_pythonServerStartedWithVisibleConsole = false;
 				InvalidateSharedAddonReadyCache();
 			}
 #endif
