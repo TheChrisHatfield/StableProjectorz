@@ -258,6 +258,12 @@ namespace spz {
 	    public void MarkCustomWorkflow_Done()
 	        => _genRequest_helper.MarkCustomWorkflow_Done();
 
+	    /// <summary>Interrupt HTTP gen even for <c>somethingCustom</c> (HDR spheres) — Hub cancel bus otherwise early-returns.</summary>
+	    public void ForceInterruptIncludingCustom() {
+	        if (_genRequest_helper == null) return;
+	        _genRequest_helper.RequestHttpInterruptOnly();
+	    }
+
 
 	    public void OnStopGenerate_Button(){
 	        //see if it's stopping for a generation that we initiated:

@@ -371,5 +371,26 @@ namespace spz {
 	        instance = this;
 	    }
 
+	    void OnEnable(){
+	        GenerateButtons_UI.OnCancelGenerationButton += OnCancelSphereGen;
+	    }
+	    void OnDisable(){
+	        GenerateButtons_UI.OnCancelGenerationButton -= OnCancelSphereGen;
+	    }
+
+	    void OnCancelSphereGen(){
+	        // Only own cancel while sphere iteration is waiting on custom workflow.
+	        if (_sphereGenIterCompleted) return;
+	        if (StableDiffusion_Hub.instance == null) return;
+	        if (StableDiffusion_Hub.instance._isGeneratingWhat != Generate_RequestingWhat.somethingCustom)
+		        return;
+	        StableDiffusion_Hub.instance.ForceInterruptIncludingCustom();
+	        StableDiffusion_Hub.instance.MarkCustomWorkflow_Done();
+	        _sphereGen_error = true;
+	        _sphereGenIterCompleted = true;
+	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:true);
+	        Viewport_StatusText.instance?.ShowStatusText("HDR sphere generation cancelled.", false, 3f, false);
+	    }
+
 	}
 }//end namespace
