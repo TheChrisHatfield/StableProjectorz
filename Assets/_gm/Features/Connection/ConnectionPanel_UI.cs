@@ -301,10 +301,8 @@ namespace spz {
 	        if (_openPanel_button != null) {
 	            SpzUiThemeOps.EnsureSelectableHitFace(_openPanel_button);
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_openPanel_button, t.controlBg, t.accent);
-	            if (_openPanel_button.targetGraphic is Image face) {
+	            if (_openPanel_button.targetGraphic is Image face)
 	                SpzUiThemeOps.ApplyRoundedControlSprite(face, markEligible: true);
-	                face.preserveAspect = false;
-	            }
 	            // Lead Globe — centered stamps any TMP on the open cell (SERV-class ghost).
 	            SpzUiThemeOps.ApplyControlLineIconLeading(_openPanel_button.transform, StudioLineIcon.Globe, 16f);
 	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_openPanel_button);
