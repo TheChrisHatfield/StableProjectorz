@@ -1,0 +1,2 @@
+# Runtime credentials / prefs — do not commit user keys or session URLs.
+settings.json

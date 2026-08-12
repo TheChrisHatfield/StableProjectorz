@@ -84,6 +84,10 @@ def main() -> int:
         assert st == 200 and body.get("images") and len(body["images"][0]) > 32, body
         print("OK txt2img images[0] len", len(body["images"][0]))
 
+        st, body = post("/sdapi/v1/img2img", {"width": 64, "height": 64, "prompt": "smoke", "init_images": []})
+        assert st == 200 and body.get("images") and len(body["images"][0]) > 32, body
+        print("OK img2img images[0] len", len(body["images"][0]))
+
         st, body = get("/sdapi/v1/progress")
         assert st == 200 and "progress" in body, body
         print("OK progress", body.get("progress"))
