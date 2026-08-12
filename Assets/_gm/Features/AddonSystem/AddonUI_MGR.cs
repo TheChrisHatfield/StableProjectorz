@@ -658,7 +658,7 @@ namespace spz {
 		}
 
 		/// <summary>Parked panels that should move onto the ribbon when the shell is ready (excludes host ribbon-hidden).</summary>
-		int CountParkedAwaitingRibbonShow() {
+		public int CountParkedAwaitingRibbonShow() {
 			int n = 0;
 			for (int i = 0; i < _parkedForRibbon.Count; i++) {
 				ParkedPanel parked = _parkedForRibbon[i];
@@ -776,25 +776,18 @@ namespace spz {
 		}
 
 		void EnsureNativeSpzGoPanel() {
-			// Path TextInputs alone must not skip seeding — Import/Export buttons are the other half.
-			if (TryGetLiveAddonPanel(StableProjectorzGoAddonId, out GameObject existingPanel)
-			    && PanelHasNamedControlPrefix(existingPanel, "Button_Import")
-			    && PanelHasNamedControlPrefix(existingPanel, "Button_Export"))
-				return;
-
-			string panelId;
-			if (existingPanel != null) {
-				panelId = existingPanel.GetInstanceID().ToString();
+			// Existing Import/Export alone is not full parity — still fill Autofill / Refresh / dialogs / Print.
+			if (TryGetLiveAddonPanel(StableProjectorzGoAddonId, out GameObject existingPanel) && existingPanel != null) {
+				string existingId = existingPanel.GetInstanceID().ToString();
 				if (!_addonUIElements.ContainsKey(StableProjectorzGoAddonId))
 					_addonUIElements[StableProjectorzGoAddonId] = new List<GameObject>();
 				if (!_addonUIElements[StableProjectorzGoAddonId].Contains(existingPanel))
 					_addonUIElements[StableProjectorzGoAddonId].Add(existingPanel);
-				UnityEngine.Debug.Log("[AddonUI_MGR] Completing native SPZ GO panel (path fields present, action buttons missing).");
-				EnsureNativeSpzGoMissingWidgets(panelId, existingPanel, seedPathsIfMissing: true);
+				EnsureNativeSpzGoMissingWidgets(existingId, existingPanel, seedPathsIfMissing: true);
 				return;
 			}
 
-			panelId = CreatePanel(StableProjectorzGoAddonId, "SPZ GO");
+			string panelId = CreatePanel(StableProjectorzGoAddonId, "SPZ GO");
 			if (string.IsNullOrEmpty(panelId)) {
 				UnityEngine.Debug.LogWarning("[AddonUI_MGR] Native SPZ GO fallback: CreatePanel failed.");
 				return;

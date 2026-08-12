@@ -189,13 +189,15 @@ namespace spz {
 			return PlayerPrefs.GetInt(PrefsKeyRememberEnabledAddons, 0) == 1;
 		}
 
-		/// <summary>Persists the “remember add-ons” option. When set to true, also saves the current enabled set.</summary>
+		/// <summary>Persists the “remember add-ons” option. On → write current enabled set; off → clear stored ids so next launch cannot restore a stale selection.</summary>
 		public static void SetRememberEnabledAddonsPreference(bool remember) {
 			PlayerPrefs.SetInt(PrefsKeyRememberEnabledAddons, remember ? 1 : 0);
-			PlayerPrefs.Save();
 			if (remember && instance != null) {
 				instance.MaybePersistEnabledAddonSelection();
+			} else if (!remember) {
+				PlayerPrefs.DeleteKey(PrefsKeyEnabledAddonIdsJson);
 			}
+			PlayerPrefs.Save();
 		}
 
 		/// <summary>Writes the list of currently enabled add-on folder ids to disk when the remember option is on.</summary>

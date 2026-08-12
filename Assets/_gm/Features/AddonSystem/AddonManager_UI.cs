@@ -1012,6 +1012,9 @@ namespace spz {
 			SyncRememberEnabledToggleFromPrefs();
 			if (!_draftDirty)
 				SeedDraftFromLiveAddons();
+			// Late ribbon / prior migrate give-up: retry park→shell while the user has the manager open.
+			if (AddonUI_MGR.instance != null)
+				AddonUI_MGR.instance.RequestMigrateParkedPanelsNow();
 			
 			if (_panel == null) {
 				Debug.LogError("[AddonManager_UI] Failed to open panel: _panel is null and could not be created.");
@@ -1124,11 +1127,18 @@ namespace spz {
 					_loadAddonsNowInFlight = false;
 					if (_loadAddonsNow_button != null)
 						_loadAddonsNow_button.interactable = true;
+					int parkedAwaiting = AddonUI_MGR.instance != null
+						? AddonUI_MGR.instance.CountParkedAwaitingRibbonShow()
+						: 0;
 					if (requested == 0)
 						ShowStatus("No enabled add-ons to load.", false);
 					else if (hardFail > 0)
 						ShowStatus(
 							$"Load finished — {hardFail}/{requested} failed (disabled). Check log.",
+							false);
+					else if (parkedAwaiting > 0)
+						ShowStatus(
+							$"Load finished for {requested} add-on(s) — {parkedAwaiting} panel(s) still off-ribbon (waiting for ribbon shell / Show in Ribbon).",
 							false);
 					else
 						ShowStatus($"Load finished for {requested} add-on(s).", true);
