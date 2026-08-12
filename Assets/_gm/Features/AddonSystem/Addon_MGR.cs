@@ -575,20 +575,24 @@ namespace spz {
 			bool needRestartForShow = wantShow && touched == 0 && serverAlive;
 			bool needRestartForHide = !wantShow && _pythonServerStartedWithVisibleConsole && serverAlive && touched == 0;
 			if (needRestartForShow || needRestartForHide) {
-				float since = Time.unscaledTime - _lastAddonVisibilityRestartUnscaledTime;
-				if (since < AddonVisibilityRestartCooldownoldownSec) {
-					UnityEngine.Debug.Log("[Addon_MGR] Black box visibility restart skipped (cooldown).");
+				if (GenerateButtons_UI.isGenerating || GenerateButtons_UI.isGeneratingPaused) {
+					UnityEngine.Debug.Log("[Addon_MGR] Black box visibility restart deferred — generation in progress.");
 				} else {
-					_lastAddonVisibilityRestartUnscaledTime = Time.unscaledTime;
-					UnityEngine.Debug.Log(needRestartForHide
-						? "[Addon_MGR] Black box still visible (no HWND on Python PID) — restarting addon server hidden."
-						: "[Addon_MGR] No visible console HWND — restarting addon Python server with Settings visibility.");
-					TerminatePythonAddonServerProcess(waitForExit: true);
-					TryClearAddonHttpFailMarker();
-					StartPythonServer();
-					// New Python process has no loaded add-ons — same path as cold start auto-load.
-					if (_enableHttpServer && _isServerRunning)
-						StartRequestLoadEnabledAddonsAfterDelay();
+					float since = Time.unscaledTime - _lastAddonVisibilityRestartUnscaledTime;
+					if (since < AddonVisibilityRestartCooldownoldownSec) {
+						UnityEngine.Debug.Log("[Addon_MGR] Black box visibility restart skipped (cooldown).");
+					} else {
+						_lastAddonVisibilityRestartUnscaledTime = Time.unscaledTime;
+						UnityEngine.Debug.Log(needRestartForHide
+							? "[Addon_MGR] Black box still visible (no HWND on Python PID) — restarting addon server hidden."
+							: "[Addon_MGR] No visible console HWND — restarting addon Python server with Settings visibility.");
+						TerminatePythonAddonServerProcess(waitForExit: true);
+						TryClearAddonHttpFailMarker();
+						StartPythonServer();
+						// New Python process has no loaded add-ons — same path as cold start auto-load.
+						if (_enableHttpServer && _isServerRunning)
+							StartRequestLoadEnabledAddonsAfterDelay();
+					}
 				}
 			} else if (!wantShow && touched > 0) {
 				_pythonServerStartedWithVisibleConsole = false;
