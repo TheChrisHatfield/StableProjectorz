@@ -50,7 +50,6 @@ namespace spz {
 
 	    /// <summary>Authored choice-panel scale unused for flip magnitude — Animator owns scale; we only own X sign.</summary>
 	    bool _choicesFanFlipped;
-	    bool _lastWantChoicesFanFlip;
 	    bool _choicesPanelRaycasterAuthoredIgnoreReversed;
 	    bool _capturedChoicesPanelRaycaster;
 
@@ -154,9 +153,8 @@ namespace spz {
 	        bool ribbonsSwapped = Settings_MGR.instance != null
 	            && Settings_MGR.instance.get_viewport_isSwapVerticalRibbons();
 	        bool wantFlip = leftColumnHidden || ribbonsSwapped;
-	        if (wantFlip == _lastWantChoicesFanFlip && wantFlip == _choicesFanFlipped)
+	        if (wantFlip == _choicesFanFlipped)
 	            return;
-	        _lastWantChoicesFanFlip = wantFlip;
 	        ApplyChoicesFanFlip(wantFlip);
 	    }
 
@@ -412,6 +410,8 @@ namespace spz {
 	    void Update(){
 	        // Skeleton left hide can change without ActiveChanged (OPEN RIGHT); keep fan side in sync.
 	        SyncChoicesFanSideForLayout();
+	        if (_choicesPanel_rectTransf == null || _mainChoiceHoverSurf == null)
+	            return;
 	        if (_ishowingChoicePanel){
 	            Vector2 mousePos  = KeyMousePenInput.cursorScreenPos();
 	            bool panelHovered = RectTransformUtility.RectangleContainsScreenPoint(_choicesPanel_rectTransf, mousePos);
