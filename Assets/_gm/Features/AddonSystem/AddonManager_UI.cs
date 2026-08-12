@@ -2252,6 +2252,7 @@ namespace spz {
 			if (prefsBody == null) return;
 			var le = prefsBody.GetComponent<LayoutElement>();
 			if (le != null) {
+				SpzUiThemeOps.SnapshotLayoutElementForTheme(le);
 				// Nested dropdown height is set by ApplyResponsivePrefsDropdownLayout / SetItemExpandedHeight.
 				le.flexibleHeight = 0f;
 				le.flexibleWidth = 1f;
@@ -2267,6 +2268,9 @@ namespace spz {
 			}
 			var row = prefsBody.Find("PrefRow_ShowInRibbon");
 			if (row != null) {
+				var rowLe = row.GetComponent<LayoutElement>();
+				if (rowLe != null)
+					SpzUiThemeOps.SnapshotLayoutElementForTheme(rowLe);
 				var rowHlg = row.GetComponent<HorizontalLayoutGroup>();
 				if (rowHlg != null) {
 					// false: checkbox/label keep authored sizes (true + missing LE stretches the face).
