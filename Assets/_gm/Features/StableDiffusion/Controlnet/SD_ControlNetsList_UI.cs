@@ -293,6 +293,8 @@ namespace spz {
 	    /// before payload build so Gen Art does not silently drop depth.
 	    /// Klein-4B: no compatible CN — disarm models to None so UI matches skipped alwayson payload.
 	    /// FLUX.2-dev: prefer Fun-Union / Flux2 CN when healing depth/normals units.
+	    /// Also fills activated Depth/Normals slots still on None once Fun-Union is installed
+	    /// (first-fill skips when prevChoice was already "None").
 	    /// </summary>
 	    public int TryHealFamilyMismatchedModels(){
 	        if (_controlNet_units == null) return 0;
@@ -347,9 +349,11 @@ namespace spz {
 	            bool wasNorms = u.isForNormals();
 	            // Only depth/normals gates participate in Gen Art projection — leave other CN slots alone.
 	            if (!wasDepth && !wasNorms) continue;
-	            if (u.is_currModel_none) continue;
-	            if (!ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(u.currModelName(), sdCkpt))
-	                continue;
+	            bool needsFill = u.is_currModel_none
+	                && SD_OptionsPacket.CheckpointLooksFlux2Dev(sdCkpt);
+	            bool needsSwap = !u.is_currModel_none
+	                && ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(u.currModelName(), sdCkpt);
+	            if (!needsFill && !needsSwap) continue;
 	            if (!u.dropdowns.TrySelectModelByName(replacement, out _, out _)) continue;
 	            if (wasDepth){
 	                u.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false);
