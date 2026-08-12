@@ -328,6 +328,11 @@ namespace spz {
 
 		void OnRememberEnabledAddonsToggleChanged(bool remember) {
 			Addon_MGR.SetRememberEnabledAddonsPreference(remember);
+			ShowStatus(
+				remember
+					? "Remember on — next launch will restore enabled add-ons after Save writes the selection."
+					: "Remember off — next launch starts with add-ons disabled (prefs like Show in Ribbon still use Save).",
+				true);
 		}
 
 		void TryEnsureSaveSettingsButton() {
@@ -866,7 +871,7 @@ namespace spz {
 		if (string.Equals(controlName, "SaveAddonSettingsButton", StringComparison.Ordinal))
 			return StudioLineIcon.Settings;
 		if (string.Equals(controlName, "CloseButton", StringComparison.Ordinal))
-			return StudioLineIcon.Expand;
+			return StudioLineIcon.ChevronLeft;
 		return StudioLineIcon.Restart;
 	}
 	
@@ -1082,6 +1087,12 @@ namespace spz {
 		/// Closes the add-on manager panel
 		/// </summary>
 		public void ClosePanel() {
+			if (_draftDirty) {
+				ShowStatus(
+					"Closed without Save settings — enable selection / ribbon prefs may not persist next launch.",
+					false);
+				_draftDirty = false;
+			}
 			if (_hidViewportStatusForModal && Viewport_StatusText.instance != null) {
 				Viewport_StatusText.instance.PreferVIsible(this);
 				_hidViewportStatusForModal = false;
@@ -1807,19 +1818,21 @@ namespace spz {
 			if (prefsBtnT != null) {
 				var prefsBtn = prefsBtnT.GetComponent<Button>();
 				if (prefsBtn != null) {
+					SpzUiThemeOps.EnsureSelectableHitFace(prefsBtn);
 					SpzUiThemeOps.ApplyBoundChromeSelectable(prefsBtn, t.controlBg, Color.Lerp(t.controlBg, t.accent, 0.22f));
-					SpzUiThemeOps.ClearNonFaceRaycastsForTheme(prefsBtn);
 				}
 				var prefsLabel = prefsBtnT.GetComponentInChildren<TextMeshProUGUI>(true);
 				if (prefsLabel != null) {
 					float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(prefsLabel, 11f);
-					// Not CompactToolLabel — UpperCase+Truncate turns "Preferences" into PREFEREN□ and clips.
 					SpzUiThemeOps.ApplyBoundChromeTmp(prefsLabel, t.textPrimary, basePt);
 					prefsLabel.enableWordWrapping = false;
 					prefsLabel.overflowMode = TextOverflowModes.Ellipsis;
 					prefsLabel.fontStyle = FontStyles.Normal;
 					prefsLabel.characterSpacing = 0f;
+					prefsLabel.maxVisibleCharacters = int.MaxValue;
 				}
+				if (prefsBtn != null)
+					SpzUiThemeOps.ClearNonFaceRaycastsForTheme(prefsBtn);
 			}
 			var toggle = (header != null ? header.Find("StatusToggle") : null)?.GetComponent<Toggle>();
 			if (toggle == null)
