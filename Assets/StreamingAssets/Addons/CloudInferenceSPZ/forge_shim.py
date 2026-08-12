@@ -7,6 +7,7 @@ import socket
 import threading
 import time
 import traceback
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, Optional, Tuple
 from urllib.parse import urlparse
@@ -44,7 +45,7 @@ class ForgeShimState:
                 "job_active": self.job_active,
                 "progress": self.progress,
                 "last_error": self.last_error,
-                "listen": f"{DEFAULT_HOST}:{DEFAULT_PORT}",
+                "listen": listen_endpoint(),
             }
 
 
@@ -52,10 +53,20 @@ _STATE = ForgeShimState()
 _SERVER: Optional[ThreadingHTTPServer] = None
 _THREAD: Optional[threading.Thread] = None
 _SERVER_LOCK = threading.Lock()
+_LISTEN_HOST = DEFAULT_HOST
+_LISTEN_PORT = DEFAULT_PORT
+
+
+class _ReuseThreadingHTTPServer(ThreadingHTTPServer):
+    allow_reuse_address = True
 
 
 def get_state() -> ForgeShimState:
     return _STATE
+
+
+def listen_endpoint() -> str:
+    return f"{_LISTEN_HOST}:{_LISTEN_PORT}"
 
 
 def is_port_free(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> bool:
@@ -70,6 +81,14 @@ def is_port_free(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> bool:
 def is_running() -> bool:
     with _SERVER_LOCK:
         return _SERVER is not None
+
+
+def _shim_ping_ok(host: str, port: int, timeout_s: float = 1.0) -> bool:
+    try:
+        with urllib.request.urlopen(f"http://{host}:{port}/internal/ping", timeout=timeout_s) as resp:
+            return int(resp.status) == 200
+    except Exception:
+        return False
 
 
 def _json_bytes(obj: Any) -> bytes:
@@ -315,17 +334,44 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 def start_shim(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> Tuple[bool, str]:
-    global _SERVER, _THREAD
+    global _SERVER, _THREAD, _LISTEN_HOST, _LISTEN_PORT
+
+    # Health-check outside the lock so we never block request threads on _SERVER_LOCK.
+    with _SERVER_LOCK:
+        existing = _SERVER
+        existing_thread = _THREAD
+        existing_host, existing_port = _LISTEN_HOST, _LISTEN_PORT
+
+    if existing is not None:
+        if existing_thread is not None and existing_thread.is_alive() and _shim_ping_ok(existing_host, existing_port):
+            return True, f"already listening on {existing_host}:{existing_port}"
+        stop_shim()
+
     with _SERVER_LOCK:
         if _SERVER is not None:
-            return True, f"already listening on {host}:{port}"
+            # Another connect won the race — treat as success if healthy.
+            alive = _THREAD is not None and _THREAD.is_alive()
+            cur_host, cur_port = _LISTEN_HOST, _LISTEN_PORT
+        else:
+            alive = False
+            cur_host, cur_port = host, port
+
+    if alive:
+        if _shim_ping_ok(cur_host, cur_port):
+            return True, f"already listening on {cur_host}:{cur_port}"
+        stop_shim()
+
+    with _SERVER_LOCK:
+        if _SERVER is not None:
+            return True, f"already listening on {_LISTEN_HOST}:{_LISTEN_PORT}"
+
         if not is_port_free(host, port):
             return False, (
                 f"port {host}:{port} is already in use — stop local Forge/WebUI "
                 "or disconnect whatever owns :7860, then Connect again"
             )
         try:
-            server = ThreadingHTTPServer((host, port), _Handler)
+            server = _ReuseThreadingHTTPServer((host, port), _Handler)
             server.daemon_threads = True
         except OSError as exc:
             return False, f"bind failed on {host}:{port}: {exc}"
@@ -339,6 +385,8 @@ def start_shim(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> Tuple[bool
         thread = threading.Thread(target=_serve, name="SPZ-CloudInferenceShim", daemon=True)
         _SERVER = server
         _THREAD = thread
+        _LISTEN_HOST = host
+        _LISTEN_PORT = port
         thread.start()
         return True, f"listening on http://{host}:{port}"
 
