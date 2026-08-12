@@ -69,7 +69,11 @@ public sealed class AddonManagerPrefsRibbonTests {
 			"_gm/Features/AddonSystem/AddonManager_UI.cs"));
 		Assert.That(File.Exists(path), Is.True, path);
 		string src = File.ReadAllText(path);
-		Assert.That(src, Does.Contain("PreferencesButton"));
+		Assert.That(src, Does.Contain("ExpandChevron"));
+		Assert.That(src, Does.Contain("PreferencesCard"));
+		Assert.That(src, Does.Contain("AddonSummary"));
+		Assert.That(src, Does.Contain("AddonVersion"));
+		Assert.That(src, Does.Contain("AddonAuthor"));
 		Assert.That(src, Does.Contain("PreferencesBody"));
 		Assert.That(src, Does.Contain("PrefRow_ShowInRibbon"));
 		Assert.That(src, Does.Contain("PrefsDropdownHeader"));
@@ -78,6 +82,8 @@ public sealed class AddonManagerPrefsRibbonTests {
 		Assert.That(src, Does.Contain("ApplyResponsivePrefsDropdownLayout"));
 		Assert.That(src, Does.Contain("PersistAddonPrefsNow"));
 		Assert.That(src, Does.Contain("SetShowInCommandRibbon"));
+		Assert.That(src, Does.Not.Contain("Preferences ▾"),
+			"Preferences label button removed — chevron expands host prefs.");
 	}
 
 	[Test]

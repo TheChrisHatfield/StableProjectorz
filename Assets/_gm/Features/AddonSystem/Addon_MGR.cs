@@ -24,6 +24,8 @@ namespace spz {
 		public string description;
 		/// <summary>Short label in Add-on Manager (optional; else folder <c>addonId</c>).</summary>
 		public string displayName;
+		/// <summary>Optional maintainer / author shown in expanded host preferences.</summary>
+		public string author;
 	}
 
 	/// <summary>Kill any process listening on the given port (Windows). Avoids [Errno 10048] when starting FastAPI on 5557. Never kills Unity.exe or Unity Hub.</summary>
@@ -526,6 +528,12 @@ namespace spz {
 			public string displayName;
 			/// <summary>List row subtitle: e.g. <c>v1.2.0 • Advanced camera controls…</c> from <c>addon.json</c> or <c>__init__.py</c>.</summary>
 			public string listSubtitle;
+			/// <summary>From <c>addon.json</c> / <c>__version__</c> (expanded host prefs).</summary>
+			public string version;
+			/// <summary>From <c>addon.json</c> author or <c>bl_info</c> (expanded host prefs).</summary>
+			public string author;
+			/// <summary>Short summary of what the add-on does (expanded host prefs).</summary>
+			public string description;
 			/// <summary>Sparse host/addon preferences (Blender-like Manager prefs). Missing keys use defaults.</summary>
 			public JObject prefs;
 		}
@@ -661,10 +669,12 @@ namespace spz {
 			if (info == null) return;
 			if (string.IsNullOrEmpty(info.path) || !Directory.Exists(info.path)) {
 				info.listSubtitle = "Installed add-on";
+				info.description = info.description ?? "Installed add-on";
 				return;
 			}
 			string ver = null;
 			string desc = null;
+			string author = null;
 			string jsonPath = Path.Combine(info.path, "addon.json");
 			if (File.Exists(jsonPath)) {
 				try {
@@ -674,16 +684,20 @@ namespace spz {
 						if (!string.IsNullOrWhiteSpace(m.version)) ver = m.version.Trim();
 						if (!string.IsNullOrWhiteSpace(m.description)) desc = m.description.Trim();
 						if (!string.IsNullOrWhiteSpace(m.displayName)) info.displayName = m.displayName.Trim();
+						if (!string.IsNullOrWhiteSpace(m.author)) author = m.author.Trim();
 					}
 				} catch (Exception e) {
 					UnityEngine.Debug.LogWarning($"[Addon_MGR] addon.json read failed for {info.id}: {e.Message}");
 				}
 			}
-			TryParseInitPyMetadata(Path.Combine(info.path, "__init__.py"), ref ver, ref desc);
+			TryParseInitPyMetadata(Path.Combine(info.path, "__init__.py"), ref ver, ref desc, ref author);
+			info.version = string.IsNullOrWhiteSpace(ver) ? null : ver.Trim();
+			info.author = string.IsNullOrWhiteSpace(author) ? null : author.Trim();
+			info.description = NormalizeSubtitleLine(desc, 220);
 			info.listSubtitle = BuildAddonListSubtitle(ver, desc, info.path);
 		}
 		
-		static void TryParseInitPyMetadata(string initPath, ref string ver, ref string desc) {
+		static void TryParseInitPyMetadata(string initPath, ref string ver, ref string desc, ref string author) {
 			if (!File.Exists(initPath)) return;
 			string text;
 			try {
@@ -697,6 +711,11 @@ namespace spz {
 				var vm = Regex.Match(text, @"__version__\s*=\s*[""']([^""']+)[""']");
 				if (vm.Success)
 					ver = vm.Groups[1].Value.Trim();
+			}
+			if (string.IsNullOrEmpty(author)) {
+				var am = Regex.Match(text, @"[""']author[""']\s*:\s*[""']([^""']+)[""']");
+				if (am.Success)
+					author = am.Groups[1].Value.Trim();
 			}
 			if (!string.IsNullOrEmpty(desc)) return;
 			int a = text.IndexOf("\"\"\"", StringComparison.Ordinal);
