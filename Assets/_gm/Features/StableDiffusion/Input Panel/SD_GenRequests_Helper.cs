@@ -117,7 +117,7 @@ namespace spz {
 	        UserCameras_Permissions.Force_KeepRenderingCameras(true);
 	        try {
 	        //for inpaint to apply itself, etc. (or to avoid checker pattern if had No-Color Mask)
-	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	        Objects_Renderer_MGR.instance?.ReRenderAll_soon();
 
 	            for (int i=0; i<3; ++i){
 	                if (_cancelRequested){
@@ -174,7 +174,7 @@ namespace spz {
 	        }
 
 	        //for inpaint to apply itself, etc. (or to avoid checker pattern if had No-Color Mask)
-	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	        Objects_Renderer_MGR.instance?.ReRenderAll_soon();
 
 	        UserCameras_Permissions.Force_KeepRenderingCameras(true);
 	        try {
@@ -252,7 +252,7 @@ namespace spz {
 	            UserCameras_Permissions.Force_KeepRenderingCameras(true);
 	            try {
 	            if (Objects_Renderer_MGR.instance != null)
-	                Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	                Objects_Renderer_MGR.instance?.ReRenderAll_soon();
 	            for(int i=0; i<3; ++i){
 	                if (_cancelRequested){ AbortPrepAfterCancel(); yield break; }
 	                yield return null;
@@ -390,9 +390,13 @@ namespace spz {
 	    void Finalize_GenerationRequest( int width, int height, int n_iter, int batch_size, string requestCategory, 
 	                                     bool noSdxlAdvice=false ){
 	        string statusMsg = $"Generating {width} x {height} images <b>({requestCategory})</b>.  Num: {n_iter}x{batch_size}";
-	        if (!noSdxlAdvice){
-	            apppend_sdxl_ctrlnet_advice_maybe( ref statusMsg );
-	            append_sdxl_size_advice_maybe(ref statusMsg );
+	        try {
+	            if (!noSdxlAdvice){
+	                apppend_sdxl_ctrlnet_advice_maybe( ref statusMsg );
+	                append_sdxl_size_advice_maybe(ref statusMsg );
+	            }
+	        } catch (System.Exception e) {
+	            UnityEngine.Debug.LogWarning("[SD_GenRequests_Helper] XL advice skipped: " + e.Message);
 	        }
 	        Viewport_StatusText.instance.ReportProgress(0);
 	        Viewport_StatusText.instance.ShowStatusText(statusMsg, false, 999999, progressVisibility:true );
@@ -408,14 +412,17 @@ namespace spz {
 	    //check the names of the selected models.
 	    //If base input model contains XL in its name, then we want all the Depth or Normal ctrlNetUnits to have XL in their name as well.
 	    void apppend_sdxl_ctrlnet_advice_maybe(ref string currMsg_){
-	        string sd_model = SD_InputPanel_UI.instance.models.selectedModel_name;
+	        if (SD_InputPanel_UI.instance == null || SD_InputPanel_UI.instance.models == null) return;
+	        if (SD_ControlNetsList_UI.instance == null) return;
+	        string sd_model = SD_InputPanel_UI.instance.models.selectedModel_name ?? "";
 	        List<string> ctrl_models = SD_ControlNetsList_UI.instance.curentModels_of_DepthOrNormal_units();
+	        if (ctrl_models == null) return;
 
 	        bool sd_likely_sdxl = sd_model.ToLower().Contains("xl");
 	        bool mismatch=false;
         
 	        for(int i=0; i<ctrl_models.Count; ++i){
-	            string unitModelName = ctrl_models[i];
+	            string unitModelName = ctrl_models[i] ?? "";
 	            bool ok =  sd_likely_sdxl == unitModelName.ToLower().Contains("xl");
 	            if(ok){ continue; }
 	            mismatch=true; 
@@ -429,7 +436,8 @@ namespace spz {
 
 	    void append_sdxl_size_advice_maybe(ref string currMsg_){
 	        var inp = SD_InputPanel_UI.instance;
-	        string sd_model = inp.models.selectedModel_name;
+	        if (inp == null || inp.models == null) return;
+	        string sd_model = inp.models.selectedModel_name ?? "";
 	        bool sd_likely_sdxl = sd_model.ToLower().Contains("xl");
 	        if(!sd_likely_sdxl){ return; }
 	        if(inp.width > 768 || inp.height > 768){ return; }
@@ -439,7 +447,7 @@ namespace spz {
 
 	    void OnProgressResponse( UnityWebRequest request ){
 
-	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	        Objects_Renderer_MGR.instance?.ReRenderAll_soon();
 
 	        if (request.result == UnityWebRequest.Result.ConnectionError || request.result == UnityWebRequest.Result.ProtocolError){
 	            Viewport_StatusText.instance.ReportProgress(0);
@@ -510,7 +518,7 @@ namespace spz {
 	            _isGeneratingWhat = Generate_RequestingWhat.nothing;
 	            _generationCooldownUntil = Time.unscaledTime + _generationCooldown;
 	            if (Objects_Renderer_MGR.instance != null)
-	                Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	                Objects_Renderer_MGR.instance?.ReRenderAll_soon();
 	            Viewport_StatusText.instance.ShowStatusText(
 	                "Klein Gen Art rejected: Neo result looks like depth plate (structure channel, not albedo).",
 	                false, 8, progressVisibility:false);
@@ -531,7 +539,7 @@ namespace spz {
 	                Art2D_IconsUI_List.instance.EnsureGenerationVisibleInViewport( latestGuid );
 	        }
 
-	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	        Objects_Renderer_MGR.instance?.ReRenderAll_soon();
 	        StartCoroutine( ReRenderAgainAfterFrames( 2 ) );
 
 	        int numGenerations = PlayerPrefs.GetInt("numArtGenerated", 0);
@@ -642,7 +650,7 @@ namespace spz {
 	        for(int i = 0; i < frames; i++)
 	            yield return null;
 	        if (Objects_Renderer_MGR.instance != null)
-	            Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	            Objects_Renderer_MGR.instance?.ReRenderAll_soon();
 	    }
 
 	    Coroutine _finishTheInterrupt_ifStuck_crtn = null;
@@ -675,7 +683,7 @@ namespace spz {
 	        if (!_cancelRequested && _isGeneratingWhat != Generate_RequestingWhat.nothing)
 	            return;
 	        if (Objects_Renderer_MGR.instance != null)
-	            Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	            Objects_Renderer_MGR.instance?.ReRenderAll_soon();
 
 	        ClearStuckInterruptTimer();
 	        if (_activeRequestCrtn != null){
