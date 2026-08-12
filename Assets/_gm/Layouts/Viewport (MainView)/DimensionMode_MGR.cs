@@ -398,7 +398,8 @@ namespace spz {
 	            if(_mainChoiceHoverSurf.isHovering==false && !panelHovered){
 	                _ishowingChoicePanel = false;
 	                _choicesPanel_anim.SetBool("ShowPanel", false);
-	                // hide:true — after close anim, deactivate so flipped/invisible graphics do not steal hits.
+	                // Drop hits immediately — close anim still runs for 0.4s before deactivate.
+	                SetChoicesPanelRaycastsEnabled(false);
 	                if(_showHidePanel_crtn!=null){ StopCoroutine(_showHidePanel_crtn); }
 	                _showHidePanel_crtn = StartCoroutine(ShowHidePanel_crtn(hide: true));
 	            }
@@ -413,10 +414,24 @@ namespace spz {
 	                _showHidePanel_crtn  = StartCoroutine(ShowHidePanel_crtn(hide:false));
 	                _ishowingChoicePanel = true;
 	                _choicesPanel_anim.SetBool("ShowPanel", true);
+	                SetChoicesPanelRaycastsEnabled(true);
 	            }
 	        }
 	    }
 
+	    void LateUpdate() {
+	        // After Animator writes Show_ChoicePanel scale (positive), keep fullscreen mirror sign.
+	        EnforceChoicesFanScaleSign();
+	    }
+
+
+	    void SetChoicesPanelRaycastsEnabled(bool enabled) {
+	        if (_choicesPanel_rectTransf == null)
+	            return;
+	        var raycaster = _choicesPanel_rectTransf.GetComponent<GraphicRaycaster>();
+	        if (raycaster != null)
+	            raycaster.enabled = enabled;
+	    }
 
 	    IEnumerator ShowHidePanel_crtn(bool hide){
 	        _choicesPanel_rectTransf.gameObject.SetActive(true);

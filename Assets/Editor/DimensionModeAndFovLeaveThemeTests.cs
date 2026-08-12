@@ -20,6 +20,7 @@ public sealed class DimensionModeAndFovLeaveThemeTests {
 		Assert.That(src, Does.Contain("SyncChoicesFanSideForLayout"));
 		Assert.That(src, Does.Contain("ApplyChoicesFanFlip"));
 		Assert.That(src, Does.Contain("ShouldHideMirroredLeftColumnContent"));
+		Assert.That(src, Does.Contain("SetChoicesPanelRaycastsEnabled"));
 		Assert.That(src, Does.Contain("EnforceChoicesFanScaleSign"));
 		Assert.That(src, Does.Contain("LateUpdate"));
 		Assert.That(src, Does.Contain("Show_ChoicePanel"));
