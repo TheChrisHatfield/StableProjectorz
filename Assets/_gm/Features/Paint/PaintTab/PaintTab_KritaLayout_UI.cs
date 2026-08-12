@@ -368,21 +368,28 @@ namespace spz {
 			var brushLe = GetSectionLayoutElement(_brushPresetsSection);
 			var toolLe = GetSectionLayoutElement(_toolOptionsSection);
 			var colorLe = GetSectionLayoutElement(_colorPaletteSection);
-			if (layersLe == null || brushLe == null || toolLe == null || colorLe == null)
+			if (layersLe == null || brushLe == null || toolLe == null || colorLe == null) {
+				// FinishDrag already cleared IsDragging — must still unlock preferred locks.
+				ApplySavedSectionWeights();
 				return;
+			}
 
 			float hL = SectionHeightForWeight(layersLe);
 			float hB = SectionHeightForWeight(brushLe);
 			float hT = SectionHeightForWeight(toolLe);
 			float hC = SectionHeightForWeight(colorLe);
 			float sumH = hL + hB + hT + hC;
-			if (sumH < 1f) return;
+			if (!(sumH > 1f) || float.IsNaN(sumH) || float.IsInfinity(sumH)) {
+				ApplySavedSectionWeights();
+				return;
+			}
 
 			const float defaultSum = DefaultFlexLayers + DefaultFlexBrush + DefaultFlexTool + DefaultFlexColor;
 			float wL = hL / sumH * defaultSum;
 			float wB = hB / sumH * defaultSum;
 			float wT = hT / sumH * defaultSum;
 			float wC = hC / sumH * defaultSum;
+			SanitizeFlexWeights(ref wL, ref wB, ref wT, ref wC);
 			ApplyFlexWeights(wL, wB, wT, wC);
 			SaveSectionWeights(wL, wB, wT, wC);
 			var root = transform as RectTransform;
