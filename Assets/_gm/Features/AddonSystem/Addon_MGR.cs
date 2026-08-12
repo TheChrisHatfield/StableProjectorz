@@ -144,6 +144,8 @@ namespace spz {
 #endif
 		/// <summary>True when the current addon Python process was started with a visible Black box console.</summary>
 		bool _pythonServerStartedWithVisibleConsole;
+		float _lastAddonVisibilityRestartUnscaledTime = -999f;
+		const float AddonVisibilityRestartCooldownSec = 3f;
 		private Dictionary<string, AddonInfo> _registeredAddons = new Dictionary<string, AddonInfo>();
 		private bool _isServerRunning = false;
 		/// <summary>One in-flight load/unload HTTP op per addon — rapid toggle must not race register/unregister.</summary>
@@ -548,17 +550,22 @@ namespace spz {
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
 			var pids = new HashSet<uint>();
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-			if (_pythonServerPid != 0)
-				pids.Add(_pythonServerPid);
+			if (_pythonServerPid != 0) {
+				if (StartExternalProcess.IsProcessRunning(_pythonServerPid))
+					pids.Add(_pythonServerPid);
+				else
+					ClearStalePythonServerRunningFlag();
+			}
 #endif
 			if (_enableHttpServer) {
 				foreach (uint p in AddonPortHelper.TryGetListeningPidsOnPort(_httpServerPort))
 					pids.Add(p);
 			}
 			int touched = StartExternalProcess.TrySetWindowsVisibleForProcessIds(pids, wantShow);
-			UnityEngine.Debug.Log($"[Addon_MGR] In-session external windows {(wantShow ? "show" : "hide")}: touched={touched}, pids={pids.Count}");
+			UnityEngine.Debug.Log($"[Addon_MGR] In-session Black box {(wantShow ? "show" : "hide")}: touched={touched}, pids={pids.Count}");
 
-			bool serverAlive = _isServerRunning || pids.Count > 0;
+			// Prefer live evidence (PID / :5557 listener). Do not trust a stale _isServerRunning alone.
+			bool serverAlive = pids.Count > 0;
 #if UNITY_EDITOR
 			if (_pythonProcess != null && !_pythonProcess.HasExited)
 				serverAlive = true;
@@ -568,15 +575,21 @@ namespace spz {
 			bool needRestartForShow = wantShow && touched == 0 && serverAlive;
 			bool needRestartForHide = !wantShow && _pythonServerStartedWithVisibleConsole && serverAlive && touched == 0;
 			if (needRestartForShow || needRestartForHide) {
-				UnityEngine.Debug.Log(needRestartForHide
-					? "[Addon_MGR] Black box still visible (no HWND on Python PID) — restarting addon server hidden."
-					: "[Addon_MGR] No visible console HWND — restarting addon Python server with Settings visibility.");
-				TerminatePythonAddonServerProcess(waitForExit: true);
-				TryClearAddonHttpFailMarker();
-				StartPythonServer();
-				// New Python process has no loaded add-ons — same path as cold start auto-load.
-				if (_enableHttpServer && _isServerRunning)
-					StartRequestLoadEnabledAddonsAfterDelay();
+				float since = Time.unscaledTime - _lastAddonVisibilityRestartUnscaledTime;
+				if (since < AddonVisibilityRestartCooldownoldownSec) {
+					UnityEngine.Debug.Log("[Addon_MGR] Black box visibility restart skipped (cooldown).");
+				} else {
+					_lastAddonVisibilityRestartUnscaledTime = Time.unscaledTime;
+					UnityEngine.Debug.Log(needRestartForHide
+						? "[Addon_MGR] Black box still visible (no HWND on Python PID) — restarting addon server hidden."
+						: "[Addon_MGR] No visible console HWND — restarting addon Python server with Settings visibility.");
+					TerminatePythonAddonServerProcess(waitForExit: true);
+					TryClearAddonHttpFailMarker();
+					StartPythonServer();
+					// New Python process has no loaded add-ons — same path as cold start auto-load.
+					if (_enableHttpServer && _isServerRunning)
+						StartRequestLoadEnabledAddonsAfterDelay();
+				}
 			} else if (!wantShow && touched > 0) {
 				_pythonServerStartedWithVisibleConsole = false;
 			}
