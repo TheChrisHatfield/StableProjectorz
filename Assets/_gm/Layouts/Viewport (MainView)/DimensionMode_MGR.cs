@@ -74,6 +74,19 @@ namespace spz {
 	        }
 	    }
 
+	    /// <summary>
+	    /// Open SD/3D/UV fan rect for FULL/SRN clearance (includes mirrored fullscreen footprint).
+	    /// </summary>
+	    public bool TryGetOpenChoicesPanelVisualRect(out RectTransform choicesRt) {
+	        choicesRt = null;
+	        if (!_ishowingChoicePanel || _choicesPanel_rectTransf == null)
+	            return false;
+	        if (!_choicesPanel_rectTransf.gameObject.activeInHierarchy)
+	            return false;
+	        choicesRt = _choicesPanel_rectTransf;
+	        return true;
+	    }
+
 
 	    void Awake(){
 	        if(instance != null){ DestroyImmediate(this.gameObject); return; }
