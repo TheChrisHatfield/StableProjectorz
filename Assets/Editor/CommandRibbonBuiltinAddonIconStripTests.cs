@@ -27,11 +27,27 @@ public sealed class CommandRibbonBuiltinAddonIconStripTests {
 		Assert.That(src, Does.Contain("Hide visible label glyphs in icon strip"));
 		Assert.That(src, Does.Contain("Attach to the raycast face"));
 		Assert.That(src, Does.Contain("Hidden labels must not steal hover/clicks"));
+		Assert.That(src, Does.Contain("Harmonize-before-theme measured maxVisibleCharacters=0"));
 	}
 
 	[Test]
-	public void ThemeStripTabCell_BuiltinAddonIcon_PrefabTmpOnly_WiresHitFaceClearsLabelRaycast() {
+	public void RefreshRibbonTabStripLayout_Source_AppliesThemeBeforeHarmonize() {
+		string path = Path.Combine(Application.dataPath, "_gm", "Layouts", "RightPanel", "CommandRibbon_UI.cs");
+		string src = File.ReadAllText(path);
+		int refresh = src.IndexOf("void RefreshRibbonTabStripLayout", System.StringComparison.Ordinal);
+		Assert.That(refresh, Is.GreaterThan(0));
+		int next = src.IndexOf("void RefreshTabStripLayout()", refresh, System.StringComparison.Ordinal);
+		Assert.That(next, Is.GreaterThan(refresh));
+		string body = src.Substring(refresh, next - refresh);
+		Assert.That(body, Does.Contain("ApplyThemeTokens()"));
+		Assert.That(body, Does.Not.Contain("HarmonizeStripTabTypography()"),
+			"Harmonize must run inside ApplyThemeTokens after labels are restored, not before");
+	}
+
+	[Test]
+	public void ThemeStripTabCell_BuiltinAddonIcon_PrefabTmpOnly_KeepsLabelHitsAndTooltip() {
 		// Prefab Art pattern: null targetGraphic, no TabBg — OG hits landed on TMP.
+		// Builtin icon strip must not Ensure synthetic TabBg (sticky after Leave); keep TMP hits + tooltip on label.
 		SpzUiThemeOps.ResetTheme();
 		var root = new GameObject("BuiltinAddonIconPrefabTab");
 		root.SetActive(false);
@@ -61,11 +77,10 @@ public sealed class CommandRibbonBuiltinAddonIconStripTests {
 			});
 
 			Assert.That(label.maxVisibleCharacters, Is.EqualTo(0));
-			Assert.That(label.raycastTarget, Is.False);
-			Assert.That(btn.targetGraphic, Is.Not.Null, "icon strip must wire a face when TMP no longer hits");
-			Assert.That(btn.targetGraphic.raycastTarget, Is.True);
-			var tip = btn.targetGraphic.GetComponent<CanShowTooltip_UI>();
-			Assert.That(tip, Is.Not.Null);
+			Assert.That(label.raycastTarget, Is.True, "TMP-only prefab must keep label hits (no Ensure TabBg)");
+			Assert.That(cell.transform.Find("TabBg"), Is.Null, "must not inject sticky synthetic TabBg");
+			var tip = label.GetComponent<CanShowTooltip_UI>();
+			Assert.That(tip, Is.Not.Null, "hover name must attach to the hittable label");
 		}
 		finally {
 			Object.DestroyImmediate(root);
