@@ -30,6 +30,7 @@ public sealed class NomadThemeSiloContractTests {
 		"ApplyBoundChromePromptHeaderTmp",
 		"ApplyBoundChromePromptPolaritySignTmp",
 		"ApplyBoundChromeGraphic",
+		"ApplyBoundChromeIconTint",
 		"ApplyBoundChromeSelectable",
 		"ApplySolidSquareChrome",
 		"ApplyNomadSliderChrome",

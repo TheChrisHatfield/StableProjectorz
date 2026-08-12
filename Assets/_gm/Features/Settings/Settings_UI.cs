@@ -854,7 +854,7 @@ namespace spz {
 	            // Glyph-as-face buttons (close/X, icons) — SolidSquare blanks them under Nomad.
 	            if (SpzUiThemeOps.IsAuthoredIconFace(btn.targetGraphic)) {
 	                if (btn.targetGraphic is Image face)
-	                    SpzUiThemeOps.ApplyBoundChromeGraphic(face, t.iconTint);
+	                    SpzUiThemeOps.ApplyBoundChromeIconTint(face, t.iconTint);
 	                SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	                continue;
 	            }

@@ -253,7 +253,7 @@ namespace spz {
 	        // Import/load glyphs often ARE the face — SolidSquare blanks mesh-list chrome under Nomad.
 	        if (SpzUiThemeOps.IsAuthoredIconFace(btn.targetGraphic)) {
 	            if (btn.targetGraphic is Image face)
-	                SpzUiThemeOps.ApplyBoundChromeGraphic(face, t.iconTint);
+	                SpzUiThemeOps.ApplyBoundChromeIconTint(face, t.iconTint);
 	        } else {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
 	        }
