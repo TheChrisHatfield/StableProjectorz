@@ -1254,6 +1254,19 @@ namespace spz {
 			}
 		}
 
+		/// <summary>
+		/// After install/refresh while draft is dirty, new add-on ids are missing from the Close-without-Save
+		/// baseline — merge them at current live value so a later discard can still revert their ribbon flips.
+		/// </summary>
+		void EnsureShowInRibbonSnapshotCoversAllAddons() {
+			if (Addon_MGR.instance == null) return;
+			foreach (var kvp in Addon_MGR.instance.GetAddons()) {
+				if (string.IsNullOrEmpty(kvp.Key)) continue;
+				if (_showInRibbonSnapshotById.ContainsKey(kvp.Key)) continue;
+				_showInRibbonSnapshotById[kvp.Key] = Addon_MGR.instance.ShouldShowInCommandRibbon(kvp.Key);
+			}
+		}
+
 		void RevertShowInRibbonPrefsFromSnapshot() {
 			if (Addon_MGR.instance == null || _showInRibbonSnapshotById.Count == 0) return;
 			foreach (var kvp in _showInRibbonSnapshotById) {
@@ -1474,6 +1487,8 @@ namespace spz {
 
 			if (!_draftDirty)
 				SeedDraftFromLiveAddons();
+			else
+				EnsureShowInRibbonSnapshotCoversAllAddons();
 			
 			var addons = Addon_MGR.instance.GetAddons();
 			var filteredAddons = new List<KeyValuePair<string, Addon_MGR.AddonInfo>>();
