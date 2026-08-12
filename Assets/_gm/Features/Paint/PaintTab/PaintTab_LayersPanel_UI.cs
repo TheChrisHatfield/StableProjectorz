@@ -234,7 +234,7 @@ namespace spz {
 
 		void Start()
 		{
-			if (_layerStack == null) _layerStack = FindObjectOfType<PaintLayerStack_MGR>();
+			if (_layerStack == null) _layerStack = FindObjectOfType<PaintLayerStack_MGR>(true);
 			if (_listRoot == null) _listRoot = transform as RectTransform;
 			if (_layerStack == null) return;
 			_layerStack.OnLayersChanged -= RebuildList;

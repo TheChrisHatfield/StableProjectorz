@@ -390,6 +390,11 @@ namespace spz {
 		    if (shell.name != null && shell.name.StartsWith("Panel_", StringComparison.Ordinal) && shell.name.Length > 6)
 			    addonId = shell.name.Substring("Panel_".Length);
 
+		    // Tab click: park→shell may have been skipped when the ribbon was late — retry before placeholder.
+		    if (!string.IsNullOrEmpty(addonId) && AddonUI_MGR.instance != null
+		        && !ShellHasAddonPanelWidgets(shell))
+			    AddonUI_MGR.instance.RequestMigrateParkedPanelsNow();
+
 		    // Always try native seed for known add-ons (title-only shells must not skip this).
 		    if (!string.IsNullOrEmpty(addonId) && AddonUI_MGR.instance != null)
 			    AddonUI_MGR.instance.EnsureNativeFallbackUiWhenPythonMissing(addonId);
@@ -524,6 +529,10 @@ namespace spz {
 	        if (_Paint_Panel == null) return;
 	        ShowOnePanel( _Paint_Panel.gameObject );
 	        _currentPanel = Panel.Paint;
+	        // Re-bind toolchest / layers if singletons arrived after first OnEnable, or re-select while already active.
+	        var collector = _Paint_Panel.GetComponent<PaintTab_CollectPaintUI>();
+	        if (collector != null)
+	            collector.CollectNow();
 	    }
 
 	    void Update(){
