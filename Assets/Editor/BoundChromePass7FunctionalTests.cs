@@ -176,6 +176,12 @@ public sealed class BoundChromePass7FunctionalTests {
 		Assert.That(src, Does.Contain("const float openRightLabelPt = DockLabelBasePt - 1f"));
 		Assert.That(src, Does.Contain("s_columnFrameSuppressCount"));
 		Assert.That(src, Does.Contain("FindDirectChildIncludingInactive(vlgRoot, MenuRowName)"));
+		Assert.That(src, Does.Contain("CollectNamedFullViewRowRoots"));
+		int collectIdx = src.IndexOf("static void CollectNamedFullViewRowRoots", System.StringComparison.Ordinal);
+		Assert.That(collectIdx, Is.GreaterThan(0));
+		string collectBody = src.Substring(collectIdx, System.Math.Min(700, src.Length - collectIdx));
+		Assert.That(collectBody, Does.Contain("MenuRowName"),
+			"Scene-wide dock sweep must destroy OPEN RIGHT menu rows, same as DestroyNamedRowsUnderTransform");
 		Assert.That(src, Does.Contain("ResetColumnFrameSuppressStatics"));
 		Assert.That(src, Does.Contain("RuntimeInitializeLoadType.SubsystemRegistration"));
 		Assert.That(src, Does.Contain("RegisteredInstances.Clear()"));

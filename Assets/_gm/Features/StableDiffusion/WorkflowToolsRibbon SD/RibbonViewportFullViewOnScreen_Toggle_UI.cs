@@ -304,8 +304,11 @@ namespace spz {
 			if (t == null) {
 				return;
 			}
+			// Must include MenuRowName — otherwise DestroyAllInjectedFullViewRowsInOpenScenes leaves
+			// orphan OPEN RIGHT rows after TearDown / addon-disable sweeps (DestroyNamedRowsUnderTransform does include it).
 			if (string.Equals(t.name, RowName, StringComparison.Ordinal)
-			    || string.Equals(t.name, SpacerName, StringComparison.Ordinal)) {
+			    || string.Equals(t.name, SpacerName, StringComparison.Ordinal)
+			    || string.Equals(t.name, MenuRowName, StringComparison.Ordinal)) {
 				outList.Add(t.gameObject);
 			}
 			for (int c = 0; c < t.childCount; c++) {
