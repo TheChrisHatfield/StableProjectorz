@@ -55,12 +55,14 @@ namespace spz {
 
 	    public void Generate_txt2Img(bool isMakingBackgrounds,  Action onRequested=null ){
 	        _cancelRequested = false;
+	        ClearStuckInterruptTimer();
 	        if (_activeRequestCrtn != null){ StopCoroutine(_activeRequestCrtn); _activeRequestCrtn = null; }
 	        _activeRequestCrtn = StartCoroutine( Generate_txt2Img_crtn(isMakingBackgrounds, onRequested) );
 	    }
 
 	    public void Generate_img2img(bool isMakingBackgrounds,  Action onRequested=null ){
 	        _cancelRequested = false;
+	        ClearStuckInterruptTimer();
 	        if (_activeRequestCrtn != null){ StopCoroutine(_activeRequestCrtn); _activeRequestCrtn = null; }
 	        _activeRequestCrtn = StartCoroutine( Generate_img2img_crtn(isMakingBackgrounds, onRequested) );
 	    }
@@ -69,6 +71,7 @@ namespace spz {
 	    public void Upscale_img2extra(float upscaleBy,  GenData2D genData_canBeNull=null, 
 	                                  Texture2D imgForSending=null, Action onRequested=null){
 	        _cancelRequested = false;
+	        ClearStuckInterruptTimer();
 	        if (_activeRequestCrtn != null){ StopCoroutine(_activeRequestCrtn); _activeRequestCrtn = null; }
 	        _activeRequestCrtn = StartCoroutine( Upscale_img2extra_crtn(upscaleBy, genData_canBeNull, imgForSending, onRequested) );
 	    }
@@ -598,13 +601,23 @@ namespace spz {
 
 	    public void OnStopGenerate_Button(){
 	        _cancelRequested = true;
+	        bool prepOnlyAbort = false;
 	        if (_activeRequestCrtn != null){
 	            StopCoroutine(_activeRequestCrtn);
 	            _activeRequestCrtn = null;
 	            // Prep may never have POSTed — clear flags now so DenyWithMessage cannot stick on forever.
 	            if (_finalPreparations_beforeGen){
 	                AbortPrepAfterCancel();
+	                prepOnlyAbort = true;
 	            }
+	        }
+	        ClearStuckInterruptTimer();
+	        if (prepOnlyAbort) {
+	            // No server job to interrupt — do not arm a 10s FinishTheInterrupt that can kill the next gen.
+	            _cancelRequested = false;
+	            GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:true);
+	            Viewport_StatusText.instance.ShowStatusText("Cancelled before request was sent.", false, 3, progressVisibility: false);
+	            return;
 	        }
 	        _generate_sender.Send_StopGenerateRequest();
 	        float gracePeriod = 10;//wait at least 10 sec from server. If no response, then our coroutine will perform clean-up.
@@ -622,9 +635,16 @@ namespace spz {
 	    }
 
 	    Coroutine _finishTheInterrupt_ifStuck_crtn = null;
+	    void ClearStuckInterruptTimer(){
+	        if (_finishTheInterrupt_ifStuck_crtn == null) return;
+	        StopCoroutine(_finishTheInterrupt_ifStuck_crtn);
+	        _finishTheInterrupt_ifStuck_crtn = null;
+	    }
 	    IEnumerator FinishTheInterrupt_ifStuck(float graceDelay=10){
 	        yield return new WaitForSeconds(graceDelay);
 	        _finishTheInterrupt_ifStuck_crtn = null;//set null BEFORE finishInterrupt().
+	        // New generate cleared _cancelRequested — do not tear down the live job.
+	        if (!_cancelRequested) yield break;
 	        OnFinishTheInterrupt();
 	    }
 
@@ -641,13 +661,12 @@ namespace spz {
 
 
 	    void OnFinishTheInterrupt(){
+	        if (!_cancelRequested && _isGeneratingWhat != Generate_RequestingWhat.nothing)
+	            return;
 	        if (Objects_Renderer_MGR.instance != null)
 	            Objects_Renderer_MGR.instance.ReRenderAll_soon();
 
-	        if(_finishTheInterrupt_ifStuck_crtn!=null){ 
-	            StopCoroutine(_finishTheInterrupt_ifStuck_crtn); 
-	            _finishTheInterrupt_ifStuck_crtn=null; 
-	        }
+	        ClearStuckInterruptTimer();
 	        if (_activeRequestCrtn != null){
 	            StopCoroutine(_activeRequestCrtn);
 	            _activeRequestCrtn = null;

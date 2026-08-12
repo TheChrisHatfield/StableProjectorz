@@ -22,8 +22,15 @@ public sealed class SdCancelStopsPrepContractTests {
 		string stopBody = src.Substring(stop, rerender - stop);
 		Assert.That(stopBody, Does.Contain("StopCoroutine(_activeRequestCrtn)"));
 		Assert.That(stopBody, Does.Contain("AbortPrepAfterCancel"));
+		Assert.That(stopBody, Does.Contain("prepOnlyAbort"),
+			"Prep-only cancel must not arm FinishTheInterrupt_ifStuck (kills next gen).");
+		Assert.That(stopBody, Does.Contain("ClearStuckInterruptTimer"));
+		Assert.That(src, Does.Contain("ClearStuckInterruptTimer()"),
+			"New Generate_* must cancel any pending stuck-interrupt timer.");
 		int finish = src.IndexOf("void OnFinishTheInterrupt()", System.StringComparison.Ordinal);
-		string finishBody = src.Substring(finish, Math.Min(800, src.Length - finish));
+		string finishBody = src.Substring(finish, Math.Min(900, src.Length - finish));
 		Assert.That(finishBody, Does.Contain("_finalPreparations_beforeGen = false"));
+		Assert.That(finishBody, Does.Contain("!_cancelRequested && _isGeneratingWhat"),
+			"Stuck timer must not tear down a live generation.");
 	}
 }
