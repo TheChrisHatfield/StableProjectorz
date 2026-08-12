@@ -86,6 +86,62 @@ public sealed class KleinStructureChannelContractTests {
 	}
 
 	[Test]
+	public void InpaintBakeMask_CapturesBrushMaskOnKleinTxt2img() {
+		Assert.That(SD_KleinStructureChannel.ShouldCaptureInpaintBakeMaskForTxt2img(
+			isMakingBackgrounds: false,
+			isKleinCheckpoint: true,
+			isImg2ImgWorkflowMode: true,
+			mode: WorkflowRibbon_CurrMode.Inpaint_Color), Is.True);
+		Assert.That(SD_KleinStructureChannel.ShouldCaptureInpaintBakeMaskForTxt2img(
+			isMakingBackgrounds: false,
+			isKleinCheckpoint: true,
+			isImg2ImgWorkflowMode: true,
+			mode: WorkflowRibbon_CurrMode.Inpaint_NoColor), Is.True);
+		Assert.That(SD_KleinStructureChannel.ShouldCaptureInpaintBakeMaskForTxt2img(
+			isMakingBackgrounds: false,
+			isKleinCheckpoint: true,
+			isImg2ImgWorkflowMode: true,
+			mode: WorkflowRibbon_CurrMode.TotalObject), Is.True);
+		Assert.That(SD_KleinStructureChannel.ShouldCaptureInpaintBakeMaskForTxt2img(
+			isMakingBackgrounds: false,
+			isKleinCheckpoint: true,
+			isImg2ImgWorkflowMode: true,
+			mode: WorkflowRibbon_CurrMode.WhereEmpty), Is.True);
+		Assert.That(SD_KleinStructureChannel.ShouldCaptureInpaintBakeMaskForTxt2img(
+			isMakingBackgrounds: true,
+			isKleinCheckpoint: true,
+			isImg2ImgWorkflowMode: true,
+			mode: WorkflowRibbon_CurrMode.Inpaint_Color), Is.False);
+		Assert.That(SD_KleinStructureChannel.ShouldCaptureInpaintBakeMaskForTxt2img(
+			isMakingBackgrounds: false,
+			isKleinCheckpoint: false,
+			isImg2ImgWorkflowMode: true,
+			mode: WorkflowRibbon_CurrMode.Inpaint_Color), Is.False);
+		Assert.That(SD_KleinStructureChannel.ShouldCaptureInpaintBakeMaskForTxt2img(
+			isMakingBackgrounds: false,
+			isKleinCheckpoint: true,
+			isImg2ImgWorkflowMode: true,
+			mode: WorkflowRibbon_CurrMode.ProjectionsMasking), Is.False);
+		Assert.That(SD_KleinStructureChannel.ShouldCaptureInpaintBakeMaskForTxt2img(
+			isMakingBackgrounds: false,
+			isKleinCheckpoint: true,
+			isImg2ImgWorkflowMode: false,
+			mode: WorkflowRibbon_CurrMode.Inpaint_Color), Is.False);
+
+		string payload = Read("Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Generate_PayloadMaker.cs");
+		Assert.That(payload, Does.Contain("CaptureKleinTxt2imgInpaintBakeMask"));
+		Assert.That(payload, Does.Contain("ShouldCaptureInpaintBakeMaskForTxt2img"));
+		Assert.That(payload, Does.Contain("kleinTxt2imgInpaintBakeMask"));
+		Assert.That(payload, Does.Contain("kleinSoftInpaintBlend"));
+		Assert.That(payload, Does.Contain("kleinInpaintBlendStrength"));
+		string results = Read("Assets", "_gm", "Features", "StableDiffusion", "GenData", "GenData_ResultTextures.cs");
+		Assert.That(results, Does.Contain("TryApplyKleinTxt2imgInpaintComposite"));
+		Assert.That(results, Does.Contain("kleinTxt2imgInpaintBakeMask"));
+		string paintUi = Read("Assets", "_gm", "Features", "Paint", "PaintTab", "PaintTab_CollectPaintUI.cs");
+		Assert.That(paintUi, Does.Contain("WorkflowRibbon_CurrMode.WhereEmpty"));
+	}
+
+	[Test]
 	public void StyleRef_GrayTexture_IsNotUsable() {
 		var gray = new Texture2D(8, 8, TextureFormat.RGBA32, false);
 		var depth = new Texture2D(8, 8, TextureFormat.RGBA32, false);
@@ -214,5 +270,20 @@ public sealed class KleinStructureChannelContractTests {
 		string ch = Read("Assets", "_gm", "Features", "StableDiffusion", "Klein", "SD_KleinStructureChannel.cs");
 		Assert.That(ch, Does.Contain("EnsureRequestStarted"));
 		Assert.That(ch, Does.Not.Contain("KleinStructureTrace.BeginRequest();"));
+	}
+
+	[Test]
+	public void OnGeneratedResult_RejectsKleinBeforeSuccessFinish() {
+		string helper = Read("Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_GenRequests_Helper.cs");
+		int onGen = helper.IndexOf("void OnGeneratedResult(", StringComparison.Ordinal);
+		Assert.That(onGen, Is.GreaterThan(0));
+		string body = helper.Substring(onGen, Math.Min(1800, helper.Length - onGen));
+		int reject = body.IndexOf("RejectKleinDepthLikeResult", StringComparison.Ordinal);
+		int successFinish = body.IndexOf("OnConfirmed_FinishedGenerate(canceled:false)", StringComparison.Ordinal);
+		Assert.That(reject, Is.GreaterThan(0));
+		Assert.That(successFinish, Is.GreaterThan(reject),
+			"Success finish must run only after Klein reject check passes.");
+		Assert.That(body, Does.Contain("OnConfirmed_FinishedGenerate(canceled:true)"),
+			"Klein reject must finish UI as canceled, not success.");
 	}
 }

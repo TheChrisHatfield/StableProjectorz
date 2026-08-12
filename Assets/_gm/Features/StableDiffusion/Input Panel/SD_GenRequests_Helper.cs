@@ -485,16 +485,15 @@ namespace spz {
 	            return;
 	        }
 
-	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:false);
-
 	        // Use class-type information, to support inheritance of objects:
 	        string json = result.downloadHandler.text;
 	        var settings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Auto, };
 	        SD_txt2imgResponse response = JsonConvert.DeserializeObject<SD_txt2imgResponse>(json, settings);
 
-	        // Klein: reject depth-plate false success before projection bake.
+	        // Klein: reject depth-plate false success before projection bake / success finish.
 	        // Complete_PendingImages(null) is a no-op — dispose pending GenData like interrupt.
 	        if (RejectKleinDepthLikeResult(response)){
+	            GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:true);
 	            if (GenData2D_Archive.instance != null)
 	                GenData2D_Archive.instance.OnTerminatedGeneration(_latestGenData);
 	            _latestGenData = null;
@@ -507,6 +506,8 @@ namespace spz {
 	                false, 8, progressVisibility:false);
 	            return;
 	        }
+
+	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:false);
 
 	        _latestGenData?.Complete_PendingImages( response.images ); //using ? in case SD had exception
 
