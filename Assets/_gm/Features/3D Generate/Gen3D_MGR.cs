@@ -100,7 +100,6 @@ namespace spz {
 	    void OnButton_GenRetexture(){
 	        if( !isCanStart_retexture() ){ return; }
 	        if( ModelsHandler_3D.instance == null ){ return; }
-	        GenerateButtons_UI.OnConfirmed_StartedGenerate();
 
 	        Dictionary<string,object> all_values = gather_all_ui_inputs();
 	        all_values.Add("mesh_3d", ModelsHandler_3D.instance.Get_3dModel_asBytes(out string mesh_exten));
@@ -109,13 +108,24 @@ namespace spz {
 
 	        if(isSupports_retexture_via_masks()){
 	            if( Art2D_IconsUI_List.instance == null ){
+	                GenerateButtons_UI.OnConfirmed_StartedGenerate();
 	                GenRetexture_Start2( all_values,  include_paintedMask:false,  udim_albedoTextures_NoOwner:null );
 	                return;
 	            }
+	            // Defer StartedGenerate until merge finishes — else MergeIcons refuse leaves UI generating forever.
 	            Art2D_IconsUI_List.instance.GetTextures_FromAllIcons( 
-	                (List<Texture2D> textures) => GenRetexture_Start2(all_values,  include_paintedMask:true,  textures)
+	                (List<Texture2D> textures) => {
+	                    if (textures == null){
+	                        Viewport_StatusText.instance?.ShowStatusText(
+	                            "Can't retexture: icon merge was refused (save/export busy).", false, 5f, false);
+	                        return;
+	                    }
+	                    GenerateButtons_UI.OnConfirmed_StartedGenerate();
+	                    GenRetexture_Start2(all_values,  include_paintedMask:true,  textures);
+	                }
 	            );
 	        }else{
+	            GenerateButtons_UI.OnConfirmed_StartedGenerate();
 	            GenRetexture_Start2( all_values,  include_paintedMask:false,  udim_albedoTextures_NoOwner:null );
 	        }
 	    }
