@@ -295,7 +295,7 @@ namespace spz {
 			}
 			for (int i = 0; i < toDestroy.Count; i++) {
 				if (toDestroy[i] != null) {
-					UnityEngine.Object.Destroy(toDestroy[i]);
+					UnityEngine.Object.DestroyImmediate(toDestroy[i]);
 				}
 			}
 		}
@@ -381,13 +381,16 @@ namespace spz {
 			var all = hostRoot.GetComponentsInChildren<Transform>(true);
 			for (int i = 0; i < all.Length; i++) {
 				var t = all[i];
+				// Unity fake-null after Destroy — still skip; use Immediate so same-frame rebuild cannot reuse doomed rows.
 				if (t == null || t == hostRoot) {
 					continue;
 				}
 				if (string.Equals(t.name, RowName, StringComparison.Ordinal)
 				    || string.Equals(t.name, SpacerName, StringComparison.Ordinal)
 				    || string.Equals(t.name, MenuRowName, StringComparison.Ordinal)) {
-					Destroy(t.gameObject);
+					// Deferred Destroy leaves the GO in the VLG until EOF; TryBuildOnce then reclaims it and
+					// end-of-frame destroy wipes FULL/SRN + OPEN RIGHT after NotifyAttachRequested.
+					DestroyImmediate(t.gameObject);
 				}
 			}
 		}
@@ -1234,10 +1237,16 @@ namespace spz {
 			const float padH = 4f;
 			const float padV = 2.5f;
 			if (textRt != null) {
-				textRt.anchorMin = Vector2.zero;
-				textRt.anchorMax = Vector2.one;
-				textRt.offsetMin = new Vector2(padH, padV);
-				textRt.offsetMax = new Vector2(-padH, -padV);
+				if (SpzUiThemeOps.ShouldRecolorBoundChrome)
+					SpzUiThemeOps.SnapshotToolFaceLayout(textRt);
+				else
+					SpzUiThemeOps.RestoreToolFaceLayoutsUnder(textRt);
+				if (SpzUiThemeOps.ShouldRecolorBoundChrome) {
+					textRt.anchorMin = Vector2.zero;
+					textRt.anchorMax = Vector2.one;
+					textRt.offsetMin = new Vector2(padH, padV);
+					textRt.offsetMax = new Vector2(-padH, -padV);
+				}
 			}
 			string raw = "FULL\nSRN";
 			tmp.text = raw.ToUpperInvariant();
@@ -1246,32 +1255,18 @@ namespace spz {
 				SpzUiThemeOps.ApplyBoundChromeNarrowDockLabelTmp(tmp, SpzUiThemeOps.Active.textPrimary, DockLabelBasePt);
 				// Preserve strip UpperCase; Bold alone would clear it.
 				tmp.fontStyle = FontStyles.Bold | FontStyles.UpperCase;
+				tmp.alignment = TextAlignmentOptions.Center;
+				tmp.horizontalAlignment = HorizontalAlignmentOptions.Center;
+				tmp.verticalAlignment = VerticalAlignmentOptions.Middle;
+				tmp.raycastTarget = false;
+				tmp.textWrappingMode = TextWrappingModes.NoWrap;
 			} else {
-				SpzUiThemeOps.EnsureDesignFontPt(tmp, DockLabelBasePt);
+				// Leave: full typography unwind — do not re-force Bold/outline/tracking after Restore.
 				SpzUiThemeOps.RestoreAuthoredGraphic(tmp);
-				if (genRefTmp != null) {
-					tmp.font = genRefTmp.font;
-					tmp.fontSharedMaterial = genRefTmp.fontSharedMaterial;
-					// Cap: "FULL" is wider than "GEN"; never copy an inflated Gen Art size.
-					float refSz = genRefTmp.fontSize > 0.05f ? genRefTmp.fontSize : DockLabelBasePt;
-					tmp.fontSize = Mathf.Clamp(refSz, DockLabelBasePt - 1f, DockLabelBasePt + 1f);
-					tmp.fontWeight = FontWeight.Bold;
-					tmp.lineSpacing = genRefTmp.lineSpacing;
-					tmp.characterSpacing = Mathf.Min(genRefTmp.characterSpacing, 2f);
-				} else {
-					tmp.fontSize = DockLabelBasePt;
-				}
-				tmp.outlineWidth = 0.012f;
-				tmp.outlineColor = new Color(0.12f, 0.12f, 0.12f, 0.92f);
-				tmp.fontStyle = FontStyles.Bold;
-				// Match GEN ART / GEN BG black on peach (and refresh BoundChrome leave snapshot).
+				SpzUiThemeOps.RestoreNomadTypography(tmp);
 				ApplyGenArtColumnLabelColor(tmp);
+				tmp.raycastTarget = false;
 			}
-			tmp.alignment = TextAlignmentOptions.Center;
-			tmp.horizontalAlignment = HorizontalAlignmentOptions.Center;
-			tmp.verticalAlignment = VerticalAlignmentOptions.Middle;
-			tmp.raycastTarget = false;
-			tmp.textWrappingMode = TextWrappingModes.NoWrap;
 		}
 
 		/// <summary>Keep frame/fill/text under one RectTransform so vertical movement never splits the button visuals.</summary>
@@ -1708,7 +1703,11 @@ namespace spz {
 				return false;
 			}
 			for (int i = 0; i < parent.childCount; i++) {
-				if (parent.GetChild(i).name == objectName) {
+				var ch = parent.GetChild(i);
+				if (ch == null) {
+					continue;
+				}
+				if (ch.name == objectName) {
 					return true;
 				}
 			}
@@ -1739,14 +1738,15 @@ namespace spz {
 				_builtRowRt = null;
 				for (int ci = 0; ci < vlgRoot.childCount; ci++) {
 					var ch = vlgRoot.GetChild(ci);
-					if (ch.name == RowName && ch is RectTransform rr) {
-						// Ignore stale legacy rows that don't contain the current canonical face node.
-						if (SpzUiThemeOps.FindDirectChildIncludingInactive(rr, "DockButtonFace") is RectTransform) {
-							_builtRowRt = rr;
-							break;
-						}
-						Destroy(rr.gameObject);
+					if (ch == null || ch.name != RowName || !(ch is RectTransform rr)) {
+						continue;
 					}
+					// Ignore stale legacy rows that don't contain the current canonical face node.
+					if (SpzUiThemeOps.FindDirectChildIncludingInactive(rr, "DockButtonFace") is RectTransform) {
+						_builtRowRt = rr;
+						break;
+					}
+					DestroyImmediate(rr.gameObject);
 				}
 				if (_builtRowRt == null) {
 					return false;
@@ -1789,7 +1789,7 @@ namespace spz {
 					ApplyAdaptiveBottomGap(force: true);
 					return true;
 				}
-				Destroy(_builtRowRt.gameObject);
+				DestroyImmediate(_builtRowRt.gameObject);
 				_builtRowRt = null;
 				return false;
 			}
