@@ -12,9 +12,26 @@ namespace spz {
 	/// 4. Tool Options section (bucket, invert, delete, pressure, direction, etc.)
 	/// 5. Color / Palette section (current color + palette swatches, like PaletteDocker + color selector)
 	/// Attach to the root of the Paint panel content; assign section transforms.
+	/// Micro: docs/delta/20_micro/paint-tab-section-splitters.md
 	/// </summary>
 	public class PaintTab_KritaLayout_UI : MonoBehaviour
 	{
+		public const string SplitLayersBrush = "Split_Layers_Brush";
+		public const string SplitBrushTool = "Split_Brush_Tool";
+		public const string SplitToolColor = "Split_Tool_Color";
+
+		public const string PrefKeyLayers = "spz.paintTab.flex.layers";
+		public const string PrefKeyBrush = "spz.paintTab.flex.brush";
+		public const string PrefKeyTool = "spz.paintTab.flex.tool";
+		public const string PrefKeyColor = "spz.paintTab.flex.color";
+
+		public const float DefaultFlexLayers = 1.5f;
+		public const float DefaultFlexBrush = 1f;
+		public const float DefaultFlexTool = 0.5f;
+		public const float DefaultFlexColor = 1f;
+
+		static readonly Color SplitterBarDefault = new Color(0.28f, 0.28f, 0.3f, 1f);
+
 		[Header("Krita-style sections (assign in Paint panel)")]
 		[Tooltip("Top row: workflow toggles + brush preset + Size, Opacity, Hardness (like Painter's Toolchest)")]
 		[SerializeField] RectTransform _toolchestRow;
@@ -35,6 +52,9 @@ namespace spz {
 
 		[Tooltip("If true, creates minimal section placeholders at runtime when sections are null (so you can drag components in).")]
 		[SerializeField] bool _createSectionsIfMissing;
+
+		/// <summary>Optional override for PlayerPrefs keys (EditMode tests). Null = production keys.</summary>
+		public static string PrefsKeyPrefixOverride;
 
 		public RectTransform ToolchestRow => _toolchestRow;
 		public RectTransform LayersSection => _layersSection;
@@ -73,6 +93,7 @@ namespace spz {
 				RestoreSectionShell(_brushPresetsSection);
 				RestoreSectionShell(_toolOptionsSection);
 				RestoreSectionShell(_colorPaletteSection);
+				RestoreSplittersUnder(transform);
 				return;
 			}
 			var t = SpzUiThemeOps.Active;
@@ -85,6 +106,7 @@ namespace spz {
 			ThemeSectionShell(_brushPresetsSection, t);
 			ThemeSectionShell(_toolOptionsSection, t);
 			ThemeSectionShell(_colorPaletteSection, t);
+			ThemeSplittersUnder(transform, t);
 		}
 
 		static void RestoreHeader(TextMeshProUGUI header) {
@@ -150,11 +172,206 @@ namespace spz {
 			var root = transform as RectTransform;
 			if (root == null) return;
 			if (_toolchestRow == null) _toolchestRow = CreateSection(root, "1_Toolchest_Row", SectionStyle.HorizontalFixed, null, 36);
-			if (_layersSection == null) _layersSection = CreateSection(root, "2_Layers", SectionStyle.VerticalFlex, "Layers", 60, 1.5f);
-			if (_brushPresetsSection == null) _brushPresetsSection = CreateSection(root, "3_BrushPresets", SectionStyle.VerticalFlex, "Brush Presets", 140, 1f);
-			if (_toolOptionsSection == null) _toolOptionsSection = CreateSection(root, "4_ToolOptions", SectionStyle.VerticalFlex, "Tool Options", 30, 0.5f);
-			if (_colorPaletteSection == null) _colorPaletteSection = CreateSection(root, "5_ColorPalette", SectionStyle.VerticalFlex, "Color / Palette", 50, 1f);
+			if (_layersSection == null) _layersSection = CreateSection(root, "2_Layers", SectionStyle.VerticalFlex, "Layers", 60, DefaultFlexLayers);
+			if (_brushPresetsSection == null) _brushPresetsSection = CreateSection(root, "3_BrushPresets", SectionStyle.VerticalFlex, "Brush Presets", 140, DefaultFlexBrush);
+			if (_toolOptionsSection == null) _toolOptionsSection = CreateSection(root, "4_ToolOptions", SectionStyle.VerticalFlex, "Tool Options", 30, DefaultFlexTool);
+			if (_colorPaletteSection == null) _colorPaletteSection = CreateSection(root, "5_ColorPalette", SectionStyle.VerticalFlex, "Color / Palette", 50, DefaultFlexColor);
+			EnsureSectionSplitters();
 			LayoutRebuilder.ForceRebuildLayoutImmediate(root);
+		}
+
+		/// <summary>
+		/// Resolves the section root that owns <see cref="LayoutElement"/> flexible height.
+		/// Runtime CreateSection stores ScrollContent in section refs; prefab refs are section roots.
+		/// </summary>
+		public static RectTransform ResolveSectionRoot(RectTransform sectionRef)
+		{
+			if (sectionRef == null) return null;
+			for (int i = 0; i < sectionRef.childCount; i++) {
+				var ch = sectionRef.GetChild(i);
+				if (ch != null && ch.name == "Content" && ch.GetComponent<ScrollRect>() != null)
+					return sectionRef;
+			}
+			var parent = sectionRef.parent;
+			if (parent != null && parent.GetComponent<ScrollRect>() != null)
+				return parent.parent as RectTransform;
+			return sectionRef;
+		}
+
+		static LayoutElement GetSectionLayoutElement(RectTransform sectionRef)
+		{
+			var root = ResolveSectionRoot(sectionRef);
+			return root != null ? root.GetComponent<LayoutElement>() : null;
+		}
+
+		static string PrefKey(string productionKey)
+		{
+			if (string.IsNullOrEmpty(PrefsKeyPrefixOverride))
+				return productionKey;
+			return PrefsKeyPrefixOverride + productionKey;
+		}
+
+		/// <summary>
+		/// Inserts / reuses three adjacent splitters between flex sections and applies saved weights.
+		/// Safe to call when sections already exist (CollectNow connectivity path).
+		/// </summary>
+		public void EnsureSectionSplitters()
+		{
+			var root = transform as RectTransform;
+			if (root == null) return;
+
+			var layersRoot = ResolveSectionRoot(_layersSection);
+			var brushRoot = ResolveSectionRoot(_brushPresetsSection);
+			var toolRoot = ResolveSectionRoot(_toolOptionsSection);
+			var colorRoot = ResolveSectionRoot(_colorPaletteSection);
+			if (layersRoot == null || brushRoot == null || toolRoot == null || colorRoot == null)
+				return;
+
+			var layersLe = layersRoot.GetComponent<LayoutElement>();
+			var brushLe = brushRoot.GetComponent<LayoutElement>();
+			var toolLe = toolRoot.GetComponent<LayoutElement>();
+			var colorLe = colorRoot.GetComponent<LayoutElement>();
+			if (layersLe == null || brushLe == null || toolLe == null || colorLe == null)
+				return;
+
+			System.Action onEnded = OnSplitterDragEnded;
+
+			var s1 = PaintTab_SectionSplitter_UI.EnsureOn(root, SplitLayersBrush, layersLe, brushLe, onEnded, SplitterBarDefault);
+			var s2 = PaintTab_SectionSplitter_UI.EnsureOn(root, SplitBrushTool, brushLe, toolLe, onEnded, SplitterBarDefault);
+			var s3 = PaintTab_SectionSplitter_UI.EnsureOn(root, SplitToolColor, toolLe, colorLe, onEnded, SplitterBarDefault);
+
+			// Sibling order: toolchest, layers, split, brush, split, tool, split, color
+			int idx = 0;
+			if (_toolchestRow != null) {
+				_toolchestRow.SetSiblingIndex(idx);
+				idx++;
+			}
+			layersRoot.SetSiblingIndex(idx++);
+			if (s1 != null) s1.transform.SetSiblingIndex(idx++);
+			brushRoot.SetSiblingIndex(idx++);
+			if (s2 != null) s2.transform.SetSiblingIndex(idx++);
+			toolRoot.SetSiblingIndex(idx++);
+			if (s3 != null) s3.transform.SetSiblingIndex(idx++);
+			colorRoot.SetSiblingIndex(idx);
+
+			// CollectNow / poll can re-enter Ensure while a splitter drag has preferredHeight locked.
+			// Re-applying prefs would unlock mid-drag and snap heights back to saved flex weights.
+			if (!IsAnyFlexSectionDragLocked(layersLe, brushLe, toolLe, colorLe))
+				ApplySavedSectionWeights();
+			ApplyThemeTokens();
+		}
+
+		/// <summary>True while a splitter drag has locked adjacent sections to preferredHeight.</summary>
+		public static bool IsAnyFlexSectionDragLocked(
+			LayoutElement layers, LayoutElement brush, LayoutElement tool, LayoutElement color)
+		{
+			return IsDragLocked(layers) || IsDragLocked(brush) || IsDragLocked(tool) || IsDragLocked(color);
+		}
+
+		static bool IsDragLocked(LayoutElement le)
+		{
+			return le != null && le.flexibleHeight <= 0f && le.preferredHeight > 0f;
+		}
+
+		public void ApplySavedSectionWeights()
+		{
+			ApplyFlexWeights(
+				PlayerPrefs.GetFloat(PrefKey(PrefKeyLayers), DefaultFlexLayers),
+				PlayerPrefs.GetFloat(PrefKey(PrefKeyBrush), DefaultFlexBrush),
+				PlayerPrefs.GetFloat(PrefKey(PrefKeyTool), DefaultFlexTool),
+				PlayerPrefs.GetFloat(PrefKey(PrefKeyColor), DefaultFlexColor));
+		}
+
+		public void SaveSectionWeights(float layers, float brush, float tool, float color)
+		{
+			PlayerPrefs.SetFloat(PrefKey(PrefKeyLayers), layers);
+			PlayerPrefs.SetFloat(PrefKey(PrefKeyBrush), brush);
+			PlayerPrefs.SetFloat(PrefKey(PrefKeyTool), tool);
+			PlayerPrefs.SetFloat(PrefKey(PrefKeyColor), color);
+			PlayerPrefs.Save();
+		}
+
+		/// <summary>Sets flexibleHeight on the four flex section roots; clears preferred lock.</summary>
+		public void ApplyFlexWeights(float layers, float brush, float tool, float color)
+		{
+			SetFlex(GetSectionLayoutElement(_layersSection), layers);
+			SetFlex(GetSectionLayoutElement(_brushPresetsSection), brush);
+			SetFlex(GetSectionLayoutElement(_toolOptionsSection), tool);
+			SetFlex(GetSectionLayoutElement(_colorPaletteSection), color);
+		}
+
+		static void SetFlex(LayoutElement le, float flex)
+		{
+			if (le == null) return;
+			le.flexibleHeight = Mathf.Max(0.01f, flex);
+			le.preferredHeight = -1f;
+		}
+
+		void OnSplitterDragEnded()
+		{
+			var layersLe = GetSectionLayoutElement(_layersSection);
+			var brushLe = GetSectionLayoutElement(_brushPresetsSection);
+			var toolLe = GetSectionLayoutElement(_toolOptionsSection);
+			var colorLe = GetSectionLayoutElement(_colorPaletteSection);
+			if (layersLe == null || brushLe == null || toolLe == null || colorLe == null)
+				return;
+
+			float hL = SectionHeightForWeight(layersLe);
+			float hB = SectionHeightForWeight(brushLe);
+			float hT = SectionHeightForWeight(toolLe);
+			float hC = SectionHeightForWeight(colorLe);
+			float sumH = hL + hB + hT + hC;
+			if (sumH < 1f) return;
+
+			const float defaultSum = DefaultFlexLayers + DefaultFlexBrush + DefaultFlexTool + DefaultFlexColor;
+			float wL = hL / sumH * defaultSum;
+			float wB = hB / sumH * defaultSum;
+			float wT = hT / sumH * defaultSum;
+			float wC = hC / sumH * defaultSum;
+			ApplyFlexWeights(wL, wB, wT, wC);
+			SaveSectionWeights(wL, wB, wT, wC);
+		}
+
+		static float SectionHeightForWeight(LayoutElement le)
+		{
+			if (le == null) return 1f;
+			if (le.preferredHeight > 0f) return le.preferredHeight;
+			var rt = le.transform as RectTransform;
+			if (rt != null && rt.rect.height > 1f) return rt.rect.height;
+			return Mathf.Max(le.minHeight, 1f);
+		}
+
+		static void ThemeSplittersUnder(Transform root, SpzUiThemeOps.ThemeTokens t)
+		{
+			if (root == null) return;
+			ThemeOneSplitter(root.Find(SplitLayersBrush), t);
+			ThemeOneSplitter(root.Find(SplitBrushTool), t);
+			ThemeOneSplitter(root.Find(SplitToolColor), t);
+		}
+
+		static void ThemeOneSplitter(Transform splitTf, SpzUiThemeOps.ThemeTokens t)
+		{
+			if (splitTf == null) return;
+			var img = splitTf.GetComponent<Image>();
+			if (img != null)
+				SpzUiThemeOps.ApplyBoundChromeGraphic(img, t.border);
+		}
+
+		static void RestoreSplittersUnder(Transform root)
+		{
+			if (root == null) return;
+			RestoreOneSplitter(root.Find(SplitLayersBrush));
+			RestoreOneSplitter(root.Find(SplitBrushTool));
+			RestoreOneSplitter(root.Find(SplitToolColor));
+		}
+
+		static void RestoreOneSplitter(Transform splitTf)
+		{
+			if (splitTf == null) return;
+			SpzUiThemeOps.RestoreBoundChromeUnder(splitTf);
+			var img = splitTf.GetComponent<Image>();
+			if (img != null && !SpzUiThemeOps.ShouldRecolorBoundChrome)
+				img.color = SplitterBarDefault;
 		}
 
 		enum SectionStyle { HorizontalFixed, VerticalFlex }
