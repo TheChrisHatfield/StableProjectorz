@@ -1001,6 +1001,7 @@ namespace spz {
 				}
 				// Same as IL2CPP: stale FastAPI-fail markers must not poison Editor Load-now / Enable.
 				TryClearAddonHttpFailMarker();
+				string socketBound = (Addon_SocketServer.instance != null && Addon_SocketServer.instance.IsListening) ? "1" : "0";
 				_pythonProcess = new Process {
 					StartInfo = new ProcessStartInfo {
 						FileName = pythonExe,
@@ -1012,6 +1013,8 @@ namespace spz {
 						WorkingDirectory = Path.GetDirectoryName(serverScriptPath)
 					}
 				};
+				// Mirror IL2CPP bat: when Unity socket is not listening, Python must fail fast (not wait ~90s).
+				_pythonProcess.StartInfo.EnvironmentVariables["SPZ_SOCKET_BOUND"] = socketBound;
 				// Named handlers (instead of inline lambdas) so TerminatePythonAddonServerProcess can detach them
 				// before Cancel/Kill — prevents shutdown stalls from late stdout callbacks calling Debug.Log
 				// during Unity teardown.
@@ -1021,7 +1024,7 @@ namespace spz {
 				_pythonProcess.BeginOutputReadLine();
 				_pythonProcess.BeginErrorReadLine();
 				_isServerRunning = true;
-				UnityEngine.Debug.Log($"[Addon_MGR] Python server started on port {_serverPort}");
+				UnityEngine.Debug.Log($"[Addon_MGR] Python server started on port {_serverPort} (SPZ_SOCKET_BOUND={socketBound})");
 			} catch (Exception e) {
 				UnityEngine.Debug.LogError($"[Addon_MGR] Failed to start Python server: {e.Message}");
 			}

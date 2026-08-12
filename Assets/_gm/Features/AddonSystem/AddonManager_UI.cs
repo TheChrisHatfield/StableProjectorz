@@ -2844,9 +2844,17 @@ namespace spz {
 		void OnRemoveAddon(string addonId) {
 			// Show confirmation dialog
 			if (ConfirmPopup_UI.instance != null) {
+				Canvas popupCanvas = ConfirmPopup_UI.instance.GetComponentInParent<Canvas>();
+				int prevSort = popupCanvas != null ? popupCanvas.sortingOrder : 0;
+				bool prevOverride = popupCanvas != null && popupCanvas.overrideSorting;
+				if (popupCanvas != null) {
+					popupCanvas.overrideSorting = true;
+					popupCanvas.sortingOrder = AddonManagerCanvasSortOrder + 100;
+				}
 				ConfirmPopup_UI.instance.Show(
 					$"Remove add-on '{addonId}'?\n\nThis cannot be undone.",
 					() => {
+						RestoreConfirmPopupSort(popupCanvas, prevSort, prevOverride);
 						if (AddonInstaller_MGR.instance != null) {
 							AddonInstaller_MGR.instance.RemoveAddon(addonId, (success, message) => {
 								if (success) {
@@ -2858,7 +2866,7 @@ namespace spz {
 							});
 						}
 					},
-					null
+					() => RestoreConfirmPopupSort(popupCanvas, prevSort, prevOverride)
 				);
 			} else {
 				// Fallback if no confirmation popup
@@ -2871,6 +2879,12 @@ namespace spz {
 					});
 				}
 			}
+		}
+
+		static void RestoreConfirmPopupSort(Canvas popupCanvas, int prevSort, bool prevOverride) {
+			if (popupCanvas == null) return;
+			popupCanvas.sortingOrder = prevSort;
+			popupCanvas.overrideSorting = prevOverride;
 		}
 		
 		/// <summary>
