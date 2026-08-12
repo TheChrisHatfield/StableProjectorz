@@ -324,8 +324,10 @@ namespace spz {
 	        Color c = Get_CurrentColor();
 	        finalColorImage.color = c;
 	        string hexCol = ColorUtility.ToHtmlStringRGB(c).ToUpper();
-	        _hexColorText.text = "#" + hexCol;
-	        _hexColor_inputText.text = "#" + hexCol;
+	        if (_hexColorText != null)
+	            _hexColorText.text = "#" + hexCol;
+	        if (_hexColor_inputText != null)
+	            _hexColor_inputText.text = "#" + hexCol;
 
 	        _OnColorChanged?.Invoke( Get_CurrentColor() );
 	    }

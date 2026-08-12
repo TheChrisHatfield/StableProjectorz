@@ -68,6 +68,13 @@ namespace spz {
 		        }
 		        return;
 	        }
+	        if( _isLoading ){
+		        if( Viewport_StatusText.instance != null ){
+			        Viewport_StatusText.instance.ShowStatusText(
+				        "Can't save project while a load is still in progress.", false, 5f, false );
+		        }
+		        return;
+	        }
 
 	        Action<string> onResultMessage = msg => {
 		        if( Viewport_StatusText.instance != null )

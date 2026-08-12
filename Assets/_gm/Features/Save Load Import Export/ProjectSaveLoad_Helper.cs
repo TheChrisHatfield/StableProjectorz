@@ -37,6 +37,11 @@ namespace spz {
 		        saveFinalTex?.Invoke(null);
 		        return;
 	        }
+	        if (sm != null && sm._isLoading) {
+		        onResultMessage?.Invoke("Can't save project while a load is still in progress.");
+		        saveFinalTex?.Invoke(null);
+		        return;
+	        }
 	        StopAllCoroutines();
 	        StartCoroutine(SaveProj_crtn(saveFinalTex, onResultMessage));
 	    }
@@ -142,7 +147,7 @@ namespace spz {
 	        // DataFolder should be relative to filepath of the project-file
 	        string resultMessage;
 	        Serialize_SPZ_toJSON(saveFile, spz, out resultMessage);
-	        onResultMessage?.Invoke(resultMessage);
+	        // Do not report "Saved" yet — final composite / mesh textures may still fail below.
 
 	        // Now, save the final composite-texture, combinging all projections.
 	        // This is important, in case the spz file gets corrupted. At least the user will have the png:
@@ -162,6 +167,9 @@ namespace spz {
 		        _finalComposite_crtn = StartCoroutine( Save_FinalCompositeTexture_crtn(onSaveFinalTex) );
 		        yield return _finalComposite_crtn;
 	        }
+
+	        // Honest success only after composite path finished (or was intentionally skipped as busy).
+	        onResultMessage?.Invoke(resultMessage);
 
 	        _last_saveFilepath = saveFile;
 	        _onMade_FinalCompositeImg?.Invoke();
