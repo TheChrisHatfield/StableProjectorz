@@ -223,6 +223,7 @@ namespace spz {
 		void OnEnable() {
 			PaintTab_ValueAssistOptions.Changed -= OnOptionsChanged;
 			PaintTab_ValueAssistOptions.Changed += OnOptionsChanged;
+			// Stay subscribed while collapsed — Leave SPZ must still unwind BoundChrome + pinned bar.
 			SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 			SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
 			if (_blendDial != null) {
@@ -235,8 +236,7 @@ namespace spz {
 
 		void OnDisable() {
 			PaintTab_ValueAssistOptions.Changed -= OnOptionsChanged;
-			SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
-			// Panel SetActive(false) on collapse — hide pinned bar so it does not block Brush options.
+			// Do NOT unsubscribe ThemeChanged here — inactive panels must still Leave SPZ (CN menu litmus).
 			if (_pinnedCollapseGo != null)
 				_pinnedCollapseGo.SetActive(false);
 		}
@@ -255,11 +255,31 @@ namespace spz {
 			// ApplyContextMenuChrome self-silos (restore on builtin). Do not re-SolidSquare here —
 			// ThemeOwnedSection also skips this panel to avoid triple ownership crush.
 			SpzUiThemeOps.ApplyContextMenuChrome(gameObject);
+			// Pinned collapse lives under ScrollRect.viewport — outside this panel root.
+			ThemeOrRestorePinnedCollapse();
 			if (!SpzUiThemeOps.ShouldRecolorBoundChrome)
 				return;
 			var bg = GetComponent<Image>();
 			if (bg != null)
 				SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
+		}
+
+		void ThemeOrRestorePinnedCollapse() {
+			if (_pinnedCollapseGo == null) return;
+			if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+				SpzUiThemeOps.RestoreBoundChromeUnder(_pinnedCollapseGo.transform);
+				return;
+			}
+			var t = SpzUiThemeOps.Active;
+			var btn = _pinnedCollapseGo.GetComponent<Button>();
+			if (btn == null) return;
+			SpzUiThemeOps.EnsureSelectableHitFace(btn);
+			SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+			foreach (var tmp in _pinnedCollapseGo.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+				if (tmp != null)
+					SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, t.textPrimary, 11f);
+			}
+			SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 		}
 
 		void Update() {
