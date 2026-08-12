@@ -374,6 +374,33 @@ namespace spz {
 	        }
 	    }
 
+	    /// <summary>Remove Forge-side device pin so Settings -1 (default) is not overridden by a stale file.</summary>
+	    public static void ClearSdDeviceFromForgeFolder(string forgeWorkingDir) {
+	        if (string.IsNullOrEmpty(forgeWorkingDir)) return;
+	        try {
+	            string path = Path.Combine(forgeWorkingDir, "spz_sd_device.txt");
+	            if (File.Exists(path)) {
+	                File.Delete(path);
+	                UnityEngine.Debug.Log("[LaunchWebUI] Cleared stale spz_sd_device.txt (Settings SD GPU = default).");
+	            }
+	        } catch (Exception e) {
+	            UnityEngine.Debug.LogWarning($"[LaunchWebUI] Could not clear spz_sd_device.txt: {e.Message}");
+	        }
+	    }
+
+	    /// <summary>Best-effort clear of spz_sd_device.txt under discovered WebUI roots (Settings restore / GPU=-1).</summary>
+	    public static void ClearSdDeviceFromKnownWebuiFolders() {
+	        try {
+	            string launchPath = GetWebuiFilePathStatic(printStatusTextIfNotFound: false);
+	            if (string.IsNullOrEmpty(launchPath)) return;
+	            string dir = Path.GetDirectoryName(launchPath);
+	            if (!string.IsNullOrEmpty(dir))
+	                ClearSdDeviceFromForgeFolder(dir);
+	        } catch (Exception e) {
+	            UnityEngine.Debug.LogWarning($"[LaunchWebUI] Could not clear known WebUI device files: {e.Message}");
+	        }
+	    }
+
     const string EnvVarWebuiPath = "SPZ_WEBUI_RUN_PATH";
 
     /// <summary>Aggressive search: env var, then exe dir + dataPath + CurrentDirectory, each up to MaxParentDepth levels.</summary>
@@ -541,6 +568,7 @@ namespace spz {
 	        var parent = Directory.GetParent(webuiFilePath);
 	        workingDir = parent != null ? parent.FullName : Path.GetDirectoryName(webuiFilePath) ?? "";
 	        // Settings (PlayerPrefs) always wins when user has set a device (>= 0). File is fallback when Settings is "default" (-1) so external .bat can set device.
+	        // Stale pins are cleared when Settings is explicitly set to -1 (see set_sdGpuDeviceId / ClearSdDeviceFromKnownWebuiFolders).
 	        int gpuId = UnityEngine.PlayerPrefs.GetInt("SD_GPU_DeviceId", -1);
 	        string deviceFile = Path.Combine(workingDir, "spz_sd_device.txt");
 	        if (gpuId < 0 && File.Exists(deviceFile)) {
@@ -552,8 +580,9 @@ namespace spz {
 	        if (gpuId >= 0)
 	            gpuId = Mathf.Clamp(gpuId, 0, 31);
 	        UnityEngine.Debug.Log($"[LaunchWebUI] SD_GPU_DeviceId = {gpuId} (from Settings; file used only when Settings = default).");
-	        if (gpuId >= 0)
-	            WriteSdDeviceToForgeFolder(workingDir, gpuId);
+	        int settingsGpu = UnityEngine.PlayerPrefs.GetInt("SD_GPU_DeviceId", -1);
+	        if (settingsGpu >= 0)
+	            WriteSdDeviceToForgeFolder(workingDir, settingsGpu);
 	        // Forge layout: launch.py and venv live under {root}/webui/. Also check {root}/ for non-standard setups.
 	        string launchPy = Path.Combine(workingDir, "webui", "launch.py");
 	        if (!File.Exists(launchPy))

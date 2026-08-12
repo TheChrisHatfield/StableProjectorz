@@ -185,6 +185,9 @@ namespace spz {
 	        PlayerPrefs.SetInt("SD_GPU_DeviceId", _sdGpuDeviceId); PlayerPrefs.Save();
 	        var inputField = EventsBinder.FindComponent<IntegerInputField>("Settings:set_sdGpuDeviceId");
 	        if (inputField != null) inputField.SetValueWithoutNotify(_sdGpuDeviceId.ToString());
+	        // Explicit default must drop Forge-side pin so next launch is not forced back to an old index.
+	        if (_sdGpuDeviceId < 0 && _settingsInSessionApplyEnabled)
+	            LaunchWebUIBatFile.ClearSdDeviceFromKnownWebuiFolders();
 	    }
 	    void tryLoad_sdGpuDeviceId()
 	        => set_sdGpuDeviceId(PlayerPrefs.GetInt("SD_GPU_DeviceId", -1));

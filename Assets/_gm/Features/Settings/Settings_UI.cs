@@ -661,6 +661,8 @@ namespace spz {
 	            UnityEngine.PlayerPrefs.SetInt("SD_GPU_DeviceId", deviceId);
 	            UnityEngine.PlayerPrefs.Save();
 	            StaticEvents.Invoke<int>("Settings:set_sdGpuDeviceId", deviceId);
+	            if (deviceId < 0)
+	                LaunchWebUIBatFile.ClearSdDeviceFromKnownWebuiFolders();
 	        }
 	        if (LaunchWebUIBatFile.instance != null) {
 	            bool started = LaunchWebUIBatFile.instance.LaunchWebui_Manually(printStatusText_ifNotFound: true);
