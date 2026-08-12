@@ -206,9 +206,14 @@ namespace spz {
 			PersistEnabledAddonSelectionNow();
 		}
 
-		/// <summary>Always writes the current enabled set (Add-on Manager Save settings).</summary>
+		/// <summary>Always writes the current enabled set when Remember is on; clears stored ids when Remember is off (Save must not imply next-launch restore).</summary>
 		public void PersistEnabledAddonSelectionNow() {
 			if (_registeredAddons == null) {
+				return;
+			}
+			if (!GetRememberEnabledAddonsPreference()) {
+				PlayerPrefs.DeleteKey(PrefsKeyEnabledAddonIdsJson);
+				PlayerPrefs.Save();
 				return;
 			}
 			var arr = new JArray();
