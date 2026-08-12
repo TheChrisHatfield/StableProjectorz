@@ -87,6 +87,9 @@ namespace spz {
 		float _appliedBottomGapPx = -1f;
 		int _adaptClearanceFrame = -1;
 		bool _lastDimChoicesFanOpen;
+		bool _haveLastFullViewSessionUi;
+		bool _lastFullViewSessionOn;
+		bool _lastFullViewRightOpen;
 
 		static bool SpecsEqual(in RibbonDock_ButtonSpec a, in RibbonDock_ButtonSpec b) {
 			return string.Equals(a.CommandId, b.CommandId, StringComparison.Ordinal)
@@ -356,6 +359,7 @@ namespace spz {
 			_appliedBottomGapPx = -1f;
 			_adaptClearanceFrame = -1;
 			_lastDimChoicesFanOpen = false;
+			_haveLastFullViewSessionUi = false;
 			RestoreGenerateButtonsColumnFrame();
 			RestoreGenArtAnchorsIfSaved();
 		}
@@ -1692,6 +1696,21 @@ namespace spz {
 
 		void Update() {
 			if (_built && _builtRowRt != null) {
+				// Driver.ActiveChanged only fires when center-only IsActive flips. OPEN RIGHT → restore left
+				// keeps IsActive false, so poll session/right and refresh fill + secondary row.
+				bool sessionOn = IsInOnScreenFullViewSession();
+				bool rightOpen = false;
+				var sk = Global_Skeleton_UI.instance;
+				if (sk != null && sk.TryGetSidePanelVisibility(out bool left, out bool right))
+					rightOpen = !left && right;
+				if (!_haveLastFullViewSessionUi
+				    || sessionOn != _lastFullViewSessionOn
+				    || rightOpen != _lastFullViewRightOpen) {
+					_haveLastFullViewSessionUi = true;
+					_lastFullViewSessionOn = sessionOn;
+					_lastFullViewRightOpen = rightOpen;
+					RefreshActiveFill();
+				}
 				bool fanOpen = DimensionMode_MGR.instance != null
 				               && DimensionMode_MGR.instance.TryGetOpenChoicesPanelVisualRect(out _);
 				if (fanOpen != _lastDimChoicesFanOpen) {
