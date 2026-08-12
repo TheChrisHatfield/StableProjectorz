@@ -77,8 +77,27 @@ namespace spz {
 	    /// was stacking IP Adapter / flux / sdxl lines into illegible clutter.
 	    /// </summary>
 	    public void ApplyThemeTokens() {
-	        if (_getMore_slideOut == null) return;
-	        SpzUiThemeOps.ApplyDownloadMoreSlideChrome(_getMore_slideOut.transform);
+	        if (_getMore_slideOut != null)
+	            SpzUiThemeOps.ApplyDownloadMoreSlideChrome(_getMore_slideOut.transform);
+	        // Mandatory depth download is a unit-level CTA — may sit outside the slide-out root.
+	        if (_download_mandatoryDepthModel == null) return;
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreBoundChromeUnder(_download_mandatoryDepthModel.transform);
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        SpzUiThemeOps.EnsureSelectableHitFace(_download_mandatoryDepthModel);
+	        if (SpzUiThemeOps.IsAuthoredIconFace(_download_mandatoryDepthModel.targetGraphic)) {
+	            if (_download_mandatoryDepthModel.targetGraphic is Image iconFace)
+	                SpzUiThemeOps.ApplyBoundChromeIconTint(iconFace, t.iconTint);
+	        } else {
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(_download_mandatoryDepthModel, t.controlBg, t.accent);
+	        }
+	        foreach (var tmp in _download_mandatoryDepthModel.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (tmp != null)
+	                SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, t.textPrimary, 12f);
+	        }
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_download_mandatoryDepthModel);
 	    }
 
     
