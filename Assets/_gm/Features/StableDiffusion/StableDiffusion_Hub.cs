@@ -141,17 +141,17 @@ namespace spz {
     
 	    bool has_Depth_or_Norm_or_RefOnly(){
 	        bool is_img2img   =  WorkflowRibbon_UI.instance.isMode_using_img2img();
-	        bool hasDepth_unit           =  SD_ControlNetsList_UI.instance.Has_Depth_CTRLUnit(onlyActive:true, only_if_validModel:false);
-	        bool hasDepth_withValidModel =  SD_ControlNetsList_UI.instance.Has_Depth_CTRLUnit(onlyActive:false, only_if_validModel:true);
+	        // Ignore means GetArgs skips depth/normals — do not require a phantom inactive unit's model.
+	        if (is_img2img && SD_WorkflowOptionsRibbon_UI.instance.ignoreDepthOrNormals)
+	            return true;
 
-	        bool hasNormals_unit          =  SD_ControlNetsList_UI.instance.Has_Normals_CTRLUnit(onlyActive:true, only_if_validModel:false);
-	        bool hasNormals_withValidModel=  SD_ControlNetsList_UI.instance.Has_Normals_CTRLUnit(onlyActive:false, only_if_validModel:true);
-
-	        bool hasDepth    = hasDepth_unit  || (is_img2img && SD_WorkflowOptionsRibbon_UI.instance.ignoreDepthOrNormals);
-	             hasDepth   &= hasDepth_withValidModel;
-
-	        bool hasNormals  = hasNormals_unit || (is_img2img && SD_WorkflowOptionsRibbon_UI.instance.ignoreDepthOrNormals);
-	             hasNormals &= hasNormals_withValidModel;
+	        // Valid model must be on an *active* depth/normals unit (same unit GetArgs will send).
+	        // onlyActive:false previously let inactive Fun-Union satisfy the gate while the active
+	        // Depth unit stayed on None → Gen Art with empty alwayson ControlNet.
+	        bool hasDepth = SD_ControlNetsList_UI.instance.Has_Depth_CTRLUnit(
+	            onlyActive: true, only_if_validModel: true);
+	        bool hasNormals = SD_ControlNetsList_UI.instance.Has_Normals_CTRLUnit(
+	            onlyActive: true, only_if_validModel: true);
 
 	        bool hasReferenceOnly = SD_ControlNetsList_UI.instance.Num_Active_Reference_CTRLUnit() > 0;
 	        return hasDepth || hasNormals || hasReferenceOnly;
