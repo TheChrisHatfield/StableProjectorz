@@ -1124,9 +1124,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _hoverDelayBeforeShow: 0.2
   _mouseVieportMoveThreshold: 0.005
-  _defaultMessage: 'Forge Neo: Flux ControlNet (Fun-Union) is not the Gen Art depth path.
+  _defaultMessage: 'Forge Neo supports Flux ControlNet (e.g. Fun-Union) for FLUX.2-dev.
 
-    Flux.2 Klein uses ImageStitch + RefControl for mesh depth. SD1.5/XL ControlNet still works on Neo.'
+    Flux.2 Klein Gen Art uses ImageStitch + RefControl for mesh depth instead — Fun-Union does not lock Klein-4B geometry.'
 --- !u!1 &6430779380156494893
 GameObject:
   m_ObjectHideFlags: 0
