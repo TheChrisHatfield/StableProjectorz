@@ -599,7 +599,7 @@ namespace spz {
 	    public void OnRefresh_WebuiInfo_Complete(){
 	        bool isNeedDownloadMandatoryModel;
 	        _dropdowns.OnRefreshInfo_Complete( out isNeedDownloadMandatoryModel );
-	        _downloadHelper.OnRefreshInfoComplete( isNeedDownloadMandatoryModel );
+	        _downloadHelper?.OnRefreshInfoComplete( isNeedDownloadMandatoryModel );
 	    }
 
    
