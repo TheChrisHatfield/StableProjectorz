@@ -80,5 +80,7 @@ public sealed class SdWeightLocalLoadContractTests {
 		Assert.That(src, Does.Contain("Kind.Checkpoint"));
 		Assert.That(src, Does.Contain("Kind.Vae"));
 		Assert.That(src, Does.Contain("Drop onto Model or SD-VAE"));
+		Assert.That(src, Does.Contain("OwnershipCenterDistance"));
+		Assert.That(src, Does.Contain("Viewport_StatusText.instance != null"));
 	}
 }
