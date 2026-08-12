@@ -212,8 +212,9 @@ namespace spz {
 	        }
 		// Saved projects may still have depth_* preprocessor with Fun-Union — force None at payload time.
 		// (Klein never reaches here: family mismatch returns null above. This is for FLUX.2-dev.)
-		if (SD_OptionsPacket.CheckpointLooksFlux2Dev(sdCkpt)
-		    && ControlNetUnit_Dropdowns.ControlNetModelLooksFlux2(cnModel)
+		bool forceFunUnionModuleNone = SD_OptionsPacket.CheckpointLooksFlux2Dev(sdCkpt)
+		    && ControlNetUnit_Dropdowns.ControlNetModelLooksFlux2(cnModel);
+		if (forceFunUnionModuleNone
 		    && _dropdowns != null && !_dropdowns.is_currPreprocessor_none){
 		    _dropdowns.TrySelectPreprocessorByName("None", out _, out _);
 		}
@@ -260,6 +261,8 @@ namespace spz {
 	        HowToResizeImg_CTRLNET resizeMode =  _imgsDisplay._whatImageToSend==WhatImageToSend_CTRLNET.CustomFile?
 	                                                                            _imgsDisplay._customImg_howResize 
 	                                                                          : HowToResizeImg_CTRLNET.ScaleToFit_InnerFit;
+	        // Outbound module must be None for Fun-Union even if the dropdown select failed.
+	        string moduleName = forceFunUnionModuleNone ? "None" : _preprocessor.currPreprocessorName();
 	        return new ControlNetUnit_NetworkArgs {
 	            image = inputImgStr,
 	            resize_mode = ControlNetUnit_ImagesDisplay.HowToResizeImg_tostr(resizeMode),
@@ -268,7 +271,7 @@ namespace spz {
 	            threshold_a = _threshSliders.threshold_A,
 	            threshold_b = _threshSliders.threshold_B,
 	            model = currModelName(),
-	            module = _preprocessor.currPreprocessorName(),
+	            module = moduleName,
 	            weight = _controlWeight_slider.value,
 	            guidance_start = _startingControl_step.value,
 	            guidance_end = _endingControl_step.value,
