@@ -157,6 +157,9 @@ namespace spz {
 						open.enabled = false;
 						UnityEngine.Object.DestroyImmediate(open);
 					}
+					// Cloned civitai rows carry download-site tooltips — remove so From disk is not mislabeled.
+					foreach (var tip in go.GetComponents<CanShowTooltip_UI>())
+						UnityEngine.Object.DestroyImmediate(tip);
 					btn = go.GetComponent<Button>();
 					btn.onClick.RemoveAllListeners();
 					var label = go.GetComponentInChildren<TextMeshProUGUI>(true);
