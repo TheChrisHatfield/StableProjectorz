@@ -1012,8 +1012,11 @@ namespace spz {
 			TryEnsureSaveSettingsButton();
 			EnsureChromeTooltips();
 			SyncRememberEnabledToggleFromPrefs();
-			if (!_draftDirty)
+			if (!_draftDirty) {
 				SeedDraftFromLiveAddons();
+				// Baseline for Close-without-Save → RevertShowInRibbonPrefsFromSnapshot (empty snapshot = no-op).
+				SnapshotShowInRibbonPrefs();
+			}
 			// Late ribbon / prior migrate give-up: retry park→shell while the user has the manager open.
 			if (AddonUI_MGR.instance != null)
 				AddonUI_MGR.instance.RequestMigrateParkedPanelsNow();
