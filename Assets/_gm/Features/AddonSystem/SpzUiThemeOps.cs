@@ -159,6 +159,13 @@ namespace spz {
 			AuthoredGraphicColors[graphic.GetInstanceID()] = graphic.color;
 		}
 
+		/// <summary>Read first-write authored color when present (e.g. Gen Art peach before Nomad grey).</summary>
+		public static bool TryGetAuthoredGraphicColor(Graphic graphic, out Color color) {
+			color = default;
+			if (graphic == null) return false;
+			return AuthoredGraphicColors.TryGetValue(graphic.GetInstanceID(), out color);
+		}
+
 		static void SnapshotAuthoredPixelsPerUnit(Image image) {
 			if (image == null) return;
 			int id = image.GetInstanceID();

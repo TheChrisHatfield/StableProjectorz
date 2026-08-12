@@ -739,6 +739,20 @@ namespace spz {
 			return Mathf.Clamp(genArtH, 40f, 96f);
 		}
 
+		/// <summary>
+		/// Peach fill for leave/build — never bake live Nomad grey from Gen Art into <see cref="_authoredFillBase"/>.
+		/// Prefer BoundChrome first-write snapshot on Gen Art, else live color when builtin, else <see cref="FallbackFill"/>.
+		/// </summary>
+		static Color ResolveAuthoredGenArtFill(Image genRefImg) {
+			if (genRefImg != null
+			    && SpzUiThemeOps.TryGetAuthoredGraphicColor(genRefImg, out Color authored)
+			    && authored.a > 0.01f)
+				return authored;
+			if (genRefImg != null && !SpzUiThemeOps.ShouldRecolorBoundChrome)
+				return genRefImg.color;
+			return FallbackFill;
+		}
+
 		/// <summary>Prefer actual GEN ART target-graphic rect height (visual face), then fall back to clamped root height.</summary>
 		static float GetVisualGenArtFaceHeightPx(RectTransform genArt, Image genRefImg) {
 			if (genRefImg != null && genRefImg.rectTransform != null) {
@@ -985,10 +999,9 @@ namespace spz {
 				img.sprite = genRefImg.sprite;
 				img.type = genRefImg.type;
 				img.pixelsPerUnitMultiplier = genRefImg.pixelsPerUnitMultiplier;
-				img.color = _fillBase;
-			} else {
-				img.color = FallbackFill;
 			}
+			img.color = ResolveAuthoredGenArtFill(genRefImg);
+			SpzUiThemeOps.ResnapshotAuthoredGraphicColor(img);
 			var btn = faceGo.AddComponent<Button>();
 			btn.targetGraphic = img;
 			var genBtn = genArt != null ? genArt.GetComponent<Button>() : null;
@@ -1138,9 +1151,10 @@ namespace spz {
 							SpzUiThemeOps.ApplyBoundChromeGraphic(openImg, t.controlBg);
 							SpzUiThemeOps.ApplyRoundedControlSprite(openImg, markEligible: true);
 						}
-					} else if (openImg != null && _bgImage != null) {
+					} else if (openImg != null) {
 						SpzUiThemeOps.RestoreAuthoredGraphic(openImg);
 						openImg.color = _authoredFillBase;
+						SpzUiThemeOps.ResnapshotAuthoredGraphicColor(openImg);
 					}
 					ApplyDockFaceChrome(openFace, ref _openRightLineIcon, openGlyph, sculpt, t, forceFullSrnLabel: false);
 					if (_openRightDockLabel == null)
@@ -1772,11 +1786,13 @@ namespace spz {
 					reuseBtn.targetGraphic = reuseImg;
 					_dockButton = reuseBtn;
 					_bgImage = reuseImg;
-					// Prefer Gen Art authored fill — reuseImg.color may still be a prior theme tint.
-					_authoredFillBase = genRefImg != null ? genRefImg.color : FallbackFill;
+					// Prefer Gen Art authored peach — live genRefImg.color may still be Nomad grey.
+					_authoredFillBase = ResolveAuthoredGenArtFill(genRefImg);
 					_fillBase = _authoredFillBase;
-					if (!SpzUiThemeOps.ShouldRecolorBoundChrome)
+					if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 						reuseImg.color = _authoredFillBase;
+						SpzUiThemeOps.ResnapshotAuthoredGraphicColor(reuseImg);
+					}
 					EnsureDockLineIcon(reuseFace, ResolveFullViewDockIcon(), out _fullSrnLineIcon);
 					EnsureAdaptiveFaceBorder(reuseFace);
 					EnsureFullViewMenu(reuseFace, genRefImg, genRefTmp);
