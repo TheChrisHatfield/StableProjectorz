@@ -164,6 +164,17 @@ public sealed class PaintTabSectionSplitterTests {
 	}
 
 	[Test]
+	public void SectionSplitter_Source_ConvertsScreenDeltaByCanvasScale() {
+		string path = System.IO.Path.Combine(Application.dataPath, "_gm", "Features", "Paint", "PaintTab", "PaintTab_SectionSplitter_UI.cs");
+		Assert.That(System.IO.File.Exists(path), Is.True, path);
+		string src = System.IO.File.ReadAllText(path);
+		Assert.That(src, Does.Contain("ScreenDeltaToLayoutY"));
+		Assert.That(src, Does.Contain("canvas.scaleFactor"));
+		Assert.That(src, Does.Contain("_dragActive"));
+		Assert.That(src, Does.Contain("PointerEventData.InputButton.Left"));
+	}
+
+	[Test]
 	public void SectionSplitter_Source_ForceRebuildsParentOnDrag() {
 		string path = System.IO.Path.Combine(Application.dataPath, "_gm", "Features", "Paint", "PaintTab", "PaintTab_SectionSplitter_UI.cs");
 		Assert.That(System.IO.File.Exists(path), Is.True, path);
