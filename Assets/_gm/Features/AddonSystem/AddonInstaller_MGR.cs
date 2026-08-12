@@ -185,6 +185,21 @@ namespace spz {
 					onComplete?.Invoke(false, $"Cannot install: failed to check if addon already exists ({e.Message}). Refusing to overwrite without backup.", null);
 					yield break;
 				}
+
+				// Overwrite of a live add-on: finish Python unregister + UI tear-down before replacing files,
+				// then re-Enable after Discover so register()/panels match the new zip (not the old module).
+				bool wasEnabledBeforeOverwrite = false;
+				if (targetExists && Addon_MGR.instance != null && !string.IsNullOrEmpty(addonId)) {
+					var registered = Addon_MGR.instance.GetAddons();
+					bool wasRegistered = registered != null && registered.ContainsKey(addonId);
+					wasEnabledBeforeOverwrite = wasRegistered && Addon_MGR.instance.IsAddonEnabled(addonId);
+					if (wasRegistered) {
+						bool unloadDone = false;
+						Addon_MGR.instance.UnloadAddon(addonId, () => unloadDone = true);
+						while (!unloadDone)
+							yield return null;
+					}
+				}
 				
 				if (targetExists) {
 					// Ask user if they want to overwrite (for now, we'll create a backup)
@@ -235,6 +250,8 @@ namespace spz {
 				// Trigger add-on discovery
 				if (Addon_MGR.instance != null) {
 					Addon_MGR.instance.DiscoverAddons();
+					if (wasEnabledBeforeOverwrite && !string.IsNullOrEmpty(addonId))
+						Addon_MGR.instance.EnableAddon(addonId);
 				}
 				
 				installSucceeded = true;

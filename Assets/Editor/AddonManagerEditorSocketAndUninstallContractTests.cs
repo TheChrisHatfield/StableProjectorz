@@ -31,4 +31,23 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 		Assert.That(src, Does.Contain("UnloadAddon(addonId, () => unloadDone = true)"));
 		Assert.That(src, Does.Contain("while (!unloadDone)"));
 	}
+
+	[Test]
+	public void InstallOverwrite_UnloadsThenReEnablesWhenWasEnabled() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "AddonInstaller_MGR.cs");
+		string src = File.ReadAllText(path);
+		int i = src.IndexOf("IEnumerator InstallAddonCoroutine(", System.StringComparison.Ordinal);
+		Assert.That(i, Is.GreaterThan(0));
+		string body = src.Substring(i, System.Math.Min(4500, src.Length - i));
+		Assert.That(body, Does.Contain("wasEnabledBeforeOverwrite"));
+		Assert.That(body, Does.Contain("UnloadAddon(addonId, () => unloadDone = true)"));
+		int unloadAt = body.IndexOf("UnloadAddon(addonId, () => unloadDone = true)", System.StringComparison.Ordinal);
+		int backupAt = body.IndexOf("Backed up existing add-on", System.StringComparison.Ordinal);
+		int enableAt = body.IndexOf("EnableAddon(addonId)", System.StringComparison.Ordinal);
+		Assert.That(unloadAt, Is.GreaterThan(0));
+		Assert.That(backupAt, Is.GreaterThan(unloadAt), "Must unload before replacing files on disk.");
+		Assert.That(enableAt, Is.GreaterThan(backupAt), "Must re-enable after Discover when overwrite replaced a live add-on.");
+		Assert.That(body, Does.Contain("if (wasEnabledBeforeOverwrite"));
+	}
 }
