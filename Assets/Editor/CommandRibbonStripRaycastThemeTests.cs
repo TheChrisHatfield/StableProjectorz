@@ -125,6 +125,7 @@ public sealed class CommandRibbonStripRaycastThemeTests {
 					SpzUiThemeOps.Active,
 					true,
 					true,
+					false,
 				});
 			}
 			finally {
@@ -182,6 +183,7 @@ public sealed class CommandRibbonStripRaycastThemeTests {
 					cell.transform,
 					SpzUiThemeOps.Active,
 					true,
+					false,
 					false,
 				});
 			}
@@ -275,7 +277,7 @@ public sealed class CommandRibbonStripRaycastThemeTests {
 		string src = File.ReadAllText(path);
 		int idx = src.IndexOf("static void ThemeFlatLauncherButton", System.StringComparison.Ordinal);
 		Assert.That(idx, Is.GreaterThan(0));
-		string body = src.Substring(idx, System.Math.Min(900, src.Length - idx));
+		string body = src.Substring(idx, System.Math.Min(1400, src.Length - idx));
 		Assert.That(body, Does.Contain("EnsureSelectableHitFace"));
 		Assert.That(body, Does.Contain("ClearNonFaceRaycastsForTheme"));
 		Assert.That(body, Does.Not.Contain("ReferenceEquals(g, btn.targetGraphic)"));
