@@ -1143,12 +1143,28 @@ namespace spz {
 			} else {
 				if (label != null) {
 					label.maxVisibleCharacters = int.MaxValue;
-					// Restore authored TMP — do not force Color.black after RestoreBoundChromeUnder (kills leave litmus).
+					// Restore authored TMP — then force Gen-Art-column black so leave/build never keep Nomad white.
 					SpzUiThemeOps.RestoreAuthoredGraphic(label);
+					ApplyGenArtColumnLabelColor(label);
 				}
 				if (iconImg != null)
 					iconImg.gameObject.SetActive(false);
 			}
+		}
+
+		/// <summary>FULL/SRN sits on the peach Gen Art strip — labels must read black like GEN ART / GEN BG.</summary>
+		static void ApplyGenArtColumnLabelColor(TMP_Text label) {
+			if (label == null)
+				return;
+			Color col = Color.black;
+			var gbm = ResolveGenerateButtonsMain();
+			if (gbm != null && gbm.GenArtButtonRectTransform != null) {
+				var genTmp = gbm.GenArtButtonRectTransform.GetComponentInChildren<TextMeshProUGUI>(true);
+				if (genTmp != null)
+					col = genTmp.color;
+			}
+			label.color = col;
+			SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(label);
 		}
 
 		static void HideCornerTrianglesUnder(Transform root, bool hide) {
@@ -1202,12 +1218,16 @@ namespace spz {
 					tmp.fontWeight = FontWeight.Bold;
 					tmp.lineSpacing = genRefTmp.lineSpacing;
 					tmp.characterSpacing = Mathf.Min(genRefTmp.characterSpacing, 2f);
+					// Match GEN ART label (authored black on peach) — do not keep a prior Nomad white snapshot.
+					tmp.color = genRefTmp.color;
 				} else {
 					tmp.fontSize = DockLabelBasePt;
+					tmp.color = Color.black;
 				}
 				tmp.outlineWidth = 0.012f;
 				tmp.outlineColor = new Color(0.12f, 0.12f, 0.12f, 0.92f);
 				tmp.fontStyle = FontStyles.Bold;
+				SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(tmp);
 			}
 			tmp.alignment = TextAlignmentOptions.Center;
 			tmp.horizontalAlignment = HorizontalAlignmentOptions.Center;
@@ -1488,9 +1508,11 @@ namespace spz {
 				borderImg.raycastTarget = false;
 				borderImg.preserveAspect = false;
 				borderImg.type = Image.Type.Sliced;
-				borderImg.fillCenter = true;
-				borderImg.color = _cachedFaceBorderColor;
-				borderImg.pixelsPerUnitMultiplier = _cachedFaceBorderPpu;
+				// Outline only — fillCenter sampled atlas padding as green/cyan fringe on the dark ribbon.
+				borderImg.fillCenter = false;
+				// Match GEN ART column frame: cream/white stroke, not a brown bevel ring.
+				borderImg.color = new Color(1f, 1f, 1f, 0.95f);
+				borderImg.pixelsPerUnitMultiplier = Mathf.Max(4f, _cachedFaceBorderPpu);
 				if (_cachedFaceBorderSprite != null)
 					borderImg.sprite = _cachedFaceBorderSprite;
 				borderImg.enabled = _cachedFaceBorderSprite != null;
