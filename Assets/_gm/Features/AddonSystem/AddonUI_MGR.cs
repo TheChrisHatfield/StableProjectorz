@@ -125,16 +125,46 @@ namespace spz {
 		}
 
 		void ApplyThemeToAllAddonUi() {
+			var themed = new HashSet<GameObject>();
+			void ThemeRoot(GameObject go) {
+				if (go == null || themed.Contains(go))
+					return;
+				themed.Add(go);
+				SpzUiThemeOps.ApplyToAddonUiRoot(go);
+			}
+
 			foreach (var elements in _addonUIElements.Values) {
 				if (elements == null)
 					continue;
 				foreach (var element in elements) {
-					// Only panel roots: child widgets are covered by GetComponentsInChildren,
-					// and re-applying on every registered control can retint hit-target images.
-					if (element != null && element.name.StartsWith("AddonPanel_", StringComparison.Ordinal))
-						SpzUiThemeOps.ApplyToAddonUiRoot(element);
+					if (element == null)
+						continue;
+					// Panel roots cover child widgets via GetComponentsInChildren.
+					if (element.name.StartsWith("AddonPanel_", StringComparison.Ordinal)) {
+						ThemeRoot(element);
+						continue;
+					}
+					// Orphans reparented outside AddonPanel_* kept Nomad SolidSquare after leave.
+					if (!IsUnderAddonPanelRoot(element.transform))
+						ThemeRoot(element);
 				}
 			}
+			// Parked / legacy mid-screen panels are not always in _addonUIElements.
+			for (int i = 0; i < _parkedForRibbon.Count; i++) {
+				ParkedPanel parked = _parkedForRibbon[i];
+				if (parked != null && parked.panel != null)
+					ThemeRoot(parked.panel);
+			}
+		}
+
+		static bool IsUnderAddonPanelRoot(Transform t) {
+			while (t != null) {
+				string n = t.name ?? "";
+				if (n.StartsWith("AddonPanel_", StringComparison.Ordinal))
+					return true;
+				t = t.parent;
+			}
+			return false;
 		}
 		
 		/// <summary>
@@ -496,6 +526,10 @@ namespace spz {
 						title = title,
 						panel = child.gameObject,
 					});
+					if (!_addonUIElements.ContainsKey(addonId))
+						_addonUIElements[addonId] = new List<GameObject>();
+					if (!_addonUIElements[addonId].Contains(child.gameObject))
+						_addonUIElements[addonId].Add(child.gameObject);
 					_ribbonMigrateRounds = 0;
 				}
 			}
