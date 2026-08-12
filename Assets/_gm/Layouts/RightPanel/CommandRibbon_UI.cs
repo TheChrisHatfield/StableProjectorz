@@ -717,6 +717,8 @@ namespace spz {
 	    static Image EnsureStripTabHitFace(Transform cell) {
 	        if (cell == null) return null;
 	        var btn = cell.GetComponent<Button>();
+	        if (btn != null)
+	            SpzUiThemeOps.SnapshotAuthoredTargetGraphic(btn);
 	        Image face = FindStripTabFaceImage(cell);
 	        if (face == null) {
 	            var go = new GameObject("TabBg", typeof(RectTransform));
