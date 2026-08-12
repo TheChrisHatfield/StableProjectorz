@@ -2338,7 +2338,32 @@ namespace spz {
 			return version.StartsWith("v", StringComparison.OrdinalIgnoreCase) ? version : "v" + version;
 		}
 
-		static void LockPreferencesBodyLayout(Transform prefsBody) {
+		/// <summary>Expanded prefs card: a little under half the manager panel (not full row width).</summary>
+		const float PrefsCardWidthFrac = 0.45f;
+		const float PrefsCardMinWidth = 220f;
+		const float PrefsCardMaxWidth = 420f;
+
+		float ResolvePreferencesCardWidth() {
+			float panelW = 800f;
+			if (_panel != null) {
+				var pr = _panel.GetComponent<RectTransform>();
+				if (pr != null && pr.rect.width > 1f)
+					panelW = pr.rect.width;
+			}
+			float w = panelW * PrefsCardWidthFrac;
+			return Mathf.Clamp(w, PrefsCardMinWidth, PrefsCardMaxWidth);
+		}
+
+		void ApplyPreferencesCardWidthCap(LayoutElement cardLe, float cardW) {
+			if (cardLe == null) return;
+			SpzUiThemeOps.SnapshotLayoutElementForTheme(cardLe);
+			cardLe.flexibleWidth = 0f;
+			cardLe.preferredWidth = cardW;
+			cardLe.minWidth = Mathf.Min(PrefsCardMinWidth, cardW);
+			cardLe.layoutPriority = 2;
+		}
+
+		void LockPreferencesBodyLayout(Transform prefsBody) {
 			if (prefsBody == null) return;
 			var le = prefsBody.GetComponent<LayoutElement>();
 			if (le != null) {
@@ -2351,11 +2376,13 @@ namespace spz {
 				hlg.childControlHeight = true;
 				hlg.childForceExpandHeight = false;
 				hlg.childControlWidth = true;
-				hlg.childForceExpandWidth = true;
+				// Card owns its width — do not stretch PreferencesCard across the full row.
+				hlg.childForceExpandWidth = false;
 				hlg.childAlignment = TextAnchor.UpperLeft;
 			}
 			var card = prefsBody.Find("PreferencesCard");
 			if (card != null) {
+				ApplyPreferencesCardWidthCap(card.GetComponent<LayoutElement>(), ResolvePreferencesCardWidth());
 				var cardVlg = card.GetComponent<VerticalLayoutGroup>();
 				if (cardVlg != null) {
 					cardVlg.childControlHeight = true;
@@ -2410,12 +2437,17 @@ namespace spz {
 				bodyHlg.childControlHeight = true;
 				bodyHlg.childForceExpandHeight = false;
 				bodyHlg.childControlWidth = true;
-				bodyHlg.childForceExpandWidth = true;
+				bodyHlg.childForceExpandWidth = false;
 				bodyHlg.childAlignment = TextAnchor.UpperLeft;
 			}
 
 			var card = prefsBody.Find("PreferencesCard");
 			Transform metaRoot = card != null ? card : prefsBody;
+			float cardW = ResolvePreferencesCardWidth();
+			if (card != null) {
+				var cardLeW = card.GetComponent<LayoutElement>();
+				ApplyPreferencesCardWidthCap(cardLeW, cardW);
+			}
 			var cardVlg = card != null ? card.GetComponent<VerticalLayoutGroup>() : prefsBody.GetComponent<VerticalLayoutGroup>();
 			if (cardVlg != null) {
 				SpzUiThemeOps.ApplyScaledLayoutGroup(cardVlg);
@@ -2505,6 +2537,7 @@ namespace spz {
 					float cardH = MeasurePreferencesBodyHeight(card);
 					cardLe.preferredHeight = cardH;
 					cardLe.minHeight = cardH;
+					ApplyPreferencesCardWidthCap(cardLe, cardW);
 				}
 			}
 			float bodyH = MeasurePreferencesBodyHeight(prefsBody);
@@ -2787,13 +2820,13 @@ namespace spz {
 			prefsBodyBg.color = Color.clear;
 			prefsBodyBg.raycastTarget = false;
 			var prefsBodyHLG = prefsBody.AddComponent<HorizontalLayoutGroup>();
-			// Left gutter aligns card under the name (chevron + dial), right gutter keeps overlay off the full width.
+			// Left gutter aligns card under the name (chevron + dial); card width is capped (~half), not full row.
 			prefsBodyHLG.padding = new RectOffset(30, 28, 0, 2);
 			prefsBodyHLG.spacing = 0;
 			prefsBodyHLG.childAlignment = TextAnchor.UpperLeft;
 			prefsBodyHLG.childControlWidth = true;
 			prefsBodyHLG.childControlHeight = true;
-			prefsBodyHLG.childForceExpandWidth = true;
+			prefsBodyHLG.childForceExpandWidth = false;
 			prefsBodyHLG.childForceExpandHeight = false;
 			prefsBody.SetActive(false);
 
@@ -2801,8 +2834,7 @@ namespace spz {
 			prefsCard.transform.SetParent(prefsBody.transform, false);
 			prefsCard.AddComponent<RectTransform>();
 			var prefsCardLE = prefsCard.AddComponent<LayoutElement>();
-			prefsCardLE.flexibleWidth = 1f;
-			prefsCardLE.minWidth = 200f;
+			ApplyPreferencesCardWidthCap(prefsCardLE, ResolvePreferencesCardWidth());
 			prefsCardLE.flexibleHeight = 0f;
 			var prefsCardBg = prefsCard.AddComponent<Image>();
 			prefsCardBg.sprite = UiRuntimeSprites.SolidRect;
