@@ -361,17 +361,14 @@ namespace spz {
 	        _threshSliders.OnUnitAltered();
 
 	        string modelText = _model_dropdown.options[ix].text;
-	        // Flux2 Fun-Union: control image is already mesh depth — drop legacy depth_* preprocessors.
+	        // Flux2 Fun-Union: control image is often already processed — drop legacy depth_* preprocessors.
+	        // Do not force Depth send here (user may want Canny/Pose/CustomFile); first-fill arms Depth via MaybeArmDepthSendForFlux2Pick.
 	        try {
 	            string sd = SD_InputPanel_UI.instance != null ? SD_InputPanel_UI.instance.models?.selectedModel_name : null;
 	            if (ControlNetModelLooksFlux2(modelText)
 	                && (SD_OptionsPacket.CheckpointNeedsKleinModules(sd)
-	                    || SD_OptionsPacket.CheckpointLooksFlux2Dev(sd))){
+	                    || SD_OptionsPacket.CheckpointLooksFlux2Dev(sd)))
 	                TrySelectPreprocessorByName("None", out _, out _);
-	                if (SD_OptionsPacket.CheckpointLooksFlux2Dev(sd) && _myUnit != null
-	                    && !_myUnit.isForDepth() && !_myUnit.isForNormals())
-	                    _myUnit.TrySetWhatImageToSend(WhatImageToSend_CTRLNET.Depth, allowOpenFileDialog: false);
-	            }
 	        } catch { /* input panel may be unset */ }
 	        if (modelText.ToLower().Contains("xl_depth")){
 	            string msg = "SDXL depth can make Low-Poly-Wireframe renders.  If so, fix it by blurring the Depth:" +
