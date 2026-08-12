@@ -1,0 +1,172 @@
+"""Deep wiring/regression checks for CloudInferenceSPZ (target ~50 assertions)."""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+import time
+import urllib.error
+import urllib.request
+
+_root = os.path.dirname(os.path.abspath(__file__))
+if _root not in sys.path:
+    sys.path.insert(0, _root)
+
+import backends as be
+import forge_shim as shim
+
+CHECKS = 0
+FAILS = 0
+
+
+def check(cond: bool, msg: str) -> None:
+    global CHECKS, FAILS
+    CHECKS += 1
+    if cond:
+        print(f"  OK {CHECKS}: {msg}")
+    else:
+        FAILS += 1
+        print(f"FAIL {CHECKS}: {msg}")
+
+
+def http(method: str, base: str, path: str, payload=None, timeout=30):
+    data = None
+    headers = {}
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(f"{base}{path}", data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read()
+            try:
+                body = json.loads(raw.decode("utf-8")) if raw else None
+            except Exception:
+                body = raw
+            return int(resp.status), body
+    except urllib.error.HTTPError as exc:
+        raw = exc.read()
+        try:
+            body = json.loads(raw.decode("utf-8")) if raw else None
+        except Exception:
+            body = raw
+        return int(exc.code), body
+
+
+def main() -> int:
+    host, port = "127.0.0.1", 7860
+    if not shim.is_port_free(host, port):
+        port = 17861
+        print(f"[deep] :7860 busy — using {port}")
+
+    shim.get_state().set_backend(be.DemoBackend())
+    ok, msg = shim.start_shim(host, port)
+    check(ok, f"start_shim: {msg}")
+    time.sleep(0.15)
+    base = f"http://{host}:{port}"
+
+    try:
+        st, body = http("GET", base, "/internal/ping")
+        check(st == 200 and isinstance(body, dict) and body.get("status") == "ok", "ping")
+
+        st, body = http("GET", base, "/internal/sysinfo")
+        check(st == 200 and isinstance(body, dict), "sysinfo 200")
+        check(bool(body.get("Data path")), "sysinfo Data path key")
+        check(bool(body.get("Script path")), "sysinfo Script path key")
+        check(str(body.get("Version", "")).lower().startswith("neo"), "sysinfo Version neo*")
+        check("forge" in str(body.get("Data path", "")).lower(), "sysinfo forge-family path")
+        check(isinstance(body.get("Config"), dict), "sysinfo Config object")
+        check(int(body["Config"].get("control_net_unit_count", 0)) >= 1, "sysinfo CN unit count")
+
+        for path, key in (
+            ("/sdapi/v1/sd-models", "model_name"),
+            ("/sdapi/v1/samplers", "name"),
+            ("/sdapi/v1/schedulers", "name"),
+            ("/sdapi/v1/upscalers", "name"),
+            ("/sdapi/v1/sd-vae", "model_name"),
+            ("/sdapi/v1/sd-modules", "model_name"),
+        ):
+            st, body = http("GET", base, path)
+            check(st == 200 and isinstance(body, list) and len(body) > 0, f"GET {path} list")
+            check(isinstance(body[0], dict) and key in body[0], f"GET {path} item.{key}")
+
+        st, body = http("GET", base, "/sdapi/v1/options")
+        check(st == 200 and "sd_model_checkpoint" in body, "options get")
+        st, body = http("POST", base, "/sdapi/v1/options", {"sd_model_checkpoint": "cloud-inference-demo"})
+        check(st == 200 and body.get("sd_model_checkpoint") == "cloud-inference-demo", "options post")
+
+        st, body = http("GET", base, "/controlnet/model_list")
+        check(st == 200 and "model_list" in body, "controlnet model_list")
+        st, body = http("GET", base, "/controlnet/module_list")
+        check(st == 200 and "module_list" in body, "controlnet module_list")
+        st, body = http("POST", base, "/controlnet/detect", {"controlnet_module": "none", "controlnet_input_images": []})
+        check(st == 200 and "images" in body, "controlnet detect stub")
+
+        st, body = http("POST", base, "/sdapi/v1/txt2img", {"width": 32, "height": 32, "prompt": "a"})
+        check(st == 200 and body.get("images") and len(body["images"][0]) > 16, "txt2img")
+        st, body = http("POST", base, "/sdapi/v1/img2img", {"width": 32, "height": 32, "init_images": []})
+        check(st == 200 and body.get("images"), "img2img")
+        st, body = http("POST", base, "/sdapi/v1/extra-batch-images", {"resize_width": 48, "resize_height": 48})
+        check(st == 200 and body.get("images"), "extra-batch-images")
+        st, body = http("GET", base, "/sdapi/v1/progress")
+        check(st == 200 and "progress" in body, "progress")
+        check("eta_relative" in body and "state" in body, "progress eta/state fields")
+        st, body = http("POST", base, "/sdapi/v1/interrupt", {})
+        check(st == 200, "interrupt")
+        st, body = http("POST", base, "/sdapi/v1/unload-checkpoint", {})
+        check(st == 200, "unload-checkpoint")
+
+        st, body = http("POST", base, "/sdapi/v1/txt2img", {"width": 16, "height": 16, "prompt": "png"})
+        check(st == 200 and body.get("images"), "txt2img png present")
+        import base64
+        raw_png = base64.b64decode(body["images"][0])
+        check(raw_png.startswith(b"\x89PNG"), "txt2img payload is PNG bytes")
+
+        # OPTIONS preflight
+        req = urllib.request.Request(f"{base}/internal/ping", method="OPTIONS")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            check(int(resp.status) in (200, 204), "OPTIONS preflight")
+
+        # Backend selection / guards
+        try:
+            be.RemoteForgeBackend("127.0.0.1:7860")
+            check(False, "reject loopback remote")
+        except be.BackendError:
+            check(True, "reject loopback remote")
+        try:
+            be.RemoteForgeBackend("")
+            check(False, "reject empty remote")
+        except be.BackendError:
+            check(True, "reject empty remote")
+        try:
+            be.FalBackend("x").generate("/sdapi/v1/txt2img", {})
+            check(False, "fal not implemented")
+        except be.BackendError as e:
+            check(e.status == 501, "fal 501")
+
+        b = be.build_backend("demo", "")
+        check(b.name == "demo", "build demo")
+        b = be.build_backend("colab", "https://example.trycloudflare.com")
+        check(b.name == "remote_forge", "build colab as remote_forge")
+
+        # Reconnect / already listening
+        ok2, msg2 = shim.start_shim(host, port)
+        check(ok2 and "already listening" in msg2, f"second start: {msg2}")
+        check(shim.is_running(), "is_running")
+        check(shim.listen_endpoint() == f"{host}:{port}", "listen_endpoint")
+
+        st, body = http("GET", base, "/does-not-exist")
+        check(st == 404, "unknown GET 404")
+
+    finally:
+        ok_stop, stop_msg = shim.stop_shim()
+        check(ok_stop, f"stop_shim: {stop_msg}")
+        check(not shim.is_running(), "not running after stop")
+
+    print(f"\nDeep checks: {CHECKS}  fails: {FAILS}")
+    return 0 if FAILS == 0 else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
