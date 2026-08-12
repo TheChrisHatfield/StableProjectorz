@@ -129,6 +129,8 @@ public sealed class AddonManagerStatusDialChromeTests {
 			"Blender-like chevron expands details (Preferences label button removed).");
 		Assert.That(src, Does.Contain("PreferencesCard"),
 			"Inset PreferencesCard overlay (not full-bleed).");
+		Assert.That(src, Does.Contain("PrefsCardWidthFrac = 0.45f"),
+			"PreferencesCard width ~half panel, not full list row.");
 		Assert.That(src, Does.Contain("verticalLayout.childControlHeight = true"),
 			"Item VLG must assign HeaderRow + PreferencesBody heights or Host preferences overlays the name.");
 		Assert.That(src, Does.Contain("contentLayout.childControlHeight = true"),
