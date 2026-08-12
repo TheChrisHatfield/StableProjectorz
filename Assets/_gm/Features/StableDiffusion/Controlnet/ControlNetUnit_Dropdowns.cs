@@ -77,7 +77,8 @@ namespace spz {
 	        if (_preprocessor_dropdown.options.Count == 0){ error = "ControlNet preprocessor dropdown empty"; return false; }
 	        int ix = _preprocessor_dropdown.options.FindIndex(o =>
 	            o.text != null && string.Equals(o.text, want, StringComparison.OrdinalIgnoreCase));
-	        if (ix < 0){
+	        // Do not IndexOf-match "None" — would hit any module whose name embeds "none".
+	        if (ix < 0 && !want.Equals("None", StringComparison.OrdinalIgnoreCase)){
 	            ix = _preprocessor_dropdown.options.FindIndex(o =>
 	                o.text != null && o.text.IndexOf(want, StringComparison.OrdinalIgnoreCase) >= 0);
 	        }
@@ -108,7 +109,8 @@ namespace spz {
 	        if (ix < 0){
 	            ix = FindIndex_matchingBaseName(_model_dropdown.options, want);
 	        }
-	        if (ix < 0){
+	        // Do not IndexOf-match "None" — would hit models whose names embed "none" (e.g. nonexistent_*).
+	        if (ix < 0 && !want.Equals("None", StringComparison.OrdinalIgnoreCase)){
 	            ix = _model_dropdown.options.FindIndex(o =>
 	                o.text != null && o.text.IndexOf(want, StringComparison.OrdinalIgnoreCase) >= 0);
 	        }
