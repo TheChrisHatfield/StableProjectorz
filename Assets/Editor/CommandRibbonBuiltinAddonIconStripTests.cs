@@ -115,6 +115,10 @@ public sealed class CommandRibbonBuiltinAddonIconStripTests {
 			Assert.That(cell.transform.Find("TabBg"), Is.Null, "must not inject sticky synthetic TabBg");
 			var tip = label.GetComponent<CanShowTooltip_UI>();
 			Assert.That(tip, Is.Not.Null, "hover name must attach to the hittable label");
+			var iconT = SpzUiThemeOps.FindDirectChildIncludingInactive(cell.transform, "MonolithLineIcon");
+			Assert.That(iconT, Is.Not.Null);
+			Assert.That(iconT.GetComponent<Image>().raycastTarget, Is.False,
+				"line icon must never steal hits from TMP-only tabs");
 		}
 		finally {
 			Object.DestroyImmediate(root);
