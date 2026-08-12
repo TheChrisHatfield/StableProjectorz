@@ -931,6 +931,8 @@ namespace spz {
 					continue;
 				if (IsAuthoredIconFace(btn.targetGraphic)) {
 					EnsureSelectableHitFace(btn);
+					if (btn.targetGraphic is Image iconFace)
+						ApplyBoundChromeIconTint(iconFace, t.iconTint);
 					ClearNonFaceRaycastsForTheme(btn);
 					continue;
 				}
@@ -2438,6 +2440,8 @@ namespace spz {
 				// MoveToLayer / Clone / Save / AO icon faces — SolidSquare blanks glyphs (Art2D/AO litmus).
 				if (IsAuthoredIconFace(button.targetGraphic)) {
 					EnsureSelectableHitFace(button);
+					if (button.targetGraphic is Image iconFace)
+						ApplyBoundChromeIconTint(iconFace, tokens.iconTint);
 					ClearNonFaceRaycastsForTheme(button);
 					continue;
 				}

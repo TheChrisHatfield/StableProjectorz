@@ -159,7 +159,7 @@ namespace spz {
 	                && closeGlyph.sprite != null
 	                && closeGlyph.preserveAspect
 	                && !UiRuntimeSprites.IsSolidRect(closeGlyph.sprite)) {
-	                SpzUiThemeOps.ApplyBoundChromeGraphic(closeGlyph, t.danger);
+	                SpzUiThemeOps.ApplyBoundChromeIconTint(closeGlyph, t.danger);
 	            } else {
 	                SpzUiThemeOps.ApplyBoundChromeSelectable(_closeButton, t.controlBg, t.danger);
 	                if (_closeButton.targetGraphic is Image closeFace) {
