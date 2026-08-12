@@ -252,7 +252,7 @@ public sealed class PaintTabSectionSplitterTests {
 		Assert.That(System.IO.File.Exists(path), Is.True, path);
 		string src = System.IO.File.ReadAllText(path);
 		Assert.That(src, Does.Contain("t.controlBg"));
-		Assert.That(src, Does.Contain("too faint for a 6px drag hit target"));
+		Assert.That(src, Does.Contain("too faint for an 8px drag hit target"));
 		Assert.That(src, Does.Not.Contain("ApplyBoundChromeGraphic(img, t.border)"));
 	}
 
