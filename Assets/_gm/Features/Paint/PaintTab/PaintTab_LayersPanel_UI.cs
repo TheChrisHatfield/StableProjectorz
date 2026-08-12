@@ -263,16 +263,6 @@ namespace spz {
 			RebuildList();
 		}
 
-		void OnDestroy()
-		{
-			if (_layerStack != null)
-			{
-				_layerStack.OnLayersChanged -= RebuildList;
-				_layerStack.OnActiveLayerChanged -= RefreshActiveHighlight;
-			}
-			if (_dragInsertIndicator != null) Destroy(_dragInsertIndicator);
-		}
-
 		void RefreshActiveHighlight()
 		{
 			if (_layerStack == null) return;
