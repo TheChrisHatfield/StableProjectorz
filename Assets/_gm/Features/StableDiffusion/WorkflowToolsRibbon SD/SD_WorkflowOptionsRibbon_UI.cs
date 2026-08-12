@@ -566,6 +566,10 @@ namespace spz {
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_pressureTabletMode.transform);
 	            if (_direction != null)
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_direction.transform);
+	            // AlphaPicker can sit under Soft RolesUnder history / Paint presets — leave Soft must unwind.
+	            var alphaPicker = UnityEngine.Object.FindFirstObjectByType<BrushRibbon_UI_AlphaPicker>(FindObjectsInactive.Include);
+	            if (alphaPicker != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(alphaPicker.transform);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
