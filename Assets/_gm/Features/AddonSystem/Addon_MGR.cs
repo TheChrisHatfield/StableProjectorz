@@ -157,6 +157,8 @@ namespace spz {
 		Coroutine _ribbonOnlyDockEnsureCrtn;
 		/// <summary>Python unregister skipped while :5557 was down — retry so watchers/routes do not stay live after dial-off.</summary>
 		readonly HashSet<string> _pendingPythonUnloadIds = new HashSet<string>();
+		/// <summary>Python load failed but dial stayed on (native/dock fallback) — Load Now soft-fail honesty.</summary>
+		readonly HashSet<string> _pythonLoadSoftFailedIds = new HashSet<string>();
 		Coroutine _pendingPythonUnloadFlushCrtn;
 		/// <summary>Single shared /ready poll so parallel Enable/Load-now do not storm HTTP + socket.</summary>
 		Coroutine _sharedAddonReadyWaitCrtn;
@@ -1066,17 +1068,19 @@ namespace spz {
 		}
 
 		/// <summary>Call from Add-on Manager \"Load addons now\" button. Requests Python to load all enabled addons.</summary>
-		/// <param name="onComplete">requested count, hard-fail count (dial flipped off). Native fallbacks that stay enabled are not hard fails.</param>
-		public void RequestLoadAllEnabledAddonsNow(Action<int, int> onComplete = null) {
+		/// <param name="onComplete">requested, hard-fail (dial off), soft-fail (kept enabled with native/dock fallback after Python fail).</param>
+		public void RequestLoadAllEnabledAddonsNow(Action<int, int, int> onComplete = null) {
 			StartCoroutine(RequestLoadAllEnabledAddonsNowCrtn(onComplete));
 		}
 
-		IEnumerator RequestLoadAllEnabledAddonsNowCrtn(Action<int, int> onComplete) {
+		IEnumerator RequestLoadAllEnabledAddonsNowCrtn(Action<int, int, int> onComplete) {
 			// Same as auto-load: prefs-restored enables never called EnableAddon — shells must exist
 			// before Python create_panel or panels park off-ribbon with "Load finished" false success.
 			EnsureRibbonShellsForAllEnabledAddons();
 			int count = 0;
 			int hardFail = 0;
+			int softFail = 0;
+			_pythonLoadSoftFailedIds.Clear();
 			// Snapshot ids — MarkAddonLoadFailed may mutate enabled flags mid-loop.
 			var toLoad = new List<string>();
 			foreach (var kvp in _registeredAddons) {
@@ -1089,11 +1093,13 @@ namespace spz {
 				yield return RequestLoadAddon(addonId);
 				if (!IsAddonEnabled(addonId))
 					hardFail++;
+				else if (_pythonLoadSoftFailedIds.Contains(addonId))
+					softFail++;
 			}
 			UnityEngine.Debug.Log(
-				$"[Addon_MGR] Load addons now finished. Requested {count} addon(s), hard-fail {hardFail}. Check [Addon_SocketServer] and [AddonUI_MGR] logs to see if create_panel ran.");
+				$"[Addon_MGR] Load addons now finished. Requested {count} addon(s), hard-fail {hardFail}, soft-fail {softFail}. Check [Addon_SocketServer] and [AddonUI_MGR] logs to see if create_panel ran.");
 			AddonDebugCapture.MarkLoadAddonsFinished();
-			onComplete?.Invoke(count, hardFail);
+			onComplete?.Invoke(count, hardFail, softFail);
 		}
 		
 		/// <summary>Polls GET /ready until Python has connected to Unity (socket 5555), so create_panel works when we POST /load_addon.</summary>
@@ -1537,6 +1543,7 @@ namespace spz {
 			// RibbonOnlyFullscreen dock is Unity-driven (Gen Art strip). Python register() is optional;
 			// HTTP timeouts during Gen Art must not flip the dial off or destroy the FULL/SRN button.
 			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal)) {
+				_pythonLoadSoftFailedIds.Add(addonId);
 				UnityEngine.Debug.LogWarning(
 					$"[Addon_MGR] Python load failed for {addonId}, but keeping add-on enabled — viewport dock does not require Python. Response/timeout is non-fatal.");
 				if (!RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyVisibleBuiltDock())
@@ -1546,6 +1553,7 @@ namespace spz {
 			// SPZ GO / Nomad Theme already work in-process when HTTP :5557 is down. Do not disable or remove the tab —
 			// that erased native fallback and left users with a vanished SPZ GO after a blank wait.
 			if (SupportsNativeUiWithoutPython(addonId)) {
+				_pythonLoadSoftFailedIds.Add(addonId);
 				UnityEngine.Debug.LogWarning(
 					$"[Addon_MGR] Python load failed for {addonId}, but keeping enabled — seeding native UI (HTTP :{_httpServerPort} unavailable).");
 				// Ribbon shell only when host pref allows; CreatePanel still parks when ribbon is hidden.
