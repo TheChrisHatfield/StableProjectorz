@@ -247,6 +247,9 @@ namespace spz {
 	            RestoreSelectable(_rembg_button);
 	            if (_direction != null)
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_direction.transform);
+	            var alphaPicker = UnityEngine.Object.FindFirstObjectByType<BrushRibbon_UI_AlphaPicker>(FindObjectsInactive.Include);
+	            if (alphaPicker != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(alphaPicker.transform);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
