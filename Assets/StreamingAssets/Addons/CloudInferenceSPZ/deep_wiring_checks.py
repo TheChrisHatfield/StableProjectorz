@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
+from http.server import BaseHTTPRequestHandler
 
 _root = os.path.dirname(os.path.abspath(__file__))
 if _root not in sys.path:
@@ -159,10 +161,70 @@ def main() -> int:
         st, body = http("GET", base, "/does-not-exist")
         check(st == 404, "unknown GET 404")
 
+        # cloud_inference marker
+        st, body = http("GET", base, "/internal/ping")
+        check(isinstance(body, dict) and body.get("cloud_inference") is True, "ping cloud_inference marker")
+
+        # float dims
+        st, body = http("POST", base, "/sdapi/v1/txt2img", {"width": 32.0, "height": 32.0, "prompt": "f"})
+        check(st == 200 and body.get("images"), "txt2img float width/height")
+
     finally:
         ok_stop, stop_msg = shim.stop_shim()
         check(ok_stop, f"stop_shim: {stop_msg}")
         check(not shim.is_running(), "not running after stop")
+
+    # Remote catalog proxy (separate ports) — must not return demo model names.
+    try:
+        from http.server import ThreadingHTTPServer
+
+        up_port, shim_port = 17911, 17912
+
+        class _Up(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                return
+
+            def do_GET(self):
+                if "sd-models" in self.path:
+                    body = json.dumps(
+                        [
+                            {
+                                "title": "upstream-real",
+                                "model_name": "upstream-real",
+                                "hash": "u",
+                                "sha256": "",
+                                "filename": "u.safetensors",
+                            }
+                        ]
+                    ).encode()
+                else:
+                    body = b"{}"
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        up = ThreadingHTTPServer(("127.0.0.1", up_port), _Up)
+        up.daemon_threads = True
+        threading.Thread(target=up.serve_forever, daemon=True).start()
+        shim.get_state().set_backend(be.RemoteForgeBackend(f"http://127.0.0.1:{up_port}"))
+        ok, msg = shim.start_shim("127.0.0.1", shim_port)
+        check(ok, f"remote shim start: {msg}")
+        time.sleep(0.1)
+        st, body = http("GET", f"http://127.0.0.1:{shim_port}", "/sdapi/v1/sd-models")
+        check(
+            st == 200 and isinstance(body, list) and body and body[0].get("model_name") == "upstream-real",
+            "remote sd-models proxies upstream",
+        )
+        check(
+            not (isinstance(body, list) and body and body[0].get("model_name") == "cloud-inference-demo"),
+            "remote sd-models is not demo stub",
+        )
+        shim.stop_shim()
+        up.shutdown()
+    except Exception as exc:
+        check(False, f"remote catalog wiring: {exc}")
 
     print(f"\nDeep checks: {CHECKS}  fails: {FAILS}")
     return 0 if FAILS == 0 else 1
