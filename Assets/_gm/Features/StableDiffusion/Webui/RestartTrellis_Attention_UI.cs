@@ -16,9 +16,9 @@ namespace spz {
 	    }
 
 	    protected override bool isAttentionAnim(){
-	        if(DimensionMode_MGR.instance._dimensionMode != DimensionMode.dim_gen_3d){ return false; }
+	        if(DimensionMode_MGR.instance != null && DimensionMode_MGR.instance._dimensionMode != DimensionMode.dim_gen_3d){ return false; }
 	        if(Connection_MGR.is_3d_connected){ return false; }//already established connection to Trellis Server.
-	        return isAttentionAnim();
+	        return base.isAttentionAnim();
 	    } 
 
 	    protected void Update(){

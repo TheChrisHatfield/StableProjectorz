@@ -82,6 +82,13 @@ namespace spz {
 
     
 	    bool IsHovering_Panel(){
+	        if (_panel != null && _panel.gameObject.activeInHierarchy){
+	            // Prefer geometric contains so TMP/IP/port children keep the panel open while editing.
+	            var panelRt = _panel.transform as RectTransform;
+	            if (panelRt != null && RectTransformUtility.RectangleContainsScreenPoint(panelRt, Input.mousePosition, null))
+	                return true;
+	        }
+
 	        PointerEventData eventData = new PointerEventData( EventSystem.current );
 	        eventData.position = Input.mousePosition;
 
@@ -89,8 +96,13 @@ namespace spz {
 	        _raycaster.Raycast(eventData, results);
 
 	        foreach (var result in results){
+	            if (result.gameObject == null) continue;
 	            NonDrawingGraphic g = result.gameObject.GetComponent<NonDrawingGraphic>();
 	            if (g==_hoverSurface){ return true; }
+	            if (_hoverSurface != null && result.gameObject.transform.IsChildOf(_hoverSurface.transform))
+	                return true;
+	            if (_panel != null && result.gameObject.transform.IsChildOf(_panel.transform))
+	                return true;
 	        }
 	        return false;
 	    }

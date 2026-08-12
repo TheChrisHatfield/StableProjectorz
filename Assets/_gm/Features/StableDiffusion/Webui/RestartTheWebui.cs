@@ -95,18 +95,33 @@ namespace spz {
 	        }
 	        LaunchWebUIBatFile.TryCloseLastLaunchedWebUi();
 	        full_path = OnWillLaunchWebui_AdjustArgs(full_path);
+	        string extraArgs = OnWillLaunchWebui_ExtraArgs();
 	        string workingDir;
 	        bool showExternalWindows = LaunchWebUIBatFile.PrefsWantShowExternalProcessWindows();
 	        string launchPath = LaunchWebUIBatFile.GetLaunchPathWithGpuSetting(full_path, out workingDir, preferNoConsole: !showExternalWindows);
 	        // keepWindow false — show/hide via hidden only; /K leaves zombie CMD after Forge exits.
-	        uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
-	            launchPath,
-	            isJustFile:true,
-	            workingDir,
-	            keepWindow:false,
-	            hidden:!showExternalWindows,
-	            attachToConsole:false
-	        );
+	        // Extra CLI args must not be appended onto the filesystem path (breaks isJustFile + Path.GetExtension).
+	        uint pid;
+	        if (string.IsNullOrEmpty(extraArgs)) {
+	            pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
+	                launchPath,
+	                isJustFile:true,
+	                workingDir,
+	                keepWindow:false,
+	                hidden:!showExternalWindows,
+	                attachToConsole:false
+	            );
+	        } else {
+	            string cmd = $"\"{launchPath}\" {extraArgs}";
+	            pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
+	                cmd,
+	                isJustFile:false,
+	                workingDir,
+	                keepWindow:false,
+	                hidden:!showExternalWindows,
+	                attachToConsole:false
+	            );
+	        }
 	        if (pid == 0){
 	            Debug.LogError("Failed to launch the file. Consider launching StableProjectorz as Admin.");
 	            return;
@@ -124,8 +139,14 @@ namespace spz {
 	    }
 
 
+	    /// <summary>Optional path rewrite only — do not append CLI args here (see <see cref="OnWillLaunchWebui_ExtraArgs"/>).</summary>
 	    protected virtual string OnWillLaunchWebui_AdjustArgs(string path){
-	        return path; //child classes can append custom args, for example path+"--precision full", or something like that.
+	        return path;
+	    }
+
+	    /// <summary>Extra CLI args appended after a quoted launch path (e.g. "--precision half").</summary>
+	    protected virtual string OnWillLaunchWebui_ExtraArgs(){
+	        return "";
 	    }
 
 	    protected virtual void OnSpecifyFileButton(){

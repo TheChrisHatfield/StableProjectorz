@@ -221,6 +221,10 @@ namespace spz {
 	        bool fadeByNormal = !isMultiView && SD_WorkflowOptionsRibbon_UI.instance.isPositive;
 	        _brushMaterial.SetFloat("_FadeByNormal", fadeByNormal? 1 : 0);
 
+	        if (ModelsHandler_3D.instance == null || Objects_Renderer_MGR.instance == null
+	            || UserCameras_MGR.instance == null || UserCameras_MGR.instance._curr_viewCamera == null)
+	            return;
+
 	        var selectedMeshes = ModelsHandler_3D.instance.selectedMeshes;
 	        Objects_Renderer_MGR.instance.EquipMaterial_on_Specific( selectedMeshes, _brushMaterial );
 

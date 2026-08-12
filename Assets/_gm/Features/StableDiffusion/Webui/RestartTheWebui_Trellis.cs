@@ -14,8 +14,11 @@ namespace spz {
 	    [SerializeField] Toggle _fp32_toggle;
 
 	    protected override string OnWillLaunchWebui_AdjustArgs(string path){
-	        string precision = _fp16_toggle.isOn? "--precision half" : "--precision full";
-	        return path + " " + precision;
+	        return path;
+	    }
+
+	    protected override string OnWillLaunchWebui_ExtraArgs(){
+	        return _fp16_toggle != null && _fp16_toggle.isOn ? "--precision half" : "--precision full";
 	    }
 
     

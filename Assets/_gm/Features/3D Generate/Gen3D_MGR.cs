@@ -146,15 +146,20 @@ namespace spz {
 
 	        if (include_paintedMask && Inpaint_MaskPainter.instance != null){
 	            RenderUdims painted_renderUdims = Inpaint_MaskPainter.instance.GetLayerCompositeOrFallback();
-	            RenderTexture painted_texArray  = painted_renderUdims.texArray;
-	            List<Texture2D> maskTextures = TextureTools_SPZ.TextureArray_to_Texture2DList(painted_texArray);
-	            var base64_imgs = new List<string>();
-	            foreach(Texture2D tex in maskTextures){
-	                base64_imgs.Add( TextureTools_SPZ.TextureToBase64(tex) );
+	            if (painted_renderUdims?.texArray == null){
+	                Viewport_StatusText.instance?.ShowStatusText(
+	                    "Retexture: no painted mask available; continuing without painted_mask_udims.", false, 4f, false);
+	            } else {
+	                RenderTexture painted_texArray  = painted_renderUdims.texArray;
+	                List<Texture2D> maskTextures = TextureTools_SPZ.TextureArray_to_Texture2DList(painted_texArray);
+	                var base64_imgs = new List<string>();
+	                foreach(Texture2D tex in maskTextures){
+	                    base64_imgs.Add( TextureTools_SPZ.TextureToBase64(tex) );
+	                }
+	                all_values.Add("painted_mask_udims", base64_imgs);
+	                maskTextures.ForEach( t=>DestroyImmediate(t) );
+	                maskTextures.Clear();
 	            }
-	            all_values.Add("painted_mask_udims", base64_imgs);
-	            maskTextures.ForEach( t=>DestroyImmediate(t) );
-	            maskTextures.Clear();
 	        }
 
 	        var callbacks = new Gen3D_API.GenerationCallbacks(){
