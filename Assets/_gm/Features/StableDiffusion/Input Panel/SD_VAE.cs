@@ -128,10 +128,13 @@ namespace spz {
 	                || string.Equals(Path.GetFileNameWithoutExtension(opt.text), wantStem, StringComparison.OrdinalIgnoreCase)));
 	        if (ix < 0) return;
 	        _preferedVAEname_viaLoad = "";
-	        _vaeDropdown.value = ix;
+	        if (_vaeDropdown.value == ix) {
+	            _timeOf_SelectedTheVAE = Time.time;
+	            SD_Options_Fetcher.instance?.SubmitOptions_Asap();
+	        } else {
+	            _vaeDropdown.value = ix;
+	        }
 	        _vaeDropdown.RefreshShownValue();
-	        _timeOf_SelectedTheVAE = Time.time;
-	        SD_Options_Fetcher.instance?.SubmitOptions_Asap();
 	    }
 
 	    /// <summary>True when screen point is over VAE dropdown, visible slide-out, or this panel.</summary>
