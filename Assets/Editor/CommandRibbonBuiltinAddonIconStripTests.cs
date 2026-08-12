@@ -203,6 +203,43 @@ public sealed class CommandRibbonBuiltinAddonIconStripTests {
 	}
 
 	[Test]
+	public void TrySetStripTabLineIcon_BuiltinWithAddons_KeepsMonolithActive() {
+		SpzUiThemeOps.ResetTheme();
+		Assert.That(SpzUiThemeOps.ShouldRecolorBoundChrome, Is.False);
+		var root = new GameObject("SetLineIconRibbon");
+		root.SetActive(false);
+		try {
+			var ribbon = root.AddComponent<CommandRibbon_UI>();
+			var strip = new GameObject("Tabs", typeof(RectTransform));
+			strip.transform.SetParent(root.transform, false);
+			var tg = strip.AddComponent<TabsGroup_UI>();
+			typeof(CommandRibbon_UI).GetField("_tabGroup", BindingFlags.Instance | BindingFlags.NonPublic)
+				?.SetValue(ribbon, tg);
+
+			var cell = new GameObject("Tab: Paint", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement), typeof(TabsGroupElem_UI));
+			cell.transform.SetParent(strip.transform, false);
+			cell.GetComponent<TabsGroupElem_UI>().InitForRuntime("paint", cell.GetComponent<Button>());
+			cell.GetComponent<Button>().targetGraphic = cell.GetComponent<Image>();
+
+			var addon = new GameObject("Tab: Demo", typeof(RectTransform), typeof(Button), typeof(TabsGroupElem_UI));
+			addon.transform.SetParent(strip.transform, false);
+			addon.GetComponent<TabsGroupElem_UI>().InitForRuntime("addon_Demo", addon.GetComponent<Button>());
+			var dict = typeof(CommandRibbon_UI).GetField("_addonTabById", BindingFlags.Instance | BindingFlags.NonPublic)
+				?.GetValue(ribbon) as System.Collections.IDictionary;
+			dict?.Add("Demo", addon);
+
+			Assert.That(ribbon.TrySetStripTabLineIcon("Paint", StudioLineIcon.Brush, out string err), Is.True, err);
+			var iconT = SpzUiThemeOps.FindDirectChildIncludingInactive(cell.transform, "MonolithLineIcon");
+			Assert.That(iconT, Is.Not.Null);
+			Assert.That(iconT.gameObject.activeSelf, Is.True, "set_line_icon must not hide Monolith on builtin addon strip");
+			Assert.That(iconT.GetComponent<Image>().raycastTarget, Is.False);
+		}
+		finally {
+			Object.DestroyImmediate(root);
+		}
+	}
+
+	[Test]
 	public void ThemeStripTabCell_BuiltinWithoutAddonIcons_HidesMonolith() {
 		SpzUiThemeOps.ResetTheme();
 		var root = new GameObject("BuiltinTextRibbon");
