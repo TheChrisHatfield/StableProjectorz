@@ -414,7 +414,9 @@ namespace spz {
 			return string.Equals(method, "spz.cmd.export_3d_with_textures_to_path", StringComparison.Ordinal)
 				|| string.Equals(method, "spz.cmd.export_3d_with_textures", StringComparison.Ordinal)
 				|| string.Equals(method, "spz.cmd.export_projection_textures", StringComparison.Ordinal)
-				|| string.Equals(method, "spz.cmd.export_view_textures", StringComparison.Ordinal);
+				|| string.Equals(method, "spz.cmd.export_view_textures", StringComparison.Ordinal)
+				|| string.Equals(method, "spz.cmd.save_project", StringComparison.Ordinal)
+				|| string.Equals(method, "spz.cmd.load_project", StringComparison.Ordinal);
 		}
 
 		/// <summary>
@@ -443,7 +445,7 @@ namespace spz {
 				return;
 			}
 			string meshPath = @params?["mesh_filepath"]?.ToString() ?? "";
-			StartCoroutine(CoRespondWhenProjectSaveIdle(id, result, meshPath));
+			StartCoroutine(CoRespondWhenProjectSaveIdle(id, result, meshPath, method));
 		}
 
 		void BeginCommandAndRespondWhenImportIdle(string id, string method, JObject @params) {
@@ -466,10 +468,50 @@ namespace spz {
 			StartCoroutine(CoRespondWhenImportIdle(id, result));
 		}
 
-		IEnumerator CoRespondWhenProjectSaveIdle(string id, JObject result, string meshFilePath) {
+		IEnumerator CoRespondWhenProjectSaveIdle(string id, JObject result, string meshFilePath, string method = null) {
 			float timeoutSec = COMMAND_TIMEOUT_LONG_OP_MS / 1000f;
 			float elapsed = 0f;
 			var sm = Save_MGR.instance;
+			bool isSaveProject = string.Equals(method, "spz.cmd.save_project", StringComparison.Ordinal);
+			bool isLoadProject = string.Equals(method, "spz.cmd.load_project", StringComparison.Ordinal);
+
+			if (isSaveProject || isLoadProject) {
+				// Dialog/async: wait until in-flight clears (save) or _isLoading clears (load).
+				while (sm != null && elapsed < timeoutSec) {
+					bool busy = isLoadProject
+						? sm._isLoading
+						: (sm._isSaving || (sm.SaveLoadHelper != null && sm.SaveLoadHelper.IsProjectSaveInFlight));
+					if (!busy) break;
+					elapsed += Time.unscaledDeltaTime;
+					yield return null;
+					sm = Save_MGR.instance;
+				}
+				if (sm == null) {
+					result["success"] = false;
+					result["error"] = isLoadProject ? "load failed (Save_MGR unavailable)" : "save failed (Save_MGR unavailable)";
+				} else if (isLoadProject && sm._isLoading) {
+					result["success"] = false;
+					result["error"] = "load timed out";
+				} else if (isSaveProject && (sm._isSaving || (sm.SaveLoadHelper != null && sm.SaveLoadHelper.IsProjectSaveInFlight))) {
+					result["success"] = false;
+					result["error"] = "save timed out";
+				} else if (isSaveProject) {
+					bool ok = sm.SaveLoadHelper != null && sm.SaveLoadHelper.LastProjectSaveSucceeded;
+					result["success"] = ok;
+					if (!ok) result["error"] = "save cancelled or failed";
+				} else {
+					bool ok = sm.SaveLoadHelper != null && sm.SaveLoadHelper.LastProjectLoadSucceeded;
+					result["success"] = ok;
+					if (!ok) result["error"] = "load cancelled or failed";
+				}
+				_pendingResponses[id] = new JObject {
+					["jsonrpc"] = "2.0",
+					["result"] = result,
+					["id"] = JToken.FromObject(id)
+				};
+				yield break;
+			}
+
 			// Export sets _isSaving before returning; wait until texture pipeline OnComplete clears it.
 			while (sm != null && sm._isSaving && elapsed < timeoutSec) {
 				elapsed += Time.unscaledDeltaTime;
