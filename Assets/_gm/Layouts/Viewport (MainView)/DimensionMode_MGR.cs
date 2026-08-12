@@ -457,7 +457,9 @@ namespace spz {
 	            return;
 	        if (_ishowingChoicePanel){
 	            Vector2 mousePos  = KeyMousePenInput.cursorScreenPos();
-	            bool panelHovered = RectTransformUtility.RectangleContainsScreenPoint(_choicesPanel_rectTransf, mousePos);
+	            Camera uiCam = ResolveUiCameraForRect(_choicesPanel_rectTransf);
+	            bool panelHovered = RectTransformUtility.RectangleContainsScreenPoint(
+	                _choicesPanel_rectTransf, mousePos, uiCam);
 	            if(_mainChoiceHoverSurf.isHovering==false && !panelHovered){
 	                _ishowingChoicePanel = false;
 	                if (_choicesPanel_anim != null)
@@ -520,6 +522,21 @@ namespace spz {
 	        _showHidePanel_crtn = null;
 	    }
 
+
+	    static Camera ResolveUiCameraForRect(RectTransform rt) {
+	        if (rt == null)
+	            return null;
+	        var canvas = rt.GetComponentInParent<Canvas>();
+	        if (canvas == null)
+	            return null;
+	        var root = canvas.rootCanvas != null ? canvas.rootCanvas : canvas;
+	        if (root.renderMode == RenderMode.ScreenSpaceOverlay)
+	            return null;
+	        if (root.worldCamera != null)
+	            return root.worldCamera;
+	        // Nested World Space canvases in this prefab often leave m_Camera unset.
+	        return Camera.main;
+	    }
 
 	    void ScaleChoice_ifHovered(Transform transf, MouseHoverSensor_UI sensor){
 	        if (transf == null || sensor == null)
