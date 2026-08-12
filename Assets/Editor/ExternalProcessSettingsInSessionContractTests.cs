@@ -18,6 +18,7 @@ public sealed class ExternalProcessSettingsInSessionContractTests {
 		Assert.That(src, Does.Contain("LaunchWebUIBatFile.ApplyExternalProcessWindowsSettingInSession"));
 		Assert.That(src, Does.Contain("LaunchWebUIBatFile.ApplyOpenBrowserSettingInSession"));
 		Assert.That(src, Does.Contain("_settingsInSessionApplyEnabled = true"));
+		Assert.That(src, Does.Contain("ResetSettingsMgrStatics"));
 	}
 
 	[Test]

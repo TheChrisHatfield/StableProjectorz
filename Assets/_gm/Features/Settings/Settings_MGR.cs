@@ -16,6 +16,11 @@ namespace spz {
 	    /// <summary>False during Awake tryLoad so restoring prefs does not relaunch WebUI/addon; true after load for live Settings toggles.</summary>
 	    bool _settingsInSessionApplyEnabled;
 
+	    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+	    static void ResetSettingsMgrStatics() {
+	        instance = null;
+	    }
+
 	    int _idleFramerate = 2; //when the window isn't focused. 5 was too much
 	    bool _hasFocus = true;
 
