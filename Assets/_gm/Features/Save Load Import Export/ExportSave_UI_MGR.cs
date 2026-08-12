@@ -62,6 +62,10 @@ namespace spz {
 	        ApplyThemeTokens();
 	    }
 
+	    void OnEnable() {
+	        ApplyThemeTokens();
+	    }
+
 	    void OnDestroy() {
 	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 	        if (instance == this)

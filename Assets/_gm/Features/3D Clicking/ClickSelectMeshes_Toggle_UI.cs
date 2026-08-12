@@ -36,6 +36,10 @@ namespace spz {
 	        ApplyThemeTokens();
 	    }
 
+	    void OnEnable() {
+	        ApplyThemeTokens();
+	    }
+
 	    void OnDestroy(){
 	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 	        _selectMode_toggle?.onValueChanged.RemoveListener(OnToggled);

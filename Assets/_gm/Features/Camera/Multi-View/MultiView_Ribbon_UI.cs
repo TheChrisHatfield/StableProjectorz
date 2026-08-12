@@ -362,7 +362,7 @@ namespace spz {
 	            }
 	            var label = _BlendCams_button.GetComponentInChildren<TextMeshProUGUI>(true);
 	            if (label != null)
-	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, t.textPrimary, 11f);
+	                SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(label, t.textPrimary, 11f);
 	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_BlendCams_button);
 	        }
 	        // Ensure GRID/POV faces BEFORE label TMP — StripLabel/Tmp clear label raycasts under Nomad;

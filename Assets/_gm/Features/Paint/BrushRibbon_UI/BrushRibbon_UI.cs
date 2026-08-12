@@ -61,6 +61,10 @@ namespace spz {
 	        ApplyThemeTokens();
 	    }
 
+	    void OnEnable() {
+	        ApplyThemeTokens();
+	    }
+
 	    void OnDestroy(){
 	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 	        BrushRibbon_UI_Direction.OnDirectionToggleChanged -= ApplyThemeTokens;

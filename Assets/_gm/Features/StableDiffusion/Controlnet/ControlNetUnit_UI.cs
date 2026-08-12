@@ -374,6 +374,10 @@ namespace spz {
 	        ApplyThemeTokens();
 	    }
 
+	    void OnEnable() {
+	        ApplyThemeTokens();
+	    }
+
 	    void OnLowVramChromeChanged(bool _) {
 	        RefreshBoundChromeSelection();
 	    }

@@ -249,6 +249,7 @@ namespace spz {
 	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
 	                SpzUiThemeOps.HideAuthoredGraphicForTheme(tmp);
 	            }
+	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	        }
 	        foreach (var toggle in root.GetComponentsInChildren<Toggle>(true)) {
 	            if (toggle == null || !IsPromptPresetToggle(toggle)) continue;

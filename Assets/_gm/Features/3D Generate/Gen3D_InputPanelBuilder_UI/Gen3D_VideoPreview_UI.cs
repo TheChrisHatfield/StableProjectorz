@@ -193,7 +193,7 @@ namespace spz {
 	        }
 	        var label = btn.GetComponentInChildren<TextMeshProUGUI>(true);
 	        if (label != null)
-	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, t.textPrimary, 15f);
+	            SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(label, t.textPrimary, 15f);
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }
 

@@ -202,6 +202,10 @@ namespace spz {
 	        Screenshot_MGR._Act_OnScreenshot += OnSomeScreenshotTaken;
 	    }
 
+	    void OnEnable() {
+	        ApplyThemeTokens();
+	    }
+
 	    void OnDestroy(){
 	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 	        if (_showAlphaOnly_toggle != null)
@@ -270,7 +274,7 @@ namespace spz {
 	            }
 	            foreach (var tmp in _rembg_button.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	                if (tmp != null)
-	                    SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+	                    SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, t.textPrimary, 11f);
 	            }
 	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_rembg_button);
 	        }

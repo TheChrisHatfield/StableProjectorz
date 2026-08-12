@@ -890,10 +890,15 @@ namespace spz {
 	                continue;
 	            if (tmp.GetComponentInParent<TMP_InputField>(true) != null)
 	                continue;
-	            // Short chrome captions on buttons/toggles — Compact; body copy keeps color with zero tracking.
+	            // Short chrome captions on buttons/toggles — Compact truncates long Settings prefs.
 	            if (tmp.GetComponentInParent<Button>(true) != null
 	                || tmp.GetComponentInParent<Toggle>(true) != null) {
-	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 12f);
+	                string raw = tmp.text ?? "";
+	                bool useReadable = raw.IndexOf(' ') >= 0 || raw.Length >= 10;
+	                if (useReadable)
+	                    SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, t.textPrimary, 12f);
+	                else
+	                    SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 12f);
 	            } else {
 	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
 	                tmp.characterSpacing = 0f;
@@ -908,6 +913,7 @@ namespace spz {
 	                continue;
 	            if (IsUnderProductColorSurface(btn.transform))
 	                continue;
+	            SpzUiThemeOps.EnsureSelectableHitFace(btn);
 	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	        }
 	        foreach (var slider in _settingsPanel_go.GetComponentsInChildren<Slider>(true)) {
