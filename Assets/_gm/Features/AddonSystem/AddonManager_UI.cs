@@ -288,7 +288,7 @@ namespace spz {
 			_installFromFile_button.onClick.AddListener(OnInstallFromFile);
 		}
 		if (_refresh_button != null) {
-			_refresh_button.onClick.AddListener(RefreshAddonsList);
+			_refresh_button.onClick.AddListener(RescanAndRefreshAddonsList);
 		}
 		
 		// Always run full connectivity check (panel + list parent + ref layout), not only _panel
@@ -710,7 +710,7 @@ namespace spz {
 			"Install an add-on from a .zip file into StreamingAssets/Addons.");
 		_installFromFile_button = installBtn;
 		AddBarButton(headerObj.transform, "RefreshButton", "Refresh", new Color(61f / 255f, 61f / 255f, 61f / 255f, 1f),
-			Color.white, RefreshAddonsList, new Vector2(82, 34), out var refreshBtn,
+			Color.white, RescanAndRefreshAddonsList, new Vector2(82, 34), out var refreshBtn,
 			"Rescan the Addons folder and refresh this list (keeps enable state for add-ons still present).");
 		_refresh_button = refreshBtn;
 		AddBarButton(headerObj.transform, "LoadAddonsNowButton", "Load addons now", new Color(46f / 255f, 204f / 255f, 113f / 255f, 1f),
@@ -1466,6 +1466,20 @@ namespace spz {
 		/// <summary>
 		/// Refreshes the list of add-ons with current filter applied (main-branch behavior — no search).
 		/// </summary>
+		/// <summary>
+		/// Header Refresh: disk rescan then rebuild list. Filter/search/enable events use <see cref="RefreshAddonsList"/> only.
+		/// </summary>
+		public void RescanAndRefreshAddonsList() {
+			try {
+				if (Addon_MGR.instance != null)
+					Addon_MGR.instance.RefreshAddons();
+			} catch (System.Exception e) {
+				Debug.LogError($"[AddonManager_UI] RescanAndRefreshAddonsList: Discover failed: {e.Message}\n{e.StackTrace}");
+				ShowStatus("Rescan failed — list may be stale.", false);
+			}
+			RefreshAddonsList();
+		}
+
 		public void RefreshAddonsList() {
 			if (_addonsListParent == null) {
 				Debug.LogError("[AddonManager_UI] RefreshAddonsList: _addonsListParent is null! Cannot create items.");
