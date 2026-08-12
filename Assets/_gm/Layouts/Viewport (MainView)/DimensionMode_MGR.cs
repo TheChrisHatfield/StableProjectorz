@@ -48,6 +48,12 @@ namespace spz {
 
 	    Coroutine _showHidePanel_crtn = null;
 
+	    /// <summary>Authored choice-panel scale; captured once before any fullscreen fan flip.</summary>
+	    Vector3 _choicesPanelAuthoredScale = Vector3.one;
+	    bool _capturedChoicesPanelAuthored;
+	    bool _choicesFanFlipped;
+	    bool _lastWantChoicesFanFlip;
+
 	    public static Action<DimensionMode> _Act_OnDimensionChanged { get; set; } = null;
 
 
@@ -99,13 +105,69 @@ namespace spz {
 	    void Start(){
 	        _Act_OnDimensionChanged?.Invoke(_dimensionMode);
 	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+	        ViewportFullViewOnScreen_Driver.ActiveChanged += OnFullViewActiveChanged;
+	        Settings_MGR._Act_verticalRibbonsSwapped += OnVerticalRibbonsSwapped;
 	        ApplyThemeTokens();
+	        SyncChoicesFanSideForLayout();
 	    }
 
 	    void OnDestroy(){
 	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	        ViewportFullViewOnScreen_Driver.ActiveChanged -= OnFullViewActiveChanged;
+	        Settings_MGR._Act_verticalRibbonsSwapped -= OnVerticalRibbonsSwapped;
+	        if (_choicesFanFlipped)
+	            ApplyChoicesFanFlip(false);
 	        if (instance == this)
 	            instance = null;
+	    }
+
+	    void OnFullViewActiveChanged(bool _) => SyncChoicesFanSideForLayout();
+	    void OnVerticalRibbonsSwapped(bool _) => SyncChoicesFanSideForLayout();
+
+	    /// <summary>
+	    /// Authored fan opens left into the skeleton SD column. When that column is hidden (FULL SRN /
+	    /// OPEN RIGHT) — or when vertical ribbons are swapped onto the opposite edge — mirror the
+	    /// choice panel so satellites open the other way instead of covering the mesh.
+	    /// </summary>
+	    void SyncChoicesFanSideForLayout() {
+	        bool leftColumnHidden = ViewportFullViewOnScreen_Driver.ShouldHideMirroredLeftColumnContent();
+	        bool ribbonsSwapped = Settings_MGR.instance != null
+	            && Settings_MGR.instance.get_viewport_isSwapVerticalRibbons();
+	        bool wantFlip = leftColumnHidden || ribbonsSwapped;
+	        if (wantFlip == _lastWantChoicesFanFlip && wantFlip == _choicesFanFlipped)
+	            return;
+	        _lastWantChoicesFanFlip = wantFlip;
+	        ApplyChoicesFanFlip(wantFlip);
+	    }
+
+	    void ApplyChoicesFanFlip(bool flip) {
+	        if (_choicesPanel_rectTransf == null)
+	            return;
+	        if (!_capturedChoicesPanelAuthored) {
+	            _choicesPanelAuthoredScale = _choicesPanel_rectTransf.localScale;
+	            _capturedChoicesPanelAuthored = true;
+	        }
+	        if (flip == _choicesFanFlipped)
+	            return;
+	        // Negative X mirrors satellites around the authored pivot; un-mirror TMP so labels stay readable.
+	        Vector3 scale = _choicesPanelAuthoredScale;
+	        if (flip)
+	            scale.x = -Mathf.Abs(scale.x == 0f ? 1f : scale.x);
+	        _choicesPanel_rectTransf.localScale = scale;
+	        UnflipChoiceLabelsForMirror();
+	        _choicesFanFlipped = flip;
+	    }
+
+	    void UnflipChoiceLabelsForMirror() {
+	        if (_choicesPanel_rectTransf == null)
+	            return;
+	        var flipX = new Vector3(-1f, 1f, 1f);
+	        foreach (var tmp in _choicesPanel_rectTransf.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (tmp == null)
+	                continue;
+	            // Toggle relative to current: entering mirror unflips text; leaving restores.
+	            tmp.transform.localScale = Vector3.Scale(tmp.transform.localScale, flipX);
+	        }
 	    }
 
 	    /// <summary>
@@ -294,6 +356,8 @@ namespace spz {
 
 
 	    void Update(){
+	        // Skeleton left hide can change without ActiveChanged (OPEN RIGHT); keep fan side in sync.
+	        SyncChoicesFanSideForLayout();
 	        if (_ishowingChoicePanel){
 	            Vector2 mousePos  = KeyMousePenInput.cursorScreenPos();
 	            bool panelHovered = RectTransformUtility.RectangleContainsScreenPoint(_choicesPanel_rectTransf, mousePos);

@@ -13,6 +13,18 @@ public sealed class DimensionModeAndFovLeaveThemeTests {
 	}
 
 	[Test]
+	public void DimensionMode_FullViewFlipsChoiceFanAwayFromViewport() {
+		string path = Path.Combine(Application.dataPath, "_gm", "Layouts", "Viewport (MainView)", "DimensionMode_MGR.cs");
+		Assert.That(File.Exists(path), Is.True, path);
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("SyncChoicesFanSideForLayout"));
+		Assert.That(src, Does.Contain("ApplyChoicesFanFlip"));
+		Assert.That(src, Does.Contain("ShouldHideMirroredLeftColumnContent"));
+		Assert.That(src, Does.Contain("UnflipChoiceLabelsForMirror"));
+		Assert.That(src, Does.Contain("get_viewport_isSwapVerticalRibbons"));
+	}
+
+	[Test]
 	public void CamerasFov_LeaveDoesNotReapplyNomadSliderChrome() {
 		string path = Path.Combine(Application.dataPath, "_gm", "Features", "Camera", "Multi-View", "MultiView_CamerasFOV.cs");
 		Assert.That(File.Exists(path), Is.True, path);
