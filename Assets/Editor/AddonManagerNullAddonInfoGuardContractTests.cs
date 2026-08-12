@@ -33,4 +33,15 @@ public sealed class AddonManagerNullAddonInfoGuardContractTests {
 		string body = src.Substring(i, System.Math.Min(450, src.Length - i));
 		Assert.That(body, Does.Contain("info == null"));
 	}
+
+	[Test]
+	public void RefreshAddonsList_MergesRibbonSnapshotWhenDraftDirty() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "AddonManager_UI.cs");
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("EnsureShowInRibbonSnapshotCoversAllAddons"));
+		int i = src.IndexOf("public void RefreshAddonsList()", System.StringComparison.Ordinal);
+		string body = src.Substring(i, System.Math.Min(900, src.Length - i));
+		Assert.That(body, Does.Contain("EnsureShowInRibbonSnapshotCoversAllAddons()"));
+	}
 }
