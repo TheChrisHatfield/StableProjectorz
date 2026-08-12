@@ -220,6 +220,10 @@ namespace spz {
 			var root = transform as RectTransform;
 			if (root == null) return;
 
+			// CollectNow / poll must not rebind, reorder, or retheme while a drag is live.
+			if (IsAnySplitterDragging(root))
+				return;
+
 			var layersRoot = ResolveSectionRoot(_layersSection);
 			var brushRoot = ResolveSectionRoot(_brushPresetsSection);
 			var toolRoot = ResolveSectionRoot(_toolOptionsSection);
@@ -259,10 +263,7 @@ namespace spz {
 			if (s3 != null) s3.transform.SetSiblingIndex(idx++);
 			colorRoot.SetSiblingIndex(idx);
 
-			// CollectNow / poll can re-enter Ensure while a splitter drag is active.
-			// Re-applying prefs would unlock mid-drag and snap heights back to saved flex weights.
-			if (!IsAnySplitterDragging(root))
-				ApplySavedSectionWeights();
+			ApplySavedSectionWeights();
 			ApplyThemeTokens();
 		}
 
