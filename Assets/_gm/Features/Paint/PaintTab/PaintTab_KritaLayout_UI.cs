@@ -227,12 +227,16 @@ namespace spz {
 			if (layersRoot == null || brushRoot == null || toolRoot == null || colorRoot == null)
 				return;
 
-			var layersLe = layersRoot.GetComponent<LayoutElement>();
-			var brushLe = brushRoot.GetComponent<LayoutElement>();
-			var toolLe = toolRoot.GetComponent<LayoutElement>();
-			var colorLe = colorRoot.GetComponent<LayoutElement>();
-			if (layersLe == null || brushLe == null || toolLe == null || colorLe == null)
-				return;
+			var layersLe = layersRoot.GetComponent<LayoutElement>() ?? layersRoot.gameObject.AddComponent<LayoutElement>();
+			var brushLe = brushRoot.GetComponent<LayoutElement>() ?? brushRoot.gameObject.AddComponent<LayoutElement>();
+			var toolLe = toolRoot.GetComponent<LayoutElement>() ?? toolRoot.gameObject.AddComponent<LayoutElement>();
+			var colorLe = colorRoot.GetComponent<LayoutElement>() ?? colorRoot.gameObject.AddComponent<LayoutElement>();
+
+			// Prefab roots may lack mins/flex; keep usable clamps before first drag.
+			EnsureFlexSectionDefaults(layersLe, 60f, DefaultFlexLayers);
+			EnsureFlexSectionDefaults(brushLe, 140f, DefaultFlexBrush);
+			EnsureFlexSectionDefaults(toolLe, 30f, DefaultFlexTool);
+			EnsureFlexSectionDefaults(colorLe, 50f, DefaultFlexColor);
 
 			System.Action onEnded = OnSplitterDragEnded;
 
@@ -271,6 +275,16 @@ namespace spz {
 		static bool IsDragLocked(LayoutElement le)
 		{
 			return le != null && le.flexibleHeight <= 0f && le.preferredHeight > 0f;
+		}
+
+		static void EnsureFlexSectionDefaults(LayoutElement le, float minH, float defaultFlex)
+		{
+			if (le == null) return;
+			if (le.minHeight < 1f)
+				le.minHeight = minH;
+			// Only seed flex when unset and not mid-drag locked.
+			if (!IsDragLocked(le) && le.flexibleHeight <= 0f && le.preferredHeight <= 0f)
+				le.flexibleHeight = defaultFlex;
 		}
 
 		public void ApplySavedSectionWeights()
