@@ -317,6 +317,7 @@ namespace spz {
 			if (toggle.targetGraphic == null)
 				return;
 			ApplyBoundChromeSelectable(toggle, face, accent);
+			SnapshotAuthoredColorBlock(toggle);
 			var cb = toggle.colors;
 			cb.normalColor = Color.white;
 			cb.highlightedColor = Color.white;
@@ -473,6 +474,7 @@ namespace spz {
 			if (selectable.targetGraphic == null)
 				return;
 			ApplySolidSquareChrome(selectable, fill, accent);
+			SnapshotAuthoredColorBlock(selectable);
 			var cb = selectable.colors;
 			cb.normalColor = Color.white;
 			cb.highlightedColor = Color.white;
