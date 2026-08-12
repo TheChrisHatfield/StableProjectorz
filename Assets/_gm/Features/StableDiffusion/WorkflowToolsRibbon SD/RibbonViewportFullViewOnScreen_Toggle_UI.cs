@@ -1167,7 +1167,8 @@ namespace spz {
 					col = genTmp.color;
 			}
 			label.color = col;
-			SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(label);
+			// Nomad may have first-write snapshotted light text — overwrite so later RestoreBoundChromeUnder keeps Gen Art black.
+			SpzUiThemeOps.ResnapshotAuthoredGraphicColor(label);
 		}
 
 		static void HideCornerTrianglesUnder(Transform root, bool hide) {
