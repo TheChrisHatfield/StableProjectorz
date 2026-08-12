@@ -188,12 +188,44 @@ namespace spz {
 	        if (_generateStatus == TaskStatus.FAILED){// Show the error from the server (if any)
 	            callbacks.onError?.Invoke($"Generation failed: {_generateResponse.message}");
 	        }
+	        else if (_generateStatus == TaskStatus.PREVIEW_READY && !_cancelRequested){
+	            // Download previews then keep polling until COMPLETE/FAILED (do not leave GenerateButtons stuck).
+	            yield return Gen_downloadPreviews(callbacks);
+	            if (!_cancelRequested && _generateStatus == TaskStatus.PREVIEW_READY)
+		            _generateStatus = TaskStatus.PROCESSING;
+	            if (_progress_crtn != null){ StopCoroutine(_progress_crtn); }
+	            _progress_crtn = StartCoroutine( PollGenerationProgress(callbacks.onProgress) );
+	            while((_generateStatus == TaskStatus.PROCESSING || _generateStatus == TaskStatus.PREVIEW_READY)
+	                  && !_cancelRequested){ yield return null; }
+	            if(_progress_crtn!=null){ StopCoroutine(_progress_crtn); }
+	            _progress_crtn = null;
+	            if (_cancelRequested) {
+		            _gen_or_resume_crtn = null;
+		            yield break;
+	            }
+	            if (_generateStatus == TaskStatus.FAILED){
+		            callbacks.onError?.Invoke($"Generation failed: {_generateResponse?.message}");
+	            }
+	            else if (_generateStatus == TaskStatus.COMPLETE){
+		            _download_crtn = StartCoroutine(Gen_downloadFinalData(callbacks, download_endpoint));
+		            yield return _download_crtn;
+		            _download_crtn = null;
+		            if (!_cancelRequested)
+			            yield return GpuFlowUnityHooks.PaceFromAddonHttpCoroutine(source: "gen3d", phase: "post_download");
+	            }
+	            else {
+		            callbacks.onError?.Invoke($"Generation stalled after preview (status={_generateStatus})");
+	            }
+	        }
 	        else if (_generateStatus == TaskStatus.COMPLETE && !_cancelRequested){// Download the final mesh
 	            _download_crtn = StartCoroutine(Gen_downloadFinalData(callbacks, download_endpoint));
 	            yield return _download_crtn;
 	            _download_crtn = null;
 	            if (!_cancelRequested)
 	                yield return GpuFlowUnityHooks.PaceFromAddonHttpCoroutine(source: "gen3d", phase: "post_download");
+	        }
+	        else if (!_cancelRequested) {
+	            callbacks.onError?.Invoke($"Unexpected generation status: {_generateStatus}");
 	        }
 	        _gen_or_resume_crtn = null;
 	    }
@@ -230,7 +262,6 @@ namespace spz {
 
 
 	    // Poll /status (without trailing slash) until preview_ready, complete, or failed.
-	    // Return the final TaskStatus via onStatusUpdate callback.
 	    IEnumerator PollGenerationProgress(Action<float> onProgressUpdate){
 	        float spacing_sec = 1f;
 
@@ -243,6 +274,8 @@ namespace spz {
 	                if (_cancelRequested) break;
 	                if (www.result != UnityWebRequest.Result.Success){
 	                    Debug.LogError($"PollGenerationProgress => WebRequest {www.result} ");
+	                    if (_generateStatus == TaskStatus.PROCESSING)
+		                    _generateStatus = TaskStatus.FAILED;
 	                    break; 
 	                }
 	                GenerationStatus st = null;
@@ -251,17 +284,55 @@ namespace spz {
 	                }
 	                catch (Exception e){
 	                    Debug.LogError("PollGenerationProgress => JSON parse error: " + e.Message);
+	                    if (_generateStatus == TaskStatus.PROCESSING)
+		                    _generateStatus = TaskStatus.FAILED;
+	                    break;
+	                }
+	                if (st == null){
+	                    Debug.LogError("PollGenerationProgress => status payload null");
+	                    if (_generateStatus == TaskStatus.PROCESSING)
+		                    _generateStatus = TaskStatus.FAILED;
 	                    break;
 	                }
 
-	                onProgressUpdate?.Invoke(st.progress / 100f);
+	                onProgressUpdate?.Invoke(Mathf.Clamp01(st.progress / 100f));
+	                if (TryParseGen3DStatus(st.status, out TaskStatus polled))
+		                _generateStatus = polled;
                 
-	                //we should NOT set generation status ourselves, but we can monitor it anyway:
 	                if(_generateStatus != TaskStatus.PROCESSING){ break; }
 	            }
 	            yield return new WaitForSeconds(spacing_sec);
 	        }//end while
 	        _progress_crtn = null;
+	    }
+
+	    static bool TryParseGen3DStatus(string raw, out TaskStatus status){
+	        status = TaskStatus.PROCESSING;
+	        if (string.IsNullOrEmpty(raw)) return false;
+	        string s = raw.Trim();
+	        if (string.Equals(s, "PROCESSING", StringComparison.OrdinalIgnoreCase)
+	            || string.Equals(s, "processing", StringComparison.Ordinal)) {
+	            status = TaskStatus.PROCESSING;
+	            return true;
+	        }
+	        if (string.Equals(s, "PREVIEW_READY", StringComparison.OrdinalIgnoreCase)
+	            || string.Equals(s, "preview_ready", StringComparison.Ordinal)) {
+	            status = TaskStatus.PREVIEW_READY;
+	            return true;
+	        }
+	        if (string.Equals(s, "COMPLETE", StringComparison.OrdinalIgnoreCase)
+	            || string.Equals(s, "completed", StringComparison.OrdinalIgnoreCase)
+	            || string.Equals(s, "complete", StringComparison.OrdinalIgnoreCase)) {
+	            status = TaskStatus.COMPLETE;
+	            return true;
+	        }
+	        if (string.Equals(s, "FAILED", StringComparison.OrdinalIgnoreCase)
+	            || string.Equals(s, "failed", StringComparison.OrdinalIgnoreCase)
+	            || string.Equals(s, "error", StringComparison.OrdinalIgnoreCase)) {
+	            status = TaskStatus.FAILED;
+	            return true;
+	        }
+	        return false;
 	    }
 
     

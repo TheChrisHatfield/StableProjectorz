@@ -173,11 +173,13 @@ namespace spz {
 
 
 	    void Gen_OnCancel(){
+	        // Shared cancel bus — only interrupt Gen3D when this API owns a live job.
+	        if (Gen3D_API.instance == null || !Gen3D_API.instance.isBusy)
+		        return;
 	        try {
-	            if (Gen3D_API.instance != null)
-	                Gen3D_API.instance.CancelGeneration();
+	            Gen3D_API.instance.CancelGeneration();
 	        } finally {
-	            // Always finish UI even if API missing/throws — otherwise Cancel button stays stuck.
+	            // Always finish UI even if API throws — otherwise Cancel button stays stuck.
 	            GenerateButtons_UI.OnConfirmed_FinishedGenerate( canceled:true );
 	        }
 	    }
