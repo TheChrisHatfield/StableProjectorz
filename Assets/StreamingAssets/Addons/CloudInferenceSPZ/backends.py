@@ -61,8 +61,14 @@ class DemoBackend(CloudBackend):
         return "demo (local solid PNG)"
 
     def generate(self, path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-        w = int(payload.get("width") or 64)
-        h = int(payload.get("height") or 64)
+        try:
+            w = int(float(payload.get("width") or 64))
+        except (TypeError, ValueError):
+            w = 64
+        try:
+            h = int(float(payload.get("height") or 64))
+        except (TypeError, ValueError):
+            h = 64
         # img2img often carries init size; prefer payload width/height.
         img_b64 = _make_solid_png_b64(w, h, rgb=(42, 96, 140) if "img2img" in path else (40, 44, 52))
         return {

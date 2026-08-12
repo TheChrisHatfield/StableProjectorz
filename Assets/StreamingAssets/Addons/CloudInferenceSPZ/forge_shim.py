@@ -272,13 +272,14 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             if path == "/sdapi/v1/progress":
                 with st.lock:
-                    prog = float(st.progress)
                     active = bool(st.job_active)
+                    # Idle Forge returns ~0; do not leave sticky 1.0 after a finished job.
+                    prog = float(st.progress) if active else 0.0
                 self._send_json(
                     200,
                     {
                         "progress": prog,
-                        "eta_relative": max(0.0, (1.0 - prog) * 2.0),
+                        "eta_relative": max(0.0, (1.0 - prog) * 2.0) if active else 0.0,
                         "state": {"job": "cloud" if active else "", "job_count": 1 if active else 0},
                         "current_image": None,
                         "textinfo": "Cloud Inference" if active else None,
