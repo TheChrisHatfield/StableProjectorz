@@ -2032,9 +2032,21 @@ namespace spz {
 
 		public bool SetBrushOpacity01(float opacity01) {
 			if (!IsValidFloat(opacity01) || opacity01 < 0f || opacity01 > 1f) return false;
-			if (BrushRibbon_UI.instance == null) return false;
-			BrushRibbon_UI.instance.SetBrushOpacity01(opacity01);
-			return true;
+			bool any = false;
+			if (BrushRibbon_UI.instance != null) {
+				BrushRibbon_UI.instance.SetBrushOpacity01(opacity01);
+				any = true;
+			}
+			// Smudge / SD mask paint read SD_WorkflowOptionsRibbon_UI.maskBrushOpacity — keep both in sync.
+			var sdRibbon = SD_WorkflowOptionsRibbon_UI.instance;
+			if (sdRibbon != null) {
+				var opac = sdRibbon.GetComponentInChildren<BrushRibbon_UI_Opacity>(true);
+				if (opac != null) {
+					opac.SetOpacity01(opacity01);
+					any = true;
+				}
+			}
+			return any;
 		}
 
 		public bool SetBrushStampIndex(int index) {

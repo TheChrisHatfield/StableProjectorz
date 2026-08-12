@@ -80,6 +80,9 @@ namespace spz {
 	        }
 	        catch (Exception e){
 	            Debug.LogError(e.Message);
+	            isImporting = false;
+	            onFail?.Invoke(kind, "Import failed: " + e.Message);
+	            return;
 	        }
 	        isImporting = false;
 	        onComplete_texturesWithoutOwner?.Invoke(kind, texturesAndUdims);

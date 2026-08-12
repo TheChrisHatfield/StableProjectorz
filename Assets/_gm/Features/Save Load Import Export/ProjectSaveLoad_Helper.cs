@@ -153,9 +153,11 @@ namespace spz {
 	        // This is important, in case the spz file gets corrupted. At least the user will have the png:
 	        Action onSaveFinalTex =  ()=>saveFinalTexs( spz.filepath_dataDir + "/FINAL_COMPOSITE_4K.png" );
         
+	        bool compositeSkippedBusy = false;
 	        if(_finalComposite_crtn != null){
 		        var smBusy = Save_MGR.instance;
 		        if (smBusy != null && smBusy._isSaving) {
+			        compositeSkippedBusy = true;
 			        UnityEngine.Debug.LogWarning(
 				        "[ProjectSaveLoad_Helper] Project save: final-composite already owned by an in-progress export; skipping restart.");
 		        } else {
@@ -168,7 +170,8 @@ namespace spz {
 		        yield return _finalComposite_crtn;
 	        }
 
-	        // Honest success only after composite path finished (or was intentionally skipped as busy).
+	        if (compositeSkippedBusy)
+		        resultMessage += " (JSON saved; final composite skipped — another export was writing.)";
 	        onResultMessage?.Invoke(resultMessage);
 
 	        _last_saveFilepath = saveFile;

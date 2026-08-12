@@ -52,8 +52,9 @@ namespace spz {
 	        }
         
 	        if(ConfirmPopup_UI.instance==null){ 
-	            OnExitConfirm(); 
-	            return true; 
+	            // Popup not ready (early boot) — block quit so we never skip "save first?" without a prompt.
+	            Debug.LogWarning("[ExitTheProgram_MGR] Confirm popup missing; refusing quit until UI is ready or AllowQuitWithoutConfirmAndArmWatchdog is used.");
+	            return false;
 	        }
 	        ConfirmPopup_UI.instance.Show("Close the program? Make sure to save progress first (Ctrl+S)", OnExitConfirm, OnExitCanceled, "Close", "Don't Close");
 	        return false;
