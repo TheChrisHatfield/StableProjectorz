@@ -484,8 +484,8 @@ namespace spz {
 				result["success"] = false;
 				result["error"] = "export to path timed out waiting for texture write";
 				UnityEngine.Debug.LogWarning("[Addon_SocketServer] export_3d_with_textures_to_path: texture write still in progress after timeout.");
-			} else if (!string.IsNullOrEmpty(meshFilePath) || ModelsHandler_3D.instance != null) {
-				// Same contract as native SPZ GO: Blender auto-import / litmus needs .spz_go_ready.
+			} else if (!string.IsNullOrEmpty(meshFilePath)) {
+				// Ready stamp is ToPath-only (dialog export never writes .spz_go_ready).
 				// Prefer the FBX path actually written (SaveDefaultDoor may normalize extension).
 				string stampMeshPath = meshFilePath;
 				var mh = ModelsHandler_3D.instance;
@@ -506,6 +506,14 @@ namespace spz {
 					result["success"] = false;
 					result["error"] = "export to path failed (ready stamp missing for Blender auto-import)";
 					UnityEngine.Debug.LogWarning("[Addon_SocketServer] export_3d_with_textures_to_path: ready stamp missing: " + stamp);
+				}
+			} else {
+				// Dialog export: no .spz_go_ready. Succeed only if this op wrote a mesh (path cleared at start).
+				var mh = ModelsHandler_3D.instance;
+				string written = mh != null ? mh._path_recentlyExported : null;
+				if (string.IsNullOrEmpty(written) || !File.Exists(written)) {
+					result["success"] = false;
+					result["error"] = "export cancelled or mesh not written";
 				}
 			}
 			_pendingResponses[id] = new JObject {
