@@ -385,13 +385,16 @@ class _Handler(BaseHTTPRequestHandler):
                     st.progress = 0.05
                     st.started_at = time.time()
                     backend = st.backend
-                # Fake progress ticks for SPZ ETA UI while backend runs.
+                # Progress pulse for SPZ ETA while backend runs (remote jobs can take minutes).
+                done_ev = threading.Event()
+
                 def _tick() -> None:
-                    for p in (0.2, 0.45, 0.7, 0.9):
-                        time.sleep(0.05)
+                    p = 0.05
+                    while not done_ev.wait(0.4):
                         with st.lock:
                             if st.interrupt:
                                 return
+                            p = min(0.95, p + 0.03)
                             st.progress = p
 
                 ticker = threading.Thread(target=_tick, daemon=True)
@@ -399,6 +402,7 @@ class _Handler(BaseHTTPRequestHandler):
                 try:
                     result = backend.generate(path, payload)
                 except BackendError as exc:
+                    done_ev.set()
                     with st.lock:
                         st.job_active = False
                         st.progress = 0.0
@@ -406,12 +410,14 @@ class _Handler(BaseHTTPRequestHandler):
                     self._send_json(exc.status, {"detail": str(exc), "error": str(exc)})
                     return
                 except Exception as exc:
+                    done_ev.set()
                     with st.lock:
                         st.job_active = False
                         st.progress = 0.0
                         st.last_error = str(exc)
                     raise
-                ticker.join(timeout=2.0)
+                done_ev.set()
+                ticker.join(timeout=1.0)
                 with st.lock:
                     st.job_active = False
                     st.progress = 1.0
