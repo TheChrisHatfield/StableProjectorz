@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -32,6 +33,7 @@ namespace spz {
 		readonly List<GameObject> _rows = new List<GameObject>();
 		int _renameRowIndex = -1;
 		bool _suppressRenameEndEdit;
+		Coroutine _rebuildListSoonCrtn;
 
 		// Drag reorder state
 		int _dragFromIndex = -1;
@@ -69,13 +71,13 @@ namespace spz {
 			if (_layerStack == stack) return;
 			if (_layerStack != null)
 			{
-				_layerStack.OnLayersChanged -= RebuildList;
+				_layerStack.OnLayersChanged -= ScheduleRebuildList;
 				_layerStack.OnActiveLayerChanged -= RefreshActiveHighlight;
 			}
 			_layerStack = stack;
 			if (_layerStack != null)
 			{
-				_layerStack.OnLayersChanged += RebuildList;
+				_layerStack.OnLayersChanged += ScheduleRebuildList;
 				_layerStack.OnActiveLayerChanged += RefreshActiveHighlight;
 				if (_listRoot == null) _listRoot = transform as RectTransform;
 				if (_addLayerButton != null)
@@ -118,9 +120,13 @@ namespace spz {
 		void OnDestroy()
 		{
 			SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+			if (_rebuildListSoonCrtn != null) {
+				StopCoroutine(_rebuildListSoonCrtn);
+				_rebuildListSoonCrtn = null;
+			}
 			if (_layerStack != null)
 			{
-				_layerStack.OnLayersChanged -= RebuildList;
+				_layerStack.OnLayersChanged -= ScheduleRebuildList;
 				_layerStack.OnActiveLayerChanged -= RefreshActiveHighlight;
 			}
 			if (_dragInsertIndicator != null) Destroy(_dragInsertIndicator);
@@ -237,10 +243,10 @@ namespace spz {
 			if (_layerStack == null) _layerStack = FindObjectOfType<PaintLayerStack_MGR>(true);
 			if (_listRoot == null) _listRoot = transform as RectTransform;
 			if (_layerStack == null) return;
-			_layerStack.OnLayersChanged -= RebuildList;
-			_layerStack.OnActiveLayerChanged -= RefreshActiveHighlight;
-			_layerStack.OnLayersChanged += RebuildList;
-			_layerStack.OnActiveLayerChanged += RefreshActiveHighlight;
+				_layerStack.OnLayersChanged -= ScheduleRebuildList;
+				_layerStack.OnActiveLayerChanged -= RefreshActiveHighlight;
+				_layerStack.OnLayersChanged += ScheduleRebuildList;
+				_layerStack.OnActiveLayerChanged += RefreshActiveHighlight;
 			if (_addLayerButton != null)
 			{
 				_addLayerButton.onClick.RemoveAllListeners();
@@ -396,6 +402,26 @@ namespace spz {
 			if (didAdd)
 				RebuildList();
 			RequestReRender();
+		}
+
+		/// <summary>
+		/// Delete/Add fire OnLayersChanged under the pointer — defer DestroyImmediate so the click target is not freed mid-handler.
+		/// </summary>
+		void ScheduleRebuildList()
+		{
+			if (!isActiveAndEnabled || !gameObject.activeInHierarchy) {
+				RebuildList();
+				return;
+			}
+			if (_rebuildListSoonCrtn != null) return;
+			_rebuildListSoonCrtn = StartCoroutine(CoRebuildListSoon());
+		}
+
+		IEnumerator CoRebuildListSoon()
+		{
+			yield return null;
+			_rebuildListSoonCrtn = null;
+			RebuildList();
 		}
 
 		void RebuildList()
