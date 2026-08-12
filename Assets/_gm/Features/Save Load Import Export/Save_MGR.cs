@@ -153,6 +153,7 @@ namespace spz {
 		        UnityEngine.Debug.LogWarning("[Save_MGR] Export3D_with_textures: refused — another save/export is in progress.");
 		        return false;
 	        }
+	        ModelsHandler_3D.instance.ClearRecentlyExportedPath();
 	        _isSaving = true;
 
 	        ModelsHandler_3D.instance.ExportModel(
@@ -498,34 +499,35 @@ namespace spz {
 	    void Save_Mesh_Textures( Action<Dictionary<Texture2D,UDIM_Sector>> onHaveAlbedo=null,  
 	                            string save_to_basePath="",  bool isDilate=false,
 	                            bool forbid_albedoDelete = false,  Action onComplete=null){
-	        Dictionary<Texture2D,UDIM_Sector> albedo;
-	        Dictionary<Texture2D,UDIM_Sector> ao;
-	        bool albedo_destroyWhenDone;
-	        bool ao_destroyWhenDone;
-	        Get_ProjectionsDict(isDilate, out albedo, out ao, out albedo_destroyWhenDone, out ao_destroyWhenDone);
-	        albedo_destroyWhenDone =  forbid_albedoDelete?false : albedo_destroyWhenDone;
+	        try {
+	            Dictionary<Texture2D,UDIM_Sector> albedo;
+	            Dictionary<Texture2D,UDIM_Sector> ao;
+	            bool albedo_destroyWhenDone;
+	            bool ao_destroyWhenDone;
+	            Get_ProjectionsDict(isDilate, out albedo, out ao, out albedo_destroyWhenDone, out ao_destroyWhenDone);
+	            albedo_destroyWhenDone =  forbid_albedoDelete?false : albedo_destroyWhenDone;
 
-	        if(albedo==null && ao==null){
-	            onHaveAlbedo?.Invoke(null);
+	            if(albedo==null && ao==null){
+	                onHaveAlbedo?.Invoke(null);
+	                return;
+	            }
+	            onHaveAlbedo?.Invoke(albedo);
+
+	            if( save_to_basePath!=""){
+	                string pathAlbedo = MakeUniquePath(save_to_basePath, "");
+	                string pathAO = MakeUniquePath(save_to_basePath, "_AO");
+	                EncodeAndSaveTextures(albedo, pathAlbedo);
+	                EncodeAndSaveTextures(ao, pathAO);
+	                Viewport_StatusText.instance?.ShowStatusText("Saved to "+ pathAlbedo.Replace("\\", "\\\\"), 
+	                                                             false, 10, displayVisibility:false);
+	            }
+	            if(albedo_destroyWhenDone && albedo != null){ foreach(var kvp in albedo){Texture.DestroyImmediate(kvp.Key);}  }
+	            if(ao_destroyWhenDone && ao != null){     foreach(var kvp in ao){Texture.DestroyImmediate(kvp.Key);}   }
+	        } catch (System.Exception e) {
+	            UnityEngine.Debug.LogError("[Save_MGR] Save_Mesh_Textures failed: " + e.Message);
+	        } finally {
 	            onComplete?.Invoke();
-	            return;
 	        }
-	        onHaveAlbedo?.Invoke(albedo);
-
-	        string pathAlbedo=null, pathAO=null;
-
-	        if( save_to_basePath!=""){
-	            pathAlbedo = MakeUniquePath(save_to_basePath, "");
-	            pathAO = MakeUniquePath(save_to_basePath, "_AO");
-	            EncodeAndSaveTextures(albedo, pathAlbedo);
-	            EncodeAndSaveTextures(ao, pathAO);
-	            Viewport_StatusText.instance?.ShowStatusText("Saved to "+ pathAlbedo.Replace("\\", "\\\\"), 
-	                                                         false, 10, progressVisibility:false);
-	        }
-	        //cleanup:
-	        if(albedo_destroyWhenDone){ foreach(var kvp in albedo){Texture.DestroyImmediate(kvp.Key);}  }
-	        if(ao_destroyWhenDone){     foreach(var kvp in ao){Texture.DestroyImmediate(kvp.Key);}   }
-	        onComplete?.Invoke();
 	    }
 
 
@@ -534,30 +536,49 @@ namespace spz {
 	                                             out Dictionary<Texture2D,UDIM_Sector> ambientOcclusion_,
 	                                             out bool albedo_destroyWhenDone_,  out bool ao_destroyWhenDone_){
 
-	        RenderUdims albedo = Objects_Renderer_MGR.instance.accumulationTextures_ref();
+	        albedo_ = null;
+	        ambientOcclusion_ = null;
+	        albedo_destroyWhenDone_ = false;
+	        ao_destroyWhenDone_ = false;
 
-	        //Dilate (spread out) the texture around the uv-chunks/islands. This hides seams between them.
-	        //check because maybe user doesn't want dilation (maybe they want to see uv islands:
-	        if (isDilate){
-	            int numDilationIters = Mathf.Max(albedo.width, albedo.height) / 16;  //for exmaple  2048 --> 128 pixels dilated.
-	            var dilationArg = new DilationArg(albedo.texArray, numDilationIters, DilateByChannel.A, null);
-	            dilationArg.bordersWiderBlur = true;
-	            dilationArg.isRunInstantly = true;
-	            TextureDilation_MGR.instance.Dillate(dilationArg);
+	        if (Objects_Renderer_MGR.instance == null) {
+	            UnityEngine.Debug.LogWarning("[Save_MGR] Get_ProjectionsDict: Objects_Renderer_MGR missing.");
+	            return;
 	        }
-	        //NOTICE: Convert albedo to texture AFTER dilate. Because dilate works while it's in tex-array form.
+	        RenderUdims albedo = Objects_Renderer_MGR.instance.accumulationTextures_ref();
+	        if (albedo == null || albedo.texArray == null) {
+	            UnityEngine.Debug.LogWarning("[Save_MGR] Get_ProjectionsDict: accumulation textures missing.");
+	            return;
+	        }
+
+	        if (isDilate){
+	            if (TextureDilation_MGR.instance == null) {
+	                UnityEngine.Debug.LogWarning("[Save_MGR] Get_ProjectionsDict: TextureDilation_MGR missing; skipping dilate.");
+	            } else {
+	                int numDilationIters = Mathf.Max(albedo.width, albedo.height) / 16;
+	                var dilationArg = new DilationArg(albedo.texArray, numDilationIters, DilateByChannel.A, null);
+	                dilationArg.bordersWiderBlur = true;
+	                dilationArg.isRunInstantly = true;
+	                TextureDilation_MGR.instance.Dillate(dilationArg);
+	            }
+	        }
 	        List<Texture2D> tex2D_list = TextureTools_SPZ.TextureArray_to_Texture2DList(albedo.texArray);
 	        albedo_ = new Dictionary<Texture2D, UDIM_Sector>();
 	        for(int i=0; i<tex2D_list.Count; ++i){  albedo_.Add(tex2D_list[i], albedo.udims_sectors[i]);  }
 	        albedo_destroyWhenDone_ = true;
 
-	        GenData2D ao_genData =  GenData2D_Archive.instance.Find_GenData_ofKind(GenerationData_Kind.AmbientOcclusion, search_lastToFirst:true);
-	        IconUI ao_iconUI   = ao_genData==null? null : Art2D_IconsUI_List.instance.GetIcon_of_GenerationGroup(ao_genData.total_GUID, 0);
-	        ambientOcclusion_  = AmbientOcclusion_Baker.instance.getDisposable_AO_texture( ao_iconUI, out ao_destroyWhenDone_ );
+	        GenData2D ao_genData = GenData2D_Archive.instance != null
+	            ? GenData2D_Archive.instance.Find_GenData_ofKind(GenerationData_Kind.AmbientOcclusion, search_lastToFirst:true)
+	            : null;
+	        IconUI ao_iconUI = ao_genData == null || Art2D_IconsUI_List.instance == null
+	            ? null
+	            : Art2D_IconsUI_List.instance.GetIcon_of_GenerationGroup(ao_genData.total_GUID, 0);
+	        if (AmbientOcclusion_Baker.instance != null)
+	            ambientOcclusion_ = AmbientOcclusion_Baker.instance.getDisposable_AO_texture( ao_iconUI, out ao_destroyWhenDone_ );
 	    }
 
 
-	    void EncodeAndSaveTextures( Dictionary<Texture2D,UDIM_Sector> textures,  string path, 
+    void EncodeAndSaveTextures( Dictionary<Texture2D,UDIM_Sector> textures,  string path, 
 	                                bool skipUdimSuffix_if_1_texture = true ){
 	        string pathBeforeExten = Path.Combine(Path.GetDirectoryName(path), Path.GetFileNameWithoutExtension(path));
 	        string exten = Path.GetExtension(path);

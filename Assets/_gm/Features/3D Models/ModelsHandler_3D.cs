@@ -42,6 +42,10 @@ namespace spz {
 	    public bool _isImportingModel => _importHelper._isImportingModel;
 	    public bool _lastImportSucceeded => _importHelper != null && _importHelper._lastImportSucceeded;
 	    public string _path_recentlyExported => _importHelper._path_recentlyExported;
+	    public void ClearRecentlyExportedPath() {
+		    if (_importHelper != null)
+			    _importHelper.ClearRecentlyExportedPath();
+	    }
 	    public static Action<ModelsHandler_ImporingInfo> Act_onWillLoadModel { get; set; } = null;
 	    public static Action<GameObject> Act_onImported { get; set; } = null;
 

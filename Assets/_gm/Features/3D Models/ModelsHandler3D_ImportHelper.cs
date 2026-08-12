@@ -34,6 +34,11 @@ namespace spz {
 	    public bool _lastImportSucceeded { get; private set; } = false;
 	    public string _path_recentlyExported { get; private set; } = "";
 
+	    /// <summary>Clears the last dialog/to-path export path so cancel cannot inherit a prior success.</summary>
+	    public void ClearRecentlyExportedPath() {
+		    _path_recentlyExported = "";
+	    }
+
 	    public Action _Act_onStartedImporting{ get; set; } = null;// isSuccess,What.
 	    public Action<bool, GameObject> _Act_onImportComplete { get; set; } = null;// isSuccess,What.
     

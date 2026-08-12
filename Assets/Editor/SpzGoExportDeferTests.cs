@@ -77,5 +77,9 @@ public sealed class SpzGoExportDeferTests {
 			"TCP export must fail closed when .spz_go_ready is absent after save idle.");
 		Assert.That(src, Does.Contain("_path_recentlyExported"),
 			"TCP stamp check must prefer the FBX path actually written.");
+		Assert.That(src, Does.Contain("!string.IsNullOrEmpty(meshFilePath)"),
+			"Ready stamp is ToPath-only; dialog export must not require .spz_go_ready.");
+		Assert.That(src, Does.Contain("export cancelled or mesh not written"),
+			"Dialog export must fail when cancel leaves no written mesh.");
 	}
 }

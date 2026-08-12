@@ -21,17 +21,26 @@ namespace spz {
 	    // What user used, to save the project. 
 	    // We can re-use it for the next saving, so user doesn't have to type it again.
 	    string _last_saveFilepath = "";
-	    
+	    /// <summary>True from SaveProject start through dialog/cancel/write — blocks overlapping Ctrl+S / RPC.</summary>
+	    bool _projectSaveInFlight;
+
 	    /// <summary>
 	    /// Get last saved project filepath (for add-on API)
 	    /// </summary>
 	    public string GetLastSaveFilepath() => _last_saveFilepath;
+
+	    public bool IsProjectSaveInFlight => _projectSaveInFlight;
 
 
 	    public void SaveProject( Action<string> saveFinalTex,  Action<string> onResultMessage){
 	        // Do not StopAllCoroutines while headless export owns final-composite / _isSaving —
 	        // that orphans texture encode and makes deferred RPC report false success.
 	        var sm = Save_MGR.instance;
+	        if (_projectSaveInFlight) {
+		        onResultMessage?.Invoke("Can't save project while another save dialog/write is already in progress.");
+		        saveFinalTex?.Invoke(null);
+		        return;
+	        }
 	        if (sm != null && sm._isSaving) {
 		        onResultMessage?.Invoke("Can't save project while an export/save is still writing textures.");
 		        saveFinalTex?.Invoke(null);
@@ -42,6 +51,7 @@ namespace spz {
 		        saveFinalTex?.Invoke(null);
 		        return;
 	        }
+	        _projectSaveInFlight = true;
 	        StopAllCoroutines();
 	        StartCoroutine(SaveProj_crtn(saveFinalTex, onResultMessage));
 	    }
@@ -79,7 +89,7 @@ namespace spz {
 
 
 	    IEnumerator SaveProj_crtn( Action<string> saveFinalTexs,  Action<string> onResultMessage ){
-
+	        try {
 	        string defaultName = _last_saveFilepath == "" ? "SPZ_Project" : Path.GetFileNameWithoutExtension(_last_saveFilepath);
         
 	        // CHANGED: Using SimpleFileBrowser Coroutine pattern for saving.
@@ -176,6 +186,9 @@ namespace spz {
 
 	        _last_saveFilepath = saveFile;
 	        _onMade_FinalCompositeImg?.Invoke();
+	        } finally {
+		        _projectSaveInFlight = false;
+	        }
 	    }
 
 
