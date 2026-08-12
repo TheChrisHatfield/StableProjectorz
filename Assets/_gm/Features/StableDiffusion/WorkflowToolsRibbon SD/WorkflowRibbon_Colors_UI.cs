@@ -147,12 +147,14 @@ namespace spz {
 	                }
 	            }
 	            foreach (var btn in root.GetComponentsInChildren<Button>(true)) {
-	                if (btn != null)
-	                    SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
+	                if (btn == null) continue;
+	                SpzUiThemeOps.EnsureSelectableHitFace(btn);
+	                SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	            }
 	            foreach (var tog in root.GetComponentsInChildren<Toggle>(true)) {
-	                if (tog != null)
-	                    SpzUiThemeOps.ClearNonFaceRaycastsForTheme(tog);
+	                if (tog == null) continue;
+	                SpzUiThemeOps.EnsureSelectableHitFace(tog);
+	                SpzUiThemeOps.ClearNonFaceRaycastsForTheme(tog);
 	            }
 	        }
 	        if (_bakeColors_button != null) {
