@@ -986,10 +986,14 @@ namespace spz {
 	            return;
 	        }
 
-	        if (!recolorChrome && builtinAddonIconStrip) {
+		if (!recolorChrome && builtinAddonIconStrip) {
 	            // SPZ default toolbox strip: line icons only — no Nomad accent underline.
 	            if (bar != null)
 	                bar.gameObject.SetActive(false);
+	            // Prefab Art/BG tabs often hit via TMP only. Hidden labels must not steal hover/clicks —
+	            // wire a face (RestoreBoundChromeUnder removes SpzUiThemeSyntheticHitFace on leave).
+	            EnsureStripTabHitFace(cell);
+	            ClearStripTabNonFaceRaycasts(cell);
 	            EnsureSpzDefaultStripLineIcon(cell, iconTransform, iconOnly: true);
 	            EnsureStripTabHoverTooltip(cell);
 	            var leSpz = cell.GetComponent<LayoutElement>();
