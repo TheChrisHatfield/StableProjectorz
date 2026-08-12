@@ -95,8 +95,11 @@ namespace spz {
 
 
 	    void OnStartEditMode(MultiView_StartEditMode_Args args){
-	        if(Art2D_IconsUI_List.instance._mainSelectedIcon == null){  return; }
-	        if(Art2D_IconsUI_List.instance._mainSelectedIcon._genData.povInfos.numEnabled == 1){ return; }
+	        var list = Art2D_IconsUI_List.instance;
+	        if (list == null || list._mainSelectedIcon == null) return;
+	        var gen = list._mainSelectedIcon._genData;
+	        if (gen == null || gen.povInfos == null) return;
+	        if (gen.povInfos.numEnabled == 1) return;
 	        //softest brush isn't sufficient for multiview. Its preview is barely visible. Switching to medium brush:
 	        SetExactHardness(1);
 	    }
