@@ -33,4 +33,18 @@ public sealed class AddonCreatePanelParkedVisibilityContractTests {
 		Assert.That(body, Does.Contain("_ribbonMigrateRounds = 0"),
 			"Pref flip / late request must clear give-up counter.");
 	}
+
+	[Test]
+	public void TryMigrateParkedPanelsNow_LeavesDisabledParkedForUnloadGetValue() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "AddonUI_MGR.cs");
+		string src = File.ReadAllText(path);
+		int i = src.IndexOf("void TryMigrateParkedPanelsNow()", System.StringComparison.Ordinal);
+		Assert.That(i, Is.GreaterThan(0));
+		string body = src.Substring(i, System.Math.Min(900, src.Length - i));
+		Assert.That(body, Does.Contain("IsAddonEnabledStatic(parked.addonId)"));
+		Assert.That(body, Does.Not.Contain("Discarding parked panel for disabled"),
+			"Migrate must not Destroy parked panels while SoftLoad HTTP unload still needs get_value.");
+		Assert.That(body, Does.Contain("continue;"));
+	}
 }
