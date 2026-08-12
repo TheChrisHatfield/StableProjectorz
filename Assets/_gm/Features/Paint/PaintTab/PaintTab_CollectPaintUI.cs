@@ -368,12 +368,14 @@ namespace spz {
 				if (btn.GetComponentInParent<PaintTab_ValueAssistPanel_UI>(true) != null) continue;
 				if (btn.GetComponentInParent<PaintTab_LayersPanel_UI>(true) != null) continue;
 				if (btn.GetComponentInParent<ColorPalette_Panel_UI>(true) != null) continue;
+				SpzUiThemeOps.EnsureSelectableHitFace(btn);
 				SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 			}
 			foreach (var toggle in section.GetComponentsInChildren<Toggle>(true)) {
 				if (toggle == null || toggle.targetGraphic is RawImage) continue;
 				if (toggle.GetComponentInParent<PaintTab_LayersPanel_UI>(true) != null) continue;
 				if (toggle.GetComponentInParent<ColorPalette_Panel_UI>(true) != null) continue;
+				SpzUiThemeOps.EnsureSelectableHitFace(toggle);
 				SpzUiThemeOps.ClearNonFaceRaycastsForTheme(toggle);
 			}
 		}
