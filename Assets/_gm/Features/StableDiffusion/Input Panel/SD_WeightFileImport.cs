@@ -221,6 +221,8 @@ namespace spz {
 		static void StartCopy(Kind kind, string sourcePath, string destPath, string fileName) {
 			_busy = true;
 			Status("Copying " + fileName + " into WebUI models…", true);
+			if (Viewport_StatusText.instance != null)
+				Viewport_StatusText.instance.ReportProgress(0f);
 			Task.Run(() => {
 				string err = null;
 				try {
@@ -236,6 +238,10 @@ namespace spz {
 						return;
 					}
 					PreferAndMaybeSelect(kind, fileName);
+					if (kind == Kind.Vae)
+						SD_VAE.instance?.RequestImmediateVAEFetch();
+					else
+						SD_Neural_Models.instance?.RequestImmediateModelsFetch();
 					Status("Copied " + fileName + ". Waiting for WebUI list refresh…", false);
 				});
 			});
