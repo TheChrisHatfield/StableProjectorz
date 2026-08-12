@@ -83,6 +83,7 @@ namespace spz {
 		RectTransform _spacerRowRt;
 		float _appliedBottomGapPx = -1f;
 		int _adaptClearanceFrame = -1;
+		bool _lastDimChoicesFanOpen;
 
 		static bool SpecsEqual(in RibbonDock_ButtonSpec a, in RibbonDock_ButtonSpec b) {
 			return string.Equals(a.CommandId, b.CommandId, StringComparison.Ordinal)
@@ -1580,9 +1581,16 @@ namespace spz {
 
 		void Update() {
 			if (_built && _builtRowRt != null) {
-				// Layout can settle a frame after Gen Art / DimensionMode hover scale; keep clear of SD disc.
-				if ((Time.frameCount & 7) == 0)
+				bool fanOpen = DimensionMode_MGR.instance != null
+				               && DimensionMode_MGR.instance.TryGetOpenChoicesPanelVisualRect(out _);
+				if (fanOpen != _lastDimChoicesFanOpen) {
+					_lastDimChoicesFanOpen = fanOpen;
+					// Fan open/close changes footprint immediately — don't wait for 8-frame poll.
+					ApplyAdaptiveBottomGap(force: true);
+				} else if ((Time.frameCount & 7) == 0) {
+					// Layout can settle a frame after Gen Art / DimensionMode hover scale; keep clear of SD disc.
 					ApplyAdaptiveBottomGap(force: false);
+				}
 			}
 			if (!_fullViewMenuOpen || _fullViewMenuRt == null) {
 				return;
