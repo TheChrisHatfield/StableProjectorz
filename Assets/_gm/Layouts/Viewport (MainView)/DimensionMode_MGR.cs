@@ -75,7 +75,7 @@ namespace spz {
 
 	    /// <summary>
 	    /// Open SD/3D/UV fan rect for FULL/SRN clearance (includes mirrored fullscreen footprint).
-	    /// Uses live scale so close-animation frames still reserve space until the fan is tiny.
+	    /// Show_ChoicePanel hide settles at ~0.35 scale (not 0) — do not treat that as open.
 	    /// </summary>
 	    public bool TryGetOpenChoicesPanelVisualRect(out RectTransform choicesRt) {
 	        choicesRt = null;
@@ -83,10 +83,14 @@ namespace spz {
 	            return false;
 	        if (!_choicesPanel_rectTransf.gameObject.activeInHierarchy)
 	            return false;
-	        // Show_ChoicePanel anim: 0.35→1 open; ignore near-zero hide frames.
 	        float ax = Mathf.Abs(_choicesPanel_rectTransf.localScale.x);
-	        if (ax < 0.2f)
+	        // Closed rest ≈0.35; open settles at 1. While dismissing, keep clearance until below mid-scale.
+	        if (!_ishowingChoicePanel) {
+	            if (ax < 0.55f)
+	                return false;
+	        } else if (ax < 0.2f) {
 	            return false;
+	        }
 	        choicesRt = _choicesPanel_rectTransf;
 	        return true;
 	    }
@@ -129,10 +133,29 @@ namespace spz {
 	            }
 	            _bg_choice_button.onClick.AddListener( ()=>OnButtonPressed(_bg_choice_button) );
 	        }
-	        if (_choicesPanel_anim != null)
+	        if (_choicesPanel_anim != null) {
 	            _choicesPanel_anim.SetBool("ShowPanel", false);
+	            // Prefab scale starts at 1; without a tick FULL/SRN clearance thinks the fan is open.
+	            _choicesPanel_anim.Update(0f);
+	        }
+	        SnapChoicesPanelScaleToClosedRestIfNeeded();
 	        // Prefab leaves choice panel active; block hits until hover opens the fan.
 	        SetChoicesPanelRaycastsEnabled(false);
+	    }
+
+	    void SnapChoicesPanelScaleToClosedRestIfNeeded() {
+	        if (_choicesPanel_rectTransf == null || _ishowingChoicePanel)
+	            return;
+	        Vector3 s = _choicesPanel_rectTransf.localScale;
+	        float ax = Mathf.Abs(s.x);
+	        // Hide end key is 0.35; if still at authored 1, snap closed so clearance is correct pre-hover.
+	        if (ax > 0.55f) {
+	            float sign = _choicesFanFlipped ? -1f : 1f;
+	            s.x = sign * 0.35f;
+	            s.y = 0.35f;
+	            s.z = 0.35f;
+	            _choicesPanel_rectTransf.localScale = s;
+	        }
 	    }
 
 	    void Start(){
