@@ -196,20 +196,23 @@ namespace spz {
 	    }
 
 	    static void ApplyGenButtonFace(Button btn, bool interactable) {
-	        if (btn == null || btn.image == null) return;
+	        if (btn == null) return;
+	        // Soft-disable must dim BoundChrome targetGraphic (may be HitFace), not only btn.image.
+	        Graphic face = btn.targetGraphic != null ? btn.targetGraphic : btn.image;
+	        if (face == null) return;
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
-	            SpzUiThemeOps.RestoreAuthoredGraphic(btn.image);
-	            var restored = btn.image.color;
+	            SpzUiThemeOps.RestoreAuthoredGraphic(face);
+	            var restored = face.color;
 	            restored.a = interactable ? 1f : 0.5f;
-	            btn.image.color = restored;
+	            face.color = restored;
 	            return;
 	        }
 	        // Soft-disable alpha only — do not rewrite RGB every Update (that kills ColorTint hover/press).
-	        var c = btn.image.color;
+	        var c = face.color;
 	        float targetA = interactable ? 1f : 0.5f;
 	        if (Mathf.Abs(c.a - targetA) > 0.001f) {
 	            c.a = targetA;
-	            btn.image.color = c;
+	            face.color = c;
 	        }
 	    }
 
