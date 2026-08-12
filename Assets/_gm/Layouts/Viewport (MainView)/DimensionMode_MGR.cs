@@ -244,8 +244,8 @@ namespace spz {
 	            var panelImg = _choicesPanel_rectTransf.GetComponent<Image>();
 	            if (panelImg != null)
 	                SpzUiThemeOps.ApplyBoundChromeGraphic(panelImg, t.panelBg);
-	            // Prefab "bg" child under choice panel.
-	            var bg = _choicesPanel_rectTransf.Find("bg");
+	            // Prefab "bg" child under choice panel (may be inactive while fan closed).
+	            var bg = SpzUiThemeOps.FindDirectChildIncludingInactive(_choicesPanel_rectTransf, "bg");
 	            if (bg != null) {
 	                var bgImg = bg.GetComponent<Image>();
 	                if (bgImg != null)
