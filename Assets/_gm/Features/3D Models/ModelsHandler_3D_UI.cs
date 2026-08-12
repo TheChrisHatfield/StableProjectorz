@@ -234,8 +234,15 @@ namespace spz {
 	    void OnVertexColorsChromeChanged() => ThemeVertexColorsToggle(SpzUiThemeOps.Active);
 
 	    void ThemeVertexColorsToggle(SpzUiThemeOps.ThemeTokens t) {
-	        if (_showVertexColors_toggle == null || !SpzUiThemeOps.ShouldRecolorBoundChrome) return;
+	        if (_showVertexColors_toggle == null) return;
 	        var btn = _showVertexColors_toggle.GetComponent<Button>();
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            if (btn != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(btn.transform);
+	            else
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_showVertexColors_toggle.transform);
+	            return;
+	        }
 	        Color fill = _showVertexColors_toggle.isPressed
 	            ? Color.Lerp(t.controlBg, t.accent, 0.14f)
 	            : t.controlBg;

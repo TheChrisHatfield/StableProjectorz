@@ -197,7 +197,6 @@ namespace spz {
 	        if (btn.targetGraphic is Image face) {
 	            SpzUiThemeOps.ApplyRoundedControlSprite(face, markEligible: true);
 	            SpzUiThemeOps.FlattenToolFaceImage(face);
-	            face.preserveAspect = false;
 	            face.raycastTarget = true;
 	        }
 	        // Leading Monolith — centered Bullseye/Folder stamps over "SERV"; hide authored folders too.
