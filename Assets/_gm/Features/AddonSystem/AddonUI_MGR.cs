@@ -816,6 +816,10 @@ namespace spz {
 			AddButton(StableProjectorzGoAddonId, panelId, "Import", "do_import_from_path");
 			AddButton(StableProjectorzGoAddonId, panelId, "Export", "do_export_to_path");
 			AddButton(StableProjectorzGoAddonId, panelId, "Install into Blender", "do_install_blender_addon_force");
+			AddButton(StableProjectorzGoAddonId, panelId, "Autofill paths", "do_autofill_mesh_paths");
+			AddButton(StableProjectorzGoAddonId, panelId, "Refresh Blender", "do_refresh_blender_path");
+			AddButton(StableProjectorzGoAddonId, panelId, "Export with dialogs…", "do_export_interactive");
+			AddButton(StableProjectorzGoAddonId, panelId, "Print data_dir", "do_show_data_dir");
 		}
 
 		void EnsureNativeSpzGoMissingWidgets(string panelId, GameObject panel, bool seedPathsIfMissing) {
@@ -843,6 +847,14 @@ namespace spz {
 				AddButton(StableProjectorzGoAddonId, panelId, "Export", "do_export_to_path");
 			if (!PanelHasNamedControlPrefix(panel, "Button_Install into Blender"))
 				AddButton(StableProjectorzGoAddonId, panelId, "Install into Blender", "do_install_blender_addon_force");
+			if (!PanelHasNamedControlPrefix(panel, "Button_Autofill paths"))
+				AddButton(StableProjectorzGoAddonId, panelId, "Autofill paths", "do_autofill_mesh_paths");
+			if (!PanelHasNamedControlPrefix(panel, "Button_Refresh Blender"))
+				AddButton(StableProjectorzGoAddonId, panelId, "Refresh Blender", "do_refresh_blender_path");
+			if (!PanelHasNamedControlPrefix(panel, "Button_Export with dialogs"))
+				AddButton(StableProjectorzGoAddonId, panelId, "Export with dialogs…", "do_export_interactive");
+			if (!PanelHasNamedControlPrefix(panel, "Button_Print data_dir"))
+				AddButton(StableProjectorzGoAddonId, panelId, "Print data_dir", "do_show_data_dir");
 		}
 
 		bool TryGetLiveAddonPanel(string addonId, out GameObject panel) {
@@ -1119,7 +1131,77 @@ namespace spz {
 				RegisterButtonCallback(addonId, callbackName, () => SpzGoRunHeadlessImportOrExportFromPanel(addonId, panelId, callbackName, isImport: false));
 			} else if (string.Equals(callbackName, "do_install_blender_addon_force", StringComparison.Ordinal)) {
 				RegisterButtonCallback(addonId, callbackName, () => SpzGoNativeInstallBlenderBridge(panelId));
+			} else if (string.Equals(callbackName, "do_autofill_mesh_paths", StringComparison.Ordinal)) {
+				RegisterButtonCallback(addonId, callbackName, () => SpzGoNativeAutofillPaths(panelId));
+			} else if (string.Equals(callbackName, "do_refresh_blender_path", StringComparison.Ordinal)) {
+				RegisterButtonCallback(addonId, callbackName, () => SpzGoNativeRefreshBlenderPath(panelId));
+			} else if (string.Equals(callbackName, "do_export_interactive", StringComparison.Ordinal)) {
+				RegisterButtonCallback(addonId, callbackName, () => SpzGoNativeExportInteractive());
+			} else if (string.Equals(callbackName, "do_show_data_dir", StringComparison.Ordinal)) {
+				RegisterButtonCallback(addonId, callbackName, () => SpzGoNativeShowDataDir());
 			}
+		}
+
+		void SpzGoNativeAutofillPaths(string panelId) {
+			var fp = FastPath_API.instance;
+			string dataDir = fp != null ? fp.GetProjectDataDirOrSession() : null;
+			if (string.IsNullOrEmpty(dataDir)) {
+				SpzGoStatusLine("No data_dir yet — save a project or retry", false);
+				return;
+			}
+			string exchange = Path.Combine(dataDir, "StableProjectorzGO_exchange");
+			string importPath = Path.Combine(exchange, "from_blender.fbx");
+			string exportPath = Path.Combine(exchange, "from_spz.fbx");
+			bool okImport = SpzGoSetTextInputByNameContains(panelId, "Import path", importPath);
+			bool okExport = SpzGoSetTextInputByNameContains(panelId, "Export path", exportPath);
+			if (okImport || okExport)
+				SpzGoStatusLine("Paths autofilled", true);
+			else
+				SpzGoStatusLine("Could not set path fields", false);
+		}
+
+		void SpzGoNativeRefreshBlenderPath(string panelId) {
+			string blender = FastPath_API.FindBlenderExecutable() ?? "";
+			if (SpzGoSetTextInputByNameContains(panelId, "Blender", blender))
+				SpzGoStatusLine(string.IsNullOrEmpty(blender) ? "Blender not found — set manually" : "Blender path refreshed", !string.IsNullOrEmpty(blender));
+			else
+				SpzGoStatusLine(string.IsNullOrEmpty(blender) ? "Blender not found" : TruncateStatus(blender), !string.IsNullOrEmpty(blender));
+		}
+
+		void SpzGoNativeExportInteractive() {
+			var fp = FastPath_API.instance;
+			if (fp == null) {
+				SpzGoStatusLine("3D / API not ready", false);
+				return;
+			}
+			bool ok = fp.Export3DWithTextures();
+			SpzGoStatusLine(ok ? "Export dialog opened" : "Export could not start (busy?)", ok);
+		}
+
+		void SpzGoNativeShowDataDir() {
+			var fp = FastPath_API.instance;
+			string d = fp != null ? fp.GetProjectDataDirOrSession() : null;
+			if (string.IsNullOrEmpty(d))
+				SpzGoStatusLine("No project data_dir — session unavailable", false);
+			else
+				SpzGoStatusLine(TruncateStatus("data_dir: " + d), true);
+		}
+
+		bool SpzGoSetTextInputByNameContains(string panelId, string nameContains, string value) {
+			var panel = FindUIElement(panelId);
+			if (panel == null) return false;
+			var allT = panel.transform.GetComponentsInChildren<Transform>(true);
+			for (int i = 0; i < allT.Length; i++) {
+				var t = allT[i];
+				if (t == null || t.name == null) continue;
+				if (!t.name.StartsWith("TextInput_", StringComparison.Ordinal)) continue;
+				if (t.name.IndexOf(nameContains, StringComparison.OrdinalIgnoreCase) < 0) continue;
+				var inf = t.GetComponentInChildren<TMP_InputField>(true);
+				if (inf == null) continue;
+				inf.SetTextWithoutNotify(value ?? "");
+				return true;
+			}
+			return false;
 		}
 
 		void SpzGoNativeInstallBlenderBridge(string panelId) {
