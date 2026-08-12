@@ -850,6 +850,14 @@ namespace spz {
 	                continue;
 	            if (IsUnderProductColorSurface(btn.transform))
 	                continue;
+	            SpzUiThemeOps.EnsureSelectableHitFace(btn);
+	            // Glyph-as-face buttons (close/X, icons) — SolidSquare blanks them under Nomad.
+	            if (SpzUiThemeOps.IsAuthoredIconFace(btn.targetGraphic)) {
+	                if (btn.targetGraphic is Image face)
+	                    SpzUiThemeOps.ApplyBoundChromeGraphic(face, t.iconTint);
+	                SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
+	                continue;
+	            }
 	            bool primary = ReferenceEquals(btn, _restoreDefaults_button)
 	                           || ReferenceEquals(btn, _openAddonManager_button);
 	            Color normal = primary ? Color.Lerp(t.controlBg, t.accent, 0.55f) : t.controlBg;
