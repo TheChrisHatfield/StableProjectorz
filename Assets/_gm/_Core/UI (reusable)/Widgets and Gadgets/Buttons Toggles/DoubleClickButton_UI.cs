@@ -28,12 +28,19 @@ namespace spz {
 	            _awaitingConfirm = false;
 	            onConfirmedClick?.Invoke();
 	            if(_image_optional!=null){ _image_optional.enabled = true; }
-	            _text.text = _startingText;
+	            if(_text != null) {
+	                _text.text = _startingText;
+	                _text.raycastTarget = false;
+	            }
 	            return;
 	        }
 	        _awaitingConfirm = true;
 	        _prevClickTime = Time.time;
-	        _text.text = _confirm_text;
+	        if (_text != null) {
+	            _text.text = _confirm_text;
+	            // Nomad ClearNonFace leaves only the face hittable — face is hidden during confirm.
+	            _text.raycastTarget = true;
+	        }
 	        if(_image_optional!=null){ _image_optional.enabled = false; }
 	        onCheckClick?.Invoke();
 	    }
@@ -42,7 +49,10 @@ namespace spz {
 	        if (!_awaitingConfirm){ return; }
 	        if (Time.time < _prevClickTime+_secondClick_deadline){ return; }
 	        _awaitingConfirm = false;
-	        _text.text = _startingText;
+	        if (_text != null) {
+	            _text.text = _startingText;
+	            _text.raycastTarget = false;
+	        }
 	        if(_image_optional!=null){ _image_optional.enabled = true; }
 	    }
 
