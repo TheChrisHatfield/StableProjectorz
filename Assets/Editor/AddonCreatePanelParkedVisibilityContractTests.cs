@@ -74,4 +74,18 @@ public sealed class AddonCreatePanelParkedVisibilityContractTests {
 		Assert.That(body.IndexOf("RequestMigrateParkedPanelsNow()", System.StringComparison.Ordinal),
 			Is.LessThan(body.IndexOf("EnsureNativeFallbackUiWhenPythonMissing", System.StringComparison.Ordinal)));
 	}
+
+	[Test]
+	public void CreatePanel_AdoptsParkedBeforeCreatingDuplicate_Source() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "AddonUI_MGR.cs");
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("TryAdoptParkedPanelForCreate"));
+		int create = src.IndexOf("public string CreatePanel(", System.StringComparison.Ordinal);
+		Assert.That(create, Is.GreaterThanOrEqualTo(0));
+		int adopt = src.IndexOf("TryAdoptParkedPanelForCreate", create, System.StringComparison.Ordinal);
+		int making = src.IndexOf("Creating panel content under", create, System.StringComparison.Ordinal);
+		Assert.That(adopt, Is.GreaterThan(create));
+		Assert.That(adopt, Is.LessThan(making), "must adopt parked before creating a duplicate shell panel");
+	}
 }
