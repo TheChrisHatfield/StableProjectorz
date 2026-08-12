@@ -20,7 +20,7 @@ namespace spz {
 	    Coroutine _deferredSoftDisable;
 
 	    void Awake() {
-	        SpzUiThemeOps.ThemeChanged += OnThemeChanged_ReapplySoftDisable;
+	        SpzUiThemeOps.ThemeChanged += OnThemeChanged;
 	    }
 
 	    void Start(){
@@ -32,10 +32,11 @@ namespace spz {
 	        _upscalersDropdown.onValueChanged.AddListener((ix) => StaticEvents.Invoke<int>("SD_Upscalers_UI", ix));
 	        _upscaleVisible_x2_button.onClick.AddListener(() => StaticEvents.Invoke("SD_Upscalers_UI:OnUpscaleX2"));
 	        _upscaleVisible_x4_button.onClick.AddListener(() => StaticEvents.Invoke("SD_Upscalers_UI:OnUpscaleX4"));
+	        ApplyThemeTokens();
 	    }
 
 	    void OnDestroy(){
-	        SpzUiThemeOps.ThemeChanged -= OnThemeChanged_ReapplySoftDisable;
+	        SpzUiThemeOps.ThemeChanged -= OnThemeChanged;
 	        if (_deferredSoftDisable != null) {
 	            StopCoroutine(_deferredSoftDisable);
 	            _deferredSoftDisable = null;
@@ -44,6 +45,47 @@ namespace spz {
 	        StaticEvents.Unsubscribe<bool>("SD_Upscalers:SetButtonsInteractable", SetButtonsInteractable);
 	        StaticEvents.Unsubscribe("SD_Upscalers:PlayAttentionAnim", PlayAttentionAnim);
 	        StaticEvents.Unsubscribe<string>("SD_Upscalers:SetSelectedByName", SetSelectedUpscaler);
+	    }
+
+	    void OnThemeChanged() {
+	        ApplyThemeTokens();
+	        OnThemeChanged_ReapplySoftDisable();
+	    }
+
+	    /// <summary>Own BoundChrome for x2/x4 + dropdown — SoftDisable alone left beige chips under Nomad.</summary>
+	    void ApplyThemeTokens() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            if (_upscaleVisible_x2_button != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_upscaleVisible_x2_button.transform);
+	            if (_upscaleVisible_x4_button != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_upscaleVisible_x4_button.transform);
+	            if (_upscalersDropdown != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_upscalersDropdown.transform);
+	            SetButtonsInteractable(_lastSoftInteractable);
+	            return;
+	        }
+	        var t = SpzUiThemeOps.Active;
+	        ThemeUpscaleChip(_upscaleVisible_x2_button, t);
+	        ThemeUpscaleChip(_upscaleVisible_x4_button, t);
+	        if (_upscalersDropdown != null) {
+	            SpzUiThemeOps.EnsureSelectableHitFace(_upscalersDropdown);
+	            SpzUiThemeOps.ApplyBoundChromeSelectable(_upscalersDropdown, t.fieldBg, t.accent);
+	            if (_upscalersDropdown.captionText != null)
+	                SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(_upscalersDropdown.captionText, t.textPrimary, 12f);
+	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_upscalersDropdown);
+	        }
+	        SetButtonsInteractable(_lastSoftInteractable);
+	    }
+
+	    static void ThemeUpscaleChip(Button btn, SpzUiThemeOps.ThemeTokens t) {
+	        if (btn == null) return;
+	        SpzUiThemeOps.EnsureSelectableHitFace(btn);
+	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
+	        foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (tmp != null)
+	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+	        }
+	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }
 
 	    void OnThemeChanged_ReapplySoftDisable() {
