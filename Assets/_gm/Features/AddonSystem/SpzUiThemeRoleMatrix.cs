@@ -180,7 +180,7 @@ namespace spz {
 				if (SpzUiThemeOps.IsAuthoredIconFace(btn.targetGraphic)) {
 					EnsureSelectableHitFace(btn);
 					if (btn.targetGraphic is Image iconFace)
-						ApplyBoundChromeGraphic(iconFace, t.iconTint);
+						ApplyBoundChromeIconTint(iconFace, t.iconTint);
 					continue;
 				}
 				ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);

@@ -25,6 +25,6 @@ public sealed class RoleMatrixEnsureBeforeClearThemeTests {
 		Assert.That(idx, Is.GreaterThanOrEqualTo(0));
 		string body = src.Substring(idx, System.Math.Min(2200, src.Length - idx));
 		Assert.That(body, Does.Contain("IsAuthoredIconFace(btn.targetGraphic)"));
-		Assert.That(body, Does.Contain("ApplyBoundChromeGraphic(iconFace, t.iconTint)"));
+		Assert.That(body, Does.Contain("ApplyBoundChromeIconTint(iconFace, t.iconTint)"));
 	}
 }

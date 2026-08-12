@@ -697,6 +697,22 @@ namespace spz {
 		}
 
 		/// <summary>
+		/// Tint an authored icon glyph without <see cref="FlattenSlicedChromeFace"/> /
+		/// SolidRect swap. Use for IsAuthoredIconFace targets (Export/Save, mesh-list, Settings).
+		/// </summary>
+		public static void ApplyBoundChromeIconTint(Graphic graphic, Color token) {
+			if (graphic == null) return;
+			if (!ShouldRecolorBoundChrome) {
+				RestoreAuthoredGraphic(graphic);
+				return;
+			}
+			if (graphic is Image maskImg && IsUiMaskGraphic(maskImg))
+				return;
+			SnapshotAuthoredGraphic(graphic);
+			graphic.color = token;
+		}
+
+		/// <summary>
 		/// Selectable chrome apply gated by <see cref="ShouldRecolorBoundChrome"/>.
 		/// Litmus expanded: hard opaque solid squares (SAVE 2K pattern) — no soft 9-slice / whiskers.
 		/// Does not hide Toggle.graphic checkmarks — Multiview POV bevel plates hide via name match.
