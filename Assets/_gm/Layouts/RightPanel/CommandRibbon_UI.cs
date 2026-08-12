@@ -411,9 +411,12 @@ namespace spz {
 			    LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
 
 		    if (!hasAddonContent && Viewport_StatusText.instance != null) {
-			    Viewport_StatusText.instance.ShowStatusText(
-				    "Add-on UI empty — Python HTTP :5557 not ready. Enable FastAPI (pip install fastapi uvicorn) or rebuild with latest fixes.",
-				    false, 5f, false);
+			    // During slow register() HTTP may already be up — do not claim FastAPI is missing.
+			    bool needHttpSeed = Addon_MGR.ShouldSeedNativeAddonFallbackStatic();
+			    string msg = needHttpSeed
+				    ? "Add-on UI empty — Python HTTP :5557 not ready. Enable FastAPI (pip install fastapi uvicorn) or rebuild with latest fixes."
+				    : "Add-on UI still loading — waiting for create_panel…";
+			    Viewport_StatusText.instance.ShowStatusText(msg, false, 5f, false);
 		    }
 	    }
 
@@ -2144,8 +2147,8 @@ namespace spz {
 	    void RefreshRibbonTabStripLayout(Transform tabStrip) {
 		    if (tabStrip == null) return;
 		    PatchTabStripResponsiveLayout();
-		    HarmonizeStripTabTypography();
-		    // Theme/icon-only widths + ForceRebuild live inside ApplyThemeTokens (must run before any prior rebuild).
+		    // ApplyThemeTokens first: restores label glyphs / clears icon locks, then Harmonize when labels are visible.
+		    // Harmonize-before-theme measured maxVisibleCharacters=0 labels and locked wrong minWidths on leave.
 		    ApplyThemeTokens();
 		    QueueTabStripRebuildNextFrame(tabStrip);
 	    }
