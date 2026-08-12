@@ -111,6 +111,8 @@ namespace spz {
 		{
 			SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 			SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+			// Theme may have changed while disabled — re-assert chrome (Collect may not run yet).
+			ApplyThemeTokens();
 		}
 
 		void OnDisable()
