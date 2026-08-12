@@ -200,6 +200,12 @@ namespace spz {
 	    public void Load( string filepath_dataDir,  RenderUdims_SL sl,  GraphicsFormat format,  FilterMode filter){
 	        Dispose();
 	        texturesBelongToMe = true;
+	        if (sl == null || sl.udim_coords == null || sl.textures == null){
+	            Debug.LogWarning("[RenderUdims] Load skipped: null udim_coords/textures in save data.");
+	            udims_sectors = new List<UDIM_Sector>();
+	            _udims_shaderCoords = null;
+	            return;
+	        }
 	        udims_sectors = sl.udim_coords.ToList();
 	        _udims_shaderCoords = Init_Udim_shaderCoords(udims_sectors);
 
