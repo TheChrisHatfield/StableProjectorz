@@ -249,6 +249,10 @@ namespace spz {
 	                continue; 
 	            }
 	            if (!_isFetchingModels){
+	                if (Coroutines_MGR.instance == null){
+	                    yield return null;
+	                    continue;
+	                }
 	                yield return Coroutines_MGR.instance.StartCoroutine( GetModels_crtn() );
 	            }
 	            dropdown_LoadedSavedModel_maybe();

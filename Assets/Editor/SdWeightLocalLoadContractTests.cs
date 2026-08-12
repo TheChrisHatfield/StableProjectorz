@@ -49,11 +49,15 @@ public sealed class SdWeightLocalLoadContractTests {
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("BrowseAndImportCheckpoint"));
 		Assert.That(src, Does.Contain("PreferModelWhenAvailable"));
+		Assert.That(src, Does.Contain("RequestImmediateModelsFetch"));
 		Assert.That(src, Does.Contain("ScreenPointHitsOwnership"));
+		Assert.That(src, Does.Contain("UiCameraFor"));
+		Assert.That(src, Does.Contain("isShowing"));
 		Assert.That(src, Does.Contain("EnsureLoadFromDiskButton"));
 		Assert.That(src, Does.Contain("_loadFromDiskWired"));
 		Assert.That(src, Does.Contain("SD_WeightFileImport"));
 		Assert.That(src, Does.Contain("OrdinalIgnoreCase"));
+		Assert.That(src, Does.Contain("NormalizeCheckpointPrefer"));
 		Assert.That(src, Does.Not.Contain("opt.text.IndexOf(want"),
 			"PreferModel must not fuzzy IndexOf — short stems false-positive longer checkpoint names.");
 	}
@@ -65,7 +69,10 @@ public sealed class SdWeightLocalLoadContractTests {
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("BrowseAndImportVAE"));
 		Assert.That(src, Does.Contain("PreferVAEWhenAvailable"));
+		Assert.That(src, Does.Contain("RequestImmediateVAEFetch"));
 		Assert.That(src, Does.Contain("ScreenPointHitsOwnership"));
+		Assert.That(src, Does.Contain("UiCameraFor"));
+		Assert.That(src, Does.Contain("isShowing"));
 		Assert.That(src, Does.Contain("EnsureLoadFromDiskButton"));
 		Assert.That(src, Does.Contain("_loadFromDiskWired"));
 		Assert.That(src, Does.Contain("SD_WeightFileImport"));
