@@ -1395,16 +1395,8 @@ namespace spz {
 			bool stripUppercase = true) {
 			if (cell == null) return;
 			if (!ShouldRecolorBoundChrome) {
-				// Leave path: hide Monolith icon, restore label rects + authored TMP (font/align).
-				ApplyControlLineIcon(cell, glyph, iconPx);
-				RestoreToolFaceLayoutsUnder(cell);
-				foreach (var tmp in cell.GetComponentsInChildren<TMP_Text>(true)) {
-					if (tmp == null) continue;
-					if (includeLabel != null && !includeLabel(tmp))
-						continue;
-					RestoreAuthoredGraphic(tmp);
-					RestoreDesignFontSize(tmp, stripUppercase ? 11f : 12f);
-				}
+				// Leave litmus: full BoundChrome unwind (label rects, typography, Monolith, sprites).
+				RestoreBoundChromeUnder(cell);
 				return;
 			}
 			// Compact strip: icon in upper band, label below — center+yLift collided with labelMaxY 0.52
