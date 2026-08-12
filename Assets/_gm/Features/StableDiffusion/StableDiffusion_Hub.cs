@@ -140,6 +140,10 @@ namespace spz {
 
     
 	    bool has_Depth_or_Norm_or_RefOnly(){
+	        // Heal before gating so leftover SD1.5/XL weights on FLUX.2-dev (or XL) can swap to a
+	        // compatible model while Fun-Union/depth is installed — otherwise Deny never reaches GetArgs.
+	        SD_ControlNetsList_UI.instance?.TryHealFamilyMismatchedModels();
+
 	        bool is_img2img   =  WorkflowRibbon_UI.instance.isMode_using_img2img();
 	        // Ignore means GetArgs skips depth/normals — do not require a phantom inactive unit's model.
 	        if (is_img2img && SD_WorkflowOptionsRibbon_UI.instance.ignoreDepthOrNormals)

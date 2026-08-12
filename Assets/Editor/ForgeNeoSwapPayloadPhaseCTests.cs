@@ -417,6 +417,8 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 		Assert.That(hub, Does.Contain("has_Depth_or_Norm_or_RefOnly() || kleinReady"));
 		Assert.That(hub, Does.Contain("onlyActive: true, only_if_validModel: true"),
 			"Depth/normals Gen Art gate must require active+valid on the same unit (not inactive Fun-Union).");
+		Assert.That(hub, Does.Contain("TryHealFamilyMismatchedModels"),
+			"Heal must run before Gen Art depth gate so Fun-Union can unlock mismatched leftover CN.");
 		Assert.That(hub, Does.Contain("ignoreDepthOrNormals"));
 		Assert.That(hub, Does.Contain("bool kleinReady = IsActiveCheckpointKlein();"));
 		Assert.That(hub, Does.Contain("SD_KleinStructureChannel.CanCaptureMeshDepth()"));

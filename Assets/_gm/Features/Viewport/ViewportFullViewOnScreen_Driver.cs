@@ -156,7 +156,7 @@ namespace spz {
 			}
 			catch { }
 
-			// Same-window fallbacks only — do not Max across GetDisplayLayout / Display.displays
+			// Same-window fallbacks only — do not Max W/H across every connected monitor
 			// (multi-monitor frankenstein e.g. 3840×3440 that matches no screen).
 			if (w < 64 || h < 64) {
 				if (Screen.width >= 64 && Screen.height >= 64) {

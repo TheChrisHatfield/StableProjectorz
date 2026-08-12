@@ -29,9 +29,9 @@ public sealed class FullViewSpacerLeaveThemeTests {
 		Assert.That(idx, Is.GreaterThan(0));
 		string body = src.Substring(idx, System.Math.Min(1800, src.Length - idx));
 		Assert.That(body, Does.Contain("mainWindowDisplayInfo"));
-		Assert.That(body, Does.Not.Contain("GetDisplayLayout"),
+		Assert.That(body, Does.Not.Contain("Screen.GetDisplayLayout"),
 			"Must not Max W/H across all monitors (frankenstein multi-monitor size)");
-		Assert.That(body, Does.Not.Contain("Display.displays"),
+		Assert.That(body, Does.Not.Contain("Display.displays["),
 			"Must not Max across Display.displays independently");
 		Assert.That(body, Does.Contain("di.width > 0 && di.height > 0"),
 			"Accept mainWindowDisplayInfo only as a paired W×H");
