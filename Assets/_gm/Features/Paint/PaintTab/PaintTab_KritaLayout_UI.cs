@@ -420,7 +420,7 @@ namespace spz {
 			if (splitTf == null) return;
 			var img = splitTf.GetComponent<Image>();
 			if (img == null) return;
-			// border token is ~8% alpha (hairline) — too faint for a 6px drag hit target.
+			// border token is ~8% alpha (hairline) — too faint for an 8px drag hit target.
 			Color bar = t.controlBg;
 			bar.a = Mathf.Max(bar.a, 0.85f);
 			SpzUiThemeOps.ApplyBoundChromeGraphic(img, bar);
