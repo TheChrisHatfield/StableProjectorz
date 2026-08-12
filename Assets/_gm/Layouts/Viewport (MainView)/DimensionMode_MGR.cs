@@ -158,7 +158,8 @@ namespace spz {
 	        _choicesPanel_rectTransf.localScale = scale;
 	        // Prefab GraphicRaycaster has ignoreReversedGraphics=true — with scale.x<0 hits die (SD/3D/UV dead).
 	        ApplyChoicesPanelRaycasterForMirror(flip);
-	        UnflipChoiceLabelsForMirror();
+	        // Absolute (not toggle): theme Restore can reset TMP scale mid-session.
+	        ApplyChoiceLabelMirrorState(flip);
 	        _choicesFanFlipped = flip;
 	    }
 
@@ -175,15 +176,19 @@ namespace spz {
 	        raycaster.ignoreReversedGraphics = flip ? false : _choicesPanelRaycasterAuthoredIgnoreReversed;
 	    }
 
-	    void UnflipChoiceLabelsForMirror() {
+	    /// <summary>
+	    /// Force readable TMP under a mirrored choice panel. Absolute X sign — safe after theme restore.
+	    /// </summary>
+	    void ApplyChoiceLabelMirrorState(bool mirrored) {
 	        if (_choicesPanel_rectTransf == null)
 	            return;
-	        var flipX = new Vector3(-1f, 1f, 1f);
 	        foreach (var tmp in _choicesPanel_rectTransf.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp == null)
 	                continue;
-	            // Toggle relative to current: entering mirror unflips text; leaving restores.
-	            tmp.transform.localScale = Vector3.Scale(tmp.transform.localScale, flipX);
+	            Vector3 s = tmp.transform.localScale;
+	            float ax = Mathf.Abs(s.x) < 1e-4f ? 1f : Mathf.Abs(s.x);
+	            s.x = mirrored ? -ax : ax;
+	            tmp.transform.localScale = s;
 	        }
 	    }
 
