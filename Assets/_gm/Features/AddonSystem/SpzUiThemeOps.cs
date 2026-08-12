@@ -473,8 +473,8 @@ namespace spz {
 			EnsureSelectableHitFace(selectable);
 			if (selectable.targetGraphic == null)
 				return;
-			ApplySolidSquareChrome(selectable, fill, accent);
 			SnapshotAuthoredColorBlock(selectable);
+			ApplySolidSquareChrome(selectable, fill, accent);
 			var cb = selectable.colors;
 			cb.normalColor = Color.white;
 			cb.highlightedColor = Color.white;
@@ -515,7 +515,11 @@ namespace spz {
 
 		/// <summary>Force LayoutElement preferred/min height to match width so chips read as squares.</summary>
 		public static void EnsureSquareLayoutElement(LayoutElement le) {
-			if (le == null || !ShouldRecolorBoundChrome) return;
+			if (le == null) return;
+			if (!ShouldRecolorBoundChrome) {
+				RestorePanelWidthsUnder(le.transform);
+				return;
+			}
 			SnapshotLayoutElementSizes(le);
 			float side = le.preferredWidth > 0.5f ? le.preferredWidth
 				: (le.minWidth > 0.5f ? le.minWidth : 30f);
@@ -532,7 +536,11 @@ namespace spz {
 		/// the row and stretch into ellipses. Lock a square LayoutElement before hide.
 		/// </summary>
 		public static void EnsureCircleDialSquareLayout(Component dial) {
-			if (dial == null || !ShouldRecolorBoundChrome) return;
+			if (dial == null) return;
+			if (!ShouldRecolorBoundChrome) {
+				RestorePanelWidthsUnder(dial.transform);
+				return;
+			}
 			var le = dial.GetComponent<LayoutElement>();
 			if (le == null)
 				le = dial.gameObject.AddComponent<LayoutElement>();
@@ -1353,11 +1361,16 @@ namespace spz {
 		/// </summary>
 		public static void ApplyControlLineIconLeading(Transform owner, StudioLineIcon glyph, float sizePx = 16f, float padLeft = 6f) {
 			if (owner == null) return;
+			if (!ShouldRecolorBoundChrome) {
+				// Leading rewrites Monolith RT anchors — full unwind (not ApplyControlLineIconAt alone).
+				RestoreBoundChromeUnder(owner);
+				return;
+			}
 			ApplyControlLineIconAt(owner, glyph, sizePx, Vector2.zero);
-			if (!ShouldRecolorBoundChrome) return;
 			Transform iconT = FindDirectChildIncludingInactive(owner, ControlLineIconChildName);
 			var rt = iconT as RectTransform;
 			if (rt == null) return;
+			SnapshotToolFaceLayout(rt);
 			rt.anchorMin = new Vector2(0f, 0.5f);
 			rt.anchorMax = new Vector2(0f, 0.5f);
 			rt.pivot = new Vector2(0.5f, 0.5f);

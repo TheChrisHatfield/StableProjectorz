@@ -277,7 +277,11 @@ namespace spz {
 
 	    /// <summary>Re-tint Point/Bilinear fills from current isOn (BoundChrome only).</summary>
 	    public void RefreshFilterToggleChrome() {
-	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) return;
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            UnwindBoundChrome(_textureFilterPoint_toggle);
+	            UnwindBoundChrome(_textureFilterBilinear_toggle);
+	            return;
+	        }
 	        var t = SpzUiThemeOps.Active;
 	        ThemeFilterToggle(_textureFilterPoint_toggle, t);
 	        ThemeFilterToggle(_textureFilterBilinear_toggle, t);

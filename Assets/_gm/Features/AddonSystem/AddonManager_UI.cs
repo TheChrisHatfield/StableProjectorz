@@ -1646,8 +1646,10 @@ namespace spz {
 				le.flexibleHeight = 0f;
 			}
 			var rt = toggle.transform as RectTransform;
-			if (rt != null)
+			if (rt != null) {
+				SpzUiThemeOps.SnapshotToolFaceLayout(rt);
 				rt.sizeDelta = new Vector2(22f, 22f);
+			}
 			var row = toggle.transform.parent;
 			if (row != null) {
 				var hlg = row.GetComponent<HorizontalLayoutGroup>();
@@ -2123,32 +2125,8 @@ namespace spz {
 		/// </summary>
 		static void ThemeShowInRibbonDial(Toggle toggle, bool isOn, Color ringOn, Color ringOff, Color fillOk) {
 			if (toggle == null) return;
-			var le = toggle.GetComponent<LayoutElement>();
-			if (le != null) {
-				le.preferredWidth = 28f;
-				le.minWidth = 28f;
-				le.preferredHeight = 28f;
-				le.minHeight = 28f;
-				le.flexibleWidth = 0f;
-				le.flexibleHeight = 0f;
-			}
-			var rt = toggle.transform as RectTransform;
-			if (rt != null)
-				rt.sizeDelta = new Vector2(28f, 28f);
-			var ring = toggle.transform.Find("Ring") as RectTransform;
-			if (ring != null) {
-				ring.anchorMin = ring.anchorMax = new Vector2(0.5f, 0.5f);
-				ring.pivot = new Vector2(0.5f, 0.5f);
-				ring.sizeDelta = new Vector2(14f, 14f);
-				ring.anchoredPosition = Vector2.zero;
-			}
-			var checkRt = toggle.transform.Find("Ring/Checkmark") as RectTransform;
-			if (checkRt != null) {
-				checkRt.anchorMin = new Vector2(0.28f, 0.28f);
-				checkRt.anchorMax = new Vector2(0.72f, 0.72f);
-				checkRt.offsetMin = Vector2.zero;
-				checkRt.offsetMax = Vector2.zero;
-			}
+			if (SpzUiThemeOps.ShouldRecolorBoundChrome)
+				LockShowInRibbonDialLayout(toggle);
 			var ringImg = toggle.transform.Find("Ring")?.GetComponent<Image>();
 			if (ringImg != null) {
 				TintStatusDialGraphic(ringImg, isOn ? ringOn : ringOff);
@@ -2172,6 +2150,42 @@ namespace spz {
 			if (toggle.targetGraphic is Image hit && hit.transform == toggle.transform) {
 				hit.color = Color.clear;
 				hit.raycastTarget = true;
+			}
+		}
+
+		/// <summary>Nomad-only geometry lock — leave must not re-stamp 28×28 after RestoreBoundChromeUnder.</summary>
+		static void LockShowInRibbonDialLayout(Toggle toggle) {
+			if (toggle == null) return;
+			var le = toggle.GetComponent<LayoutElement>();
+			if (le != null) {
+				SpzUiThemeOps.SnapshotLayoutElementForTheme(le);
+				le.preferredWidth = 28f;
+				le.minWidth = 28f;
+				le.preferredHeight = 28f;
+				le.minHeight = 28f;
+				le.flexibleWidth = 0f;
+				le.flexibleHeight = 0f;
+			}
+			var rt = toggle.transform as RectTransform;
+			if (rt != null) {
+				SpzUiThemeOps.SnapshotToolFaceLayout(rt);
+				rt.sizeDelta = new Vector2(28f, 28f);
+			}
+			var ring = toggle.transform.Find("Ring") as RectTransform;
+			if (ring != null) {
+				SpzUiThemeOps.SnapshotToolFaceLayout(ring);
+				ring.anchorMin = ring.anchorMax = new Vector2(0.5f, 0.5f);
+				ring.pivot = new Vector2(0.5f, 0.5f);
+				ring.sizeDelta = new Vector2(14f, 14f);
+				ring.anchoredPosition = Vector2.zero;
+			}
+			var checkRt = toggle.transform.Find("Ring/Checkmark") as RectTransform;
+			if (checkRt != null) {
+				SpzUiThemeOps.SnapshotToolFaceLayout(checkRt);
+				checkRt.anchorMin = new Vector2(0.28f, 0.28f);
+				checkRt.anchorMax = new Vector2(0.72f, 0.72f);
+				checkRt.offsetMin = Vector2.zero;
+				checkRt.offsetMax = Vector2.zero;
 			}
 		}
 
