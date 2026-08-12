@@ -2340,8 +2340,12 @@ namespace spz {
 		/// Snapshots the authored sprite once so <see cref="RestoreRoundedControlSpritesUnder"/> can unwind.
 		/// </summary>
 		public static void ApplyRoundedControlSprite(Image image, bool markEligible = false) {
-			if (image == null || !ShouldRecolorBoundChrome)
+			if (image == null)
 				return;
+			if (!ShouldRecolorBoundChrome) {
+				RestoreRoundedControlSpritesUnder(image.transform);
+				return;
+			}
 			if (IsToggleCheckmarkGraphic(image))
 				return;
 			if (IsUiMaskGraphic(image))
