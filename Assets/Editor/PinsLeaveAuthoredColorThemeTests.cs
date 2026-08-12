@@ -9,5 +9,7 @@ public sealed class PinsLeaveAuthoredColorThemeTests {
 		Assert.That(File.Exists(path), Is.True, path);
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("rootImg.color = new Color(_pinColor.r"));
+		Assert.That(src, Does.Contain("SnapshotAuthoredGraphicForTheme(rootImg)"));
+		Assert.That(src, Does.Not.Contain("ApplyBoundChromeGraphic(rootImg"));
 	}
 }

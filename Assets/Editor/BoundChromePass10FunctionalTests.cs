@@ -143,11 +143,13 @@ public sealed class BoundChromePass10FunctionalTests {
 		int idx = src.IndexOf("void ApplyPinsChromeThemeTokens()", System.StringComparison.Ordinal);
 		Assert.That(idx, Is.GreaterThan(0));
 		string body = src.Substring(idx, System.Math.Min(2800, src.Length - idx));
-		Assert.That(body, Does.Contain("ApplyBoundChromeTmp"));
+		Assert.That(body, Does.Contain("ApplyBoundChromeDialValueTmp"));
 		Assert.That(body, Does.Contain("tmp.raycastTarget = false"));
-		int tmp = body.IndexOf("ApplyBoundChromeTmp(tmp", System.StringComparison.Ordinal);
+		int tmp = body.IndexOf("ApplyBoundChromeDialValueTmp(tmp", System.StringComparison.Ordinal);
 		int clear = body.IndexOf("tmp.raycastTarget = false", System.StringComparison.Ordinal);
 		Assert.That(clear, Is.GreaterThan(tmp));
+		Assert.That(body, Does.Contain("SnapshotAuthoredGraphicForTheme(rootImg)"));
+		Assert.That(body, Does.Not.Contain("ApplyBoundChromeGraphic(rootImg"));
 	}
 
 	[Test]
