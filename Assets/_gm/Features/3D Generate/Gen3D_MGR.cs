@@ -180,6 +180,8 @@ namespace spz {
 	        #if UNITY_EDITOR
 	        Debug.Log($"3d progress {val}");
 	        #endif
+	        if (Viewport_StatusText.instance != null)
+	            Viewport_StatusText.instance.ReportProgress(val);
 	    }
 
 
@@ -187,6 +189,7 @@ namespace spz {
 	    void Gen_OnError(string msg){
 	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:true);
 	        Debug.Log("Error: " + msg);
+	        Viewport_StatusText.instance?.ShowStatusText("3D generation failed: " + msg, false, 6f, false);
 	    }
 
 	    void Gen_OnComplete(){
@@ -208,6 +211,7 @@ namespace spz {
 	    void Gen_Retexture_OnError(string msg){
 	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:true);
 	        Debug.Log("Retexture Error: " + msg);
+	        Viewport_StatusText.instance?.ShowStatusText("3D retexture failed: " + msg, false, 6f, false);
 	    }
 
 	    void Gen_Retexture_OnComplete(){

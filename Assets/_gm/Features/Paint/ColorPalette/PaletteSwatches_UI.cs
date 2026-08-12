@@ -222,13 +222,14 @@ namespace spz {
 			}
 		}
 
-		/// <summary> Remove the currently selected swatch from the palette. Called by the minus button. </summary>
-		public void RemoveSelectedSwatch()
+		/// <summary> Remove the currently selected swatch from the palette. Returns true if removed. </summary>
+		public bool RemoveSelectedSwatch()
 		{
-			if (_paletteMGR == null || _selectedSwatchIndex < 0) return;
-			if (_selectedSwatchIndex >= _paletteMGR.CurrentPalette.Count) return;
+			if (_paletteMGR == null || _selectedSwatchIndex < 0) return false;
+			if (_selectedSwatchIndex >= _paletteMGR.CurrentPalette.Count) return false;
 			_paletteMGR.RemoveSwatchAt(_selectedSwatchIndex);
 			_selectedSwatchIndex = -1;
+			return true;
 		}
 	}
 }

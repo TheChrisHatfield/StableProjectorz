@@ -321,14 +321,16 @@ namespace spz {
     
 	    void RepositionText_and_BG(){
 	        float stickyPosY  = _stickyMsg_Text.rectTransform.anchoredPosition.y;
-	        float verticalPos = _stickyMsg_Text.text!=""?  _stickyMsg_Text.textInfo.lineInfo[0].lineHeight + stickyPosY         
-	                                                      : _statusText_originalPosY;
+	        float stickyLineH = 0f;
+	        if (_stickyMsg_Text.text != "" && _stickyMsg_Text.textInfo != null && _stickyMsg_Text.textInfo.lineCount > 0)
+	            stickyLineH = _stickyMsg_Text.textInfo.lineInfo[0].lineHeight;
+	        float verticalPos = stickyLineH > 0f ? stickyLineH + stickyPosY : _statusText_originalPosY;
 	        _statusText_holder.anchoredPosition = new Vector3(0,verticalPos);
 
 	        //ensure the text-background remains behind it, and stretched to its size:
 	        RectTransform bgTransf = _textBackground.rectTransform;
 	        float bg_height = _statusText_holder.rect.height + 5;
-	              bg_height += _stickyMsg_Text.text!=""? _stickyMsg_Text.textInfo.lineInfo[0].lineHeight  :  0;
+	              bg_height += stickyLineH;
 
 	        bgTransf.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, bg_height);
 	        bgTransf.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, _statusText.rectTransform.rect.width+50);

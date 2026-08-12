@@ -1046,14 +1046,14 @@ namespace spz {
 				Debug.LogWarning($"[AddonManager_UI] Pre-panel blocker layout (non-fatal): {e.Message}");
 			}
 			_panel.SetActive(true);
+			// Clear pending once the panel is shown — do not wait on canvas lookup (can fail forever).
+			s_pendingOpenRequest = false;
 			if (_blockerDimImage != null)
 				_blockerDimImage.color = RefBgModalDim;
 			if (_panelModalGroup != null) {
 				_panelModalGroup.alpha = 1f;
 				_panelModalGroup.interactable = true;
 			}
-			if (rootCanvas != null)
-				s_pendingOpenRequest = false;
 
 			if (closeSettingsAfterShow) {
 				s_closeSettingsWhenModalShown = false;

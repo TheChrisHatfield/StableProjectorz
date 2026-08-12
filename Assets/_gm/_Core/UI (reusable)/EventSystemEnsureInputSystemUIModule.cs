@@ -28,7 +28,18 @@ namespace spz {
 			var systems = Object.FindObjectsByType<EventSystem>(FindObjectsInactive.Include, FindObjectsSortMode.None);
 			foreach (var es in systems) {
 				if (es == null) continue;
-				if (es.GetComponent<InputSystemUIInputModule>() != null) continue;
+				var inputSys = es.GetComponent<InputSystemUIInputModule>();
+				if (inputSys != null) {
+					// Prefab may ship a disabled module — treat that as unwired until enabled.
+					if (!inputSys.enabled)
+						inputSys.enabled = true;
+					var legacyDup = es.GetComponent<StandaloneInputModule>();
+					if (legacyDup != null) {
+						legacyDup.enabled = false;
+						Object.Destroy(legacyDup);
+					}
+					continue;
+				}
 				var legacy = es.GetComponent<StandaloneInputModule>();
 				if (legacy != null) {
 					legacy.enabled = false;
