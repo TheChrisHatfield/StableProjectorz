@@ -70,6 +70,11 @@ namespace spz {
 	                SpzUiThemeOps.HideAuthoredGraphicForTheme(img);
 	        }
 	        SpzUiThemeOps.ApplyControlLineIcon(_selectMode_toggle.transform, StudioLineIcon.Cursor, 20f);
+	        foreach (var tmp in _selectMode_toggle.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
+	            if (tmp == null) continue;
+	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	            SpzUiThemeOps.HideAuthoredGraphicForTheme(tmp);
+	        }
 	        ApplyActiveBar(_selectMode_toggle.transform, _selectMode_toggle.isOn, t.accent);
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_selectMode_toggle);
 	    }

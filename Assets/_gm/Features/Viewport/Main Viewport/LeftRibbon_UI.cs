@@ -297,6 +297,11 @@ namespace spz {
 	            }
 	        }
 	        SpzUiThemeOps.ApplyControlLineIcon(_toggleWireframe.transform, StudioLineIcon.Wireframe, 20f);
+	        foreach (var tmp in _toggleWireframe.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (tmp == null) continue;
+	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	            SpzUiThemeOps.HideAuthoredGraphicForTheme(tmp);
+	        }
 	        ApplyActiveBar(_toggleWireframe.transform, _toggleWireframe.isPressed, t.accent);
 	        if (btn != null)
 	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
