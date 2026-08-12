@@ -174,6 +174,7 @@ public sealed class BoundChromePass7FunctionalTests {
 		Assert.That(src, Does.Contain("RuntimeInitializeLoadType.SubsystemRegistration"));
 		Assert.That(src, Does.Contain("TryGetOpenChoicesPanelVisualRect"));
 		Assert.That(src, Does.Contain("choicesBottomLocal"));
+		Assert.That(src, Does.Contain("_lastDimChoicesFanOpen"));
 	}
 
 	[Test]
