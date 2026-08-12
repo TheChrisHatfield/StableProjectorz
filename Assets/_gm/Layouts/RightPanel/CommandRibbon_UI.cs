@@ -1166,6 +1166,17 @@ namespace spz {
 	    public static string ResolveStripTabDisplayName(Transform cell) {
 	        if (cell == null) return "Tab";
 	        var elem = cell.GetComponent<TabsGroupElem_UI>();
+	        // Add-on tabs use title "addon_<folderId>" — prefer the visible header label (display name) for hover.
+	        if (elem != null && !string.IsNullOrWhiteSpace(elem.title)
+	            && elem.title.StartsWith("addon_", StringComparison.OrdinalIgnoreCase)) {
+	            foreach (var tmp in cell.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	                if (tmp == null) continue;
+	                string label = (tmp.text ?? "").Trim();
+	                if (label.Length == 0) continue;
+	                label = System.Text.RegularExpressions.Regex.Replace(label, @"\s+", " ");
+	                return PrettifyStripTabLabel(label);
+	            }
+	        }
 	        if (elem != null && !string.IsNullOrWhiteSpace(elem.title)) {
 	            string pretty = PrettifyStripTabTitle(elem.title);
 	            if (!string.IsNullOrWhiteSpace(pretty))
