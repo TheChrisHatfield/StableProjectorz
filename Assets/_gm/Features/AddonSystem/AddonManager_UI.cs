@@ -2289,6 +2289,7 @@ namespace spz {
 			if (header != null) {
 				var headerLE = header.GetComponent<LayoutElement>();
 				if (headerLE != null) {
+					SpzUiThemeOps.SnapshotLayoutElementForTheme(headerLE);
 					headerLE.preferredHeight = narrow ? 22f : 18f;
 					headerLE.minHeight = headerLE.preferredHeight;
 				}
@@ -2306,6 +2307,7 @@ namespace spz {
 			if (row != null) {
 				var rowLE = row.GetComponent<LayoutElement>();
 				if (rowLE != null) {
+					SpzUiThemeOps.SnapshotLayoutElementForTheme(rowLE);
 					rowLE.preferredHeight = rowH;
 					rowLE.minHeight = rowH;
 					rowLE.flexibleWidth = 1f;

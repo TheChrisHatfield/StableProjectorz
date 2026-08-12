@@ -202,7 +202,11 @@ namespace spz {
 	        if (face == null) return;
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            SpzUiThemeOps.RestoreAuthoredGraphic(face);
+	            // Lock full authored alpha in the snapshot, then dim for soft-disable display only.
 	            var restored = face.color;
+	            restored.a = 1f;
+	            face.color = restored;
+	            SpzUiThemeOps.ResnapshotAuthoredGraphicColor(face);
 	            restored.a = interactable ? 1f : 0.5f;
 	            face.color = restored;
 	            return;
