@@ -15,8 +15,15 @@ namespace spz {
 	/// </summary>
 	public static class FullView_OuterPanel_Chrome_Binder {
 
+		[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+		static void ResetStatics() {
+			// Enter Play Mode Options can clear ActiveChanged while this binder stays "initialized".
+			ViewportFullViewOnScreen_Driver.ActiveChanged -= OnFullViewActiveChanged;
+		}
+
 		[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
 		static void Init() {
+			ViewportFullViewOnScreen_Driver.ActiveChanged -= OnFullViewActiveChanged;
 			ViewportFullViewOnScreen_Driver.ActiveChanged += OnFullViewActiveChanged;
 			SyncChromeToDriver();
 		}
