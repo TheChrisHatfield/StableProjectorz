@@ -115,10 +115,30 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
+        full_path = self.path  # keep query string for upstream ControlNet (?update=true)
         try:
+            st = get_state()
+            with st.lock:
+                backend = st.backend
+            is_remote = backend.name == "remote_forge"
+
             if path in ("/internal/ping", "/ping"):
                 self._send_json(200, {"status": "ok", "cloud_inference": True})
                 return
+
+            # Remote Forge: proxy options/sysinfo/ControlNet so SPZ sees upstream catalogs.
+            if is_remote and path in (
+                "/internal/sysinfo",
+                "/sdapi/v1/options",
+                "/controlnet/model_list",
+                "/controlnet/module_list",
+                "/controlnet/control_types",
+                "/controlnet/settings",
+            ):
+                status, body, ct = backend.proxy("GET", full_path, None, dict(self.headers.items()))
+                self._send(status, body, ct)
+                return
+
             if path == "/internal/sysinfo":
                 # Keys must match SD_SysInfo JsonProperty names ("Data path", "Script path").
                 # Path/Version must look Forge-family so isForgeWebui_detected() is true.
@@ -139,7 +159,6 @@ class _Handler(BaseHTTPRequestHandler):
                 )
                 return
             if path == "/sdapi/v1/progress":
-                st = get_state()
                 with st.lock:
                     prog = float(st.progress)
                     active = bool(st.job_active)
@@ -155,7 +174,6 @@ class _Handler(BaseHTTPRequestHandler):
                 )
                 return
             if path == "/sdapi/v1/options":
-                st = get_state()
                 with st.lock:
                     opts = dict(st.options)
                 self._send_json(200, opts)
@@ -177,11 +195,9 @@ class _Handler(BaseHTTPRequestHandler):
                     self._send_json(404, {"detail": "controlnet settings not available on cloud shim"})
                 return
 
-            # Proxy GETs to remote Forge when configured.
-            st = get_state()
-            backend = st.backend
-            if backend.name == "remote_forge":
-                status, body, ct = backend.proxy("GET", path, None, dict(self.headers.items()))
+            # Proxy remaining GETs to remote Forge when configured.
+            if is_remote:
+                status, body, ct = backend.proxy("GET", full_path, None, dict(self.headers.items()))
                 self._send(status, body, ct)
                 return
 
@@ -194,19 +210,36 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
+        full_path = self.path
         try:
+            st = get_state()
+            with st.lock:
+                backend = st.backend
+            is_remote = backend.name == "remote_forge"
+
             if path == "/sdapi/v1/interrupt":
-                st = get_state()
                 with st.lock:
                     st.interrupt = True
                     st.job_active = False
                     st.progress = 0.0
+                if is_remote:
+                    try:
+                        length = int(self.headers.get("Content-Length") or 0)
+                        body = self.rfile.read(length) if length > 0 else b"{}"
+                        backend.proxy("POST", full_path, body or b"{}", dict(self.headers.items()))
+                    except Exception:
+                        pass
                 self._send_json(200, {"interrupted": True})
                 return
 
             if path == "/sdapi/v1/options":
+                if is_remote:
+                    length = int(self.headers.get("Content-Length") or 0)
+                    body = self.rfile.read(length) if length > 0 else b"{}"
+                    status, raw, ct = backend.proxy("POST", full_path, body, dict(self.headers.items()))
+                    self._send(status, raw, ct)
+                    return
                 payload = self._read_json()
-                st = get_state()
                 with st.lock:
                     st.options.update(payload)
                     opts = dict(st.options)
@@ -215,7 +248,6 @@ class _Handler(BaseHTTPRequestHandler):
 
             if path in ("/sdapi/v1/txt2img", "/sdapi/v1/img2img"):
                 payload = self._read_json()
-                st = get_state()
                 with st.lock:
                     st.job_active = True
                     st.interrupt = False
@@ -257,15 +289,20 @@ class _Handler(BaseHTTPRequestHandler):
                 return
 
             if path == "/controlnet/detect":
+                if is_remote:
+                    length = int(self.headers.get("Content-Length") or 0)
+                    body = self.rfile.read(length) if length > 0 else None
+                    status, raw, ct = backend.proxy("POST", full_path, body, dict(self.headers.items()))
+                    self._send(status, raw, ct)
+                    return
                 # Echo-friendly stub: return empty images so callers fail soft.
                 self._send_json(200, {"images": [], "info": "cloud shim detect stub (T5 pending)"})
                 return
 
-            st = get_state()
-            if st.backend.name == "remote_forge":
+            if is_remote:
                 length = int(self.headers.get("Content-Length") or 0)
                 body = self.rfile.read(length) if length > 0 else None
-                status, raw, ct = st.backend.proxy("POST", path, body, dict(self.headers.items()))
+                status, raw, ct = backend.proxy("POST", full_path, body, dict(self.headers.items()))
                 self._send(status, raw, ct)
                 return
 
