@@ -181,6 +181,7 @@ namespace spz {
 					EnsureSelectableHitFace(btn);
 					if (btn.targetGraphic is Image iconFace)
 						ApplyBoundChromeIconTint(iconFace, t.iconTint);
+					ClearNonFaceRaycastsForTheme(btn);
 					continue;
 				}
 				ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);

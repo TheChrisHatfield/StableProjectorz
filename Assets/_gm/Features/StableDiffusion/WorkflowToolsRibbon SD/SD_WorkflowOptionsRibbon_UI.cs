@@ -490,6 +490,10 @@ namespace spz {
 	        ApplyThemeTokens();
 	    }
 
+	    void OnEnable() {
+	        ApplyThemeTokens();
+	    }
+
 	    void WireOptionToggleChromeRefresh(Toggle toggle) {
 	        if (toggle == null) return;
 	        toggle.onValueChanged.RemoveListener(OnOptionToggleChromeChanged);

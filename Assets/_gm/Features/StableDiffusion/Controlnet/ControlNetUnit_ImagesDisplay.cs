@@ -278,6 +278,8 @@ namespace spz {
 	        //else, self AND right mouse button:
 	        bool wasActive = _contextMenu_gameObj.activeSelf;
 	        _contextMenu_gameObj.SetActive( !wasActive );
+	        if (_contextMenu_gameObj.activeSelf)
+	            SpzUiThemeOps.ApplyContextMenuChrome(_contextMenu_gameObj);
 	    }
 
 

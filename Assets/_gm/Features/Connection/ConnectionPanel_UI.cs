@@ -99,6 +99,7 @@ namespace spz {
 	    void OnOpenPanel_Button(){
 	        _panel.gameObject.SetActive(true);
 	        _time_clickedOpenPanelButton = Time.time;
+	        ApplyThemeTokens();
 	    }
 
     

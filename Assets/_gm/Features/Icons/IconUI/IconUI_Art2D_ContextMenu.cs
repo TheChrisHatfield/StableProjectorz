@@ -211,6 +211,13 @@ namespace spz {
 	    void ApplyThemeTokens() {
 	        SpzUiThemeOps.ApplyContextMenuChrome(gameObject);
 	        ThemeImportToLayerButton();
+	        // Delete is reparented outside the menu while shown — leave must still unwind it.
+	        if (_delete_button != null) {
+	            if (!SpzUiThemeOps.ShouldRecolorBoundChrome)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_delete_button.transform);
+	            else
+	                SpzUiThemeOps.ApplyContextMenuChrome(_delete_button.gameObject);
+	        }
 	    }
 
 	    void Start(){

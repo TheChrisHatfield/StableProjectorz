@@ -130,6 +130,10 @@ namespace spz {
 	        ApplyThemeTokens();
 	    }
 
+	    void OnEnable() {
+	        ApplyThemeTokens();
+	    }
+
 	    void ApplyThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
@@ -169,7 +173,7 @@ namespace spz {
 	            }
 	            foreach (var tmp in _closeButton.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
 	                if (tmp != null)
-	                    SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+	                    SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, t.textPrimary, 11f);
 	            }
 	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_closeButton);
 	        }
