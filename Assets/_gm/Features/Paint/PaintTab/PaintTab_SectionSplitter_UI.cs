@@ -25,12 +25,20 @@ namespace spz {
 		public LayoutElement Above => _above;
 		public LayoutElement Below => _below;
 		public Image Bar => _bar;
+		public bool IsDragging => _dragActive;
 
 		public void Bind(LayoutElement above, LayoutElement below, Action onDragEnded = null)
 		{
 			_above = above;
 			_below = below;
 			_onDragEnded = onDragEnded;
+		}
+
+		void OnDisable()
+		{
+			// Pointer can be lost without OnEndDrag (tab hide, disable). Unlock to flex weights.
+			if (_dragActive)
+				FinishDrag();
 		}
 
 		/// <summary>Builds a splitter GO under <paramref name="parent"/> (or configures an existing one).</summary>
@@ -94,6 +102,11 @@ namespace spz {
 		}
 
 		public void OnEndDrag(PointerEventData eventData)
+		{
+			FinishDrag();
+		}
+
+		void FinishDrag()
 		{
 			if (!_dragActive) return;
 			_dragActive = false;
