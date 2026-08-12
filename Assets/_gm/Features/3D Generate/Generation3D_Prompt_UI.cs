@@ -111,6 +111,11 @@ namespace spz {
 	        Color fill = Color.Lerp(t.controlBg, t.panelBg, 0.2f);
 	        SpzUiThemeOps.ThemePromptPresetSquareCell(btn, fill, t.accent);
 	        SpzUiThemeOps.ApplyControlLineIcon(btn.transform, StudioLineIcon.Globe, 16f);
+	        foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	            if (tmp == null) continue;
+	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	            SpzUiThemeOps.HideAuthoredGraphicForTheme(tmp);
+	        }
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }
 

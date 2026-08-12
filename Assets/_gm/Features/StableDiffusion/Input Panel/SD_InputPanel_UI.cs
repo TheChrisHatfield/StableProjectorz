@@ -244,6 +244,11 @@ namespace spz {
 	            if (btn == null || !IsWebFindButton(btn)) continue;
 	            SpzUiThemeOps.ThemePromptPresetSquareCell(btn, FlatCellFill(false, t), t.accent);
 	            SpzUiThemeOps.ApplyControlLineIcon(btn.transform, StudioLineIcon.Globe, 16f);
+	            foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+	                if (tmp == null) continue;
+	                SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+	                SpzUiThemeOps.HideAuthoredGraphicForTheme(tmp);
+	            }
 	        }
 	        foreach (var toggle in root.GetComponentsInChildren<Toggle>(true)) {
 	            if (toggle == null || !IsPromptPresetToggle(toggle)) continue;
