@@ -1481,7 +1481,8 @@ namespace spz {
 			int disabledCount = 0;
 			
 			foreach (var kvp in addons) {
-				bool draftOn = GetDraftEnabled(kvp.Key, kvp.Value != null && kvp.Value.isEnabled);
+				if (kvp.Value == null) continue;
+				bool draftOn = GetDraftEnabled(kvp.Key, kvp.Value.isEnabled);
 				if (draftOn) enabledCount++;
 				else disabledCount++;
 				bool shouldShow = _filterState == 0
@@ -2536,6 +2537,10 @@ namespace spz {
 		void CreateAddonListItem(string addonId, Addon_MGR.AddonInfo addonInfo) {
 			if (_addonsListParent == null) {
 				Debug.LogError($"[AddonManager_UI] CreateAddonListItem: _addonsListParent is null for addon {addonId}");
+				return;
+			}
+			if (addonInfo == null) {
+				Debug.LogError($"[AddonManager_UI] CreateAddonListItem: AddonInfo null for '{addonId}'");
 				return;
 			}
 			
