@@ -78,17 +78,27 @@ namespace spz {
 		{
 			LockPreferredFromRect(_above);
 			LockPreferredFromRect(_below);
+			RebuildParentLayout();
 		}
 
 		public void OnDrag(PointerEventData eventData)
 		{
 			if (eventData == null) return;
 			ApplyDragDelta(_above, _below, eventData.delta.y);
+			RebuildParentLayout();
 		}
 
 		public void OnEndDrag(PointerEventData eventData)
 		{
 			_onDragEnded?.Invoke();
+			RebuildParentLayout();
+		}
+
+		void RebuildParentLayout()
+		{
+			var parent = transform.parent as RectTransform;
+			if (parent != null)
+				LayoutRebuilder.ForceRebuildLayoutImmediate(parent);
 		}
 
 		/// <summary>

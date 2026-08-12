@@ -344,6 +344,9 @@ namespace spz {
 			float wC = hC / sumH * defaultSum;
 			ApplyFlexWeights(wL, wB, wT, wC);
 			SaveSectionWeights(wL, wB, wT, wC);
+			var root = transform as RectTransform;
+			if (root != null)
+				LayoutRebuilder.ForceRebuildLayoutImmediate(root);
 		}
 
 		static float SectionHeightForWeight(LayoutElement le)
