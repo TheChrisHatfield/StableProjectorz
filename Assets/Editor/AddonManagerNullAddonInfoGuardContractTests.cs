@@ -41,7 +41,9 @@ public sealed class AddonManagerNullAddonInfoGuardContractTests {
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("EnsureShowInRibbonSnapshotCoversAllAddons"));
 		int i = src.IndexOf("public void RefreshAddonsList()", System.StringComparison.Ordinal);
-		string body = src.Substring(i, System.Math.Min(900, src.Length - i));
+		string body = src.Substring(i, System.Math.Min(1100, src.Length - i));
 		Assert.That(body, Does.Contain("EnsureShowInRibbonSnapshotCoversAllAddons()"));
+		Assert.That(body, Does.Contain("SnapshotShowInRibbonPrefs()"),
+			"Clean draft refresh must re-snapshot so newly installed add-ons enter the discard baseline.");
 	}
 }
