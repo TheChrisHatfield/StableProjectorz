@@ -389,6 +389,7 @@ namespace spz {
 
 	    static void ApplyReverseOutLabelsUnder(Button button, SpzUiThemeOps.ThemeTokens t) {
 	        if (button == null) return;
+	        SpzUiThemeOps.EnsureSelectableHitFace(button);
 	        foreach (var tmp in button.GetComponentsInChildren<TMP_Text>(true))
 	            ApplyReverseOutLabel(tmp, t, 14f);
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(button);

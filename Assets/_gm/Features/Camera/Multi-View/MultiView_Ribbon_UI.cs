@@ -257,7 +257,11 @@ namespace spz {
 	        WirePovChromeSelectionRefresh();
 	        ApplyMultiviewChromeThemeTokens();
 	    }
-    
+
+	    void OnEnable() {
+	        ApplyMultiviewChromeThemeTokens();
+	    }
+
 	    void Start(){
 	        WorkflowRibbon_UI._Act_OnModeChanged += (isOn)=>OnWorkflowMode_Toggled();
 
