@@ -335,6 +335,7 @@ namespace spz {
 	    /// <summary>ColorTint must not multiply the sliced bevel when selected.</summary>
 	    static void ApplyFlatToolColorBlock(Selectable sel) {
 	        if (sel == null) return;
+	        SpzUiThemeOps.SnapshotAuthoredColorBlock(sel);
 	        var cb = sel.colors;
 	        cb.normalColor = Color.white;
 	        cb.highlightedColor = Color.white;

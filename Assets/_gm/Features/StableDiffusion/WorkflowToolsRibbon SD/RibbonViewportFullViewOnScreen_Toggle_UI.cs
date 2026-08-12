@@ -1192,8 +1192,20 @@ namespace spz {
 					continue;
 				if (hide)
 					SpzUiThemeOps.HideAuthoredGraphicForTheme(img);
-				else
+				else {
+					// RestoreAuthoredGraphic alone leaves enabled=false when SpzUiThemeHiddenGraphic remains
+					// (ApplyDockFaceChrome after a path that skipped RestoreBoundChromeUnder).
+					var tag = img.GetComponent<SpzUiThemeHiddenGraphic>();
+					if (tag != null) {
+						if (tag.hasSnapshot)
+							img.enabled = tag.wasEnabled;
+						if (Application.isPlaying)
+							UnityEngine.Object.Destroy(tag);
+						else
+							UnityEngine.Object.DestroyImmediate(tag);
+					}
 					SpzUiThemeOps.RestoreAuthoredGraphic(img);
+				}
 			}
 		}
 
