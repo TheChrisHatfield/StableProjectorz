@@ -313,7 +313,18 @@ namespace spz {
 
 	    /// <summary>Re-apply flat selected fills from current isOn (BoundChrome only).</summary>
 	    public void RefreshPovAndGridChromeSelection() {
-	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) return;
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            if (_showGrid_toggle != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_showGrid_toggle.transform);
+	            if (_editPOV_toggles != null) {
+	                for (int i = 0; i < _editPOV_toggles.Count; i++) {
+	                    var pov = _editPOV_toggles[i];
+	                    if (pov != null)
+	                        SpzUiThemeOps.RestoreBoundChromeUnder(pov.transform);
+	                }
+	            }
+	            return;
+	        }
 	        var t = SpzUiThemeOps.Active;
 	        if (_showGrid_toggle != null) {
 	            Color normal = _showGrid_toggle.isOn

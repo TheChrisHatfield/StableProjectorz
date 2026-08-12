@@ -504,7 +504,15 @@ namespace spz {
 
 	    /// <summary>Re-tint Soft/Tileable/Ignore fills from current isOn (BoundChrome only).</summary>
 	    public void RefreshOptionToggleChrome() {
-	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) return;
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            if (_softInpaint != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_softInpaint.transform);
+	            if (_tileableInpaint != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_tileableInpaint.transform);
+	            if (_ignoreDepthOrNormals != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_ignoreDepthOrNormals.transform);
+	            return;
+	        }
 	        var t = SpzUiThemeOps.Active;
 	        ThemeToggle(_softInpaint, t);
 	        ThemeToggle(_tileableInpaint, t);

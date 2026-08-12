@@ -384,7 +384,11 @@ namespace spz {
 
 	    /// <summary>Re-tint flat toggle cells after P/B/C/LOW selection changes.</summary>
 	    public void RefreshBoundChromeSelection() {
-	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) return;
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
+	            _preprocessor?.ApplyThemeTokens();
+	            return;
+	        }
 	        var t = SpzUiThemeOps.Active;
 	        ThemeHeaderModeToggles(t);
 	        // Non-header toggles are real checkboxes (resize/context) — never ThemeFlatToggleCell
