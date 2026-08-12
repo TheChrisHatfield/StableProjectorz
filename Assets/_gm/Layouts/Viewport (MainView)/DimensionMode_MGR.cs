@@ -76,12 +76,17 @@ namespace spz {
 
 	    /// <summary>
 	    /// Open SD/3D/UV fan rect for FULL/SRN clearance (includes mirrored fullscreen footprint).
+	    /// Uses live scale so close-animation frames still reserve space until the fan is tiny.
 	    /// </summary>
 	    public bool TryGetOpenChoicesPanelVisualRect(out RectTransform choicesRt) {
 	        choicesRt = null;
-	        if (!_ishowingChoicePanel || _choicesPanel_rectTransf == null)
+	        if (_choicesPanel_rectTransf == null)
 	            return false;
 	        if (!_choicesPanel_rectTransf.gameObject.activeInHierarchy)
+	            return false;
+	        // Show_ChoicePanel anim: 0.35→1 open; ignore near-zero hide frames.
+	        float ax = Mathf.Abs(_choicesPanel_rectTransf.localScale.x);
+	        if (ax < 0.2f)
 	            return false;
 	        choicesRt = _choicesPanel_rectTransf;
 	        return true;
