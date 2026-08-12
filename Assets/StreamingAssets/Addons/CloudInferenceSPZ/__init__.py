@@ -114,15 +114,16 @@ def _panel_value_text(key: str, default: str = "") -> str:
 
 
 def _backend_index_from_panel() -> int:
-    label = _panel_value_text("backend", _BACKEND_LABELS[0])
-    for i, name in enumerate(_BACKEND_LABELS):
-        if label == name or label.lower() in name.lower():
-            return i
-    # Dropdown may return index as string.
+    """Dropdown get_value returns an int index from AddonUI_MGR; accept label text as fallback."""
+    raw = _panel_value_text("backend", "0")
     try:
-        return max(0, min(2, int(float(label))))
+        return max(0, min(2, int(float(raw))))
     except (TypeError, ValueError):
-        return 0
+        pass
+    for i, name in enumerate(_BACKEND_LABELS):
+        if raw == name or raw.lower() == name.lower():
+            return i
+    return 0
 
 
 def _mode_from_index(ix: int) -> str:
