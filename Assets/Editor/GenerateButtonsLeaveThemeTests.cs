@@ -11,5 +11,7 @@ public sealed class GenerateButtonsLeaveThemeTests {
 		Assert.That(src, Does.Contain("RestoreGenButton(_cancelGeneration_button)"));
 		Assert.That(src, Does.Contain("RestoreGenButton(_generateART_button)"));
 		Assert.That(src, Does.Contain("RestoreGenButton(_generate3D_button)"));
+		Assert.That(src, Does.Not.Contain("RestoreBoundChromeUnder(transform)"),
+			"Blanket restore under GBM walks injected FULL/SRN and undoes Gen Art black labels");
 	}
 }

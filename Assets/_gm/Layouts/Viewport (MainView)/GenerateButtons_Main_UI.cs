@@ -218,7 +218,8 @@ namespace spz {
 
 	    void ApplyThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
-	            SpzUiThemeOps.RestoreBoundChromeUnder(transform);
+	            // Do not RestoreBoundChromeUnder(transform): FULL/SRN dock rows live under this VLG and would
+	            // get Nomad TMP snapshots (white) after the dock already forced Gen Art black.
 	            RestoreGenButton(_generateART_button);
 	            RestoreGenButton(_generateBG_button);
 	            RestoreGenButton(_generate3D_button);
