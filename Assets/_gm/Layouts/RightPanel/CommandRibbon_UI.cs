@@ -993,15 +993,19 @@ namespace spz {
 	            // SPZ default toolbox strip: line icons only — no Nomad accent underline.
 	            if (bar != null)
 	                bar.gameObject.SetActive(false);
-	            // Prefer an existing face — do not inject TabBg/synthetic HitFace after Leave SPZ
+	            // Prefer an existing face — do not EnsureStripTabHitFace after Leave SPZ
 	            // (RestoreBoundChromeUnder already removed synthetics; recreating sticks forever).
 	            Image face = FindStripTabFaceImage(cell);
 	            var btn = cell.GetComponent<Button>();
 	            if (face != null && btn != null && btn.targetGraphic == null)
 	                btn.targetGraphic = face;
-	            if (face != null)
+	            if (face != null) {
 	                face.raycastTarget = true;
-	            ClearStripTabNonFaceRaycasts(cell);
+	                // Hidden labels must not steal hover/clicks from the face / tooltip host.
+	                ClearStripTabNonFaceRaycasts(cell);
+	            }
+	            // No face (prefab TMP-only): keep label raycasts so OG Button clicks still work;
+	            // EnsureStripTabHoverTooltip attaches to the label in that case.
 	            EnsureSpzDefaultStripLineIcon(cell, iconTransform, iconOnly: true);
 	            EnsureStripTabHoverTooltip(cell);
 	            var leSpz = cell.GetComponent<LayoutElement>();
@@ -1137,8 +1141,18 @@ namespace spz {
 	    static void EnsureStripTabHoverTooltip(Transform cell) {
 	        if (cell == null) return;
 	        // Attach to the raycast face so IPointerEnter fires (hits land on TabBg / Button graphic).
+	        // Prefab TMP-only tabs have no face — attach to the label that still receives hits.
 	        Image face = FindStripTabFaceImage(cell);
-	        GameObject host = face != null ? face.gameObject : cell.gameObject;
+	        GameObject host = null;
+	        if (face != null)
+	            host = face.gameObject;
+	        else {
+	            var label = cell.GetComponentInChildren<TextMeshProUGUI>(true);
+	            if (label != null)
+	                host = label.gameObject;
+	        }
+	        if (host == null)
+	            host = cell.gameObject;
 	        var tip = host.GetComponent<CanShowTooltip_UI>();
 	        if (tip == null)
 	            tip = host.AddComponent<CanShowTooltip_UI>();
