@@ -325,7 +325,7 @@ namespace spz {
 
 		void TryRefreshBuiltLabelText() {
 			if (_builtRowRt == null) return;
-			var face = _builtRowRt.Find("DockButtonFace") as RectTransform;
+			var face = SpzUiThemeOps.FindDirectChildIncludingInactive(_builtRowRt, "DockButtonFace") as RectTransform;
 			var tmp = face != null ? face.GetComponentInChildren<TextMeshProUGUI>(true) : null;
 			if (tmp == null) return;
 			ApplyFullSrnLabelStyle(tmp, null, tmp.rectTransform);
@@ -1362,7 +1362,9 @@ namespace spz {
 		float MeasureDimModeOverlapDeficitLocalPx() {
 			var face = _dockButton != null
 				? _dockButton.transform as RectTransform
-				: (_builtRowRt != null ? _builtRowRt.Find("DockButtonFace") as RectTransform : null);
+				: (_builtRowRt != null
+					? SpzUiThemeOps.FindDirectChildIncludingInactive(_builtRowRt, "DockButtonFace") as RectTransform
+					: null);
 			if (face == null)
 				face = _builtRowRt;
 			var dim = DimensionMode_MGR.instance != null
@@ -1635,7 +1637,7 @@ namespace spz {
 					var ch = vlgRoot.GetChild(ci);
 					if (ch.name == RowName && ch is RectTransform rr) {
 						// Ignore stale legacy rows that don't contain the current canonical face node.
-						if (rr.Find("DockButtonFace") is RectTransform) {
+						if (SpzUiThemeOps.FindDirectChildIncludingInactive(rr, "DockButtonFace") is RectTransform) {
 							_builtRowRt = rr;
 							break;
 						}
@@ -1645,7 +1647,7 @@ namespace spz {
 				if (_builtRowRt == null) {
 					return false;
 				}
-				var reuseFace = _builtRowRt.Find("DockButtonFace") as RectTransform;
+				var reuseFace = SpzUiThemeOps.FindDirectChildIncludingInactive(_builtRowRt, "DockButtonFace") as RectTransform;
 				var reuseBtn = reuseFace != null ? reuseFace.GetComponent<Button>() : null;
 				var reuseImg = reuseFace != null ? reuseFace.GetComponent<Image>() : null;
 				var reuseTmp = reuseFace != null ? reuseFace.GetComponentInChildren<TextMeshProUGUI>(true) : null;
