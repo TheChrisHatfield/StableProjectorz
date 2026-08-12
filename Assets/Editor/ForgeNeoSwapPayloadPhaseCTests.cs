@@ -413,6 +413,14 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 		Assert.That(hub, Does.Contain("SD_KleinStructureChannel.CanCaptureMeshDepth()"));
 		Assert.That(hub, Does.Contain("mesh depth structure"));
 		Assert.That(hub, Does.Contain("!klein && has_Depth_or_Norm_or_RefOnly()==false"));
+		Assert.That(hub, Does.Contain("need Fun-Union ControlNet"),
+			"FLUX.2-dev Gen Art deny must name Fun-Union, not only generic depth/normals.");
+		string downloadHelper = File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "ControlNetUnit_DownloadHelper.cs"));
+		Assert.That(downloadHelper, Does.Contain("CheckpointLooksFlux2Dev"));
+		Assert.That(downloadHelper, Does.Contain("FLUX.2-dev-Fun-Controlnet-Union"),
+			"Empty-CN mandatory button must open Fun-Union on FLUX.2-dev, not only SD1.5 depth .pth.");
 		string list = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "SD_ControlNetsList_UI.cs"));

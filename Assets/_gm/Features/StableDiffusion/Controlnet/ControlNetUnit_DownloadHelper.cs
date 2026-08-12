@@ -42,6 +42,32 @@ namespace spz {
 	    // Happens after installing the StableProjectors, when there are no control-net models initially.
 	    void OnDownload_MandatoryDepthModel_button(){
 	        if(ControlNetUnit_DownloadHelper.isSomeUnit_downloadingModels){ return; }
+
+	        // FLUX.2-dev needs Fun-Union (~8GB), not the default SD1.5 depth .pth — open the HF page
+	        // (same destination as ControlNet Download More) instead of starting a wrong/huge in-app pull.
+	        try {
+	            string sd = SD_InputPanel_UI.instance != null
+	                ? SD_InputPanel_UI.instance.models?.selectedModel_name : null;
+	            if (SD_OptionsPacket.CheckpointLooksFlux2Dev(sd)){
+	                const string funUnionPage =
+	                    "https://huggingface.co/alibaba-pai/FLUX.2-dev-Fun-Controlnet-Union/tree/main";
+	                Application.OpenURL(funUnionPage);
+	                if (SD_SysInfo_MGR.TryResolveControlNetModelsDir(
+	                        "/models/ControlNet/",
+	                        "/extensions/sd-webui-controlnet/models/",
+	                        out string modelsDir,
+	                        out _)){
+	                    try { Application.OpenURL(modelsDir); } catch { /* folder open best-effort */ }
+	                }
+	                if (Viewport_StatusText.instance != null){
+	                    Viewport_StatusText.instance.ShowStatusText(
+	                        "FLUX.2-dev: download Fun-Union-2602 into models/ControlNet, then restart SPZ.",
+	                        false, 8f, false);
+	                }
+	                return;
+	            }
+	        } catch { /* fall through to SD1.5 depth download */ }
+
 	        ControlNetUnit_DownloadHelper.isSomeUnit_downloadingModels = true;//will prevent other controlnet units from downloading.
 
 	        _onSomeUnit_startedDownloadModel.Invoke(this);

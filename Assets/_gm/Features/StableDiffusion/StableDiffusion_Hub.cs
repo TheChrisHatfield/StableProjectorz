@@ -75,8 +75,16 @@ namespace spz {
 	        if (Time.unscaledTime < _generationCooldownUntil){ return true; }
 
 	        if (!klein && has_Depth_or_Norm_or_RefOnly()==false){
-	            string msg = "To generate projections you need  a Depth or a Normals Control Net." +
-	                        "\nGo to ControlNet tab, open a unit and assign depth or normals";
+	            bool flux2Dev = false;
+	            try {
+	                string sd = SD_InputPanel_UI.instance != null
+	                    ? SD_InputPanel_UI.instance.models?.selectedModel_name : null;
+	                flux2Dev = SD_OptionsPacket.CheckpointLooksFlux2Dev(sd);
+	            } catch { /* */ }
+	            string msg = flux2Dev
+	                ? "To generate with FLUX.2-dev you need Fun-Union ControlNet (Depth).\nCTRL NETS → Download More → Fun-Union, then assign Depth / restart after install."
+	                : "To generate projections you need  a Depth or a Normals Control Net." +
+	                  "\nGo to ControlNet tab, open a unit and assign depth or normals";
 	            CommandRibbon_UI.instance.Attention_toCtrlNetButton();
 	            Viewport_StatusText.instance.ShowStatusText(msg, false, 5, true);
 	            return true;
