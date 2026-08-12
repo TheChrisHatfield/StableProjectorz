@@ -164,6 +164,8 @@ namespace spz {
 		bool _sharedAddonReadyPollActive;
 		readonly List<Action<bool>> _sharedAddonReadyWaiters = new List<Action<bool>>();
 		bool _sharedAddonReadyKnownOk;
+		/// <summary>Cold-start / visibility-restart auto-load of enabled add-ons — one in flight.</summary>
+		Coroutine _requestLoadEnabledAddonsCrtn;
 
 		static bool s_addonApiQuitShutdownDone;
 		static bool s_appliedRememberedEnabledOnFirstDiscover;
@@ -574,11 +576,19 @@ namespace spz {
 				StartPythonServer();
 				// New Python process has no loaded add-ons — same path as cold start auto-load.
 				if (_enableHttpServer && _isServerRunning)
-					StartCoroutine(RequestLoadEnabledAddonsAfterDelay());
+					StartRequestLoadEnabledAddonsAfterDelay();
 			} else if (!wantShow && touched > 0) {
 				_pythonServerStartedWithVisibleConsole = false;
 			}
 #endif
+		}
+
+		void StartRequestLoadEnabledAddonsAfterDelay() {
+			if (_requestLoadEnabledAddonsCrtn != null) {
+				StopCoroutine(_requestLoadEnabledAddonsCrtn);
+				_requestLoadEnabledAddonsCrtn = null;
+			}
+			_requestLoadEnabledAddonsCrtn = StartCoroutine(RequestLoadEnabledAddonsAfterDelay());
 		}
 
 #if UNITY_EDITOR
@@ -700,7 +710,7 @@ namespace spz {
 			
 			// Request Python to load each enabled addon (server exposes POST /load_addon)
 			if (_enableHttpServer) {
-				StartCoroutine(RequestLoadEnabledAddonsAfterDelay());
+				StartRequestLoadEnabledAddonsAfterDelay();
 			} else {
 				// No HTTP auto-load — still wire ribbon shells / FULL dock for remember-restored enables.
 				EnsureRibbonShellsForAllEnabledAddons();
@@ -1185,6 +1195,7 @@ namespace spz {
 				UnityEngine.Debug.Log("[Addon_MGR] Auto-load: no enabled add-ons — ribbon stays clear (enable + Save settings to load).");
 			else
 				UnityEngine.Debug.Log($"[Addon_MGR] Auto-load finished. Requested {count} addon(s).");
+			_requestLoadEnabledAddonsCrtn = null;
 		}
 
 		/// <summary>Call from Add-on Manager \"Load addons now\" button. Requests Python to load all enabled addons.</summary>

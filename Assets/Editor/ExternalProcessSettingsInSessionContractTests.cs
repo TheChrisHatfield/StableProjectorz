@@ -49,6 +49,8 @@ public sealed class ExternalProcessSettingsInSessionContractTests {
 		Assert.That(body, Does.Contain("RequestLoadEnabledAddonsAfterDelay"));
 		Assert.That(body, Does.Contain("_pythonServerStartedWithVisibleConsole"));
 		Assert.That(body, Does.Contain("needRestartForHide"));
+		Assert.That(src, Does.Contain("StartRequestLoadEnabledAddonsAfterDelay"));
+		Assert.That(src, Does.Contain("_requestLoadEnabledAddonsCrtn"));
 	}
 
 	[Test]

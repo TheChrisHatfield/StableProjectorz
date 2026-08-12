@@ -219,7 +219,7 @@ namespace spz {
 	        var row = new GameObject("Row_ShowExternalProcessWindows");
 	        row.transform.SetParent(content, false);
 	        var rowRect = row.AddComponent<RectTransform>();
-	        rowRect.sizeDelta = new Vector2(0, 28f);
+	        rowRect.sizeDelta = new Vector2(0, 40f);
 	        var rowLayout = row.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
 	        rowLayout.spacing = 8f;
 	        rowLayout.padding = new RectOffset(4, 4, 2, 2);
