@@ -189,7 +189,7 @@ namespace spz {
 					tmp.alignment = TextAlignmentOptions.Center;
 					tmp.raycastTarget = false;
 				}
-				go.transform.SetAsFirstSibling();
+				go.transform.SetSiblingIndex(Mathf.Min(1, vertical.childCount - 1));
 			}
 
 			if (btn != null) {
