@@ -392,6 +392,11 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			"FLUX.2-dev-Fun-Controlnet-Union.safetensors", "flux-2-dev.safetensors"), Is.False);
 		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
 			"FLUX.2-dev-Fun-Controlnet-Union.safetensors", "realisticvisionv51_v51vae"), Is.True);
+		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
+			"control_v11f1p_sd15_depth", "FLUX.2-dev"), Is.True,
+			"SD1.5 CN must mismatch FLUX.2-dev (both are non-XL under CheckpointLooksXl).");
+		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
+			"diffusers_xl_depth_full", "FLUX.2-dev"), Is.True);
 		Assert.That(SD_OptionsPacket.CheckpointLooksFlux2Dev("FLUX.2-dev"), Is.True);
 		Assert.That(SD_OptionsPacket.CheckpointLooksFlux2Dev("flux-2-klein-4b"), Is.False);
 		string hub = File.ReadAllText(Path.Combine(
