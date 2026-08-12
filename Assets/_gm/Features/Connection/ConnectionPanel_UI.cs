@@ -352,7 +352,14 @@ namespace spz {
 	    }
 
 	    void Start(){
-	        if (Coroutines_MGR.instance == null) return;
+	        // Boot race: Coroutines_MGR may arrive a frame later — retry so ping is not permanently skipped.
+	        StartCoroutine( EnsureConnectionCheckStarted_crtn() );
+	    }
+
+	    IEnumerator EnsureConnectionCheckStarted_crtn(){
+	        while (Coroutines_MGR.instance == null)
+	            yield return null;
+	        if (_connectionCheckCoroutine != null) yield break;
 	        _connectionCheckCoroutine = Coroutines_MGR.instance.StartCoroutine( CheckConnection(setColorToPending_once:true) );
 	    }
 	}
