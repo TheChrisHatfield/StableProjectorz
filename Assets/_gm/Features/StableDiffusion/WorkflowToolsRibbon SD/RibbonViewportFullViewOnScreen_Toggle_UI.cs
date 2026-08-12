@@ -909,8 +909,10 @@ namespace spz {
 				_fullViewMenuRt.SetSiblingIndex(rowRt.GetSiblingIndex() + 1);
 			}
 			var openRt = SpzUiThemeOps.FindDirectChildIncludingInactive(_fullViewMenuRt, "OpenRightDock") as RectTransform;
-			if (openRt != null)
-				EnsureAdaptiveFaceBorder(openRt);
+			if (openRt != null) {
+				var openFace = SpzUiThemeOps.FindDirectChildIncludingInactive(openRt, "DockButtonFace") as RectTransform ?? openRt;
+				EnsureAdaptiveFaceBorder(openFace);
+			}
 			_fullViewMenuCg = _fullViewMenuRt.GetComponent<CanvasGroup>();
 			if (_fullViewMenuCg == null) {
 				_fullViewMenuCg = _fullViewMenuRt.gameObject.AddComponent<CanvasGroup>();
@@ -965,7 +967,14 @@ namespace spz {
 			rowRt.sizeDelta = new Vector2(144f, 52f);
 			var le = rowGo.AddComponent<LayoutElement>();
 			le.preferredHeight = 52f;
-			var img = rowGo.AddComponent<Image>();
+			// Same inset face as FULL/SRN / GEN ART — do not paint the full VLG child width.
+			var faceGo = new GameObject("DockButtonFace");
+			faceGo.layer = rowGo.layer;
+			var faceRt = faceGo.AddComponent<RectTransform>();
+			faceRt.SetParent(rowRt, false);
+			var genArt = ResolveGenerateButtonsMain()?.GenArtButtonRectTransform;
+			ApplyFaceRectLayout(faceRt, genArt, genRefImg);
+			var img = faceGo.AddComponent<Image>();
 			if (genRefImg != null && genRefImg.sprite != null) {
 				img.sprite = genRefImg.sprite;
 				img.type = genRefImg.type;
@@ -974,13 +983,13 @@ namespace spz {
 			} else {
 				img.color = FallbackFill;
 			}
-			var btn = rowGo.AddComponent<Button>();
+			var btn = faceGo.AddComponent<Button>();
 			btn.targetGraphic = img;
 			btn.onClick.AddListener(onClick);
 			var txtGo = new GameObject("Text (TMP)");
-			txtGo.layer = rowGo.layer;
+			txtGo.layer = faceGo.layer;
 			var txtRt = txtGo.AddComponent<RectTransform>();
-			txtRt.SetParent(rowRt, false);
+			txtRt.SetParent(faceRt, false);
 			var txt = txtGo.AddComponent<TextMeshProUGUI>();
 			// One point smaller than FULL/SRN; seed designPt so BoundChrome does not snap back to 13.
 			const float openRightLabelPt = DockLabelBasePt - 1f;
@@ -991,10 +1000,10 @@ namespace spz {
 				SpzUiThemeOps.ApplyBoundChromeNarrowDockLabelTmp(txt, SpzUiThemeOps.Active.textPrimary, openRightLabelPt);
 			else
 				txt.fontSize = openRightLabelPt;
-			EnsureAdaptiveFaceBorder(rowRt);
+			EnsureAdaptiveFaceBorder(faceRt);
 			if (string.Equals(name, "OpenRightDock", StringComparison.Ordinal)) {
 				_openRightDockLabel = txt;
-				EnsureDockLineIcon(rowRt, ResolveOpenRightDockIcon(rightPanelOpen: false), out _openRightLineIcon);
+				EnsureDockLineIcon(faceRt, ResolveOpenRightDockIcon(rightPanelOpen: false), out _openRightLineIcon);
 			}
 		}
 
@@ -1095,8 +1104,11 @@ namespace spz {
 			if (_fullViewMenuRt != null) {
 				var openRt = SpzUiThemeOps.FindDirectChildIncludingInactive(_fullViewMenuRt, "OpenRightDock") as RectTransform;
 				if (openRt != null) {
-					var openBtn = openRt.GetComponent<Button>();
-					var openImg = openRt.GetComponent<Image>();
+					var openFace = SpzUiThemeOps.FindDirectChildIncludingInactive(openRt, "DockButtonFace") as RectTransform ?? openRt;
+					var openBtn = openFace.GetComponent<Button>() ?? openRt.GetComponentInChildren<Button>(true);
+					var openImg = openBtn != null && openBtn.targetGraphic is Image tg
+						? tg
+						: openFace.GetComponent<Image>();
 					if (sculpt) {
 						if (openBtn != null) {
 							SpzUiThemeOps.EnsureSelectableHitFace(openBtn);
@@ -1114,9 +1126,9 @@ namespace spz {
 						SpzUiThemeOps.RestoreAuthoredGraphic(openImg);
 						openImg.color = _authoredFillBase;
 					}
-					ApplyDockFaceChrome(openRt, ref _openRightLineIcon, openGlyph, sculpt, t, forceFullSrnLabel: false);
+					ApplyDockFaceChrome(openFace, ref _openRightLineIcon, openGlyph, sculpt, t, forceFullSrnLabel: false);
 					if (_openRightDockLabel == null)
-						_openRightDockLabel = openRt.GetComponentInChildren<TextMeshProUGUI>(true);
+						_openRightDockLabel = openFace.GetComponentInChildren<TextMeshProUGUI>(true);
 				}
 			}
 
@@ -1576,9 +1588,10 @@ namespace spz {
 			if (_openRightDockLabel == null && _fullViewMenuRt != null) {
 				var t = SpzUiThemeOps.FindDirectChildIncludingInactive(_fullViewMenuRt, "OpenRightDock");
 				if (t != null) {
-					_openRightDockLabel = t.GetComponentInChildren<TextMeshProUGUI>(true);
+					var face = SpzUiThemeOps.FindDirectChildIncludingInactive(t, "DockButtonFace") ?? t;
+					_openRightDockLabel = face.GetComponentInChildren<TextMeshProUGUI>(true);
 					if (_openRightLineIcon == null)
-						EnsureDockLineIcon(t as RectTransform, ResolveOpenRightDockIcon(false), out _openRightLineIcon);
+						EnsureDockLineIcon(face as RectTransform, ResolveOpenRightDockIcon(false), out _openRightLineIcon);
 				}
 			}
 			bool rightOpen = false;
