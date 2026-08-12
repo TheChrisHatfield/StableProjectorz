@@ -305,12 +305,21 @@ namespace spz {
 
 	    /// <summary>Cached result of nvidia-smi query for Settings UI to show "0: Name0, 1: Name1". Empty if not yet queried or nvidia-smi failed.</summary>
 	    static string _cudaDeviceListString = null;
+	    /// <summary>CUDA GPU count from last successful nvidia-smi query; -1 if unknown / query failed.</summary>
+	    static int _cudaDeviceCount = -1;
+
+	    /// <summary>Number of CUDA GPUs reported by nvidia-smi (-1 if unknown). Triggers query if needed.</summary>
+	    public static int GetCudaDeviceCount() {
+	        GetCudaDeviceListString();
+	        return _cudaDeviceCount;
+	    }
 
 	    /// <summary>Query nvidia-smi for CUDA devices; returns e.g. "0: Tesla T10, 1: RTX 3080". Cached. Call from main thread or before UI use.</summary>
 	    public static string GetCudaDeviceListString() {
 	        if (_cudaDeviceListString != null)
 	            return _cudaDeviceListString;
 #if !UNITY_STANDALONE_WIN && !UNITY_EDITOR_WIN
+	        _cudaDeviceCount = -1;
 	        return "";
 #else
 	        try {
@@ -325,10 +334,10 @@ namespace spz {
 	                RedirectStandardError = true
 	            };
 	            using (var p = Process.Start(si)) {
-	                if (p == null) { _cudaDeviceListString = ""; return ""; }
+	                if (p == null) { _cudaDeviceListString = ""; _cudaDeviceCount = -1; return ""; }
 	                stdout = p.StandardOutput?.ReadToEnd() ?? "";
 	                p.WaitForExit(3000);
-	                if (p.ExitCode != 0) { _cudaDeviceListString = ""; return ""; }
+	                if (p.ExitCode != 0) { _cudaDeviceListString = ""; _cudaDeviceCount = -1; return ""; }
 	            }
 #else
 	            // IL2CPP: Process.Start triggers Process::CreateProcess_internal assertion. Run via cmd and capture to temp file.
@@ -336,7 +345,7 @@ namespace spz {
 	            string cmd = "nvidia-smi --query-gpu=index,name --format=csv,noheader,nounits > \"" + tempFile + "\"";
 	            string workDir = Path.GetTempPath();
 	            uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(cmd, isJustFile: false, workDir, keepWindow: false, hidden: true, attachToConsole: false);
-	            if (pid == 0) { _cudaDeviceListString = ""; return ""; }
+	            if (pid == 0) { _cudaDeviceListString = ""; _cudaDeviceCount = -1; return ""; }
 	            StartExternalProcess.WaitForProcessExit(pid, 3000);
 	            stdout = File.Exists(tempFile) ? File.ReadAllText(tempFile) : "";
 	            try { File.Delete(tempFile); } catch { }
@@ -353,11 +362,13 @@ namespace spz {
 	                    if (!string.IsNullOrEmpty(name)) parts.Add(idx + ": " + name);
 	                }
 	            }
+	            _cudaDeviceCount = parts.Count > 0 ? parts.Count : -1;
 	            _cudaDeviceListString = parts.Count > 0 ? string.Join(", ", parts) : "";
 	            return _cudaDeviceListString;
 	        } catch (Exception e) {
 	            UnityEngine.Debug.LogWarning($"[LaunchWebUI] Could not query nvidia-smi for CUDA devices: {e.Message}");
 	            _cudaDeviceListString = "";
+	            _cudaDeviceCount = -1;
 	            return "";
 	        }
 #endif
@@ -805,6 +816,7 @@ namespace spz {
 	        _lastWebUiLaunchedWithVisibleConsole = false;
 	        _lastExternalWindowsRelaunchUnscaledTime = -999f;
 	        _cudaDeviceListString = null;
+	        _cudaDeviceCount = -1;
 	    }
 	}
 }//end namespace

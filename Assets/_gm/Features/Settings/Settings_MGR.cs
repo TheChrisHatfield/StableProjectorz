@@ -181,10 +181,16 @@ namespace spz {
 	    int _sdGpuDeviceId = -1;
 	    public int get_sdGpuDeviceId() => _sdGpuDeviceId;
 	    void set_sdGpuDeviceId(int id) {
-	        _sdGpuDeviceId = id < 0 ? -1 : Mathf.Clamp(id, 0, SD_GPU_ID_MAX);
+	        int maxId = SD_GPU_ID_MAX;
+	        int cudaCount = LaunchWebUIBatFile.GetCudaDeviceCount();
+	        if (cudaCount > 0) maxId = cudaCount - 1;
+	        _sdGpuDeviceId = id < 0 ? -1 : Mathf.Clamp(id, 0, maxId);
 	        PlayerPrefs.SetInt("SD_GPU_DeviceId", _sdGpuDeviceId); PlayerPrefs.Save();
 	        var inputField = EventsBinder.FindComponent<IntegerInputField>("Settings:set_sdGpuDeviceId");
-	        if (inputField != null) inputField.SetValueWithoutNotify(_sdGpuDeviceId.ToString());
+	        if (inputField != null) {
+	            inputField.SetMax(maxId);
+	            inputField.SetValueWithoutNotify(_sdGpuDeviceId.ToString());
+	        }
 	        // Explicit default must drop Forge-side pin so next launch is not forced back to an old index.
 	        if (_sdGpuDeviceId < 0 && _settingsInSessionApplyEnabled)
 	            LaunchWebUIBatFile.ClearSdDeviceFromKnownWebuiFolders();

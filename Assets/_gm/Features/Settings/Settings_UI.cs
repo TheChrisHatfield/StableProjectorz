@@ -418,9 +418,11 @@ namespace spz {
 
 	    /// <summary>Creates "SD GPU" row in Settings panel at runtime so it acts as remote control for which GPU Stable Diffusion uses when launched.</summary>
 	    void EnsureSDGpuRowExists() {
+	        int cudaCount = LaunchWebUIBatFile.GetCudaDeviceCount();
+	        int maxId = cudaCount > 0 ? cudaCount - 1 : Settings_MGR.SD_GPU_ID_MAX;
 	        if (_sdGpuDeviceId_input != null) {
 	            _sdGpuDeviceId_input.SetMin(-1);
-	            _sdGpuDeviceId_input.SetMax(Settings_MGR.SD_GPU_ID_MAX);
+	            _sdGpuDeviceId_input.SetMax(maxId);
 	            return;
 	        }
 	        if (_settingsPanel_go == null) return;
@@ -429,12 +431,19 @@ namespace spz {
 	        if (content == null) content = _settingsPanel_go.transform as RectTransform;
 	        if (content == null) return;
 	        int current = UnityEngine.PlayerPrefs.GetInt("SD_GPU_DeviceId", -1);
+	        if (cudaCount > 0 && current > maxId) {
+	            current = maxId;
+	            UnityEngine.PlayerPrefs.SetInt("SD_GPU_DeviceId", current);
+	            UnityEngine.PlayerPrefs.Save();
+	        }
 	        string deviceList = LaunchWebUIBatFile.GetCudaDeviceListString();
-	        string labelBase = string.IsNullOrEmpty(deviceList) ? "SD GPU (-1=default, 0/1/2=index):" : "SD GPU (" + deviceList + "):";
+	        string labelBase = string.IsNullOrEmpty(deviceList)
+	            ? "SD GPU — CUDA (-1=default, 0/1/2=index):"
+	            : "SD GPU — CUDA (" + deviceList + "):";
 	        var row = new GameObject("Row_SD_GPU");
 	        row.transform.SetParent(content, false);
 	        var rowRect = row.AddComponent<RectTransform>();
-	        rowRect.sizeDelta = new Vector2(0, 28f);
+	        rowRect.sizeDelta = new Vector2(0, 40f);
 	        var rowLayout = row.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
 	        rowLayout.spacing = 8f;
 	        rowLayout.padding = new RectOffset(4, 4, 2, 2);
@@ -447,13 +456,14 @@ namespace spz {
 	        labelGo.transform.SetParent(row.transform, false);
 	        var labelRect = labelGo.AddComponent<RectTransform>();
 	        var labelLE = labelGo.AddComponent<UnityEngine.UI.LayoutElement>();
-	        labelLE.preferredWidth = 280f;
-	        labelLE.preferredHeight = 24f;
+	        labelLE.preferredWidth = 420f;
+	        labelLE.preferredHeight = 36f;
 	        var labelText = labelGo.AddComponent<TMPro.TextMeshProUGUI>();
 	        labelText.text = labelBase;
 	        labelText.fontSize = 14;
 	        labelText.color = new Color(0.9f, 0.9f, 0.9f, 1f);
 	        labelText.raycastTarget = false;
+	        labelText.enableWordWrapping = true;
 	        var inputGo = new GameObject("Input");
 	        inputGo.transform.SetParent(row.transform, false);
 	        var inputRect = inputGo.AddComponent<RectTransform>();
@@ -478,7 +488,7 @@ namespace spz {
 	        var intInput = inputGo.AddComponent<IntegerInputField>();
 	        intInput.SetInputField(inputField);
 	        intInput.SetMin(-1);
-	        intInput.SetMax(Settings_MGR.SD_GPU_ID_MAX);
+	        intInput.SetMax(maxId);
 	        intInput.SetValueWithoutNotify(current.ToString());
 	        _sdGpuDeviceId_input = intInput;
 
@@ -657,7 +667,10 @@ namespace spz {
 	        var gpuInput = _sdGpuDeviceId_input != null ? _sdGpuDeviceId_input : EventsBinder.FindComponent<IntegerInputField>("Settings:set_sdGpuDeviceId");
 	        if (gpuInput != null) {
 	            gpuInput.CommitCurrentText();
-	            int deviceId = Mathf.Clamp(gpuInput.recentVal, -1, Settings_MGR.SD_GPU_ID_MAX);
+	            int maxId = Settings_MGR.SD_GPU_ID_MAX;
+	            int cudaCount = LaunchWebUIBatFile.GetCudaDeviceCount();
+	            if (cudaCount > 0) maxId = cudaCount - 1;
+	            int deviceId = Mathf.Clamp(gpuInput.recentVal, -1, maxId);
 	            UnityEngine.PlayerPrefs.SetInt("SD_GPU_DeviceId", deviceId);
 	            UnityEngine.PlayerPrefs.Save();
 	            StaticEvents.Invoke<int>("Settings:set_sdGpuDeviceId", deviceId);
