@@ -150,6 +150,15 @@ namespace spz {
 		/// <summary>Public snapshot so ClearStrip / launcher paths can unwind Image raycasts on Restore SPZ.</summary>
 		public static void SnapshotAuthoredGraphicForTheme(Graphic graphic) => SnapshotAuthoredGraphic(graphic);
 
+		/// <summary>
+		/// Overwrite BoundChrome leave color (first-write snapshot only is wrong when leave recolors
+		/// runtime docks that were snapshotted under Nomad, e.g. FULL/SRN → Gen Art black).
+		/// </summary>
+		public static void ResnapshotAuthoredGraphicColor(Graphic graphic) {
+			if (graphic == null) return;
+			AuthoredGraphicColors[graphic.GetInstanceID()] = graphic.color;
+		}
+
 		static void SnapshotAuthoredPixelsPerUnit(Image image) {
 			if (image == null) return;
 			int id = image.GetInstanceID();
@@ -571,7 +580,7 @@ namespace spz {
 		/// Call after <see cref="ApplyScaledLayoutGroup"/> so spacing is not wiped back to 0.
 		/// </summary>
 		public static void EnsurePromptPresetRowGaps(Transform cell) {
-			if (cell == null || !ShouldRecolorBoundChrome) return;
+			if (cell == null) return;
 			var hlg = cell.GetComponentInParent<HorizontalLayoutGroup>(true);
 			if (hlg == null) return;
 			bool hasPreset = false;
@@ -584,6 +593,11 @@ namespace spz {
 				}
 			}
 			if (!hasPreset) return;
+			if (!ShouldRecolorBoundChrome) {
+				// Parent HLG is outside RestoreBoundChromeUnder(cell) — unwind Nomad Min(3) gap.
+				ApplyScaledLayoutGroup(hlg);
+				return;
+			}
 			var tag = hlg.GetComponent<SpzUiThemeDesignLayoutGroup>();
 			if (tag == null) {
 				tag = hlg.gameObject.AddComponent<SpzUiThemeDesignLayoutGroup>();
