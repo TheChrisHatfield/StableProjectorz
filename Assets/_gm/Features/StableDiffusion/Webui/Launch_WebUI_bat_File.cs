@@ -566,15 +566,16 @@ namespace spz {
 	        // Always launch Forge with python.exe. Visibility is controlled by CREATE_NO_WINDOW / SW_HIDE on the
 	        // wrapper — pythonw.exe was a common silent-fail (PID then no :7860 listener) when Settings hide windows.
 	        string pythonLaunch = pythonExe;
-	        // When user picked an SD GPU in Settings, pass both:
-	        // 1) CUDA_VISIBLE_DEVICES (hard mask)
-	        // 2) --gpu-device-id (Forge CLI hint)
-	        // This avoids ambiguous fallback to GPU 0 across different Forge launch paths.
+	        // When user picked an SD GPU in Settings:
+	        // 1) CUDA_VISIBLE_DEVICES=<physicalId> (hard mask — only that card is visible)
+	        // 2) --gpu-device-id 0 (logical index inside the masked view; NOT the physical id)
+	        // Passing physical id as --gpu-device-id after CUDA_VISIBLE_DEVICES remaps cuda:0→physical
+	        // and makes --gpu-device-id N (N>0) miss the only visible device.
 	        // Pin Gradio/API to WebUiHttpPort so launch matches ConnectionPanel ping target.
 	        // Neo warns on py≠3.13 / torch pin — skip checks (host uses proven 3.11 + cu128).
 	        const string neoSkipChecks = " --skip-python-version-check --skip-version-check";
 	        string argsBase = gpuId >= 0
-	            ? ("--api --port " + WebUiHttpPort + " --gpu-device-id " + gpuId + neoSkipChecks)
+	            ? ("--api --port " + WebUiHttpPort + " --gpu-device-id 0" + neoSkipChecks)
 	            : ("--api --port " + WebUiHttpPort + neoSkipChecks);
 	        string args = string.IsNullOrWhiteSpace(launchExtraArgs) ? argsBase : (argsBase + " " + launchExtraArgs);
 	        bool hasLaunchPy = File.Exists(launchPy);
@@ -593,7 +594,7 @@ namespace spz {
 	                    + "set COMMANDLINE_ARGS=" + args + "\r\nset REDUCE_DISPLAY_GPU_LOAD=1\r\n" + envLine + cudaLine + "cd /d \"" + launchDir.Replace("\"", "\"\"") + "\"\r\n" + pythonCmd + " \"" + launchPy.Replace("\"", "\"\"") + "\"\r\n";
 	                File.WriteAllText(wrapperPath, content);
 	                if (gpuId >= 0)
-	                    UnityEngine.Debug.Log($"[LaunchWebUI] Direct launch.py with SD GPU={gpuId}, CUDA_VISIBLE_DEVICES={gpuId}, COMMANDLINE_ARGS='{args}', python={(hasVenvPython ? Path.GetFileName(pythonLaunch) : "PATH")}. Wrapper: {wrapperPath}");
+	                    UnityEngine.Debug.Log($"[LaunchWebUI] Direct launch.py with physical SD GPU={gpuId} via CUDA_VISIBLE_DEVICES (Forge --gpu-device-id 0), COMMANDLINE_ARGS='{args}', python={(hasVenvPython ? Path.GetFileName(pythonLaunch) : "PATH")}. Wrapper: {wrapperPath}");
 	                else
 	                    UnityEngine.Debug.Log($"[LaunchWebUI] Direct launch.py (default GPU; webui-user.bat bypassed), python={(hasVenvPython ? Path.GetFileName(pythonLaunch) : "PATH")}. Wrapper: {wrapperPath}");
 	                workingDir = Path.GetTempPath();
