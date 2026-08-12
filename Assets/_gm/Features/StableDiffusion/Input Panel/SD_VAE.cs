@@ -37,6 +37,7 @@ namespace spz {
 	    [Space(10)]
 	    [SerializeField] SlideOut_Widget_UI _getMore_slideout;
 	    [SerializeField] Button _loadFromDiskButton;
+	    bool _loadFromDiskWired;
 
 	    public string selectedVAE_name => GetSelectedVAE_name();
 	    bool _isFetchingVAEs = false;
@@ -95,13 +96,15 @@ namespace spz {
 	    }
 
 	    void EnsureLoadFromDiskButton(){
+	        if (_loadFromDiskWired && _loadFromDiskButton != null) return;
+	        if (_getMore_slideout == null) return;
 	        if (_loadFromDiskButton == null)
 	            _loadFromDiskButton = SD_WeightFileImport.EnsureFromDiskButton(
 	                _getMore_slideout, SD_WeightFileImport.Kind.Vae, BrowseAndImportVAE);
-	        else {
-	            _loadFromDiskButton.onClick.RemoveListener(BrowseAndImportVAE);
-	            _loadFromDiskButton.onClick.AddListener(BrowseAndImportVAE);
-	        }
+	        if (_loadFromDiskButton == null) return;
+	        _loadFromDiskButton.onClick.RemoveListener(BrowseAndImportVAE);
+	        _loadFromDiskButton.onClick.AddListener(BrowseAndImportVAE);
+	        _loadFromDiskWired = true;
 	    }
 
 	    public void BrowseAndImportVAE(){
@@ -144,6 +147,9 @@ namespace spz {
 
 
 	    void Update(){
+	        if (!_loadFromDiskWired)
+	            EnsureLoadFromDiskButton();
+	        if (_getMore_slideout == null || _vaeDropdown == null) return;
 	        _getMore_slideout._dontAutoHide = true;
 	        _getMore_slideout.Toggle_if_Different(_vaeDropdown.IsExpanded);
 	    }

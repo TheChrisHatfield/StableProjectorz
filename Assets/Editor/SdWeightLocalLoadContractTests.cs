@@ -51,6 +51,7 @@ public sealed class SdWeightLocalLoadContractTests {
 		Assert.That(src, Does.Contain("PreferModelWhenAvailable"));
 		Assert.That(src, Does.Contain("ScreenPointHitsOwnership"));
 		Assert.That(src, Does.Contain("EnsureLoadFromDiskButton"));
+		Assert.That(src, Does.Contain("_loadFromDiskWired"));
 		Assert.That(src, Does.Contain("SD_WeightFileImport"));
 		Assert.That(src, Does.Contain("OrdinalIgnoreCase"));
 		Assert.That(src, Does.Not.Contain("opt.text.IndexOf(want"),
@@ -66,6 +67,7 @@ public sealed class SdWeightLocalLoadContractTests {
 		Assert.That(src, Does.Contain("PreferVAEWhenAvailable"));
 		Assert.That(src, Does.Contain("ScreenPointHitsOwnership"));
 		Assert.That(src, Does.Contain("EnsureLoadFromDiskButton"));
+		Assert.That(src, Does.Contain("_loadFromDiskWired"));
 		Assert.That(src, Does.Contain("SD_WeightFileImport"));
 	}
 

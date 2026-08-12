@@ -42,6 +42,7 @@ namespace spz {
 	    [Space(10)]
 	    [SerializeField] SlideOut_Widget_UI _getModes_slideOut;
 	    [SerializeField] Button _loadFromDiskButton;
+	    bool _loadFromDiskWired;
 
 	    public string selectedModel_name => GetSelectedModel_name();
 	    public static Action<SDModelsList> Act_ListOfModelsReceived { get; set; } = null;
@@ -136,13 +137,15 @@ namespace spz {
 	    }
 
 	    void EnsureLoadFromDiskButton(){
+	        if (_loadFromDiskWired && _loadFromDiskButton != null) return;
+	        if (_getModes_slideOut == null) return;
 	        if (_loadFromDiskButton == null)
 	            _loadFromDiskButton = SD_WeightFileImport.EnsureFromDiskButton(
 	                _getModes_slideOut, SD_WeightFileImport.Kind.Checkpoint, BrowseAndImportCheckpoint);
-	        else {
-	            _loadFromDiskButton.onClick.RemoveListener(BrowseAndImportCheckpoint);
-	            _loadFromDiskButton.onClick.AddListener(BrowseAndImportCheckpoint);
-	        }
+	        if (_loadFromDiskButton == null) return;
+	        _loadFromDiskButton.onClick.RemoveListener(BrowseAndImportCheckpoint);
+	        _loadFromDiskButton.onClick.AddListener(BrowseAndImportCheckpoint);
+	        _loadFromDiskWired = true;
 	    }
 
 	    public void BrowseAndImportCheckpoint(){
@@ -192,6 +195,9 @@ namespace spz {
 	    }
 
 	    void Update(){
+	        if (!_loadFromDiskWired)
+	            EnsureLoadFromDiskButton();
+	        if (_getModes_slideOut == null || _modelsDropdown == null) return;
 	        _getModes_slideOut._dontAutoHide = true;
 	        _getModes_slideOut.Toggle_if_Different( _modelsDropdown.IsExpanded );
 	    }
