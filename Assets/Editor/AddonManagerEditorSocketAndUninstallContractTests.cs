@@ -30,6 +30,9 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 		Assert.That(src, Does.Contain("RemoveAddonCrtn"));
 		Assert.That(src, Does.Contain("UnloadAddon(addonId, () => unloadDone = true)"));
 		Assert.That(src, Does.Contain("while (!unloadDone)"));
+		Assert.That(src, Does.Contain("IsPythonUnloadPending(addonId)"),
+			"Must not delete StreamingAssets folder while HTTP unload is only queued.");
+		Assert.That(src, Does.Contain("Removal blocked"));
 	}
 
 	[Test]
