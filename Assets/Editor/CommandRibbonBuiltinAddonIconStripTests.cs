@@ -30,6 +30,7 @@ public sealed class CommandRibbonBuiltinAddonIconStripTests {
 		Assert.That(src, Does.Contain("Harmonize-before-theme measured maxVisibleCharacters=0"));
 		Assert.That(src, Does.Contain("Deactivate before Destroy so StripHasEnabledAddonTabs"));
 		Assert.That(src, Does.Contain("ignore inactive / doomed GOs"));
+		Assert.That(src, Does.Contain("re-apply strip icon/text chrome after repair"));
 	}
 
 	[Test]
