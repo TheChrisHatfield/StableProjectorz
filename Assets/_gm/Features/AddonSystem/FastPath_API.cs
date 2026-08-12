@@ -1585,10 +1585,10 @@ namespace spz {
 		/// Check if skybox gradient is clear (no gradient colors)
 		/// </summary>
 		public bool IsSkyboxGradientClear() {
-			if (!_isInitialized) return true;
+			if (!_isInitialized) return false;
 			
 			var skybox = SkyboxBackground_MGR.instance;
-			if (skybox == null) return true;
+			if (skybox == null) return false;
 			
 			return skybox.isGradientColorClear;
 		}

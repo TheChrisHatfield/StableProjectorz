@@ -165,8 +165,21 @@ namespace spz {
 	        Debug.Log($"Process started with ID: {processId}");
 
 	        try {
+	            const float maxWaitSec = 600f; // 10 min — hung rembg must not block SD forever
+	            float waited = 0f;
 	            while (!func_isCanFinish()){
+	                if (!StartExternalProcess.IsProcessRunning(processId)){
+	                    Debug.LogWarning($"[Rembg_PythonRunner] Process {processId} exited before outputs were ready.");
+	                    reportOk?.Invoke(false);
+	                    yield break;
+	                }
+	                if (waited >= maxWaitSec){
+	                    Debug.LogError($"[Rembg_PythonRunner] Timed out after {maxWaitSec}s waiting for outputs.");
+	                    reportOk?.Invoke(false);
+	                    yield break;
+	                }
 	                yield return new WaitForSeconds(0.2f);
+	                waited += 0.2f;
 	            }
 	            reportOk?.Invoke(true);
 	        } finally {

@@ -85,10 +85,17 @@ namespace spz {
 
 	    void Start(){
 	        _vaeDropdown.onValueChanged.AddListener( OnDropdown_EntryPicked );
-	        Coroutines_MGR.instance.StartCoroutine( FetchContiniously_crtn() );
+	        // Boot order: Coroutines_MGR may not exist yet — retry until ready (same class as ConnectionPanel).
+	        StartCoroutine( EnsureFetchLoopStarted_crtn() );
 	        SD_Options_Fetcher.Act_onOptionsRetrieved += OnOptionsReceived;
 	        SD_Options_Fetcher.Act_onWillSendOptions_AmmendPlz += OnWillSendOptions_AmmendPlz;
 	        SD_Options_Fetcher.Act_OnSendOptions_done += OnSendOptions_done;
+	    }
+
+	    IEnumerator EnsureFetchLoopStarted_crtn(){
+	        while (Coroutines_MGR.instance == null)
+	            yield return null;
+	        Coroutines_MGR.instance.StartCoroutine( FetchContiniously_crtn() );
 	    }
 
 
@@ -106,6 +113,10 @@ namespace spz {
 	            }
 
 	            if (!_isFetchingVAEs){
+	                if (Coroutines_MGR.instance == null){
+	                    yield return null;
+	                    continue;
+	                }
 	                yield return Coroutines_MGR.instance.StartCoroutine( GetVAEs_crtn() );
 	            }
 
@@ -123,17 +134,27 @@ namespace spz {
 
 	        _isFetchingVAEs = true;
 
-	        //try different urls each time, because older Webui used another endpoint
+	        // Forge/Neo-family: prefer /sd-vae then fall back to /sd-modules (some Forge builds only expose modules).
+	        // Legacy A1111: alternate between endpoints across polls.
 	        _fetched_num_times++;
-	        string url_old = Connection_MGR.A1111_SD_API_URL + "/sd-vae";
-	        string url_new = Connection_MGR.A1111_SD_API_URL + "/sd-modules";
-	        string url     = _fetched_num_times%2==0? url_old : url_new;
+	        string url_vae = Connection_MGR.A1111_SD_API_URL + "/sd-vae";
+	        string url_modules = Connection_MGR.A1111_SD_API_URL + "/sd-modules";
+	        bool forgeFamily = SD_SysInfo_MGR.instance != null && SD_SysInfo_MGR.instance.isForgeFamilyWebui_detected();
+	        string urlPrimary = forgeFamily || (_fetched_num_times % 2 == 0) ? url_vae : url_modules;
+	        string urlFallback = urlPrimary == url_vae ? url_modules : url_vae;
 
-	        UnityWebRequest request = UnityWebRequest.Get(url);
+	        UnityWebRequest request = UnityWebRequest.Get(urlPrimary);
 	        yield return request.SendWebRequest();
 
 	        bool isBad = request.result == UnityWebRequest.Result.ConnectionError;
 	            isBad |= request.result == UnityWebRequest.Result.ProtocolError;
+	        if (isBad) {
+	            request.Dispose();
+	            request = UnityWebRequest.Get(urlFallback);
+	            yield return request.SendWebRequest();
+	            isBad = request.result == UnityWebRequest.Result.ConnectionError;
+	            isBad |= request.result == UnityWebRequest.Result.ProtocolError;
+	        }
 	        if (!isBad){
 	            SD_VAEList list_of_VAE = SD_VAEList.CreateFromJSON(request.downloadHandler.text);
 	            Populate_Dropdown(list_of_VAE);
@@ -227,6 +248,40 @@ namespace spz {
 	        string chosen = _vaeDropdown.options[_vaeDropdown.value].text;
 	        if (SdDisconnectPlaceholder.IsPlaceholder(chosen)){ return ""; }
 	        return chosen;
+	    }
+
+	    /// <summary>Agent / MCP: select VAE by dropdown label (partial match ok).</summary>
+	    public bool TrySelectVAEByName(string name, out string resolvedName, out string error){
+	        resolvedName = "";
+	        error = null;
+	        if (string.IsNullOrEmpty(name)){ error = "VAE name is empty"; return false; }
+	        if (_vaeDropdown == null || _vaeDropdown.options.Count == 0){
+	            error = "VAE dropdown is empty (not connected?)";
+	            return false;
+	        }
+	        string want = name.Trim();
+	        int ix = _vaeDropdown.options.FindIndex(opt =>
+	            string.Equals(opt.text, want, StringComparison.OrdinalIgnoreCase));
+	        if (ix < 0){
+	            ix = _vaeDropdown.options.FindIndex(opt =>
+	                opt.text != null && opt.text.IndexOf(want, StringComparison.OrdinalIgnoreCase) >= 0);
+	        }
+	        if (ix < 0){
+	            error = "VAE not in dropdown: " + want;
+	            return false;
+	        }
+	        _vaeDropdown.value = ix;
+	        _vaeDropdown.RefreshShownValue();
+	        resolvedName = GetSelectedVAE_name();
+	        return true;
+	    }
+
+	    public List<string> ListVAENames(){
+	        var list = new List<string>();
+	        if (_vaeDropdown == null) return list;
+	        for (int i = 0; i < _vaeDropdown.options.Count; i++)
+	            list.Add(_vaeDropdown.options[i].text);
+	        return list;
 	    }
 
 	    void OnDropdown_EntryPicked(int ix){

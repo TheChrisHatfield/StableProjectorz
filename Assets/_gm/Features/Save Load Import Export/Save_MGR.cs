@@ -443,15 +443,22 @@ namespace spz {
 
 	    //ask all user-cameras (and projections) to re-render. Wait few frames until all is complete.
 	    IEnumerator WaitForRenderAll_crtn(bool skipAO_blit, Action onReady){
-	        UserCameras_Permissions.Force_KeepRenderingCameras(true);
+	        try {
+	            UserCameras_Permissions.Force_KeepRenderingCameras(true);
 
-	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
-	        Objects_Renderer_MGR.instance._skip_AO_blit = skipAO_blit;
-	        for(int i=0; i<3; ++i){ yield return null; }
-	        Objects_Renderer_MGR.instance._skip_AO_blit = false;
+	            if (Objects_Renderer_MGR.instance != null){
+	                Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	                Objects_Renderer_MGR.instance._skip_AO_blit = skipAO_blit;
+	            }
+	            for(int i=0; i<3; ++i){ yield return null; }
+	            if (Objects_Renderer_MGR.instance != null)
+	                Objects_Renderer_MGR.instance._skip_AO_blit = false;
         
-	        UserCameras_Permissions.Force_KeepRenderingCameras(false);
-	        onReady();
+	            UserCameras_Permissions.Force_KeepRenderingCameras(false);
+	        } finally {
+	            // Always complete so callers clear _isSaving even if renderer was null mid-boot.
+	            onReady?.Invoke();
+	        }
 	    }
 
 
