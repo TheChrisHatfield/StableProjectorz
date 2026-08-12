@@ -84,9 +84,17 @@ def is_running() -> bool:
 
 
 def _shim_ping_ok(host: str, port: int, timeout_s: float = 1.0) -> bool:
+    """True only if OUR shim answers (body includes cloud_inference), not a real Forge."""
     try:
         with urllib.request.urlopen(f"http://{host}:{port}/internal/ping", timeout=timeout_s) as resp:
-            return int(resp.status) == 200
+            if int(resp.status) != 200:
+                return False
+            raw = resp.read().decode("utf-8", errors="replace")
+            try:
+                data = json.loads(raw) if raw else {}
+            except Exception:
+                return False
+            return isinstance(data, dict) and data.get("cloud_inference") is True
     except Exception:
         return False
 
