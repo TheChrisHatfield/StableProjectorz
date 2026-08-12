@@ -17,7 +17,7 @@ namespace spz {
 		CompactTool = 3,
 		/// <summary>Multi-line list / long dropdown caption.</summary>
 		ReadableBody = 4,
-		/// <summary>Workflow stacked cell — caller must invoke stacked apply with glyph.</summary>
+		/// <summary>Workflow stacked cell — documentation tag only; caller must invoke ApplyNomadStackedToolCell with glyph.</summary>
 		StripStack = 5,
 		/// <summary>Narrow Gen Art docks (FULL/SRN).</summary>
 		NarrowDock = 6,

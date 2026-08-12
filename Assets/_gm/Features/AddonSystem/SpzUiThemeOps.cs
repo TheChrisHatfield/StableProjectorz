@@ -2702,7 +2702,7 @@ namespace spz {
 				Surface("addon_manager", true, "AddonManager_UI; REF roles → tokens when non-builtin theme"),
 				Surface("settings", true, "Settings_UI chrome when non-builtin theme; product prefs untouched"),
 				Surface("viewport_statusline", true, "Viewport_StatusText RGB when non-builtin theme; sticky caller-owned"),
-				Surface("viewport_ribbons", true, "LeftRibbon + WorkflowRibbon + GenButtons; colors when non-builtin theme"),
+				Surface("viewport_ribbons", true, "Multi-owner: LeftRibbon_UI + WorkflowRibbon_UI + GenerateButtons_UI each ApplyThemeTokens"),
 				Surface("sd_input_panel", true, "SD_InputPanel_UI column; colors when non-builtin theme"),
 				Surface("export_save_menu", true, "ExportSave_UI_MGR buttons; colors when non-builtin theme"),
 				Surface("scene_resolution", true, "SceneResolution_MGR SAVE Nx / filters; colors when non-builtin theme"),
