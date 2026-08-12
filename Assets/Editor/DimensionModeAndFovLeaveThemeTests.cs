@@ -23,6 +23,8 @@ public sealed class DimensionModeAndFovLeaveThemeTests {
 		Assert.That(src, Does.Contain("ApplyChoiceLabelMirrorState"));
 		Assert.That(src, Does.Contain("ApplyChoicesPanelRaycasterForMirror"));
 		Assert.That(src, Does.Contain("ignoreReversedGraphics"));
+		Assert.That(src, Does.Contain("get_viewport_isSwapVerticalRibbons"));
+		Assert.That(src, Does.Contain("ShowHidePanel_crtn(hide: true)"));
 		Assert.That(src, Does.Not.Contain("UnflipChoiceLabelsForMirror"));
 	}
 
