@@ -15,6 +15,11 @@ namespace spz {
 	    public string set_overrideMessage(string msg) => _overrideMessage = msg;
 	    public string tooltipText =>  _overrideMessage!=""? _overrideMessage : _defaultMessage;
 
+	    /// <summary>Runtime override for hover delay (e.g. icon-strip tab names need a snappier tip).</summary>
+	    public void SetHoverDelayBeforeShow(float seconds) {
+	        _hoverDelayBeforeShow = Mathf.Max(0f, seconds);
+	    }
+
 	    public bool isHovered => _isHovered;
 	    bool _isHovered;
 	    bool _requestedShowTooltip;
