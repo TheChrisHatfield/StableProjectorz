@@ -164,9 +164,21 @@ public sealed class PaintTabSectionSplitterTests {
 
 		layout.EnsureSectionSplitters();
 
+		Assert.That(split.IsDragging, Is.True);
 		Assert.That(brushLe.preferredHeight, Is.GreaterThan(0f), "mid-drag preferred must survive Ensure");
 		Assert.That(brushLe.flexibleHeight, Is.EqualTo(0f));
 		Assert.That(toolLe.flexibleHeight, Is.EqualTo(0f));
+	}
+
+	[Test]
+	public void EnsureSectionSplitters_Source_EarlyReturnsWhileDragging() {
+		string path = System.IO.Path.Combine(Application.dataPath, "_gm", "Features", "Paint", "PaintTab", "PaintTab_KritaLayout_UI.cs");
+		string src = System.IO.File.ReadAllText(path);
+		int ensure = src.IndexOf("public void EnsureSectionSplitters()", System.StringComparison.Ordinal);
+		Assert.That(ensure, Is.GreaterThanOrEqualTo(0));
+		string head = src.Substring(ensure, Math.Min(500, src.Length - ensure));
+		Assert.That(head, Does.Contain("IsAnySplitterDragging(root)"));
+		Assert.That(head, Does.Contain("return;"));
 	}
 
 	[Test]
