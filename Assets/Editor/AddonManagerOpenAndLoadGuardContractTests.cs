@@ -10,7 +10,7 @@ public sealed class AddonManagerOpenAndLoadGuardContractTests {
 		string src = File.ReadAllText(path);
 		int i = src.IndexOf("_panel.SetActive(true);", System.StringComparison.Ordinal);
 		Assert.That(i, Is.GreaterThanOrEqualTo(0));
-		string snip = src.Substring(i, Math.Min(350, src.Length - i));
+		string snip = src.Substring(i, System.Math.Min(350, src.Length - i));
 		Assert.That(snip, Does.Contain("if (rootCanvas != null)"));
 		Assert.That(snip, Does.Contain("s_pendingOpenRequest = false"));
 	}

@@ -21,7 +21,7 @@ public sealed class AddonSpzGoNativeParityAndRememberPersistContractTests {
 			"Assets", "_gm", "Features", "AddonSystem", "Addon_MGR.cs");
 		string src = File.ReadAllText(path);
 		int i = src.IndexOf("public void PersistEnabledAddonSelectionNow()", System.StringComparison.Ordinal);
-		string body = src.Substring(i, Math.Min(500, src.Length - i));
+		string body = src.Substring(i, System.Math.Min(500, src.Length - i));
 		Assert.That(body, Does.Contain("GetRememberEnabledAddonsPreference()"));
 		Assert.That(body, Does.Contain("DeleteKey(PrefsKeyEnabledAddonIdsJson)"));
 	}
