@@ -17,5 +17,9 @@ public sealed class AddonUnloadImmediateRibbonParkContractTests {
 		Assert.That(parkAt, Is.GreaterThan(0));
 		Assert.That(coAt, Is.GreaterThan(parkAt),
 			"Ribbon tab must leave the strip before waiting on HTTP unregister.");
+		int notifyAt = body.IndexOf("OnAddonEnabledStateChanged?.Invoke(addonId)", System.StringComparison.Ordinal);
+		Assert.That(notifyAt, Is.GreaterThan(0));
+		Assert.That(notifyAt, Is.LessThan(coAt),
+			"Enabled-state listeners must run when isEnabled flips, not after HTTP unload.");
 	}
 }
