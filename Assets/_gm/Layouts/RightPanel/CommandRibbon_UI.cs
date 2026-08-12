@@ -267,14 +267,17 @@ namespace spz {
 		    TextMeshProUGUI refTmp = GetRibbonStripTypographyReferenceTMP(strip, null);
 		    float designBasis = kRibbonStripTabLabelDefaultPt;
 		    float basis = designBasis * SpzUiThemeOps.Active.fontScale;
-		    // Match ApplyThemeTokens: icon-only widths only while labels are hidden (Nomad ribbon_icon_only or builtin+addon strip).
-		    bool iconOnly = (SpzUiThemeOps.ShouldRecolorBoundChrome && SpzUiThemeOps.RibbonIconOnlyActive)
-			    || (!SpzUiThemeOps.ShouldRecolorBoundChrome && StripHasEnabledAddonTabs());
-		    if (iconOnly)
-			    return; // ApplyThemeTokens owns icon-only cell widths; do not auto-size hidden labels.
+		    // Nomad ribbon_icon_only: ApplyThemeTokens owns compact widths. Builtin add-on icon cells are skipped below.
+		    bool nomadIconOnly = SpzUiThemeOps.ShouldRecolorBoundChrome && SpzUiThemeOps.RibbonIconOnlyActive;
+		    if (nomadIconOnly)
+			    return;
+		    bool skipBuiltinAddonIconCells = !SpzUiThemeOps.ShouldRecolorBoundChrome && StripHasEnabledAddonTabs();
 		    foreach (var elem in strip.GetComponentsInChildren<TabsGroupElem_UI>(true))
 		    {
 			    if (elem == null || elem.transform.parent != strip) continue;
+			    // Enabled add-ons borrow icon chrome only — do not auto-size their hidden labels.
+			    if (skipBuiltinAddonIconCells && IsAddonStripTabCell(elem.transform))
+				    continue;
 			    var tmp = elem.GetComponentInChildren<TextMeshProUGUI>(true);
 			    if (tmp == null) continue;
 			    ConfigureResponsiveRibbonTabText(tmp, refTmp, basis);
@@ -645,8 +648,8 @@ namespace spz {
 	        var t = SpzUiThemeOps.Active;
 	        bool recolorChrome = SpzUiThemeOps.ShouldRecolorBoundChrome;
 	        bool iconOnly = recolorChrome && SpzUiThemeOps.RibbonIconOnlyActive;
-	        bool builtinAddonIconStrip = !recolorChrome && StripHasEnabledAddonTabs();
-	        bool hideStripLabels = iconOnly || builtinAddonIconStrip;
+	        // Builtin: only enabled add-on tabs borrow line icons — Art/Mesh/Paint stay OG text tabs.
+	        bool allowBuiltinAddonIcons = !recolorChrome && StripHasEnabledAddonTabs();
 
 	        RecolorOrRestorePanelShell(_SD_ArtList_Panel, recolorChrome);
 	        RecolorOrRestorePanelShell(_SD_ArtBgList_Panel, recolorChrome);
@@ -661,9 +664,8 @@ namespace spz {
 	                // ComposeNomadStripIconsNative plants SpzStripLineIconOverride — clear so Leave SPZ
 	                // uses ResolveStripTabLineIcon (Nomad Brush/Layers glyphs must not stick on addon icon strip).
 	                ClearStripLineIconOverridesUnder(strip);
-	                // Keep SPZ line icons when add-on tabs are on the strip; otherwise match OG text tabs.
-	                if (!builtinAddonIconStrip)
-	                    HideMonolithOverlaysUnder(strip);
+	                // Hide all Monolith first; ThemeStripTabCell re-shows only on add-on cells when allowed.
+	                HideMonolithOverlaysUnder(strip);
 	            }
 
 	            for (int i = 0; i < strip.childCount; i++) {
@@ -685,7 +687,9 @@ namespace spz {
 	                }
 	                if (cell.GetComponent<TabsGroupElem_UI>() == null)
 	                    continue;
-	                ThemeStripTabCell(cell, t, recolorChrome, hideStripLabels, builtinAddonIconStrip);
+	                bool cellAddonIcon = allowBuiltinAddonIcons && IsAddonStripTabCell(cell);
+	                bool cellHideLabels = iconOnly || cellAddonIcon;
+	                ThemeStripTabCell(cell, t, recolorChrome, cellHideLabels, cellAddonIcon);
 	            }
 	        }
 
@@ -696,13 +700,25 @@ namespace spz {
 	            }
 	        }
 
-	        if (!hideStripLabels)
+	        // Nomad icon-only hides all labels; builtin+addons still Harmonize Art/Mesh/Paint text tabs.
+	        if (!iconOnly)
 	            HarmonizeStripTabTypography();
 
 	        if (strip != null && strip is RectTransform stripRt)
 	            UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(stripRt);
 
 	        SnapshotStripTabSelectionChrome();
+	    }
+
+	    /// <summary>True when this strip cell is an enabled add-on tab (not Art / Mesh / Paint / …).</summary>
+	    public static bool IsAddonStripTabCell(Transform cell) {
+	        if (cell == null) return false;
+	        var elem = cell.GetComponent<TabsGroupElem_UI>();
+	        if (elem != null && !string.IsNullOrEmpty(elem.title)
+	            && elem.title.StartsWith("addon_", StringComparison.OrdinalIgnoreCase))
+	            return true;
+	        string n = cell.name ?? "";
+	        return n.StartsWith("AddonTab_", StringComparison.OrdinalIgnoreCase);
 	    }
 
 	    /// <summary>True when at least one live add-on tab sits on the CommandRibbon strip.</summary>
@@ -970,9 +986,8 @@ namespace spz {
 	    /// <summary>
 	    /// Studio chrome on strip tabs: active bar + line icon (create if missing).
 	    /// Non-builtin: create/show Monolith icons and BoundChrome tint.
-	    /// Builtin default without add-ons: hide Monolith overlays (authored OG text tabs).
-	    /// Builtin with enabled add-on tabs: SPZ-styled line icons (same glyphs as Nomad) + hover name tooltip;
-	    /// no Nomad fill/accent bar — keeps default chrome.
+	    /// Builtin default: hide Monolith overlays (authored OG text tabs).
+	    /// Builtin add-on cells only: SPZ-styled line icons + hover name (Art/Mesh/Paint stay text).
 	    /// When <see cref="SpzUiThemeOps.RibbonIconOnlyActive"/> (Nomad), centers a larger icon.
 	    /// </summary>
 	    static void ApplyStudioTabChromeColors(Transform cell, SpzUiThemeOps.ThemeTokens t, bool recolorChrome = true, bool builtinAddonIconStrip = false) {
@@ -1327,10 +1342,19 @@ namespace spz {
 	            string hay = BuildStripTabMatchHaystack(cell);
 	            if (hay.IndexOf(needle, StringComparison.OrdinalIgnoreCase) < 0)
 	                continue;
-	            bool builtinAddonIconStrip = !SpzUiThemeOps.ShouldRecolorBoundChrome && StripHasEnabledAddonTabs();
+	            bool cellAddonIcon = !SpzUiThemeOps.ShouldRecolorBoundChrome
+	                && StripHasEnabledAddonTabs()
+	                && IsAddonStripTabCell(cell);
 	            ApplyStudioTabChromeColors(cell, SpzUiThemeOps.Active,
-	                SpzUiThemeOps.ShouldRecolorBoundChrome, builtinAddonIconStrip);
+	                SpzUiThemeOps.ShouldRecolorBoundChrome, cellAddonIcon);
 	            Transform iconTransform = SpzUiThemeOps.FindDirectChildIncludingInactive(cell, "MonolithLineIcon");
+	            // Builtin Art/Mesh/Paint must stay text tabs — do not force Monolith on from set_line_icon.
+	            if (!SpzUiThemeOps.ShouldRecolorBoundChrome && !cellAddonIcon) {
+	                if (iconTransform != null)
+	                    iconTransform.gameObject.SetActive(false);
+	                matched++;
+	                continue;
+	            }
 	            if (iconTransform == null) {
 	                error = $"line icon missing after ensure on '{n}'";
 	                return false;
