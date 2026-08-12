@@ -28,6 +28,8 @@ public sealed class FluxDownloadMoreTooltipNeoContractTests {
 		Assert.That(src, Does.Contain("alibaba-pai/FLUX.2-dev-Fun-Controlnet-Union"));
 		Assert.That(src, Does.Contain("Fun-Union (FLUX.2-dev)"));
 		Assert.That(src, Does.Not.Contain("xlabs-ai"));
+		Assert.That(src, Does.Not.Contain("'  m_isRightToLeft"),
+			"Prefab YAML must not glue m_isRightToLeft onto m_text.");
 		AssertTooltip(src);
 	}
 
