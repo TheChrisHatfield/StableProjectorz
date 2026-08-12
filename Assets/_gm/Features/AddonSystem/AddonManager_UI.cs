@@ -1084,8 +1084,15 @@ namespace spz {
 		void OnLoadAddonsNow() {
 			ShowStatus("Loading addons...", true);
 			if (Addon_MGR.instance != null) {
-				Addon_MGR.instance.RequestLoadAllEnabledAddonsNow(() => {
-					ShowStatus("Addons load requested", true);
+				Addon_MGR.instance.RequestLoadAllEnabledAddonsNow((requested, hardFail) => {
+					if (requested == 0)
+						ShowStatus("No enabled add-ons to load.", false);
+					else if (hardFail > 0)
+						ShowStatus(
+							$"Load finished — {hardFail}/{requested} failed (disabled). Check log.",
+							false);
+					else
+						ShowStatus($"Load finished for {requested} add-on(s).", true);
 					RefreshAddonsList();
 				});
 			} else {
