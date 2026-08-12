@@ -69,6 +69,13 @@ namespace spz {
 		        }
 		        return;
 	        }
+	        if( _saveLoad_helper != null && _saveLoad_helper.IsProjectSaveInFlight ){
+		        if( Viewport_StatusText.instance != null ){
+			        Viewport_StatusText.instance.ShowStatusText(
+				        "Can't save project while another save dialog/write is already in progress.", false, 5f, false );
+		        }
+		        return;
+	        }
 	        if( _isLoading ){
 		        if( Viewport_StatusText.instance != null ){
 			        Viewport_StatusText.instance.ShowStatusText(

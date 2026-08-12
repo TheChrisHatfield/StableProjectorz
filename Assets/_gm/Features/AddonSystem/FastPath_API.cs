@@ -1631,8 +1631,9 @@ namespace spz {
 			var saveMGR = Save_MGR.instance;
 			if (saveMGR == null) return false;
 			
-			// Check if already saving/loading
+			// Check if already saving/loading (including save dialog open — _isSaving is false until path chosen).
 			if (saveMGR._isSaving || saveMGR._isLoading) return false;
+			if (saveMGR.SaveLoadHelper != null && saveMGR.SaveLoadHelper.IsProjectSaveInFlight) return false;
 			
 			// Check if generating (blocks save)
 			if (StableDiffusion_Hub.instance != null && StableDiffusion_Hub.instance._generating) {
@@ -1656,6 +1657,7 @@ namespace spz {
 			
 			// Check if already saving/loading
 			if (saveMGR._isSaving || saveMGR._isLoading) return false;
+			if (saveMGR.SaveLoadHelper != null && saveMGR.SaveLoadHelper.IsProjectSaveInFlight) return false;
 			
 			// Check if generating (blocks load)
 			if (StableDiffusion_Hub.instance != null && StableDiffusion_Hub.instance._generating) {

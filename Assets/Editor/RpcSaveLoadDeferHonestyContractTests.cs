@@ -24,4 +24,15 @@ public sealed class RpcSaveLoadDeferHonestyContractTests {
 		Assert.That(src, Does.Contain("save cancelled or failed"));
 		Assert.That(src, Does.Contain("load cancelled or failed"));
 	}
+
+	[Test]
+	public void FastPath_SaveProject_RefusesWhileDialogInFlight() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "FastPath_API.cs");
+		string src = File.ReadAllText(path);
+		int i = src.IndexOf("public bool SaveProject()", System.StringComparison.Ordinal);
+		string body = src.Substring(i, System.Math.Min(700, src.Length - i));
+		Assert.That(body, Does.Contain("IsProjectSaveInFlight"),
+			"Second RPC must not return true while the save dialog is still open.");
+	}
 }
