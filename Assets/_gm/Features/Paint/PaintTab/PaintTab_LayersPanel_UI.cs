@@ -115,9 +115,15 @@ namespace spz {
 			ApplyThemeTokens();
 		}
 
-		void OnDisable()
+		void OnDestroy()
 		{
 			SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+			if (_layerStack != null)
+			{
+				_layerStack.OnLayersChanged -= RebuildList;
+				_layerStack.OnActiveLayerChanged -= RefreshActiveHighlight;
+			}
+			if (_dragInsertIndicator != null) Destroy(_dragInsertIndicator);
 		}
 
 		public void ApplyThemeTokens()
