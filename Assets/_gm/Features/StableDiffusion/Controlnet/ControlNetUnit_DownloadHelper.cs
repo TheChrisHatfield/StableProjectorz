@@ -70,11 +70,11 @@ namespace spz {
 
 	        ControlNetUnit_DownloadHelper.isSomeUnit_downloadingModels = true;//will prevent other controlnet units from downloading.
 
-	        _onSomeUnit_startedDownloadModel.Invoke(this);
+	        _onSomeUnit_startedDownloadModel?.Invoke(this);
 	        _downloadModel_ifNotExist.DownloadFile("", "", onProgress);
 
 	        void onProgress(float pcnt01){
-	            _onSomeUnit_downloadModelPcnt.Invoke(this, pcnt01);
+	            _onSomeUnit_downloadModelPcnt?.Invoke(this, pcnt01);
 	            if(pcnt01<1.0f){ return;}
 	            _onSomeUnit_stoppedDownloadModel?.Invoke(this);
 	            ControlNetUnit_DownloadHelper.isSomeUnit_downloadingModels = false;
