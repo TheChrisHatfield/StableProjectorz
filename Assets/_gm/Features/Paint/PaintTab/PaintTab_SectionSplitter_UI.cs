@@ -13,7 +13,7 @@ namespace spz {
 	public sealed class PaintTab_SectionSplitter_UI : MonoBehaviour,
 		IBeginDragHandler, IDragHandler, IEndDragHandler
 	{
-		public const float HandleHeight = 6f;
+		public const float HandleHeight = 8f;
 
 		LayoutElement _above;
 		LayoutElement _below;

@@ -168,6 +168,11 @@ public sealed class PaintTabSectionSplitterTests {
 	}
 
 	[Test]
+	public void SectionSplitter_HandleHeight_IsAtLeast8() {
+		Assert.That(PaintTab_SectionSplitter_UI.HandleHeight, Is.GreaterThanOrEqualTo(8f));
+	}
+
+	[Test]
 	public void SectionSplitter_OnDisable_FinishesActiveDrag() {
 		string path = System.IO.Path.Combine(Application.dataPath, "_gm", "Features", "Paint", "PaintTab", "PaintTab_SectionSplitter_UI.cs");
 		string src = System.IO.File.ReadAllText(path);
