@@ -957,13 +957,13 @@ namespace spz {
 		/// </summary>
 		public bool StopGeneration() {
 			if (!_isInitialized) return false;
-			
-			var sdHub = StableDiffusion_Hub.instance;
-			if (sdHub == null) return false;
-			
-			if (!sdHub._generating) return false; // Not generating
-			
-			sdHub.OnStopGenerate_Button();
+
+			bool hubBusy = StableDiffusion_Hub.instance != null && StableDiffusion_Hub.instance._generating;
+			bool gen3dBusy = Gen3D_API.instance != null && Gen3D_API.instance.isBusy;
+			if (!hubBusy && !gen3dBusy) return false;
+
+			// Multicast cancel (SD Hub, rembg, ShadowR, HDR, Gen3D) — Hub.OnStop alone ignores custom workflows.
+			GenerateButtons_UI.OnCancelGenerationButton?.Invoke();
 			return true;
 		}
 		

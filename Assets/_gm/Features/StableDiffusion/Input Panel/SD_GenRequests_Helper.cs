@@ -108,7 +108,7 @@ namespace spz {
 	        }
 
 	        UserCameras_Permissions.Force_KeepRenderingCameras(true);
-
+	        try {
 	        //for inpaint to apply itself, etc. (or to avoid checker pattern if had No-Color Mask)
 	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
 
@@ -137,7 +137,6 @@ namespace spz {
 	                intermediates.Dispose();
 	                _finalPreparations_beforeGen = false;
 	                _isGeneratingWhat = Generate_RequestingWhat.nothing;
-	                UserCameras_Permissions.Force_KeepRenderingCameras(false);
 	                _activeRequestCrtn = null;
 	                yield break;
 	            }
@@ -149,10 +148,12 @@ namespace spz {
 	            Finalize_GenerationRequest( payload.width,  payload.height,  payload.n_iter,  
 	                                        payload.batch_size, "txt2img" );
             
-	        UserCameras_Permissions.Force_KeepRenderingCameras(false);
 	        RememberSentVals_forDebug(intermediates,  isImg2Img:false );
 	        _activeRequestCrtn = null;
 	        onRequested?.Invoke();
+	        } finally {
+	            UserCameras_Permissions.Force_KeepRenderingCameras(false);
+	        }
 	    }
 
 
@@ -169,6 +170,7 @@ namespace spz {
 	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
 
 	        UserCameras_Permissions.Force_KeepRenderingCameras(true);
+	        try {
 	            for(int i=0; i<3; ++i){
 	                if (_cancelRequested){ AbortPrepAfterCancel(); yield break; }
 	                yield return null;
@@ -210,7 +212,6 @@ namespace spz {
 	                    Viewport_StatusText.instance.ShowStatusText(
 	                        "img2img aborted: missing init image (ContentCam/CustomFile capture failed).",
 	                        false, 5f, false);
-	                UserCameras_Permissions.Force_KeepRenderingCameras(false);
 	                _activeRequestCrtn = null;
 	                yield break;
 	            }
@@ -222,10 +223,12 @@ namespace spz {
 	            Finalize_GenerationRequest( payload.width,  payload.height,  payload.n_iter,  
 	                                        payload.batch_size, "img2img" );
 
-	        UserCameras_Permissions.Force_KeepRenderingCameras(false);
 	        RememberSentVals_forDebug(intermediates,  isImg2Img:true,  (InpaintingFill)payload.inpainting_fill );
 	        _activeRequestCrtn = null;
 	        onRequested?.Invoke();
+	        } finally {
+	            UserCameras_Permissions.Force_KeepRenderingCameras(false);
+	        }
 	    }
 
 
