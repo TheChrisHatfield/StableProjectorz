@@ -446,9 +446,11 @@ namespace spz {
 		public static void ThemePromptPresetSquareCell(Selectable selectable, Color fill, Color accent) {
 			if (selectable == null)
 				return;
-			// Ensure only under Nomad — leave/builtin must not inject sticky BoundChromeHitFace.
-			if (!ShouldRecolorBoundChrome)
+			// Leave litmus: full unwind (SolidRect + LE square lock + hidden emboss) — not a no-op.
+			if (!ShouldRecolorBoundChrome) {
+				RestoreBoundChromeUnder(selectable.transform);
 				return;
+			}
 			EnsureSelectableHitFace(selectable);
 			if (selectable.targetGraphic == null)
 				return;
@@ -752,12 +754,10 @@ namespace spz {
 		public static void ApplyBoundChromeSelectable(Selectable selectable, Color normal, Color accent) {
 			if (selectable == null)
 				return;
-			// Ensure only under Nomad — leave/builtin must not inject synthetic hit faces then "restore".
+			// Leave litmus: full RestoreBoundChromeUnder — ColorBlock/face alone leaves SolidRect +
+			// ClearNonFace raycast holds and hidden child plates sticky (filter pills / tools).
 			if (!ShouldRecolorBoundChrome) {
-				if (selectable.targetGraphic != null) {
-					RestoreAuthoredGraphic(selectable.targetGraphic);
-					RestoreAuthoredColorBlock(selectable);
-				}
+				RestoreBoundChromeUnder(selectable.transform);
 				return;
 			}
 			EnsureSelectableHitFace(selectable);
