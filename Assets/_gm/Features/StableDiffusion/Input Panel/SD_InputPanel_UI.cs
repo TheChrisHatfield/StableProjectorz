@@ -378,6 +378,8 @@ namespace spz {
 
 	    void OnEnable() {
 	        TrySyncResolutionFromCurrentViewportMode();
+	        // Theme may change while the prompt panel is disabled.
+	        ApplyThemeTokens();
 	    }
 
 	    void TrySyncResolutionFromCurrentViewportMode() {
