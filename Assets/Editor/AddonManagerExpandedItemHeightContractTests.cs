@@ -32,4 +32,20 @@ public sealed class AddonManagerExpandedItemHeightContractTests {
 		string between = body.Substring(dirty, snap - dirty);
 		Assert.That(between, Does.Contain("SeedDraftFromLiveAddons()"));
 	}
+
+	[Test]
+	public void ShowInRibbonLabel_UsesEllipsisNotWrapOverflow() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "AddonManager_UI.cs");
+		string src = File.ReadAllText(path);
+		int create = src.IndexOf("var ribbonLabel = ribbonLabelObj.AddComponent<TextMeshProUGUI>();", System.StringComparison.Ordinal);
+		Assert.That(create, Is.GreaterThan(0));
+		string createBody = src.Substring(create, System.Math.Min(450, src.Length - create));
+		Assert.That(createBody, Does.Contain("enableWordWrapping = false"));
+		Assert.That(createBody, Does.Contain("TextOverflowModes.Ellipsis"));
+		int responsive = src.IndexOf("var label = row.Find(\"ShowInRibbonLabel\")", System.StringComparison.Ordinal);
+		string respBody = src.Substring(responsive, System.Math.Min(500, src.Length - responsive));
+		Assert.That(respBody, Does.Contain("enableWordWrapping = false"));
+		Assert.That(respBody, Does.Contain("TextOverflowModes.Ellipsis"));
+	}
 }
