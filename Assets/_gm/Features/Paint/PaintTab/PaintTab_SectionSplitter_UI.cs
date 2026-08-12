@@ -18,6 +18,7 @@ namespace spz {
 		LayoutElement _above;
 		LayoutElement _below;
 		Action _onDragEnded;
+		bool _dragActive;
 
 		Image _bar;
 
@@ -76,6 +77,9 @@ namespace spz {
 
 		public void OnBeginDrag(PointerEventData eventData)
 		{
+			if (eventData != null && eventData.button != PointerEventData.InputButton.Left)
+				return;
+			_dragActive = true;
 			LockPreferredFromRect(_above);
 			LockPreferredFromRect(_below);
 			RebuildParentLayout();
@@ -83,15 +87,27 @@ namespace spz {
 
 		public void OnDrag(PointerEventData eventData)
 		{
-			if (eventData == null) return;
-			ApplyDragDelta(_above, _below, eventData.delta.y);
+			if (!_dragActive || eventData == null) return;
+			if (eventData.button != PointerEventData.InputButton.Left) return;
+			ApplyDragDelta(_above, _below, ScreenDeltaToLayoutY(eventData.delta.y));
 			RebuildParentLayout();
 		}
 
 		public void OnEndDrag(PointerEventData eventData)
 		{
+			if (!_dragActive) return;
+			_dragActive = false;
 			_onDragEnded?.Invoke();
 			RebuildParentLayout();
+		}
+
+		float ScreenDeltaToLayoutY(float screenDeltaY)
+		{
+			float scale = 1f;
+			var canvas = GetComponentInParent<Canvas>();
+			if (canvas != null && canvas.scaleFactor > 0.01f)
+				scale = canvas.scaleFactor;
+			return screenDeltaY / scale;
 		}
 
 		void RebuildParentLayout()
