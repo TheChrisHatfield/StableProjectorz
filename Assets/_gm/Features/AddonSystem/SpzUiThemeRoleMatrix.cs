@@ -75,11 +75,14 @@ namespace spz {
 				foreach (var btn in root.GetComponentsInChildren<Button>(true)) {
 					if (btn == null || IsExcluded(opts, btn)) continue;
 					if (btn.GetComponentInParent<SlideOut_Widget_UI>(true) != null) continue;
+					// Icon-as-face skips SolidSquare above — still need a hittable face before ClearNonFace.
+					EnsureSelectableHitFace(btn);
 					ClearNonFaceRaycastsForTheme(btn);
 				}
 				foreach (var tog in root.GetComponentsInChildren<Toggle>(true)) {
 					if (tog == null || IsExcluded(opts, tog)) continue;
 					if (tog.GetComponentInParent<SlideOut_Widget_UI>(true) != null) continue;
+					EnsureSelectableHitFace(tog);
 					ClearNonFaceRaycastsForTheme(tog);
 				}
 			}
@@ -174,8 +177,12 @@ namespace spz {
 				if (btn.targetGraphic != null && btn.targetGraphic.color.a < 0.08f)
 					continue;
 				// Opaque icon-as-face — SolidSquare blanks glyphs (SD input / Soft / CN litmus).
-				if (SpzUiThemeOps.IsAuthoredIconFace(btn.targetGraphic))
+				if (SpzUiThemeOps.IsAuthoredIconFace(btn.targetGraphic)) {
+					EnsureSelectableHitFace(btn);
+					if (btn.targetGraphic is Image iconFace)
+						ApplyBoundChromeGraphic(iconFace, t.iconTint);
 					continue;
+				}
 				ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
 				if (btn.targetGraphic is Image btnImg)
 					ApplyRoundedControlSprite(btnImg, markEligible: true);
