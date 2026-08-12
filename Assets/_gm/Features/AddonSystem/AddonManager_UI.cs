@@ -635,7 +635,8 @@ namespace spz {
 		GameObject titleObj = new GameObject("Title");
 		titleObj.transform.SetParent(headerObj.transform, false);
 		var titleLE = titleObj.AddComponent<LayoutElement>();
-		titleLE.minWidth = 230f;
+		titleLE.minWidth = 160f;
+		titleLE.preferredWidth = 220f;
 		titleLE.flexibleWidth = 1f;
 		var titleText = titleObj.AddComponent<TextMeshProUGUI>();
 		titleText.text = "Add-on Manager";
@@ -644,7 +645,7 @@ namespace spz {
 		titleText.fontStyle = FontStyles.Bold;
 		titleText.alignment = TextAlignmentOptions.MidlineLeft;
 		titleText.enableWordWrapping = false;
-		titleText.overflowMode = TMPro.TextOverflowModes.Overflow;
+		titleText.overflowMode = TMPro.TextOverflowModes.Ellipsis;
 		titleText.raycastTarget = false;
 		
 		void AddBarButton(Transform parent, string goName, string label, Color bg, Color fg, UnityEngine.Events.UnityAction onClick, Vector2 size, out Button outBtn, string tooltip = null) {
@@ -835,16 +836,17 @@ namespace spz {
 		var statusObj = new GameObject("StatusText");
 		statusObj.transform.SetParent(panelObj.transform, false);
 		var statusLE = statusObj.AddComponent<LayoutElement>();
-		statusLE.preferredHeight = 22f;
-		statusLE.minHeight = 20f;
+		statusLE.preferredHeight = 36f;
+		statusLE.minHeight = 28f;
 		statusLE.flexibleWidth = 1f;
 		_statusText = statusObj.AddComponent<TextMeshProUGUI>();
 		_statusText.text = "";
 		_statusText.fontSize = 12f;
 		_statusText.color = new Color(0.63f, 0.63f, 0.67f, 1f);
-		_statusText.alignment = TextAlignmentOptions.MidlineLeft;
-		_statusText.enableWordWrapping = false;
+		_statusText.alignment = TextAlignmentOptions.TopLeft;
+		_statusText.enableWordWrapping = true;
 		_statusText.overflowMode = TextOverflowModes.Ellipsis;
+		_statusText.maxVisibleLines = 2;
 		_statusText.raycastTarget = false;
 		
 		SetLayerRecursively(_panel.transform, UILayer);
@@ -1153,6 +1155,16 @@ namespace spz {
 						: $"Settings saved — {changed} add-on(s) applied; preferences persisted (Remember off — selection not restored next launch).",
 					true);
 			}
+		}
+
+		string KeepNextLaunchHint() {
+			return Addon_MGR.GetRememberEnabledAddonsPreference()
+				? "Click Save settings to keep next launch."
+				: "Save persists prefs; enable restore is off (Remember).";
+		}
+
+		string KeepPrefsHint() {
+			return "Click Save settings to keep.";
 		}
 
 		bool GetDraftEnabled(string addonId, bool fallbackActual) {
@@ -2324,7 +2336,7 @@ namespace spz {
 			var itemLayout = itemObj.AddComponent<LayoutElement>();
 			itemLayout.preferredHeight = 48f;
 			itemLayout.minHeight = 44f;
-			itemLayout.minWidth = 440f;
+			itemLayout.minWidth = 280f;
 			itemLayout.flexibleWidth = 1f;
 			var verticalLayout = itemObj.AddComponent<VerticalLayoutGroup>();
 			// Gap between HeaderRow and PreferencesBody so prefs bg does not clip Preferences/Uninstall.
@@ -2717,8 +2729,8 @@ namespace spz {
 				bool enabled = GetDraftEnabled(addonId, addonInfo.isEnabled);
 				ShowStatus(enabled
 					? (isOn
-						? $"'{addonId}' — Command Ribbon tab shown. Click Save settings to keep."
-						: $"'{addonId}' — active, ribbon hidden. Click Save settings to keep.")
+						? $"'{addonId}' — Command Ribbon tab shown. {KeepPrefsHint()}"
+						: $"'{addonId}' — active, ribbon hidden. {KeepPrefsHint()}")
 					: $"'{addonId}' — ribbon preference updated (enable dial to load).", true);
 			});
 
@@ -2745,13 +2757,13 @@ namespace spz {
 					bool showRibbon = Addon_MGR.instance.ShouldShowInCommandRibbon(id);
 					ShowStatus(isOn
 						? (ribbonOnly
-							? $"Enabled '{id}' — viewport dock on. Click Save settings to keep next launch."
+							? $"Enabled '{id}' — viewport dock on. {KeepNextLaunchHint()}"
 							: showRibbon
-								? $"Enabled '{id}' — ribbon tab on. Click Save settings to keep next launch."
-								: $"Enabled '{id}' — active, ribbon hidden. Click Save settings to keep next launch.")
+								? $"Enabled '{id}' — ribbon tab on. {KeepNextLaunchHint()}"
+								: $"Enabled '{id}' — active, ribbon hidden. {KeepNextLaunchHint()}")
 						: (ribbonOnly
-							? $"Disabled '{id}' — viewport dock off. Click Save settings to keep next launch."
-							: $"Disabled '{id}' — unloaded. Click Save settings to keep next launch."), true);
+							? $"Disabled '{id}' — viewport dock off. {KeepNextLaunchHint()}"
+							: $"Disabled '{id}' — unloaded. {KeepNextLaunchHint()}"), true);
 				} finally {
 					_suppressEnabledListRefresh = false;
 				}
