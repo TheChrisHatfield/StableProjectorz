@@ -706,7 +706,10 @@ namespace spz {
 		AddBarButton(headerObj.transform, "RunWithAddonsButton", "Restart with addons", new Color(52f / 255f, 152f / 255f, 219f / 255f, 1f),
 			Color.white, OnRestartWithAddons, new Vector2(142, 34), out _restartWithAddons_button,
 			"Quit and relaunch StableProjectorz with the add-on Python server (Run_with_Addons).");
-		_closePanel_button = null;
+		// Runtime rebuild clears serialized Close — recreate so Nomad theme + users are not stuck with dimmer-only dismiss.
+		AddBarButton(headerObj.transform, "CloseButton", "Close", new Color(61f / 255f, 61f / 255f, 61f / 255f, 1f),
+			Color.white, ClosePanel, new Vector2(88, 34), out _closePanel_button,
+			"Close the Add-on Manager.");
 		
 		GameObject filterBarObj = new GameObject("FilterBar");
 		filterBarObj.transform.SetParent(panelObj.transform, false);
@@ -855,6 +858,8 @@ namespace spz {
 			return StudioLineIcon.Play;
 		if (string.Equals(controlName, "SaveAddonSettingsButton", StringComparison.Ordinal))
 			return StudioLineIcon.Settings;
+		if (string.Equals(controlName, "CloseButton", StringComparison.Ordinal))
+			return StudioLineIcon.Expand;
 		return StudioLineIcon.Restart;
 	}
 	
@@ -1629,6 +1634,7 @@ namespace spz {
 			if (string.Equals(goName, "LoadAddonsNowButton", StringComparison.Ordinal)) return 126f;
 			if (string.Equals(goName, "SaveAddonSettingsButton", StringComparison.Ordinal)) return 118f;
 			if (string.Equals(goName, "RunWithAddonsButton", StringComparison.Ordinal)) return 142f;
+			if (string.Equals(goName, "CloseButton", StringComparison.Ordinal)) return 88f;
 			return 100f;
 		}
 
