@@ -154,6 +154,13 @@ namespace spz {
 	        SD_WeightFileImport.BrowseAndImport(SD_WeightFileImport.Kind.Checkpoint);
 	    }
 
+	    /// <summary>Kick an immediate /sd-models poll (e.g. after local weight copy).</summary>
+	    public void RequestImmediateModelsFetch(){
+	        if (_isFetchingModels) return;
+	        if (Coroutines_MGR.instance == null) return;
+	        Coroutines_MGR.instance.StartCoroutine(GetModels_crtn());
+	    }
+
 	    /// <summary>Prefer this checkpoint after list refresh (also selects immediately if already listed).</summary>
 	    public void PreferModelWhenAvailable(string name){
 	        if (string.IsNullOrEmpty(name)) return;
@@ -242,7 +249,7 @@ namespace spz {
 	                continue; 
 	            }
 	            if (!_isFetchingModels){
-	                Coroutines_MGR.instance.StartCoroutine( GetModels_crtn() );
+	                yield return Coroutines_MGR.instance.StartCoroutine( GetModels_crtn() );
 	            }
 	            dropdown_LoadedSavedModel_maybe();
 	            yield return new WaitForSeconds(3f);

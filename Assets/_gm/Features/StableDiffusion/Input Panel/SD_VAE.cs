@@ -114,6 +114,13 @@ namespace spz {
 	        SD_WeightFileImport.BrowseAndImport(SD_WeightFileImport.Kind.Vae);
 	    }
 
+	    /// <summary>Kick an immediate VAE list poll (e.g. after local weight copy).</summary>
+	    public void RequestImmediateVAEFetch(){
+	        if (_isFetchingVAEs) return;
+	        if (Coroutines_MGR.instance == null) return;
+	        Coroutines_MGR.instance.StartCoroutine(GetVAEs_crtn());
+	    }
+
 	    /// <summary>Prefer this VAE after list refresh (also selects immediately if already listed).</summary>
 	    public void PreferVAEWhenAvailable(string name){
 	        if (string.IsNullOrEmpty(name)) return;
