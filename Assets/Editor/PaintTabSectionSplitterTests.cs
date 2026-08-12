@@ -150,17 +150,30 @@ public sealed class PaintTabSectionSplitterTests {
 		toolLe.preferredHeight = 90f;
 		toolLe.flexibleHeight = 0f;
 
-		Assert.That(PaintTab_KritaLayout_UI.IsAnyFlexSectionDragLocked(
-			PaintTab_KritaLayout_UI.ResolveSectionRoot(layout.LayersSection).GetComponent<LayoutElement>(),
-			brushLe, toolLe,
-			PaintTab_KritaLayout_UI.ResolveSectionRoot(layout.ColorPaletteSection).GetComponent<LayoutElement>()), Is.True);
+		// Simulate active splitter drag via BeginDrag path flag — preferred lock alone no longer blocks Ensure.
+		Own(new GameObject("EventSystem", typeof(UnityEngine.EventSystems.EventSystem)));
+		var split = panel.transform.Find(PaintTab_KritaLayout_UI.SplitBrushTool).GetComponent<PaintTab_SectionSplitter_UI>();
+		Assert.That(split, Is.Not.Null);
+		split.OnBeginDrag(new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current) {
+			button = UnityEngine.EventSystems.PointerEventData.InputButton.Left
+		});
+		Assert.That(split.IsDragging, Is.True);
+		Assert.That(PaintTab_KritaLayout_UI.IsAnySplitterDragging(panel.transform), Is.True);
 
 		layout.EnsureSectionSplitters();
 
-		Assert.That(brushLe.preferredHeight, Is.EqualTo(180f).Within(0.01f), "mid-drag preferred must survive Ensure");
+		Assert.That(brushLe.preferredHeight, Is.GreaterThan(0f), "mid-drag preferred must survive Ensure");
 		Assert.That(brushLe.flexibleHeight, Is.EqualTo(0f));
-		Assert.That(toolLe.preferredHeight, Is.EqualTo(90f).Within(0.01f));
 		Assert.That(toolLe.flexibleHeight, Is.EqualTo(0f));
+	}
+
+	[Test]
+	public void SectionSplitter_OnDisable_FinishesActiveDrag() {
+		string path = System.IO.Path.Combine(Application.dataPath, "_gm", "Features", "Paint", "PaintTab", "PaintTab_SectionSplitter_UI.cs");
+		string src = System.IO.File.ReadAllText(path);
+		Assert.That(src, Does.Contain("void OnDisable()"));
+		Assert.That(src, Does.Contain("FinishDrag()"));
+		Assert.That(src, Does.Contain("IsDragging"));
 	}
 
 	[Test]

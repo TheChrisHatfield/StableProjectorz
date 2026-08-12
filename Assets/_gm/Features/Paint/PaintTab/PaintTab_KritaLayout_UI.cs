@@ -258,14 +258,30 @@ namespace spz {
 			if (s3 != null) s3.transform.SetSiblingIndex(idx++);
 			colorRoot.SetSiblingIndex(idx);
 
-			// CollectNow / poll can re-enter Ensure while a splitter drag has preferredHeight locked.
+			// CollectNow / poll can re-enter Ensure while a splitter drag is active.
 			// Re-applying prefs would unlock mid-drag and snap heights back to saved flex weights.
-			if (!IsAnyFlexSectionDragLocked(layersLe, brushLe, toolLe, colorLe))
+			if (!IsAnySplitterDragging(root))
 				ApplySavedSectionWeights();
 			ApplyThemeTokens();
 		}
 
-		/// <summary>True while a splitter drag has locked adjacent sections to preferredHeight.</summary>
+		/// <summary>True while a section splitter reports an active left-button drag.</summary>
+		public static bool IsAnySplitterDragging(Transform root)
+		{
+			if (root == null) return false;
+			return IsSplitterDragging(root.Find(SplitLayersBrush))
+				|| IsSplitterDragging(root.Find(SplitBrushTool))
+				|| IsSplitterDragging(root.Find(SplitToolColor));
+		}
+
+		static bool IsSplitterDragging(Transform splitTf)
+		{
+			if (splitTf == null) return false;
+			var s = splitTf.GetComponent<PaintTab_SectionSplitter_UI>();
+			return s != null && s.IsDragging;
+		}
+
+		/// <summary>Legacy preferredHeight lock heuristic (tests / diagnostics).</summary>
 		public static bool IsAnyFlexSectionDragLocked(
 			LayoutElement layers, LayoutElement brush, LayoutElement tool, LayoutElement color)
 		{
