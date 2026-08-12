@@ -74,9 +74,16 @@ namespace spz {
 
 
 	    void OnViewCamera_Toggled(int camIx, bool isOn){
+	        if (UserCameras_MGR.instance == null) return;
 	        int numCams =  UserCameras_MGR.instance.numActiveViewCameras();
 	        _wantedNumCams = numCams;
-	        _numCams_numberText.text = numCams.ToString();                          
+	        // Keep prev in sync so LateUpdate does not call EnableExactly_N (contiguous 0..N-1)
+	        // and remaps an arbitrary non-trailing camera toggle.
+	        _prevSliderValue = numCams;
+	        if (_numCams_numberText != null)
+		        _numCams_numberText.text = numCams.ToString();
+	        if (_numCameras_slider != null)
+		        _numCameras_slider.SetSliderValue(numCams, invokeCallback:false);
 	    }
 
 
