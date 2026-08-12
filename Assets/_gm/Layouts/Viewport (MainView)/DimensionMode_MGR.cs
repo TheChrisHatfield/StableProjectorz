@@ -374,34 +374,38 @@ namespace spz {
 
 
 	    void OnButtonPressed(Button but){
+	        if (but == null)
+	            return;
 	        string msg = "";
 	        if(but == _3d_choice_button){ 
-	            _dimensionMode = DimensionMode.dim_gen_3d; _mainChoice_text.text = "3D";
+	            _dimensionMode = DimensionMode.dim_gen_3d;
+	            if (_mainChoice_text != null) _mainChoice_text.text = "3D";
 	            msg = "3d Generation Mode";
 	        }
 	        if(but == _sd_choice_button){ 
-	            _dimensionMode = DimensionMode.dim_sd; _mainChoice_text.text = "SD";
+	            _dimensionMode = DimensionMode.dim_sd;
+	            if (_mainChoice_text != null) _mainChoice_text.text = "SD";
 	            msg = "Stable Diffusion Texturing Mode";
 	        } //t for 'textures'
 	        if(but == _uv_choice_button){ 
-	            _dimensionMode = DimensionMode.dim_uv; _mainChoice_text.text = "UV";
+	            _dimensionMode = DimensionMode.dim_uv;
+	            if (_mainChoice_text != null) _mainChoice_text.text = "UV";
 	            msg = "Inspect Texture Coords Mode"; //don't explain. Self evident and avoids distraction.
 	        }
-	        if (string.IsNullOrEmpty(msg) == false){
+	        if (string.IsNullOrEmpty(msg) == false && Viewport_StatusText.instance != null){
 	            Viewport_StatusText.instance.ShowStatusText(msg, false, 3, false);
 	        }
-	        _mainChoice_anim.Play();
+	        if (_mainChoice_anim != null)
+	            _mainChoice_anim.Play();
 	        if (SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            ApplyThemeTokens();
 	        }
 	        else {
-	            _3d_choice_button.GetComponent<Image>().color = _inactiveColor;
-	            _sd_choice_button.GetComponent<Image>().color = _inactiveColor;
-	            _uv_choice_button.GetComponent<Image>().color = _inactiveColor;
-	            _bg_choice_button.GetComponent<Image>().color = _inactiveColor;
-	            var img = but.GetComponent<Image>();
-	            if (img != null)
-	                img.color = Color.white;
+	            SetAuthoredButtonColor(_3d_choice_button, false);
+	            SetAuthoredButtonColor(_sd_choice_button, false);
+	            SetAuthoredButtonColor(_uv_choice_button, false);
+	            SetAuthoredButtonColor(_bg_choice_button, false);
+	            SetAuthoredButtonColor(but, true);
 	        }
 	        _Act_OnDimensionChanged?.Invoke(_dimensionMode);
 	    }
