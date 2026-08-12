@@ -822,13 +822,11 @@ namespace spz {
 				_bgImage.sprite = genRefImg.sprite;
 				_bgImage.type = genRefImg.type;
 				_bgImage.pixelsPerUnitMultiplier = genRefImg.pixelsPerUnitMultiplier;
-				_fillBase = genRefImg.color;
-				_bgImage.color = _fillBase;
-			} else {
-				_fillBase = FallbackFill;
-				_bgImage.color = _fillBase;
 			}
-			_authoredFillBase = _fillBase;
+			_authoredFillBase = ResolveAuthoredGenArtFill(genRefImg);
+			_fillBase = _authoredFillBase;
+			_bgImage.color = _fillBase;
+			SpzUiThemeOps.ResnapshotAuthoredGraphicColor(_bgImage);
 
 			var button = faceGo.AddComponent<Button>();
 			button.targetGraphic = _bgImage;
@@ -1102,8 +1100,11 @@ namespace spz {
 						_bgImage.preserveAspect = false;
 					}
 				} else {
+					_authoredFillBase = ResolveAuthoredGenArtFill(FindGenArtReferenceImage(
+						ResolveGenerateButtonsMain()?.GenArtButtonRectTransform));
 					_fillBase = _authoredFillBase;
 					_bgImage.color = on ? Color.Lerp(_fillBase, Color.black, 0.14f) : _fillBase;
+					SpzUiThemeOps.ResnapshotAuthoredGraphicColor(_bgImage);
 				}
 			}
 
@@ -1237,15 +1238,14 @@ namespace spz {
 			const float padH = 4f;
 			const float padV = 2.5f;
 			if (textRt != null) {
-				if (SpzUiThemeOps.ShouldRecolorBoundChrome)
-					SpzUiThemeOps.SnapshotToolFaceLayout(textRt);
-				else
-					SpzUiThemeOps.RestoreToolFaceLayoutsUnder(textRt);
 				if (SpzUiThemeOps.ShouldRecolorBoundChrome) {
+					SpzUiThemeOps.SnapshotToolFaceLayout(textRt);
 					textRt.anchorMin = Vector2.zero;
 					textRt.anchorMax = Vector2.one;
 					textRt.offsetMin = new Vector2(padH, padV);
 					textRt.offsetMax = new Vector2(-padH, -padV);
+				} else {
+					SpzUiThemeOps.RestoreBoundChromeUnder(textRt);
 				}
 			}
 			string raw = "FULL\nSRN";
@@ -1261,9 +1261,8 @@ namespace spz {
 				tmp.raycastTarget = false;
 				tmp.textWrappingMode = TextWrappingModes.NoWrap;
 			} else {
-				// Leave: full typography unwind — do not re-force Bold/outline/tracking after Restore.
-				SpzUiThemeOps.RestoreAuthoredGraphic(tmp);
-				SpzUiThemeOps.RestoreNomadTypography(tmp);
+				// Leave: full BoundChrome unwind — do not re-force Bold/outline/tracking after Restore.
+				SpzUiThemeOps.RestoreBoundChromeUnder(tmp.transform);
 				ApplyGenArtColumnLabelColor(tmp);
 				tmp.raycastTarget = false;
 			}
