@@ -579,7 +579,7 @@ namespace spz {
 					UnityEngine.Debug.Log("[Addon_MGR] Black box visibility restart deferred — generation in progress.");
 				} else {
 					float since = Time.unscaledTime - _lastAddonVisibilityRestartUnscaledTime;
-					if (since < AddonVisibilityRestartCooldownoldownSec) {
+					if (since < AddonVisibilityRestartCooldownSec) {
 						UnityEngine.Debug.Log("[Addon_MGR] Black box visibility restart skipped (cooldown).");
 					} else {
 						_lastAddonVisibilityRestartUnscaledTime = Time.unscaledTime;
