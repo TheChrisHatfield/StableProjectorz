@@ -71,12 +71,17 @@ public class FileDragAndDrop : MonoBehaviour
         }
 
         // SD checkpoint / VAE weights — only when dropped onto Model or SD-VAE ownership rects.
-        if (SD_WeightFileImport.AllFilesAreWeights(aFiles)) {
+		if (SD_WeightFileImport.AllFilesAreWeights(aFiles)) {
             Vector2 screen = new Vector2(screenCoord.x, screenCoord.y);
             bool onModel = SD_Neural_Models.instance != null
                 && SD_Neural_Models.instance.ScreenPointHitsOwnership(screen);
             bool onVae = SD_VAE.instance != null
                 && SD_VAE.instance.ScreenPointHitsOwnership(screen);
+            if (aFiles.Count > 1) {
+                if (Viewport_StatusText.instance != null)
+                    Viewport_StatusText.instance.ShowStatusText(
+                        "Loading first weight only (" + aFiles.Count + " dropped).", false, 3, false);
+            }
             if (onModel && !onVae) {
                 SD_WeightFileImport.ImportFromPath(SD_WeightFileImport.Kind.Checkpoint, aFiles[0]);
                 return;

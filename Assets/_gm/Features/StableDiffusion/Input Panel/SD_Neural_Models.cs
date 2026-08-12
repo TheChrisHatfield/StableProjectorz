@@ -169,7 +169,14 @@ namespace spz {
 	            && string.Equals(NormalizeCheckpointPrefer(opt.text), want, StringComparison.OrdinalIgnoreCase));
 	        if (ix >= 0) {
 	            _preferedModelName_viaLoad = "";
-	            _modelsDropdown.value = ix;
+	            if (_modelsDropdown.value == ix) {
+	                // Same entry (e.g. overwrite of active checkpoint) — value= won't fire onValueChanged.
+	                _timeOf_SelectedTheModel = Time.time;
+	                EnsureKleinSdVaeSelected(GetSelectedModel_name());
+	                SD_Options_Fetcher.instance?.SubmitOptions_Asap();
+	            } else {
+	                _modelsDropdown.value = ix;
+	            }
 	            _modelsDropdown.RefreshShownValue();
 	        }
 	    }
