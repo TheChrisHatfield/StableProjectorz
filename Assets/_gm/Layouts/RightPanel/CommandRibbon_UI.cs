@@ -1327,7 +1327,9 @@ namespace spz {
 	            string hay = BuildStripTabMatchHaystack(cell);
 	            if (hay.IndexOf(needle, StringComparison.OrdinalIgnoreCase) < 0)
 	                continue;
-	            ApplyStudioTabChromeColors(cell, SpzUiThemeOps.Active, SpzUiThemeOps.ShouldRecolorBoundChrome);
+	            bool builtinAddonIconStrip = !SpzUiThemeOps.ShouldRecolorBoundChrome && StripHasEnabledAddonTabs();
+	            ApplyStudioTabChromeColors(cell, SpzUiThemeOps.Active,
+	                SpzUiThemeOps.ShouldRecolorBoundChrome, builtinAddonIconStrip);
 	            Transform iconTransform = SpzUiThemeOps.FindDirectChildIncludingInactive(cell, "MonolithLineIcon");
 	            if (iconTransform == null) {
 	                error = $"line icon missing after ensure on '{n}'";
@@ -1339,7 +1341,12 @@ namespace spz {
 	                return false;
 	            }
 	            img.sprite = UiRuntimeSprites.GetLineIcon(icon);
-	            SpzUiThemeOps.ApplyLineIconTint(img);
+	            // Nomad BoundChrome tint only when recoloring; builtin addon strip keeps SPZ light gray.
+	            if (SpzUiThemeOps.ShouldRecolorBoundChrome)
+	                SpzUiThemeOps.ApplyLineIconTint(img);
+	            else
+	                img.color = SpzDefaultStripIconTint;
+	            img.raycastTarget = false;
 	            var mark = cell.GetComponent<SpzStripLineIconOverride>()
 	                       ?? cell.gameObject.AddComponent<SpzStripLineIconOverride>();
 	            mark.Icon = icon;
