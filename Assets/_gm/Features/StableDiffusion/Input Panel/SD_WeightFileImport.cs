@@ -205,6 +205,9 @@ namespace spz {
 
 		static Transform FindVerticalGroup(Transform root) {
 			if (root == null) return null;
+			var layouts = root.GetComponentsInChildren<UnityEngine.UI.VerticalLayoutGroup>(true);
+			if (layouts != null && layouts.Length > 0 && layouts[0] != null)
+				return layouts[0].transform;
 			foreach (var t in root.GetComponentsInChildren<Transform>(true)) {
 				if (t != null && t.name != null && t.name.IndexOf("vertical", StringComparison.OrdinalIgnoreCase) >= 0)
 					return t;

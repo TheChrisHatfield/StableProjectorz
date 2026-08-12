@@ -187,20 +187,28 @@ namespace spz {
 	        return n;
 	    }
 
-	    /// <summary>True when screen point is over Model dropdown, slide-out, or this panel.</summary>
+	    /// <summary>True when screen point is over Model dropdown, visible slide-out, or this panel.</summary>
 	    public bool ScreenPointHitsOwnership(Vector2 screenPoint){
+	        Camera cam = UiCameraFor(transform);
 	        if (transform is RectTransform root
-	            && RectTransformUtility.RectangleContainsScreenPoint(root, screenPoint))
+	            && RectTransformUtility.RectangleContainsScreenPoint(root, screenPoint, cam))
 	            return true;
 	        if (_modelsDropdown != null
 	            && _modelsDropdown.transform is RectTransform dd
-	            && RectTransformUtility.RectangleContainsScreenPoint(dd, screenPoint))
+	            && RectTransformUtility.RectangleContainsScreenPoint(dd, screenPoint, cam))
 	            return true;
-	        if (_getModes_slideOut != null
+	        if (_getModes_slideOut != null && _getModes_slideOut.isShowing
 	            && _getModes_slideOut.transform is RectTransform slide
-	            && RectTransformUtility.RectangleContainsScreenPoint(slide, screenPoint))
+	            && RectTransformUtility.RectangleContainsScreenPoint(slide, screenPoint, cam))
 	            return true;
 	        return false;
+	    }
+
+	    static Camera UiCameraFor(Transform t){
+	        var canvas = t != null ? t.GetComponentInParent<Canvas>() : null;
+	        if (canvas == null) return null;
+	        if (canvas.renderMode == RenderMode.ScreenSpaceOverlay) return null;
+	        return canvas.worldCamera;
 	    }
 
 	    IEnumerator EnsureFetchStarted_crtn(){
