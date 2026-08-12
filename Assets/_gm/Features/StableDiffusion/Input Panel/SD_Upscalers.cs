@@ -92,12 +92,18 @@ namespace spz {
 	        StaticEvents.SubscribeUnique<int>("SD_Upscalers_UI", OnDropdown_EntryPicked);
 
 	        // _upscalersDropdown.onValueChanged.AddListener(OnDropdown_EntryPicked); // to be deleted
-	        Coroutines_MGR.instance.StartCoroutine(FetchContiniously_crtn());
+	        StartCoroutine( EnsureFetchStarted_crtn() );
 	        SD_Options_Fetcher.Act_onWillSendOptions_AmmendPlz += OnWillSendOptions_AmmendPlz;
 
 	        // Listen for UI button presses via StaticEvents
 	        StaticEvents.SubscribeUnique("SD_Upscalers_UI:OnUpscaleX2", () => OnGenUpscaleVisible_ButtonX2?.Invoke());
 	        StaticEvents.SubscribeUnique("SD_Upscalers_UI:OnUpscaleX4", () => OnGenUpscaleVisible_ButtonX4?.Invoke());
+	    }
+
+	    IEnumerator EnsureFetchStarted_crtn(){
+	        while (Coroutines_MGR.instance == null)
+	            yield return null;
+	        Coroutines_MGR.instance.StartCoroutine(FetchContiniously_crtn());
 	    }
 
 	    void Update()

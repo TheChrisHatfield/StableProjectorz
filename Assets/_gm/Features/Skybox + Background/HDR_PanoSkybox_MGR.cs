@@ -172,7 +172,13 @@ namespace spz {
 
 	        _sphereGenIterCompleted = false;
 	        _sphereGen_error = false;
-	        StableDiffusion_Hub.instance.SubmitCustomWorkflow(Generate_RequestingWhat.somethingCustom, sendPayload:true, sphere_payload, OnGeneratedSpheres_Progress, OnGeneratedSpheres_Result);
+	        if (!StableDiffusion_Hub.instance.SubmitCustomWorkflow(Generate_RequestingWhat.somethingCustom, sendPayload:true, sphere_payload, OnGeneratedSpheres_Progress, OnGeneratedSpheres_Result)){
+	            Viewport_StatusText.instance?.ShowStatusText(
+	                "Can't generate HDR spheres while another generation is in progress.", false, 5f, false);
+	            _sphereGen_error = true;
+	            _sphereGenIterCompleted = true;
+	            yield break;
+	        }
 
 	        while (_sphereGenIterCompleted==false){ yield return null; }
 
@@ -215,15 +221,16 @@ namespace spz {
 
 	    void OnGeneratedSpheres_Result( UnityWebRequest result){
         
-	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
-	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:false);
+	        if (Objects_Renderer_MGR.instance != null)
+	            Objects_Renderer_MGR.instance.ReRenderAll_soon();
 
 	        bool err =  result.result==UnityWebRequest.Result.ConnectionError 
 	                 || result.result==UnityWebRequest.Result.ProtocolError;
         
-	        string json = result.downloadHandler.text;
+	        string json = result.downloadHandler != null ? result.downloadHandler.text : "";
 
 	        if(err || json==""){
+	            GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:true);
 	            var jsonLow = json.ToLower();
 	            json += jsonLow.Contains("cannot be multiplied") || jsonLow.Contains("server error") ?  
 	                        " ..Maybe you are mixing SDXL model with SD 1.5 Controlnet?"  : "";
@@ -240,12 +247,14 @@ namespace spz {
 	        SD_txt2imgResponse response = JsonConvert.DeserializeObject<SD_txt2imgResponse>(json, settings);
         
 	        if(json == "{}"){
+	            GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:true);
 	            _latestGenData?.Complete_PendingImages(null); //using ? in case SD had exception
 	            StableDiffusion_Hub.instance.MarkCustomWorkflow_Done();
 	            _sphereGenIterCompleted = true;
 	            _sphereGen_error = true; 
 	            return;
 	        }
+	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:false);
 	        _latestGenData?.Complete_PendingImages( response.images ); //using ? in case SD had exception
 	        StableDiffusion_Hub.instance.MarkCustomWorkflow_Done();
 	        _sphereGenIterCompleted = true;

@@ -231,7 +231,8 @@ namespace spz {
 	        //see if it's stopping for a generation that we initiated:
 	        bool isMine = _isGeneratingWhat == Generate_RequestingWhat.txt2img ||
 	                      _isGeneratingWhat == Generate_RequestingWhat.img2img ||
-	                      _isGeneratingWhat == Generate_RequestingWhat.upscale;
+	                      _isGeneratingWhat == Generate_RequestingWhat.upscale ||
+	                      _isGeneratingWhat == Generate_RequestingWhat.ctrlnetDetect;
 	        if(!isMine){ return; }//we don't care about this signal, someone else will handle it.
 	        _genRequest_helper.OnStopGenerate_Button();
 	    }

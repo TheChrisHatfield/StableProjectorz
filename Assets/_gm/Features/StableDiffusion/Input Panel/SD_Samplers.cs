@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
 using TMPro;
@@ -68,6 +69,42 @@ namespace spz {
 	        return _listOfSamplers.samplers[selectedIndex];
 	    }
 
+	    public string selectedSampler_name => value?.name ?? "";
+
+	    public List<string> ListSamplerNames(){
+	        var list = new List<string>();
+	        if (_samplers_dropdown == null) return list;
+	        for (int i = 0; i < _samplers_dropdown.options.Count; i++)
+	            list.Add(_samplers_dropdown.options[i].text);
+	        return list;
+	    }
+
+	    /// <summary>Agent / MCP: select sampler by name (e.g. Euler). Partial match allowed.</summary>
+	    public bool TrySelectSamplerByName(string name, out string resolvedName, out string error){
+	        resolvedName = "";
+	        error = null;
+	        if (string.IsNullOrEmpty(name)){ error = "sampler name is empty"; return false; }
+	        if (_samplers_dropdown == null || _samplers_dropdown.options.Count == 0){
+	            error = "sampler dropdown is empty (not connected?)";
+	            return false;
+	        }
+	        string want = name.Trim();
+	        int ix = _samplers_dropdown.options.FindIndex(opt =>
+	            string.Equals(opt.text, want, StringComparison.OrdinalIgnoreCase));
+	        if (ix < 0){
+	            ix = _samplers_dropdown.options.FindIndex(opt =>
+	                opt.text != null && opt.text.IndexOf(want, StringComparison.OrdinalIgnoreCase) >= 0);
+	        }
+	        if (ix < 0){
+	            error = "sampler not in dropdown: " + want;
+	            return false;
+	        }
+	        _samplers_dropdown.value = ix;
+	        _samplers_dropdown.RefreshShownValue();
+	        resolvedName = _samplers_dropdown.options[ix].text;
+	        return true;
+	    }
+
 
 	    public void Save(SD_GenSettingsInput_UI fill_this){
 	        fill_this.samplers = new SD_InputSamplers_SL();
@@ -92,6 +129,12 @@ namespace spz {
 	    }
 
 	    void Start(){
+	        StartCoroutine( EnsureFetchStarted_crtn() );
+	    }
+
+	    IEnumerator EnsureFetchStarted_crtn(){
+	        while (Coroutines_MGR.instance == null)
+	            yield return null;
 	        Coroutines_MGR.instance.StartCoroutine( FetchContiniously() );
 	    }
 

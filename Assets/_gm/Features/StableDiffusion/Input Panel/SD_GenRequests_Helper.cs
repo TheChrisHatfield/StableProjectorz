@@ -237,7 +237,9 @@ namespace spz {
 
 	        if(fromGen_canBeNull == null){ //genData not provided, render the scene to submit the ViewTexture for upscale.
 	            UserCameras_Permissions.Force_KeepRenderingCameras(true);
-	            Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	            try {
+	            if (Objects_Renderer_MGR.instance != null)
+	                Objects_Renderer_MGR.instance.ReRenderAll_soon();
 	            for(int i=0; i<3; ++i){
 	                if (_cancelRequested){ AbortPrepAfterCancel(); yield break; }
 	                yield return null;
@@ -247,6 +249,10 @@ namespace spz {
 	                Objects_Renderer_MGR.instance.EnsureInpaintColorLayerAppliedForCapture();
 	            yield return new WaitForEndOfFrame();//same ordering as img2img: avoid capture before end-of-frame render after layer sync
 	            if (_cancelRequested){ AbortPrepAfterCancel(); yield break; }
+	            } finally {
+	                // Always unlock — success path previously leaked Force_KeepRenderingCameras(true).
+	                UserCameras_Permissions.Force_KeepRenderingCameras(false);
+	            }
 	        }
 
 	        SD_GenRequestArgs_byproducts intermediates = null;
@@ -283,6 +289,7 @@ namespace spz {
 	                                        Action<SD_ControlnetDetect_Response> onDetected ){
         
 	        if(_isGeneratingWhat!=Generate_RequestingWhat.nothing){ yield break; }
+	        _cancelRequested = false;
 	        _isGeneratingWhat = Generate_RequestingWhat.ctrlnetDetect;
 
 	        _generate_sender.Send_GenerateRequest(payload, OnDone);
@@ -294,6 +301,11 @@ namespace spz {
 	        SD_ControlnetDetect_Response response = null;
 
 	        void OnDone(UnityWebRequest req){
+	            if (_cancelRequested){
+	                isError = true;
+	                response = null;
+	                return;
+	            }
 	            if(Finish_if_ResultError(req)){
 	                isError = true;
 	                response = null;
@@ -305,11 +317,17 @@ namespace spz {
 	            response = JsonConvert.DeserializeObject<SD_ControlnetDetect_Response>(json, settings);
 	        }
 
-	        while(response == null && !isError){ yield return null;  }
+	        while(response == null && !isError && !_cancelRequested){ yield return null;  }
 
-	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:false);
+	        if (_cancelRequested){
+	            _isGeneratingWhat = Generate_RequestingWhat.nothing;
+	            yield break; // OnStop already finished UI
+	        }
+
+	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled: isError);
 	        _isGeneratingWhat = Generate_RequestingWhat.nothing;
-	        onDetected?.Invoke(response);
+	        if (!isError)
+	            onDetected?.Invoke(response);
 	    }
 
 
@@ -452,9 +470,19 @@ namespace spz {
 
 	    void OnGeneratedResult( UnityWebRequest result){
 
-	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:false);
+	        // Late HTTP after cancel must not bake Gen Art or report a successful finish.
+	        if (_cancelRequested){
+	            _latestGenData?.Complete_PendingImages(null);
+	            OnFinishTheInterrupt();
+	            return;
+	        }
 
-	        if(Finish_if_ResultError(result)){ return; }
+	        if(Finish_if_ResultError(result)){
+	            GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:true);
+	            return;
+	        }
+
+	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:false);
 
 	        // Use class-type information, to support inheritance of objects:
 	        string json = result.downloadHandler.text;
