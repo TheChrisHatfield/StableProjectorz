@@ -543,7 +543,7 @@ namespace spz {
 	        if (transf == null || sensor == null)
 	            return;
 	        Vector3 targScale = sensor.isHovering ? _choice_originalScale*1.25f : _choice_originalScale;
-	        float factor = Time.deltaTime * _choiceHover_AnimSpeed;
+	        float factor = Time.unscaledDeltaTime * _choiceHover_AnimSpeed;
 	        transf.localScale =  Vector3.Lerp(transf.localScale, targScale, factor);
 	    }
 
