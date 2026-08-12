@@ -590,6 +590,7 @@ namespace spz {
 				"spz.cmd.deselect_all_meshes", "spz.cmd.deselect_mesh", "spz.cmd.export_3d_with_textures",
 				"spz.cmd.export_3d_with_textures_to_path", "spz.cmd.export_projection_textures", "spz.cmd.export_view_textures",
 				"spz.cmd.import_3d_model",
+				"spz.cmd.agent_bridge_apply_settings", "spz.cmd.agent_bridge_get_status",
 				"spz.cmd.get_active_controlnet_unit_count", "spz.cmd.get_addon_context", "spz.cmd.get_all_camera_fovs",
 				"spz.cmd.get_all_camera_positions", "spz.cmd.get_all_camera_rotations", "spz.cmd.get_all_mesh_ids",
 				"spz.cmd.get_api_capabilities", "spz.cmd.get_brush_settings", "spz.cmd.get_camera_pos",
@@ -1101,6 +1102,29 @@ namespace spz {
 		}
 
 		/// <summary>
+		/// Agent bridge status / settings — no FastPath required. Socket is gated by SpzMcpSPZ (SPZ MCP).
+		/// </summary>
+		static JObject TryExecuteAgentBridgeCommand(string method, JObject @params) {
+			if (method == "spz.cmd.agent_bridge_get_status") {
+				var bridge = SPZ_Agent_Bridge.EnsureInstance();
+				return bridge.BuildStatusJson();
+			}
+
+			if (method == "spz.cmd.agent_bridge_apply_settings") {
+				@params ??= new JObject();
+				var bridge = SPZ_Agent_Bridge.EnsureInstance();
+				bool listen = @params["listen"]?.ToObject<bool>()
+				              ?? @params["enabled"]?.ToObject<bool>()
+				              ?? false;
+				int port = @params["port"]?.ToObject<int>() ?? SPZ_Agent_Bridge.DEFAULT_PORT;
+				string token = @params["token"]?.ToString() ?? "";
+				return bridge.ApplySettings(listen, port, token);
+			}
+
+			return null;
+		}
+
+		/// <summary>
 		/// Executes fast-path commands
 		/// </summary>
 		JObject ExecuteFastPathCommand(string method, JObject @params) {
@@ -1121,6 +1145,11 @@ namespace spz {
 			var uiChromeResult = TryExecuteUiChromeCommand(method, @params);
 			if (uiChromeResult != null) {
 				return uiChromeResult;
+			}
+
+			var agentBridgeResult = TryExecuteAgentBridgeCommand(method, @params);
+			if (agentBridgeResult != null) {
+				return agentBridgeResult;
 			}
 
 			if (FastPath_API.instance == null || !FastPath_API.instance.IsReady()) {
@@ -2235,9 +2264,19 @@ namespace spz {
 						}
 						string panelId = uiMgr.CreatePanel(addonId, title);
 						if (panelId != null) {
+							bool parked = uiMgr.IsPanelParkedOffRibbon(panelId);
 							result["success"] = true;
 							result["panel_id"] = panelId;
-							UnityEngine.Debug.Log($"[Addon_SocketServer] create_panel OK: panel_id={panelId}");
+							result["parked"] = parked;
+							result["visible"] = !parked;
+							if (parked) {
+								result["note"] =
+									"Panel created off-ribbon (parking). Enable Show in Command Ribbon or wait for ribbon migrate.";
+								UnityEngine.Debug.Log(
+									$"[Addon_SocketServer] create_panel OK but parked (not visible): panel_id={panelId}");
+							} else {
+								UnityEngine.Debug.Log($"[Addon_SocketServer] create_panel OK: panel_id={panelId}");
+							}
 						} else {
 							result["error"] = "Failed to create panel";
 							UnityEngine.Debug.LogWarning($"[Addon_SocketServer] create_panel FAILED for {addonId} (CreatePanel returned null)");
