@@ -185,7 +185,7 @@ namespace spz {
 
 	//MESH GENERATION CALLBACKS
 	    void Gen_OnError(string msg){
-	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:false);
+	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:true);
 	        Debug.Log("Error: " + msg);
 	    }
 
@@ -206,7 +206,7 @@ namespace spz {
 
 	 //RETEXTURING CALLBACKS
 	    void Gen_Retexture_OnError(string msg){
-	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:false);
+	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:true);
 	        Debug.Log("Retexture Error: " + msg);
 	    }
 

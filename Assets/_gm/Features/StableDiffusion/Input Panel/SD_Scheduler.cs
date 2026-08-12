@@ -55,6 +55,42 @@ namespace spz {
 	        return _listOfSchedulers.schedulers[selectedIndex];
 	    }
 
+	    public string selectedScheduler_name => value?.name ?? "";
+
+	    /// <summary>Agent / MCP: select scheduler by name/label (partial match ok).</summary>
+	    public bool TrySelectSchedulerByName(string name, out string resolvedName, out string error){
+	        resolvedName = "";
+	        error = null;
+	        if (string.IsNullOrEmpty(name)){ error = "scheduler name is empty"; return false; }
+	        if (_schedulers_dropdown == null || _schedulers_dropdown.options.Count == 0){
+	            error = "scheduler dropdown is empty (not connected?)";
+	            return false;
+	        }
+	        string want = name.Trim();
+	        int ix = _schedulers_dropdown.options.FindIndex(opt =>
+	            string.Equals(opt.text, want, StringComparison.OrdinalIgnoreCase));
+	        if (ix < 0){
+	            ix = _schedulers_dropdown.options.FindIndex(opt =>
+	                opt.text != null && opt.text.IndexOf(want, StringComparison.OrdinalIgnoreCase) >= 0);
+	        }
+	        if (ix < 0){
+	            error = "scheduler not in dropdown: " + want;
+	            return false;
+	        }
+	        _schedulers_dropdown.value = ix;
+	        _schedulers_dropdown.RefreshShownValue();
+	        resolvedName = _schedulers_dropdown.options[ix].text;
+	        return true;
+	    }
+
+	    public List<string> ListSchedulerNames(){
+	        var list = new List<string>();
+	        if (_schedulers_dropdown == null) return list;
+	        for (int i = 0; i < _schedulers_dropdown.options.Count; i++)
+	            list.Add(_schedulers_dropdown.options[i].text);
+	        return list;
+	    }
+
 	    public void Save(SD_GenSettingsInput_UI fill_this){
 	        fill_this.scheduler = new SD_InputSchedulers_SL();
 	        fill_this.scheduler.selectedScheduler_name = value?.name ?? "";
@@ -79,6 +115,12 @@ namespace spz {
 
 
 	    void Start(){
+	        StartCoroutine( EnsureFetchStarted_crtn() );
+	    }
+
+	    IEnumerator EnsureFetchStarted_crtn(){
+	        while (Coroutines_MGR.instance == null)
+	            yield return null;
 	        Coroutines_MGR.instance.StartCoroutine(FetchContinuously());
 	    }
 

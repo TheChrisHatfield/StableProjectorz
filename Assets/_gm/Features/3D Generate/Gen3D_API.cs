@@ -276,13 +276,19 @@ namespace spz {
 	        {//keep checking the progress:
 	            if(_progress_crtn != null){  StopCoroutine(_progress_crtn); }
 	            _progress_crtn = StartCoroutine( PollGenerationProgress(callbacks.onProgress) );
-	            while(_generateStatus == TaskStatus.PROCESSING){ yield return null; }
+	            while(_generateStatus == TaskStatus.PROCESSING && !_cancelRequested){ yield return null; }
         
 	            if(_progress_crtn!=null){ StopCoroutine(_progress_crtn); }
 	            _progress_crtn = null;
 	        }
 
-	        if (_generateStatus == TaskStatus.COMPLETE){
+	        if (_cancelRequested) {
+	            _generateStatus = TaskStatus.FAILED;
+	            _gen_or_resume_crtn = null;
+	            yield break;
+	        }
+
+	        if (_generateStatus == TaskStatus.COMPLETE && !_cancelRequested){
 	            yield return StartCoroutine(Gen_downloadFinalData(callbacks));
 	            yield return GpuFlowUnityHooks.PaceFromAddonHttpCoroutine(source: "gen3d", phase: "post_resume_download");
 	        }

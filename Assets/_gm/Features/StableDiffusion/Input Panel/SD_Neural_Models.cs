@@ -127,10 +127,16 @@ namespace spz {
 
 	    void Start(){
 	        _modelsDropdown.onValueChanged.AddListener( OnDropdown_EntryPicked );
-	        Coroutines_MGR.instance.StartCoroutine( FetchContiniously_crtn() );
+	        StartCoroutine( EnsureFetchStarted_crtn() );
 	        SD_Options_Fetcher.Act_onOptionsRetrieved += OnOptionsReceived;
 	        SD_Options_Fetcher.Act_onWillSendOptions_AmmendPlz += OnWillSendOptions_AmmendPlz;
 	        SD_Options_Fetcher.Act_OnSendOptions_done += OnSendOptions_done;
+	    }
+
+	    IEnumerator EnsureFetchStarted_crtn(){
+	        while (Coroutines_MGR.instance == null)
+	            yield return null;
+	        Coroutines_MGR.instance.StartCoroutine( FetchContiniously_crtn() );
 	    }
 
 	    void Update(){
