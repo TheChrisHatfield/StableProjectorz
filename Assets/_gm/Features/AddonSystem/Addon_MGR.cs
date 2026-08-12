@@ -1567,6 +1567,8 @@ namespace spz {
 					$"[Addon_MGR] Python load failed for {addonId}, but keeping add-on enabled — viewport dock does not require Python. Response/timeout is non-fatal.");
 				if (!RibbonViewportFullViewOnScreen_Toggle_UI.IsAnyVisibleBuiltDock())
 					StartEnsureRibbonOnlyFullscreenViewportDock();
+				// Soft-fail keeps isEnabled — still notify UI so draftDirty can recompute (enable dial already matched).
+				OnAddonEnabledStateChanged?.Invoke(addonId);
 				return;
 			}
 			// SPZ GO / Nomad Theme already work in-process when HTTP :5557 is down. Do not disable or remove the tab —
@@ -1580,6 +1582,7 @@ namespace spz {
 					EnsureRibbonShellForEnabledAddon(addonId);
 				if (AddonUI_MGR.instance != null)
 					AddonUI_MGR.instance.EnsureNativeFallbackUiWhenPythonMissing(addonId, force: true);
+				OnAddonEnabledStateChanged?.Invoke(addonId);
 				return;
 			}
 			addon.isEnabled = false;
