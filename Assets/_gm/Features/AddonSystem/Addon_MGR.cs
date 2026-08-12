@@ -535,8 +535,9 @@ namespace spz {
 		}
 
 		/// <summary>
-		/// Settings → Show external process windows: show/hide live addon console, or restart the server when
+		/// Settings → Show Black box / external process windows: show/hide live addon console, or restart the server when
 		/// it was spawned with CREATE_NO_WINDOW (no HWND). Does not require restarting StableProjectorz.
+		/// After a visibility restart, re-request load of enabled add-ons (Python process is new).
 		/// </summary>
 		public void ApplyExternalProcessWindowsSettingInSession(bool wantShow) {
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
@@ -563,6 +564,9 @@ namespace spz {
 				TerminatePythonAddonServerProcess(waitForExit: true);
 				TryClearAddonHttpFailMarker();
 				StartPythonServer();
+				// New Python process has no loaded add-ons — same path as cold start auto-load.
+				if (_enableHttpServer && _isServerRunning)
+					StartCoroutine(RequestLoadEnabledAddonsAfterDelay());
 			}
 #endif
 		}
@@ -773,10 +777,31 @@ namespace spz {
 				if (vm.Success)
 					ver = vm.Groups[1].Value.Trim();
 			}
+			// bl_info = { "version": (1, 0, 0), "description": "...", "author": "..." }
+			if (string.IsNullOrEmpty(ver)) {
+				var vt = Regex.Match(text,
+					@"[""']version[""']\s*:\s*\(\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*(\d+))?\s*\)");
+				if (vt.Success) {
+					string major = vt.Groups[1].Value;
+					string minor = vt.Groups[2].Value;
+					string patch = vt.Groups[3].Success ? vt.Groups[3].Value : null;
+					ver = string.IsNullOrEmpty(patch) ? $"{major}.{minor}" : $"{major}.{minor}.{patch}";
+				}
+			}
+			if (string.IsNullOrEmpty(ver)) {
+				var vs = Regex.Match(text, @"[""']version[""']\s*:\s*[""']([^""']+)[""']");
+				if (vs.Success)
+					ver = vs.Groups[1].Value.Trim();
+			}
 			if (string.IsNullOrEmpty(author)) {
 				var am = Regex.Match(text, @"[""']author[""']\s*:\s*[""']([^""']+)[""']");
 				if (am.Success)
 					author = am.Groups[1].Value.Trim();
+			}
+			if (string.IsNullOrEmpty(desc)) {
+				var dm = Regex.Match(text, @"[""']description[""']\s*:\s*[""']([^""']+)[""']");
+				if (dm.Success)
+					desc = dm.Groups[1].Value.Trim();
 			}
 			if (!string.IsNullOrEmpty(desc)) return;
 			int a = text.IndexOf("\"\"\"", StringComparison.Ordinal);

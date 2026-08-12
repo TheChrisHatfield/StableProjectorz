@@ -13,21 +13,24 @@ namespace spz {
 	/// When the built exe runs, this component auto-launches the WebUI batch file (run_noQuickEdit.bat).
 	/// Aggressive: env SPZ_WEBUI_RUN_PATH, then search exe dir + dataPath + CurrentDirectory, each up to 10 parent levels.
 	/// Retries at 0.5s, 1.5s, 3s, 6s, 12s until bat is found and launched.
-	/// Folder candidates: reForge Neo preferred, then classic Forge (spec forge-neo-swap R1).
+	/// Folder candidates: true Forge Neo preferred, then classic Forge, then legacy reForge (spec forge-neo-swap R1).
 	/// </summary>
 	public class LaunchWebUIBatFile : MonoBehaviour{
 	    public static LaunchWebUIBatFile instance { get; private set; } = null;
 
-	    /// <summary>Legacy classic Forge folder (serialized RestartTheWebui defaults, Build_IL2CPP classic installs).</summary>
+	    /// <summary>Legacy classic Forge folder (serialized Restart defaults historically; still discoverable).</summary>
 	    public const string WebuiFolderName = "stable-diffusion-webui-forge";
-	    /// <summary>reForge Neo folder name (preferred discovery when both exist).</summary>
-	    public const string WebuiFolderNameNeo = "stable-diffusion-webui-reForge";
-	    /// <summary>Search order: Neo first, then classic. Env <c>SPZ_WEBUI_RUN_PATH</c> still wins.</summary>
+	    /// <summary>True Forge Neo official clone folder (Haoming02 sd-webui-forge-classic --branch neo).</summary>
+	    public const string WebuiFolderNameNeo = "sd-webui-forge-neo";
+	    /// <summary>Legacy mistaken "Neo" label — Panchovix reForge; discoverable only, not preferred.</summary>
+	    public const string WebuiFolderNameReForgeLegacy = "stable-diffusion-webui-reForge";
+	    /// <summary>Search order: true Neo first, classic, then legacy reForge. Env <c>SPZ_WEBUI_RUN_PATH</c> still wins.</summary>
 	    public static readonly string[] WebuiCandidateFolderNames = new string[] {
 	        WebuiFolderNameNeo,
 	        WebuiFolderName,
+	        WebuiFolderNameReForgeLegacy,
 	    };
-	    public static readonly string[] WebuiLaunchFileNames = new string[] { "run_noQuickEdit.bat", "run.bat", "run_forge.bat", "run_noQuickEdit.lnk" };
+	    public static readonly string[] WebuiLaunchFileNames = new string[] { "run_noQuickEdit.bat", "webui-user.bat", "run.bat", "run_forge.bat", "webui.bat", "run_noQuickEdit.lnk" };
 	    /// <summary>Gradio: prefer not to open a browser (some versions).</summary>
 	    const string GradioSuppressInBrowser_bat = "set \"GRADIO_INBROWSER=0\"\r\n";
 	    /// <summary>Forge <c>webui.py</c> sets <c>inbrowser</c> from config ("Local") unless this env is set (same as internal UI-reload). Required; GRADIO_INBROWSER alone does not stop Forge.</summary>
@@ -193,8 +196,16 @@ namespace spz {
 	    }
 
 	    void TryOpenBrowserWhenReady() {
-	        if (!_openBrowserWhenReadyRequested) return;
+	        // Live Settings win at ready time (toggle during wait must apply without app restart).
+	        if (UnityEngine.PlayerPrefs.GetInt("WebUI_OpenBrowserOnStartup", 0) == 0) {
+	            _openBrowserWhenReadyRequested = false;
+	            return;
+	        }
 	        _openBrowserWhenReadyRequested = false;
+	        OpenWebUiInBrowserNow();
+	    }
+
+	    void OpenWebUiInBrowserNow() {
 	        const string webUiUrl = "http://127.0.0.1:7860";
 	        try {
 	            Application.OpenURL(webUiUrl);
@@ -202,6 +213,65 @@ namespace spz {
 	        } catch (Exception e) {
 	            UnityEngine.Debug.LogWarning($"[LaunchWebUI] Could not open WebUI browser URL: {e.Message}");
 	        }
+	    }
+
+	    /// <summary>
+	    /// Settings → Open WebUI in browser: apply without restarting the app.
+	    /// ON while waiting for ready → open when connected; ON while already connected → open now; OFF → cancel pending open.
+	    /// </summary>
+	    public static void ApplyOpenBrowserSettingInSession(bool wantOpen) {
+	        if (instance == null) {
+	            if (wantOpen && Connection_MGR.is_sd_connected) {
+	                try { Application.OpenURL("http://127.0.0.1:7860"); } catch { /* best-effort */ }
+	            }
+	            return;
+	        }
+	        if (!wantOpen) {
+	            instance._openBrowserWhenReadyRequested = false;
+	            return;
+	        }
+	        if (instance._isWaitingForWebUiReady) {
+	            instance._openBrowserWhenReadyRequested = true;
+	            return;
+	        }
+	        if (Connection_MGR.is_sd_connected)
+	            instance.OpenWebUiInBrowserNow();
+	    }
+
+	    /// <summary>
+	    /// Settings → Show external process windows: apply without restarting the app.
+	    /// Prefer ShowWindow/HideWindow on live PIDs; if show is requested but processes were launched with CREATE_NO_WINDOW
+	    /// (no HWND), relaunch WebUI when safe (not generating). Addon server is handled by <see cref="Addon_MGR"/>.
+	    /// </summary>
+	    public static void ApplyExternalProcessWindowsSettingInSession(bool wantShow) {
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+	        var pids = new System.Collections.Generic.HashSet<uint>();
+	        if (_lastLaunchedWebUiPid != 0)
+	            pids.Add(_lastLaunchedWebUiPid);
+	        foreach (uint p in AddonPortHelper.TryGetListeningPidsOnPort(WebUiHttpPort))
+	            pids.Add(p);
+
+	        int touched = StartExternalProcess.TrySetWindowsVisibleForProcessIds(pids, wantShow);
+	        UnityEngine.Debug.Log($"[LaunchWebUI] In-session external windows {(wantShow ? "show" : "hide")}: touched={touched}, pids={pids.Count}");
+
+	        if (wantShow && touched == 0 && pids.Count > 0) {
+	            // CREATE_NO_WINDOW → no HWND to raise. Relaunch with visible console when not mid-gen.
+	            bool busy = GenerateButtons_UI.isGenerating;
+	            if (busy) {
+	                if (Viewport_StatusText.instance != null)
+	                    Viewport_StatusText.instance.ShowStatusText(
+	                        "Show external windows saved — restart WebUI after generation to open the console.", false, 5f, false);
+	            } else if (instance != null) {
+	                if (Viewport_StatusText.instance != null)
+	                    Viewport_StatusText.instance.ShowStatusText(
+	                        "Restarting WebUI so the console can appear…", false, 4f, false);
+	                bool suppressBrowser = UnityEngine.PlayerPrefs.GetInt("WebUI_OpenBrowserOnStartup", 0) == 0;
+	                instance.LaunchWebui_Manually(printStatusText_ifNotFound: false, suppressBrowserOpenForThisLaunch: suppressBrowser);
+	            }
+	        }
+#endif
+	        if (Addon_MGR.instance != null)
+	            Addon_MGR.instance.ApplyExternalProcessWindowsSettingInSession(wantShow);
 	    }
 
 	    /// <summary>Cached result of nvidia-smi query for Settings UI to show "0: Name0, 1: Name1". Empty if not yet queried or nvidia-smi failed.</summary>
@@ -472,9 +542,11 @@ namespace spz {
 	        // 2) --gpu-device-id (Forge CLI hint)
 	        // This avoids ambiguous fallback to GPU 0 across different Forge launch paths.
 	        // Pin Gradio/API to WebUiHttpPort so launch matches ConnectionPanel ping target.
+	        // Neo warns on py≠3.13 / torch pin — skip checks (host uses proven 3.11 + cu128).
+	        const string neoSkipChecks = " --skip-python-version-check --skip-version-check";
 	        string argsBase = gpuId >= 0
-	            ? ("--api --port " + WebUiHttpPort + " --gpu-device-id " + gpuId)
-	            : ("--api --port " + WebUiHttpPort);
+	            ? ("--api --port " + WebUiHttpPort + " --gpu-device-id " + gpuId + neoSkipChecks)
+	            : ("--api --port " + WebUiHttpPort + neoSkipChecks);
 	        string args = string.IsNullOrWhiteSpace(launchExtraArgs) ? argsBase : (argsBase + " " + launchExtraArgs);
 	        bool hasLaunchPy = File.Exists(launchPy);
 	        bool hasVenvPython = File.Exists(pythonExe);
@@ -559,7 +631,7 @@ namespace spz {
 	        if (string.IsNullOrEmpty(filePath)) {
 	            UnityEngine.Debug.Log("[LaunchWebUI] No bat file path; skipping launch (see above for search path).");
 	            ClearSdLoadingNotification(
-	                "Stable Diffusion bat not found next to the EXE (stable-diffusion-webui-reForge or stable-diffusion-webui-forge). Set SPZ_WEBUI_RUN_PATH.",
+	                "Stable Diffusion bat not found next to the EXE (sd-webui-forge-neo or stable-diffusion-webui-forge). Set SPZ_WEBUI_RUN_PATH (e.g. true Neo under FORGE_NEO_TRUE_REPO\\neo).",
 	                false);
 	            _suppressBrowserOpenForCurrentLaunch = false;
 	            return false;

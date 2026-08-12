@@ -51,8 +51,9 @@ public sealed class SdDisconnectPlaceholderTests {
 		Assert.That(SdDisconnectPlaceholder.StatusText, Does.Not.Contain("black window"));
 		Assert.That(SdDisconnectPlaceholder.TooltipText, Does.Contain("Not yet connected to the Diffusion Model"));
 		Assert.That(SdDisconnectPlaceholder.TooltipText, Does.Contain("Settings"));
-		Assert.That(SdDisconnectPlaceholder.TooltipText, Does.Contain("Show external process windows"));
-		Assert.That(SdDisconnectPlaceholder.TooltipText, Does.Contain("black box"));
+		Assert.That(SdDisconnectPlaceholder.TooltipText, Does.Contain("Show Black box"));
+		Assert.That(SdDisconnectPlaceholder.TooltipText, Does.Contain("external process windows"));
+		Assert.That(SdDisconnectPlaceholder.TooltipText, Does.Contain("Black box"));
 		Assert.That(SdDisconnectPlaceholder.StatusText, Is.Not.EqualTo(SdDisconnectPlaceholder.DisplayText));
 		Assert.That(SdDisconnectPlaceholder.TooltipText, Is.Not.EqualTo(SdDisconnectPlaceholder.DisplayText));
 	}
