@@ -942,10 +942,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _hoverDelayBeforeShow: 0.2
   _mouseVieportMoveThreshold: 0.005
-  _defaultMessage: 'Flux Controlnet doesn''t work yet with Forge Webui.
+  _defaultMessage: 'Forge Neo: Flux ControlNet (Fun-Union) is not the Gen Art depth path.
 
-    Let''s
-    wait until Illyasviel (the Forge author) implements it.'
+    Flux.2 Klein uses ImageStitch + RefControl for mesh depth. SD1.5/XL ControlNet still works on Neo.'
 --- !u!1 &3346147877681412407
 GameObject:
   m_ObjectHideFlags: 0
@@ -1317,10 +1316,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _hoverDelayBeforeShow: 0.2
   _mouseVieportMoveThreshold: 0.005
-  _defaultMessage: 'Flux Controlnet doesn''t work yet with Forge Webui.
+  _defaultMessage: 'Forge Neo: Flux ControlNet (Fun-Union) is not the Gen Art depth path.
 
-    Let''s
-    wait until Illyasviel (the Forge author) implements it.'
+    Flux.2 Klein uses ImageStitch + RefControl for mesh depth. SD1.5/XL ControlNet still works on Neo.'
 --- !u!1 &6572521357643308640
 GameObject:
   m_ObjectHideFlags: 0
@@ -1683,10 +1681,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _hoverDelayBeforeShow: 0.2
   _mouseVieportMoveThreshold: 0.005
-  _defaultMessage: 'Flux Controlnet doesn''t work yet with Forge Webui.
+  _defaultMessage: 'Forge Neo: Flux ControlNet (Fun-Union) is not the Gen Art depth path.
 
-    Let''s
-    wait until Illyasviel (the Forge author) implements it.'
+    Flux.2 Klein uses ImageStitch + RefControl for mesh depth. SD1.5/XL ControlNet still works on Neo.'
 --- !u!1 &9126762291064495643
 GameObject:
   m_ObjectHideFlags: 0
