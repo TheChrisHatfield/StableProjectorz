@@ -33,7 +33,7 @@ public sealed class ThemePassColorsServClearNonFaceTests {
 		string path = Path.Combine(Application.dataPath, "_gm", "Features", "Connection", "ConnectionPanel_UI.cs");
 		Assert.That(File.Exists(path), Is.True, path);
 		string src = File.ReadAllText(path);
-		Assert.That(src, Does.Contain("ApplyControlLineIcon(_openPanel_button.transform, StudioLineIcon.Globe"));
+		Assert.That(src, Does.Contain("ApplyControlLineIconLeading(_openPanel_button.transform, StudioLineIcon.Globe"));
 	}
 
 	[Test]
