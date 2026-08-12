@@ -2013,9 +2013,12 @@ namespace spz {
 				ThemePrefsMetaTmp(metaRoot.Find("AddonSummary")?.GetComponent<TextMeshProUGUI>(), t.textMuted, 13f);
 				ThemePrefsMetaTmp(metaRoot.Find("AddonVersion")?.GetComponent<TextMeshProUGUI>(), t.textMuted, 12f);
 				ThemePrefsMetaTmp(metaRoot.Find("AddonAuthor")?.GetComponent<TextMeshProUGUI>(), t.textMuted, 12f);
-				if (prefsBodyT.gameObject.activeSelf)
+				if (prefsBodyT.gameObject.activeSelf) {
 					ApplyResponsivePrefsDropdownLayout(prefsBodyT);
-				else
+					// Theme/responsive pass updates PreferencesBody preferredHeight — keep the AddonItem
+					// LayoutElement in sync or the inset card clips under ContentSizeFitter.
+					SyncExpandedAddonItemHeight(item, prefsBodyT);
+				} else
 					LockPreferencesBodyLayout(prefsBodyT);
 			}
 			var ribbonToggle = FindChildRecursive(item.transform, "ShowInRibbonToggle")?.GetComponent<Toggle>();
@@ -2495,6 +2498,27 @@ namespace spz {
 			return Mathf.Max(36f, pad + rows);
 		}
 
+		/// <summary>After prefs body height changes (expand / theme / responsive), sync the parent AddonItem LE + rect.</summary>
+		static void SyncExpandedAddonItemHeight(GameObject item, Transform prefsBody) {
+			if (item == null || prefsBody == null) return;
+			var itemLe = item.GetComponent<LayoutElement>();
+			var headerLe = item.transform.Find("HeaderRow")?.GetComponent<LayoutElement>();
+			var bodyLe = prefsBody.GetComponent<LayoutElement>();
+			var vlg = item.GetComponent<VerticalLayoutGroup>();
+			if (itemLe == null || headerLe == null || bodyLe == null || vlg == null) return;
+			float bodyH = bodyLe.preferredHeight > 0f ? bodyLe.preferredHeight : MeasurePreferencesBodyHeight(prefsBody);
+			float h = headerLe.preferredHeight
+				+ bodyH
+				+ vlg.spacing
+				+ vlg.padding.top
+				+ vlg.padding.bottom;
+			itemLe.preferredHeight = h;
+			itemLe.minHeight = h;
+			var itemRt = item.GetComponent<RectTransform>();
+			if (itemRt != null)
+				itemRt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, h);
+		}
+
 		void ReapplyAuthoredStatusDialsAfterThemeRestore() {
 			foreach (var item in _addonUIItems.Values) {
 				if (item == null) continue;
@@ -2896,23 +2920,13 @@ namespace spz {
 					h = collapsedH;
 					itemLayout.preferredHeight = h;
 					itemLayout.minHeight = 44f;
+					var itemRtCollapsed = itemObj.GetComponent<RectTransform>();
+					if (itemRtCollapsed != null)
+						itemRtCollapsed.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, h);
 				} else {
 					ApplyResponsivePrefsDropdownLayout(prefsBody.transform);
-					float bodyH = prefsBodyLE.preferredHeight > 0f
-						? prefsBodyLE.preferredHeight
-						: MeasurePreferencesBodyHeight(prefsBody.transform);
-					h = headerLE.preferredHeight
-						+ bodyH
-						+ verticalLayout.spacing
-						+ verticalLayout.padding.top
-						+ verticalLayout.padding.bottom;
-					itemLayout.preferredHeight = h;
-					itemLayout.minHeight = h;
+					SyncExpandedAddonItemHeight(itemObj, prefsBody.transform);
 				}
-				// Belt-and-suspenders: list CSF reads LayoutElement, but keep the rect in sync immediately.
-				var itemRt = itemObj.GetComponent<RectTransform>();
-				if (itemRt != null)
-					itemRt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, h);
 			}
 
 			void SetExpandChevron(bool expanded) {
