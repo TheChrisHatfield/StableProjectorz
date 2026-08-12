@@ -55,53 +55,51 @@ namespace spz {
 			finally { try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { } }
 		}
 
+		/// <summary>LISTENING PIDs on <paramref name="port"/> (netstat). Empty on failure; never includes current Unity/game PID.</summary>
+		public static HashSet<uint> TryGetListeningPidsOnPort(int port) {
+			var pids = new HashSet<uint>();
+			if (port <= 0) return pids;
+			string tempFile = Path.Combine(Path.GetTempPath(), "spz_netstat_" + port + "_" + Guid.NewGuid().ToString("N") + ".txt");
+			string workDir = Path.GetTempPath();
+			try {
+				string cmd = "netstat -ano | find \":" + port + "\" > \"" + tempFile + "\"";
+				uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(cmd, isJustFile: false, workDir, keepWindow: false, hidden: true, attachToConsole: false);
+				if (pid == 0) return pids;
+				StartExternalProcess.WaitForProcessExit(pid, 2000);
+				if (!File.Exists(tempFile)) return pids;
+				string output = File.ReadAllText(tempFile);
+				string portSuffix = ":" + port;
+				uint currentPid = StartExternalProcess.GetCurrentPid();
+				foreach (string line in output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)) {
+					string trimmed = line.Trim();
+					if (string.IsNullOrEmpty(trimmed) || !trimmed.Contains("LISTENING")) continue;
+					string[] parts = trimmed.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+					if (parts.Length < 4) continue;
+					if (!parts[1].EndsWith(portSuffix)) continue;
+					if (!uint.TryParse(parts[parts.Length - 1], out uint p)) continue;
+					if (p == 0 || p == currentPid) continue;
+					if (IsProcessUnityOrHub(p)) continue;
+					pids.Add(p);
+				}
+			} catch (Exception e) {
+				UnityEngine.Debug.LogWarning($"[Addon_MGR] Could not list listeners on port {port}: {e.Message}");
+			} finally {
+				try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
+			}
+			return pids;
+		}
+
 		/// <summary>Finds PIDs listening on the port via netstat -ano, then taskkill /PID x /F. Never kills Unity.exe or Unity Hub. Uses StartExternalProcess so it works in IL2CPP build.</summary>
 		public static void TryKillProcessesOnPort(int port)
 		{
 			// Port 5555 is the Unity/addon socket; never free it from here (Editor may be using it; we never kill Unity).
 			if (port == 5555) return;
-			string tempFile = Path.Combine(Path.GetTempPath(), "spz_netstat_" + port + "_" + Guid.NewGuid().ToString("N") + ".txt");
 			string workDir = Path.GetTempPath();
 			try
 			{
-				// Use colon prefix ":{port}" so we match the port in the address column (e.g. "127.0.0.1:5557")
-				// and never false-positive on PIDs that happen to contain the port number as a substring.
-				string cmd = "netstat -ano | find \":" + port + "\" > \"" + tempFile + "\"";
-				uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(cmd, isJustFile: false, workDir, keepWindow: false, hidden: true, attachToConsole: false);
-				if (pid == 0) return;
-				StartExternalProcess.WaitForProcessExit(pid, 2000);
-				if (!File.Exists(tempFile)) return;
-				string output = File.ReadAllText(tempFile);
-				// netstat -ano line e.g. "  TCP    127.0.0.1:5557    0.0.0.0:0    LISTENING    12345"
-				// parts[1] = local address (e.g. "127.0.0.1:5557"), parts[last] = PID
-				string portSuffix = ":" + port;
-				var pids = new HashSet<uint>();
-				foreach (string line in output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
-				{
-					string trimmed = line.Trim();
-					if (string.IsNullOrEmpty(trimmed) || !trimmed.Contains("LISTENING")) continue;
-					string[] parts = trimmed.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
-					if (parts.Length < 4) continue;
-					// Verify the local address column actually ends with the exact port
-					// (prevents matching port 55570 when looking for 5557)
-					if (!parts[1].EndsWith(portSuffix)) continue;
-					if (uint.TryParse(parts[parts.Length - 1], out uint p))
-						pids.Add(p);
-				}
-				uint currentPid = StartExternalProcess.GetCurrentPid();
+				var pids = TryGetListeningPidsOnPort(port);
 				foreach (uint p in pids)
 				{
-					if (p == currentPid)
-					{
-						UnityEngine.Debug.Log($"[Addon_MGR] Skipping current process PID {p} (Unity/game window); not killing self.");
-						continue;
-					}
-					// Never kill Unity Editor or Unity Hub, regardless of port (safeguard against any matching bug)
-					if (IsProcessUnityOrHub(p))
-					{
-						UnityEngine.Debug.Log($"[Addon_MGR] Skipping PID {p} (Unity/Unity Hub); will not kill Editor.");
-						continue;
-					}
 					string killCmd = "taskkill /PID " + p + " /F";
 					uint killPid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(killCmd, isJustFile: false, workDir, keepWindow: false, hidden: true, attachToConsole: false);
 					if (killPid != 0)
@@ -114,10 +112,6 @@ namespace spz {
 			catch (Exception e)
 			{
 				UnityEngine.Debug.LogWarning($"[Addon_MGR] Could not free port {port}: {e.Message}");
-			}
-			finally
-			{
-				try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
 			}
 		}
 #endif
@@ -538,6 +532,39 @@ namespace spz {
 #endif
 			_isServerRunning = false;
 			InvalidateSharedAddonReadyCache();
+		}
+
+		/// <summary>
+		/// Settings → Show external process windows: show/hide live addon console, or restart the server when
+		/// it was spawned with CREATE_NO_WINDOW (no HWND). Does not require restarting StableProjectorz.
+		/// </summary>
+		public void ApplyExternalProcessWindowsSettingInSession(bool wantShow) {
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+			var pids = new HashSet<uint>();
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+			if (_pythonServerPid != 0)
+				pids.Add(_pythonServerPid);
+#endif
+			if (_enableHttpServer) {
+				foreach (uint p in AddonPortHelper.TryGetListeningPidsOnPort(_httpServerPort))
+					pids.Add(p);
+			}
+			int touched = StartExternalProcess.TrySetWindowsVisibleForProcessIds(pids, wantShow);
+			UnityEngine.Debug.Log($"[Addon_MGR] In-session external windows {(wantShow ? "show" : "hide")}: touched={touched}, pids={pids.Count}");
+
+			// Hidden CREATE_NO_WINDOW launches have no window to raise — restart with current pref.
+			bool serverAlive = _isServerRunning || pids.Count > 0;
+#if UNITY_EDITOR
+			if (_pythonProcess != null && !_pythonProcess.HasExited)
+				serverAlive = true;
+#endif
+			if (wantShow && touched == 0 && serverAlive) {
+				UnityEngine.Debug.Log("[Addon_MGR] No visible console HWND — restarting addon Python server with Settings visibility.");
+				TerminatePythonAddonServerProcess(waitForExit: true);
+				TryClearAddonHttpFailMarker();
+				StartPythonServer();
+			}
+#endif
 		}
 
 #if UNITY_EDITOR
@@ -1986,6 +2013,10 @@ namespace spz {
 			if (shell == null)
 				return false;
 			UnityEngine.Debug.Log($"[Addon_MGR] Ribbon tab ready for enabled add-on: {addonId} ({title})");
+			// Late shell create (CoEnsure after Enable when ribbon was null): parked create_panel
+			// widgets must move now — Enable's earlier RequestMigrate no-ops without a ribbon.
+			if (AddonUI_MGR.instance != null)
+				AddonUI_MGR.instance.RequestMigrateParkedPanelsNow();
 			// Do not seed native SPZ GO/Nomad here — when HTTP is up, Python create_panel arrives
 			// immediately and ClearAddonPanelChildren wipes the native seed (flash). Native seed runs
 			// from MarkAddonLoadFailed / tab activate only when ShouldSeedNativeAddonFallback().

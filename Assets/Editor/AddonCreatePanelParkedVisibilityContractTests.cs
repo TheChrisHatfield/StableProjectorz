@@ -47,4 +47,31 @@ public sealed class AddonCreatePanelParkedVisibilityContractTests {
 			"Migrate must not Destroy parked panels while SoftLoad HTTP unload still needs get_value.");
 		Assert.That(body, Does.Contain("continue;"));
 	}
+
+	[Test]
+	public void TryCreateRibbonShellNow_MigratesParkedAfterShellReady() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "Addon_MGR.cs");
+		string src = File.ReadAllText(path);
+		int i = src.IndexOf("bool TryCreateRibbonShellNow(string addonId)", System.StringComparison.Ordinal);
+		Assert.That(i, Is.GreaterThanOrEqualTo(0));
+		int j = src.IndexOf("void StartEnsureRibbonShellWhenReady", i, System.StringComparison.Ordinal);
+		string body = src.Substring(i, j - i);
+		Assert.That(body, Does.Contain("RequestMigrateParkedPanelsNow()"),
+			"Late CoEnsure shell must migrate parked create_panel widgets");
+		Assert.That(body, Does.Contain("parked create_panel"));
+	}
+
+	[Test]
+	public void ActivateAddonShell_RetriesMigrateWhenEmpty() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Layouts", "RightPanel", "CommandRibbon_UI.cs");
+		string src = File.ReadAllText(path);
+		int i = src.IndexOf("void ActivateAddonShellContentOrPlaceholder", System.StringComparison.Ordinal);
+		Assert.That(i, Is.GreaterThanOrEqualTo(0));
+		string body = src.Substring(i, System.Math.Min(900, src.Length - i));
+		Assert.That(body, Does.Contain("RequestMigrateParkedPanelsNow()"));
+		Assert.That(body.IndexOf("RequestMigrateParkedPanelsNow()", System.StringComparison.Ordinal),
+			Is.LessThan(body.IndexOf("EnsureNativeFallbackUiWhenPythonMissing", System.StringComparison.Ordinal)));
+	}
 }
