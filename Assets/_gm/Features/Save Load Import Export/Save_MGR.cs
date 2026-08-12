@@ -23,6 +23,7 @@ namespace spz {
 
 	    public bool _isSaving { get; private set; } = false;
 	    public bool _isLoading { get; private set; } = false;
+	    public ProjectSaveLoad_Helper SaveLoadHelper => _saveLoad_helper;
 
 
 	    public void MergeIcons( Action<Dictionary<Texture2D,UDIM_Sector>> onHaveAlbedo,  bool oldIcons_survive=false ){

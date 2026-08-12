@@ -23,6 +23,8 @@ namespace spz {
 	    string _last_saveFilepath = "";
 	    /// <summary>True from SaveProject start through dialog/cancel/write — blocks overlapping Ctrl+S / RPC.</summary>
 	    bool _projectSaveInFlight;
+	    /// <summary>Set true only after JSON serialize succeeds for the current SaveProject attempt.</summary>
+	    public bool LastProjectSaveSucceeded { get; private set; }
 
 	    /// <summary>
 	    /// Get last saved project filepath (for add-on API)
@@ -52,6 +54,7 @@ namespace spz {
 		        return;
 	        }
 	        _projectSaveInFlight = true;
+	        LastProjectSaveSucceeded = false;
 	        StopAllCoroutines();
 	        StartCoroutine(SaveProj_crtn(saveFinalTex, onResultMessage));
 	    }
@@ -157,6 +160,8 @@ namespace spz {
 	        // DataFolder should be relative to filepath of the project-file
 	        string resultMessage;
 	        Serialize_SPZ_toJSON(saveFile, spz, out resultMessage);
+	        LastProjectSaveSucceeded = resultMessage != null
+		        && resultMessage.StartsWith("Saved the project", StringComparison.Ordinal);
 	        // Do not report "Saved" yet — final composite / mesh textures may still fail below.
 
 	        // Now, save the final composite-texture, combinging all projections.
@@ -214,9 +219,13 @@ namespace spz {
 	    }
     
     
+	    /// <summary>Set true only after a load dialog completed with a successful CreateFromJSON + apply.</summary>
+	    public bool LastProjectLoadSucceeded { get; private set; }
+
 	    // CHANGED: Method signature updated to use Callback Action<string> instead of 'out string',
 	    // because SimpleFileBrowser operates asynchronously.
 	    public void LoadProject( Action<string> onResult ){
+	        LastProjectLoadSucceeded = false;
         
 	        FileBrowser.SetFilters(true, new FileBrowser.Filter("Project", "spz"));
 	        FileBrowser.SetDefaultFilter("spz");
@@ -297,6 +306,7 @@ namespace spz {
 
 	            // Same as SaveProj: so GetProjectDataDirOrSession / SPZ GO exchange use this project, not a prior save or session folder.
 	            _last_saveFilepath = spzFilepath;
+	            LastProjectLoadSucceeded = true;
             
 	            onResult?.Invoke(resultMessage_);
 
