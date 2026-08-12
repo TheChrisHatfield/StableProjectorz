@@ -171,6 +171,14 @@ public sealed class PaintTabSectionSplitterTests {
 	}
 
 	[Test]
+	public void SectionSplitter_Source_SkipsRebuildWhenInactive() {
+		string split = System.IO.File.ReadAllText(System.IO.Path.Combine(Application.dataPath, "_gm", "Features", "Paint", "PaintTab", "PaintTab_SectionSplitter_UI.cs"));
+		string krita = System.IO.File.ReadAllText(System.IO.Path.Combine(Application.dataPath, "_gm", "Features", "Paint", "PaintTab", "PaintTab_KritaLayout_UI.cs"));
+		Assert.That(split, Does.Contain("parent.gameObject.activeInHierarchy"));
+		Assert.That(krita, Does.Contain("root.gameObject.activeInHierarchy"));
+	}
+
+	[Test]
 	public void EnsureSectionSplitters_Source_GuardsSiblingParent() {
 		string path = System.IO.Path.Combine(Application.dataPath, "_gm", "Features", "Paint", "PaintTab", "PaintTab_KritaLayout_UI.cs");
 		string src = System.IO.File.ReadAllText(path);

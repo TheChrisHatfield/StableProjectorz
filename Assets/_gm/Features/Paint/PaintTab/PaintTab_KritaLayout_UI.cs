@@ -398,7 +398,7 @@ namespace spz {
 			ApplyFlexWeights(wL, wB, wT, wC);
 			SaveSectionWeights(wL, wB, wT, wC);
 			var root = transform as RectTransform;
-			if (root != null)
+			if (root != null && root.gameObject.activeInHierarchy)
 				LayoutRebuilder.ForceRebuildLayoutImmediate(root);
 		}
 
