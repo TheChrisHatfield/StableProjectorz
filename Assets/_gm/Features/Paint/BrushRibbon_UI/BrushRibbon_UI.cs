@@ -372,8 +372,11 @@ namespace spz {
 
 	    /// <summary>Re-apply pressure N/B/S/O cell fills after selection changes.</summary>
 	    public void NotifyPressureModeChromeChanged() {
-	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) return;
 	        if (_pressureTabletMode == null) return;
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreBoundChromeUnder(_pressureTabletMode.transform);
+	            return;
+	        }
 	        ThemePressureMode(_pressureTabletMode, SpzUiThemeOps.Active);
 	    }
 

@@ -202,7 +202,13 @@ namespace spz {
 
 	    /// <summary>Re-tint Alpha/Screenshots fills from current isOn (BoundChrome only).</summary>
 	    public void RefreshOptionToggleChrome() {
-	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) return;
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            if (_showAlphaOnly_toggle != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_showAlphaOnly_toggle.transform);
+	            if (_makeScreenshots_toggle != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(_makeScreenshots_toggle.transform);
+	            return;
+	        }
 	        var t = SpzUiThemeOps.Active;
 	        ThemeToggle(_showAlphaOnly_toggle, t);
 	        ThemeToggle(_makeScreenshots_toggle, t);
