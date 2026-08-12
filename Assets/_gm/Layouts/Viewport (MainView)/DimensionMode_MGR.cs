@@ -423,10 +423,14 @@ namespace spz {
 	                if(_showHidePanel_crtn!=null){ StopCoroutine(_showHidePanel_crtn); }
 	                _showHidePanel_crtn = StartCoroutine(ShowHidePanel_crtn(hide: true));
 	            }
-	            ScaleChoice_ifHovered(_3d_choice_button.transform.parent, _3d_choice_sensor);
-	            ScaleChoice_ifHovered(_sd_choice_button.transform.parent, _2d_choice_sensor);
-	            ScaleChoice_ifHovered(_uv_choice_button.transform.parent, _uv_choice_sensor);
-	            ScaleChoice_ifHovered(_bg_choice_button.transform.parent, _bg_choice_sensor);
+	            ScaleChoice_ifHovered(
+	                _3d_choice_button != null ? _3d_choice_button.transform.parent : null, _3d_choice_sensor);
+	            ScaleChoice_ifHovered(
+	                _sd_choice_button != null ? _sd_choice_button.transform.parent : null, _2d_choice_sensor);
+	            ScaleChoice_ifHovered(
+	                _uv_choice_button != null ? _uv_choice_button.transform.parent : null, _uv_choice_sensor);
+	            ScaleChoice_ifHovered(
+	                _bg_choice_button != null ? _bg_choice_button.transform.parent : null, _bg_choice_sensor);
 	        }
 	        else{//not showing, check if should show:
 	            if(_mainChoiceHoverSurf.isHovering){
@@ -454,9 +458,13 @@ namespace spz {
 	    }
 
 	    IEnumerator ShowHidePanel_crtn(bool hide){
+	        if (_choicesPanel_rectTransf == null) {
+	            _showHidePanel_crtn = null;
+	            yield break;
+	        }
 	        _choicesPanel_rectTransf.gameObject.SetActive(true);
 	        yield return new WaitForSeconds(0.4f);
-	        if (hide){
+	        if (hide && _choicesPanel_rectTransf != null){
 	            _choicesPanel_rectTransf.gameObject.SetActive(false);
 	        }
 	        _showHidePanel_crtn = null;
@@ -464,6 +472,8 @@ namespace spz {
 
 
 	    void ScaleChoice_ifHovered(Transform transf, MouseHoverSensor_UI sensor){
+	        if (transf == null || sensor == null)
+	            return;
 	        Vector3 targScale = sensor.isHovering ? _choice_originalScale*1.25f : _choice_originalScale;
 	        float factor = Time.deltaTime * _choiceHover_AnimSpeed;
 	        transf.localScale =  Vector3.Lerp(transf.localScale, targScale, factor);
