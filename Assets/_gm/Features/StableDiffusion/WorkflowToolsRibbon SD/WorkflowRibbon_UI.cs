@@ -403,8 +403,10 @@ namespace spz {
 	    /// <summary>Nomad sculpt strip: solid cell + line icon above Roboto label (BoundChrome only).</summary>
 	    static void ThemeModeToggle(MonoBehaviour modeUi, bool selected, StudioLineIcon glyph, SpzUiThemeOps.ThemeTokens t) {
 	        if (modeUi == null) return;
-	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome)
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            RestoreWorkflowModeAuthored(modeUi);
 	            return;
+	        }
 	        var toggle = modeUi.GetComponentInChildren<Toggle>(true);
 	        if (toggle != null) {
 	            // Subtle selected fill (Brush/Multiview) — full tabActive reads as a stuck mustard brick.
@@ -412,6 +414,7 @@ namespace spz {
 	                ? Color.Lerp(t.controlBg, t.accent, 0.14f)
 	                : t.controlBg;
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, normal, t.accent);
+	            SpzUiThemeOps.SnapshotAuthoredColorBlock(toggle);
 	            var cb = toggle.colors;
 	            cb.normalColor = Color.white;
 	            cb.highlightedColor = Color.white;

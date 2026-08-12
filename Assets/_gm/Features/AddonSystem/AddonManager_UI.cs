@@ -1646,8 +1646,13 @@ namespace spz {
 		/// Strip open launcher sits outside the panel — theme like Settings gear (SolidSquare + Monolith).
 		/// </summary>
 		void ThemeOpenLauncherButton(SpzUiThemeOps.ThemeTokens t) {
-			if (_openPanel_button == null || !SpzUiThemeOps.ShouldRecolorBoundChrome)
+			if (_openPanel_button == null)
 				return;
+			if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+				SpzUiThemeOps.RestoreBoundChromeUnder(_openPanel_button.transform);
+				HideMonolithUnder(_openPanel_button.transform);
+				return;
+			}
 			SpzUiThemeOps.EnsureSelectableHitFace(_openPanel_button);
 			if (_openPanel_button.targetGraphic == null) return;
 			SpzUiThemeOps.ApplySolidSquareChrome(_openPanel_button, t.controlBg, t.accent);
