@@ -2475,8 +2475,9 @@ namespace spz {
 						labelLE.minWidth = labelMinW;
 						labelLE.preferredHeight = rowH - 8f;
 					}
-					label.enableWordWrapping = true;
-					label.overflowMode = TextOverflowModes.Overflow;
+					// Single-line + ellipsis: wrap+Overflow painted taller than PrefRow LE and clipped the card.
+					label.enableWordWrapping = false;
+					label.overflowMode = TextOverflowModes.Ellipsis;
 					const float labelDesign = 13f;
 					float labelBase = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(label, labelDesign);
 					if (SpzUiThemeOps.ShouldRecolorBoundChrome)
@@ -2940,8 +2941,8 @@ namespace spz {
 			ribbonLabel.fontSize = 13f;
 			ribbonLabel.color = new Color(0.78f, 0.78f, 0.82f, 1f);
 			ribbonLabel.alignment = TextAlignmentOptions.MidlineLeft;
-			ribbonLabel.enableWordWrapping = true;
-			ribbonLabel.overflowMode = TextOverflowModes.Overflow;
+			ribbonLabel.enableWordWrapping = false;
+			ribbonLabel.overflowMode = TextOverflowModes.Ellipsis;
 			ribbonLabel.raycastTarget = false;
 			if (ribbonOnly) {
 				// Dial hidden — tip on the label (row plate is intentionally clear / non-raycast).
