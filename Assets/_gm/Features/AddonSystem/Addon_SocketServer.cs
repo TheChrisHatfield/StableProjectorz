@@ -411,7 +411,10 @@ namespace spz {
 		/// (mesh write is sync; texture encode/write is deferred via coroutines).
 		/// </summary>
 		public static bool DefersResponseUntilProjectSaveIdle(string method) {
-			return string.Equals(method, "spz.cmd.export_3d_with_textures_to_path", StringComparison.Ordinal);
+			return string.Equals(method, "spz.cmd.export_3d_with_textures_to_path", StringComparison.Ordinal)
+				|| string.Equals(method, "spz.cmd.export_3d_with_textures", StringComparison.Ordinal)
+				|| string.Equals(method, "spz.cmd.export_projection_textures", StringComparison.Ordinal)
+				|| string.Equals(method, "spz.cmd.export_view_textures", StringComparison.Ordinal);
 		}
 
 		/// <summary>
