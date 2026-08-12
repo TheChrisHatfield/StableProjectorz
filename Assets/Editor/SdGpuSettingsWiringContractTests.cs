@@ -30,4 +30,14 @@ public sealed class SdGpuSettingsWiringContractTests {
 		Assert.That(body, Does.Not.Contain("--gpu-device-id \" + gpuId"));
 		Assert.That(src, Does.Contain("CUDA_VISIBLE_DEVICES=\" + gpuId"));
 	}
+
+	[Test]
+	public void ExplicitDefaultGpu_ClearsForgeDevicePin() {
+		string launch = ReadLaunch();
+		Assert.That(launch, Does.Contain("ClearSdDeviceFromKnownWebuiFolders"));
+		Assert.That(launch, Does.Contain("ClearSdDeviceFromForgeFolder"));
+		string settings = File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "Settings", "Settings_MGR.cs"));
+		Assert.That(settings, Does.Contain("ClearSdDeviceFromKnownWebuiFolders"));
+	}
 }
