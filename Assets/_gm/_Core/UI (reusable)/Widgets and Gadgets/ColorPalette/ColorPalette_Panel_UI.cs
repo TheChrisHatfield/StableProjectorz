@@ -187,6 +187,12 @@ namespace spz {
 	        ApplyThemeTokens();
 	    }
 
+	    void OnEnable() {
+	        // Created/disabled under ThemeChanged — re-assert Commit chrome when shown.
+	        if (_init)
+	            ApplyThemeTokens();
+	    }
+
 	    void EnsureCommitButton(){
 	        if(_commitButton != null) return;
 	        var rt = transform as RectTransform;
