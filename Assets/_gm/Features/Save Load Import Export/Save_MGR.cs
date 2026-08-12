@@ -32,6 +32,8 @@ namespace spz {
 		        _isSaving = false;
 		        Viewport_StatusText.instance?.ShowStatusText(
 			        "Can't merge icons while another save/export is still writing.", false, 5f, false );
+		        // Callers (GetTextures_FromAllIcons / Gen3D retexture) wait forever without a callback.
+		        onHaveAlbedo?.Invoke(null);
 		        return;
 	        }
 
