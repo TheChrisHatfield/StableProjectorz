@@ -21,6 +21,7 @@ public sealed class NomadThemeSiloContractTests {
 		"FlattenToolFaceImage",
 		"FlattenSlicedChromeFace",
 		"ApplyControlLineIconAt",
+		"ApplyControlLineIconLeading",
 		"ApplyNomadStackedToolCell",
 		"ApplyBoundChromeTmp",
 		"ApplyBoundChromeStripLabelTmp",

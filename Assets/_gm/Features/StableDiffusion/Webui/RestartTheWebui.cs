@@ -16,7 +16,7 @@ namespace spz {
 	    [SerializeField] protected Button _fileButton; //allows to specify path to the file that should be launched
 	    [SerializeField] protected string _openFile_os_window_headerMsg;
 	    [Space(10)]
-	    [SerializeField] protected string _defaultRelativePath = "./" + LaunchWebUIBatFile.WebuiFolderName + "/run_noQuickEdit.bat";
+	    [SerializeField] protected string _defaultRelativePath = "./" + LaunchWebUIBatFile.WebuiFolderNameNeo + "/webui-user.bat";
 	    [SerializeField] protected string _playerPrefs_filepathID = "_RestartWebuiFilepath";
 	    [SerializeField] protected Animation _anim;
 
@@ -179,8 +179,8 @@ namespace spz {
 	            face.preserveAspect = false;
 	            face.raycastTarget = true;
 	        }
-	        // Launch must replace blanked authored glyphs (folder picker already did).
-	        SpzUiThemeOps.ApplyControlLineIcon(btn.transform,
+	        // Leading Monolith — centered Bullseye/Folder stamps over "SERV"; hide authored folders too.
+	        SpzUiThemeOps.ApplyControlLineIconLeading(btn.transform,
 	            applyFolderIcon ? StudioLineIcon.Folder : StudioLineIcon.Bullseye, 16f);
 	        foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp == null) continue;
