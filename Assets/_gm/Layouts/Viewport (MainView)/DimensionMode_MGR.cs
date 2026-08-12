@@ -55,6 +55,12 @@ namespace spz {
 
 	    public static Action<DimensionMode> _Act_OnDimensionChanged { get; set; } = null;
 
+	    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+	    static void ResetDimensionModeStatics() {
+	        // Domain-reload-off: stale instance / subscribers would point at destroyed objects.
+	        instance = null;
+	        _Act_OnDimensionChanged = null;
+	    }
 
 	    public DimensionMode _dimensionMode { get; private set; } = DimensionMode.dim_sd;
 
