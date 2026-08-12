@@ -703,8 +703,9 @@ namespace spz {
 	            if (pin == null) continue;
 	            var rootImg = pin.GetComponent<Image>();
 	            if (rootImg != null) {
-	                // Color only — do not ApplyRoundedControlSprite on pin faces (crushes authored POV glyphs).
-	                SpzUiThemeOps.ApplyBoundChromeGraphic(rootImg, t.controlBg);
+	                // Color only — ApplyBoundChromeGraphic flattens Sliced → SolidRect and crushes POV plates.
+	                SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(rootImg);
+	                rootImg.color = new Color(t.controlBg.r, t.controlBg.g, t.controlBg.b, rootImg.color.a);
 	            }
 	            foreach (var img in pin.GetComponentsInChildren<Image>(true)) {
 	                if (img == null || img == rootImg) continue;
