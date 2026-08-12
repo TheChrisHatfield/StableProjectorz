@@ -1046,8 +1046,9 @@ namespace spz {
 				Debug.LogWarning($"[AddonManager_UI] Pre-panel blocker layout (non-fatal): {e.Message}");
 			}
 			_panel.SetActive(true);
-			// Clear pending once the panel is shown — do not wait on canvas lookup (can fail forever).
-			s_pendingOpenRequest = false;
+			// Only clear pending when overlay canvas exists — otherwise deferred open must keep retrying.
+			if (rootCanvas != null)
+				s_pendingOpenRequest = false;
 			if (_blockerDimImage != null)
 				_blockerDimImage.color = RefBgModalDim;
 			if (_panelModalGroup != null) {
@@ -1104,13 +1105,25 @@ namespace spz {
 			if (_panel != null) _panel.SetActive(false);
 		}
 		
+		bool _loadAddonsNowInFlight;
+
 		/// <summary>
 		/// Requests Python to load all currently enabled add-ons.
 		/// </summary>
 		void OnLoadAddonsNow() {
+			if (_loadAddonsNowInFlight) {
+				ShowStatus("Load already in progress…", false);
+				return;
+			}
+			_loadAddonsNowInFlight = true;
+			if (_loadAddonsNow_button != null)
+				_loadAddonsNow_button.interactable = false;
 			ShowStatus("Loading addons...", true);
 			if (Addon_MGR.instance != null) {
 				Addon_MGR.instance.RequestLoadAllEnabledAddonsNow((requested, hardFail) => {
+					_loadAddonsNowInFlight = false;
+					if (_loadAddonsNow_button != null)
+						_loadAddonsNow_button.interactable = true;
 					if (requested == 0)
 						ShowStatus("No enabled add-ons to load.", false);
 					else if (hardFail > 0)
@@ -1122,6 +1135,9 @@ namespace spz {
 					RefreshAddonsList();
 				});
 			} else {
+				_loadAddonsNowInFlight = false;
+				if (_loadAddonsNow_button != null)
+					_loadAddonsNow_button.interactable = true;
 				ShowStatus("Add-on manager not available", false);
 			}
 		}
