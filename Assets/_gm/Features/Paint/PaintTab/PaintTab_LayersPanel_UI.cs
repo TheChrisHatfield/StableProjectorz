@@ -143,6 +143,7 @@ namespace spz {
 			_rowDefault = t.panelBg; _rowDefault.a = 0.2f;
 			_rowActive = t.selection; _rowActive.a = 0.45f;
 			if (_addLayerButton != null) {
+				SpzUiThemeOps.EnsureSelectableHitFace(_addLayerButton);
 				SpzUiThemeOps.ApplyBoundChromeSelectable(_addLayerButton, t.success, t.accent);
 				foreach (var tmp in _addLayerButton.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
 					if (tmp != null)
@@ -151,6 +152,7 @@ namespace spz {
 				SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_addLayerButton);
 			}
 			if (_collapseButton != null) {
+				SpzUiThemeOps.EnsureSelectableHitFace(_collapseButton);
 				SpzUiThemeOps.ApplyBoundChromeSelectable(_collapseButton, t.controlBg, t.accent);
 				foreach (var tmp in _collapseButton.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
 					if (tmp != null)
