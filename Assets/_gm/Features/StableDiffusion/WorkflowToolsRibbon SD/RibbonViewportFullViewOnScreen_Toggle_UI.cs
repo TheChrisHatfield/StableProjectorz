@@ -67,6 +67,9 @@ namespace spz {
 			s_columnFrameSuppressCount = 0;
 			s_columnFrameGo = null;
 			s_columnFrameWasActive = false;
+			// Stale instance IDs in PendingDockSpecs can re-apply the wrong dock spec after Play.
+			RegisteredInstances.Clear();
+			PendingDockSpecs.Clear();
 		}
 
 		Sprite _cachedFaceBorderSprite;
