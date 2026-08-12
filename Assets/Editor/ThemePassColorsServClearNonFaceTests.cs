@@ -62,4 +62,11 @@ public sealed class ThemePassColorsServClearNonFaceTests {
 		Assert.That(a, Does.Contain("ApplyContextMenuChrome"));
 		Assert.That(a, Does.Not.Contain("ApplyBoundChromeSelectable(btn"));
 	}
+
+	[Test]
+	public void ColorPalettePanel_NotDoubleSolidSquaredByCollect() {
+		string collect = Path.Combine(Application.dataPath, "_gm", "Features", "Paint", "PaintTab", "PaintTab_CollectPaintUI.cs");
+		Assert.That(File.ReadAllText(collect), Does.Contain("ColorPalette_Panel_UI"));
+		Assert.That(File.ReadAllText(collect), Does.Contain("GetComponentInParent<ColorPalette_Panel_UI>"));
+	}
 }
