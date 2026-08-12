@@ -1136,6 +1136,8 @@ namespace spz {
 	        // Do not ApplyLineIconTint — that is Nomad-only; use authored SPZ light gray.
 	        icon.color = SpzDefaultStripIconTint;
 	        icon.preserveAspect = true;
+	        // Always clear — TMP-only cells skip ClearStripTabNonFaceRaycasts and an old icon could steal hits.
+	        icon.raycastTarget = false;
 	    }
 
 	    /// <summary>Hover name overlay for icon strip tabs (Paint, Art, Mesh, add-ons, …).</summary>
