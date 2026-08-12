@@ -167,6 +167,8 @@ public sealed class BoundChromePass7FunctionalTests {
 		Assert.That(src, Does.Contain("ApplyGenArtColumnLabelColor"));
 		Assert.That(src, Does.Contain("ResnapshotAuthoredGraphicColor"),
 			"Leave must overwrite Nomad first-write TMP color so Restore keeps Gen Art black");
+		Assert.That(src, Does.Contain("ApplyFaceRectLayout(faceRt, genArt, genRefImg)"),
+			"OPEN RIGHT must use the same Gen Art face insets as FULL/SRN");
 		int onDestroy = src.IndexOf("void OnDestroy()", System.StringComparison.Ordinal);
 		Assert.That(onDestroy, Is.GreaterThan(0));
 		string destroyBody = src.Substring(onDestroy, System.Math.Min(500, src.Length - onDestroy));
