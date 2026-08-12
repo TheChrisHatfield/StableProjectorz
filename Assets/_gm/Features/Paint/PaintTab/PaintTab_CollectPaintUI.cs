@@ -200,7 +200,7 @@ namespace spz {
 		/// <summary>Paint tab inactive: drop brush-size listeners and smudge store/visibility subscriptions (rebound on next CollectNow when UI exists).</summary>
 		void OnDisable()
 		{
-			SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+			// Keep ThemeChanged — Leave SPZ while another ribbon tab is open must still unwind Paint chrome.
 			if (_layout != null && TryGetToolOptionsRowAndExpando(_layout.ToolOptionsSection, out var row, out var expando))
 				SetToolOptionsRowBehindBrushPanelBlocked(row, expando, false);
 			UnregisterBrushSettingsHandlers();
@@ -208,6 +208,11 @@ namespace spz {
 			UnregisterStrictIsolationBrushOptsHandlers();
 			if (_paintTabTmpStyleSource == this)
 				_paintTabTmpStyleSource = null;
+		}
+
+		void OnDestroy()
+		{
+			SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 		}
 
 		/// <summary>
