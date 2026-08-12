@@ -158,8 +158,13 @@ namespace spz {
 
 
 	    void Gen_OnCancel(){
-	        Gen3D_API.instance.CancelGeneration();
-	        GenerateButtons_UI.OnConfirmed_FinishedGenerate( canceled:true );
+	        try {
+	            if (Gen3D_API.instance != null)
+	                Gen3D_API.instance.CancelGeneration();
+	        } finally {
+	            // Always finish UI even if API missing/throws — otherwise Cancel button stays stuck.
+	            GenerateButtons_UI.OnConfirmed_FinishedGenerate( canceled:true );
+	        }
 	    }
 	    void Gen_OnProgress(float val){
 	        #if UNITY_EDITOR
