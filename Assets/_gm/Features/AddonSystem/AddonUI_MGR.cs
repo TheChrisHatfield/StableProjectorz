@@ -714,14 +714,11 @@ namespace spz {
 					_parkedForRibbon.RemoveAt(i);
 					continue;
 				}
-				// Disabled add-ons must not get a ribbon tab via park migration (CreatePanel is gated; migrate was not).
-				if (!Addon_MGR.IsAddonEnabledStatic(parked.addonId)) {
-					UnityEngine.Debug.Log(
-						$"[AddonUI_MGR] Discarding parked panel for disabled add-on '{parked.addonId}'.");
-					Destroy(parked.panel);
-					_parkedForRibbon.RemoveAt(i);
+				// SoftLoad/HTTP unload parks content for Python get_value during unregister while isEnabled
+				// is already false. Do not Destroy here — DestroyAddonUI / Unload finishes tear-down.
+				// Leaving parked also avoids OpenPanel migrate deleting panels mid-unload.
+				if (!Addon_MGR.IsAddonEnabledStatic(parked.addonId))
 					continue;
-				}
 				if (!Addon_MGR.ShouldShowInCommandRibbonStatic(parked.addonId)) {
 					// Host pref: keep under parking; leave on migrate list until ribbon is shown again.
 					continue;
