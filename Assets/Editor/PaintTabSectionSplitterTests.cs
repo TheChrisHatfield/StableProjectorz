@@ -164,6 +164,16 @@ public sealed class PaintTabSectionSplitterTests {
 	}
 
 	[Test]
+	public void ThemeOneSplitter_Source_DoesNotUseHairlineBorderToken() {
+		string path = System.IO.Path.Combine(Application.dataPath, "_gm", "Features", "Paint", "PaintTab", "PaintTab_KritaLayout_UI.cs");
+		Assert.That(System.IO.File.Exists(path), Is.True, path);
+		string src = System.IO.File.ReadAllText(path);
+		Assert.That(src, Does.Contain("t.controlBg"));
+		Assert.That(src, Does.Contain("too faint for a 6px drag hit target"));
+		Assert.That(src, Does.Not.Contain("ApplyBoundChromeGraphic(img, t.border)"));
+	}
+
+	[Test]
 	public void CollectPaintUI_Source_CallsEnsureSectionSplitters() {
 		string path = System.IO.Path.Combine(Application.dataPath, "_gm", "Features", "Paint", "PaintTab", "PaintTab_CollectPaintUI.cs");
 		Assert.That(System.IO.File.Exists(path), Is.True, path);
