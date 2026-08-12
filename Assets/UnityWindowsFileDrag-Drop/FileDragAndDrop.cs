@@ -86,21 +86,42 @@ public class FileDragAndDrop : MonoBehaviour
                 return;
             }
             if (onModel && onVae) {
-                // Overlap: prefer the tighter control by checking VAE first only if model panel contains both —
-                // use VAE when its dropdown/slide hits, else checkpoint.
-                if (SD_VAE.instance != null && SD_VAE.instance.ScreenPointHitsOwnership(screen))
+                // Boundary overlap: pick the control whose rect center is closer to the drop.
+                float dModel = OwnershipCenterDistance(SD_Neural_Models.instance != null
+                    ? SD_Neural_Models.instance.transform as RectTransform : null, screen);
+                float dVae = OwnershipCenterDistance(SD_VAE.instance != null
+                    ? SD_VAE.instance.transform as RectTransform : null, screen);
+                if (dVae <= dModel)
                     SD_WeightFileImport.ImportFromPath(SD_WeightFileImport.Kind.Vae, aFiles[0]);
                 else
                     SD_WeightFileImport.ImportFromPath(SD_WeightFileImport.Kind.Checkpoint, aFiles[0]);
                 return;
             }
-            Viewport_StatusText.instance.ShowStatusText(
-                "Drop onto Model or SD-VAE to load this weight.", false, 4, false);
+            if (Viewport_StatusText.instance != null)
+                Viewport_StatusText.instance.ShowStatusText(
+                    "Drop onto Model or SD-VAE to load this weight.", false, 4, false);
+            else
+                Debug.Log("Drop onto Model or SD-VAE to load this weight.");
             return;
         }
 
         string msg = "Drag-and-drop contains unsupported file types.";
-        Viewport_StatusText.instance.ShowStatusText(msg, false, 4, false);
+        if (Viewport_StatusText.instance != null)
+            Viewport_StatusText.instance.ShowStatusText(msg, false, 4, false);
+        else
+            Debug.Log(msg);
+    }
+
+    static float OwnershipCenterDistance(RectTransform rt, Vector2 screen) {
+        if (rt == null) return float.MaxValue;
+        Vector3[] corners = new Vector3[4];
+        rt.GetWorldCorners(corners);
+        var canvas = rt.GetComponentInParent<Canvas>();
+        Camera cam = null;
+        if (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+            cam = canvas.worldCamera;
+        Vector2 screenCenter = RectTransformUtility.WorldToScreenPoint(cam, (corners[0] + corners[2]) * 0.5f);
+        return Vector2.Distance(screenCenter, screen);
     }
 
     bool AllFiles3D(List<string> files)
