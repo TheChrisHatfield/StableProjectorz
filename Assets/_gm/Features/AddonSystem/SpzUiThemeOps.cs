@@ -377,7 +377,11 @@ namespace spz {
 		/// No-op when face is missing — never mass-clear (that kills prefab tabs/tools that clicked via TMP).
 		/// </summary>
 		public static void ClearNonFaceRaycastsForTheme(Selectable selectable) {
-			if (selectable == null || !ShouldRecolorBoundChrome) return;
+			if (selectable == null) return;
+			if (!ShouldRecolorBoundChrome) {
+				RestoreBoundChromeUnder(selectable.transform);
+				return;
+			}
 			Graphic face = selectable.targetGraphic;
 			// Prefab CommandRibbon / SAVE+/- / tools with null targetGraphic relied on child TMP hits.
 			// Mass-clearing here leaves zero hittable graphics after Nomad label raycast clears.
