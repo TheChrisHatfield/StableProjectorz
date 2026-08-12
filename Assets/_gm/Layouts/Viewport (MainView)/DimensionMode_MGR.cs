@@ -463,7 +463,8 @@ namespace spz {
 	            yield break;
 	        }
 	        _choicesPanel_rectTransf.gameObject.SetActive(true);
-	        yield return new WaitForSeconds(0.4f);
+	        // Unscaled — timescale 0 (pause/modal) must not strand the panel active forever.
+	        yield return new WaitForSecondsRealtime(0.4f);
 	        if (hide && _choicesPanel_rectTransf != null){
 	            _choicesPanel_rectTransf.gameObject.SetActive(false);
 	        }
