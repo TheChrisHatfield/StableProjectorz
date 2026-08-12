@@ -110,7 +110,7 @@ public sealed class CommandRibbonStripChromeThemeTests {
 		var m = typeof(CommandRibbon_UI).GetMethod("ThemeStripTabCell",
 			BindingFlags.Instance | BindingFlags.NonPublic);
 		Assert.That(m, Is.Not.Null);
-		m.Invoke(ribbon, new object[] { cell, t, recolor, iconOnly });
+		m.Invoke(ribbon, new object[] { cell, t, recolor, iconOnly, false });
 	}
 
 	[Test]
@@ -119,7 +119,7 @@ public sealed class CommandRibbonStripChromeThemeTests {
 		string src = System.IO.File.ReadAllText(path);
 		int idx = src.IndexOf("static void ApplyStudioTabChromeColors", System.StringComparison.Ordinal);
 		Assert.That(idx, Is.GreaterThanOrEqualTo(0));
-		string body = src.Substring(idx, System.Math.Min(3500, src.Length - idx));
+		string body = src.Substring(idx, System.Math.Min(6500, src.Length - idx));
 		Assert.That(body, Does.Contain("Labels visible"));
 		Assert.That(body, Does.Contain("new Vector2(0f, 0.5f)"));
 		// Icon-only still centers; labeled leads.

@@ -796,7 +796,7 @@ namespace spz {
 	                // Hide visible label glyphs in icon strip; name stays available via hover tooltip.
 	                label.maxVisibleCharacters = hideStripLabels ? 0 : int.MaxValue;
 	            }
-	            // Do not EnsureStripTabHitFace on leave — Restore already unwound raycasts;
+	            // Do not inject TabBg hit face on leave — Restore already unwound raycasts;
 	            // injecting TabBg after Restore SPZ sticks forever and can steal hits.
 	            ApplyStudioTabChromeColors(cell, t, recolorChrome: false, builtinAddonIconStrip: builtinAddonIconStrip);
 	            return;
