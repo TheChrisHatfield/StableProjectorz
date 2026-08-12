@@ -454,7 +454,7 @@ namespace spz {
 		void OnDisable() {
 			ForceHideFullViewMenuInstant();
 			ViewportFullViewOnScreen_Driver.ActiveChanged -= OnDriverActiveChanged;
-			SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+			// Keep ThemeChanged — host often disables when switching ribbon tabs; Leave SPZ must still unwind dock chrome.
 			// Only stop a build coroutine hosted on *this* behaviour. External runners (Addon_MGR /
 			// MainViewport) must keep going — otherwise enable-from-Add-on-Manager after Generate
 			// dies when the workflow-ribbon host disables under the modal.
