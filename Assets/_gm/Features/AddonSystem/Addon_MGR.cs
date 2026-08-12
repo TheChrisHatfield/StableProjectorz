@@ -232,6 +232,40 @@ namespace spz {
 			PlayerPrefs.Save();
 		}
 
+		/// <summary>
+		/// True when Remember is on and the live enabled set differs from the last Save-persisted JSON.
+		/// SoftLoad dials apply live immediately but do not write prefs — Close must still warn.
+		/// </summary>
+		public bool LiveEnabledSelectionDiffersFromPersisted() {
+			if (!GetRememberEnabledAddonsPreference() || _registeredAddons == null)
+				return false;
+			var persisted = new HashSet<string>(StringComparer.Ordinal);
+			string s = PlayerPrefs.GetString(PrefsKeyEnabledAddonIdsJson, "[]");
+			try {
+				var arr = JArray.Parse(string.IsNullOrEmpty(s) ? "[]" : s);
+				foreach (var t in arr) {
+					if (t == null) continue;
+					string id = t.ToString();
+					if (!string.IsNullOrEmpty(id))
+						persisted.Add(id);
+				}
+			} catch {
+				persisted.Clear();
+			}
+			var live = new HashSet<string>(StringComparer.Ordinal);
+			foreach (var kvp in _registeredAddons) {
+				if (kvp.Value != null && kvp.Value.isEnabled)
+					live.Add(kvp.Key);
+			}
+			if (live.Count != persisted.Count)
+				return true;
+			foreach (string id in live) {
+				if (!persisted.Contains(id))
+					return true;
+			}
+			return false;
+		}
+
 		/// <summary>Always writes sparse per-add-on host prefs (Add-on Manager Save settings).</summary>
 		public void PersistAddonPrefsNow() {
 			if (_registeredAddons == null)
@@ -1731,6 +1765,10 @@ namespace spz {
 				RibbonViewportFullViewOnScreen_Toggle_UI.TeardownAllDocksForAddonDisabled();
 			}
 
+			// Notify listeners as soon as the dial is off (Agent bridge / manager draft dirty), not after
+			// the multi-second HTTP unregister + UI destroy window.
+			OnAddonEnabledStateChanged?.Invoke(addonId);
+
 			if (_enableHttpServer) {
 				// Dial SoftLoad / Discover can leave the ribbon tab live for the whole HTTP unregister
 				// window (multi-second). Park/remove the strip tab immediately; destroy parked content
@@ -1744,7 +1782,6 @@ namespace spz {
 
 			DestroyAddonUiShell(addonId);
 			UnityEngine.Debug.Log($"[Addon_MGR] Unloaded add-on: {addonId}");
-			OnAddonEnabledStateChanged?.Invoke(addonId);
 			onComplete?.Invoke();
 		}
 
@@ -1763,7 +1800,7 @@ namespace spz {
 			}
 			DestroyAddonUiShell(addonId);
 			UnityEngine.Debug.Log($"[Addon_MGR] Unloaded add-on: {addonId}");
-			OnAddonEnabledStateChanged?.Invoke(addonId);
+			// Enabled-state notify already fired at UnloadAddon start (HTTP path).
 			onComplete?.Invoke();
 		}
 
