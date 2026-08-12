@@ -95,6 +95,91 @@ def _json_bytes(obj: Any) -> bytes:
     return json.dumps(obj).encode("utf-8")
 
 
+def _demo_catalog_get(path: str) -> Optional[Tuple[bytes, str]]:
+    """Return (body, content_type) for Forge list endpoints used by SPZ dropdowns."""
+    if path == "/sdapi/v1/sd-models":
+        return (
+            _json_bytes(
+                [
+                    {
+                        "title": "cloud-inference-demo [cloud]",
+                        "model_name": "cloud-inference-demo",
+                        "hash": "cloud",
+                        "sha256": "",
+                        "filename": "cloud-inference-demo.safetensors",
+                    }
+                ]
+            ),
+            "application/json",
+        )
+    if path == "/sdapi/v1/samplers":
+        return (
+            _json_bytes(
+                [
+                    {"name": "Euler a", "aliases": ["k_euler_a"], "options": {}},
+                    {"name": "Euler", "aliases": ["k_euler"], "options": {}},
+                    {"name": "DDIM", "aliases": [], "options": {}},
+                ]
+            ),
+            "application/json",
+        )
+    if path == "/sdapi/v1/schedulers":
+        return (
+            _json_bytes(
+                [
+                    {
+                        "name": "automatic",
+                        "label": "Automatic",
+                        "aliases": [],
+                        "default_rho": 1.0,
+                        "need_inner_model": False,
+                    },
+                    {
+                        "name": "normal",
+                        "label": "Normal",
+                        "aliases": [],
+                        "default_rho": 1.0,
+                        "need_inner_model": False,
+                    },
+                ]
+            ),
+            "application/json",
+        )
+    if path == "/sdapi/v1/upscalers":
+        return (
+            _json_bytes(
+                [
+                    {
+                        "name": "None",
+                        "model_name": None,
+                        "model_path": None,
+                        "model_url": None,
+                        "scale": 4.0,
+                    },
+                    {
+                        "name": "Lanczos",
+                        "model_name": None,
+                        "model_path": None,
+                        "model_url": None,
+                        "scale": 4.0,
+                    },
+                ]
+            ),
+            "application/json",
+        )
+    if path in ("/sdapi/v1/sd-vae", "/sdapi/v1/sd-modules"):
+        return (
+            _json_bytes(
+                [
+                    {"model_name": "Automatic", "filename": None},
+                    {"model_name": "None", "filename": None},
+                ]
+            ),
+            "application/json",
+        )
+    return None
+
+
 class _Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -197,6 +282,14 @@ class _Handler(BaseHTTPRequestHandler):
                     opts = dict(st.options)
                 self._send_json(200, opts)
                 return
+
+            # Demo (and local) catalog stubs so SPZ model/sampler/VAE dropdowns populate.
+            # Remote mode already proxied these above when applicable.
+            catalog = _demo_catalog_get(path)
+            if catalog is not None:
+                self._send(200, catalog[0], catalog[1])
+                return
+
             if path in (
                 "/controlnet/model_list",
                 "/controlnet/module_list",
@@ -249,6 +342,16 @@ class _Handler(BaseHTTPRequestHandler):
                     except Exception:
                         pass
                 self._send_json(200, {"interrupted": True})
+                return
+
+            if path == "/sdapi/v1/unload-checkpoint":
+                if is_remote:
+                    length = int(self.headers.get("Content-Length") or 0)
+                    body = self.rfile.read(length) if length > 0 else b"{}"
+                    status, raw, ct = backend.proxy("POST", full_path, body, dict(self.headers.items()))
+                    self._send(status, raw, ct)
+                    return
+                self._send_json(200, {})
                 return
 
             if path == "/sdapi/v1/options":

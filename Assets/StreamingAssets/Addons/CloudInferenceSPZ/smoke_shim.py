@@ -68,6 +68,18 @@ def main() -> int:
         assert st == 200 and "sd_model_checkpoint" in body, body
         print("OK options")
 
+        st, body = get("/sdapi/v1/sd-models")
+        assert st == 200 and isinstance(body, list) and body and body[0].get("model_name"), body
+        print("OK sd-models", body[0].get("model_name"))
+
+        st, body = get("/sdapi/v1/samplers")
+        assert st == 200 and isinstance(body, list) and body[0].get("name"), body
+        print("OK samplers", body[0].get("name"))
+
+        st, body = get("/sdapi/v1/sd-vae")
+        assert st == 200 and isinstance(body, list), body
+        print("OK sd-vae", len(body))
+
         st, body = post("/sdapi/v1/txt2img", {"width": 64, "height": 64, "prompt": "smoke"})
         assert st == 200 and body.get("images") and len(body["images"][0]) > 32, body
         print("OK txt2img images[0] len", len(body["images"][0]))
