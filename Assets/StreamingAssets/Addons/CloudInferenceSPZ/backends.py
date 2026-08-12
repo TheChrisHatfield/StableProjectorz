@@ -92,6 +92,14 @@ class RemoteForgeBackend(CloudBackend):
         if "://" not in base:
             # Allow host:port paste without scheme.
             base = "http://" + base
+        # Refuse loopback :7860 — that is the local shim itself (proxy would recurse).
+        lowered = base.lower()
+        if "127.0.0.1:7860" in lowered or "localhost:7860" in lowered or "[::1]:7860" in lowered:
+            raise BackendError(
+                "Remote URL cannot be 127.0.0.1:7860 (that is the local Cloud Inference shim). "
+                "Paste a Colab/RunPod public Forge URL instead, or use Demo.",
+                status=400,
+            )
         self.base_url = base
         self.timeout_s = float(timeout_s)
 
