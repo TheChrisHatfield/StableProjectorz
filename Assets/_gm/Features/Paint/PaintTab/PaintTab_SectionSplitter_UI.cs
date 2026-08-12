@@ -122,8 +122,12 @@ namespace spz {
 		{
 			float scale = 1f;
 			var canvas = GetComponentInParent<Canvas>();
-			if (canvas != null && canvas.scaleFactor > 0.01f)
-				scale = canvas.scaleFactor;
+			if (canvas != null) {
+				// Nested canvases often report scaleFactor=1; layout units follow the root canvas.
+				var root = canvas.rootCanvas != null ? canvas.rootCanvas : canvas;
+				if (root.scaleFactor > 0.01f)
+					scale = root.scaleFactor;
+			}
 			return screenDeltaY / scale;
 		}
 
