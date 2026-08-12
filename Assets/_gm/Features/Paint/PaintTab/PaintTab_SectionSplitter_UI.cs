@@ -17,6 +17,7 @@ namespace spz {
 
 		LayoutElement _above;
 		LayoutElement _below;
+		Action _onDragBegan;
 		Action _onDragEnded;
 		bool _dragActive;
 
@@ -27,11 +28,12 @@ namespace spz {
 		public Image Bar => _bar;
 		public bool IsDragging => _dragActive;
 
-		public void Bind(LayoutElement above, LayoutElement below, Action onDragEnded = null)
+		public void Bind(LayoutElement above, LayoutElement below, Action onDragEnded = null, Action onDragBegan = null)
 		{
 			_above = above;
 			_below = below;
 			_onDragEnded = onDragEnded;
+			_onDragBegan = onDragBegan;
 		}
 
 		void OnDisable()
@@ -48,7 +50,8 @@ namespace spz {
 			LayoutElement above,
 			LayoutElement below,
 			Action onDragEnded,
-			Color defaultBarColor)
+			Color defaultBarColor,
+			Action onDragBegan = null)
 		{
 			if (parent == null) return null;
 			Transform existing = parent.Find(name);
@@ -79,7 +82,7 @@ namespace spz {
 			var splitter = go.GetComponent<PaintTab_SectionSplitter_UI>();
 			if (splitter == null) splitter = go.AddComponent<PaintTab_SectionSplitter_UI>();
 			splitter._bar = img;
-			splitter.Bind(above, below, onDragEnded);
+			splitter.Bind(above, below, onDragEnded, onDragBegan);
 			return splitter;
 		}
 
@@ -88,6 +91,7 @@ namespace spz {
 			if (eventData != null && eventData.button != PointerEventData.InputButton.Left)
 				return;
 			_dragActive = true;
+			_onDragBegan?.Invoke();
 			LockPreferredFromRect(_above);
 			LockPreferredFromRect(_below);
 			RebuildParentLayout();
