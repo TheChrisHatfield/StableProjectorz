@@ -274,6 +274,7 @@ namespace spz {
 	            bg.color = new Color(0.25f, 0.25f, 0.28f, 1f);
 	            return;
 	        }
+	        SpzUiThemeOps.EnsureSelectableHitFace(_button_importToLayer);
 	        SpzUiThemeOps.ApplyBoundChromeGraphic(bg, SpzUiThemeOps.Active.iconTint);
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_button_importToLayer);
 	    }
