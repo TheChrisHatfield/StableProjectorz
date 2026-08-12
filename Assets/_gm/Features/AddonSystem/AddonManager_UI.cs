@@ -624,9 +624,10 @@ namespace spz {
 		headerLayoutElement.minHeight = 48f;
 		var headerLayout = headerObj.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
 		headerLayout.childControlWidth = true;
-		headerLayout.childControlHeight = true;
+		// false: Nomad SolidSquare + force-expand stretched Install/Refresh/Save into tall capsules.
+		headerLayout.childControlHeight = false;
 		headerLayout.childForceExpandWidth = false;
-		headerLayout.childForceExpandHeight = true;
+		headerLayout.childForceExpandHeight = false;
 		headerLayout.childAlignment = TextAnchor.MiddleCenter;
 		headerLayout.spacing = 10f;
 		headerLayout.padding = new RectOffset(0, 0, 0, 0);
@@ -1612,7 +1613,8 @@ namespace spz {
 			var label = button.transform.Find("Text")?.GetComponent<TextMeshProUGUI>();
 			var icon = button.transform.Find("LineIcon")?.GetComponent<Image>();
 			bool boundChrome = SpzUiThemeOps.ShouldRecolorBoundChrome;
-			bool iconOnly = boundChrome && SpzUiThemeOps.RibbonIconOnlyActive;
+			// RibbonIconOnly is CommandRibbon-only — applying it here hides Install/Save/Close labels in Manager.
+			bool iconOnly = false;
 			if (icon != null && SpzUiThemeOps.ShouldRecolorBoundChrome) {
 				var iconRt = icon.rectTransform;
 				SpzUiThemeOps.SnapshotToolFaceLayout(iconRt);
