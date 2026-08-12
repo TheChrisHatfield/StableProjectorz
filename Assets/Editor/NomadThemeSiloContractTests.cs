@@ -38,6 +38,7 @@ public sealed class NomadThemeSiloContractTests {
 		"HideAuthoredGraphicForTheme",
 		"ApplyLineIconTint",
 		"ApplyPanelWidth",
+		"SnapshotLayoutElementForTheme",
 		"ApplyToAddonUiRoot",
 		"ApplyContextMenuChrome",
 	};

@@ -593,6 +593,10 @@ namespace spz {
 			}
 		}
 
+		/// <summary>Public first-call LE snapshot for callers that mutate preferred/min sizes under Nomad.</summary>
+		public static void SnapshotLayoutElementForTheme(LayoutElement layout) =>
+			SnapshotLayoutElementSizes(layout);
+
 		/// <summary>
 		/// Soft/solid fill stretched edge-to-edge; snapshots RectTransform for Restore SPZ.
 		/// Pair with solid-square chrome (<see cref="ApplySolidSquareChrome"/> /
