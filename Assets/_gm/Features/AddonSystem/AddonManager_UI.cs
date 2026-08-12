@@ -208,6 +208,8 @@ namespace spz {
 		bool? _lastStatusIsSuccess;
 		float _themeTitleBasePt = -1f;
 		TextAnchor _authoredHeaderChildAlignment = TextAnchor.MiddleCenter;
+		bool _authoredHeaderChildControlHeight = true;
+		bool _authoredHeaderChildForceExpandHeight = false;
 		bool _headerChildAlignSnapshotted;
 		float _themeFilterLabelBasePt = -1f;
 		float _themeStatusBasePt = -1f;
@@ -1438,8 +1440,10 @@ namespace spz {
 				_statusOk = kAuthoredStatusOk;
 				_statusFail = kAuthoredStatusFail;
 				_statusMuted = kAuthoredStatusMuted;
-				if (_openPanel_button != null)
+				if (_openPanel_button != null) {
 					SpzUiThemeOps.RestoreBoundChromeUnder(_openPanel_button.transform);
+					HideMonolithUnder(_openPanel_button.transform);
+				}
 				if (_panel != null) {
 					// Full unwind: ColorBlocks / TMP metrics / line icons — not Graphic colors alone.
 					SpzUiThemeOps.RestoreBoundChromeUnder(_panel.transform);
@@ -1488,6 +1492,8 @@ namespace spz {
 						// Snapshot authored alignment before Nomad write — leave RefreshScaled restores pad only.
 						if (!_headerChildAlignSnapshotted) {
 							_authoredHeaderChildAlignment = headerHlg.childAlignment;
+							_authoredHeaderChildControlHeight = headerHlg.childControlHeight;
+							_authoredHeaderChildForceExpandHeight = headerHlg.childForceExpandHeight;
 							_headerChildAlignSnapshotted = true;
 						}
 						headerHlg.childAlignment = TextAnchor.MiddleLeft;
@@ -1605,6 +1611,7 @@ namespace spz {
 			if (toggle == null) return;
 			var le = toggle.GetComponent<LayoutElement>();
 			if (le != null) {
+				SpzUiThemeOps.SnapshotLayoutElementForTheme(le);
 				le.preferredWidth = 22f;
 				le.minWidth = 22f;
 				le.preferredHeight = 22f;
@@ -1653,6 +1660,16 @@ namespace spz {
 				SpzUiThemeOps.HideAuthoredGraphicForTheme(tmp);
 			}
 			SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_openPanel_button);
+		}
+
+		static void HideMonolithUnder(Transform root) {
+			if (root == null) return;
+			foreach (var tr in root.GetComponentsInChildren<Transform>(true)) {
+				if (tr == null) continue;
+				string n = tr.name ?? "";
+				if (n == "MonolithLineIcon" || n == "MonolithActiveBar")
+					tr.gameObject.SetActive(false);
+			}
 		}
 
 		static void ThemeHeaderButton(Button button, Color normal, Color highlighted, Color foreground) {
@@ -1723,8 +1740,11 @@ namespace spz {
 			if (!_headerChildAlignSnapshotted || _panel == null) return;
 			var header = _panel.transform.Find("Header");
 			var headerHlg = header != null ? header.GetComponent<HorizontalLayoutGroup>() : null;
-			if (headerHlg != null)
+			if (headerHlg != null) {
 				headerHlg.childAlignment = _authoredHeaderChildAlignment;
+				headerHlg.childControlHeight = _authoredHeaderChildControlHeight;
+				headerHlg.childForceExpandHeight = _authoredHeaderChildForceExpandHeight;
+			}
 		}
 
 		static void RestoreHeaderButtonAuthoredChrome(Button button) {
@@ -1798,6 +1818,7 @@ namespace spz {
 					SpzUiThemeOps.ApplyBoundChromeSelectable(removeBtn, dangerBg, Color.Lerp(dangerBg, t.danger, 0.28f));
 					var removeLe = remove.GetComponent<LayoutElement>();
 					if (removeLe != null) {
+						SpzUiThemeOps.SnapshotLayoutElementForTheme(removeLe);
 						removeLe.preferredWidth = 92f;
 						removeLe.minWidth = 88f;
 					}
