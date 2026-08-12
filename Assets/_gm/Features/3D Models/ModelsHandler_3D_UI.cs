@@ -180,6 +180,10 @@ namespace spz {
 	        ApplyMeshListChromeThemeTokens();
 	    }
 
+	    void OnEnable() {
+	        ApplyMeshListChromeThemeTokens();
+	    }
+
 	    /// <summary>Themes mesh-panel chrome (header buttons / scroll parent) — not per-submesh selection colors.</summary>
 	    void ApplyMeshListChromeThemeTokens() {
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {

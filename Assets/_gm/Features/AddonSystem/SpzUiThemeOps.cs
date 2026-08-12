@@ -927,8 +927,11 @@ namespace spz {
 			foreach (var btn in root.GetComponentsInChildren<Button>(true)) {
 				if (btn == null) continue;
 				// Skip near-transparent / glyph-only hit pads — SolidSquare blanks download-row icons.
-				if (btn.targetGraphic != null && btn.targetGraphic.color.a < 0.08f)
+				if (btn.targetGraphic != null && btn.targetGraphic.color.a < 0.08f) {
+					EnsureSelectableHitFace(btn);
+					ClearNonFaceRaycastsForTheme(btn);
 					continue;
+				}
 				if (IsAuthoredIconFace(btn.targetGraphic)) {
 					EnsureSelectableHitFace(btn);
 					if (btn.targetGraphic is Image iconFace)
@@ -1639,7 +1642,7 @@ namespace spz {
 						handle.sprite = UiRuntimeSprites.GetLineIcon(StudioLineIcon.Bullseye);
 						handle.type = Image.Type.Simple;
 						handle.preserveAspect = true;
-						ApplyBoundChromeGraphic(handle, t.iconTint);
+						ApplyBoundChromeIconTint(handle, t.iconTint);
 						var hrt = slider.handleRect;
 						if (hrt != null) {
 							float s = Mathf.Clamp(Mathf.Max(hrt.sizeDelta.x, hrt.sizeDelta.y), 18f, 28f);

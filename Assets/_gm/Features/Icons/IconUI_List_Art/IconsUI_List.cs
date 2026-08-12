@@ -492,6 +492,10 @@ namespace spz {
 	        ApplyListChromeThemeTokens();
 	    }
 
+	    protected virtual void OnEnable() {
+	        ApplyListChromeThemeTokens();
+	    }
+
 	    protected virtual void Start() { }
 
 	    /// <summary>
@@ -531,7 +535,7 @@ namespace spz {
 	                    SpzUiThemeOps.ApplyBoundChromeIconTint(glyphFace, t.iconTint);
 	                    var glyphLabel = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	                    if (glyphLabel != null)
-	                        SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(glyphLabel, t.textPrimary, 11f);
+	                        SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(glyphLabel, t.textPrimary, 11f);
 	                    SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	                    continue;
 	                }
