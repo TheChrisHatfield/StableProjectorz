@@ -507,9 +507,13 @@ namespace spz {
 	        _mainHeader.enabled = true;
 	        if (string.IsNullOrWhiteSpace(_mainHeader.text))
 	            _mainHeader.text = "ControlNet " + transform.GetSiblingIndex();
-	        // Force readable design pt — do not capture oversized authored 23pt into a clipped band.
-	        SpzUiThemeOps.EnsureDesignFontPt(_mainHeader, 14f);
-	        SpzUiThemeOps.ApplyBoundChromeTmp(_mainHeader, t.textPrimary, 14f);
+	        // Capture authored size once — EnsureDesignFontPt(14) permanently rewrote designPt so Leave
+	        // SPZ could never recover the prefab ~23pt title.
+	        float authoredPt = _mainHeader.fontSize > 0.05f ? _mainHeader.fontSize : 14f;
+	        SpzUiThemeOps.ResolveOrCaptureDesignFontPt(_mainHeader, authoredPt);
+	        SpzUiThemeOps.ApplyBoundChromeTmp(_mainHeader, t.textPrimary, authoredPt);
+	        // Nomad compact display in the masked header strip (Grid/CTRL litmus) — do not overwrite designPt.
+	        _mainHeader.fontSize = 14f * Mathf.Clamp(SpzUiThemeOps.Active.fontScale, SpzUiThemeOps.ScaleTokenMin, SpzUiThemeOps.ScaleTokenMax);
 	        // Mild tracking — keep title inside the masked header strip (Grid/CTRL litmus).
 	        _mainHeader.characterSpacing = 2f;
 	        _mainHeader.overflowMode = TextOverflowModes.Overflow;

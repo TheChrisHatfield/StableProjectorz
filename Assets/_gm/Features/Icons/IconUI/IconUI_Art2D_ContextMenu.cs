@@ -281,7 +281,13 @@ namespace spz {
 	        bg.type = Image.Type.Simple;
 	        bg.preserveAspect = true;
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
-	            SpzUiThemeOps.RestoreAuthoredGraphic(bg);
+	            SpzUiThemeOps.RestoreBoundChromeUnder(_button_importToLayer.transform);
+	            bg = _button_importToLayer.targetGraphic as Image
+	                 ?? _button_importToLayer.GetComponent<Image>();
+	            if (bg == null) return;
+	            bg.sprite = CreateImportToLayerSprite();
+	            bg.type = Image.Type.Simple;
+	            bg.preserveAspect = true;
 	            bg.color = new Color(0.25f, 0.25f, 0.28f, 1f);
 	            return;
 	        }
