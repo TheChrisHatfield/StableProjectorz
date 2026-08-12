@@ -23,4 +23,14 @@ public sealed class AddonManagerNullAddonInfoGuardContractTests {
 		string body = src.Substring(i, System.Math.Min(500, src.Length - i));
 		Assert.That(body, Does.Contain("if (addonInfo == null)"));
 	}
+
+	[Test]
+	public void SyncAddonRowVisual_GuardsNullAddonInfo() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "AddonManager_UI.cs");
+		string src = File.ReadAllText(path);
+		int i = src.IndexOf("void SyncAddonRowVisual(", System.StringComparison.Ordinal);
+		string body = src.Substring(i, System.Math.Min(450, src.Length - i));
+		Assert.That(body, Does.Contain("info == null"));
+	}
 }

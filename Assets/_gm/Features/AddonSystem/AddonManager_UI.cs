@@ -2093,7 +2093,8 @@ namespace spz {
 			int disabledCount = 0;
 			int shown = 0;
 			foreach (var kvp in addons) {
-				bool draftOn = GetDraftEnabled(kvp.Key, kvp.Value != null && kvp.Value.isEnabled);
+				if (kvp.Value == null) continue;
+				bool draftOn = GetDraftEnabled(kvp.Key, kvp.Value.isEnabled);
 				if (draftOn) enabledCount++;
 				else disabledCount++;
 				bool shouldShow = _filterState == 0
@@ -2113,7 +2114,9 @@ namespace spz {
 		void SyncAddonRowVisual(string addonId) {
 			if (string.IsNullOrEmpty(addonId) || !_addonUIItems.TryGetValue(addonId, out var item) || item == null)
 				return;
-			if (Addon_MGR.instance == null || !Addon_MGR.instance.GetAddons().TryGetValue(addonId, out var info))
+			if (Addon_MGR.instance == null
+			    || !Addon_MGR.instance.GetAddons().TryGetValue(addonId, out var info)
+			    || info == null)
 				return;
 			var toggle = item.transform.Find("HeaderRow/StatusToggle")?.GetComponent<Toggle>();
 			if (toggle == null)
