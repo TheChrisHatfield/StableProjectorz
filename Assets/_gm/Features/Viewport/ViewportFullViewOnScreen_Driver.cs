@@ -139,9 +139,8 @@ namespace spz {
 		static bool _loggedResolveBestOnce;
 
 		/// <summary>
-		/// Pick the largest pixel size across all Unity monitor APIs so DPI scaling, windowed-mode reporting,
-		/// or a stale <see cref="Screen.currentResolution"/> never produces a "too short" SD H/W.
-		/// <para>Authoritative on Unity 6: <see cref="Screen.mainWindowDisplayInfo"/> (display the window is on, native pixels).</para>
+		/// Native pixel size of the display the game window is on (paired W×H — never Max width from one
+		/// monitor with Max height from another). Falls back to window / currentResolution.
 		/// </summary>
 		static Vector2Int ResolveBestScreenPixelSize() {
 			int w = 0;
@@ -150,55 +149,43 @@ namespace spz {
 			// Primary on Unity 6: native pixel size of the display the game window is currently on.
 			try {
 				DisplayInfo di = Screen.mainWindowDisplayInfo;
-				if (di.width > 0)  { w = Mathf.Max(w, di.width);  }
-				if (di.height > 0) { h = Mathf.Max(h, di.height); }
-			}
-			catch { }
-
-			// All connected displays (multi-monitor): pick the largest extent in case a bigger one is attached.
-			try {
-				var infos = new System.Collections.Generic.List<DisplayInfo>(2);
-				Screen.GetDisplayLayout(infos);
-				for (int i = 0; i < infos.Count; i++) {
-					if (infos[i].width  > 0) { w = Mathf.Max(w, infos[i].width);  }
-					if (infos[i].height > 0) { h = Mathf.Max(h, infos[i].height); }
+				if (di.width > 0 && di.height > 0) {
+					w = di.width;
+					h = di.height;
 				}
 			}
 			catch { }
 
-			Resolution scr = Screen.currentResolution;
-			w = Mathf.Max(w, scr.width);
-			h = Mathf.Max(h, scr.height);
-
-			w = Mathf.Max(w, Screen.width);
-			h = Mathf.Max(h, Screen.height);
-
-			if (Display.main != null) {
-				w = Mathf.Max(w, Display.main.systemWidth);
-				h = Mathf.Max(h, Display.main.systemHeight);
-			}
-			if (Display.displays != null) {
-				for (int i = 0; i < Display.displays.Length; i++) {
-					var d = Display.displays[i];
-					if (d == null) { continue; }
-					w = Mathf.Max(w, d.systemWidth);
-					h = Mathf.Max(h, d.systemHeight);
+			// Same-window fallbacks only — do not Max across GetDisplayLayout / Display.displays
+			// (multi-monitor frankenstein e.g. 3840×3440 that matches no screen).
+			if (w < 64 || h < 64) {
+				if (Screen.width >= 64 && Screen.height >= 64) {
+					w = Screen.width;
+					h = Screen.height;
 				}
 			}
-
-			w = Mathf.Max(64, w);
-			h = Mathf.Max(64, h);
+			if (w < 64 || h < 64) {
+				Resolution scr = Screen.currentResolution;
+				if (scr.width >= 64 && scr.height >= 64) {
+					w = scr.width;
+					h = scr.height;
+				}
+			}
+			if (w < 64 || h < 64) {
+				w = Mathf.Max(64, w > 0 ? w : 1920);
+				h = Mathf.Max(64, h > 0 ? h : 1080);
+			}
 
 			if (!_loggedResolveBestOnce) {
 				_loggedResolveBestOnce = true;
 				int diW = 0, diH = 0;
 				try { var di = Screen.mainWindowDisplayInfo; diW = di.width; diH = di.height; } catch { }
+				Resolution scrLog = Screen.currentResolution;
 				Debug.Log(
 					$"[ViewportFullViewOnScreen_Driver] ResolveBestScreenPixelSize → {w}x{h} | " +
 					$"mainWindowDisplayInfo={diW}x{diH} | " +
-					$"Screen.currentResolution={scr.width}x{scr.height} | " +
-					$"Screen.width/height={Screen.width}x{Screen.height} | " +
-					$"Display.main.system={(Display.main != null ? Display.main.systemWidth  : 0)}x{(Display.main != null ? Display.main.systemHeight : 0)}");
+					$"Screen.currentResolution={scrLog.width}x{scrLog.height} | " +
+					$"Screen.width/height={Screen.width}x{Screen.height}");
 			}
 			return new Vector2Int(w, h);
 		}
