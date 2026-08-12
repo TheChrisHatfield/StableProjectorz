@@ -2219,13 +2219,16 @@ namespace spz {
 		/// Preserves real <see cref="Toggle.graphic"/> checkmarks. Restore via <see cref="RestoreBoundChromeUnder"/>.
 		/// </summary>
 		public static void ApplySolidSquareChrome(Selectable selectable, Color fill, Color accent) {
-			if (selectable == null || selectable.targetGraphic == null)
+			if (selectable == null)
 				return;
 			if (!ShouldRecolorBoundChrome) {
-				RestoreAuthoredGraphic(selectable.targetGraphic);
-				RestoreAuthoredColorBlock(selectable);
+				// Leave litmus: unwind SolidRect sprite, hidden triangle/tick plates, raycasts — not
+				// ColorBlock/face tint alone (Addon open launcher / Settings gear holdover).
+				RestoreBoundChromeUnder(selectable.transform);
 				return;
 			}
+			if (selectable.targetGraphic == null)
+				return;
 			SnapshotAuthoredGraphic(selectable.targetGraphic);
 			SnapshotAuthoredColorBlock(selectable);
 			ApplySelectableToken(selectable, fill, accent);
