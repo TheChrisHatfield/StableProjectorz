@@ -113,6 +113,10 @@ namespace spz {
 	            _delete_button.transform.SetParent(transform.parent, worldPositionStays: true);
 	            _delete_button.transform.SetAsLastSibling();
 	        }
+	        // Re-theme after show/reparent — ThemeChanged while inactive leaves stale chrome; delete is outside menu root.
+	        ApplyThemeTokens();
+	        if (_delete_button != null && SpzUiThemeOps.ShouldRecolorBoundChrome)
+	            SpzUiThemeOps.ApplyContextMenuChrome(_delete_button.gameObject);
 	        bool isDepthOn = _showDepth_toggle.isPressed;
 	        _disableWhenDepth.ForEach(go => go.SetActive(!isDepthOn));
 	    }

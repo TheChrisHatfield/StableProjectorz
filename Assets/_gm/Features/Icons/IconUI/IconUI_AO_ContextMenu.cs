@@ -40,6 +40,8 @@ namespace spz {
 	            gameObject.SetActive(isShow);
 	            _alreadyShown = true;
 	        }
+	        if (isShow)
+	            ApplyThemeTokens();
 	    }
 
 	    public AmbientOcclusionInfo aoInfo
