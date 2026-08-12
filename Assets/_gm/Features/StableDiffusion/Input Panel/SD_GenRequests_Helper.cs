@@ -98,6 +98,13 @@ namespace spz {
 	        _isGeneratingWhat = Generate_RequestingWhat.nothing;
 	    }
 
+	    /// <summary>POST /interrupt without arming the 10s FinishTheInterrupt timer (custom workflows clear busy themselves).</summary>
+	    public void RequestHttpInterruptOnly(){
+	        _cancelRequested = true;
+	        ClearStuckInterruptTimer();
+	        _generate_sender.Send_StopGenerateRequest();
+	    }
+
 
 
 	    IEnumerator Generate_txt2Img_crtn(bool isMakingBackgrounds, Action onRequested = null) {
