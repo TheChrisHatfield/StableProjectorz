@@ -125,6 +125,11 @@ namespace spz {
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_hardness.transform);
 	            if (_colors != null)
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_colors.transform);
+	            // AlphaPicker lives under Paint Brush Presets — Soft RolesUnder historically SolidSquared it;
+	            // leave must unwind even when Soft exclude skips it on apply.
+	            var alphaPicker = UnityEngine.Object.FindFirstObjectByType<BrushRibbon_UI_AlphaPicker>(FindObjectsInactive.Include);
+	            if (alphaPicker != null)
+	                SpzUiThemeOps.RestoreBoundChromeUnder(alphaPicker.transform);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
