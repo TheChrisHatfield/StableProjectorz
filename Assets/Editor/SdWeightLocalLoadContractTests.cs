@@ -37,9 +37,9 @@ public sealed class SdWeightLocalLoadContractTests {
 		Assert.That(src, Does.Contain("File.Copy"));
 		Assert.That(src, Does.Contain("PreferModelWhenAvailable"));
 		Assert.That(src, Does.Contain("PreferVAEWhenAvailable"));
-		Assert.That(src, Does.Contain("EnsureFromDiskButton"));
-		Assert.That(src, Does.Contain("From disk"));
-		Assert.That(src, Does.Contain("DataPath empty").Or.Contain("denyReason"));
+		Assert.That(src, Does.Contain("PreferNameFromPath"));
+		Assert.That(src, Does.Contain("GetFullPath"));
+		Assert.That(src, Does.Contain("Invalid path"));
 	}
 
 	[Test]

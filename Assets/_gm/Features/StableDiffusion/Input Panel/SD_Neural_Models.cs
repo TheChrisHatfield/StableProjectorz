@@ -156,20 +156,35 @@ namespace spz {
 	    public void PreferModelWhenAvailable(string name){
 	        if (string.IsNullOrEmpty(name)) return;
 	        if (_modelsDropdown == null) {
-	            _preferedModelName_viaLoad = StripExtensions(name.Trim());
+	            _preferedModelName_viaLoad = NormalizeCheckpointPrefer(name);
 	            return;
 	        }
-	        string want = StripExtensions(name.Trim());
+	        string want = NormalizeCheckpointPrefer(name);
 	        _preferedModelName_viaLoad = want;
 	        // Exact stem match only — IndexOf would pick flux-2… when wanting "flux".
 	        int ix = _modelsDropdown.options.FindIndex(opt =>
 	            opt.text != null
-	            && string.Equals(StripExtensions(opt.text), want, StringComparison.OrdinalIgnoreCase));
+	            && string.Equals(NormalizeCheckpointPrefer(opt.text), want, StringComparison.OrdinalIgnoreCase));
 	        if (ix >= 0) {
 	            _preferedModelName_viaLoad = "";
 	            _modelsDropdown.value = ix;
 	            _modelsDropdown.RefreshShownValue();
 	        }
+	    }
+
+	    static string NormalizeCheckpointPrefer(string name){
+	        if (string.IsNullOrEmpty(name)) return "";
+	        string n = name.Trim().Replace('\\', '/');
+	        string exten = Path.GetExtension(n);
+	        if (exten.IndexOf(".safetensors", StringComparison.OrdinalIgnoreCase) >= 0
+	            || exten.IndexOf(".ckpt", StringComparison.OrdinalIgnoreCase) >= 0
+	            || exten.IndexOf(".pt", StringComparison.OrdinalIgnoreCase) >= 0
+	            || exten.IndexOf(".pth", StringComparison.OrdinalIgnoreCase) >= 0) {
+	            string dir = Path.GetDirectoryName(n)?.Replace('\\', '/') ?? "";
+	            string stem = Path.GetFileNameWithoutExtension(n);
+	            return string.IsNullOrEmpty(dir) ? stem : (dir + "/" + stem);
+	        }
+	        return n;
 	    }
 
 	    /// <summary>True when screen point is over Model dropdown, slide-out, or this panel.</summary>
@@ -264,10 +279,10 @@ namespace spz {
 	        bool wantsLoaded = string.IsNullOrEmpty(_preferedModelName_viaLoad) == false;
 	        if(!wantsLoaded){ return; }
 	        if (_modelsDropdown == null || _modelsDropdown.options.Count == 0){ return; }
-	        string want = StripExtensions(_preferedModelName_viaLoad);
+	        string want = NormalizeCheckpointPrefer(_preferedModelName_viaLoad);
 	        int modelIndex = _modelsDropdown.options.FindIndex(opt =>
 	            opt.text != null
-	            && string.Equals(StripExtensions(opt.text), want, StringComparison.OrdinalIgnoreCase));
+	            && string.Equals(NormalizeCheckpointPrefer(opt.text), want, StringComparison.OrdinalIgnoreCase));
 	        if(modelIndex>=0){ 
 	            _preferedModelName_viaLoad = "";//found, no longer need to search for it.
 	            _modelsDropdown.value = modelIndex;//will invoke our callback, and send JSON to SD.

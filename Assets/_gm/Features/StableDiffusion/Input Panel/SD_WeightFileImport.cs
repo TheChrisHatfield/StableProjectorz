@@ -99,17 +99,24 @@ namespace spz {
 			Directory.CreateDirectory(destDir);
 			string fileName = Path.GetFileName(absolutePath);
 			string destPath = Path.Combine(destDir, fileName).Replace('\\', '/');
-			string srcFull = Path.GetFullPath(absolutePath);
-			string destDirFull = Path.GetFullPath(destDir);
-			bool alreadyInDest = srcFull.StartsWith(
-				destDirFull.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-					+ Path.DirectorySeparatorChar,
-				StringComparison.OrdinalIgnoreCase)
+			string srcFull;
+			string destDirFull;
+			try {
+				srcFull = Path.GetFullPath(absolutePath);
+				destDirFull = Path.GetFullPath(destDir);
+			} catch (Exception ex) {
+				Status("Invalid path: " + ex.Message, false);
+				return;
+			}
+			string destDirPrefix = destDirFull.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+				+ Path.DirectorySeparatorChar;
+			bool alreadyInDest = srcFull.StartsWith(destDirPrefix, StringComparison.OrdinalIgnoreCase)
 				|| string.Equals(srcFull, Path.GetFullPath(destPath), StringComparison.OrdinalIgnoreCase);
 
 			if (alreadyInDest) {
-				PreferAndMaybeSelect(kind, fileName);
-				Status("Selected " + PreferLabel(kind, fileName) + " (already in WebUI folder).", false);
+				string preferName = PreferNameFromPath(kind, destDirPrefix, srcFull, fileName);
+				PreferAndMaybeSelect(kind, preferName);
+				Status("Selected " + PreferLabel(kind, preferName) + " (already in WebUI folder).", false);
 				return;
 			}
 
@@ -228,17 +235,41 @@ namespace spz {
 			});
 		}
 
-		static void PreferAndMaybeSelect(Kind kind, string fileName) {
+		static void PreferAndMaybeSelect(Kind kind, string fileNameOrRelative) {
 			if (kind == Kind.Vae) {
-				SD_VAE.instance?.PreferVAEWhenAvailable(fileName);
+				SD_VAE.instance?.PreferVAEWhenAvailable(fileNameOrRelative);
 			} else {
-				string stem = Path.GetFileNameWithoutExtension(fileName);
-				SD_Neural_Models.instance?.PreferModelWhenAvailable(stem);
+				// Checkpoint dropdown uses stems; keep subdir/stem when present.
+				string prefer = fileNameOrRelative;
+				if (prefer.IndexOf('/') >= 0 || prefer.IndexOf('\\') >= 0) {
+					string dir = Path.GetDirectoryName(prefer) ?? "";
+					string stem = Path.GetFileNameWithoutExtension(prefer);
+					prefer = string.IsNullOrEmpty(dir) ? stem : Path.Combine(dir, stem).Replace('\\', '/');
+				} else {
+					prefer = Path.GetFileNameWithoutExtension(prefer);
+				}
+				SD_Neural_Models.instance?.PreferModelWhenAvailable(prefer);
 			}
 		}
 
+		/// <summary>WebUI titles for nested files are relative paths (subdir/name), not basenames.</summary>
+		static string PreferNameFromPath(Kind kind, string destDirPrefix, string srcFull, string fileName) {
+			if (srcFull.StartsWith(destDirPrefix, StringComparison.OrdinalIgnoreCase)) {
+				string rel = srcFull.Substring(destDirPrefix.Length).Replace('\\', '/');
+				if (!string.IsNullOrEmpty(rel))
+					return rel;
+			}
+			return fileName;
+		}
+
 		static string PreferLabel(Kind kind, string fileName) {
-			return kind == Kind.Vae ? fileName : Path.GetFileNameWithoutExtension(fileName);
+			if (kind == Kind.Vae) return Path.GetFileName(fileName);
+			if (fileName.IndexOf('/') >= 0 || fileName.IndexOf('\\') >= 0) {
+				string dir = Path.GetDirectoryName(fileName) ?? "";
+				string stem = Path.GetFileNameWithoutExtension(fileName);
+				return string.IsNullOrEmpty(dir) ? stem : (dir.Replace('\\', '/') + "/" + stem);
+			}
+			return Path.GetFileNameWithoutExtension(fileName);
 		}
 
 		static void Status(string msg, bool showProgress) {
