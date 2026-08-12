@@ -859,8 +859,11 @@ namespace spz {
 		/// radial dials (CircleSlider) — flattening those into SolidRect causes overlay soup.
 		/// </summary>
 		public static void FlattenSlicedChromeFace(Image image) {
-			if (image == null || !ShouldRecolorBoundChrome)
+			if (image == null) return;
+			if (!ShouldRecolorBoundChrome) {
+				RestoreRoundedControlSpritesUnder(image.transform);
 				return;
+			}
 			if (IsToggleCheckmarkGraphic(image))
 				return;
 			if (IsUiMaskGraphic(image))
@@ -1656,7 +1659,20 @@ namespace spz {
 		/// No-op on builtin default (silo).
 		/// </summary>
 		public static void HideAuthoredGraphicForTheme(Graphic graphic) {
-			if (graphic == null || !ShouldRecolorBoundChrome) return;
+			if (graphic == null) return;
+			if (!ShouldRecolorBoundChrome) {
+				var leaveTag = graphic.GetComponent<SpzUiThemeHiddenGraphic>();
+				if (leaveTag != null) {
+					if (leaveTag.hasSnapshot)
+						graphic.enabled = leaveTag.wasEnabled;
+					if (Application.isPlaying)
+						UnityEngine.Object.Destroy(leaveTag);
+					else
+						UnityEngine.Object.DestroyImmediate(leaveTag);
+				}
+				RestoreAuthoredGraphic(graphic);
+				return;
+			}
 			// Never disable a Selectable click/raycast face (dead UI under Nomad).
 			if (graphic is Image img && IsSelectableTargetGraphic(img))
 				return;
