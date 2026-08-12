@@ -58,4 +58,15 @@ public sealed class ExternalProcessSettingsInSessionContractTests {
 		Assert.That(src, Does.Contain("ShowWindow"));
 		Assert.That(src, Does.Contain("EnumWindows"));
 	}
+
+	[Test]
+	public void SettingsUi_SyncsBrowserToggleFromPrefs_LikeExternalWindows() {
+		string src = Read("Assets", "_gm", "Features", "Settings", "Settings_UI.cs");
+		int i = src.IndexOf("Settings:set_webUiOpenBrowserOnStartup", System.StringComparison.Ordinal);
+		Assert.That(i, Is.GreaterThanOrEqualTo(0));
+		int j = src.IndexOf("Settings:set_sd_strictMaskIsolation", i, System.StringComparison.Ordinal);
+		string body = src.Substring(i, j - i);
+		Assert.That(body, Does.Contain("WebUI_OpenBrowserOnStartup"));
+		Assert.That(body, Does.Contain("SetIsOnWithoutNotify"));
+	}
 }
