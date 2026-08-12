@@ -41,6 +41,7 @@ namespace spz {
 	    [SerializeField] Animation _isLoading_anim;
 	    [Space(10)]
 	    [SerializeField] SlideOut_Widget_UI _getModes_slideOut;
+	    [SerializeField] Button _loadFromDiskButton;
 
 	    public string selectedModel_name => GetSelectedModel_name();
 	    public static Action<SDModelsList> Act_ListOfModelsReceived { get; set; } = null;
@@ -131,6 +132,57 @@ namespace spz {
 	        SD_Options_Fetcher.Act_onOptionsRetrieved += OnOptionsReceived;
 	        SD_Options_Fetcher.Act_onWillSendOptions_AmmendPlz += OnWillSendOptions_AmmendPlz;
 	        SD_Options_Fetcher.Act_OnSendOptions_done += OnSendOptions_done;
+	        EnsureLoadFromDiskButton();
+	    }
+
+	    void EnsureLoadFromDiskButton(){
+	        if (_loadFromDiskButton == null)
+	            _loadFromDiskButton = SD_WeightFileImport.EnsureFromDiskButton(
+	                _getModes_slideOut, SD_WeightFileImport.Kind.Checkpoint, BrowseAndImportCheckpoint);
+	        else {
+	            _loadFromDiskButton.onClick.RemoveListener(BrowseAndImportCheckpoint);
+	            _loadFromDiskButton.onClick.AddListener(BrowseAndImportCheckpoint);
+	        }
+	    }
+
+	    public void BrowseAndImportCheckpoint(){
+	        SD_WeightFileImport.BrowseAndImport(SD_WeightFileImport.Kind.Checkpoint);
+	    }
+
+	    /// <summary>Prefer this checkpoint after list refresh (also selects immediately if already listed).</summary>
+	    public void PreferModelWhenAvailable(string name){
+	        if (string.IsNullOrEmpty(name)) return;
+	        if (_modelsDropdown == null) {
+	            _preferedModelName_viaLoad = StripExtensions(name.Trim());
+	            return;
+	        }
+	        string want = StripExtensions(name.Trim());
+	        _preferedModelName_viaLoad = want;
+	        // Exact stem match only — IndexOf would pick flux-2… when wanting "flux".
+	        int ix = _modelsDropdown.options.FindIndex(opt =>
+	            opt.text != null
+	            && string.Equals(StripExtensions(opt.text), want, StringComparison.OrdinalIgnoreCase));
+	        if (ix >= 0) {
+	            _preferedModelName_viaLoad = "";
+	            _modelsDropdown.value = ix;
+	            _modelsDropdown.RefreshShownValue();
+	        }
+	    }
+
+	    /// <summary>True when screen point is over Model dropdown, slide-out, or this panel.</summary>
+	    public bool ScreenPointHitsOwnership(Vector2 screenPoint){
+	        if (transform is RectTransform root
+	            && RectTransformUtility.RectangleContainsScreenPoint(root, screenPoint))
+	            return true;
+	        if (_modelsDropdown != null
+	            && _modelsDropdown.transform is RectTransform dd
+	            && RectTransformUtility.RectangleContainsScreenPoint(dd, screenPoint))
+	            return true;
+	        if (_getModes_slideOut != null
+	            && _getModes_slideOut.transform is RectTransform slide
+	            && RectTransformUtility.RectangleContainsScreenPoint(slide, screenPoint))
+	            return true;
+	        return false;
 	    }
 
 	    IEnumerator EnsureFetchStarted_crtn(){
@@ -205,7 +257,11 @@ namespace spz {
 	    void dropdown_LoadedSavedModel_maybe(){
 	        bool wantsLoaded = string.IsNullOrEmpty(_preferedModelName_viaLoad) == false;
 	        if(!wantsLoaded){ return; }
-	        int modelIndex = FindIndex_inDropdown(_preferedModelName_viaLoad);
+	        if (_modelsDropdown == null || _modelsDropdown.options.Count == 0){ return; }
+	        string want = StripExtensions(_preferedModelName_viaLoad);
+	        int modelIndex = _modelsDropdown.options.FindIndex(opt =>
+	            opt.text != null
+	            && string.Equals(StripExtensions(opt.text), want, StringComparison.OrdinalIgnoreCase));
 	        if(modelIndex>=0){ 
 	            _preferedModelName_viaLoad = "";//found, no longer need to search for it.
 	            _modelsDropdown.value = modelIndex;//will invoke our callback, and send JSON to SD.

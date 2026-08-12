@@ -36,6 +36,7 @@ namespace spz {
 	    [SerializeField] Animation _isLoading_anim;
 	    [Space(10)]
 	    [SerializeField] SlideOut_Widget_UI _getMore_slideout;
+	    [SerializeField] Button _loadFromDiskButton;
 
 	    public string selectedVAE_name => GetSelectedVAE_name();
 	    bool _isFetchingVAEs = false;
@@ -90,6 +91,49 @@ namespace spz {
 	        SD_Options_Fetcher.Act_onOptionsRetrieved += OnOptionsReceived;
 	        SD_Options_Fetcher.Act_onWillSendOptions_AmmendPlz += OnWillSendOptions_AmmendPlz;
 	        SD_Options_Fetcher.Act_OnSendOptions_done += OnSendOptions_done;
+	        EnsureLoadFromDiskButton();
+	    }
+
+	    void EnsureLoadFromDiskButton(){
+	        if (_loadFromDiskButton == null)
+	            _loadFromDiskButton = SD_WeightFileImport.EnsureFromDiskButton(
+	                _getMore_slideout, SD_WeightFileImport.Kind.Vae, BrowseAndImportVAE);
+	        else {
+	            _loadFromDiskButton.onClick.RemoveListener(BrowseAndImportVAE);
+	            _loadFromDiskButton.onClick.AddListener(BrowseAndImportVAE);
+	        }
+	    }
+
+	    public void BrowseAndImportVAE(){
+	        SD_WeightFileImport.BrowseAndImport(SD_WeightFileImport.Kind.Vae);
+	    }
+
+	    /// <summary>Prefer this VAE after list refresh (also selects immediately if already listed).</summary>
+	    public void PreferVAEWhenAvailable(string name){
+	        if (string.IsNullOrEmpty(name)) return;
+	        string want = name.Trim();
+	        _preferedVAEname_viaLoad = want;
+	        if (TrySelectVAEByName(want, out _, out _)) {
+	            _preferedVAEname_viaLoad = "";
+	            _timeOf_SelectedTheVAE = Time.time;
+	            SD_Options_Fetcher.instance?.SubmitOptions_Asap();
+	        }
+	    }
+
+	    /// <summary>True when screen point is over VAE dropdown, slide-out, or this panel.</summary>
+	    public bool ScreenPointHitsOwnership(Vector2 screenPoint){
+	        if (transform is RectTransform root
+	            && RectTransformUtility.RectangleContainsScreenPoint(root, screenPoint))
+	            return true;
+	        if (_vaeDropdown != null
+	            && _vaeDropdown.transform is RectTransform dd
+	            && RectTransformUtility.RectangleContainsScreenPoint(dd, screenPoint))
+	            return true;
+	        if (_getMore_slideout != null
+	            && _getMore_slideout.transform is RectTransform slide
+	            && RectTransformUtility.RectangleContainsScreenPoint(slide, screenPoint))
+	            return true;
+	        return false;
 	    }
 
 	    IEnumerator EnsureFetchLoopStarted_crtn(){

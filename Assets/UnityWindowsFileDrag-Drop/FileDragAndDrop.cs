@@ -70,6 +70,35 @@ public class FileDragAndDrop : MonoBehaviour
             return;
         }
 
+        // SD checkpoint / VAE weights — only when dropped onto Model or SD-VAE ownership rects.
+        if (SD_WeightFileImport.AllFilesAreWeights(aFiles)) {
+            Vector2 screen = new Vector2(screenCoord.x, screenCoord.y);
+            bool onModel = SD_Neural_Models.instance != null
+                && SD_Neural_Models.instance.ScreenPointHitsOwnership(screen);
+            bool onVae = SD_VAE.instance != null
+                && SD_VAE.instance.ScreenPointHitsOwnership(screen);
+            if (onModel && !onVae) {
+                SD_WeightFileImport.ImportFromPath(SD_WeightFileImport.Kind.Checkpoint, aFiles[0]);
+                return;
+            }
+            if (onVae && !onModel) {
+                SD_WeightFileImport.ImportFromPath(SD_WeightFileImport.Kind.Vae, aFiles[0]);
+                return;
+            }
+            if (onModel && onVae) {
+                // Overlap: prefer the tighter control by checking VAE first only if model panel contains both —
+                // use VAE when its dropdown/slide hits, else checkpoint.
+                if (SD_VAE.instance != null && SD_VAE.instance.ScreenPointHitsOwnership(screen))
+                    SD_WeightFileImport.ImportFromPath(SD_WeightFileImport.Kind.Vae, aFiles[0]);
+                else
+                    SD_WeightFileImport.ImportFromPath(SD_WeightFileImport.Kind.Checkpoint, aFiles[0]);
+                return;
+            }
+            Viewport_StatusText.instance.ShowStatusText(
+                "Drop onto Model or SD-VAE to load this weight.", false, 4, false);
+            return;
+        }
+
         string msg = "Drag-and-drop contains unsupported file types.";
         Viewport_StatusText.instance.ShowStatusText(msg, false, 4, false);
     }
