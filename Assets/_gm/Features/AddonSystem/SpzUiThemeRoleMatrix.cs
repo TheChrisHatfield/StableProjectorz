@@ -310,14 +310,11 @@ namespace spz {
 			SafeApply();
 		}
 
-		void OnDisable() {
-			if (!_subscribed) return;
-			SpzUiThemeOps.ThemeChanged -= OnThemeChanged;
-			_subscribed = false;
-		}
-
 		void OnDestroy() {
-			OnDisable();
+			if (_subscribed) {
+				SpzUiThemeOps.ThemeChanged -= OnThemeChanged;
+				_subscribed = false;
+			}
 			_apply = null;
 		}
 

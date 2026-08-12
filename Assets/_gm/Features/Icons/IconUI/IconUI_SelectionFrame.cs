@@ -33,7 +33,7 @@ namespace spz {
 	        ApplyThemeTokens();
 	    }
 
-	    void OnDisable() {
+	    void OnDestroy() {
 	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 	    }
 
