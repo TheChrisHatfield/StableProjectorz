@@ -265,7 +265,7 @@ namespace spz {
 	        int touched = StartExternalProcess.TrySetWindowsVisibleForProcessIds(pids, wantShow);
 	        UnityEngine.Debug.Log($"[LaunchWebUI] In-session Black box {(wantShow ? "show" : "hide")}: touched={touched}, pids={pids.Count}");
 
-	        bool liveWebUi = pids.Count > 0 || Connection_MGR.is_sd_connected;
+	        bool liveWebUi = pids.Count > 0;
 	        bool needRestartForShow = wantShow && touched == 0 && liveWebUi;
 	        bool needRestartForHide = !wantShow && _lastWebUiLaunchedWithVisibleConsole && liveWebUi && touched == 0;
 	        if (needRestartForShow || needRestartForHide) {
