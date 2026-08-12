@@ -670,9 +670,30 @@ namespace spz {
 		/// flattening that RT would stretch Paint/Smudge/Erase cells over their parent and erase gap anchors.
 		/// </summary>
 		public static void FlattenToolFaceImage(Image img) {
-			if (img == null || !ShouldRecolorBoundChrome) return;
+			if (img == null) return;
+			if (!ShouldRecolorBoundChrome) {
+				RestoreBoundChromeUnder(img.transform);
+				return;
+			}
 			if (IsUiMaskGraphic(img)) return;
 			if (img.type == Image.Type.Filled) return;
+			// Snapshot preserveAspect/sprite so leave RestoreRoundedControlSpritesUnder can unwind.
+			var roundTag = img.GetComponent<SpzUiThemeRoundedControl>();
+			if (roundTag == null) {
+				roundTag = img.gameObject.AddComponent<SpzUiThemeRoundedControl>();
+				roundTag.authoredSprite = img.sprite;
+				roundTag.authoredType = img.type;
+				roundTag.authoredPixelsPerUnitMultiplier = img.pixelsPerUnitMultiplier;
+				roundTag.authoredPreserveAspect = img.preserveAspect;
+				roundTag.hasAuthoredSnapshot = true;
+			}
+			else if (!roundTag.hasAuthoredSnapshot) {
+				roundTag.authoredSprite = img.sprite;
+				roundTag.authoredType = img.type;
+				roundTag.authoredPixelsPerUnitMultiplier = img.pixelsPerUnitMultiplier;
+				roundTag.authoredPreserveAspect = img.preserveAspect;
+				roundTag.hasAuthoredSnapshot = true;
+			}
 			img.preserveAspect = false;
 			img.pixelsPerUnitMultiplier = 1f;
 			if (UiRuntimeSprites.IsCachedRoundedRect(img.sprite))
