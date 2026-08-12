@@ -183,6 +183,8 @@ public sealed class BoundChromePass7FunctionalTests {
 		Assert.That(src, Does.Contain("s_columnFrameSuppressCount"));
 		Assert.That(src, Does.Contain("SyncOpenRightDockLayout"),
 			"Existing OPEN RIGHT menus must re-apply Gen Art face layout, not only create-time");
+		Assert.That(src, Does.Contain("_lastFullViewSessionOn"),
+			"Dock must poll full-view session — ActiveChanged skips OPEN RIGHT → restore-left");
 		Assert.That(src, Does.Contain("ResolveAuthoredGenArtFill"),
 			"Dock face fill must not bake Nomad live Gen Art grey into authored peach");
 		Assert.That(src, Does.Contain("TryGetAuthoredGraphicColor"));
