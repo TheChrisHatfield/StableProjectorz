@@ -48,9 +48,7 @@ namespace spz {
 
 	    Coroutine _showHidePanel_crtn = null;
 
-	    /// <summary>Authored choice-panel scale; captured once before any fullscreen fan flip.</summary>
-	    Vector3 _choicesPanelAuthoredScale = Vector3.one;
-	    bool _capturedChoicesPanelAuthored;
+	    /// <summary>Authored choice-panel scale unused for flip magnitude — Animator owns scale; we only own X sign.</summary>
 	    bool _choicesFanFlipped;
 	    bool _lastWantChoicesFanFlip;
 	    bool _choicesPanelRaycasterAuthoredIgnoreReversed;
@@ -145,22 +143,31 @@ namespace spz {
 	    void ApplyChoicesFanFlip(bool flip) {
 	        if (_choicesPanel_rectTransf == null)
 	            return;
-	        if (!_capturedChoicesPanelAuthored) {
-	            _choicesPanelAuthoredScale = _choicesPanel_rectTransf.localScale;
-	            _capturedChoicesPanelAuthored = true;
-	        }
 	        if (flip == _choicesFanFlipped)
 	            return;
-	        // Negative X mirrors satellites around the authored pivot; un-mirror TMP so labels stay readable.
-	        Vector3 scale = _choicesPanelAuthoredScale;
-	        if (flip)
-	            scale.x = -Mathf.Abs(scale.x == 0f ? 1f : scale.x);
-	        _choicesPanel_rectTransf.localScale = scale;
+	        // Do NOT assign absolute localScale here: Show_ChoicePanel.anim drives scale 0.35→1.
+	        // LateUpdate EnforceChoicesFanScaleSign keeps X sign after the Animator writes.
+	        _choicesFanFlipped = flip;
 	        // Prefab GraphicRaycaster has ignoreReversedGraphics=true — with scale.x<0 hits die (SD/3D/UV dead).
 	        ApplyChoicesPanelRaycasterForMirror(flip);
-	        // Absolute (not toggle): theme Restore can reset TMP scale mid-session.
 	        ApplyChoiceLabelMirrorState(flip);
-	        _choicesFanFlipped = flip;
+	    }
+
+	    /// <summary>
+	    /// Animator writes positive scale each frame; re-apply mirror sign without changing magnitude.
+	    /// </summary>
+	    void EnforceChoicesFanScaleSign() {
+	        if (_choicesPanel_rectTransf == null)
+	            return;
+	        Vector3 s = _choicesPanel_rectTransf.localScale;
+	        float ax = Mathf.Abs(s.x);
+	        if (ax < 1e-5f)
+	            return; // hide anim may zero scale — leave alone
+	        float wantX = _choicesFanFlipped ? -ax : ax;
+	        if (Mathf.Approximately(s.x, wantX))
+	            return;
+	        s.x = wantX;
+	        _choicesPanel_rectTransf.localScale = s;
 	    }
 
 	    void ApplyChoicesPanelRaycasterForMirror(bool flip) {
