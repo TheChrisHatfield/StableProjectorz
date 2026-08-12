@@ -1030,6 +1030,7 @@ namespace spz {
 			if (!ShouldRecolorBoundChrome) {
 				RestoreAuthoredGraphic(text);
 				RestoreDesignFontSize(text, fallbackBasePt);
+				RestoreNomadTypography(text);
 				return;
 			}
 			SnapshotAuthoredGraphic(text);
@@ -1086,12 +1087,13 @@ namespace spz {
 			if (text == null) return;
 			if (designBasePt < 0.05f)
 				designBasePt = 11f;
-			EnsureDesignFontPt(text, designBasePt);
 			if (!ShouldRecolorBoundChrome) {
 				RestoreAuthoredGraphic(text);
 				RestoreDesignFontSize(text, designBasePt);
+				RestoreNomadTypography(text);
 				return;
 			}
+			EnsureDesignFontPt(text, designBasePt);
 			ApplyBoundChromeStripLabelTmp(text, token, designBasePt);
 			// Same class of fix as ApplyWorkflowStackedLabelMetrics — strip 18 is too wide here.
 			text.characterSpacing = 4f;
@@ -2390,8 +2392,12 @@ namespace spz {
 
 		/// <summary>Tints a line-icon Image with the active <c>icon_tint</c> token. No-op on builtin.</summary>
 		public static void ApplyLineIconTint(Image image) {
-			if (image == null || !ShouldRecolorBoundChrome)
+			if (image == null) return;
+			if (!ShouldRecolorBoundChrome) {
+				RestoreAuthoredGraphic(image);
 				return;
+			}
+			SnapshotAuthoredGraphic(image);
 			image.color = _active.iconTint;
 		}
 
