@@ -1131,7 +1131,7 @@ namespace spz {
 				_loadAddonsNow_button.interactable = false;
 			ShowStatus("Loading addons...", true);
 			if (Addon_MGR.instance != null) {
-				Addon_MGR.instance.RequestLoadAllEnabledAddonsNow((requested, hardFail) => {
+				Addon_MGR.instance.RequestLoadAllEnabledAddonsNow((requested, hardFail, softFail) => {
 					_loadAddonsNowInFlight = false;
 					if (_loadAddonsNow_button != null)
 						_loadAddonsNow_button.interactable = true;
@@ -1143,6 +1143,10 @@ namespace spz {
 					else if (hardFail > 0)
 						ShowStatus(
 							$"Load finished — {hardFail}/{requested} failed (disabled). Check log.",
+							false);
+					else if (softFail > 0)
+						ShowStatus(
+							$"Load finished — {softFail}/{requested} used native/dock fallback (Python load failed). Check log.",
 							false);
 					else if (parkedAwaiting > 0)
 						ShowStatus(
@@ -1185,6 +1189,7 @@ namespace spz {
 				Addon_MGR.instance.PersistEnabledAddonSelectionNow();
 				Addon_MGR.instance.PersistAddonPrefsNow();
 				SeedDraftFromLiveAddons();
+				SnapshotShowInRibbonPrefs();
 			} finally {
 				_suppressEnabledListRefresh = false;
 			}
@@ -1235,6 +1240,46 @@ namespace spz {
 				if (kvp.Value == null) continue;
 				_draftEnabledById[kvp.Key] = kvp.Value.isEnabled;
 			}
+		}
+
+		void SnapshotShowInRibbonPrefs() {
+			_showInRibbonSnapshotById.Clear();
+			if (Addon_MGR.instance == null) return;
+			foreach (var kvp in Addon_MGR.instance.GetAddons()) {
+				if (string.IsNullOrEmpty(kvp.Key)) continue;
+				_showInRibbonSnapshotById[kvp.Key] = Addon_MGR.instance.ShouldShowInCommandRibbon(kvp.Key);
+			}
+		}
+
+		void RevertShowInRibbonPrefsFromSnapshot() {
+			if (Addon_MGR.instance == null || _showInRibbonSnapshotById.Count == 0) return;
+			foreach (var kvp in _showInRibbonSnapshotById) {
+				if (Addon_MGR.instance.ShouldShowInCommandRibbon(kvp.Key) == kvp.Value)
+					continue;
+				Addon_MGR.instance.SetShowInCommandRibbon(kvp.Key, kvp.Value);
+			}
+		}
+
+		/// <summary>Clear false Close warnings when live enable matches draft (e.g. after load-fail flips dial off).</summary>
+		void RecomputeDraftDirtyFromLive() {
+			if (Addon_MGR.instance == null) {
+				_draftDirty = false;
+				return;
+			}
+			foreach (var kvp in Addon_MGR.instance.GetAddons()) {
+				if (kvp.Value == null) continue;
+				if (GetDraftEnabled(kvp.Key, kvp.Value.isEnabled) != kvp.Value.isEnabled) {
+					_draftDirty = true;
+					return;
+				}
+			}
+			foreach (var kvp in _showInRibbonSnapshotById) {
+				if (Addon_MGR.instance.ShouldShowInCommandRibbon(kvp.Key) != kvp.Value) {
+					_draftDirty = true;
+					return;
+				}
+			}
+			_draftDirty = false;
 		}
 
 		/// <summary>
@@ -2004,6 +2049,7 @@ namespace spz {
 			    && Addon_MGR.instance.GetAddons().TryGetValue(addonId, out var live)
 			    && live != null)
 				_draftEnabledById[addonId] = live.isEnabled;
+			RecomputeDraftDirtyFromLive();
 			if (_suppressEnabledListRefresh) {
 				SyncAddonRowVisual(addonId);
 				RefreshStatusCountsOnly();

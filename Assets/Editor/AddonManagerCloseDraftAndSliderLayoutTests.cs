@@ -13,7 +13,10 @@ public sealed class AddonManagerCloseDraftAndSliderLayoutTests {
 		string body = src.Substring(method, next - method);
 		Assert.That(body, Does.Contain("_draftDirty"));
 		Assert.That(body, Does.Contain("Closed without Save settings"));
-		Assert.That(src, Does.Contain("Remember on — next launch will restore"));
+		Assert.That(body, Does.Contain("Viewport_StatusText"),
+			"Close warning must reach viewport — panel is hidden immediately.");
+		Assert.That(body, Does.Contain("RevertShowInRibbonPrefsFromSnapshot"));
+		Assert.That(src, Does.Contain("Remember on — current enabled set saved"));
 	}
 
 	[Test]

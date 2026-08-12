@@ -877,8 +877,16 @@ namespace spz {
 		}
 
 		void EnsureNativeNomadThemePanel() {
-			if (HasLiveAddonPanelWithWidgets(NomadThemeAddonId))
+			if (TryGetLiveAddonPanel(NomadThemeAddonId, out GameObject existingPanel) && existingPanel != null) {
+				string existingId = existingPanel.GetInstanceID().ToString();
+				if (!_addonUIElements.ContainsKey(NomadThemeAddonId))
+					_addonUIElements[NomadThemeAddonId] = new List<GameObject>();
+				if (!_addonUIElements[NomadThemeAddonId].Contains(existingPanel))
+					_addonUIElements[NomadThemeAddonId].Add(existingPanel);
+				EnsureNativeNomadMissingWidgets(existingId, existingPanel);
 				return;
+			}
+
 			string panelId = CreatePanel(NomadThemeAddonId, "Nomad Theme");
 			if (string.IsNullOrEmpty(panelId)) {
 				UnityEngine.Debug.LogWarning("[AddonUI_MGR] Native Nomad fallback: CreatePanel failed.");
@@ -891,6 +899,28 @@ namespace spz {
 			_nomadSpacingScaleSliderId = AddSlider(NomadThemeAddonId, panelId, "Spacing scale", 0.75f, 1.5f, NomadDefaultSpacingScale);
 			AddButton(NomadThemeAddonId, panelId, "Apply Scales", "apply_nomad_scales");
 			AddButton(NomadThemeAddonId, panelId, "Refresh Theme Status", "refresh_nomad_theme_status");
+		}
+
+		void EnsureNativeNomadMissingWidgets(string panelId, GameObject panel) {
+			if (panel == null || string.IsNullOrEmpty(panelId)) return;
+			if (!PanelHasNamedControlPrefix(panel, "Button_Apply Pro-Studio Nomad palette")
+			    && !PanelHasNamedControlPrefix(panel, "Button_Apply Nomad Palette"))
+				AddButton(NomadThemeAddonId, panelId, "Apply Pro-Studio Nomad palette", "apply_nomad_palette");
+			if (!PanelHasNamedControlPrefix(panel, "Button_Restore StableProjectorz palette")
+			    && !PanelHasNamedControlPrefix(panel, "Button_Restore SPZ Palette"))
+				AddButton(NomadThemeAddonId, panelId, "Restore StableProjectorz palette", "restore_stableprojectorz_palette");
+			if (!PanelHasNamedControlPrefix(panel, "Slider_Font scale"))
+				_nomadFontScaleSliderId = AddSlider(NomadThemeAddonId, panelId, "Font scale", 0.75f, 1.5f, NomadDefaultFontScale);
+			else
+				MaybeBindNomadSlidersFromExistingPanel();
+			if (!PanelHasNamedControlPrefix(panel, "Slider_Spacing scale"))
+				_nomadSpacingScaleSliderId = AddSlider(NomadThemeAddonId, panelId, "Spacing scale", 0.75f, 1.5f, NomadDefaultSpacingScale);
+			else
+				MaybeBindNomadSlidersFromExistingPanel();
+			if (!PanelHasNamedControlPrefix(panel, "Button_Apply Scales"))
+				AddButton(NomadThemeAddonId, panelId, "Apply Scales", "apply_nomad_scales");
+			if (!PanelHasNamedControlPrefix(panel, "Button_Refresh Theme Status"))
+				AddButton(NomadThemeAddonId, panelId, "Refresh Theme Status", "refresh_nomad_theme_status");
 		}
 
 		bool HasLiveAddonPanelWithWidgets(string addonId) {

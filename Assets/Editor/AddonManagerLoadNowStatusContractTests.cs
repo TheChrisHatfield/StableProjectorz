@@ -18,14 +18,18 @@ public sealed class AddonManagerLoadNowStatusContractTests {
 		Assert.That(File.Exists(mgrPath), Is.True);
 		string ui = File.ReadAllText(uiPath);
 		string mgr = File.ReadAllText(mgrPath);
-		Assert.That(mgr, Does.Contain("Action<int, int> onComplete"),
-			"Load-all must report requested/hardFail counts.");
+		Assert.That(mgr, Does.Contain("Action<int, int, int> onComplete"),
+			"Load-all must report requested/hardFail/softFail counts.");
 		Assert.That(mgr, Does.Contain("hardFail++"),
 			"Must count add-ons disabled by MarkAddonLoadFailed.");
+		Assert.That(mgr, Does.Contain("_pythonLoadSoftFailedIds"),
+			"Must track native/dock soft-fails that stay enabled.");
 		Assert.That(ui, Does.Not.Contain("Addons load requested"),
 			"Must not always show false-success 'Addons load requested'.");
 		Assert.That(ui, Does.Contain("hardFail"),
 			"UI must branch status on hardFail.");
+		Assert.That(ui, Does.Contain("softFail"),
+			"UI must branch status on softFail.");
 		Assert.That(ui, Does.Contain("ShowStatus(").And.Contain("false)"),
 			"Hard failures must ShowStatus with isSuccess=false.");
 	}
