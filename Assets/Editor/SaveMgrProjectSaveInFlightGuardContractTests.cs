@@ -31,4 +31,17 @@ public sealed class SaveMgrProjectSaveInFlightGuardContractTests {
 		string viewBody = src.Substring(view, System.Math.Min(400, src.Length - view));
 		Assert.That(viewBody, Does.Contain("IsProjectSaveDialogOrWriteInFlight()"));
 	}
+
+	[Test]
+	public void MergeIcons_RefusesWhenBusyBeforeClaimingFlag() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "Save Load Import Export", "Save_MGR.cs");
+		string src = File.ReadAllText(path);
+		int i = src.IndexOf("public void MergeIcons(", System.StringComparison.Ordinal);
+		Assert.That(i, Is.GreaterThanOrEqualTo(0));
+		string body = src.Substring(i, System.Math.Min(700, src.Length - i));
+		Assert.That(body, Does.Contain("IsProjectSaveDialogOrWriteInFlight()"));
+		Assert.That(body.IndexOf("if( _isSaving || IsProjectSaveDialogOrWriteInFlight()", System.StringComparison.Ordinal),
+			Is.LessThan(body.IndexOf("_isSaving = true", System.StringComparison.Ordinal)));
+	}
 }
