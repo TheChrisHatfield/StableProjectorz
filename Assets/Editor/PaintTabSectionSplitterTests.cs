@@ -228,7 +228,8 @@ public sealed class PaintTabSectionSplitterTests {
 		Assert.That(System.IO.File.Exists(path), Is.True, path);
 		string src = System.IO.File.ReadAllText(path);
 		Assert.That(src, Does.Contain("ScreenDeltaToLayoutY"));
-		Assert.That(src, Does.Contain("canvas.scaleFactor"));
+		Assert.That(src, Does.Contain("rootCanvas"));
+		Assert.That(src, Does.Contain("scaleFactor"));
 		Assert.That(src, Does.Contain("_dragActive"));
 		Assert.That(src, Does.Contain("PointerEventData.InputButton.Left"));
 	}
