@@ -46,4 +46,20 @@ public sealed class AddonManagerNullAddonInfoGuardContractTests {
 		Assert.That(body, Does.Contain("SnapshotShowInRibbonPrefs()"),
 			"Clean draft refresh must re-snapshot so newly installed add-ons enter the discard baseline.");
 	}
+
+	[Test]
+	public void RefreshButton_RescansDiskBeforeRebuildingList() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "AddonManager_UI.cs");
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("RescanAndRefreshAddonsList"),
+			"Header Refresh must rescan disk; UI-only RefreshAddonsList stays for filter/search.");
+		int i = src.IndexOf("public void RescanAndRefreshAddonsList()", System.StringComparison.Ordinal);
+		Assert.That(i, Is.GreaterThan(0));
+		string body = src.Substring(i, System.Math.Min(500, src.Length - i));
+		Assert.That(body, Does.Contain("RefreshAddons()"));
+		Assert.That(body, Does.Contain("RefreshAddonsList()"));
+		Assert.That(src, Does.Contain("RescanAndRefreshAddonsList, new Vector2(82, 34)"));
+		Assert.That(src, Does.Contain("onClick.AddListener(RescanAndRefreshAddonsList)"));
+	}
 }
