@@ -37,6 +37,10 @@ namespace spz {
 	    public Generate_RequestingWhat _isGeneratingWhat { get; private set; } = Generate_RequestingWhat.nothing;//reset to 'nothing' once generation is done.
 	    public float _generationCooldownUntil { get; private set; } = -9999; //to prevent relaunching generation too quickly (for example after Interrupting).
 
+	    /// <summary>Active txt2img/img2img/upscale prep+send coroutine — cancel must stop this or it can still POST after interrupt.</summary>
+	    Coroutine _activeRequestCrtn = null;
+	    bool _cancelRequested = false;
+
 
 	#if UNITY_EDITOR
 	    public bool _dumTextures_toFile;
@@ -50,17 +54,23 @@ namespace spz {
 
 
 	    public void Generate_txt2Img(bool isMakingBackgrounds,  Action onRequested=null ){
-	        StartCoroutine( Generate_txt2Img_crtn(isMakingBackgrounds, onRequested) );
+	        _cancelRequested = false;
+	        if (_activeRequestCrtn != null){ StopCoroutine(_activeRequestCrtn); _activeRequestCrtn = null; }
+	        _activeRequestCrtn = StartCoroutine( Generate_txt2Img_crtn(isMakingBackgrounds, onRequested) );
 	    }
 
 	    public void Generate_img2img(bool isMakingBackgrounds,  Action onRequested=null ){
-	        StartCoroutine( Generate_img2img_crtn(isMakingBackgrounds, onRequested) );
+	        _cancelRequested = false;
+	        if (_activeRequestCrtn != null){ StopCoroutine(_activeRequestCrtn); _activeRequestCrtn = null; }
+	        _activeRequestCrtn = StartCoroutine( Generate_img2img_crtn(isMakingBackgrounds, onRequested) );
 	    }
 
 
 	    public void Upscale_img2extra(float upscaleBy,  GenData2D genData_canBeNull=null, 
 	                                  Texture2D imgForSending=null, Action onRequested=null){
-	        StartCoroutine( Upscale_img2extra_crtn(upscaleBy, genData_canBeNull, imgForSending, onRequested) );
+	        _cancelRequested = false;
+	        if (_activeRequestCrtn != null){ StopCoroutine(_activeRequestCrtn); _activeRequestCrtn = null; }
+	        _activeRequestCrtn = StartCoroutine( Upscale_img2extra_crtn(upscaleBy, genData_canBeNull, imgForSending, onRequested) );
 	    }
 
     
@@ -89,14 +99,24 @@ namespace spz {
 
 	    IEnumerator Generate_txt2Img_crtn(bool isMakingBackgrounds, Action onRequested = null) {
         
-	        if(!Start_GenerationRequest(Generate_RequestingWhat.txt2img)){ yield break; }
+	        if(!Start_GenerationRequest(Generate_RequestingWhat.txt2img)){
+	            _activeRequestCrtn = null;
+	            yield break;
+	        }
 
 	        UserCameras_Permissions.Force_KeepRenderingCameras(true);
 
 	        //for inpaint to apply itself, etc. (or to avoid checker pattern if had No-Color Mask)
 	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
 
-	            for (int i=0; i<3; ++i){ yield return null; }//give time for cameras to render the target textures.
+	            for (int i=0; i<3; ++i){
+	                if (_cancelRequested){
+	                    AbortPrepAfterCancel();
+	                    yield break;
+	                }
+	                yield return null;
+	            }//give time for cameras to render the target textures.
+	            if (_cancelRequested){ AbortPrepAfterCancel(); yield break; }
             
 	            GenerationData_Kind genData_kind = isMakingBackgrounds? GenerationData_Kind.SD_Backgrounds 
 	                                                                  : GenerationData_Kind.SD_ProjTextures;
@@ -104,11 +124,18 @@ namespace spz {
 	            SD_GenRequestArgs_byproducts intermediates;
 	            _payload_maker.Create_txt2img_payload(out payload, out intermediates, isMakingBackgrounds);
 
+	            if (_cancelRequested){
+	                intermediates?.Dispose();
+	                AbortPrepAfterCancel();
+	                yield break;
+	            }
+
 	            if (intermediates != null && intermediates.kleinStructureAttachFailed){
 	                intermediates.Dispose();
 	                _finalPreparations_beforeGen = false;
 	                _isGeneratingWhat = Generate_RequestingWhat.nothing;
 	                UserCameras_Permissions.Force_KeepRenderingCameras(false);
+	                _activeRequestCrtn = null;
 	                yield break;
 	            }
 
@@ -121,6 +148,7 @@ namespace spz {
             
 	        UserCameras_Permissions.Force_KeepRenderingCameras(false);
 	        RememberSentVals_forDebug(intermediates,  isImg2Img:false );
+	        _activeRequestCrtn = null;
 	        onRequested?.Invoke();
 	    }
 
@@ -130,6 +158,7 @@ namespace spz {
 	        if( !Start_GenerationRequest(Generate_RequestingWhat.img2img) ){
 	            if (SceneResolution_MGR.LastImg2imgWillAppliedPrep)
 		            SceneResolution_MGR.RevertImg2ImgAccumBoostIfPreRequestFailed();
+	            _activeRequestCrtn = null;
 	            yield break;
 	        }
 
@@ -137,19 +166,30 @@ namespace spz {
 	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
 
 	        UserCameras_Permissions.Force_KeepRenderingCameras(true);
-	            for(int i=0; i<3; ++i){ yield return null; }//give time for cameras to render the target textures.
+	            for(int i=0; i<3; ++i){
+	                if (_cancelRequested){ AbortPrepAfterCancel(); yield break; }
+	                yield return null;
+	            }//give time for cameras to render the target textures.
+	            if (_cancelRequested){ AbortPrepAfterCancel(); yield break; }
 
 	            // Apply visible layer paint to mesh; img2img_GetTextures_andFill calls EnsureInpaint again right before capture.
 	            if (!isMakingBackgrounds && Objects_Renderer_MGR.instance != null)
 	                Objects_Renderer_MGR.instance.EnsureInpaintColorLayerAppliedForCapture();
 	            // Wait until after rendering so OnUpdate/ProcessMeshes cannot clear accumulation after EnsureInpaint but before ReadPixels.
 	            yield return new WaitForEndOfFrame();
+	            if (_cancelRequested){ AbortPrepAfterCancel(); yield break; }
 
 	            GenerationData_Kind genData_kind = isMakingBackgrounds? GenerationData_Kind.SD_Backgrounds 
 	                                                                   : GenerationData_Kind.SD_ProjTextures;
 	            SD_img2img_payload payload;
 	            SD_GenRequestArgs_byproducts intermediates;
 	            _payload_maker.Create_img2img_payload(isMakingBackgrounds, out payload, out intermediates);
+
+	            if (_cancelRequested){
+	                intermediates?.Dispose();
+	                AbortPrepAfterCancel();
+	                yield break;
+	            }
 
 	            // Empty init_images crashes / no-ops Neo img2img (e.g. ContentCam capture failed after Klein force).
 	            bool structureFailed = intermediates != null && intermediates.kleinStructureAttachFailed;
@@ -168,6 +208,7 @@ namespace spz {
 	                        "img2img aborted: missing init image (ContentCam/CustomFile capture failed).",
 	                        false, 5f, false);
 	                UserCameras_Permissions.Force_KeepRenderingCameras(false);
+	                _activeRequestCrtn = null;
 	                yield break;
 	            }
 
@@ -180,6 +221,7 @@ namespace spz {
 
 	        UserCameras_Permissions.Force_KeepRenderingCameras(false);
 	        RememberSentVals_forDebug(intermediates,  isImg2Img:true,  (InpaintingFill)payload.inpainting_fill );
+	        _activeRequestCrtn = null;
 	        onRequested?.Invoke();
 	    }
 
@@ -189,16 +231,22 @@ namespace spz {
 	        if(!Start_GenerationRequest(Generate_RequestingWhat.upscale)){
 	            if (SceneResolution_MGR.LastImg2imgWillAppliedPrep)
 		            SceneResolution_MGR.RevertImg2ImgAccumBoostIfPreRequestFailed();
+	            _activeRequestCrtn = null;
 	            yield break;
 	        }
 
 	        if(fromGen_canBeNull == null){ //genData not provided, render the scene to submit the ViewTexture for upscale.
 	            UserCameras_Permissions.Force_KeepRenderingCameras(true);
 	            Objects_Renderer_MGR.instance.ReRenderAll_soon();
-	            for(int i=0; i<3; ++i){ yield return null; }//give time for cameras to render the target textures.
+	            for(int i=0; i<3; ++i){
+	                if (_cancelRequested){ AbortPrepAfterCancel(); yield break; }
+	                yield return null;
+	            }//give time for cameras to render the target textures.
+	            if (_cancelRequested){ AbortPrepAfterCancel(); yield break; }
 	            if (Objects_Renderer_MGR.instance != null)
 	                Objects_Renderer_MGR.instance.EnsureInpaintColorLayerAppliedForCapture();
 	            yield return new WaitForEndOfFrame();//same ordering as img2img: avoid capture before end-of-frame render after layer sync
+	            if (_cancelRequested){ AbortPrepAfterCancel(); yield break; }
 	        }
 
 	        SD_GenRequestArgs_byproducts intermediates = null;
@@ -210,6 +258,12 @@ namespace spz {
 	            _payload_maker.Create_upscale_payload(upscaleBy, out payload, out intermediates);
 	        }
 
+	        if (_cancelRequested){
+	            intermediates?.Dispose();
+	            AbortPrepAfterCancel();
+	            yield break;
+	        }
+
 	        _generate_sender.Send_GenerateRequest(payload, OnProgressResponse, OnGeneratedResult);
         
 	        _latestGenData = GenData2D_Maker.make_img2extra(payload, fromGen_canBeNull, intermediates);
@@ -218,6 +272,7 @@ namespace spz {
 	                                    1, 1, "img2extra", noSdxlAdvice:true );
 
 	        RememberSentVals_forDebug(null,  isImg2Img:true,  InpaintingFill.Original);//to reset previous values.
+	        _activeRequestCrtn = null;
 	        onRequested?.Invoke();
 	    }
 
@@ -514,6 +569,15 @@ namespace spz {
     
 
 	    public void OnStopGenerate_Button(){
+	        _cancelRequested = true;
+	        if (_activeRequestCrtn != null){
+	            StopCoroutine(_activeRequestCrtn);
+	            _activeRequestCrtn = null;
+	            // Prep may never have POSTed — clear flags now so DenyWithMessage cannot stick on forever.
+	            if (_finalPreparations_beforeGen){
+	                AbortPrepAfterCancel();
+	            }
+	        }
 	        _generate_sender.Send_StopGenerateRequest();
 	        float gracePeriod = 10;//wait at least 10 sec from server. If no response, then our coroutine will perform clean-up.
 	        _finishTheInterrupt_ifStuck_crtn = StartCoroutine( FinishTheInterrupt_ifStuck(gracePeriod) );
@@ -537,16 +601,34 @@ namespace spz {
 	    }
 
 
+	    void AbortPrepAfterCancel(){
+	        _finalPreparations_beforeGen = false;
+	        _isGeneratingWhat = Generate_RequestingWhat.nothing;
+	        UserCameras_Permissions.Force_KeepRenderingCameras(false);
+	        if (SceneResolution_MGR.LastImg2imgWillAppliedPrep)
+		        SceneResolution_MGR.RevertImg2ImgAccumBoostIfPreRequestFailed();
+	        _activeRequestCrtn = null;
+	        _generationCooldownUntil = Time.unscaledTime + _generationCooldown;
+	    }
+
+
 	    void OnFinishTheInterrupt(){
-	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	        if (Objects_Renderer_MGR.instance != null)
+	            Objects_Renderer_MGR.instance.ReRenderAll_soon();
 
 	        if(_finishTheInterrupt_ifStuck_crtn!=null){ 
 	            StopCoroutine(_finishTheInterrupt_ifStuck_crtn); 
 	            _finishTheInterrupt_ifStuck_crtn=null; 
 	        }
+	        if (_activeRequestCrtn != null){
+	            StopCoroutine(_activeRequestCrtn);
+	            _activeRequestCrtn = null;
+	        }
 	        GenData2D_Archive.instance.OnTerminatedGeneration(_latestGenData);
 	        _latestGenData = null;
+	        _finalPreparations_beforeGen = false;
 	        _isGeneratingWhat = Generate_RequestingWhat.nothing;
+	        _cancelRequested = false;
 	        _generationCooldownUntil = Time.unscaledTime + _generationCooldown;
 	        Viewport_StatusText.instance.ShowStatusText("Interrupted the generation.", false, 3, progressVisibility: false);
 	    }
