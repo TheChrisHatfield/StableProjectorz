@@ -2765,6 +2765,8 @@ namespace spz {
 				if (Addon_MGR.instance == null || ribbonOnly)
 					return;
 				Addon_MGR.instance.SetShowInCommandRibbon(addonId, isOn);
+				// In-memory until Save settings → PersistAddonPrefsNow — mark draft dirty for close warning.
+				_draftDirty = true;
 				ThemeShowInRibbonDial(ribbonToggle, isOn, _statusOk, _statusMuted, _statusOk);
 				bool enabled = GetDraftEnabled(addonId, addonInfo.isEnabled);
 				ShowStatus(enabled
@@ -2780,7 +2782,9 @@ namespace spz {
 				string id = addonId;
 				var map = Addon_MGR.instance.GetAddons();
 				if (map.TryGetValue(id, out var info) && info != null && info.isEnabled == isOn) {
-					SetDraftEnabled(id, isOn);
+					// Already live-synced — do not SetDraftEnabled (that would false-dirty the close warning).
+					if (GetDraftEnabled(id, info.isEnabled) != isOn)
+						SetDraftEnabled(id, isOn);
 					ApplyStatusDialVisual(rowToggle, isOn);
 					Addon_MGR.instance.SyncRibbonTabWithEnabledState(id);
 					return;
