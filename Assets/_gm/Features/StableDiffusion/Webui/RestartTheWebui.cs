@@ -127,6 +127,7 @@ namespace spz {
 	            return;
 	        }
 	        LaunchWebUIBatFile.SetLastLaunchedWebUiPid(pid);
+	        LaunchWebUIBatFile.SetLastWebUiLaunchedWithVisibleConsole(showExternalWindows);
 	        LaunchWebUIBatFile.NotifyWebUiLaunchStarted();
 	        OnClicked?.Invoke();
 	    }
