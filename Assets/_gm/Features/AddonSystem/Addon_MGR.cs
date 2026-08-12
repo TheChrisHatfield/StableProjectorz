@@ -592,6 +592,8 @@ namespace spz {
 				}
 			} else if (!wantShow && touched > 0) {
 				_pythonServerStartedWithVisibleConsole = false;
+			} else if (wantShow && touched > 0) {
+				_pythonServerStartedWithVisibleConsole = true;
 			}
 #endif
 		}

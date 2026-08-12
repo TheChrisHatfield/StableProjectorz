@@ -295,6 +295,8 @@ namespace spz {
 	            }
 	        } else if (!wantShow && touched > 0) {
 	            _lastWebUiLaunchedWithVisibleConsole = false;
+	        } else if (wantShow && touched > 0) {
+	            _lastWebUiLaunchedWithVisibleConsole = true;
 	        }
 #endif
 	        if (Addon_MGR.instance != null)
