@@ -100,39 +100,16 @@ namespace spz {
 	        if(instance != null){ DestroyImmediate(this.gameObject); return; }
 	        instance = this;
 	        if (_3d_choice_button != null) {
-	            var sensor = _3d_choice_button.GetComponentInParent<MouseHoverSensor_UI>();
-	            if (sensor != null) {
-	                sensor.onSurfaceEnter += p=>OnSurfaceEnter(_3d_choice_button, p);
-	                sensor.onSurfaceExit += p=>OnSurfaceExit(_3d_choice_button, p);
-	            }
-	            _3d_choice_button.onClick.AddListener( ()=>OnButtonPressed(_3d_choice_button) );
+	            WireChoiceButton(_3d_choice_button, _3d_choice_sensor);
 	            if (_3d_choice_button.transform.parent != null)
 	                _choice_originalScale = _3d_choice_button.transform.parent.localScale;
 	        }
-	        if (_sd_choice_button != null) {
-	            var sensor = _sd_choice_button.GetComponentInParent<MouseHoverSensor_UI>();
-	            if (sensor != null) {
-	                sensor.onSurfaceEnter += p=>OnSurfaceEnter(_sd_choice_button, p);
-	                sensor.onSurfaceExit += p=>OnSurfaceExit(_sd_choice_button, p);
-	            }
-	            _sd_choice_button.onClick.AddListener( ()=>OnButtonPressed(_sd_choice_button) );
-	        }
-	        if (_uv_choice_button != null) {
-	            var sensor = _uv_choice_button.GetComponentInParent<MouseHoverSensor_UI>();
-	            if (sensor != null) {
-	                sensor.onSurfaceEnter += p=>OnSurfaceEnter(_uv_choice_button, p);
-	                sensor.onSurfaceExit += p=>OnSurfaceExit(_uv_choice_button, p);
-	            }
-	            _uv_choice_button.onClick.AddListener( ()=>OnButtonPressed(_uv_choice_button) );
-	        }
-	        if (_bg_choice_button != null) {
-	            var sensor = _bg_choice_button.GetComponentInParent<MouseHoverSensor_UI>(includeInactive:true);
-	            if (sensor != null) {
-	                sensor.onSurfaceEnter += p=>OnSurfaceEnter(_bg_choice_button, p);
-	                sensor.onSurfaceExit += p=>OnSurfaceExit(_bg_choice_button, p);
-	            }
-	            _bg_choice_button.onClick.AddListener( ()=>OnButtonPressed(_bg_choice_button) );
-	        }
+	        if (_sd_choice_button != null)
+	            WireChoiceButton(_sd_choice_button, _2d_choice_sensor);
+	        if (_uv_choice_button != null)
+	            WireChoiceButton(_uv_choice_button, _uv_choice_sensor);
+	        if (_bg_choice_button != null)
+	            WireChoiceButton(_bg_choice_button, _bg_choice_sensor, includeInactiveSensor: true);
 	        if (_choicesPanel_anim != null) {
 	            _choicesPanel_anim.SetBool("ShowPanel", false);
 	            // Prefab scale starts at 1; without a tick FULL/SRN clearance thinks the fan is open.
@@ -141,6 +118,20 @@ namespace spz {
 	        SnapChoicesPanelScaleToClosedRestIfNeeded();
 	        // Prefab leaves choice panel active; block hits until hover opens the fan.
 	        SetChoicesPanelRaycastsEnabled(false);
+	    }
+
+	    void WireChoiceButton(Button button, MouseHoverSensor_UI authoredSensor, bool includeInactiveSensor = false) {
+	        if (button == null)
+	            return;
+	        // Prefer serialized sensor (same ref ScaleChoice_ifHovered uses) over a different parent hit.
+	        var sensor = authoredSensor;
+	        if (sensor == null)
+	            sensor = button.GetComponentInParent<MouseHoverSensor_UI>(includeInactiveSensor);
+	        if (sensor != null) {
+	            sensor.onSurfaceEnter += p => OnSurfaceEnter(button, p);
+	            sensor.onSurfaceExit += p => OnSurfaceExit(button, p);
+	        }
+	        button.onClick.AddListener(() => OnButtonPressed(button));
 	    }
 
 	    void SnapChoicesPanelScaleToClosedRestIfNeeded() {
