@@ -78,7 +78,8 @@ namespace spz {
 	        if(genData==null){ return; }
 	        if(genData._masking_utils == null){ return; }
 
-	        Color col = SD_WorkflowOptionsRibbon_UI.instance.isPositive? Color.white : Color.black;
+	        Color col = (SD_WorkflowOptionsRibbon_UI.instance != null && SD_WorkflowOptionsRibbon_UI.instance.isPositive)
+		        ? Color.white : Color.black;
 	        PaintUndo_MGR.EnsureExists();
 	        StartCoroutine(BucketFillWithUndo_Coroutine(genData, col));
 	    }
@@ -171,6 +172,7 @@ namespace spz {
 
 	    protected override float getBrushStrength(){//strength [0,1] --> [-1,1]
 	        var orib = SD_WorkflowOptionsRibbon_UI.instance;
+	        if (orib == null) return 0f;
 	        if (KeyMousePenInput.isPenEraserPressed()) return -orib.maskBrushOpacity;
 	        if (KeyMousePenInput.isPenTipPressed()) return orib.maskBrushOpacity;
 	        return orib.maskBrushOpacity * (orib.isPositive?1:-1);
@@ -218,7 +220,9 @@ namespace spz {
 	        _brushMaterial.SetFloat("_BrushStampStronger", isErasing? 2 : 0.0f);
 
 	        bool isMultiView = genData._masking_utils.numPOV>1;
-	        bool fadeByNormal = !isMultiView && SD_WorkflowOptionsRibbon_UI.instance.isPositive;
+	        bool fadeByNormal = !isMultiView
+		        && SD_WorkflowOptionsRibbon_UI.instance != null
+		        && SD_WorkflowOptionsRibbon_UI.instance.isPositive;
 	        _brushMaterial.SetFloat("_FadeByNormal", fadeByNormal? 1 : 0);
 
 	        if (ModelsHandler_3D.instance == null || Objects_Renderer_MGR.instance == null

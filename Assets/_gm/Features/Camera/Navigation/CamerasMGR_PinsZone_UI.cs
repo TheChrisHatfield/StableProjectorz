@@ -262,6 +262,8 @@ namespace spz {
 	    }
 
 	    void OnToggledViewCamera(int cameraIx, bool isOn){
+	        if (_cameraPins == null || cameraIx < 0 || cameraIx >= _cameraPins.Count || _cameraPins[cameraIx] == null)
+		        return;
 	        _cameraPins[cameraIx].gameObject.SetActive(isOn);
 	    }
 
