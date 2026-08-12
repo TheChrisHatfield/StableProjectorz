@@ -284,7 +284,11 @@ namespace spz {
 	    /// Matches bucket/trash square litmus — no stacked label/+ band that elongates Paint/Smudge/Erase.
 	    /// </summary>
 	    static void ThemeToolToggle(Toggle toggle, StudioLineIcon glyph, SpzUiThemeOps.ThemeTokens t, float iconSizePx = 24f) {
-	        if (toggle == null || !SpzUiThemeOps.ShouldRecolorBoundChrome) return;
+	        if (toggle == null) return;
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreBoundChromeUnder(toggle.transform);
+	            return;
+	        }
 	        Color normal = FlatToolFill(toggle.isOn, t);
 	        SpzUiThemeOps.ApplyBoundChromeSelectable(toggle, normal, t.accent);
 	        ApplyFlatToolColorBlock(toggle);
@@ -320,7 +324,11 @@ namespace spz {
 	    }
 
 	    static void ThemeToolButton(Button btn, StudioLineIcon glyph, SpzUiThemeOps.ThemeTokens t, bool applyIcon = true) {
-	        if (btn == null || !SpzUiThemeOps.ShouldRecolorBoundChrome) return;
+	        if (btn == null) return;
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreBoundChromeUnder(btn.transform);
+	            return;
+	        }
 	        SpzUiThemeOps.EnsureSelectableHitFace(btn);
 	        SpzUiThemeOps.ApplyBoundChromeSelectable(btn, FlatToolFill(false, t), t.accent);
 	        ApplyFlatToolColorBlock(btn);
@@ -344,7 +352,11 @@ namespace spz {
 	    /// Hardness stamp / brush-color swatch: keep authored Image content; only wire hit face + clear label steals.
 	    /// </summary>
 	    static void ThemeContentSafeHitOnly(Component host) {
-	        if (host == null || !SpzUiThemeOps.ShouldRecolorBoundChrome) return;
+	        if (host == null) return;
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreBoundChromeUnder(host.transform);
+	            return;
+	        }
 	        var btn = host.GetComponentInChildren<Button>(true);
 	        if (btn == null) return;
 	        SpzUiThemeOps.EnsureSelectableHitFace(btn);
