@@ -57,6 +57,12 @@ public sealed class ExternalProcessSettingsInSessionContractTests {
 		Assert.That(src, Does.Contain("TrySetWindowsVisibleForProcessIds"));
 		Assert.That(src, Does.Contain("ShowWindow"));
 		Assert.That(src, Does.Contain("EnumWindows"));
+		// Must not treat ShowWindow's BOOL (was-visible) as success — that false-triggers WebUI relaunch.
+		int i = src.IndexOf("TrySetWindowsVisibleForProcessIds", System.StringComparison.Ordinal);
+		int j = src.IndexOf("public static bool WaitForProcessExit", i, System.StringComparison.Ordinal);
+		string body = src.Substring(i, j - i);
+		Assert.That(body, Does.Contain("was previously visible"));
+		Assert.That(body, Does.Not.Contain("if (ShowWindow(hWnd, showCmd))"));
 	}
 
 	[Test]
