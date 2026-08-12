@@ -45,6 +45,9 @@ namespace spz {
 	    static uint _lastLaunchedWebUiPid;
 	    /// <summary>True when the last WebUI launch used a visible Black box console (CREATE_NEW_CONSOLE).</summary>
 	    static bool _lastWebUiLaunchedWithVisibleConsole;
+	    /// <summary>Guard against rapid Settings toggles stacking WebUI kill/relaunch.</summary>
+	    static float _lastExternalWindowsRelaunchUnscaledTime = -999f;
+	    const float ExternalWindowsRelaunchCooldownoldownSec = 3f;
 	    // Classic Forge/WebUI Gradio+API port (matches ConnectionPanel default).
 	    const int WebUiHttpPort = 7860;
 	    Coroutine _waitForWebUiReady_crtn;
@@ -267,11 +270,17 @@ namespace spz {
 	        bool needRestartForHide = !wantShow && _lastWebUiLaunchedWithVisibleConsole && liveWebUi && touched == 0;
 	        if (needRestartForShow || needRestartForHide) {
 	            bool busy = GenerateButtons_UI.isGenerating;
+	            float since = Time.unscaledTime - _lastExternalWindowsRelaunchUnscaledTime;
 	            if (busy) {
 	                if (Viewport_StatusText.instance != null)
 	                    Viewport_StatusText.instance.ShowStatusText(
 	                        "Black box setting saved — restart WebUI after generation to apply.", false, 5f, false);
+	            } else if (since < ExternalWindowsRelaunchCooldownoldownSec) {
+	                if (Viewport_StatusText.instance != null)
+	                    Viewport_StatusText.instance.ShowStatusText(
+	                        "Black box setting saved — wait a moment before WebUI restart applies.", false, 3f, false);
 	            } else if (instance != null) {
+	                _lastExternalWindowsRelaunchUnscaledTime = Time.unscaledTime;
 	                if (Viewport_StatusText.instance != null)
 	                    Viewport_StatusText.instance.ShowStatusText(
 	                        needRestartForHide
