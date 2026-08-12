@@ -182,6 +182,23 @@ public sealed class CommandRibbonBuiltinAddonIconStripTests {
 	}
 
 	[Test]
+	public void ResolveStripTabDisplayName_AddonPrefersHeaderLabelOverFolderId() {
+		var cell = new GameObject("AddonTab_NomadThemeSPZ", typeof(RectTransform), typeof(Button), typeof(TabsGroupElem_UI));
+		cell.SetActive(false);
+		try {
+			cell.GetComponent<TabsGroupElem_UI>().InitForRuntime("addon_NomadThemeSPZ", cell.GetComponent<Button>());
+			var labelGo = new GameObject("Input (text)", typeof(RectTransform));
+			labelGo.transform.SetParent(cell.transform, false);
+			var label = labelGo.AddComponent<TextMeshProUGUI>();
+			label.text = "Nomad Theme";
+			Assert.That(CommandRibbon_UI.ResolveStripTabDisplayName(cell.transform), Is.EqualTo("Nomad Theme"));
+		}
+		finally {
+			Object.DestroyImmediate(cell);
+		}
+	}
+
+	[Test]
 	public void ThemeStripTabCell_BuiltinWithoutAddonIcons_HidesMonolith() {
 		SpzUiThemeOps.ResetTheme();
 		var root = new GameObject("BuiltinTextRibbon");
