@@ -1042,22 +1042,31 @@ namespace spz {
 		}
 
 		/// <summary>Call from Add-on Manager \"Load addons now\" button. Requests Python to load all enabled addons.</summary>
-		public void RequestLoadAllEnabledAddonsNow(Action onComplete = null) {
+		/// <param name="onComplete">requested count, hard-fail count (dial flipped off). Native fallbacks that stay enabled are not hard fails.</param>
+		public void RequestLoadAllEnabledAddonsNow(Action<int, int> onComplete = null) {
 			StartCoroutine(RequestLoadAllEnabledAddonsNowCrtn(onComplete));
 		}
 
-		IEnumerator RequestLoadAllEnabledAddonsNowCrtn(Action onComplete) {
+		IEnumerator RequestLoadAllEnabledAddonsNowCrtn(Action<int, int> onComplete) {
 			int count = 0;
+			int hardFail = 0;
+			// Snapshot ids — MarkAddonLoadFailed may mutate enabled flags mid-loop.
+			var toLoad = new List<string>();
 			foreach (var kvp in _registeredAddons) {
-				if (kvp.Value.isEnabled) {
-					count++;
-					UnityEngine.Debug.Log($"[Addon_MGR] Load addons now: requesting addon {count}: {kvp.Key}");
-					yield return RequestLoadAddon(kvp.Key);
-				}
+				if (kvp.Value != null && kvp.Value.isEnabled)
+					toLoad.Add(kvp.Key);
 			}
-			UnityEngine.Debug.Log($"[Addon_MGR] Load addons now finished. Requested {count} addon(s). Check [Addon_SocketServer] and [AddonUI_MGR] logs to see if create_panel ran.");
+			foreach (string addonId in toLoad) {
+				count++;
+				UnityEngine.Debug.Log($"[Addon_MGR] Load addons now: requesting addon {count}: {addonId}");
+				yield return RequestLoadAddon(addonId);
+				if (!IsAddonEnabled(addonId))
+					hardFail++;
+			}
+			UnityEngine.Debug.Log(
+				$"[Addon_MGR] Load addons now finished. Requested {count} addon(s), hard-fail {hardFail}. Check [Addon_SocketServer] and [AddonUI_MGR] logs to see if create_panel ran.");
 			AddonDebugCapture.MarkLoadAddonsFinished();
-			onComplete?.Invoke();
+			onComplete?.Invoke(count, hardFail);
 		}
 		
 		/// <summary>Polls GET /ready until Python has connected to Unity (socket 5555), so create_panel works when we POST /load_addon.</summary>
