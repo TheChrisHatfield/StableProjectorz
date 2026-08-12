@@ -61,7 +61,15 @@ namespace spz {
 	        }
 	        bool klein = IsActiveCheckpointKlein();
 	        if(allow_without_controlnets==false && !klein && ControlNetUnit_UI.hasAtLeastSomeModel == false){
-	            string msg = "Can't Generate images yet. You need to download a Depth Control Net.\nGo to ControlNet tab, open unit, and download it.";
+	            bool flux2DevEmpty = false;
+	            try {
+	                string sd = SD_InputPanel_UI.instance != null
+	                    ? SD_InputPanel_UI.instance.models?.selectedModel_name : null;
+	                flux2DevEmpty = SD_OptionsPacket.CheckpointLooksFlux2Dev(sd);
+	            } catch { /* */ }
+	            string msg = flux2DevEmpty
+	                ? "Can't Generate yet: FLUX.2-dev needs Fun-Union ControlNet.\nCTRL NETS → open a unit → Download More → Fun-Union (or the big download button)."
+	                : "Can't Generate images yet. You need to download a Depth Control Net.\nGo to ControlNet tab, open unit, and download it.";
 	            CommandRibbon_UI.instance.Attention_toCtrlNetButton();
 	            Viewport_StatusText.instance.ShowStatusText(msg, false, 5, true);
 	            return true;

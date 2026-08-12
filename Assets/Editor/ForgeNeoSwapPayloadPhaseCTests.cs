@@ -415,6 +415,8 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 		Assert.That(hub, Does.Contain("!klein && has_Depth_or_Norm_or_RefOnly()==false"));
 		Assert.That(hub, Does.Contain("need Fun-Union ControlNet"),
 			"FLUX.2-dev Gen Art deny must name Fun-Union, not only generic depth/normals.");
+		Assert.That(hub, Does.Contain("FLUX.2-dev needs Fun-Union ControlNet"),
+			"Empty CN list deny on FLUX.2-dev must name Fun-Union (not only SD1.5 depth).");
 		string downloadHelper = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "ControlNetUnit_DownloadHelper.cs"));
