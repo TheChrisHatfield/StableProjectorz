@@ -296,12 +296,12 @@ namespace spz {
 	        if (string.IsNullOrEmpty(cnModelName) || cnModelName.Equals("None", StringComparison.OrdinalIgnoreCase))
 	            return false;
 	        if (string.IsNullOrEmpty(checkpointName)) return false;
-	        // Flux.2 Klein-4B: no alwayson ControlNet (Fun-Union ineffective). Structure via Depth img2img.
+	        // Flux.2 Klein-4B: no alwayson ControlNet (Fun-Union ineffective). Structure via ImageStitch.
 	        if (SD_OptionsPacket.CheckpointNeedsKleinModules(checkpointName))
 	            return true;
-	        // Flux2 CN on non-Klein checkpoints is also a mismatch.
+	        // Fun-Union / Flux2 CN pairs with FLUX.2-dev on Forge Neo — allow when checkpoint is non-Klein Flux.2.
 	        if (ControlNetModelLooksFlux2(cnModelName))
-	            return true;
+	            return !SD_OptionsPacket.CheckpointLooksFlux2Dev(checkpointName);
 	        return ControlNetModelLooksXl(cnModelName) != CheckpointLooksXl(checkpointName);
 	    }
 

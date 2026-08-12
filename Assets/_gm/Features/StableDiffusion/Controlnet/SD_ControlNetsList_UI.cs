@@ -292,6 +292,7 @@ namespace spz {
 	    /// Swap family-mismatched CN weights (e.g. leftover SD1.5 depth on XL) to a compatible model
 	    /// before payload build so Gen Art does not silently drop depth.
 	    /// Klein-4B: no compatible CN — disarm models to None so UI matches skipped alwayson payload.
+	    /// FLUX.2-dev: prefer Fun-Union / Flux2 CN when healing depth/normals units.
 	    /// </summary>
 	    public int TryHealFamilyMismatchedModels(){
 	        if (_controlNet_units == null) return 0;
@@ -325,7 +326,13 @@ namespace spz {
 	        string[] models = _models != null ? _models.model_list : null;
 	        if (models == null || models.Length == 0) return 0;
 
-	        string replacement = ControlNetUnit_Dropdowns.FindPreferredDepthModelName(models);
+	        string replacement = null;
+	        if (SD_OptionsPacket.CheckpointLooksFlux2Dev(sdCkpt)){
+	            int fluxIx = ControlNetUnit_Dropdowns.FindPreferredFlux2ModelIndex(models);
+	            if (fluxIx >= 0) replacement = models[fluxIx];
+	        } else {
+	            replacement = ControlNetUnit_Dropdowns.FindPreferredDepthModelName(models);
+	        }
 	        if (string.IsNullOrEmpty(replacement)) return 0;
 	        // Refuse a "heal" that would still mismatch (e.g. Klein with only SD1.5 depth installed).
 	        if (ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(replacement, sdCkpt))

@@ -383,11 +383,17 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			"flux2-alt.safetensors",
 			"FLUX.2-dev-Fun-Controlnet-Union.safetensors",
 		}), Is.EqualTo(2));
-		// Fun-Union is for FLUX.2-dev, not Klein-4B — treat as mismatch so GetArgs never sends it.
+		// Fun-Union is for FLUX.2-dev on Neo — allow; still mismatch on Klein and SD1.5/XL.
 		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
 			"FLUX.2-dev-Fun-Controlnet-Union.safetensors", "flux-2-klein-4b"), Is.True);
 		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
+			"FLUX.2-dev-Fun-Controlnet-Union.safetensors", "FLUX.2-dev"), Is.False);
+		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
+			"FLUX.2-dev-Fun-Controlnet-Union.safetensors", "flux-2-dev.safetensors"), Is.False);
+		Assert.That(ControlNetUnit_Dropdowns.IsControlNetCheckpointFamilyMismatch(
 			"FLUX.2-dev-Fun-Controlnet-Union.safetensors", "realisticvisionv51_v51vae"), Is.True);
+		Assert.That(SD_OptionsPacket.CheckpointLooksFlux2Dev("FLUX.2-dev"), Is.True);
+		Assert.That(SD_OptionsPacket.CheckpointLooksFlux2Dev("flux-2-klein-4b"), Is.False);
 		string hub = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "StableDiffusion", "StableDiffusion_Hub.cs"));
@@ -407,6 +413,8 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 		Assert.That(list, Does.Contain("WhatImageToSend_CTRLNET.Depth"));
 		Assert.That(list, Does.Contain("IsUnitModelValidForActiveCheckpoint"));
 		Assert.That(list, Does.Contain("TryHealFamilyMismatchedModels"));
+		Assert.That(list, Does.Contain("FLUX.2-dev: prefer Fun-Union"));
+		Assert.That(list, Does.Contain("FindPreferredFlux2ModelIndex"));
 		Assert.That(list, Does.Contain("Klein-4B: no compatible CN — disarm models to None"));
 		Assert.That(list, Does.Contain("Capture role before model swap"));
 		Assert.That(list, Does.Contain("Refuse a \"heal\" that would still mismatch"));
@@ -414,9 +422,14 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 		string dropdowns = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "ControlNetUnit_Dropdowns.cs"));
+		Assert.That(dropdowns, Does.Contain("pairs with FLUX.2-dev"));
 		Assert.That(dropdowns, Does.Contain("Do not auto-pick any CN weight"));
 		Assert.That(dropdowns, Does.Contain("no alwayson ControlNet (Fun-Union ineffective)"));
 		Assert.That(dropdowns, Does.Contain("drop legacy depth_* preprocessors"));
+		string options = File.ReadAllText(Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Options_Fetcher.cs"));
+		Assert.That(options, Does.Contain("CheckpointLooksFlux2Dev"));
 		string neural = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Neural_Models.cs"));

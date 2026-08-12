@@ -33,6 +33,16 @@ namespace spz {
 	    }
 
 	    /// <summary>
+	    /// FLUX.2-dev (or other non-Klein Flux.2) checkpoints — compatible with Fun-Union ControlNet on Neo.
+	    /// </summary>
+	    public static bool CheckpointLooksFlux2Dev(string checkpointName){
+	        if (string.IsNullOrEmpty(checkpointName)) return false;
+	        if (CheckpointNeedsKleinModules(checkpointName)) return false;
+	        string n = checkpointName.ToLowerInvariant();
+	        return n.Contains("flux2") || n.Contains("flux-2") || n.Contains("flux.2");
+	    }
+
+	    /// <summary>
 	    /// True Forge Neo <c>set_config</c> KeyErrors on unknown option keys.
 	    /// Only emit keys SPZ intentionally manages (forge-neo-swap).
 	    /// </summary>

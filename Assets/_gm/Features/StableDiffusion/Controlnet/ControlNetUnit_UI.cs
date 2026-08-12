@@ -203,7 +203,9 @@ namespace spz {
 	            if (Viewport_StatusText.instance != null){
 	                string msg = SD_OptionsPacket.CheckpointNeedsKleinModules(sdCkpt)
 	                    ? "Skipped ControlNet: Flux.2 Klein uses mesh-depth ImageStitch structure (not Fun-Union / SD1.5/XL CN)."
-	                    : "Skipped ControlNet: model family mismatch (use SD1.5 CN with SD1.5 checkpoint, XL CN with XL).";
+	                    : ControlNetUnit_Dropdowns.ControlNetModelLooksFlux2(cnModel)
+	                        ? "Skipped ControlNet: Fun-Union / Flux2 CN needs a FLUX.2-dev checkpoint (not SD1.5/XL)."
+	                        : "Skipped ControlNet: model family mismatch (use SD1.5 CN with SD1.5 checkpoint, XL CN with XL).";
 	                Viewport_StatusText.instance.ShowStatusText(msg, false, 4f, false);
 	            }
 	            return null;
