@@ -125,6 +125,17 @@ namespace spz {
 	        // Prefer BoundChrome face (targetGraphic) — .image may lag after theme apply.
 	        var face = btn.targetGraphic != null ? btn.targetGraphic : btn.image;
 	        if (face == null) return;
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            // Leave litmus: soft-dim must not become the Restore baseline (Gen Art soft-disable class).
+	            SpzUiThemeOps.RestoreAuthoredGraphic(face);
+	            var restored = face.color;
+	            restored.a = 1f;
+	            face.color = restored;
+	            SpzUiThemeOps.ResnapshotAuthoredGraphicColor(face);
+	            restored.a = interactable ? 1f : 0.5f;
+	            face.color = restored;
+	            return;
+	        }
 	        var c = face.color;
 	        c.a = interactable ? 1f : 0.5f;
 	        face.color = c;
