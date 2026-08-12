@@ -311,6 +311,8 @@ namespace spz {
 					continue;
 				if (toggle.GetComponentInParent<ColorPalette_Panel_UI>(true) != null)
 					continue;
+				if (toggle.GetComponentInParent<PaintTab_ValueAssistPanel_UI>(true) != null)
+					continue;
 				Color fill = toggle.isOn
 					? Color.Lerp(t.controlBg, t.accent, 0.14f)
 					: t.controlBg;
@@ -331,6 +333,13 @@ namespace spz {
 				if (tmp.GetComponentInParent<RawImage>() != null)
 					continue;
 				if (IsUnderNamedAncestor(tmp.transform, "Swatch", "Brush_"))
+					continue;
+				// Ownership roots theme their own TMP — Collect must not leave Roboto/tracking sticky.
+				if (tmp.GetComponentInParent<PaintTab_ValueAssistPanel_UI>(true) != null)
+					continue;
+				if (tmp.GetComponentInParent<PaintTab_LayersPanel_UI>(true) != null)
+					continue;
+				if (tmp.GetComponentInParent<ColorPalette_Panel_UI>(true) != null)
 					continue;
 				// Design base must be stable across applies — never derive from current fontSize/scale
 				// (that cancels font_scale changes: size/s * s == size).
@@ -375,6 +384,7 @@ namespace spz {
 				if (toggle == null || toggle.targetGraphic is RawImage) continue;
 				if (toggle.GetComponentInParent<PaintTab_LayersPanel_UI>(true) != null) continue;
 				if (toggle.GetComponentInParent<ColorPalette_Panel_UI>(true) != null) continue;
+				if (toggle.GetComponentInParent<PaintTab_ValueAssistPanel_UI>(true) != null) continue;
 				SpzUiThemeOps.EnsureSelectableHitFace(toggle);
 				SpzUiThemeOps.ClearNonFaceRaycastsForTheme(toggle);
 			}

@@ -993,9 +993,14 @@ namespace spz {
 	            // SPZ default toolbox strip: line icons only — no Nomad accent underline.
 	            if (bar != null)
 	                bar.gameObject.SetActive(false);
-	            // Prefab Art/BG tabs often hit via TMP only. Hidden labels must not steal hover/clicks —
-	            // wire a face (RestoreBoundChromeUnder removes SpzUiThemeSyntheticHitFace on leave).
-	            EnsureStripTabHitFace(cell);
+	            // Prefer an existing face — do not inject TabBg/synthetic HitFace after Leave SPZ
+	            // (RestoreBoundChromeUnder already removed synthetics; recreating sticks forever).
+	            Image face = FindStripTabFaceImage(cell);
+	            var btn = cell.GetComponent<Button>();
+	            if (face != null && btn != null && btn.targetGraphic == null)
+	                btn.targetGraphic = face;
+	            if (face != null)
+	                face.raycastTarget = true;
 	            ClearStripTabNonFaceRaycasts(cell);
 	            EnsureSpzDefaultStripLineIcon(cell, iconTransform, iconOnly: true);
 	            EnsureStripTabHoverTooltip(cell);

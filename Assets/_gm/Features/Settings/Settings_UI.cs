@@ -1009,6 +1009,7 @@ namespace spz {
 	        if (tgl == null) return;
 	        // Ensure + BoundChrome graphic only under Nomad — CreateToggle* runs on builtin too.
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreBoundChromeUnder(tgl.transform);
 	            ApplySettingsPrefabMatchToggleColors(tgl);
 	            return;
 	        }

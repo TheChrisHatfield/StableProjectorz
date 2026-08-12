@@ -124,6 +124,9 @@ namespace spz {
 		{
 			if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 				ApplyAuthoredRowPalette();
+				SpzUiThemeOps.RestoreBoundChromeUnder(transform);
+				if (_listRoot != null && !ReferenceEquals(_listRoot, transform))
+					SpzUiThemeOps.RestoreBoundChromeUnder(_listRoot);
 				if (_addLayerButton != null)
 					SpzUiThemeOps.RestoreBoundChromeUnder(_addLayerButton.transform);
 				if (_collapseButton != null)
