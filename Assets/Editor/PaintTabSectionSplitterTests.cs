@@ -168,6 +168,21 @@ public sealed class PaintTabSectionSplitterTests {
 	}
 
 	[Test]
+	public void SanitizeFlexWeights_RejectsCorruptValues() {
+		float layers = float.NaN, brush = -1f, tool = 0f, color = float.PositiveInfinity;
+		PaintTab_KritaLayout_UI.SanitizeFlexWeights(ref layers, ref brush, ref tool, ref color);
+		Assert.That(layers, Is.EqualTo(PaintTab_KritaLayout_UI.DefaultFlexLayers));
+		Assert.That(brush, Is.EqualTo(PaintTab_KritaLayout_UI.DefaultFlexBrush));
+		Assert.That(tool, Is.EqualTo(PaintTab_KritaLayout_UI.DefaultFlexTool));
+		Assert.That(color, Is.EqualTo(PaintTab_KritaLayout_UI.DefaultFlexColor));
+
+		layers = 2f; brush = 1f; tool = 0.5f; color = 0.5f;
+		PaintTab_KritaLayout_UI.SanitizeFlexWeights(ref layers, ref brush, ref tool, ref color);
+		Assert.That(layers, Is.EqualTo(2f));
+		Assert.That(brush, Is.EqualTo(1f));
+	}
+
+	[Test]
 	public void SectionSplitter_HandleHeight_IsAtLeast8() {
 		Assert.That(PaintTab_SectionSplitter_UI.HandleHeight, Is.GreaterThanOrEqualTo(8f));
 	}

@@ -324,10 +324,34 @@ namespace spz {
 		/// <summary>Sets flexibleHeight on the four flex section roots; clears preferred lock.</summary>
 		public void ApplyFlexWeights(float layers, float brush, float tool, float color)
 		{
+			SanitizeFlexWeights(ref layers, ref brush, ref tool, ref color);
 			SetFlex(GetSectionLayoutElement(_layersSection), layers);
 			SetFlex(GetSectionLayoutElement(_brushPresetsSection), brush);
 			SetFlex(GetSectionLayoutElement(_toolOptionsSection), tool);
 			SetFlex(GetSectionLayoutElement(_colorPaletteSection), color);
+		}
+
+		/// <summary>Rejects NaN/Inf/non-positive weights; falls back to defaults when the sum is unusable.</summary>
+		public static void SanitizeFlexWeights(ref float layers, ref float brush, ref float tool, ref float color)
+		{
+			layers = SanitizedFlexOrDefault(layers, DefaultFlexLayers);
+			brush = SanitizedFlexOrDefault(brush, DefaultFlexBrush);
+			tool = SanitizedFlexOrDefault(tool, DefaultFlexTool);
+			color = SanitizedFlexOrDefault(color, DefaultFlexColor);
+			float sum = layers + brush + tool + color;
+			if (!(sum > 0.04f) || float.IsNaN(sum) || float.IsInfinity(sum)) {
+				layers = DefaultFlexLayers;
+				brush = DefaultFlexBrush;
+				tool = DefaultFlexTool;
+				color = DefaultFlexColor;
+			}
+		}
+
+		static float SanitizedFlexOrDefault(float value, float fallback)
+		{
+			if (float.IsNaN(value) || float.IsInfinity(value) || value < 0.01f)
+				return fallback;
+			return value;
 		}
 
 		static void SetFlex(LayoutElement le, float flex)
