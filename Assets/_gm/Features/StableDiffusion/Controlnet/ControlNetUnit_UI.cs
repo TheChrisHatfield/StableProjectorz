@@ -210,12 +210,13 @@ namespace spz {
 	            }
 	            return null;
 	        }
-	        // Saved projects may still have depth_* preprocessor with Fun-Union — force None at payload time.
-	        if (SD_OptionsPacket.CheckpointNeedsKleinModules(sdCkpt)
-	            && ControlNetUnit_Dropdowns.ControlNetModelLooksFlux2(cnModel)
-	            && _dropdowns != null && !_dropdowns.is_currPreprocessor_none){
-	            _dropdowns.TrySelectPreprocessorByName("None", out _, out _);
-	        }
+		// Saved projects may still have depth_* preprocessor with Fun-Union — force None at payload time.
+		// (Klein never reaches here: family mismatch returns null above. This is for FLUX.2-dev.)
+		if (SD_OptionsPacket.CheckpointLooksFlux2Dev(sdCkpt)
+		    && ControlNetUnit_Dropdowns.ControlNetModelLooksFlux2(cnModel)
+		    && _dropdowns != null && !_dropdowns.is_currPreprocessor_none){
+		    _dropdowns.TrySelectPreprocessorByName("None", out _, out _);
+		}
 
 	        if (isForInpaint()){
 	            var trib = WorkflowRibbon_UI.instance;
