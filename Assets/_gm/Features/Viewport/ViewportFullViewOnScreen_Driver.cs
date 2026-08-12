@@ -40,6 +40,19 @@ namespace spz {
 
 		public static event Action<bool> ActiveChanged;
 
+		[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+		static void ResetFullViewDriverStatics() {
+			// Enter Play Mode Options can disable domain reload — IsActive / captured gen W×H would stick.
+			IsActive = false;
+			_savedLeft = true;
+			_savedRight = true;
+			_capturedSave = false;
+			_savedGenWidth = 512;
+			_savedGenHeight = 512;
+			_capturedGenResolution = false;
+			ActiveChanged = null;
+		}
+
 		public static void SyncFromCurrentSkeleton() {
 			var sk = Global_Skeleton_UI.instance;
 			if (sk == null || !sk.TryGetSidePanelVisibility(out bool left, out bool right)) {
