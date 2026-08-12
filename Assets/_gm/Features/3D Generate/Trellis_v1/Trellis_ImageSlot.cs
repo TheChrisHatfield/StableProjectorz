@@ -90,12 +90,14 @@ namespace spz {
 
 	    void OnSaveImageButton(){
 	        // CHANGED: SimpleFileBrowser implementation for saving.
+	        if (!has_image()) return;
         
 	        FileBrowser.SetFilters(true, new FileBrowser.Filter("Image", "png"));
 	        FileBrowser.SetDefaultFilter("png");
 
 	        FileBrowser.ShowSaveDialog((paths) => {
 	            if(paths.Length == 0) return;
+	            if (!has_image()) return;
 	            string filepath = paths[0];
 
 	            Texture2D tex2D = _image.visibleTexture_ref as Texture2D;
@@ -103,7 +105,9 @@ namespace spz {
 	                TextureTools_SPZ.EncodeAndSaveTexture(tex2D, filepath);
 	                //don't clean up the tex2D here, it already existed before and belongs to someone else.
 	            }else{
-	                tex2D = TextureTools_SPZ.RenderTextureToTexture2D(_image.visibleTexture_ref as RenderTexture);
+	                var rt = _image.visibleTexture_ref as RenderTexture;
+	                if (rt == null) return;
+	                tex2D = TextureTools_SPZ.RenderTextureToTexture2D(rt);
 	                TextureTools_SPZ.EncodeAndSaveTexture(tex2D, filepath);
 	                DestroyImmediate(tex2D);//clean up the temporary tex2D.
 	            }

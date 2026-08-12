@@ -117,7 +117,8 @@ namespace spz {
 	        _brushStroke_intoMask.SetFloat("_Sign", sign); //to know if erasing or adding.
 	        _brushStroke_intoMask.SetTexture(kernel, "_PaintedMask", uvMask.texArray);
 
-	        RenderTexture chunksTex = Objects_Renderer_MGR.instance.chunksTexture_ref().texArray;
+	        RenderTexture chunksTex = Objects_Renderer_MGR.instance?.chunksTexture_ref()?.texArray;
+	        if (chunksTex == null) return;
 	        _brushStroke_intoMask.SetTexture(kernel, "_UV_Chunks_R8", chunksTex);
 
 	        Vector4 chunks_scale = new Vector4(chunksTex.width/(float)currBrushStroke_R8.width, chunksTex.height/(float)currBrushStroke_R8.height, 0,0);
