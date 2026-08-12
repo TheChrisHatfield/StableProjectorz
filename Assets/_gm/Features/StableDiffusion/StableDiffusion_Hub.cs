@@ -140,9 +140,12 @@ namespace spz {
 
     
 	    bool has_Depth_or_Norm_or_RefOnly(){
+	        var cnList = SD_ControlNetsList_UI.instance;
+	        if (cnList == null) return false;
+
 	        // Heal before gating so leftover SD1.5/XL weights on FLUX.2-dev (or XL) can swap to a
 	        // compatible model while Fun-Union/depth is installed — otherwise Deny never reaches GetArgs.
-	        SD_ControlNetsList_UI.instance?.TryHealFamilyMismatchedModels();
+	        cnList.TryHealFamilyMismatchedModels();
 
 	        bool is_img2img   =  WorkflowRibbon_UI.instance.isMode_using_img2img();
 	        // Ignore means GetArgs skips depth/normals — do not require a phantom inactive unit's model.
@@ -152,12 +155,12 @@ namespace spz {
 	        // Valid model must be on an *active* depth/normals unit (same unit GetArgs will send).
 	        // onlyActive:false previously let inactive Fun-Union satisfy the gate while the active
 	        // Depth unit stayed on None → Gen Art with empty alwayson ControlNet.
-	        bool hasDepth = SD_ControlNetsList_UI.instance.Has_Depth_CTRLUnit(
+	        bool hasDepth = cnList.Has_Depth_CTRLUnit(
 	            onlyActive: true, only_if_validModel: true);
-	        bool hasNormals = SD_ControlNetsList_UI.instance.Has_Normals_CTRLUnit(
+	        bool hasNormals = cnList.Has_Normals_CTRLUnit(
 	            onlyActive: true, only_if_validModel: true);
 
-	        bool hasReferenceOnly = SD_ControlNetsList_UI.instance.Num_Active_Reference_CTRLUnit() > 0;
+	        bool hasReferenceOnly = cnList.Num_Active_Reference_CTRLUnit() > 0;
 	        return hasDepth || hasNormals || hasReferenceOnly;
 	    }
 
