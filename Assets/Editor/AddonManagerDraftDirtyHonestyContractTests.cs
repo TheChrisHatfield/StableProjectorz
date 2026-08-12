@@ -38,4 +38,19 @@ public sealed class AddonManagerDraftDirtyHonestyContractTests {
 		Assert.That(body, Does.Contain("SnapshotShowInRibbonPrefs()"),
 			"empty snapshot makes Close-without-Save Revert a no-op");
 	}
+
+	[Test]
+	public void RecomputeDraftDirty_IncludesPersistedEnableMismatch() {
+		string uiPath = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "AddonManager_UI.cs");
+		string mgrPath = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "Addon_MGR.cs");
+		string ui = File.ReadAllText(uiPath);
+		string mgr = File.ReadAllText(mgrPath);
+		Assert.That(mgr, Does.Contain("LiveEnabledSelectionDiffersFromPersisted"));
+		int i = ui.IndexOf("void RecomputeDraftDirtyFromLive()", System.StringComparison.Ordinal);
+		string body = ui.Substring(i, System.Math.Min(900, ui.Length - i));
+		Assert.That(body, Does.Contain("LiveEnabledSelectionDiffersFromPersisted()"),
+			"SoftLoad mirrors draft to live; Close must still dirty when Remember prefs are stale.");
+	}
 }

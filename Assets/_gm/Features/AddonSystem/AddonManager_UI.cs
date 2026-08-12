@@ -1295,6 +1295,11 @@ namespace spz {
 					return;
 				}
 			}
+			// SoftLoad mirrors draft←live so the loops above stay clean; still dirty vs last Save when Remember is on.
+			if (Addon_MGR.instance.LiveEnabledSelectionDiffersFromPersisted()) {
+				_draftDirty = true;
+				return;
+			}
 			_draftDirty = false;
 		}
 
