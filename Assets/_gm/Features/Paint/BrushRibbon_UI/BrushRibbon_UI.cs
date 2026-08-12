@@ -10,6 +10,25 @@ namespace spz {
 	public class BrushRibbon_UI : MonoBehaviour{
 	    public static BrushRibbon_UI instance { get; private set; } = null;
 
+	    /// <summary>
+	    /// Soft/Gen3D RolesUnder must not SolidSquare BrushRibbon-owned hosts (stamps, direction, eyedropper…).
+	    /// Incomplete type lists left EyeDropper/AlphaPicker sticky after Soft ThemeChanged.
+	    /// </summary>
+	    public static bool IsBoundChromeOwnedByBrushRibbon(Component c) {
+	        if (c == null) return false;
+	        return c.GetComponentInParent<BrushRibbon_UI_Hardness>(true) != null
+	            || c.GetComponentInParent<BrushRibbon_UI_Colors>(true) != null
+	            || c.GetComponentInParent<BrushRibbon_UI_Size>(true) != null
+	            || c.GetComponentInParent<BrushRibbon_UI_Opacity>(true) != null
+	            || c.GetComponentInParent<BrushRibbon_UI_BucketFill>(true) != null
+	            || c.GetComponentInParent<BrushRibbon_UI_DeleteButton>(true) != null
+	            || c.GetComponentInParent<BrushRibbon_UI_InvertMask>(true) != null
+	            || c.GetComponentInParent<BrushRibbon_UI_PressureMode>(true) != null
+	            || c.GetComponentInParent<BrushRibbon_UI_Direction>(true) != null
+	            || c.GetComponentInParent<BrushRibbon_UI_EyeDropperTool>(true) != null
+	            || c.GetComponentInParent<BrushRibbon_UI_AlphaPicker>(true) != null;
+	    }
+
 	    [Space(10)]
 	    [SerializeField] BrushRibbon_UI_Colors _colors;
 	    [SerializeField] BrushRibbon_UI_Opacity _opacity;
