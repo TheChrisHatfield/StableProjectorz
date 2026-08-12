@@ -90,7 +90,8 @@ def main() -> int:
 
         st, body = get("/sdapi/v1/progress")
         assert st == 200 and "progress" in body, body
-        print("OK progress", body.get("progress"))
+        assert float(body.get("progress") or 0) == 0.0, body
+        print("OK progress idle", body.get("progress"))
 
         st, body = post("/sdapi/v1/interrupt", {})
         assert st == 200, body
