@@ -28,6 +28,40 @@ public sealed class CommandRibbonBuiltinAddonIconStripTests {
 		Assert.That(src, Does.Contain("Attach to the raycast face"));
 		Assert.That(src, Does.Contain("Hidden labels must not steal hover/clicks"));
 		Assert.That(src, Does.Contain("Harmonize-before-theme measured maxVisibleCharacters=0"));
+		Assert.That(src, Does.Contain("Deactivate before Destroy so StripHasEnabledAddonTabs"));
+		Assert.That(src, Does.Contain("ignore inactive / doomed GOs"));
+	}
+
+	[Test]
+	public void StripHasEnabledAddonTabs_IgnoresInactiveAddonTabOnStrip() {
+		SpzUiThemeOps.ResetTheme();
+		var root = new GameObject("RibbonInactiveAddonScan");
+		root.SetActive(false);
+		try {
+			var ribbon = root.AddComponent<CommandRibbon_UI>();
+			var doomed = new GameObject("AddonTab_Gone", typeof(RectTransform), typeof(Button), typeof(TabsGroupElem_UI));
+			doomed.transform.SetParent(root.transform, false);
+			doomed.GetComponent<TabsGroupElem_UI>().InitForRuntime("addon_Gone", doomed.GetComponent<Button>());
+			doomed.SetActive(false);
+
+			var method = typeof(CommandRibbon_UI).GetMethod("StripHasEnabledAddonTabs", BindingFlags.Instance | BindingFlags.NonPublic);
+			Assert.That(method, Is.Not.Null);
+			var dictField = typeof(CommandRibbon_UI).GetField("_addonTabById", BindingFlags.Instance | BindingFlags.NonPublic);
+			Assert.That(dictField, Is.Not.Null);
+			var dict = dictField.GetValue(ribbon) as System.Collections.IDictionary;
+			Assert.That(dict, Is.Not.Null);
+			dict["Gone"] = doomed;
+
+			Assert.That((bool)method.Invoke(ribbon, null), Is.False,
+				"inactive/doomed addon tabs must not keep icon strip mode");
+
+			doomed.SetActive(true);
+			Assert.That((bool)method.Invoke(ribbon, null), Is.True,
+				"active dict entry must still enable icon strip");
+		}
+		finally {
+			Object.DestroyImmediate(root);
+		}
 	}
 
 	[Test]
