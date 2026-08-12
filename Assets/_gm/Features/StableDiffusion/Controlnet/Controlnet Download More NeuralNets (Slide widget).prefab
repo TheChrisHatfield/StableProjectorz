@@ -555,8 +555,8 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 'Fun-Union (FLUX.2-dev)
-'  m_isRightToLeft: 0
+  m_text: Fun-Union (FLUX.2-dev)
+  m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8c45e186b0c4284498cea9e97889e753, type: 2}
   m_sharedMaterial: {fileID: 2294251427998740342, guid: 8c45e186b0c4284498cea9e97889e753, type: 2}
   m_fontSharedMaterials: []
