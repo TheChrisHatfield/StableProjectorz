@@ -25,6 +25,8 @@ namespace spz {
 
 	    public void Toggle(bool isOn){
 	        _contextMenu_go.SetActive(isOn);
+	        if (isOn)
+	            ApplyThemeTokens();
 	    }
 
 	    void OnExportMeshButton(){

@@ -108,6 +108,7 @@ namespace spz {
 	        gameObject.SetActive(true);
 	        Reposition_underCursor();
 	        Init(affectThisIcon);
+	        ApplyThemeTokens();
 	        StopAllCoroutines();
 	        StartCoroutine( ToggleVisibil_crtn(isShow:true, isInstant:false, onComplete:null) );
 	    }
