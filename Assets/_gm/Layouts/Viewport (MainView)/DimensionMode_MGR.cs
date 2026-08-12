@@ -474,9 +474,13 @@ namespace spz {
 	                if(_showHidePanel_crtn!=null){ StopCoroutine(_showHidePanel_crtn); }
 	                _showHidePanel_crtn  = StartCoroutine(ShowHidePanel_crtn(hide:false));
 	                _ishowingChoicePanel = true;
-	                if (_choicesPanel_anim != null)
+	                if (_choicesPanel_anim != null) {
 	                    _choicesPanel_anim.SetBool("ShowPanel", true);
+	                    // After SetActive from hide path, Animator resets — apply ShowPanel this frame.
+	                    _choicesPanel_anim.Update(0f);
+	                }
 	                SetChoicesPanelRaycastsEnabled(true);
+	                EnforceChoicesFanScaleSign();
 	            }
 	        }
 	    }
