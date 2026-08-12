@@ -264,7 +264,7 @@ namespace spz {
 	            // Icon-as-face rembg — SolidSquare blanks the glyph (Gen3D Soft litmus).
 	            if (SpzUiThemeOps.IsAuthoredIconFace(_rembg_button.targetGraphic)) {
 	                if (_rembg_button.targetGraphic is Image rembgFace)
-	                    SpzUiThemeOps.ApplyBoundChromeGraphic(rembgFace, t.iconTint);
+	                    SpzUiThemeOps.ApplyBoundChromeIconTint(rembgFace, t.iconTint);
 	            } else {
 	                SpzUiThemeOps.ApplyBoundChromeSelectable(_rembg_button, t.controlBg, t.accent);
 	            }

@@ -159,7 +159,7 @@ namespace spz {
 	            SpzUiThemeOps.EnsureSelectableHitFace(_bakeColors_button);
 	            if (SpzUiThemeOps.IsAuthoredIconFace(_bakeColors_button.targetGraphic)) {
 	                if (_bakeColors_button.targetGraphic is Image bakeFace)
-	                    SpzUiThemeOps.ApplyBoundChromeGraphic(bakeFace, t.iconTint);
+	                    SpzUiThemeOps.ApplyBoundChromeIconTint(bakeFace, t.iconTint);
 	            } else {
 	                SpzUiThemeOps.ApplyBoundChromeSelectable(_bakeColors_button, t.controlBg, t.accent);
 	            }

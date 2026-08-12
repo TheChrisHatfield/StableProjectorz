@@ -86,7 +86,7 @@ namespace spz {
 	            && face.sprite != null
 	            && face.preserveAspect
 	            && !UiRuntimeSprites.IsSolidRect(face.sprite)) {
-	            SpzUiThemeOps.ApplyBoundChromeGraphic(face, t.iconTint);
+	            SpzUiThemeOps.ApplyBoundChromeIconTint(face, t.iconTint);
 	        } else {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
 	        }
