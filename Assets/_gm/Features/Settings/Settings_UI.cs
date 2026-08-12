@@ -962,8 +962,11 @@ namespace spz {
 	    /// </summary>
 	    static void ThemeFlatLauncherButton(Button btn, StudioLineIcon glyph, SpzUiThemeOps.ThemeTokens t) {
 	        if (btn == null) return;
-	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome)
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+	            SpzUiThemeOps.RestoreBoundChromeUnder(btn.transform);
+	            HideMonolithUnder(btn.transform);
 	            return;
+	        }
 	        SpzUiThemeOps.EnsureSelectableHitFace(btn);
 	        if (btn.targetGraphic == null) return;
 	        SpzUiThemeOps.ApplySolidSquareChrome(btn, t.controlBg, t.accent);
