@@ -712,7 +712,15 @@ namespace spz {
 				if (!string.IsNullOrEmpty(mode) && mode == "center_max_off") {
 					bool okExit = ViewportFullViewOnScreen_Driver.TryExit();
 					result["success"] = okExit;
-					if (!okExit) {
+					if (okExit) {
+						// Mirror center_max enter — TryExit alone leaves outer chrome/layout stale
+						// (ActiveChanged may also be null after Play without domain reload).
+						FullView_OuterPanel_Chrome_Binder.SyncChromeToDriver();
+						if (Global_Skeleton_UI.instance != null) {
+							Global_Skeleton_UI.instance.ForceLayoutRefreshAfterPanelResize();
+						}
+						ViewportFullViewOnScreen_Driver.NotifyLayoutRefreshedForPendingGenRefit();
+					} else {
 						result["error"] = "Failed to restore editor layout from on-screen full view";
 					}
 					return result;
