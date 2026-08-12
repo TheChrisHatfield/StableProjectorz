@@ -942,9 +942,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _hoverDelayBeforeShow: 0.2
   _mouseVieportMoveThreshold: 0.005
-  _defaultMessage: 'Forge Neo: download Fun-Union into models/ControlNet and use with a FLUX.2-dev checkpoint.
+  _defaultMessage: 'Forge Neo: Flux.1 base checkpoint for Gen Art.
 
-    Flux.2 Klein Gen Art still uses ImageStitch + RefControl (Fun-Union does not lock Klein-4B).'
+    Fun-Union ControlNet is under ControlNet Download More (needs FLUX.2-dev). Flux.2 Klein Gen Art uses ImageStitch + RefControl.'
 --- !u!1 &3346147877681412407
 GameObject:
   m_ObjectHideFlags: 0
@@ -1316,9 +1316,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _hoverDelayBeforeShow: 0.2
   _mouseVieportMoveThreshold: 0.005
-  _defaultMessage: 'Forge Neo: download Fun-Union into models/ControlNet and use with a FLUX.2-dev checkpoint.
+  _defaultMessage: 'Forge Neo: Flux.1 base checkpoint for Gen Art.
 
-    Flux.2 Klein Gen Art still uses ImageStitch + RefControl (Fun-Union does not lock Klein-4B).'
+    Fun-Union ControlNet is under ControlNet Download More (needs FLUX.2-dev). Flux.2 Klein Gen Art uses ImageStitch + RefControl.'
 --- !u!1 &6572521357643308640
 GameObject:
   m_ObjectHideFlags: 0
@@ -1681,9 +1681,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _hoverDelayBeforeShow: 0.2
   _mouseVieportMoveThreshold: 0.005
-  _defaultMessage: 'Forge Neo: download Fun-Union into models/ControlNet and use with a FLUX.2-dev checkpoint.
+  _defaultMessage: 'Forge Neo: Flux.1 base checkpoint for Gen Art.
 
-    Flux.2 Klein Gen Art still uses ImageStitch + RefControl (Fun-Union does not lock Klein-4B).'
+    Fun-Union ControlNet is under ControlNet Download More (needs FLUX.2-dev). Flux.2 Klein Gen Art uses ImageStitch + RefControl.'
 --- !u!1 &9126762291064495643
 GameObject:
   m_ObjectHideFlags: 0
