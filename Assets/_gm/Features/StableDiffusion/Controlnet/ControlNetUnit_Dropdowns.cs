@@ -373,9 +373,9 @@ namespace spz {
 	        // Do not force Depth send here (user may want Canny/Pose/CustomFile); first-fill arms Depth via MaybeArmDepthSendForFlux2Pick.
 	        try {
 	            string sd = SD_InputPanel_UI.instance != null ? SD_InputPanel_UI.instance.models?.selectedModel_name : null;
+	            // Klein never keeps Fun-Union (family mismatch); only FLUX.2-dev needs None here.
 	            if (ControlNetModelLooksFlux2(modelText)
-	                && (SD_OptionsPacket.CheckpointNeedsKleinModules(sd)
-	                    || SD_OptionsPacket.CheckpointLooksFlux2Dev(sd)))
+	                && SD_OptionsPacket.CheckpointLooksFlux2Dev(sd))
 	                TrySelectPreprocessorByName("None", out _, out _);
 	        } catch { /* input panel may be unset */ }
 	        if (modelText.ToLower().Contains("xl_depth")){
