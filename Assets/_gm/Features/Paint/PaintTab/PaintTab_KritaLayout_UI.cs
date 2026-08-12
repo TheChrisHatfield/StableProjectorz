@@ -251,20 +251,24 @@ namespace spz {
 
 			// Sibling order: toolchest, layers, split, brush, split, tool, split, color
 			int idx = 0;
-			if (_toolchestRow != null) {
-				_toolchestRow.SetSiblingIndex(idx);
-				idx++;
-			}
-			layersRoot.SetSiblingIndex(idx++);
-			if (s1 != null) s1.transform.SetSiblingIndex(idx++);
-			brushRoot.SetSiblingIndex(idx++);
-			if (s2 != null) s2.transform.SetSiblingIndex(idx++);
-			toolRoot.SetSiblingIndex(idx++);
-			if (s3 != null) s3.transform.SetSiblingIndex(idx++);
-			colorRoot.SetSiblingIndex(idx);
+			if (_toolchestRow != null && _toolchestRow.parent == root)
+				_toolchestRow.SetSiblingIndex(idx++);
+			SetSiblingUnder(layersRoot, root, ref idx);
+			SetSiblingUnder(s1 != null ? s1.transform : null, root, ref idx);
+			SetSiblingUnder(brushRoot, root, ref idx);
+			SetSiblingUnder(s2 != null ? s2.transform : null, root, ref idx);
+			SetSiblingUnder(toolRoot, root, ref idx);
+			SetSiblingUnder(s3 != null ? s3.transform : null, root, ref idx);
+			SetSiblingUnder(colorRoot, root, ref idx);
 
 			ApplySavedSectionWeights();
 			ApplyThemeTokens();
+		}
+
+		static void SetSiblingUnder(Transform child, Transform parent, ref int idx)
+		{
+			if (child == null || parent == null || child.parent != parent) return;
+			child.SetSiblingIndex(idx++);
 		}
 
 		/// <summary>True while a section splitter reports an active left-button drag.</summary>
