@@ -280,7 +280,6 @@ namespace spz {
 
 	    /// <summary>Re-sync preset cell fills after a slot is selected (selection can change without ThemeChanged).</summary>
 	    public void RefreshPromptPresetChrome() {
-	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) return;
 	        Transform root = _movableRectTransform != null ? _movableRectTransform : transform;
 	        if (root == null) return;
 	        var t = SpzUiThemeOps.Active;
@@ -292,7 +291,6 @@ namespace spz {
 
 	    /// <summary>Re-tint 512…2048 resolution chips from current W×H (BoundChrome only).</summary>
 	    public void RefreshResolutionPresetChrome() {
-	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) return;
 	        var t = SpzUiThemeOps.Active;
 	        ThemeResolutionPreset(_resolutionPreset_512, 512, t);
 	        ThemeResolutionPreset(_resolutionPreset_768, 768, t);

@@ -125,7 +125,7 @@ namespace spz {
 
 	    /// <summary>Re-tint preset cells from isOn (BoundChrome). Call after WithoutNotify loads too.</summary>
 	    public void RefreshPresetChrome() {
-	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome || _presetToggles == null) return;
+	        if (_presetToggles == null) return;
 	        var t = SpzUiThemeOps.Active;
 	        for (int i = 0; i < _presetToggles.Count; i++) {
 	            var toggle = _presetToggles[i];
