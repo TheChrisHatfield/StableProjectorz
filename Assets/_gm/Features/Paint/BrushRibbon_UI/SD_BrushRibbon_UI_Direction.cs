@@ -256,16 +256,18 @@ namespace spz {
 	        }
 
 	        var rootLayout = dir.GetComponent<LayoutElement>();
-	        if (rootLayout != null) {
+	        if (rootLayout != null && nomadGaps) {
+	            // Snapshot so RestoreBoundChromeUnder can unwind; leave must not hardcode 210 over Restore.
+	            SpzUiThemeOps.SnapshotLayoutElementForTheme(rootLayout);
 	            if (smudgeRect != null) {
 	                // Square cells like bucket/trash: each band height ≈ column width (not a tall 280px stack).
 	                float colW = MeasureDirectionColumnWidth(dir);
 	                float cellFrac = (1f - 2f * gap) / 3f;
 	                float squareStackH = colW / Mathf.Max(0.05f, cellFrac);
-	                rootLayout.minHeight = nomadGaps ? squareStackH : 210f;
-	                rootLayout.preferredHeight = nomadGaps ? squareStackH : -1f;
+	                rootLayout.minHeight = squareStackH;
+	                rootLayout.preferredHeight = squareStackH;
 	            }
-	            else if (nomadGaps) {
+	            else {
 	                float colW = MeasureDirectionColumnWidth(dir);
 	                float cellFrac = (1f - gap) * 0.5f;
 	                float squareStackH = colW / Mathf.Max(0.05f, cellFrac);
