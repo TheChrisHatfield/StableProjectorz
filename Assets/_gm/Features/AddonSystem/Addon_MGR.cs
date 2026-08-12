@@ -1575,6 +1575,11 @@ namespace spz {
 				_pendingPythonUnloadFlushCrtn = StartCoroutine(CoFlushPendingPythonUnloads());
 		}
 
+		/// <summary>True when HTTP unload was deferred (Python may still hold the module).</summary>
+		public bool IsPythonUnloadPending(string addonId) {
+			return !string.IsNullOrEmpty(addonId) && _pendingPythonUnloadIds.Contains(addonId);
+		}
+
 		IEnumerator CoFlushPendingPythonUnloads() {
 			try {
 				while (_pendingPythonUnloadIds.Count > 0) {
