@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using spz;
 using UnityEngine;
@@ -28,7 +30,7 @@ public sealed class PaintTabSectionSplitterTests {
 		DeletePref(PaintTab_KritaLayout_UI.PrefKeyColor);
 		for (int i = 0; i < _owned.Count; i++) {
 			if (_owned[i] != null)
-				Object.DestroyImmediate(_owned[i]);
+				UnityEngine.Object.DestroyImmediate(_owned[i]);
 		}
 		_owned.Clear();
 	}
@@ -168,6 +170,22 @@ public sealed class PaintTabSectionSplitterTests {
 	}
 
 	[Test]
+	public void OnSplitterDragEnded_Source_AlwaysUnlocksOnFailurePaths() {
+		string path = System.IO.Path.Combine(Application.dataPath, "_gm", "Features", "Paint", "PaintTab", "PaintTab_KritaLayout_UI.cs");
+		string src = System.IO.File.ReadAllText(path);
+		int ended = src.IndexOf("void OnSplitterDragEnded()", System.StringComparison.Ordinal);
+		Assert.That(ended, Is.GreaterThanOrEqualTo(0));
+		string body = src.Substring(ended, Math.Min(1200, src.Length - ended));
+		Assert.That(body, Does.Contain("ApplySavedSectionWeights()"));
+		Assert.That(body, Does.Contain("SanitizeFlexWeights(ref wL"));
+		// Failure paths must not bare-return without unlocking.
+		Assert.That(Regex.IsMatch(body,
+			@"if \(layersLe == null[\s\S]*?ApplySavedSectionWeights\(\);\s*return;"), Is.True);
+		Assert.That(Regex.IsMatch(body,
+			@"sumH[\s\S]*?ApplySavedSectionWeights\(\);\s*return;"), Is.True);
+	}
+
+	[Test]
 	public void SectionSplitter_Source_LocksAllSectionsOnDragBegan() {
 		string krita = System.IO.Path.Combine(Application.dataPath, "_gm", "Features", "Paint", "PaintTab", "PaintTab_KritaLayout_UI.cs");
 		string split = System.IO.Path.Combine(Application.dataPath, "_gm", "Features", "Paint", "PaintTab", "PaintTab_SectionSplitter_UI.cs");
@@ -235,7 +253,7 @@ public sealed class PaintTabSectionSplitterTests {
 
 		var brushRoot = PaintTab_KritaLayout_UI.ResolveSectionRoot(layout.BrushPresetsSection);
 		var old = brushRoot.GetComponent<LayoutElement>();
-		Object.DestroyImmediate(old);
+		UnityEngine.Object.DestroyImmediate(old);
 		Assert.That(brushRoot.GetComponent<LayoutElement>(), Is.Null);
 
 		layout.EnsureSectionSplitters();
