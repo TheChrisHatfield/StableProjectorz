@@ -112,4 +112,17 @@ public sealed class CommandRibbonStripChromeThemeTests {
 		Assert.That(m, Is.Not.Null);
 		m.Invoke(ribbon, new object[] { cell, t, recolor, iconOnly });
 	}
+
+	[Test]
+	public void LabeledStrip_LeadsMonolithLeftNotCenterOverText() {
+		string path = System.IO.Path.Combine(Application.dataPath, "_gm", "Layouts", "RightPanel", "CommandRibbon_UI.cs");
+		string src = System.IO.File.ReadAllText(path);
+		int idx = src.IndexOf("static void ApplyStudioTabChromeColors", System.StringComparison.Ordinal);
+		Assert.That(idx, Is.GreaterThanOrEqualTo(0));
+		string body = src.Substring(idx, System.Math.Min(3500, src.Length - idx));
+		Assert.That(body, Does.Contain("Labels visible"));
+		Assert.That(body, Does.Contain("new Vector2(0f, 0.5f)"));
+		// Icon-only still centers; labeled leads.
+		Assert.That(body.IndexOf("iconOnly)"), Is.LessThan(body.IndexOf("Labels visible")));
+	}
 }

@@ -972,12 +972,20 @@ namespace spz {
 	        iconTransform.gameObject.SetActive(true);
 	        var iconRt = iconTransform as RectTransform;
 	        if (iconRt != null) {
-	            // Icon-only and label+icon share the same center so strip glyphs stay aligned.
-	            iconRt.anchorMin = new Vector2(0.5f, 0.5f);
-	            iconRt.anchorMax = new Vector2(0.5f, 0.5f);
-	            iconRt.pivot = new Vector2(0.5f, 0.5f);
-	            iconRt.anchoredPosition = Vector2.zero;
-	            iconRt.sizeDelta = iconOnly ? new Vector2(24f, 24f) : new Vector2(18f, 18f);
+	            if (iconOnly) {
+	                iconRt.anchorMin = new Vector2(0.5f, 0.5f);
+	                iconRt.anchorMax = new Vector2(0.5f, 0.5f);
+	                iconRt.pivot = new Vector2(0.5f, 0.5f);
+	                iconRt.anchoredPosition = Vector2.zero;
+	                iconRt.sizeDelta = new Vector2(24f, 24f);
+	            } else {
+	                // Labels visible — centered 18px Monolith stamps ART/MESH (SERV-class ghost).
+	                iconRt.anchorMin = new Vector2(0f, 0.5f);
+	                iconRt.anchorMax = new Vector2(0f, 0.5f);
+	                iconRt.pivot = new Vector2(0.5f, 0.5f);
+	                iconRt.anchoredPosition = new Vector2(12f, 0f);
+	                iconRt.sizeDelta = new Vector2(18f, 18f);
+	            }
 	        }
 	        var icon = iconTransform.GetComponent<Image>();
 	        if (icon != null) {
