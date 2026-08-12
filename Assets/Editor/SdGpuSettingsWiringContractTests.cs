@@ -40,4 +40,15 @@ public sealed class SdGpuSettingsWiringContractTests {
 			"Assets", "_gm", "Features", "Settings", "Settings_MGR.cs"));
 		Assert.That(settings, Does.Contain("ClearSdDeviceFromKnownWebuiFolders"));
 	}
+
+	[Test]
+	public void SettingsUi_ClampsGpuInputToDiscoveredCudaCount() {
+		string ui = File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "Settings", "Settings_UI.cs"));
+		Assert.That(ui, Does.Contain("GetCudaDeviceCount"));
+		Assert.That(ui, Does.Contain("SD GPU — CUDA"));
+		string launch = ReadLaunch();
+		Assert.That(launch, Does.Contain("GetCudaDeviceCount"));
+		Assert.That(launch, Does.Contain("_cudaDeviceCount"));
+	}
 }
