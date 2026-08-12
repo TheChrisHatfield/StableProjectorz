@@ -73,7 +73,8 @@ namespace spz {
 	            if(contains){ break; }
 	        }
 	        if(!contains){ 
-	            _colorPanel.Hide();
+	            // Commit typed hex / current color before dismiss — Hide() alone drops pending hex.
+	            _colorPanel.CommitAndClose();
 	            if(_workbenchGO != null) _workbenchGO.SetActive(false);
 	        }
 	    }

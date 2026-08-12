@@ -887,8 +887,12 @@ namespace spz {
 				// Ensure stack exists so panel can wire to it (whether panel is found or created)
 				if (PaintLayerStack_MGR.instance == null)
 				{
-					var mgrGo = new GameObject("PaintLayerStack_MGR_Runtime");
-					mgrGo.AddComponent<PaintLayerStack_MGR>();
+					var existing = UnityEngine.Object.FindObjectOfType<PaintLayerStack_MGR>(true);
+					if (existing == null)
+					{
+						var mgrGo = new GameObject("PaintLayerStack_MGR_Runtime");
+						mgrGo.AddComponent<PaintLayerStack_MGR>();
+					}
 				}
 				var layersPanel = layersScrollContent != null
 					? layersScrollContent.GetComponentInChildren<PaintTab_LayersPanel_UI>(true)
@@ -1225,8 +1229,12 @@ namespace spz {
 		{
 			if (PaintLayerStack_MGR.instance == null)
 			{
-				var mgrGo = new GameObject("PaintLayerStack_MGR_Runtime");
-				mgrGo.AddComponent<PaintLayerStack_MGR>();
+				var existing = UnityEngine.Object.FindObjectOfType<PaintLayerStack_MGR>(true);
+				if (existing == null)
+				{
+					var mgrGo = new GameObject("PaintLayerStack_MGR_Runtime");
+					mgrGo.AddComponent<PaintLayerStack_MGR>();
+				}
 			}
 
 			// Panel lives inside scroll content so the layer list scrolls; list root = panel transform

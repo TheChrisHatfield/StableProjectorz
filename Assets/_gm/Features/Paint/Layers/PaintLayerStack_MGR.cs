@@ -198,8 +198,7 @@ namespace spz {
 		/// <summary>Add a new layer. New layer is set active. Existing layers (including layer 0) are unchanged and remain visible. Scene/data injection runs via OnLayerAdded (e.g. Inpaint_MaskPainter).</summary>
 		public PaintLayer AddLayer(string name = null)
 		{
-			int count = _layers.Count;
-			string layerName = name ?? ("Layer " + (count + 1));
+			string layerName = name ?? ConsumeNextDefaultLayerName();
 			var layer = new PaintLayer(layerName);
 			layer.Visible = true;
 			if (_resolution.x > 0 && _udimsCount > 0)
@@ -375,6 +374,14 @@ namespace spz {
 		{
 			if (index < 0) index = 0;
 			return "Layer " + (index + 1);
+		}
+
+		/// <summary>Next default name for new layers: "Layer 1", "Layer 2", … Counter advances and is saved in <see cref="PaintLayerStack_SL.nextLayerNumber"/>.</summary>
+		public string ConsumeNextDefaultLayerName()
+		{
+			string name = "Layer " + _nextLayerNumber;
+			_nextLayerNumber++;
+			return name;
 		}
 
 		/// <summary>Next default name for merged layers: "Collapse 1", "Collapse 2", … Counter advances and is saved in <see cref="PaintLayerStack_SL.nextCollapseNumber"/>.</summary>
@@ -802,12 +809,11 @@ namespace spz {
 			UnityEngine.Debug.Log("[PaintLayerStack] ReplaceLayersWithOneEmpty: one empty layer.");
 		}
 
-		/// <summary>Set opacity of a layer (0–1). Fires OnLayersChanged. </summary>
+		/// <summary>Set opacity of a layer (0–1). Does not fire OnLayersChanged (avoids RebuildList mid-slider, same as visibility).</summary>
 		public void SetLayerOpacity(int index, float opacity)
 		{
 			if (index < 0 || index >= _layers.Count) return;
 			_layers[index].Opacity = Mathf.Clamp01(opacity);
-			OnLayersChanged?.Invoke();
 			if (Objects_Renderer_MGR.instance != null)
 				Objects_Renderer_MGR.instance.ReRenderAll_soon();
 		}

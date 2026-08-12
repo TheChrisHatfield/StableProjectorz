@@ -192,7 +192,18 @@ namespace spz {
 	            _editPOV_toggles[0].gameObject.SetActive(iconPovs>1); 
 
 	            if(toggleWasEnabled && _editPOV_toggles[i].gameObject.activeSelf==false){
-	                _editPOV_toggles[0].isOn = true;//if num cams decreased, ensure 0th toggle is on (even if all of their gameObjs are off)
+	                // Prefer a still-visible POV; never force hidden toggle[0] when iconPovs<=1.
+	                bool reassigned = false;
+	                for (int j = 0; j < _editPOV_toggles.Count; j++){
+	                    if (_editPOV_toggles[j].gameObject.activeSelf){
+	                        _editPOV_toggles[j].isOn = true;
+	                        reassigned = true;
+	                        break;
+	                    }
+	                }
+	                if (!reassigned && iconPovs <= 1){
+	                    // Single-cam / no visible POV edits — leave toggles alone (all inactive).
+	                }
 	            }
 	        }
 	        RefreshPovAndGridChromeSelection();
