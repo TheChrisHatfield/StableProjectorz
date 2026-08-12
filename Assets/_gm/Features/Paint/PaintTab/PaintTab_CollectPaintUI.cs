@@ -539,7 +539,7 @@ namespace spz {
 			smudgeOptsRoot.SetActive(ComputeSmudgeBrushOptsShouldBeVisible());
 		}
 
-		/// <summary>Strict isolation post-process only runs for <see cref="InpaintingFill.Original"/> (see <see cref="GenData_ResultTextures.TryConstrainImg2ImgResult_toScreenMask"/>). Hide the flip option elsewhere so it is not misleading.</summary>
+		/// <summary>Strict isolation / Klein local composite flip: show for every Inpaint workflow that captures a bake mask (Color / NoColor / TotalObject / WhereEmpty).</summary>
 		static bool ComputeStrictIsolationBrushOptsShouldBeVisible()
 		{
 			var wf = WorkflowRibbon_UI.instance;
@@ -549,6 +549,7 @@ namespace spz {
 				case WorkflowRibbon_CurrMode.Inpaint_Color:
 				case WorkflowRibbon_CurrMode.Inpaint_NoColor:
 				case WorkflowRibbon_CurrMode.TotalObject:
+				case WorkflowRibbon_CurrMode.WhereEmpty:
 					return true;
 				default:
 					return false;
@@ -1102,6 +1103,9 @@ namespace spz {
 			if (toolchestDid) {
 				RibbonViewportFullViewOnScreen_Toggle_UI.NotifyAllAttachRequested();
 			}
+
+			// Connectivity: sections may exist without splitters (prefab / prior Collect). Always ensure.
+			_layout.EnsureSectionSplitters();
 
 			var root = _layout.transform as RectTransform;
 			if (root != null)
