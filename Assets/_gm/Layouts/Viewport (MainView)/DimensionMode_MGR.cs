@@ -169,6 +169,8 @@ namespace spz {
 	        // Prefab GraphicRaycaster has ignoreReversedGraphics=true — with scale.x<0 hits die (SD/3D/UV dead).
 	        ApplyChoicesPanelRaycasterForMirror(flip);
 	        ApplyChoiceLabelMirrorState(flip);
+	        // Same-frame sign — don't wait for LateUpdate (one-frame wrong-side flash on FULL enter).
+	        EnforceChoicesFanScaleSign();
 	    }
 
 	    /// <summary>
