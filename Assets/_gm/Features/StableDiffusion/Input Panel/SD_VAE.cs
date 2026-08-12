@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using System.Linq;
+using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -116,11 +117,19 @@ namespace spz {
 	        if (string.IsNullOrEmpty(name)) return;
 	        string want = name.Trim();
 	        _preferedVAEname_viaLoad = want;
-	        if (TrySelectVAEByName(want, out _, out _)) {
-	            _preferedVAEname_viaLoad = "";
-	            _timeOf_SelectedTheVAE = Time.time;
-	            SD_Options_Fetcher.instance?.SubmitOptions_Asap();
-	        }
+	        if (_vaeDropdown == null || _vaeDropdown.options.Count == 0) return;
+	        string wantStem = Path.GetFileNameWithoutExtension(want);
+	        // Exact filename or stem only — avoid loose IndexOf false positives.
+	        int ix = _vaeDropdown.options.FindIndex(opt =>
+	            opt.text != null && (
+	                string.Equals(opt.text, want, StringComparison.OrdinalIgnoreCase)
+	                || string.Equals(Path.GetFileNameWithoutExtension(opt.text), wantStem, StringComparison.OrdinalIgnoreCase)));
+	        if (ix < 0) return;
+	        _preferedVAEname_viaLoad = "";
+	        _vaeDropdown.value = ix;
+	        _vaeDropdown.RefreshShownValue();
+	        _timeOf_SelectedTheVAE = Time.time;
+	        SD_Options_Fetcher.instance?.SubmitOptions_Asap();
 	    }
 
 	    /// <summary>True when screen point is over VAE dropdown, slide-out, or this panel.</summary>
@@ -254,7 +263,13 @@ namespace spz {
 	    void dropdown_LoadedSavedVAE_maybe(){
 	        bool wantsLoaded = string.IsNullOrEmpty(_preferedVAEname_viaLoad) == false;
 	        if(!wantsLoaded){ return; }
-	        int vaeIndex = Find_index_inDropdown(_preferedVAEname_viaLoad);
+	        if (_vaeDropdown == null || _vaeDropdown.options.Count == 0){ return; }
+	        string want = _preferedVAEname_viaLoad.Trim();
+	        string wantStem = Path.GetFileNameWithoutExtension(want);
+	        int vaeIndex = _vaeDropdown.options.FindIndex(opt =>
+	            opt.text != null && (
+	                string.Equals(opt.text, want, StringComparison.OrdinalIgnoreCase)
+	                || string.Equals(Path.GetFileNameWithoutExtension(opt.text), wantStem, StringComparison.OrdinalIgnoreCase)));
 	        if(vaeIndex >= 0){ 
 	            _preferedVAEname_viaLoad = "";//found, no longer need to search for it.
 	            _vaeDropdown.value = vaeIndex;//will invoke our callback, and send JSON to SD.
