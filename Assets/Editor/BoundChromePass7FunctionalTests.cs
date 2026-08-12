@@ -172,6 +172,8 @@ public sealed class BoundChromePass7FunctionalTests {
 		Assert.That(src, Does.Contain("FindDirectChildIncludingInactive(vlgRoot, MenuRowName)"));
 		Assert.That(src, Does.Contain("ResetColumnFrameSuppressStatics"));
 		Assert.That(src, Does.Contain("RuntimeInitializeLoadType.SubsystemRegistration"));
+		Assert.That(src, Does.Contain("TryGetOpenChoicesPanelVisualRect"));
+		Assert.That(src, Does.Contain("choicesBottomLocal"));
 	}
 
 	[Test]

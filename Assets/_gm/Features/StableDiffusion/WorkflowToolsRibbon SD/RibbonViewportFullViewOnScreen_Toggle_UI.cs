@@ -1367,9 +1367,8 @@ namespace spz {
 					: null);
 			if (face == null)
 				face = _builtRowRt;
-			var dim = DimensionMode_MGR.instance != null
-				? DimensionMode_MGR.instance.MainChoiceVisualRect
-				: null;
+			var dimMgr = DimensionMode_MGR.instance;
+			var dim = dimMgr != null ? dimMgr.MainChoiceVisualRect : null;
 			if (face == null || dim == null || !dim.gameObject.activeInHierarchy)
 				return 0f;
 			var vlgRoot = _builtRowRt != null ? _builtRowRt.parent as RectTransform : null;
@@ -1383,6 +1382,14 @@ namespace spz {
 			// Corners: 0=bottom-left, 1=top-left — convert to VLG local so gap is in layout px.
 			float faceTopLocal = vlgRoot.InverseTransformPoint(faceCorners[1]).y;
 			float dimBottomLocal = vlgRoot.InverseTransformPoint(dimCorners[0]).y;
+			// When the SD/3D/UV fan is open (and mirrored toward Gen Art in fullscreen), use the
+			// choice panel footprint so FULL/SRN does not climb under the satellites.
+			if (dimMgr.TryGetOpenChoicesPanelVisualRect(out var choicesRt) && choicesRt.gameObject.activeInHierarchy) {
+				var choiceCorners = new Vector3[4];
+				choicesRt.GetWorldCorners(choiceCorners);
+				float choicesBottomLocal = vlgRoot.InverseTransformPoint(choiceCorners[0]).y;
+				dimBottomLocal = Mathf.Min(dimBottomLocal, choicesBottomLocal);
+			}
 			return Mathf.Max(0f, faceTopLocal - dimBottomLocal + DimModeClearancePx);
 		}
 
