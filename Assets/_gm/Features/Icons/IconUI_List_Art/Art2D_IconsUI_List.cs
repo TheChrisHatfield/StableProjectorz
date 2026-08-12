@@ -80,7 +80,7 @@ namespace spz {
 	        void onYes() => Save_MGR.instance.MergeIcons( onHaveAlbedo );
 
 	        void onHaveAlbedo( Dictionary<Texture2D,UDIM_Sector> albedoDict_withoutOwner){
-	            if(albedoDict_withoutOwner.Count == 0){ return; }
+	            if(albedoDict_withoutOwner == null || albedoDict_withoutOwner.Count == 0){ return; }
 	            base.OnImportCustomImage_OK( GenerationData_Kind.UvTextures_FromFile, albedoDict_withoutOwner );
 	            Debug.Assert(albedoDict_withoutOwner.All( kvp=>kvp.Key==null) );//alls hould have been destroyed by now
 	            string msg = $"Images Merged. GPU memory reduced :)";
@@ -106,6 +106,11 @@ namespace spz {
 	        Save_MGR.instance.MergeIcons( onHaveAlbedo, oldIcons_survive: true);
 
 	        void onHaveAlbedo(Dictionary<Texture2D, UDIM_Sector> albedoDict_withoutOwner) {
+	            if (albedoDict_withoutOwner == null){
+	                // MergeIcons refused (busy) — signal failure; do not NRE on OrderBy.
+	                onReady_TexturesWithoutOwner?.Invoke(null);
+	                return;
+	            }
 	            textureList = albedoDict_withoutOwner.OrderBy(kvp => kvp.Value.ToInt())//ensure textures are sorted by their sector.
 	                                                 .Select(kvp => kvp.Key)//only care about textures.
 	                                                 .ToList();
