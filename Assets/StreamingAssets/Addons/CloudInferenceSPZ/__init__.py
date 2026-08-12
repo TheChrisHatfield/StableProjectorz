@@ -194,6 +194,21 @@ def connect_cloud() -> bool:
     mode = _mode_from_index(int(settings["backend_index"]))
     credential = str(settings.get("credential") or "")
 
+    # Guard: remote URL must not target the active local shim listen endpoint.
+    if mode == "remote_forge":
+        listen = shim.listen_endpoint()  # e.g. 127.0.0.1:7860
+        cred_l = credential.strip().lower().rstrip("/")
+        if "://" not in cred_l:
+            cred_l = "http://" + cred_l
+        if listen.lower() in cred_l or cred_l.endswith(listen.lower()):
+            msg = (
+                f"Remote URL cannot target the local shim ({listen}). "
+                "Paste a Colab/RunPod public Forge URL, or use Demo."
+            )
+            _set_status(f"Connect failed: {msg}")
+            _show(msg, duration=4.0)
+            return False
+
     try:
         backend = be.build_backend(mode, credential)
     except be.BackendError as exc:
