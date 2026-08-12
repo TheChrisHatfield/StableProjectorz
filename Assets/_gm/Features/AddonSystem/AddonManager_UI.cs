@@ -1414,6 +1414,8 @@ namespace spz {
 				_statusOk = kAuthoredStatusOk;
 				_statusFail = kAuthoredStatusFail;
 				_statusMuted = kAuthoredStatusMuted;
+				if (_openPanel_button != null)
+					SpzUiThemeOps.RestoreBoundChromeUnder(_openPanel_button.transform);
 				if (_panel != null) {
 					// Full unwind: ColorBlocks / TMP metrics / line icons — not Graphic colors alone.
 					SpzUiThemeOps.RestoreBoundChromeUnder(_panel.transform);
@@ -1436,6 +1438,7 @@ namespace spz {
 			_statusFail = t.danger;
 			_statusMuted = t.textMuted;
 			bool boundChrome = SpzUiThemeOps.ShouldRecolorBoundChrome;
+			ThemeOpenLauncherButton(t);
 			if (_panel != null) {
 				var panelImg = _panel.GetComponent<Image>();
 				if (panelImg != null) {
@@ -1606,6 +1609,26 @@ namespace spz {
 				stored = current / scale;
 			else
 				stored = current > 0.05f ? current : fallback;
+		}
+
+		/// <summary>
+		/// Strip open launcher sits outside the panel — theme like Settings gear (SolidSquare + Monolith).
+		/// </summary>
+		void ThemeOpenLauncherButton(SpzUiThemeOps.ThemeTokens t) {
+			if (_openPanel_button == null || !SpzUiThemeOps.ShouldRecolorBoundChrome)
+				return;
+			SpzUiThemeOps.EnsureSelectableHitFace(_openPanel_button);
+			if (_openPanel_button.targetGraphic == null) return;
+			SpzUiThemeOps.ApplySolidSquareChrome(_openPanel_button, t.controlBg, t.accent);
+			if (_openPanel_button.targetGraphic != null)
+				_openPanel_button.targetGraphic.raycastTarget = true;
+			SpzUiThemeOps.ApplyControlLineIcon(_openPanel_button.transform, StudioLineIcon.Grid, 18f);
+			foreach (var tmp in _openPanel_button.GetComponentsInChildren<TextMeshProUGUI>(true)) {
+				if (tmp == null) continue;
+				SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
+				SpzUiThemeOps.HideAuthoredGraphicForTheme(tmp);
+			}
+			SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_openPanel_button);
 		}
 
 		static void ThemeHeaderButton(Button button, Color normal, Color highlighted, Color foreground) {
