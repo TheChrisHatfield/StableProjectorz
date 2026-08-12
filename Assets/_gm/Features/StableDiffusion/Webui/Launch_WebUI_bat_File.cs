@@ -590,6 +590,11 @@ namespace spz {
 	        }
 	        if (gpuId >= 0)
 	            gpuId = Mathf.Clamp(gpuId, 0, 31);
+	        int cudaCount = GetCudaDeviceCount();
+	        if (cudaCount > 0 && gpuId >= cudaCount) {
+	            UnityEngine.Debug.LogWarning($"[LaunchWebUI] SD GPU index {gpuId} is out of range for {cudaCount} CUDA device(s); clamping to {cudaCount - 1}.");
+	            gpuId = cudaCount - 1;
+	        }
 	        UnityEngine.Debug.Log($"[LaunchWebUI] SD_GPU_DeviceId = {gpuId} (from Settings; file used only when Settings = default).");
 	        int settingsGpu = UnityEngine.PlayerPrefs.GetInt("SD_GPU_DeviceId", -1);
 	        if (settingsGpu >= 0)
