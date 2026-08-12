@@ -458,6 +458,8 @@ namespace spz {
 			// Leave litmus: full unwind (SolidRect + LE square lock + hidden emboss) — not a no-op.
 			if (!ShouldRecolorBoundChrome) {
 				RestoreBoundChromeUnder(selectable.transform);
+				// Parent HLG spacing is outside the cell root — unwind Nomad preset gaps.
+				EnsurePromptPresetRowGaps(selectable.transform);
 				return;
 			}
 			EnsureSelectableHitFace(selectable);
