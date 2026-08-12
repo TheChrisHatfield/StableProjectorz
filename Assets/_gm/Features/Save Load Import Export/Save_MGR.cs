@@ -27,6 +27,12 @@ namespace spz {
 
 
 	    public void MergeIcons( Action<Dictionary<Texture2D,UDIM_Sector>> onHaveAlbedo,  bool oldIcons_survive=false ){
+	        if( _isSaving || IsProjectSaveDialogOrWriteInFlight() ){
+		        Viewport_StatusText.instance?.ShowStatusText(
+			        "Can't merge icons while another save/export is still writing.", false, 5f, false );
+		        onHaveAlbedo?.Invoke(null);
+		        return;
+	        }
 	        _isSaving = true;
 
 	        if( !_saveLoad_helper.Save_FinalCompositeTexture( OnReady1 ) ){
