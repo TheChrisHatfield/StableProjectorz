@@ -164,6 +164,25 @@ public sealed class PaintTabSectionSplitterTests {
 	}
 
 	[Test]
+	public void EnsureSectionSplitters_AddsMissingLayoutElements() {
+		var panel = Own(new GameObject("Panel_Paint", typeof(RectTransform), typeof(VerticalLayoutGroup)));
+		var layout = panel.AddComponent<PaintTab_KritaLayout_UI>();
+		layout.SetCreateSectionsIfMissing(true);
+
+		var brushRoot = PaintTab_KritaLayout_UI.ResolveSectionRoot(layout.BrushPresetsSection);
+		var old = brushRoot.GetComponent<LayoutElement>();
+		Object.DestroyImmediate(old);
+		Assert.That(brushRoot.GetComponent<LayoutElement>(), Is.Null);
+
+		layout.EnsureSectionSplitters();
+
+		var added = brushRoot.GetComponent<LayoutElement>();
+		Assert.That(added, Is.Not.Null);
+		Assert.That(added.minHeight, Is.GreaterThanOrEqualTo(1f));
+		Assert.That(panel.transform.Find(PaintTab_KritaLayout_UI.SplitBrushTool), Is.Not.Null);
+	}
+
+	[Test]
 	public void ThemeOneSplitter_Source_DoesNotUseHairlineBorderToken() {
 		string path = System.IO.Path.Combine(Application.dataPath, "_gm", "Features", "Paint", "PaintTab", "PaintTab_KritaLayout_UI.cs");
 		Assert.That(System.IO.File.Exists(path), Is.True, path);
