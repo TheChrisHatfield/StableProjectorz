@@ -230,6 +230,12 @@ namespace spz {
 				UnityEngine.Debug.LogError("[AddonUI_MGR] No parent found for add-on panels (ribbon and parking failed). Returning null.");
 				return null;
 			}
+			// Live shell: adopt parked AddonPanel_* before creating a duplicate (Purge would Destroy widgets).
+			if (!parkedPendingRibbon) {
+				GameObject adopted = TryAdoptParkedPanelForCreate(addonId, title, parentForThisAddon);
+				if (adopted != null)
+					return adopted.GetInstanceID().ToString();
+			}
 			// Reuse an existing AddonPanel_* under the resolved parent (ribbon shell OR parking).
 			// Must run when ribbon is missing too, or repeated CreatePanel stacks duplicate parked panels.
 			string expectedPanelName = $"AddonPanel_{addonId}_{title}";
@@ -376,6 +382,51 @@ namespace spz {
 			
 			// Return panel ID (use GameObject instance ID)
 			return panelObj.GetInstanceID().ToString();
+		}
+
+		/// <summary>
+		/// When CreatePanel targets a live ribbon shell but widgets already live under parking,
+		/// reparent that panel (keep instance IDs / children) instead of creating a duplicate and Purge-Destroying it.
+		/// </summary>
+		GameObject TryAdoptParkedPanelForCreate(string addonId, string title, RectTransform shell) {
+			if (shell == null || string.IsNullOrEmpty(addonId)) return null;
+			string expectedPanelName = $"AddonPanel_{addonId}_{title}";
+			GameObject best = null;
+			int bestIx = -1;
+			for (int i = 0; i < _parkedForRibbon.Count; i++) {
+				ParkedPanel parked = _parkedForRibbon[i];
+				if (parked == null || parked.panel == null) continue;
+				if (!string.Equals(parked.addonId, addonId, StringComparison.Ordinal)) continue;
+				string cn = parked.panel.name ?? "";
+				if (IsExactAddonPanelChild(cn, addonId, title, expectedPanelName)
+				    || IsAddonPanelOwnedBy(cn, addonId)) {
+					best = parked.panel;
+					bestIx = i;
+					if (IsExactAddonPanelChild(cn, addonId, title, expectedPanelName))
+						break;
+				}
+			}
+			if (best == null || bestIx < 0) return null;
+			best.transform.SetParent(shell, false);
+			var rt = best.transform as RectTransform;
+			if (rt != null) {
+				rt.anchorMin = Vector2.zero;
+				rt.anchorMax = Vector2.one;
+				rt.sizeDelta = Vector2.zero;
+				rt.anchoredPosition = Vector2.zero;
+			}
+			_parkedForRibbon.RemoveAt(bestIx);
+			if (!_addonUIElements.ContainsKey(addonId))
+				_addonUIElements[addonId] = new List<GameObject>();
+			if (!_addonUIElements[addonId].Contains(best))
+				_addonUIElements[addonId].Add(best);
+			if (Addon_MGR.instance != null)
+				Addon_MGR.instance.RegisterAddonUI(addonId, best);
+			SpzUiThemeOps.ApplyToAddonUiRoot(best);
+			ClearAddonShellWaitingPlaceholder(shell);
+			PurgeParkedForAddon(addonId, best);
+			UnityEngine.Debug.Log($"[AddonUI_MGR] Adopted parked panel '{best.name}' into shell {shell.name} (create_panel keep-alive)");
+			return best;
 		}
 
 		/// <summary>
