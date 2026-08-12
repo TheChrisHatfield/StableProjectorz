@@ -283,31 +283,31 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send_json(200, opts)
                 return
 
-            # Demo (and local) catalog stubs so SPZ model/sampler/VAE dropdowns populate.
-            # Remote mode already proxied these above when applicable.
-            catalog = _demo_catalog_get(path)
-            if catalog is not None:
-                self._send(200, catalog[0], catalog[1])
-                return
+            # Demo catalog stubs only when NOT proxying to remote Forge.
+            if not is_remote:
+                catalog = _demo_catalog_get(path)
+                if catalog is not None:
+                    self._send(200, catalog[0], catalog[1])
+                    return
 
-            if path in (
-                "/controlnet/model_list",
-                "/controlnet/module_list",
-                "/controlnet/control_types",
-                "/controlnet/settings",
-            ):
-                # Soft stubs so catalog polls do not hard-fail; real CN is T5.
-                if path.endswith("model_list"):
-                    self._send_json(200, {"model_list": ["None"]})
-                elif path.endswith("module_list"):
-                    self._send_json(200, {"module_list": ["none"]})
-                elif path.endswith("control_types"):
-                    self._send_json(200, {"control_types": {}})
-                else:
-                    self._send_json(404, {"detail": "controlnet settings not available on cloud shim"})
-                return
+                if path in (
+                    "/controlnet/model_list",
+                    "/controlnet/module_list",
+                    "/controlnet/control_types",
+                    "/controlnet/settings",
+                ):
+                    # Soft stubs so catalog polls do not hard-fail; real CN is T5.
+                    if path.endswith("model_list"):
+                        self._send_json(200, {"model_list": ["None"]})
+                    elif path.endswith("module_list"):
+                        self._send_json(200, {"module_list": ["none"]})
+                    elif path.endswith("control_types"):
+                        self._send_json(200, {"control_types": {}})
+                    else:
+                        self._send_json(404, {"detail": "controlnet settings not available on cloud shim"})
+                    return
 
-            # Proxy remaining GETs to remote Forge when configured.
+            # Proxy remaining GETs to remote Forge when configured (incl. sd-models/samplers/VAE).
             if is_remote:
                 status, body, ct = backend.proxy("GET", full_path, None, dict(self.headers.items()))
                 self._send(status, body, ct)
