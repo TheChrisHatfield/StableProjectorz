@@ -92,6 +92,7 @@ namespace spz {
 			string targetPath = null; // Track for cleanup on partial install failure
 			string backupPath = null; // If we moved existing addon here, restore on failure
 			string addonId = null;
+			string addonRoot = null;
 			bool installSucceeded = false;
 			
 			try {
@@ -141,7 +142,7 @@ namespace spz {
 				}
 				
 				// Find the add-on directory (could be root of zip or in a subdirectory)
-				string addonRoot = FindAddonRootInExtractedDirectory(tempExtractPath);
+				addonRoot = FindAddonRootInExtractedDirectory(tempExtractPath);
 				
 				if (addonRoot == null) {
 					onComplete?.Invoke(false, "No __init__.py found in zip file", null);
@@ -186,20 +187,36 @@ namespace spz {
 					yield break;
 				}
 
-				// Overwrite of a live add-on: finish Python unregister + UI tear-down before replacing files,
-				// then re-Enable after Discover so register()/panels match the new zip (not the old module).
-				bool wasEnabledBeforeOverwrite = false;
-				if (targetExists && Addon_MGR.instance != null && !string.IsNullOrEmpty(addonId)) {
-					var registered = Addon_MGR.instance.GetAddons();
-					bool wasRegistered = registered != null && registered.ContainsKey(addonId);
-					wasEnabledBeforeOverwrite = wasRegistered && Addon_MGR.instance.IsAddonEnabled(addonId);
-					if (wasRegistered) {
-						bool unloadDone = false;
-						Addon_MGR.instance.UnloadAddon(addonId, () => unloadDone = true);
-						while (!unloadDone)
-							yield return null;
-					}
+			} catch (Exception e) {
+				UnityEngine.Debug.LogError($"[AddonInstaller] Error preparing add-on install: {e.Message}");
+				onComplete?.Invoke(false, $"Installation failed: {e.Message}", null);
+				yield break;
+			}
+
+			// Yield must stay outside try/catch (CS1626). Unload before replacing on-disk files.
+			bool wasEnabledBeforeOverwrite = false;
+			bool targetExistsForOverwrite = false;
+			try {
+				targetExistsForOverwrite = !string.IsNullOrEmpty(targetPath) && Directory.Exists(targetPath);
+			} catch (Exception e) {
+				UnityEngine.Debug.LogError($"[AddonInstaller] Failed to re-check target directory: {e.Message}");
+				onComplete?.Invoke(false, $"Cannot install: failed to check if addon already exists ({e.Message}).", null);
+				yield break;
+			}
+			if (targetExistsForOverwrite && Addon_MGR.instance != null && !string.IsNullOrEmpty(addonId)) {
+				var registered = Addon_MGR.instance.GetAddons();
+				bool wasRegistered = registered != null && registered.ContainsKey(addonId);
+				wasEnabledBeforeOverwrite = wasRegistered && Addon_MGR.instance.IsAddonEnabled(addonId);
+				if (wasRegistered) {
+					bool unloadDone = false;
+					Addon_MGR.instance.UnloadAddon(addonId, () => unloadDone = true);
+					while (!unloadDone)
+						yield return null;
 				}
+			}
+
+			try {
+				bool targetExists = targetExistsForOverwrite;
 				
 				if (targetExists) {
 					// Ask user if they want to overwrite (for now, we'll create a backup)
