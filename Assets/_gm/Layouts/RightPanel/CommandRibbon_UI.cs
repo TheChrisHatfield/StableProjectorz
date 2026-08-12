@@ -1782,6 +1782,10 @@ namespace spz {
 	                _addonTabById[addonId] = tabOnStrip.gameObject;
 	                if (TryWireAddonTabPanelShow(addonId, tabId, existing, tabOnStrip)) {
 		                RegisterAddonShortcutOrder(addonId);
+		                // Connectivity: re-apply strip icon/text chrome after repair (do not assume prior Refresh).
+		                Transform stripExisting = ResolveEffectiveTabStripTransform();
+		                if (stripExisting != null)
+			                RefreshRibbonTabStripLayout(stripExisting);
 		                UnityEngine.Debug.Log($"[CommandRibbon_UI] Returning existing panel for: {addonId}");
 		                return existing;
 	                }
@@ -1813,12 +1817,14 @@ namespace spz {
 	            bool sameGo = tabOnStrip != null && tabGoFromDict != null && tabGoFromDict == tabOnStrip.gameObject;
 	            if (tabOnStrip != null) {
 	                _tabGroup.RemoveTab(tabOnStrip);
+	                tabOnStrip.gameObject.SetActive(false);
 	                Destroy(tabOnStrip.gameObject);
 	            }
 	            if (tabGoFromDict != null && !sameGo) {
 	                var strayElem = tabGoFromDict.GetComponent<TabsGroupElem_UI>();
 	                if (strayElem != null)
 	                    _tabGroup.RemoveTab(strayElem);
+	                tabGoFromDict.SetActive(false);
 	                Destroy(tabGoFromDict);
 	            }
 	            // Fall through to create a fresh shell, then reattach salvaged content below.
