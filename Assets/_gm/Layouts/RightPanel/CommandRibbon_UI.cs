@@ -267,8 +267,9 @@ namespace spz {
 		    TextMeshProUGUI refTmp = GetRibbonStripTypographyReferenceTMP(strip, null);
 		    float designBasis = kRibbonStripTabLabelDefaultPt;
 		    float basis = designBasis * SpzUiThemeOps.Active.fontScale;
-		    // Match ApplyThemeTokens: icon-only widths only while non-builtin theme chrome is active.
-		    bool iconOnly = SpzUiThemeOps.ShouldRecolorBoundChrome && SpzUiThemeOps.RibbonIconOnlyActive;
+		    // Match ApplyThemeTokens: icon-only widths only while labels are hidden (Nomad ribbon_icon_only or builtin+addon strip).
+		    bool iconOnly = (SpzUiThemeOps.ShouldRecolorBoundChrome && SpzUiThemeOps.RibbonIconOnlyActive)
+			    || (!SpzUiThemeOps.ShouldRecolorBoundChrome && StripHasEnabledAddonTabs());
 		    if (iconOnly)
 			    return; // ApplyThemeTokens owns icon-only cell widths; do not auto-size hidden labels.
 		    foreach (var elem in strip.GetComponentsInChildren<TabsGroupElem_UI>(true))
@@ -632,6 +633,8 @@ namespace spz {
 	        var t = SpzUiThemeOps.Active;
 	        bool recolorChrome = SpzUiThemeOps.ShouldRecolorBoundChrome;
 	        bool iconOnly = recolorChrome && SpzUiThemeOps.RibbonIconOnlyActive;
+	        bool builtinAddonIconStrip = !recolorChrome && StripHasEnabledAddonTabs();
+	        bool hideStripLabels = iconOnly || builtinAddonIconStrip;
 
 	        RecolorOrRestorePanelShell(_SD_ArtList_Panel, recolorChrome);
 	        RecolorOrRestorePanelShell(_SD_ArtBgList_Panel, recolorChrome);
@@ -643,8 +646,9 @@ namespace spz {
 	        if (strip != null) {
 	            if (!recolorChrome) {
 	                SpzUiThemeOps.RestoreBoundChromeUnder(strip);
-	                // Belt-and-suspenders: Nomad Monolith overlays must not remain blended over OG tabs.
-	                HideMonolithOverlaysUnder(strip);
+	                // Keep SPZ line icons when add-on tabs are on the strip; otherwise match OG text tabs.
+	                if (!builtinAddonIconStrip)
+	                    HideMonolithOverlaysUnder(strip);
 	            }
 
 	            for (int i = 0; i < strip.childCount; i++) {
@@ -666,7 +670,7 @@ namespace spz {
 	                }
 	                if (cell.GetComponent<TabsGroupElem_UI>() == null)
 	                    continue;
-	                ThemeStripTabCell(cell, t, recolorChrome, iconOnly);
+	                ThemeStripTabCell(cell, t, recolorChrome, hideStripLabels, builtinAddonIconStrip);
 	            }
 	        }
 
@@ -677,13 +681,37 @@ namespace spz {
 	            }
 	        }
 
-	        if (!iconOnly)
+	        if (!hideStripLabels)
 	            HarmonizeStripTabTypography();
 
 	        if (strip != null && strip is RectTransform stripRt)
 	            UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(stripRt);
 
 	        SnapshotStripTabSelectionChrome();
+	    }
+
+	    /// <summary>True when at least one live add-on tab sits on the CommandRibbon strip.</summary>
+	    bool StripHasEnabledAddonTabs() {
+	        if (_addonTabById != null) {
+	            foreach (var kvp in _addonTabById) {
+	                if (kvp.Value != null)
+	                    return true;
+	            }
+	        }
+	        Transform strip = ResolveEffectiveTabStripTransform();
+	        if (strip == null) return false;
+	        for (int i = 0; i < strip.childCount; i++) {
+	            Transform cell = strip.GetChild(i);
+	            if (cell == null) continue;
+	            var elem = cell.GetComponent<TabsGroupElem_UI>();
+	            if (elem != null && !string.IsNullOrEmpty(elem.title)
+	                && elem.title.StartsWith("addon_", StringComparison.OrdinalIgnoreCase))
+	                return true;
+	            string n = cell.name ?? "";
+	            if (n.StartsWith("AddonTab_", StringComparison.OrdinalIgnoreCase))
+	                return true;
+	        }
+	        return false;
 	    }
 
 	    /// <summary>Flat tool fill: selected = subtle accent mix (never gold plate).</summary>
@@ -754,7 +782,7 @@ namespace spz {
 	    }
 
 	    /// <summary>Themes one strip menu item (Art / BG / Mesh / Control / Paint / add-on).</summary>
-	    void ThemeStripTabCell(Transform cell, SpzUiThemeOps.ThemeTokens t, bool recolorChrome, bool iconOnly) {
+	    void ThemeStripTabCell(Transform cell, SpzUiThemeOps.ThemeTokens t, bool recolorChrome, bool hideStripLabels, bool builtinAddonIconStrip = false) {
 	        if (cell == null) return;
 	        var elem = cell.GetComponent<TabsGroupElem_UI>();
 	        bool selected = elem != null && elem.IsVisuallySelectedAsActiveTab();
@@ -762,11 +790,12 @@ namespace spz {
 	        if (!recolorChrome) {
 	            foreach (var label in cell.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	                if (label == null) continue;
-	                label.maxVisibleCharacters = int.MaxValue;
+	                // Hide visible label glyphs in icon strip; name stays available via hover tooltip.
+	                label.maxVisibleCharacters = hideStripLabels ? 0 : int.MaxValue;
 	            }
 	            // Do not EnsureStripTabHitFace on leave — Restore already unwound raycasts;
 	            // injecting TabBg after Restore SPZ sticks forever and can steal hits.
-	            ApplyStudioTabChromeColors(cell, t, recolorChrome: false);
+	            ApplyStudioTabChromeColors(cell, t, recolorChrome: false, builtinAddonIconStrip: builtinAddonIconStrip);
 	            return;
 	        }
 
@@ -790,7 +819,7 @@ namespace spz {
 
 	        foreach (var label in cell.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (label == null) continue;
-	            if (iconOnly) {
+	            if (hideStripLabels) {
 	                label.maxVisibleCharacters = 0;
 	                SpzUiThemeOps.ApplyBoundChromeTmp(label,
 	                    new Color(t.textPrimary.r, t.textPrimary.g, t.textPrimary.b, 0f),
@@ -801,7 +830,7 @@ namespace spz {
 	            }
 	        }
 
-	        ApplyStudioTabChromeColors(cell, t, recolorChrome: true);
+	        ApplyStudioTabChromeColors(cell, t, recolorChrome: true, builtinAddonIconStrip: false);
 	        ClearStripTabNonFaceRaycasts(cell);
 	    }
 
@@ -848,6 +877,20 @@ namespace spz {
 	        }
 	    }
 
+	    /// <summary>Drop Compose/set_line_icon override markers so Leave SPZ resolves default strip glyphs.</summary>
+	    static void ClearStripLineIconOverridesUnder(Transform root) {
+	        if (root == null) return;
+	        var marks = root.GetComponentsInChildren<SpzStripLineIconOverride>(true);
+	        for (int i = marks.Length - 1; i >= 0; i--) {
+	            var mark = marks[i];
+	            if (mark == null) continue;
+	            if (Application.isPlaying)
+	                UnityEngine.Object.Destroy(mark);
+	            else
+	                UnityEngine.Object.DestroyImmediate(mark);
+	        }
+	    }
+
 	    string BuildStripSelectionKey() {
 	        Transform strip = ResolveEffectiveTabStripTransform();
 	        if (strip == null) return "";
@@ -881,13 +924,13 @@ namespace spz {
 	        if (key == _lastStripSelectionKey && _lastStripNomadChrome)
 	            return;
 	        var t = SpzUiThemeOps.Active;
-	        bool iconOnly = SpzUiThemeOps.RibbonIconOnlyActive;
+	        bool hideLabels = SpzUiThemeOps.RibbonIconOnlyActive;
 	        Transform strip = ResolveEffectiveTabStripTransform();
 	        if (strip == null) return;
 	        for (int i = 0; i < strip.childCount; i++) {
 	            Transform cell = strip.GetChild(i);
 	            if (cell == null || cell.GetComponent<TabsGroupElem_UI>() == null) continue;
-	            ThemeStripTabCell(cell, t, recolorChrome: true, iconOnly);
+	            ThemeStripTabCell(cell, t, recolorChrome: true, hideLabels, builtinAddonIconStrip: false);
 	        }
 	        SnapshotStripTabSelectionChrome();
 	    }
@@ -910,20 +953,22 @@ namespace spz {
 
 	    /// <summary>
 	    /// Studio chrome on strip tabs: active bar + line icon (create if missing).
-	    /// Only when <paramref name="recolorChrome"/> (non-builtin theme): create/show Monolith icons and tint.
-	    /// Builtin default: hide Monolith overlays so strip matches authored OG text tabs.
-	    /// When <see cref="SpzUiThemeOps.RibbonIconOnlyActive"/>, centers a larger icon (Nomad-like).
+	    /// Non-builtin: create/show Monolith icons and BoundChrome tint.
+	    /// Builtin default without add-ons: hide Monolith overlays (authored OG text tabs).
+	    /// Builtin with enabled add-on tabs: SPZ-styled line icons (same glyphs as Nomad) + hover name tooltip;
+	    /// no Nomad fill/accent bar — keeps default chrome.
+	    /// When <see cref="SpzUiThemeOps.RibbonIconOnlyActive"/> (Nomad), centers a larger icon.
 	    /// </summary>
-	    static void ApplyStudioTabChromeColors(Transform cell, SpzUiThemeOps.ThemeTokens t, bool recolorChrome = true) {
+	    static void ApplyStudioTabChromeColors(Transform cell, SpzUiThemeOps.ThemeTokens t, bool recolorChrome = true, bool builtinAddonIconStrip = false) {
 	        if (cell == null) return;
-	        bool iconOnly = recolorChrome && SpzUiThemeOps.RibbonIconOnlyActive;
+	        bool iconOnly = (recolorChrome && SpzUiThemeOps.RibbonIconOnlyActive) || builtinAddonIconStrip;
 	        Transform active = cell.Find("go active");
 	        Transform bar = active != null
 	            ? SpzUiThemeOps.FindDirectChildIncludingInactive(active, "MonolithActiveBar")
 	            : null;
 	        Transform iconTransform = SpzUiThemeOps.FindDirectChildIncludingInactive(cell, "MonolithLineIcon");
 
-	        if (!recolorChrome) {
+	        if (!recolorChrome && !builtinAddonIconStrip) {
 	            if (bar != null)
 	                bar.gameObject.SetActive(false);
 	            if (iconTransform != null)
@@ -934,6 +979,21 @@ namespace spz {
 	                leBuiltin.preferredWidth = -1f;
 	                // Drop icon-only lock so Harmonize / label measure can reflow.
 	                leBuiltin.minWidth = 0f;
+	            }
+	            return;
+	        }
+
+	        if (!recolorChrome && builtinAddonIconStrip) {
+	            // SPZ default toolbox strip: line icons only — no Nomad accent underline.
+	            if (bar != null)
+	                bar.gameObject.SetActive(false);
+	            EnsureSpzDefaultStripLineIcon(cell, iconTransform, iconOnly: true);
+	            EnsureStripTabHoverTooltip(cell);
+	            var leSpz = cell.GetComponent<LayoutElement>();
+	            if (leSpz != null) {
+	                leSpz.flexibleWidth = 0f;
+	                leSpz.preferredWidth = 44f;
+	                leSpz.minWidth = 40f;
 	            }
 	            return;
 	        }
@@ -1016,12 +1076,57 @@ namespace spz {
 	        }
 	    }
 
-	    /// <summary>Hover label for icon-only strip tabs (Paint, Art, Mesh, …).</summary>
+	    /// <summary>SPZ-default (non-Nomad) centered line icon — light gray, no BoundChrome tint.</summary>
+	    static readonly Color SpzDefaultStripIconTint = new Color(0.88f, 0.88f, 0.86f, 1f);
+
+	    static void EnsureSpzDefaultStripLineIcon(Transform cell, Transform iconTransform, bool iconOnly) {
+	        if (cell == null) return;
+	        if (iconTransform == null) {
+	            var go = new GameObject("MonolithLineIcon", typeof(RectTransform));
+	            go.transform.SetParent(cell, false);
+	            iconTransform = go.transform;
+	            var imgNew = go.AddComponent<Image>();
+	            imgNew.raycastTarget = false;
+	            imgNew.preserveAspect = true;
+	        }
+	        iconTransform.gameObject.SetActive(true);
+	        var iconRt = iconTransform as RectTransform;
+	        if (iconRt != null) {
+	            if (iconOnly) {
+	                iconRt.anchorMin = new Vector2(0.5f, 0.5f);
+	                iconRt.anchorMax = new Vector2(0.5f, 0.5f);
+	                iconRt.pivot = new Vector2(0.5f, 0.5f);
+	                iconRt.anchoredPosition = Vector2.zero;
+	                iconRt.sizeDelta = new Vector2(24f, 24f);
+	            } else {
+	                iconRt.anchorMin = new Vector2(0f, 0.5f);
+	                iconRt.anchorMax = new Vector2(0f, 0.5f);
+	                iconRt.pivot = new Vector2(0.5f, 0.5f);
+	                iconRt.anchoredPosition = new Vector2(12f, 0f);
+	                iconRt.sizeDelta = new Vector2(18f, 18f);
+	            }
+	        }
+	        var icon = iconTransform.GetComponent<Image>();
+	        if (icon == null) return;
+	        var overrideMark = cell.GetComponent<SpzStripLineIconOverride>();
+	        StudioLineIcon glyph = overrideMark != null
+	            ? overrideMark.Icon
+	            : ResolveStripTabLineIcon(cell);
+	        icon.sprite = UiRuntimeSprites.GetLineIcon(glyph);
+	        // Do not ApplyLineIconTint — that is Nomad-only; use authored SPZ light gray.
+	        icon.color = SpzDefaultStripIconTint;
+	        icon.preserveAspect = true;
+	    }
+
+	    /// <summary>Hover name overlay for icon strip tabs (Paint, Art, Mesh, add-ons, …).</summary>
 	    static void EnsureStripTabHoverTooltip(Transform cell) {
 	        if (cell == null) return;
-	        var tip = cell.GetComponent<CanShowTooltip_UI>();
+	        // Attach to the raycast face so IPointerEnter fires (hits land on TabBg / Button graphic).
+	        Image face = FindStripTabFaceImage(cell);
+	        GameObject host = face != null ? face.gameObject : cell.gameObject;
+	        var tip = host.GetComponent<CanShowTooltip_UI>();
 	        if (tip == null)
-	            tip = cell.gameObject.AddComponent<CanShowTooltip_UI>();
+	            tip = host.AddComponent<CanShowTooltip_UI>();
 	        tip.set_overrideMessage(ResolveStripTabDisplayName(cell));
 	    }
 
