@@ -131,6 +131,12 @@ namespace spz {
 			new Dictionary<int, float>();
 		static readonly Dictionary<int, bool> AuthoredGraphicRaycasts =
 			new Dictionary<int, bool>();
+		/// <summary>
+		/// Prefab Selectables often ship <c>targetGraphic == null</c>. EnsureHitFace wires a face;
+		/// leave must restore the authored reference (including null) after destroying synthetics.
+		/// </summary>
+		static readonly Dictionary<int, Graphic> AuthoredTargetGraphics =
+			new Dictionary<int, Graphic>();
 
 		static void SnapshotAuthoredGraphic(Graphic graphic) {
 			if (graphic == null) return;
@@ -180,6 +186,21 @@ namespace spz {
 				selectable.colors = block;
 		}
 
+		/// <summary>First-call snapshot of Selectable.targetGraphic (may be null) before Nomad wiring.</summary>
+		public static void SnapshotAuthoredTargetGraphic(Selectable selectable) {
+			if (selectable == null) return;
+			int id = selectable.GetInstanceID();
+			if (!AuthoredTargetGraphics.ContainsKey(id))
+				AuthoredTargetGraphics[id] = selectable.targetGraphic;
+		}
+
+		/// <summary>Restores authored targetGraphic after synthetic HitFace teardown (null is valid).</summary>
+		public static void RestoreAuthoredTargetGraphic(Selectable selectable) {
+			if (selectable == null) return;
+			if (AuthoredTargetGraphics.TryGetValue(selectable.GetInstanceID(), out Graphic g))
+				selectable.targetGraphic = g;
+		}
+
 		/// <summary>
 		/// Full BoundChrome unwind under a root (line icons, rounded/flat sprites, colors, ColorBlocks, slider thumbs).
 		/// Call from ThemeChanged leave paths so Restore SPZ does not leave Nomad holdovers.
@@ -221,8 +242,12 @@ namespace spz {
 				if (tag == null) continue;
 				var face = tag.GetComponent<Graphic>();
 				var sel = tag.GetComponentInParent<Selectable>(true);
-				if (sel != null && face != null && ReferenceEquals(sel.targetGraphic, face))
-					sel.targetGraphic = null;
+				if (sel != null && face != null && ReferenceEquals(sel.targetGraphic, face)) {
+					// Do not leave targetGraphic=null forever — restore authored (often null for TMP-hit tabs).
+					RestoreAuthoredTargetGraphic(sel);
+					if (ReferenceEquals(sel.targetGraphic, face))
+						sel.targetGraphic = null;
+				}
 				var go = tag.gameObject;
 				if (Application.isPlaying)
 					UnityEngine.Object.Destroy(go);
@@ -368,6 +393,7 @@ namespace spz {
 			// Callers under Nomad already gate ApplyTheme; this is the hard backstop for direct Ensure.
 			if (!ShouldRecolorBoundChrome)
 				return selectable.targetGraphic as Image;
+			SnapshotAuthoredTargetGraphic(selectable);
 			if (selectable.targetGraphic is Image wired) {
 				SnapshotAuthoredGraphic(wired);
 				wired.raycastTarget = true;
