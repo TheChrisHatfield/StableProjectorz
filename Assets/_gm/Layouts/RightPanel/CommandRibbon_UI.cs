@@ -1160,6 +1160,8 @@ namespace spz {
 	        if (tip == null)
 	            tip = host.AddComponent<CanShowTooltip_UI>();
 	        tip.set_overrideMessage(ResolveStripTabDisplayName(cell));
+	        // Icon strip names are primary chrome — snappier than the default 0.5s utility delay.
+	        tip.SetHoverDelayBeforeShow(0.15f);
 	    }
 
 	    /// <summary>User-facing name for tooltips — prefers TabsGroup title (prettified), then visible label.</summary>

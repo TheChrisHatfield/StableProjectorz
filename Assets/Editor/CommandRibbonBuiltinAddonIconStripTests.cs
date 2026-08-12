@@ -175,6 +175,10 @@ public sealed class CommandRibbonBuiltinAddonIconStripTests {
 			var tip = face.GetComponent<CanShowTooltip_UI>();
 			Assert.That(tip, Is.Not.Null, "hover name overlay must sit on the hit face");
 			Assert.That(tip.tooltipText, Does.Contain("Demo").IgnoreCase);
+			var delayField = typeof(CanShowTooltip_UI).GetField("_hoverDelayBeforeShow",
+				BindingFlags.Instance | BindingFlags.NonPublic);
+			Assert.That(delayField, Is.Not.Null);
+			Assert.That((float)delayField.GetValue(tip), Is.EqualTo(0.15f).Within(0.001f));
 		}
 		finally {
 			Object.DestroyImmediate(root);
