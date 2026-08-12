@@ -78,9 +78,18 @@ namespace spz {
 	            Viewport_StatusText.instance.ShowStatusText("Can't Generate images while ControlNet downloads a model. Please wait.", false, 2, true);
 	            return true;
 	        }
-	        if(_generating){ return true; }
-	        if(_finalPreparations_beforeGen){ return true; }
-	        if (Time.unscaledTime < _generationCooldownUntil){ return true; }
+	        if(_generating){
+	            Viewport_StatusText.instance.ShowStatusText("Can't Generate — a generation is already in progress (or cancelling).", false, 2, true);
+	            return true;
+	        }
+	        if(_finalPreparations_beforeGen){
+	            Viewport_StatusText.instance.ShowStatusText("Can't Generate — still preparing the last request.", false, 2, true);
+	            return true;
+	        }
+	        if (Time.unscaledTime < _generationCooldownUntil){
+	            Viewport_StatusText.instance.ShowStatusText("Can't Generate yet — brief cooldown after cancel/finish.", false, 2, true);
+	            return true;
+	        }
 
 	        if (!klein && has_Depth_or_Norm_or_RefOnly()==false){
 	            bool flux2Dev = false;
