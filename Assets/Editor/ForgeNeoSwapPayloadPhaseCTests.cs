@@ -404,6 +404,12 @@ public sealed class ForgeNeoSwapPayloadPhaseCTests {
 			"diffusers_xl_depth_full", "FLUX.2-dev"), Is.True);
 		Assert.That(SD_OptionsPacket.CheckpointLooksFlux2Dev("FLUX.2-dev"), Is.True);
 		Assert.That(SD_OptionsPacket.CheckpointLooksFlux2Dev("flux-2-klein-4b"), Is.False);
+		Assert.That(ControlNetUnit_Dropdowns.CheckpointLooksXl("juggernautXL_v9"), Is.True);
+		Assert.That(ControlNetUnit_Dropdowns.CheckpointLooksXl("sdxl_base"), Is.True);
+		Assert.That(ControlNetUnit_Dropdowns.CheckpointLooksXl("exllama_quant"), Is.False,
+			"Bare IndexOf(xl) must not treat exllama as SDXL.");
+		Assert.That(ControlNetUnit_Dropdowns.CheckpointLooksXl("flux1-schnell"), Is.False);
+		Assert.That(ControlNetUnit_Dropdowns.CheckpointLooksXl("realisticvisionv51_v51vae"), Is.False);
 		string hub = File.ReadAllText(Path.Combine(
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "StableDiffusion", "StableDiffusion_Hub.cs"));

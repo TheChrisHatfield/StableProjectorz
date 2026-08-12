@@ -284,8 +284,16 @@ namespace spz {
 
 	    public static bool CheckpointLooksXl(string checkpointName){
 	        if (string.IsNullOrEmpty(checkpointName)) return false;
-	        string n = checkpointName.ToLowerInvariant();
-	        return n.Contains("sdxl") || n.Contains("juggernautxl") || n.IndexOf("xl", StringComparison.Ordinal) >= 0;
+	        string n = checkpointName.ToLowerInvariant().Replace('\\', '/');
+	        // Avoid bare IndexOf("xl") — false-positives "exllama", random "…xl…" stems.
+	        if (n.Contains("sdxl") || n.Contains("juggernautxl") || n.Contains("diffusers_xl"))
+	            return true;
+	        if (n.Contains("_xl_") || n.Contains("-xl-") || n.Contains("/xl/") || n.Contains(" xl"))
+	            return true;
+	        // Trailing XL token: "modelXL", "model_xl", "model-xl" (not mid-string "exllama").
+	        if (n.EndsWith("xl") || n.EndsWith("_xl") || n.EndsWith("-xl"))
+	            return true;
+	        return false;
 	    }
 
 	    public static bool ControlNetModelLooksXl(string cnModelName){
