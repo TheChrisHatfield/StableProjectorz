@@ -403,23 +403,61 @@ namespace spz {
 			try {
 				string[] lines = File.ReadAllLines(initFile);
 				foreach (string line in lines) {
-					// Look for common patterns like "bl_info" or "addon_id" or "__name__"
-					if (line.Contains("__name__") || line.Contains("addon_id") || line.Contains("id")) {
-						// Simple extraction - could be improved with regex
-						int eqIndex = line.IndexOf('=');
-						if (eqIndex > 0) {
-							string value = line.Substring(eqIndex + 1).Trim().Trim('"', '\'', ' ');
-							if (!string.IsNullOrEmpty(value)) {
-								return value;
-							}
-						}
-					}
+					if (string.IsNullOrWhiteSpace(line)) continue;
+					string trimmed = line.Trim();
+					if (trimmed.StartsWith("#", StringComparison.Ordinal)) continue;
+					// Only explicit id assignments — never match any line containing "id" (e.g. mesh_id).
+					if (!TryParseExplicitAddonIdAssignment(trimmed, out string parsedId))
+						continue;
+					if (IsPlausibleAddonFolderId(parsedId))
+						return parsedId;
 				}
 			} catch {
 				// If we can't read the file, just use directory name
 			}
 			
 			return null;
+		}
+
+		/// <summary>
+		/// Parses <c>ADDON_ID = "…"</c> / <c>addon_id = '…'</c> (optional leading <c>bl_info</c>-style dict keys not used).
+		/// </summary>
+		static bool TryParseExplicitAddonIdAssignment(string trimmedLine, out string addonId) {
+			addonId = null;
+			if (string.IsNullOrEmpty(trimmedLine)) return false;
+			const StringComparison ord = StringComparison.Ordinal;
+			string[] keys = { "ADDON_ID", "addon_id" };
+			foreach (string key in keys) {
+				if (!trimmedLine.StartsWith(key, ord)) continue;
+				int i = key.Length;
+				while (i < trimmedLine.Length && char.IsWhiteSpace(trimmedLine[i])) i++;
+				if (i >= trimmedLine.Length || trimmedLine[i] != '=') continue;
+				i++;
+				while (i < trimmedLine.Length && char.IsWhiteSpace(trimmedLine[i])) i++;
+				if (i >= trimmedLine.Length) continue;
+				char q = trimmedLine[i];
+				if (q != '"' && q != '\'') continue;
+				int end = trimmedLine.IndexOf(q, i + 1);
+				if (end <= i + 1) continue;
+				addonId = trimmedLine.Substring(i + 1, end - i - 1).Trim();
+				return !string.IsNullOrEmpty(addonId);
+			}
+			return false;
+		}
+
+		static bool IsPlausibleAddonFolderId(string id) {
+			if (string.IsNullOrWhiteSpace(id)) return false;
+			id = id.Trim();
+			if (id.Length < 2 || id.Length > 128) return false;
+			if (id.IndexOfAny(new[] { '/', '\\', ':', '*', '?', '"', '<', '>', '|', ' ', '(', ')' }) >= 0)
+				return false;
+			if (id.IndexOf('.') >= 0) return false; // reject api.models.get_pos(...) style leftovers
+			for (int i = 0; i < id.Length; i++) {
+				char c = id[i];
+				if (!(char.IsLetterOrDigit(c) || c == '_' || c == '-'))
+					return false;
+			}
+			return true;
 		}
 		
 		/// <summary>

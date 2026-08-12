@@ -50,4 +50,18 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 		Assert.That(enableAt, Is.GreaterThan(backupAt), "Must re-enable after Discover when overwrite replaced a live add-on.");
 		Assert.That(body, Does.Contain("if (wasEnabledBeforeOverwrite"));
 	}
+
+	[Test]
+	public void GetAddonIdFromRoot_OnlyParsesExplicitAddonIdAssignments() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "AddonInstaller_MGR.cs");
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("TryParseExplicitAddonIdAssignment"));
+		Assert.That(src, Does.Contain("IsPlausibleAddonFolderId"));
+		Assert.That(src, Does.Not.Contain("line.Contains(\"__name__\") || line.Contains(\"addon_id\") || line.Contains(\"id\")"));
+		int i = src.IndexOf("public static string GetAddonIdFromRoot(", System.StringComparison.Ordinal);
+		string body = src.Substring(i, System.Math.Min(2200, src.Length - i));
+		Assert.That(body, Does.Contain("\"ADDON_ID\""));
+		Assert.That(body, Does.Contain("\"addon_id\""));
+	}
 }
