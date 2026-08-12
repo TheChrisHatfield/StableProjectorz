@@ -168,6 +168,14 @@ public sealed class PaintTabSectionSplitterTests {
 	}
 
 	[Test]
+	public void SectionSplitter_Source_LocksAllSectionsOnDragBegan() {
+		string krita = System.IO.Path.Combine(Application.dataPath, "_gm", "Features", "Paint", "PaintTab", "PaintTab_KritaLayout_UI.cs");
+		string split = System.IO.Path.Combine(Application.dataPath, "_gm", "Features", "Paint", "PaintTab", "PaintTab_SectionSplitter_UI.cs");
+		Assert.That(System.IO.File.ReadAllText(krita), Does.Contain("LockAllFlexSectionsFromRect"));
+		Assert.That(System.IO.File.ReadAllText(split), Does.Contain("_onDragBegan?.Invoke()"));
+	}
+
+	[Test]
 	public void SanitizeFlexWeights_RejectsCorruptValues() {
 		float layers = float.NaN, brush = -1f, tool = 0f, color = float.PositiveInfinity;
 		PaintTab_KritaLayout_UI.SanitizeFlexWeights(ref layers, ref brush, ref tool, ref color);

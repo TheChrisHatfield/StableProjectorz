@@ -239,10 +239,11 @@ namespace spz {
 			EnsureFlexSectionDefaults(colorLe, 50f, DefaultFlexColor);
 
 			System.Action onEnded = OnSplitterDragEnded;
+			System.Action onBegan = LockAllFlexSectionsFromRect;
 
-			var s1 = PaintTab_SectionSplitter_UI.EnsureOn(root, SplitLayersBrush, layersLe, brushLe, onEnded, SplitterBarDefault);
-			var s2 = PaintTab_SectionSplitter_UI.EnsureOn(root, SplitBrushTool, brushLe, toolLe, onEnded, SplitterBarDefault);
-			var s3 = PaintTab_SectionSplitter_UI.EnsureOn(root, SplitToolColor, toolLe, colorLe, onEnded, SplitterBarDefault);
+			var s1 = PaintTab_SectionSplitter_UI.EnsureOn(root, SplitLayersBrush, layersLe, brushLe, onEnded, SplitterBarDefault, onBegan);
+			var s2 = PaintTab_SectionSplitter_UI.EnsureOn(root, SplitBrushTool, brushLe, toolLe, onEnded, SplitterBarDefault, onBegan);
+			var s3 = PaintTab_SectionSplitter_UI.EnsureOn(root, SplitToolColor, toolLe, colorLe, onEnded, SplitterBarDefault, onBegan);
 
 			// Sibling order: toolchest, layers, split, brush, split, tool, split, color
 			int idx = 0;
@@ -387,6 +388,14 @@ namespace spz {
 			var root = transform as RectTransform;
 			if (root != null)
 				LayoutRebuilder.ForceRebuildLayoutImmediate(root);
+		}
+
+		void LockAllFlexSectionsFromRect()
+		{
+			PaintTab_SectionSplitter_UI.LockPreferredFromRect(GetSectionLayoutElement(_layersSection));
+			PaintTab_SectionSplitter_UI.LockPreferredFromRect(GetSectionLayoutElement(_brushPresetsSection));
+			PaintTab_SectionSplitter_UI.LockPreferredFromRect(GetSectionLayoutElement(_toolOptionsSection));
+			PaintTab_SectionSplitter_UI.LockPreferredFromRect(GetSectionLayoutElement(_colorPaletteSection));
 		}
 
 		static float SectionHeightForWeight(LayoutElement le)
