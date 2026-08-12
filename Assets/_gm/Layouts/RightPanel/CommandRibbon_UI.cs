@@ -700,7 +700,8 @@ namespace spz {
 	    bool StripHasEnabledAddonTabs() {
 	        if (_addonTabById != null) {
 	            foreach (var kvp in _addonTabById) {
-	                if (kvp.Value != null)
+	                // Destroy is deferred — ignore inactive / doomed GOs so leave-icon mode can run same frame.
+	                if (kvp.Value != null && kvp.Value.activeSelf)
 	                    return true;
 	            }
 	        }
@@ -708,7 +709,7 @@ namespace spz {
 	        if (strip == null) return false;
 	        for (int i = 0; i < strip.childCount; i++) {
 	            Transform cell = strip.GetChild(i);
-	            if (cell == null) continue;
+	            if (cell == null || !cell.gameObject.activeSelf) continue;
 	            var elem = cell.GetComponent<TabsGroupElem_UI>();
 	            if (elem != null && !string.IsNullOrEmpty(elem.title)
 	                && elem.title.StartsWith("addon_", StringComparison.OrdinalIgnoreCase))
@@ -2126,12 +2127,15 @@ namespace spz {
 	        if(tabGo != null){
 	            var tabElem = tabGo.GetComponent<TabsGroupElem_UI>();
 	            if(tabElem != null && _tabGroup != null) _tabGroup.RemoveTab(tabElem);
-	            UnityEngine.Object.Destroy(tabGo);
 	            _addonTabById.Remove(addonId);
+	            // Deactivate before Destroy so StripHasEnabledAddonTabs / strip scan leave icon mode same frame.
+	            tabGo.SetActive(false);
+	            UnityEngine.Object.Destroy(tabGo);
 	        } else if (_tabGroup != null && _tabGroup.HasTab(tabId)) {
 	            var orphan = FindAddonTabElementForTabId(_tabGroup, tabId);
 	            if (orphan != null) {
 	                _tabGroup.RemoveTab(orphan);
+	                orphan.gameObject.SetActive(false);
 	                UnityEngine.Object.Destroy(orphan.gameObject);
 	            }
 	        }
