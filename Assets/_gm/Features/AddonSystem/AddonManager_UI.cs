@@ -1017,6 +1017,8 @@ namespace spz {
 				// Baseline for Close-without-Save → RevertShowInRibbonPrefsFromSnapshot (empty snapshot = no-op).
 				SnapshotShowInRibbonPrefs();
 			}
+			// SoftLoad enables may already differ from Remember prefs — keep Save nudge honest.
+			RecomputeDraftDirtyFromLive();
 			// Late ribbon / prior migrate give-up: retry park→shell while the user has the manager open.
 			if (AddonUI_MGR.instance != null)
 				AddonUI_MGR.instance.RequestMigrateParkedPanelsNow();
@@ -1108,6 +1110,8 @@ namespace spz {
 				SeedDraftFromLiveAddons();
 				SnapshotShowInRibbonPrefs();
 			}
+			// SoftLoad dials apply live; SeedDraft clears _draftDirty — restore dirty vs Remember prefs.
+			RecomputeDraftDirtyFromLive();
 			if (_hidViewportStatusForModal && Viewport_StatusText.instance != null) {
 				Viewport_StatusText.instance.PreferVIsible(this);
 				_hidViewportStatusForModal = false;
