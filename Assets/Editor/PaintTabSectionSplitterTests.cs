@@ -171,6 +171,15 @@ public sealed class PaintTabSectionSplitterTests {
 	}
 
 	[Test]
+	public void EnsureSectionSplitters_Source_GuardsSiblingParent() {
+		string path = System.IO.Path.Combine(Application.dataPath, "_gm", "Features", "Paint", "PaintTab", "PaintTab_KritaLayout_UI.cs");
+		string src = System.IO.File.ReadAllText(path);
+		Assert.That(src, Does.Contain("SetSiblingUnder"));
+		Assert.That(src, Does.Contain("child.parent != parent"));
+		Assert.That(src, Does.Contain("_toolchestRow.parent == root"));
+	}
+
+	[Test]
 	public void EnsureSectionSplitters_Source_EarlyReturnsWhileDragging() {
 		string path = System.IO.Path.Combine(Application.dataPath, "_gm", "Features", "Paint", "PaintTab", "PaintTab_KritaLayout_UI.cs");
 		string src = System.IO.File.ReadAllText(path);
