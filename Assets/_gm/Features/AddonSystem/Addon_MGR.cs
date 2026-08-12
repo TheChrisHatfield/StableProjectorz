@@ -840,7 +840,8 @@ namespace spz {
 					if (!foundIds.Contains(key)) toRemove.Add(key);
 				}
 				foreach (var key in toRemove) {
-					// Already unloaded (e.g. RemoveAddon waited) — only shell cleanup + drop registry.
+					// Tear ribbon/UI immediately when soft-disabled; for still-enabled vanished folders
+					// UnloadAddon parks the tab sync then async-unregisters Python (do not leave orphan tabs).
 					if (_registeredAddons.TryGetValue(key, out var gone) && gone != null && !gone.isEnabled) {
 						DestroyAddonUiShell(key);
 					} else {
@@ -1731,8 +1732,12 @@ namespace spz {
 			}
 
 			if (_enableHttpServer) {
-				// Do not DestroyAddonUI before POST /unload_addon — GenerationDoneAudio/GpuFlow unregister
-				// still read panel values via get_value (AddonDebug showed get_value after RemoveAddonPanel).
+				// Dial SoftLoad / Discover can leave the ribbon tab live for the whole HTTP unregister
+				// window (multi-second). Park/remove the strip tab immediately; destroy parked content
+				// after Python unregister so get_value during unload still works.
+				var ribbon = AddonRibbonIntegration.ResolveCommandRibbon();
+				if (ribbon != null)
+					ribbon.RemoveAddonPanelPreservingContent(addonId);
 				StartCoroutine(CoPythonUnloadThenDestroyUi(addonId, onComplete));
 				return;
 			}
