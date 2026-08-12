@@ -349,6 +349,7 @@ namespace spz {
 			_built = false;
 			_appliedBottomGapPx = -1f;
 			_adaptClearanceFrame = -1;
+			_lastDimChoicesFanOpen = false;
 			RestoreGenerateButtonsColumnFrame();
 			RestoreGenArtAnchorsIfSaved();
 		}
