@@ -20,10 +20,10 @@ public sealed class DimensionModeAndFovLeaveThemeTests {
 		Assert.That(src, Does.Contain("SyncChoicesFanSideForLayout"));
 		Assert.That(src, Does.Contain("ApplyChoicesFanFlip"));
 		Assert.That(src, Does.Contain("ShouldHideMirroredLeftColumnContent"));
-		Assert.That(src, Does.Contain("UnflipChoiceLabelsForMirror"));
-		Assert.That(src, Does.Contain("get_viewport_isSwapVerticalRibbons"));
+		Assert.That(src, Does.Contain("ApplyChoiceLabelMirrorState"));
 		Assert.That(src, Does.Contain("ApplyChoicesPanelRaycasterForMirror"));
 		Assert.That(src, Does.Contain("ignoreReversedGraphics"));
+		Assert.That(src, Does.Not.Contain("UnflipChoiceLabelsForMirror"));
 	}
 
 	[Test]
