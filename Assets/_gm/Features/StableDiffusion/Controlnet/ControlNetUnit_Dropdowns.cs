@@ -313,9 +313,12 @@ namespace spz {
 	        // Flux.2 Klein-4B: no alwayson ControlNet (Fun-Union ineffective). Structure via ImageStitch.
 	        if (SD_OptionsPacket.CheckpointNeedsKleinModules(checkpointName))
 	            return true;
-	        // Fun-Union / Flux2 CN pairs with FLUX.2-dev on Forge Neo — allow when checkpoint is non-Klein Flux.2.
+	        // Fun-Union / Flux2 CN pairs with FLUX.2-dev on Forge Neo.
 	        if (ControlNetModelLooksFlux2(cnModelName))
 	            return !SD_OptionsPacket.CheckpointLooksFlux2Dev(checkpointName);
+	        // FLUX.2-dev does not accept SD1.5/XL CN (both look "non-XL" under CheckpointLooksXl).
+	        if (SD_OptionsPacket.CheckpointLooksFlux2Dev(checkpointName))
+	            return true;
 	        return ControlNetModelLooksXl(cnModelName) != CheckpointLooksXl(checkpointName);
 	    }
 
