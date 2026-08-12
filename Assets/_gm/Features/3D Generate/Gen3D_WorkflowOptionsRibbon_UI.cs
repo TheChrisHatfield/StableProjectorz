@@ -66,10 +66,19 @@ namespace spz {
 	    void OnBackgroundRemoved( List<Texture2D> texs ){
 	        if(texs == null || texs.Count==0){ return; }
 
+	        var genData = _currentlyProcessed_genData;
+	        var maskArr = genData?._masking_utils?._ObjectUV_brushedMaskR8;
+	        if (maskArr == null || maskArr.Count == 0 || maskArr[0]?.texArray == null){
+	            Viewport_StatusText.instance?.ShowStatusText(
+	                "Background removal finished but the BG mask target is gone.", false, 5f, false);
+	            texs.ForEach( t=>DestroyImmediate(t) );
+	            return;
+	        }
+
 	        // extract the alpha channel from the returned textures (only one should have been returned).
 	        // Use this alpha channel as the new mask of the BG image:
 	        _rgba_to_a_mat.SetTexture("_MainTex", texs[0]);
-	        RenderTexture dest_mask = _currentlyProcessed_genData._masking_utils._ObjectUV_brushedMaskR8[0].texArray;
+	        RenderTexture dest_mask = maskArr[0].texArray;
 	        TextureTools_SPZ.Blit( null, dest_mask, _rgba_to_a_mat);
 
 	        texs.ForEach( t=>DestroyImmediate(t) );
@@ -99,6 +108,7 @@ namespace spz {
 
 
 	    void Shortcuts_maybe(){
+	        if (DimensionMode_MGR.instance == null) return;
 	        bool isDim3D =  DimensionMode_MGR.instance._dimensionMode == DimensionMode.dim_gen_3d;
 	        if(!isDim3D){ return; }
 	        if (KeyMousePenInput.isSomeInputFieldActive()) { return; }

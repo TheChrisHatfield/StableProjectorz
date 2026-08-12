@@ -1423,6 +1423,8 @@ namespace spz {
 			AddPaletteSquareButton(row.transform, "+", new Color(0.25f, 0.45f, 0.3f, 1f), () =>
 			{
 				if (ColorPalette_MGR.instance == null) return;
+				// Seed defaults first so AddSwatch does not replace the 16 UI-only defaults with one color.
+				ColorPalette_MGR.instance.EnsureDefaultPaletteIfEmpty();
 				var brushColors = FindObjectOfType<BrushRibbon_UI_Colors>(true);
 				Color c = brushColors != null ? brushColors._brushColor : Color.gray;
 				ColorPalette_MGR.instance.AddSwatch(c);
@@ -1434,9 +1436,12 @@ namespace spz {
 				var swatches = FindObjectOfType<PaletteSwatches_UI>(true);
 				if (swatches != null && swatches.SelectedSwatchIndex >= 0)
 				{
-					swatches.RemoveSelectedSwatch();
+					if (ColorPalette_MGR.instance != null)
+						ColorPalette_MGR.instance.EnsureDefaultPaletteIfEmpty();
+					bool removed = swatches.RemoveSelectedSwatch();
 					if (Viewport_StatusText.instance != null)
-						Viewport_StatusText.instance.ShowStatusText("Swatch removed", false, 1.5f, false);
+						Viewport_StatusText.instance.ShowStatusText(
+							removed ? "Swatch removed" : "Could not remove swatch", false, 1.5f, false);
 				}
 				else if (Viewport_StatusText.instance != null)
 					Viewport_StatusText.instance.ShowStatusText("Select a swatch first", false, 1.5f, false);

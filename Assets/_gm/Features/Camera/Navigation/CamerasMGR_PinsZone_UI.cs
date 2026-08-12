@@ -319,7 +319,10 @@ namespace spz {
 	        bool canShowNumbers  =  hoverMainView  ||  _draggedPin != null;
 	             canShowNumbers &= (noUsual || isMMB);//show numbers when  inpainting only when user pans using MMB
 	        if (canShowNumbers){
-	            _cameraPins.ForEach(p=>p.GetComponentInChildren<FadeOutUnlessPersist_UI>().FadeInThisFrame());
+	            _cameraPins.ForEach(p=>{
+	                if (p == null) return;
+	                p.GetComponentInChildren<FadeOutUnlessPersist_UI>()?.FadeInThisFrame();
+	            });
 	        }
 	    }
 
