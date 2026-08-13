@@ -145,8 +145,12 @@ namespace spz {
 	                    _help_button.colors = _authoredHelpButtonColors;
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_help_button.transform);
 	            }
-	            if (_helpTipsPanel != null)
+	            // Footer (catalogue / updates / help / settings) lives under the tips panel —
+	            // one Restore + Monolith hide so Settings gear / Compact holdovers do not stick.
+	            if (_helpTipsPanel != null) {
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_helpTipsPanel.transform);
+	                HideMonolithUnder(_helpTipsPanel.transform);
+	            }
 	            RestoreFooterButton(_3dGenerators_catalogue_button);
 	            RestoreFooterButton(_openCheckForUpdates_button);
 	            RestoreFooterButton(_openWelcomeNovice_button);
@@ -183,6 +187,7 @@ namespace spz {
 	        }
 	        ThemeHelpTipsOverlay(t);
 	        // Footer: catalogue / updates / welcome — authored beige boxes clash under Nomad.
+	        // Settings gear in the same row is owned by Settings_UI.ThemeFlatLauncherButton — skip it.
 	        ThemeFooterButton(_3dGenerators_catalogue_button, t.controlBg, t);
 	        ThemeFooterButton(_openCheckForUpdates_button, t.controlBg, t);
 	        ThemeFooterButton(_openWelcomeNovice_button, t.accent, t);
@@ -190,8 +195,19 @@ namespace spz {
 	    }
 
 	    static void RestoreFooterButton(Button btn) {
-	        if (btn != null)
-	            SpzUiThemeOps.RestoreBoundChromeUnder(btn.transform);
+	        if (btn == null) return;
+	        SpzUiThemeOps.RestoreBoundChromeUnder(btn.transform);
+	        HideMonolithUnder(btn.transform);
+	    }
+
+	    static void HideMonolithUnder(Transform root) {
+	        if (root == null) return;
+	        foreach (var tr in root.GetComponentsInChildren<Transform>(true)) {
+	            if (tr == null) continue;
+	            string n = tr.name ?? "";
+	            if (n == "MonolithLineIcon" || n == "MonolithActiveBar")
+	                tr.gameObject.SetActive(false);
+	        }
 	    }
 
 	    static void ThemeFooterButton(Button btn, Color fill, SpzUiThemeOps.ThemeTokens t) {
@@ -204,12 +220,20 @@ namespace spz {
 	            Color ink = RelativeLuminance(fill) > 0.36f
 	                ? new Color(0.10f, 0.09f, 0.10f, 1f)
 	                : t.textPrimary;
-	            SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, ink, 12f);
+	            // Multi-word footer captions — ReadableBody (Compact UpperCase+Truncate sticks across leave).
+	            string raw = tmp.text ?? "";
+	            if (raw.IndexOf(' ') >= 0 || raw.Length >= 10)
+	                SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, ink, 12f);
+	            else
+	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, ink, 12f);
 	        }
 	        SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	    }
 
-	    /// <summary>Help tips shortcut list: primary body + accent for authored yellow tip lines.</summary>
+	    /// <summary>
+	    /// Help tips shortcut list: ReadableBody + accent for authored yellow tip lines.
+	    /// Skips Button/Toggle chrome — footer + Settings gear are separate ownership roots (leave litmus).
+	    /// </summary>
 	    void ThemeHelpTipsOverlay(SpzUiThemeOps.ThemeTokens t) {
 	        if (_helpTipsPanel == null) return;
 	        var panelImg = _helpTipsPanel.GetComponent<Image>();
@@ -220,9 +244,15 @@ namespace spz {
 	        }
 	        foreach (var img in _helpTipsPanel.GetComponentsInChildren<Image>(true)) {
 	            if (img == null || img == panelImg) continue;
+	            // Footer / Settings gear faces — do not flatten into tip shell chrome.
+	            if (img.GetComponentInParent<Button>(true) != null
+	                || img.GetComponentInParent<Toggle>(true) != null)
+	                continue;
 	            // Skip product/preview content; only chrome-like simple fills.
 	            if (img.GetComponentInParent<RawImage>() != null) continue;
 	            string n = img.gameObject.name ?? "";
+	            if (n == "MonolithLineIcon" || n == "MonolithActiveBar")
+	                continue;
 	            if (n.IndexOf("bg", System.StringComparison.OrdinalIgnoreCase) >= 0
 	                || n.IndexOf("panel", System.StringComparison.OrdinalIgnoreCase) >= 0
 	                || n.IndexOf("backdrop", System.StringComparison.OrdinalIgnoreCase) >= 0) {
@@ -231,9 +261,14 @@ namespace spz {
 	        }
 	        foreach (var tmp in _helpTipsPanel.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
 	            if (tmp == null) continue;
+	            // Footer labels + Settings "settings" TMP — ThemeFooterButton / Settings_UI own those.
+	            if (tmp.GetComponentInParent<Button>(true) != null
+	                || tmp.GetComponentInParent<Toggle>(true) != null)
+	                continue;
 	            // Authored tips are yellow; after first theme pass color is already tokenized — use text cues.
 	            bool tipYellow = IsHelpTipAccentLine(tmp);
-	            SpzUiThemeOps.ApplyBoundChromeTmp(tmp, tipYellow ? t.accent : t.textPrimary, 14f);
+	            // ReadableBody: no Compact UpperCase / strip tracking on multi-line shortcuts (leave litmus).
+	            SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, tipYellow ? t.accent : t.textPrimary, 14f);
 	            tmp.raycastTarget = false;
 	        }
 	    }
@@ -301,6 +336,8 @@ namespace spz {
 	        _help_button.GetComponent<Animation>().enabled = false;
 	        _helpTipsPanel.SetActive(true);
 	        _helpTipsPanel_canvGrp.alpha = 0;//will lerp to 1 during Update
+	        // Sync Nomad↔default when tips were inactive during ThemeChanged (holdover litmus).
+	        ApplyThemeTokens();
 	    }
 
 
