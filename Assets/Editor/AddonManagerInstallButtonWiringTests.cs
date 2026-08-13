@@ -38,13 +38,17 @@ public sealed class AddonManagerInstallButtonWiringTests {
 	}
 
 	[Test]
-	public void InstallHelper_SuppressesOverlayRaycaster_Source() {
+	public void InstallHelper_DoesNotDisableManagerRaycaster_Source() {
 		string path = Path.Combine(Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "AddonSystem", "AddonInstallFromFile_Helper.cs");
 		string src = File.ReadAllText(path);
-		Assert.That(src, Does.Contain("SuppressOverlayRaycaster"),
-			"Manager GraphicRaycaster must yield while the file browser is open.");
 		Assert.That(src, Does.Contain("ElevateFileBrowserCanvas"),
 			"File browser canvas must sort above Addon Manager (32767).");
+		Assert.That(src, Does.Contain("AbortInstallDialogAndRestoreUi"),
+			"Close/Open must hide FileBrowser so GlobalClickBlocker cannot freeze the app.");
+		Assert.That(src, Does.Not.Contain("SuppressOverlayRaycaster"),
+			"Disabling manager GraphicRaycaster + FileBrowser GlobalClickBlocker deadlocks all clicks.");
+		Assert.That(src, Does.Contain("EnsureAddonManagerCanvasRaycastersEnabled"),
+			"Must re-enable AddonManager_Canvas raycasters if an older build left them off.");
 	}
 }
