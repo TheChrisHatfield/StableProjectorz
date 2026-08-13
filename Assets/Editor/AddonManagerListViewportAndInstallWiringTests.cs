@@ -10,10 +10,14 @@ public sealed class AddonManagerListViewportAndInstallWiringTests {
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("EnsureListScrollViewportHealthy"),
 			"Open/theme must migrate legacy Mask viewports that paint a white bar.");
+		Assert.That(src, Does.Contain("PanelShellVersionMarker = \"StichAddonManager_v11\""),
+			"Shell version must bump so broken v10 Mask panels rebuild.");
 		Assert.That(src, Does.Contain("AddComponent<RectMask2D>()"),
 			"List Viewport must clip with RectMask2D.");
-		Assert.That(src, Does.Contain("SolidSquare on the mask graphic paints a white vertical bar"),
-			"Create path must document why Mask+Image is forbidden.");
+		Assert.That(src, Does.Contain("img.enabled = false"),
+			"Viewport Image must stay disabled — clear color alone still draws a white plate.");
+		Assert.That(src, Does.Contain("never put an enabled Image on Viewport"),
+			"Create path must keep Viewport image-free.");
 	}
 
 	[Test]
