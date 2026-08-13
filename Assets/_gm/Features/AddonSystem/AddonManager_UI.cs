@@ -1938,9 +1938,11 @@ namespace spz {
 					headerHlg.childForceExpandHeight = false;
 				}
 			}
-			Transform remove = header != null ? header.Find("RemoveBtn") : null;
+			Transform remove = null;
+			var prefsCardForRemove = item.transform.Find("PreferencesBody/PreferencesCard");
+			if (prefsCardForRemove != null)
+				remove = prefsCardForRemove.Find("RemoveButton");
 			if (remove == null && header != null) remove = header.Find("RemoveButton");
-			if (remove == null) remove = item.transform.Find("RemoveBtn");
 			if (remove == null) remove = item.transform.Find("RemoveButton");
 			if (remove != null) {
 				var removeBtn = remove.GetComponent<Button>();
@@ -1952,6 +1954,9 @@ namespace spz {
 						SpzUiThemeOps.SnapshotLayoutElementForTheme(removeLe);
 						removeLe.preferredWidth = 92f;
 						removeLe.minWidth = 88f;
+						removeLe.preferredHeight = 28f;
+						removeLe.minHeight = 28f;
+						removeLe.flexibleWidth = 0f;
 					}
 				}
 				var removeLabel = remove.GetComponentInChildren<TextMeshProUGUI>(true);
@@ -2086,6 +2091,15 @@ namespace spz {
 			var ribbonToggle = FindChildRecursive(item.transform, "ShowInRibbonToggle")?.GetComponent<Toggle>();
 			if (ribbonToggle != null && ribbonToggle.gameObject.activeSelf) {
 				ThemeShowInRibbonDial(ribbonToggle, ribbonToggle.isOn, t.success, t.textMuted, t.success);
+				var ribbonLabel = FindChildRecursive(item.transform, "ShowInRibbonLabel")?.GetComponent<TextMeshProUGUI>();
+				if (ribbonLabel != null) {
+					float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(ribbonLabel, 13f);
+					SpzUiThemeOps.ApplyBoundChromeTmp(ribbonLabel, t.textMuted, basePt);
+					ribbonLabel.enableWordWrapping = false;
+					ribbonLabel.overflowMode = TextOverflowModes.Ellipsis;
+					ribbonLabel.fontStyle = FontStyles.Normal;
+					ribbonLabel.alignment = TextAlignmentOptions.MidlineLeft;
+				}
 			}
 			// Keep status dial square after any theme pass (layout smash otherwise elongates CircleFilled).
 			if (toggle != null)
@@ -2239,67 +2253,35 @@ namespace spz {
 			SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
 		}
 
-		static string ShowInRibbonButtonLabel(bool isOn, bool ribbonOnly) {
-			if (ribbonOnly)
-				return "Viewport Gen Art dock only";
-			return isOn ? "In Command Ribbon ✓" : "Show in Command Ribbon";
-		}
-
 		/// <summary>
-		/// Host pref is a labeled action button (not a blank grey plate + cryptic dial).
-		/// Enable status still uses the ring dial via <see cref="LockShowInRibbonDialLayout"/>.
+		/// Show-in-Ribbon: clean radio dial + label (no giant tinted plate — Nomad painted that green block).
 		/// </summary>
 		static void ThemeShowInRibbonDial(Toggle toggle, bool isOn, Color ringOn, Color ringOff, Color fillOk) {
 			if (toggle == null) return;
-			_ = ringOn;
-			_ = ringOff;
-			_ = fillOk;
-			LockShowInRibbonButtonLayout(toggle);
-			var face = toggle.targetGraphic as Image;
-			if (face == null)
-				face = toggle.GetComponent<Image>();
-			if (face != null) {
-				AssignSolidFaceThenMarkRounded(face);
-				if (!toggle.interactable) {
-					face.color = new Color(0.18f, 0.18f, 0.20f, 0.85f);
-				} else {
-					face.color = isOn
-						? new Color(0.12f, 0.32f, 0.20f, 0.95f)
-						: new Color(0.22f, 0.22f, 0.26f, 0.95f);
-				}
-				face.raycastTarget = true;
+			LockShowInRibbonDialLayout(toggle);
+			// Hit target stays clear — never paint a solid plate under the dial.
+			if (toggle.targetGraphic is Image hit && hit.transform == toggle.transform) {
+				hit.color = Color.clear;
+				hit.raycastTarget = true;
 			}
-			var label = toggle.transform.Find("ShowInRibbonLabel")?.GetComponent<TextMeshProUGUI>();
-			if (label != null) {
-				bool ribbonOnly = !toggle.interactable;
-				label.text = ShowInRibbonButtonLabel(isOn, ribbonOnly);
-				label.enableWordWrapping = false;
-				label.overflowMode = TextOverflowModes.Ellipsis;
-				label.alignment = TextAlignmentOptions.Center;
-				label.color = (!toggle.interactable)
-					? new Color(0.70f, 0.70f, 0.74f, 1f)
-					: (isOn
-						? new Color(0.72f, 0.95f, 0.78f, 1f)
-						: new Color(0.88f, 0.88f, 0.92f, 1f));
-				float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(label, 12f);
-				if (SpzUiThemeOps.ShouldRecolorBoundChrome)
-					SpzUiThemeOps.ApplyBoundChromeTmp(label, label.color, basePt);
-				else
-					label.fontSize = basePt;
+			var ringImg = toggle.transform.Find("Ring")?.GetComponent<Image>();
+			if (ringImg != null) {
+				TintStatusDialGraphic(ringImg, isOn ? ringOn : ringOff);
+				ringImg.sprite = UiRuntimeSprites.CircleRing;
+				ringImg.preserveAspect = true;
+				ringImg.type = Image.Type.Simple;
 			}
-		}
-
-		static void LockShowInRibbonButtonLayout(Toggle toggle) {
-			if (toggle == null) return;
-			var le = toggle.GetComponent<LayoutElement>();
-			if (le != null) {
-				SpzUiThemeOps.SnapshotLayoutElementForTheme(le);
-				le.preferredWidth = 200f;
-				le.minWidth = 160f;
-				le.preferredHeight = 28f;
-				le.minHeight = 28f;
-				le.flexibleWidth = 0f;
-				le.flexibleHeight = 0f;
+			Image fill = toggle.graphic as Image;
+			if (fill == null)
+				fill = toggle.transform.Find("Ring/Checkmark")?.GetComponent<Image>();
+			if (fill != null) {
+				TintStatusDialGraphic(fill, fillOk);
+				fill.sprite = UiRuntimeSprites.CircleFilled;
+				fill.preserveAspect = true;
+				fill.type = Image.Type.Simple;
+				fill.gameObject.SetActive(true);
+				fill.enabled = true;
+				fill.canvasRenderer.SetAlpha(isOn ? 1f : 0f);
 			}
 		}
 
@@ -2550,18 +2532,24 @@ namespace spz {
 				}
 				var ribbonBtn = row.Find("ShowInRibbonToggle")?.GetComponent<Toggle>();
 				if (ribbonBtn != null)
-					LockShowInRibbonButtonLayout(ribbonBtn);
-				var label = row.Find("ShowInRibbonToggle/ShowInRibbonLabel")?.GetComponent<TextMeshProUGUI>();
+					LockShowInRibbonDialLayout(ribbonBtn);
+				var label = row.Find("ShowInRibbonLabel")?.GetComponent<TextMeshProUGUI>();
 				if (label == null)
-					label = row.Find("ShowInRibbonLabel")?.GetComponent<TextMeshProUGUI>();
+					label = row.Find("ShowInRibbonToggle/ShowInRibbonLabel")?.GetComponent<TextMeshProUGUI>();
 				if (label != null) {
-					// Single-line + ellipsis on the action button face.
+					var labelLE = label.GetComponent<LayoutElement>();
+					if (labelLE != null) {
+						labelLE.flexibleWidth = 1f;
+						labelLE.minWidth = narrow ? 120f : 160f;
+						labelLE.preferredHeight = rowH - 8f;
+					}
 					label.enableWordWrapping = false;
 					label.overflowMode = TextOverflowModes.Ellipsis;
-					const float labelDesign = 12f;
+					label.alignment = TextAlignmentOptions.MidlineLeft;
+					const float labelDesign = 13f;
 					float labelBase = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(label, labelDesign);
 					if (SpzUiThemeOps.ShouldRecolorBoundChrome)
-						SpzUiThemeOps.ApplyBoundChromeTmp(label, SpzUiThemeOps.Active.textPrimary, labelBase);
+						SpzUiThemeOps.ApplyBoundChromeTmp(label, SpzUiThemeOps.Active.textMuted, labelBase);
 					else
 						label.fontSize = labelBase;
 				}
@@ -2826,36 +2814,6 @@ namespace spz {
 			nameText.overflowMode = TMPro.TextOverflowModes.Ellipsis;
 			nameText.raycastTarget = false;
 
-			var removeBtnObj = new GameObject("RemoveButton");
-			removeBtnObj.transform.SetParent(headerObj.transform, false);
-			var removeBtnLE = removeBtnObj.AddComponent<LayoutElement>();
-			removeBtnLE.preferredWidth = 92f;
-			removeBtnLE.minWidth = 88f;
-			removeBtnLE.flexibleWidth = 0f;
-			removeBtnLE.preferredHeight = 28f;
-			removeBtnLE.minHeight = 28f;
-			var removeBtnImage = removeBtnObj.AddComponent<Image>();
-			AssignSolidFaceThenMarkRounded(removeBtnImage);
-			removeBtnImage.color = new Color(45f / 255f, 26f / 255f, 26f / 255f, 0.85f);
-			removeBtnImage.raycastTarget = true;
-			var removeBtn = removeBtnObj.AddComponent<Button>();
-			removeBtn.targetGraphic = removeBtnImage;
-			removeBtn.transition = Selectable.Transition.ColorTint;
-			var removeBtnText = new GameObject("Text");
-			removeBtnText.transform.SetParent(removeBtnObj.transform, false);
-			var removeBtnTextRect = removeBtnText.AddComponent<RectTransform>();
-			removeBtnTextRect.anchorMin = Vector2.zero;
-			removeBtnTextRect.anchorMax = Vector2.one;
-			removeBtnTextRect.sizeDelta = Vector2.zero;
-			var removeBtnTextComp = removeBtnText.AddComponent<TextMeshProUGUI>();
-			removeBtnTextComp.text = "Uninstall";
-			removeBtnTextComp.fontSize = 11f;
-			removeBtnTextComp.alignment = TextAlignmentOptions.Center;
-			removeBtnTextComp.color = new Color(0.96f, 0.44f, 0.44f, 0.9f);
-			removeBtnTextComp.raycastTarget = false;
-			removeBtn.onClick.AddListener(() => OnRemoveAddon(addonId));
-			AttachTooltip(removeBtnObj, "Uninstall this add-on from StreamingAssets/Addons (cannot be undone).");
-
 			// Nested Blender-like details under HeaderRow — inset card (not full-bleed grey band).
 			var prefsBody = new GameObject("PreferencesBody");
 			prefsBody.transform.SetParent(itemObj.transform, false);
@@ -2969,54 +2927,113 @@ namespace spz {
 			prefRowHLG.childForceExpandWidth = false;
 			prefRowHLG.childForceExpandHeight = false;
 
-			// Labeled action button — end users can read what the control does (not a blank grey square).
+			// Clean radio dial + label (not a giant green action plate).
+			const float ribbonDialHit = 28f;
+			const float ribbonDialSize = 14f;
 			var ribbonToggleObj = new GameObject("ShowInRibbonToggle");
 			ribbonToggleObj.transform.SetParent(prefRow.transform, false);
-			ribbonToggleObj.AddComponent<RectTransform>();
+			var ribbonToggleRt = ribbonToggleObj.AddComponent<RectTransform>();
+			ribbonToggleRt.sizeDelta = new Vector2(ribbonDialHit, ribbonDialHit);
 			var ribbonToggleLE = ribbonToggleObj.AddComponent<LayoutElement>();
-			ribbonToggleLE.preferredWidth = 200f;
-			ribbonToggleLE.minWidth = 160f;
-			ribbonToggleLE.preferredHeight = 28f;
-			ribbonToggleLE.minHeight = 28f;
+			ribbonToggleLE.preferredWidth = ribbonDialHit;
+			ribbonToggleLE.minWidth = ribbonDialHit;
+			ribbonToggleLE.preferredHeight = ribbonDialHit;
+			ribbonToggleLE.minHeight = ribbonDialHit;
 			ribbonToggleLE.flexibleWidth = 0f;
 			ribbonToggleLE.flexibleHeight = 0f;
-			var ribbonFace = ribbonToggleObj.AddComponent<Image>();
-			AssignSolidFaceThenMarkRounded(ribbonFace);
-			ribbonFace.raycastTarget = true;
+			var ribbonHit = ribbonToggleObj.AddComponent<Image>();
+			ribbonHit.color = Color.clear;
+			ribbonHit.raycastTarget = true;
+			var ribbonRingObj = new GameObject("Ring");
+			ribbonRingObj.transform.SetParent(ribbonToggleObj.transform, false);
+			var ribbonRingRt = ribbonRingObj.AddComponent<RectTransform>();
+			ribbonRingRt.anchorMin = ribbonRingRt.anchorMax = new Vector2(0.5f, 0.5f);
+			ribbonRingRt.pivot = new Vector2(0.5f, 0.5f);
+			ribbonRingRt.sizeDelta = new Vector2(ribbonDialSize, ribbonDialSize);
+			var ribbonRing = ribbonRingObj.AddComponent<Image>();
+			ribbonRing.sprite = UiRuntimeSprites.CircleRing;
+			ribbonRing.type = Image.Type.Simple;
+			ribbonRing.preserveAspect = true;
+			ribbonRing.raycastTarget = false;
+			var ribbonCheckGo = new GameObject("Checkmark");
+			ribbonCheckGo.transform.SetParent(ribbonRingObj.transform, false);
+			var ribbonCheckRt = ribbonCheckGo.AddComponent<RectTransform>();
+			ribbonCheckRt.anchorMin = new Vector2(0.28f, 0.28f);
+			ribbonCheckRt.anchorMax = new Vector2(0.72f, 0.72f);
+			ribbonCheckRt.offsetMin = Vector2.zero;
+			ribbonCheckRt.offsetMax = Vector2.zero;
+			var ribbonCheck = ribbonCheckGo.AddComponent<Image>();
+			ribbonCheck.sprite = UiRuntimeSprites.CircleFilled;
+			ribbonCheck.type = Image.Type.Simple;
+			ribbonCheck.preserveAspect = true;
+			ribbonCheck.color = new Color(34f / 255f, 197f / 255f, 94f / 255f, 1f);
+			ribbonCheck.raycastTarget = false;
 			var ribbonToggle = ribbonToggleObj.AddComponent<Toggle>();
-			ribbonToggle.targetGraphic = ribbonFace;
+			ribbonToggle.targetGraphic = ribbonHit;
 			ribbonToggle.graphic = null;
-			ribbonToggle.transition = Selectable.Transition.ColorTint;
+			ribbonToggle.transition = Selectable.Transition.None;
 			ribbonToggle.toggleTransition = Toggle.ToggleTransition.None;
 			ribbonToggle.SetIsOnWithoutNotify(showInRibbon);
 			ribbonToggle.interactable = !ribbonOnly;
+			ThemeShowInRibbonDial(ribbonToggle, showInRibbon, _statusOk, _statusMuted, _statusOk);
 
 			var ribbonLabelObj = new GameObject("ShowInRibbonLabel");
-			ribbonLabelObj.transform.SetParent(ribbonToggleObj.transform, false);
-			var ribbonLabelRt = ribbonLabelObj.AddComponent<RectTransform>();
-			ribbonLabelRt.anchorMin = Vector2.zero;
-			ribbonLabelRt.anchorMax = Vector2.one;
-			ribbonLabelRt.offsetMin = new Vector2(8f, 0f);
-			ribbonLabelRt.offsetMax = new Vector2(-8f, 0f);
+			ribbonLabelObj.transform.SetParent(prefRow.transform, false);
+			var ribbonLabelLE = ribbonLabelObj.AddComponent<LayoutElement>();
+			ribbonLabelLE.flexibleWidth = 1f;
+			ribbonLabelLE.minWidth = 160f;
+			ribbonLabelLE.preferredHeight = 28f;
+			ribbonLabelLE.flexibleHeight = 0f;
 			var ribbonLabel = ribbonLabelObj.AddComponent<TextMeshProUGUI>();
-			ribbonLabel.text = ShowInRibbonButtonLabel(showInRibbon, ribbonOnly);
-			ribbonLabel.fontSize = 12f;
-			ribbonLabel.alignment = TextAlignmentOptions.Center;
+			ribbonLabel.text = ribbonOnly
+				? "Viewport Gen Art dock only — no Command Ribbon tab"
+				: "Show in Command Ribbon";
+			ribbonLabel.fontSize = 13f;
+			ribbonLabel.color = new Color(0.78f, 0.78f, 0.82f, 1f);
+			ribbonLabel.alignment = TextAlignmentOptions.MidlineLeft;
 			ribbonLabel.enableWordWrapping = false;
 			ribbonLabel.overflowMode = TextOverflowModes.Ellipsis;
 			ribbonLabel.raycastTarget = false;
-			ThemeShowInRibbonDial(ribbonToggle, showInRibbon, _statusOk, _statusMuted, _statusOk);
 			if (ribbonOnly) {
-				// RibbonOnlyFullscreen never uses a Command Ribbon tab — tip only, no toggle.
-				ribbonToggle.interactable = false;
-				ribbonFace.color = new Color(0.18f, 0.18f, 0.20f, 0.85f);
+				ribbonToggleObj.SetActive(false);
 				ribbonLabel.raycastTarget = true;
-				AttachTooltip(ribbonToggleObj,
+				AttachTooltip(ribbonLabelObj,
 					"RibbonOnlyFullscreen uses the viewport Gen Art dock — it never appears as a Command Ribbon tab.");
 			} else {
 				AttachTooltip(ribbonToggleObj,
 					"When on, an enabled add-on shows a Command Ribbon tab. When off, it stays active but the tab is hidden.");
 			}
+
+			// Uninstall lives under Host preferences (not far-right on the header row).
+			var removeBtnObj = new GameObject("RemoveButton");
+			removeBtnObj.transform.SetParent(prefsCard.transform, false);
+			var removeBtnLE = removeBtnObj.AddComponent<LayoutElement>();
+			removeBtnLE.preferredWidth = 92f;
+			removeBtnLE.minWidth = 88f;
+			removeBtnLE.flexibleWidth = 0f;
+			removeBtnLE.preferredHeight = 28f;
+			removeBtnLE.minHeight = 28f;
+			var removeBtnImage = removeBtnObj.AddComponent<Image>();
+			AssignSolidFaceThenMarkRounded(removeBtnImage);
+			removeBtnImage.color = new Color(45f / 255f, 26f / 255f, 26f / 255f, 0.85f);
+			removeBtnImage.raycastTarget = true;
+			var removeBtn = removeBtnObj.AddComponent<Button>();
+			removeBtn.targetGraphic = removeBtnImage;
+			removeBtn.transition = Selectable.Transition.ColorTint;
+			var removeBtnText = new GameObject("Text");
+			removeBtnText.transform.SetParent(removeBtnObj.transform, false);
+			var removeBtnTextRect = removeBtnText.AddComponent<RectTransform>();
+			removeBtnTextRect.anchorMin = Vector2.zero;
+			removeBtnTextRect.anchorMax = Vector2.one;
+			removeBtnTextRect.sizeDelta = Vector2.zero;
+			var removeBtnTextComp = removeBtnText.AddComponent<TextMeshProUGUI>();
+			removeBtnTextComp.text = "Uninstall";
+			removeBtnTextComp.fontSize = 11f;
+			removeBtnTextComp.alignment = TextAlignmentOptions.Center;
+			removeBtnTextComp.color = new Color(0.96f, 0.44f, 0.44f, 0.9f);
+			removeBtnTextComp.raycastTarget = false;
+			removeBtn.onClick.AddListener(() => OnRemoveAddon(addonId));
+			AttachTooltip(removeBtnObj, "Uninstall this add-on from StreamingAssets/Addons (cannot be undone).");
 
 			void SetItemExpandedHeight(bool expanded) {
 				const float collapsedH = 48f;
@@ -3032,8 +3049,6 @@ namespace spz {
 					ApplyResponsivePrefsDropdownLayout(prefsBody.transform);
 					SyncExpandedAddonItemHeight(itemObj, prefsBody.transform);
 				}
-			}
-
 			}
 
 			void CollapseOtherExpandedItems() {

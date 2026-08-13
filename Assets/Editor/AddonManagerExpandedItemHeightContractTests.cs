@@ -43,8 +43,8 @@ public sealed class AddonManagerExpandedItemHeightContractTests {
 		string createBody = src.Substring(create, System.Math.Min(450, src.Length - create));
 		Assert.That(createBody, Does.Contain("enableWordWrapping = false"));
 		Assert.That(createBody, Does.Contain("TextOverflowModes.Ellipsis"));
-		int responsive = src.IndexOf("ShowInRibbonToggle/ShowInRibbonLabel", System.StringComparison.Ordinal);
-		Assert.That(responsive, Is.GreaterThan(0), "Responsive layout must find label under the action button.");
+		int responsive = src.IndexOf("var label = row.Find(\"ShowInRibbonLabel\")", System.StringComparison.Ordinal);
+		Assert.That(responsive, Is.GreaterThan(0), "Responsive layout must find label beside the radio dial.");
 		string respBody = src.Substring(responsive, System.Math.Min(500, src.Length - responsive));
 		Assert.That(respBody, Does.Contain("enableWordWrapping = false"));
 		Assert.That(respBody, Does.Contain("TextOverflowModes.Ellipsis"));
