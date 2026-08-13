@@ -357,6 +357,36 @@ namespace spz {
 			"Close the Add-on Manager.");
 	}
 
+		/// <summary>
+		/// Legacy shells used Mask+Image on Viewport — BoundChrome/SolidSquare turns that into a white vertical bar.
+		/// Migrate in place to RectMask2D + clear hit graphic (same as create path).
+		/// </summary>
+		void EnsureListScrollViewportHealthy() {
+			if (_panel == null) return;
+			Transform viewport = _panel.transform.Find("ScrollView/Viewport");
+			if (viewport == null)
+				viewport = _panel.transform.Find("ListArea/ScrollView/Viewport");
+			if (viewport == null) return;
+
+			var legacyMask = viewport.GetComponent<Mask>();
+			if (legacyMask != null)
+				Destroy(legacyMask);
+
+			if (viewport.GetComponent<RectMask2D>() == null)
+				viewport.gameObject.AddComponent<RectMask2D>();
+
+			var img = viewport.GetComponent<Image>();
+			if (img == null) {
+				img = viewport.gameObject.AddComponent<Image>();
+			}
+			img.sprite = UiRuntimeSprites.SolidRect;
+			img.type = Image.Type.Simple;
+			img.color = Color.clear;
+			img.raycastTarget = true;
+			// Never leave showMaskGraphic-style white stencil plate.
+			img.enabled = true;
+		}
+
 		void OnRememberEnabledAddonsToggleChanged(bool remember) {
 			Addon_MGR.SetRememberEnabledAddonsPreference(remember);
 			ThemeRememberActionButton(_rememberEnabledAddonToggle, remember);
@@ -880,8 +910,8 @@ namespace spz {
 		scrollView.inertia = true;
 		scrollView.decelerationRate = 0.135f;
 
-		// Nested Viewport (Mask) — viewport=self made content bounds fight the panel VLG so the
-		// list could not scroll far enough to reach the last add-on / expanded Preferences.
+		// Nested Viewport — RectMask2D clips the list. Do NOT use Mask+Image: Nomad/default
+		// SolidSquare on the mask graphic paints a white vertical bar over the add-on list.
 		GameObject viewportObj = new GameObject("Viewport");
 		viewportObj.layer = UILayer;
 		viewportObj.transform.SetParent(scrollViewObj.transform, false);
@@ -891,10 +921,14 @@ namespace spz {
 		viewportRect.sizeDelta = Vector2.zero;
 		viewportRect.pivot = new Vector2(0.5f, 0.5f);
 		var viewportImage = viewportObj.AddComponent<UnityEngine.UI.Image>();
-		viewportImage.color = new Color(0f, 0f, 0f, 0.01f);
+		viewportImage.sprite = UiRuntimeSprites.SolidRect;
+		viewportImage.type = Image.Type.Simple;
+		viewportImage.color = Color.clear;
 		viewportImage.raycastTarget = true;
-		var viewportMask = viewportObj.AddComponent<UnityEngine.UI.Mask>();
-		viewportMask.showMaskGraphic = false;
+		if (viewportObj.GetComponent<Mask>() != null)
+			Destroy(viewportObj.GetComponent<Mask>());
+		if (viewportObj.GetComponent<RectMask2D>() == null)
+			viewportObj.AddComponent<RectMask2D>();
 
 		GameObject contentObj = new GameObject("Content");
 		contentObj.layer = UILayer;
@@ -1090,6 +1124,7 @@ namespace spz {
 
 			CreatePanelIfNeeded();
 			EnsureHeaderActionButtonsWired();
+			EnsureListScrollViewportHealthy();
 			TryAddRememberPreferenceRowIfMissing();
 			TryEnsureSaveSettingsButton();
 			EnsureChromeTooltips();
@@ -1672,6 +1707,7 @@ namespace spz {
 					RestoreHeaderButtonAuthoredChrome(_loadAddonsNow_button);
 					RestoreHeaderButtonAuthoredChrome(_saveAddonSettings_button);
 					RestoreHeaderButtonAuthoredChrome(_restartWithAddons_button);
+					EnsureListScrollViewportHealthy();
 				}
 				if (_closePanel_button != null)
 					SpzUiThemeOps.RestoreBoundChromeUnder(_closePanel_button.transform);
@@ -1786,6 +1822,7 @@ namespace spz {
 				ThemeHeaderButton(_restartWithAddons_button, t.accent, t.selection, restartFg);
 			}
 			if (_addonsListParent != null) {
+				EnsureListScrollViewportHealthy();
 				var listImg = _addonsListParent.GetComponent<Image>();
 				if (listImg != null)
 					SpzUiThemeOps.ApplyBoundChromeGraphic(listImg, t.fieldBg);
