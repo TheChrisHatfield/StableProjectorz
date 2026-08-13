@@ -138,10 +138,14 @@ namespace spz {
         
 	        // CHANGED: LoadProject is now Async, so we use a callback instead of 'out string'
 	        _saveLoad_helper.LoadProject( (resultMessage_) => {
-	            Viewport_StatusText.instance?.ShowStatusText(resultMessage_, false, 6, false);
-	            _isLoading = false;
-	            //after loading, Unpress any ctrl, alt etc. Else unity might keep thinking they are still pressed:
-	            StartCoroutine( ResetCtrlKey_AfterLoadSave() );
+	            try {
+	                Viewport_StatusText.instance?.ShowStatusText(resultMessage_, false, 6, false);
+	                //after loading, Unpress any ctrl, alt etc. Else unity might keep thinking they are still pressed:
+	                StartCoroutine( ResetCtrlKey_AfterLoadSave() );
+	            } finally {
+	                // Always clear — LoadProject try/catch invokes onResult, but status UI must not stick the gate.
+	                _isLoading = false;
+	            }
 	        });
 	    }
 

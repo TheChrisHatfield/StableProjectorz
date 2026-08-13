@@ -231,7 +231,8 @@ namespace spz {
 	        FileBrowser.SetDefaultFilter("spz");
 
 	        FileBrowser.ShowLoadDialog((paths) => {
-	            if (paths.Length == 0){
+	            try {
+	            if (paths == null || paths.Length == 0){
 	                onResult?.Invoke("Load cancelled — no file selected.");
 	                return;
 	            }
@@ -255,34 +256,34 @@ namespace spz {
 	                onResult?.Invoke(resultMessage_ ?? "Error loading the project file. The file is corrupted, or an unsupported version");
 	                return;
 	            }
-	            Performance_MGR.instance.Load(spz);
-	            LeftRibbon_UI.instance.Load(spz);
-	            UserCameras_MGR.instance.Load(spz);
+	            Performance_MGR.instance?.Load(spz);
+	            LeftRibbon_UI.instance?.Load(spz);
+	            UserCameras_MGR.instance?.Load(spz);
 
-	            ModelsHandler_3D.instance.Load(spz);//befores the projector cameras
-	            ModelsHandler_3D_UI.instance.Load(spz);
-	            ProjectorCameras_MGR.instance.Load(spz);
-	            SD_InputPanel_UI.instance.Load(spz);
+	            ModelsHandler_3D.instance?.Load(spz);//befores the projector cameras
+	            ModelsHandler_3D_UI.instance?.Load(spz);
+	            ProjectorCameras_MGR.instance?.Load(spz);
+	            SD_InputPanel_UI.instance?.Load(spz);
 	            if (spz.sd_genSettingsInput != null)
-	                StableDiffusion_Prompts_UI.instance.Load( spz.sd_genSettingsInput );
+	                StableDiffusion_Prompts_UI.instance?.Load( spz.sd_genSettingsInput );
 
 	            //Jan 2025 not saving for now, because the layout is dynamically created from a text string
 	            //TrellisInputTabs_MGR_UI.instance.Load(spz.generate3D_inputs, spz.filepath_dataDir);
 
-	            WorkflowRibbon_UI.instance.Load(spz);
-	            SD_WorkflowOptionsRibbon_UI.instance.Load(spz);
+	            WorkflowRibbon_UI.instance?.Load(spz);
+	            SD_WorkflowOptionsRibbon_UI.instance?.Load(spz);
 	            if (BrushRibbon_UI.instance != null && spz.brush_MGR != null)
 	                BrushRibbon_UI.instance.Load(spz);
 	            if (ColorPalette_MGR.instance != null && spz.colorPalette != null)
 	                ColorPalette_MGR.instance.Load(spz);
-	            Gen3D_WorkflowOptionsRibbon_UI.instance.Load(spz);
+	            Gen3D_WorkflowOptionsRibbon_UI.instance?.Load(spz);
 
-	            GenData2D_Archive.instance.Load(spz);
-	            SD_ControlNetsList_UI.instance.Load(spz);
-	            SkyboxColorButtons_UI_MGR.instance.Load(spz);
-	            Art2D_IconsUI_List.instance.Load(spz);
-	            ArtBG_IconsUI_List.instance.Load(spz);
-	            Connection_MGR.instance.Load(spz);
+	            GenData2D_Archive.instance?.Load(spz);
+	            SD_ControlNetsList_UI.instance?.Load(spz);
+	            SkyboxColorButtons_UI_MGR.instance?.Load(spz);
+	            Art2D_IconsUI_List.instance?.Load(spz);
+	            ArtBG_IconsUI_List.instance?.Load(spz);
+	            Connection_MGR.instance?.Load(spz);
 	            if (spz.paintLayerStack != null)
 	            {
 	                if (PaintLayerStack_MGR.instance == null)
@@ -296,19 +297,24 @@ namespace spz {
 		            Inpaint_MaskPainter.instance?.NotifyPaintLayersRestoredFromDisk(false);
 	            //2D BACKGROUND mgr?
 
-	            UserCameras_MGR.instance.OnAfter_AllLoaded();
-	            ProjectorCameras_MGR.instance.OnAfterLoadedAll();
-	            GenData2D_Archive.instance.OnAfter_AllLoaded(spz);
-	            Art2D_IconsUI_List.instance.OnAfter_AllLoaded();
-	            ArtBG_IconsUI_List.instance.OnAfter_AllLoaded();
+	            UserCameras_MGR.instance?.OnAfter_AllLoaded();
+	            ProjectorCameras_MGR.instance?.OnAfterLoadedAll();
+	            GenData2D_Archive.instance?.OnAfter_AllLoaded(spz);
+	            Art2D_IconsUI_List.instance?.OnAfter_AllLoaded();
+	            ArtBG_IconsUI_List.instance?.OnAfter_AllLoaded();
 
-	            Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	            Objects_Renderer_MGR.instance?.ReRenderAll_soon();
 
 	            // Same as SaveProj: so GetProjectDataDirOrSession / SPZ GO exchange use this project, not a prior save or session folder.
 	            _last_saveFilepath = spzFilepath;
 	            LastProjectLoadSucceeded = true;
             
 	            onResult?.Invoke(resultMessage_);
+	            }
+	            catch (System.Exception ex) {
+	                LastProjectLoadSucceeded = false;
+	                onResult?.Invoke("Error loading the project: " + ex.Message);
+	            }
 
 	        }, 
 	        () => {
