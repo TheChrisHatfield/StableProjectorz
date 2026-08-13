@@ -336,7 +336,8 @@ namespace spz {
 			var btn = t.GetComponent<Button>();
 			if (btn == null) return;
 			field = btn;
-			btn.onClick.RemoveListener(handler);
+			// RemoveAll avoids IL2CPP method-group RemoveListener misses that leave Install unwired.
+			btn.onClick.RemoveAllListeners();
 			btn.onClick.AddListener(handler);
 			btn.interactable = true;
 			if (btn.targetGraphic != null)
@@ -1452,24 +1453,41 @@ namespace spz {
 		/// Uses deferred helper so the dialog is not opened on the same pointer-up as the button click.
 		/// </summary>
 		void OnInstallFromFile() {
+			EnsureHeaderActionButtonsWired();
+			ShowStatus("Opening install file browser…", true);
+			Debug.Log("[AddonManager_UI] Install from File clicked.");
 			if (!isActiveAndEnabled || !gameObject.activeInHierarchy) {
-				ShowStatus("Add-on Manager is not ready to install.", false);
+				// Overlay canvas is a scene root; host the pick coroutine on the deferred DDOL host
+				// so it still runs if this MB is inactive after Settings closes.
+				EnsureDeferredOpenCoroutineHost();
+				if (_installFromFilePickCo != null && s_deferredOpenHost != null)
+					s_deferredOpenHost.StopCoroutine(_installFromFilePickCo);
+				_installFromFilePickCo = s_deferredOpenHost.StartCoroutine(CoInstallFromFilePick());
 				return;
 			}
 			if (_installFromFilePickCo != null)
 				StopCoroutine(_installFromFilePickCo);
-			_installFromFilePickCo = StartCoroutine(AddonInstallFromFile_Helper.CoDeferredThenPickZipOrInitPy(
+			_installFromFilePickCo = StartCoroutine(CoInstallFromFilePick());
+		}
+
+		IEnumerator CoInstallFromFilePick() {
+			Canvas overlay = FindAddonManagerOverlayCanvas();
+			yield return AddonInstallFromFile_Helper.CoDeferredThenPickZipOrInitPy(
 				AddonManagerCanvasSortOrder,
 				path => {
 					_installFromFilePickCo = null;
 					InstallAddon(path);
 				},
-				() => { _installFromFilePickCo = null; },
+				() => {
+					_installFromFilePickCo = null;
+					ShowStatus("Install cancelled.", false);
+				},
 				ex => {
 					_installFromFilePickCo = null;
 					Debug.LogError($"[AddonManager_UI] Install file browser failed: {ex.Message}\n{ex.StackTrace}");
-					ShowStatus("Could not open Install file browser.", false);
-				}));
+					ShowStatus("Could not open Install file browser: " + ex.Message, false);
+				},
+				overlay);
 		}
 		
 		/// <summary>
