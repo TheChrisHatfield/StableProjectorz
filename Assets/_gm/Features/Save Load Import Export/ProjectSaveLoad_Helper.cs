@@ -127,43 +127,51 @@ namespace spz {
 	        spz.sd_genSettingsInput = new SD_GenSettingsInput_UI();
 	        spz.generate3D_inputs = new Generate3D_Inputs_SL();
 
-	        Performance_MGR.instance.Save(spz);
-	        LeftRibbon_UI.instance.Save(spz);
-	        UserCameras_MGR.instance.Save(spz);
+	        string resultMessage = null;
+	        System.Exception gatherEx = null;
+	        // No yield inside try/catch (CS1626) — gather+serialize sync only, then restore on throw.
+	        try {
+	            Performance_MGR.instance?.Save(spz);
+	            LeftRibbon_UI.instance?.Save(spz);
+	            UserCameras_MGR.instance?.Save(spz);
 
-	        ProjectorCameras_MGR.instance.Save(spz);
-	        SD_InputPanel_UI.instance.Save(spz.sd_genSettingsInput);
-	        StableDiffusion_Prompts_UI.instance.Save(spz.sd_genSettingsInput);
+	            ProjectorCameras_MGR.instance?.Save(spz);
+	            SD_InputPanel_UI.instance?.Save(spz.sd_genSettingsInput);
+	            StableDiffusion_Prompts_UI.instance?.Save(spz.sd_genSettingsInput);
 
-	        //Jan 2025 not saving for now, because the layout is dynamically created from a text string
-	        //TrellisInputTabs_MGR_UI.instance.Save(spz.generate3D_inputs, spz.filepath_dataDir);
+	            WorkflowRibbon_UI.instance?.Save(spz);
+	            SD_WorkflowOptionsRibbon_UI.instance?.Save(spz);
+	            if (BrushRibbon_UI.instance != null)
+	                BrushRibbon_UI.instance.Save(spz);
+	            if (ColorPalette_MGR.instance != null)
+	                ColorPalette_MGR.instance.Save(spz);
+	            Gen3D_WorkflowOptionsRibbon_UI.instance?.Save(spz);
 
-	        WorkflowRibbon_UI.instance.Save(spz);
-	        SD_WorkflowOptionsRibbon_UI.instance.Save(spz);
-	        if (BrushRibbon_UI.instance != null)
-	            BrushRibbon_UI.instance.Save(spz);
-	        if (ColorPalette_MGR.instance != null)
-	            ColorPalette_MGR.instance.Save(spz);
-	        Gen3D_WorkflowOptionsRibbon_UI.instance.Save(spz);
+	            GenData2D_Archive.instance?.Save(spz);
+	            SD_ControlNetsList_UI.instance?.Save(spz);
+	            ModelsHandler_3D.instance?.Save(spz);
+	            ModelsHandler_3D_UI.instance?.Save(spz);
+	            SkyboxColorButtons_UI_MGR.instance?.Save(spz);
+	            Art2D_IconsUI_List.instance?.Save(spz);
+	            ArtBG_IconsUI_List.instance?.Save(spz);
+	            Connection_MGR.instance?.Save(spz);
+	            if (PaintLayerStack_MGR.instance != null)
+	                PaintLayerStack_MGR.instance.Save(spz);
 
-	        GenData2D_Archive.instance.Save(spz);
-	        SD_ControlNetsList_UI.instance.Save(spz);
-	        ModelsHandler_3D.instance.Save(spz);
-	        ModelsHandler_3D_UI.instance.Save(spz);
-	        SkyboxColorButtons_UI_MGR.instance.Save(spz);
-	        Art2D_IconsUI_List.instance.Save(spz);
-	        ArtBG_IconsUI_List.instance.Save(spz);
-	        Connection_MGR.instance.Save(spz);
-	        if (PaintLayerStack_MGR.instance != null)
-	            PaintLayerStack_MGR.instance.Save(spz);
-
-	        // DataFolder should be relative to filepath of the project-file
-	        string resultMessage;
-	        Serialize_SPZ_toJSON(saveFile, spz, out resultMessage);
-	        LastProjectSaveSucceeded = resultMessage != null
-		        && resultMessage.StartsWith("Saved the project", StringComparison.Ordinal);
-	        // If JSON write failed, restore wiped _Data and skip composite / last-path update.
-	        CommitOrRestoreDataDir(spz.filepath_dataDir, LastProjectSaveSucceeded);
+	            Serialize_SPZ_toJSON(saveFile, spz, out resultMessage);
+	            LastProjectSaveSucceeded = resultMessage != null
+		            && resultMessage.StartsWith("Saved the project", StringComparison.Ordinal);
+	            CommitOrRestoreDataDir(spz.filepath_dataDir, LastProjectSaveSucceeded);
+	        } catch (System.Exception ex) {
+	            gatherEx = ex;
+	        }
+	        if (gatherEx != null) {
+	            CommitOrRestoreDataDir(spz.filepath_dataDir, false);
+	            LastProjectSaveSucceeded = false;
+	            onResultMessage?.Invoke("Didn't save - " + gatherEx.Message);
+	            saveFinalTexs?.Invoke(null);
+	            yield break;
+	        }
 	        if (!LastProjectSaveSucceeded) {
 	            onResultMessage?.Invoke(resultMessage);
 	            saveFinalTexs?.Invoke(null);
