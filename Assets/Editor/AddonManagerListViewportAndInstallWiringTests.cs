@@ -4,20 +4,22 @@ using NUnit.Framework;
 public sealed class AddonManagerListViewportAndInstallWiringTests {
 
 	[Test]
-	public void ListViewport_UsesRectMask2DNotStencilMask_Source() {
+	public void ListViewport_UsesKnownGoodMaskShell_Source() {
 		string path = Path.Combine(Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "AddonSystem", "AddonManager_UI.cs");
 		string src = File.ReadAllText(path);
-		Assert.That(src, Does.Contain("EnsureListScrollViewportHealthy"),
-			"Open/theme must migrate legacy Mask viewports that paint a white bar.");
-		Assert.That(src, Does.Contain("PanelShellVersionMarker = \"StichAddonManager_v11\""),
-			"Shell version must bump so broken v10 Mask panels rebuild.");
-		Assert.That(src, Does.Contain("AddComponent<RectMask2D>()"),
-			"List Viewport must clip with RectMask2D.");
-		Assert.That(src, Does.Contain("img.enabled = false"),
-			"Viewport Image must stay disabled — clear color alone still draws a white plate.");
-		Assert.That(src, Does.Contain("never put an enabled Image on Viewport"),
-			"Create path must keep Viewport image-free.");
+		// Last-known-good list (898dd6a UX + Install). Do not require RectMask2D — that path
+		// emptied the list and left a white square after the white-bar "fixes".
+		Assert.That(src, Does.Contain("StichAddonManager_v12"),
+			"Shell version must bump so broken v10/v11 panels rebuild to the known-good list.");
+		Assert.That(src, Does.Contain("AddComponent<UnityEngine.UI.Mask>()"),
+			"List Viewport clips with Mask (known-good create path).");
+		Assert.That(src, Does.Contain("showMaskGraphic = false"),
+			"Mask graphic must stay hidden so BoundChrome cannot paint a white bar.");
+		Assert.That(src, Does.Contain("ProtectListViewportMaskGraphic"),
+			"Theme must keep Mask.showMaskGraphic false after BoundChrome (white bar without killing the list).");
+		Assert.That(src, Does.Not.Contain("EnsureListScrollViewportHealthy"),
+			"Do not migrate Mask→RectMask2D at runtime (that broke list population).");
 	}
 
 	[Test]
