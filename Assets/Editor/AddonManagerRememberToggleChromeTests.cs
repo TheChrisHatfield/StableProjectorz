@@ -15,20 +15,17 @@ public sealed class AddonManagerRememberToggleChromeTests {
 			"Assets/_gm/Features/AddonSystem/AddonManager_UI.cs"));
 		Assert.That(File.Exists(path), Is.True, path);
 		string src = File.ReadAllText(path);
-		int create = src.IndexOf("BuildRememberEnabledPreferenceRow", System.StringComparison.Ordinal);
+		int create = src.IndexOf("GameObject BuildRememberEnabledPreferenceRow(", System.StringComparison.Ordinal);
 		Assert.That(create, Is.GreaterThan(0));
-		// Narrow to the remember-row builder that creates Background + Checkmark.
-		int ck = src.IndexOf("new GameObject(\"Checkmark\")", create, System.StringComparison.Ordinal);
-		Assert.That(ck, Is.GreaterThan(0));
-		int graphic = src.IndexOf("tgl.graphic = ckI;", ck, System.StringComparison.Ordinal);
-		Assert.That(graphic, Is.GreaterThan(0));
-		int roundCk = src.IndexOf("ApplyRoundedControlSprite(ckI", ck, System.StringComparison.Ordinal);
-		Assert.That(roundCk, Is.LessThan(0), "Checkmark must not be solid-squared before/after graphic assign");
-		int roundBg = src.IndexOf("ApplyRoundedControlSprite(bgI", create, System.StringComparison.Ordinal);
-		Assert.That(roundBg, Is.GreaterThan(0));
-		Assert.That(roundBg, Is.LessThan(graphic));
-		int ckSprite = src.IndexOf("UiRuntimeSprites.CircleFilled", ck, System.StringComparison.Ordinal);
-		Assert.That(ckSprite, Is.GreaterThan(0), "Remember checkmark must assign CircleFilled or ON is invisible.");
-		Assert.That(ckSprite, Is.LessThan(graphic));
+		int next = src.IndexOf("void EnsureRememberRowTooltip(", create, System.StringComparison.Ordinal);
+		string body = src.Substring(create, next - create);
+		Assert.That(body, Does.Contain("new GameObject(\"Checkmark\")"));
+		Assert.That(body, Does.Contain("tgl.graphic = ckI;"));
+		Assert.That(body, Does.Not.Contain("ApplyRoundedControlSprite(ckI"),
+			"Checkmark must not be solid-squared before/after graphic assign");
+		Assert.That(body, Does.Contain("AssignSolidFaceThenMarkRounded(bgI)"),
+			"Button face must assign SolidRect via AssignSolidFaceThenMarkRounded.");
+		Assert.That(body, Does.Contain("UiRuntimeSprites.CircleFilled"),
+			"Remember checkmark must assign CircleFilled or ON is invisible.");
 	}
 }

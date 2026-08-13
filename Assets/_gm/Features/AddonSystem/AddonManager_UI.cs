@@ -333,6 +333,7 @@ namespace spz {
 
 		void OnRememberEnabledAddonsToggleChanged(bool remember) {
 			Addon_MGR.SetRememberEnabledAddonsPreference(remember);
+			ThemeRememberActionButton(_rememberEnabledAddonToggle, remember);
 			ShowStatus(
 				remember
 					? "Remember on — current enabled set saved for next launch."
@@ -367,13 +368,20 @@ namespace spz {
 			}
 			Transform found = _panel.transform.Find("RememberEnabledRow");
 			if (found != null) {
-				_rememberEnabledAddonToggle = found.GetComponentInChildren<Toggle>(true);
-				if (_rememberEnabledAddonToggle != null) {
-					_rememberEnabledAddonToggle.onValueChanged.RemoveListener(OnRememberEnabledAddonsToggleChanged);
-					_rememberEnabledAddonToggle.onValueChanged.AddListener(OnRememberEnabledAddonsToggleChanged);
+				// Old chrome: tiny unmarked corner checkbox + separate label — rebuild as labeled button.
+				if (found.Find("ToggleWrap/Label") == null) {
+					UnityEngine.Object.Destroy(found.gameObject);
+					found = null;
+					_rememberEnabledAddonToggle = null;
+				} else {
+					_rememberEnabledAddonToggle = found.GetComponentInChildren<Toggle>(true);
+					if (_rememberEnabledAddonToggle != null) {
+						_rememberEnabledAddonToggle.onValueChanged.RemoveListener(OnRememberEnabledAddonsToggleChanged);
+						_rememberEnabledAddonToggle.onValueChanged.AddListener(OnRememberEnabledAddonsToggleChanged);
+					}
+					EnsureRememberRowTooltip(found.gameObject);
+					return;
 				}
-				EnsureRememberRowTooltip(found.gameObject);
-				return;
 			}
 			Transform status = _panel.transform.Find("StatusText");
 			int idx = status != null ? status.GetSiblingIndex() : _panel.transform.childCount;
@@ -386,81 +394,127 @@ namespace spz {
 			if (_rememberEnabledAddonToggle == null) {
 				return;
 			}
-			_rememberEnabledAddonToggle.SetIsOnWithoutNotify(Addon_MGR.GetRememberEnabledAddonsPreference());
+			bool on = Addon_MGR.GetRememberEnabledAddonsPreference();
+			_rememberEnabledAddonToggle.SetIsOnWithoutNotify(on);
+			ThemeRememberActionButton(_rememberEnabledAddonToggle, on);
 		}
 
 		GameObject BuildRememberEnabledPreferenceRow(float grid) {
 			var row = new GameObject("RememberEnabledRow");
 			row.layer = _panel != null ? _panel.gameObject.layer : 5;
 			var rowLE = row.AddComponent<LayoutElement>();
-			rowLE.preferredHeight = 30f;
-			rowLE.minHeight = 26f;
-			// Full-row hover target so the label text area also shows the tip (TMP is non-raycast).
+			rowLE.preferredHeight = 34f;
+			rowLE.minHeight = 30f;
 			var rowHit = row.AddComponent<Image>();
 			rowHit.color = Color.clear;
 			rowHit.raycastTarget = true;
 			var rowH = row.AddComponent<HorizontalLayoutGroup>();
 			rowH.spacing = grid;
+			rowH.padding = new RectOffset(0, 0, 2, 2);
 			rowH.childAlignment = TextAnchor.MiddleLeft;
 			rowH.childControlWidth = true;
 			// false: Nomad BoundChrome + force-expand stretched the Remember face into a green capsule.
 			rowH.childControlHeight = false;
-			rowH.childForceExpandWidth = true;
+			rowH.childForceExpandWidth = false;
 			rowH.childForceExpandHeight = false;
-			var labelObj = new GameObject("Label");
-			labelObj.transform.SetParent(row.transform, false);
-			var labelLE = labelObj.AddComponent<LayoutElement>();
-			labelLE.minWidth = 200f;
-			labelLE.preferredWidth = 420f;
-			labelLE.flexibleWidth = 1f;
-			labelLE.preferredHeight = 22f;
-			labelLE.minHeight = 20f;
-			var labelT = labelObj.AddComponent<TextMeshProUGUI>();
-			labelT.text = "Restore saved selection next launch (saves immediately when toggled)";
-			labelT.fontSize = 12;
-			labelT.color = new Color(0.65f, 0.65f, 0.68f, 1f);
-			labelT.alignment = TextAlignmentOptions.MidlineLeft;
-			labelT.raycastTarget = false;
+
+			// Visible action button (not a tiny unmarked checkbox in the corner).
 			var toggleContainer = new GameObject("ToggleWrap");
 			toggleContainer.transform.SetParent(row.transform, false);
 			var tLE = toggleContainer.AddComponent<LayoutElement>();
-			tLE.preferredWidth = 22f;
-			tLE.minWidth = 22f;
+			tLE.preferredWidth = 210f;
+			tLE.minWidth = 180f;
 			tLE.flexibleWidth = 0f;
-			tLE.preferredHeight = 22f;
-			tLE.minHeight = 22f;
+			tLE.preferredHeight = 28f;
+			tLE.minHeight = 28f;
 			tLE.flexibleHeight = 0f;
-			var bg = new GameObject("Background");
-			bg.transform.SetParent(toggleContainer.transform, false);
-			var bgR = bg.AddComponent<RectTransform>();
-			bgR.anchorMin = Vector2.zero;
-			bgR.anchorMax = Vector2.one;
-			bgR.sizeDelta = Vector2.zero;
-			var bgI = bg.AddComponent<UnityEngine.UI.Image>();
+			var bgI = toggleContainer.AddComponent<UnityEngine.UI.Image>();
 			AssignSolidFaceThenMarkRounded(bgI);
-			bgI.color = new Color(0.3f, 0.3f, 0.3f, 1f);
 			bgI.raycastTarget = true;
 			var ck = new GameObject("Checkmark");
-			ck.transform.SetParent(bg.transform, false);
+			ck.transform.SetParent(toggleContainer.transform, false);
 			var ckR = ck.AddComponent<RectTransform>();
-			ckR.anchorMin = Vector2.zero;
-			ckR.anchorMax = Vector2.one;
-			ckR.sizeDelta = Vector2.zero;
+			// Small filled dial on the left of the button face.
+			ckR.anchorMin = new Vector2(0f, 0.5f);
+			ckR.anchorMax = new Vector2(0f, 0.5f);
+			ckR.pivot = new Vector2(0.5f, 0.5f);
+			ckR.anchoredPosition = new Vector2(14f, 0f);
+			ckR.sizeDelta = new Vector2(12f, 12f);
 			var ckI = ck.AddComponent<UnityEngine.UI.Image>();
 			ckI.sprite = UiRuntimeSprites.CircleFilled;
 			ckI.type = Image.Type.Simple;
 			ckI.preserveAspect = true;
 			ckI.color = new Color(0.2f, 0.8f, 0.2f, 1f);
 			ckI.raycastTarget = false;
+			var labelObj = new GameObject("Label");
+			labelObj.transform.SetParent(toggleContainer.transform, false);
+			var labelRt = labelObj.AddComponent<RectTransform>();
+			labelRt.anchorMin = Vector2.zero;
+			labelRt.anchorMax = Vector2.one;
+			labelRt.offsetMin = new Vector2(28f, 0f);
+			labelRt.offsetMax = new Vector2(-8f, 0f);
+			var labelT = labelObj.AddComponent<TextMeshProUGUI>();
+			bool rememberOn = Addon_MGR.GetRememberEnabledAddonsPreference();
+			labelT.text = rememberOn ? "Remembering next launch" : "Remember next launch";
+			labelT.fontSize = 12f;
+			labelT.alignment = TextAlignmentOptions.MidlineLeft;
+			labelT.enableWordWrapping = false;
+			labelT.overflowMode = TextOverflowModes.Ellipsis;
+			labelT.raycastTarget = false;
 			var tgl = toggleContainer.AddComponent<Toggle>();
-			tgl.isOn = Addon_MGR.GetRememberEnabledAddonsPreference();
+			tgl.SetIsOnWithoutNotify(rememberOn);
 			tgl.targetGraphic = bgI;
 			// Assign graphic before BoundChrome; never solid-square the ON glyph (IsToggleCheckmarkGraphic).
 			tgl.graphic = ckI;
+			tgl.transition = Selectable.Transition.ColorTint;
 			tgl.onValueChanged.AddListener(OnRememberEnabledAddonsToggleChanged);
 			_rememberEnabledAddonToggle = tgl;
+			ThemeRememberActionButton(tgl, rememberOn);
 			EnsureRememberRowTooltip(row);
 			return row;
+		}
+
+		static string RememberButtonLabel(bool rememberOn) {
+			return rememberOn ? "Remembering next launch" : "Remember next launch";
+		}
+
+		void ThemeRememberActionButton(Toggle toggle, bool isOn) {
+			if (toggle == null) return;
+			LockRememberToggleSquare(toggle);
+			var face = toggle.targetGraphic as Image;
+			if (face != null) {
+				AssignSolidFaceThenMarkRounded(face);
+				face.color = isOn
+					? new Color(0.12f, 0.32f, 0.20f, 0.95f)
+					: new Color(0.24f, 0.24f, 0.28f, 0.95f);
+				face.raycastTarget = true;
+			}
+			if (toggle.graphic is Image ck) {
+				UnwindDialFillHiddenForTheme(ck);
+				ck.sprite = UiRuntimeSprites.CircleFilled;
+				ck.preserveAspect = true;
+				ck.type = Image.Type.Simple;
+				ck.enabled = true;
+				ck.gameObject.SetActive(true);
+				Color ok = _statusOk;
+				ok.a = 1f;
+				TintStatusDialGraphic(ck, ok);
+				ck.canvasRenderer.SetAlpha(isOn ? 1f : 0.35f);
+			}
+			var label = toggle.transform.Find("Label")?.GetComponent<TextMeshProUGUI>();
+			if (label != null) {
+				label.text = RememberButtonLabel(isOn);
+				label.enableWordWrapping = false;
+				label.overflowMode = TextOverflowModes.Ellipsis;
+				label.color = isOn
+					? new Color(0.78f, 0.96f, 0.82f, 1f)
+					: new Color(0.88f, 0.88f, 0.92f, 1f);
+				float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(label, 12f);
+				if (SpzUiThemeOps.ShouldRecolorBoundChrome)
+					SpzUiThemeOps.ApplyBoundChromeTmp(label, label.color, basePt);
+				else
+					label.fontSize = basePt;
+			}
 		}
 
 		const string RememberRowTooltip =
@@ -1645,10 +1699,12 @@ namespace spz {
 				var pills = _panel.transform.Find("FilterBar/FilterPills")?.GetComponent<Image>();
 				if (pills != null)
 					SpzUiThemeOps.ApplyBoundChromeGraphic(pills, new Color(t.controlBg.r, t.controlBg.g, t.controlBg.b, 0.55f));
-				var rememberLabel = _panel.transform.Find("RememberEnabledRow/Label")?.GetComponent<TextMeshProUGUI>();
+				var rememberLabel = _panel.transform.Find("RememberEnabledRow/ToggleWrap/Label")?.GetComponent<TextMeshProUGUI>();
+				if (rememberLabel == null)
+					rememberLabel = _panel.transform.Find("RememberEnabledRow/Label")?.GetComponent<TextMeshProUGUI>();
 				if (rememberLabel != null) {
-					CaptureBasePt(ref _themeRememberLabelBasePt, rememberLabel, 13f);
-					SpzUiThemeOps.ApplyBoundChromeTmp(rememberLabel, t.textMuted, _themeRememberLabelBasePt);
+					CaptureBasePt(ref _themeRememberLabelBasePt, rememberLabel, 12f);
+					SpzUiThemeOps.ApplyBoundChromeTmp(rememberLabel, t.textPrimary, _themeRememberLabelBasePt);
 				}
 			}
 			if (_closePanel_button != null) {
@@ -1724,29 +1780,28 @@ namespace spz {
 				ThemeFilterToggle(_filterDisabledToggle, t);
 			}
 			if (_rememberEnabledAddonToggle != null) {
-				SpzUiThemeOps.ThemeCheckboxToggle(
-					_rememberEnabledAddonToggle, t.controlBg, t.accent, t.success);
-				LockRememberToggleSquare(_rememberEnabledAddonToggle);
+				// Do not ThemeCheckboxToggle — that paints a tiny unmarked square; use labeled action button.
+				ThemeRememberActionButton(_rememberEnabledAddonToggle, _rememberEnabledAddonToggle.isOn);
 			}
 		}
 
-		/// <summary>Keep Remember checkbox square after Nomad ThemeCheckboxToggle / SolidSquare.</summary>
+		/// <summary>Keep Remember action button sized after theme passes.</summary>
 		static void LockRememberToggleSquare(Toggle toggle) {
 			if (toggle == null) return;
 			var le = toggle.GetComponent<LayoutElement>();
 			if (le != null) {
 				SpzUiThemeOps.SnapshotLayoutElementForTheme(le);
-				le.preferredWidth = 22f;
-				le.minWidth = 22f;
-				le.preferredHeight = 22f;
-				le.minHeight = 22f;
+				le.preferredWidth = 210f;
+				le.minWidth = 180f;
+				le.preferredHeight = 28f;
+				le.minHeight = 28f;
 				le.flexibleWidth = 0f;
 				le.flexibleHeight = 0f;
 			}
 			var rt = toggle.transform as RectTransform;
 			if (rt != null) {
 				SpzUiThemeOps.SnapshotToolFaceLayout(rt);
-				rt.sizeDelta = new Vector2(22f, 22f);
+				rt.sizeDelta = new Vector2(210f, 28f);
 			}
 			var row = toggle.transform.parent;
 			if (row != null) {
@@ -1754,6 +1809,7 @@ namespace spz {
 				if (hlg != null) {
 					hlg.childControlHeight = false;
 					hlg.childForceExpandHeight = false;
+					hlg.childForceExpandWidth = false;
 				}
 			}
 		}
@@ -2219,10 +2275,12 @@ namespace spz {
 			if (fillImg == null)
 				fillImg = toggle.transform.Find("Ring/Checkmark")?.GetComponent<Image>();
 			if (fillImg != null) {
+				UnwindDialFillHiddenForTheme(fillImg);
 				TintStatusDialGraphic(fillImg, _statusOk);
 				fillImg.preserveAspect = true;
 				fillImg.type = Image.Type.Simple;
 				fillImg.gameObject.SetActive(true);
+				fillImg.enabled = true;
 				fillImg.canvasRenderer.SetAlpha(enabled ? 1f : 0f);
 			}
 			LockStatusDialLayout(toggle);
@@ -2252,6 +2310,7 @@ namespace spz {
 
 		/// <summary>
 		/// Show-in-Ribbon: clean ring radio (same family as enable dial) — never a filled green plate.
+		/// Under Nomad, BoundChrome may hide Checkmark graphics — unwind before showing the ON fill.
 		/// </summary>
 		static void ThemeShowInRibbonDial(Toggle toggle, bool isOn, Color ringOn, Color ringOff, Color fillOk) {
 			if (toggle == null) return;
@@ -2262,17 +2321,22 @@ namespace spz {
 				ringImg.sprite = UiRuntimeSprites.CircleRing;
 				ringImg.preserveAspect = true;
 				ringImg.type = Image.Type.Simple;
+				ringImg.enabled = true;
 			}
 			Image fill = toggle.graphic as Image;
 			if (fill == null)
 				fill = toggle.transform.Find("Ring/Checkmark")?.GetComponent<Image>();
 			if (fill != null) {
-				TintStatusDialGraphic(fill, fillOk);
+				UnwindDialFillHiddenForTheme(fill);
 				fill.sprite = UiRuntimeSprites.CircleFilled;
 				fill.preserveAspect = true;
 				fill.type = Image.Type.Simple;
 				fill.gameObject.SetActive(true);
 				fill.enabled = true;
+				Color fillColor = fillOk;
+				fillColor.a = 1f;
+				TintStatusDialGraphic(fill, fillColor);
+				// ON = filled center (normal radio); OFF = empty ring only.
 				fill.canvasRenderer.SetAlpha(isOn ? 1f : 0f);
 			}
 			// Hit target stays clear — never paint a green/grey square under the dial.
@@ -2280,6 +2344,19 @@ namespace spz {
 				hit.color = Color.clear;
 				hit.raycastTarget = true;
 			}
+		}
+
+		/// <summary>Nomad HideAuthoredGraphicForTheme can leave Checkmark disabled — restore for dial ON state.</summary>
+		static void UnwindDialFillHiddenForTheme(Image fill) {
+			if (fill == null) return;
+			var hidden = fill.GetComponent<SpzUiThemeHiddenGraphic>();
+			if (hidden != null) {
+				if (Application.isPlaying)
+					UnityEngine.Object.Destroy(hidden);
+				else
+					UnityEngine.Object.DestroyImmediate(hidden);
+			}
+			fill.enabled = true;
 		}
 
 		/// <summary>Nomad-only geometry lock — leave must not re-stamp 28×28 after RestoreBoundChromeUnder.</summary>
@@ -3044,40 +3121,11 @@ namespace spz {
 				}
 			}
 
-			void CollapseOtherExpandedItems() {
-				if (_addonsListParent == null) return;
-				for (int i = 0; i < _addonsListParent.childCount; i++) {
-					var other = _addonsListParent.GetChild(i);
-					if (other == null || other == itemObj.transform) continue;
-					var otherBody = other.Find("PreferencesBody");
-					if (otherBody == null || !otherBody.gameObject.activeSelf) continue;
-					otherBody.gameObject.SetActive(false);
-					var otherItemLe = other.GetComponent<LayoutElement>();
-					if (otherItemLe != null) {
-						otherItemLe.preferredHeight = 48f;
-						otherItemLe.minHeight = 44f;
-					}
-					var otherRt = other as RectTransform;
-					if (otherRt != null)
-						otherRt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 48f);
-					var otherChevron = other.Find("HeaderRow/ExpandChevron/Text")?.GetComponent<TextMeshProUGUI>();
-					if (otherChevron != null)
-						otherChevron.text = "▶";
-					var otherExpand = other.Find("HeaderRow/ExpandChevron");
-					if (otherExpand != null)
-						AttachTooltip(otherExpand.gameObject, "▶ Preferences closed — click to open details.");
-				}
-				// Shrink siblings before measuring the newly expanded row so CSF content height is not briefly tall.
-				RebuildAddonListScrollLayout(null);
-			}
-
 			expandBtn.onClick.AddListener(() => {
 				bool next = !prefsBody.activeSelf;
-				if (next)
-					CollapseOtherExpandedItems();
+				// Allow multiple add-ons expanded — do not collapse siblings.
 				prefsBody.SetActive(next);
 				if (next) {
-					prefsBody.transform.SetAsLastSibling();
 					ApplyResponsivePrefsDropdownLayout(prefsBody.transform);
 					LockPreferencesBodyLayout(prefsBody.transform);
 					ThemeShowInRibbonDial(ribbonToggle, ribbonToggle.isOn, _statusOk, _statusMuted, _statusOk);
