@@ -200,9 +200,17 @@ namespace spz {
 	            SpzUiThemeOps.FlattenToolFaceImage(face);
 	            face.raycastTarget = true;
 	        }
-	        // Leading Monolith — centered Bullseye/Folder stamps over "SERV"; hide authored folders too.
-	        SpzUiThemeOps.ApplyControlLineIconLeading(btn.transform,
-	            applyFolderIcon ? StudioLineIcon.Folder : StudioLineIcon.Bullseye, 16f);
+	        if (applyFolderIcon) {
+	            // File-picker cell: leading Folder Monolith (hides authored folder silhouette).
+	            SpzUiThemeOps.ApplyControlLineIconLeading(btn.transform, StudioLineIcon.Folder, 16f);
+	        } else {
+	            // Launch SERV: never stamp Bullseye — it overlays "SD SERV" as a circle on the label.
+	            // Deactivate any leftover Monolith from older Nomad applies; keep authored glyph only.
+	            Transform mono = SpzUiThemeOps.FindDirectChildIncludingInactive(
+	                btn.transform, "MonolithLineIcon");
+	            if (mono != null)
+	                mono.gameObject.SetActive(false);
+	        }
 	        foreach (var tmp in btn.GetComponentsInChildren<TextMeshProUGUI>(true)) {
 	            if (tmp == null) continue;
 	            // SD SERV / 3D SERV: strip tracking 18 overflows ~118px top-strip (Soft litmus).
