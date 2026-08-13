@@ -127,7 +127,8 @@ namespace spz {
 
 
 	    IEnumerator BakeAO_crtn( AmbientOcclusionBake_Args args,  System.Action<bool> onBakeComplete ){
-
+	        bool ok = false;
+	        try {
 	        BakeOA_Preliminaries();
 	        Bounds meshesBounds = ModelsHandler_3D.instance.GetTotalBounds_ofSelectedMeshes();
 
@@ -168,8 +169,12 @@ namespace spz {
 	        var genData =  GenData2D_Maker.make_AmbientOcclusion( clone_takeOwnershipPlz.texArray, clone_takeOwnershipPlz.udims_sectors);
 	        //DON'T Destroy 'clone_takeOwnershipPlz', because it was already "adopted" by the GenData2D.
 
-	        CompleteBake_and_Cleanup();
-	        onBakeComplete?.Invoke(true);
+	        ok = true;
+	        } finally {
+	            // Sticky isGeneratingAO blocked SD Deny forever if bake NRE'd mid-flight.
+	            CompleteBake_and_Cleanup();
+	            onBakeComplete?.Invoke(ok);
+	        }
 	    }
 
 
@@ -270,8 +275,12 @@ namespace spz {
 	        dilationArg.blitHelperTex = _helper_uvTex.texArray;
 	        //dilationArg.findUVchunkBorders_thenBlurThem = true;
 	        dilationArg.rule = DilationRule.NineSamplesAveraged;
-	        TextureDilation_MGR.instance.Dillate(dilationArg);
-	        while(!dilationDone){ yield return null; }
+	        if (TextureDilation_MGR.instance == null) {
+	            dilationDone = true;
+	        } else {
+	            TextureDilation_MGR.instance.Dillate(dilationArg);
+	            while(!dilationDone){ yield return null; }
+	        }
 	    }
 
 	    void CompleteBake_and_Cleanup(){
