@@ -39,4 +39,16 @@ public sealed class SdGenFinalizeAndRendererNullGuardContractTests {
 		Assert.That(src, Does.Not.Contain("Objects_Renderer_MGR.instance.ReRenderAll_soon()"),
 			"unguarded instance.ReRenderAll_soon can stick generating flags");
 	}
+
+	[Test]
+	public void ApplyInpaintSketch_NullGuardsMainViewportInstance() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "Render", "Objects_Renderer_MGR.cs");
+		string src = File.ReadAllText(path);
+		int i = src.IndexOf("void Apply_InpaintSketch_ColorLayer()", System.StringComparison.Ordinal);
+		Assert.That(i, Is.GreaterThanOrEqualTo(0));
+		string body = src.Substring(i, System.Math.Min(400, src.Length - i));
+		Assert.That(body, Does.Contain("MainViewport_UI.instance == null"),
+			"missing viewport singleton must not NRE mid-render");
+	}
 }
