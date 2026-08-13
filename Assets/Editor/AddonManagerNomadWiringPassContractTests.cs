@@ -2,7 +2,7 @@ using System.IO;
 using NUnit.Framework;
 
 /// <summary>
-/// Nomad leave must re-tint Show-in-Ribbon dials; names must stay single-line; prefs pads snapshot first.
+/// Nomad leave must re-tint Show-in-Ribbon action button; names must stay single-line; prefs pads snapshot first.
 /// </summary>
 public sealed class AddonManagerNomadWiringPassContractTests {
 
@@ -15,7 +15,7 @@ public sealed class AddonManagerNomadWiringPassContractTests {
 		int next = src.IndexOf("void CreateAddonListItem(", method, System.StringComparison.Ordinal);
 		string body = src.Substring(method, next - method);
 		Assert.That(body, Does.Contain("ThemeShowInRibbonDial"),
-			"Restore SPZ must re-tint Show-in-Ribbon dials or Nomad green sticks.");
+			"Restore SPZ must re-tint Show-in-Ribbon action button or Nomad colors stick.");
 	}
 
 	[Test]
@@ -50,15 +50,17 @@ public sealed class AddonManagerNomadWiringPassContractTests {
 	}
 
 	[Test]
-	public void PreferencesCard_UsesBoundChromeGraphicForRestore() {
+	public void PreferencesCard_ClearsPlateSoItIsNotADeadGreySquare() {
 		string path = Path.Combine(Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "AddonSystem", "AddonManager_UI.cs");
 		string src = File.ReadAllText(path);
 		int i = src.IndexOf("void ThemeAddonListItem(", System.StringComparison.Ordinal);
 		string body = src.Substring(i, System.Math.Min(2800, src.Length - i));
 		Assert.That(body, Does.Contain("PreferencesCard"));
-		Assert.That(body, Does.Contain("ApplyBoundChromeGraphic(cardImg, card)"),
-			"Raw cardImg.color sticks after Restore SPZ.");
+		Assert.That(body, Does.Contain("cardImg.color = Color.clear"),
+			"Filled PreferencesCard plate reads as a giant unlabeled square.");
+		Assert.That(body, Does.Not.Contain("ApplyBoundChromeGraphic(cardImg, card)"),
+			"Do not re-paint the prefs plate grey under Nomad.");
 	}
 
 	[Test]

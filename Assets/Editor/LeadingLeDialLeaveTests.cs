@@ -26,7 +26,10 @@ public sealed class LeadingLeDialLeaveTests {
 	public void ShowInRibbonDial_LocksLayoutOnlyUnderNomad_Source() {
 		string path = Path.Combine(Application.dataPath, "_gm", "Features", "AddonSystem", "AddonManager_UI.cs");
 		string src = File.ReadAllText(path);
-		Assert.That(src, Does.Contain("LockShowInRibbonDialLayout(toggle)"));
+		Assert.That(src, Does.Contain("LockShowInRibbonDialLayout(toggle)"),
+			"Enable status dial still uses ring geometry lock.");
+		Assert.That(src, Does.Contain("LockShowInRibbonButtonLayout(toggle)"),
+			"Host ribbon pref uses button geometry lock.");
 		Assert.That(src, Does.Contain("SnapshotToolFaceLayout(rt)"));
 		int rem = src.IndexOf("static void LockRememberToggleSquare", System.StringComparison.Ordinal);
 		string remBody = src.Substring(rem, System.Math.Min(600, src.Length - rem));
