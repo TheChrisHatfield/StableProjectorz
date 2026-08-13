@@ -235,7 +235,8 @@ namespace spz {
 
 	    /// <summary>Draw paint layers onto mesh accumulation texture. Inpaint_MaskPainter blits each visible layer's Content in order (or single active layer when only one).</summary>
 	    void Apply_InpaintSketch_ColorLayer(){
-	        if(MainViewport_UI.instance.showing != MainViewport_UI.Showing.UsualView){ return; }
+	        if(MainViewport_UI.instance == null
+	           || MainViewport_UI.instance.showing != MainViewport_UI.Showing.UsualView){ return; }
 	        if(Inpaint_MaskPainter.instance == null){ return; }
 	        // Any paint layer stack (1+ layers): always composite onto accumulation for viewport + SD. Do not gate on
 	        // allowed_to_showBrushMask() — that flag only tracks inpaint brush/mask UI modes; skipping here left a single
