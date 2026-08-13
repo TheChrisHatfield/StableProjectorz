@@ -2036,33 +2036,10 @@ namespace spz {
 			}
 			Transform expandT = header != null ? header.Find("ExpandChevron") : item.transform.Find("ExpandChevron");
 			if (expandT != null) {
+				var prefsOpen = item.transform.Find("PreferencesBody");
+				bool expanded = prefsOpen != null && prefsOpen.gameObject.activeSelf;
+				ApplyExpandChevronVisual(expandT, expanded, t.textPrimary);
 				var expandBtn = expandT.GetComponent<Button>();
-				var expandFace = expandT.GetComponent<Image>();
-				if (expandFace != null) {
-					AssignSolidFaceThenMarkRounded(expandFace);
-					if (SpzUiThemeOps.ShouldRecolorBoundChrome)
-						SpzUiThemeOps.ApplyBoundChromeGraphic(expandFace, t.panelBg);
-					else
-						expandFace.color = new Color(0.20f, 0.20f, 0.24f, 0.90f);
-				}
-				var expandLe = expandT.GetComponent<LayoutElement>();
-				if (expandLe != null) {
-					SpzUiThemeOps.SnapshotLayoutElementForTheme(expandLe);
-					expandLe.preferredWidth = 12f;
-					expandLe.minWidth = 12f;
-					expandLe.preferredHeight = 12f;
-					expandLe.minHeight = 12f;
-					expandLe.flexibleWidth = 0f;
-					expandLe.flexibleHeight = 0f;
-				}
-				var expandLabel = expandT.Find("Text")?.GetComponent<TextMeshProUGUI>();
-				if (expandLabel != null) {
-					var prefsOpen = item.transform.Find("PreferencesBody");
-					bool expanded = prefsOpen != null && prefsOpen.gameObject.activeSelf;
-					expandLabel.text = expanded ? "▼" : "▶";
-					float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(expandLabel, 9f);
-					SpzUiThemeOps.ApplyBoundChromeTmp(expandLabel, t.textMuted, basePt);
-				}
 				if (expandBtn != null)
 					SpzUiThemeOps.ClearNonFaceRaycastsForTheme(expandBtn);
 			}
@@ -2299,6 +2276,9 @@ namespace spz {
 		/// <summary>
 		/// Ensure a real sprite exists before BoundChrome marks the face eligible — otherwise Restore SPZ rewinds null.
 		/// </summary>
+		/// <summary>
+		/// Ensure a real sprite exists before BoundChrome marks the face eligible — otherwise Restore SPZ rewinds null.
+		/// </summary>
 		static void AssignSolidFaceThenMarkRounded(Image img) {
 			if (img == null) return;
 			if (img.sprite == null) {
@@ -2306,6 +2286,75 @@ namespace spz {
 				img.type = Image.Type.Simple;
 			}
 			SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
+		}
+
+		const float ExpandChevronHit = 18f;
+
+		/// <summary>
+		/// Prefs expand control: ChevronRight image — 0° = closed (▶), −90° = open (▼).
+		/// No solid square face (Nomad BoundChrome plate looked like a stop icon).
+		/// </summary>
+		static void ApplyExpandChevronVisual(Transform expandT, bool expanded, Color arrowColor) {
+			if (expandT == null) return;
+			SpzUiThemeOps.RestoreControlLineIconsUnder(expandT);
+			var le = expandT.GetComponent<LayoutElement>();
+			if (le != null) {
+				SpzUiThemeOps.SnapshotLayoutElementForTheme(le);
+				le.preferredWidth = ExpandChevronHit;
+				le.minWidth = ExpandChevronHit;
+				le.preferredHeight = ExpandChevronHit;
+				le.minHeight = ExpandChevronHit;
+				le.flexibleWidth = 0f;
+				le.flexibleHeight = 0f;
+			}
+			var rootRt = expandT as RectTransform;
+			if (rootRt != null)
+				rootRt.sizeDelta = new Vector2(ExpandChevronHit, ExpandChevronHit);
+
+			var face = expandT.GetComponent<Image>();
+			if (face != null) {
+				face.sprite = UiRuntimeSprites.SolidRect;
+				face.type = Image.Type.Simple;
+				face.color = Color.clear;
+				face.raycastTarget = true;
+			}
+
+			// Hide leftover TMP glyph — image arrow is the affordance.
+			var legacyText = expandT.Find("Text");
+			if (legacyText != null)
+				legacyText.gameObject.SetActive(false);
+
+			Transform arrowT = expandT.Find("Arrow");
+			if (arrowT == null) {
+				var go = new GameObject("Arrow");
+				go.transform.SetParent(expandT, false);
+				arrowT = go.transform;
+				go.AddComponent<RectTransform>();
+				go.AddComponent<Image>();
+			}
+			arrowT.gameObject.SetActive(true);
+			var arrowRt = arrowT as RectTransform;
+			if (arrowRt != null) {
+				arrowRt.anchorMin = arrowRt.anchorMax = new Vector2(0.5f, 0.5f);
+				arrowRt.pivot = new Vector2(0.5f, 0.5f);
+				arrowRt.anchoredPosition = Vector2.zero;
+				arrowRt.sizeDelta = new Vector2(14f, 14f);
+				// Closed → point right; open → point down.
+				arrowRt.localEulerAngles = new Vector3(0f, 0f, expanded ? -90f : 0f);
+			}
+			var arrowImg = arrowT.GetComponent<Image>();
+			if (arrowImg != null) {
+				arrowImg.sprite = UiRuntimeSprites.GetLineIcon(StudioLineIcon.ChevronRight);
+				arrowImg.type = Image.Type.Simple;
+				arrowImg.preserveAspect = true;
+				arrowImg.raycastTarget = false;
+				arrowImg.enabled = true;
+				Color c = arrowColor;
+				c.a = 1f;
+				if (SpzUiThemeOps.ShouldRecolorBoundChrome)
+					SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(arrowImg);
+				arrowImg.color = c;
+			}
 		}
 
 		/// <summary>
@@ -2772,8 +2821,8 @@ namespace spz {
 			horizontalLayout.childForceExpandWidth = false;
 			horizontalLayout.childForceExpandHeight = false;
 
-			// Compact arrow button: ▶ collapsed, ▼ expanded (prefs open/closed affordance).
-			const float chevronHit = 12f;
+			// Arrow button: ChevronRight (▶) collapsed, rotated −90° (▼) when prefs open — no solid square plate.
+			const float chevronHit = ExpandChevronHit;
 			var expandObj = new GameObject("ExpandChevron");
 			expandObj.transform.SetParent(headerObj.transform, false);
 			var expandRt = expandObj.AddComponent<RectTransform>();
@@ -2786,8 +2835,9 @@ namespace spz {
 			expandLE.flexibleWidth = 0f;
 			expandLE.flexibleHeight = 0f;
 			var expandHit = expandObj.AddComponent<Image>();
-			AssignSolidFaceThenMarkRounded(expandHit);
-			expandHit.color = new Color(0.20f, 0.20f, 0.24f, 0.90f);
+			expandHit.sprite = UiRuntimeSprites.SolidRect;
+			expandHit.type = Image.Type.Simple;
+			expandHit.color = Color.clear;
 			expandHit.raycastTarget = true;
 			var expandBtn = expandObj.AddComponent<Button>();
 			expandBtn.targetGraphic = expandHit;
@@ -2798,23 +2848,11 @@ namespace spz {
 			expandColors.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
 			expandColors.selectedColor = Color.white;
 			expandBtn.colors = expandColors;
-			var expandLabelGo = new GameObject("Text");
-			expandLabelGo.transform.SetParent(expandObj.transform, false);
-			var expandLabelRt = expandLabelGo.AddComponent<RectTransform>();
-			expandLabelRt.anchorMin = Vector2.zero;
-			expandLabelRt.anchorMax = Vector2.one;
-			expandLabelRt.offsetMin = Vector2.zero;
-			expandLabelRt.offsetMax = Vector2.zero;
-			var expandLabel = expandLabelGo.AddComponent<TextMeshProUGUI>();
-			expandLabel.text = "▶";
-			expandLabel.fontSize = 9f;
-			expandLabel.alignment = TextAlignmentOptions.Center;
-			expandLabel.color = new Color(0.82f, 0.82f, 0.86f, 1f);
-			expandLabel.raycastTarget = false;
+			ApplyExpandChevronVisual(expandObj.transform, false, new Color(0.88f, 0.88f, 0.92f, 1f));
 			AttachTooltip(expandObj, "▶ Preferences closed — click to open. ▼ Preferences open — click to close.");
 
 			void SetExpandChevron(bool expanded) {
-				expandLabel.text = expanded ? "▼" : "▶";
+				ApplyExpandChevronVisual(expandObj.transform, expanded, new Color(0.88f, 0.88f, 0.92f, 1f));
 				AttachTooltip(expandObj, expanded
 					? "▼ Preferences open — click to close details."
 					: "▶ Preferences closed — click to open details.");
