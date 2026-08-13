@@ -1634,8 +1634,14 @@ namespace spz {
 				Debug.LogWarning("[AddonManager_UI] No addons found. Check StreamingAssets/Addons/ directory.");
 			}
 			
-			foreach (var kvp in filteredAddons)
-				CreateAddonListItem(kvp.Key, kvp.Value);
+			foreach (var kvp in filteredAddons) {
+				try {
+					CreateAddonListItem(kvp.Key, kvp.Value);
+				} catch (System.Exception e) {
+					// One bad row must not wipe the whole manager (Player.log: ApplyExpandChevronVisual NRE).
+					Debug.LogError($"[AddonManager_UI] CreateAddonListItem failed for '{kvp.Key}': {e.Message}\n{e.StackTrace}");
+				}
+			}
 			
 			if (_addonsListParent != null) {
 				RebuildAddonListScrollLayout(null);
@@ -2388,14 +2394,17 @@ namespace spz {
 			if (legacyText != null)
 				legacyText.gameObject.SetActive(false);
 
+			// Important (IL2CPP): never cache Transform then AddComponent<RectTransform>() —
+			// adding RectTransform replaces/destroys the old Transform; the stale ref NREs on .gameObject
+			// and aborts RefreshAddonsList on the first row (empty list + leftover white plate).
 			Transform arrowT = expandT.Find("Arrow");
 			if (arrowT == null) {
-				var go = new GameObject("Arrow");
+				var go = new GameObject("Arrow", typeof(RectTransform), typeof(Image));
+				go.layer = expandT.gameObject.layer;
 				go.transform.SetParent(expandT, false);
 				arrowT = go.transform;
-				go.AddComponent<RectTransform>();
-				go.AddComponent<Image>();
 			}
+			if (arrowT == null) return;
 			arrowT.gameObject.SetActive(true);
 			var arrowRt = arrowT as RectTransform;
 			if (arrowRt != null) {
@@ -2407,6 +2416,8 @@ namespace spz {
 				arrowRt.localEulerAngles = new Vector3(0f, 0f, expanded ? -90f : 0f);
 			}
 			var arrowImg = arrowT.GetComponent<Image>();
+			if (arrowImg == null)
+				arrowImg = arrowT.gameObject.AddComponent<Image>();
 			if (arrowImg != null) {
 				// Nomad HideAuthoredIconsUnder can disable preserveAspect glyphs — force visible again.
 				var hidden = arrowImg.GetComponent<SpzUiThemeHiddenGraphic>();

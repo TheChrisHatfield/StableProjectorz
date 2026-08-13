@@ -12,7 +12,10 @@ namespace spz {
 	public class AddonDebugCapture : MonoBehaviour {
 		public static AddonDebugCapture instance { get; private set; }
 
-		static readonly string[] CaptureTags = { "[Addon_MGR]", "[Addon_SocketServer]", "[AddonUI_MGR]", "[CommandRibbon_UI]", "[AddonDebugCapture]" };
+		static readonly string[] CaptureTags = {
+			"[Addon_MGR]", "[Addon_SocketServer]", "[AddonUI_MGR]", "[AddonManager_UI]",
+			"[CommandRibbon_UI]", "[AddonDebugCapture]"
+		};
 		static string _logPath;
 		static StreamWriter _writer;
 		static readonly object _lock = new object();
