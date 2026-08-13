@@ -12,5 +12,7 @@ public sealed class PaintLayersDeleteDeferRebuildContractTests {
 		Assert.That(src, Does.Contain("CoRebuildListSoon"));
 		Assert.That(src, Does.Contain("OnLayersChanged += ScheduleRebuildList"));
 		Assert.That(src, Does.Contain("DestroyImmediate so the click target is not freed"));
+		Assert.That(src, Does.Contain("_rebuildListPendingWhileInactive"));
+		Assert.That(src, Does.Contain("queue for OnEnable"));
 	}
 }

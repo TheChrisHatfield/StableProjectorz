@@ -34,6 +34,7 @@ namespace spz {
 		int _renameRowIndex = -1;
 		bool _suppressRenameEndEdit;
 		Coroutine _rebuildListSoonCrtn;
+		bool _rebuildListPendingWhileInactive;
 
 		// Drag reorder state
 		int _dragFromIndex = -1;
@@ -115,6 +116,10 @@ namespace spz {
 			SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
 			// Theme may have changed while disabled — re-assert chrome (Collect may not run yet).
 			ApplyThemeTokens();
+			if (_rebuildListPendingWhileInactive) {
+				_rebuildListPendingWhileInactive = false;
+				RebuildList();
+			}
 		}
 
 		void OnDestroy()
@@ -410,7 +415,8 @@ namespace spz {
 		void ScheduleRebuildList()
 		{
 			if (!isActiveAndEnabled || !gameObject.activeInHierarchy) {
-				RebuildList();
+				// Do not sync-Destroy rows while inactive — queue for OnEnable (Collect/tab show).
+				_rebuildListPendingWhileInactive = true;
 				return;
 			}
 			if (_rebuildListSoonCrtn != null) return;
