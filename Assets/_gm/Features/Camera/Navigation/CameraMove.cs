@@ -38,7 +38,7 @@ namespace spz {
 	        if(_currentMover != null){ return; }
 	        if (MainViewport_UI.instance == null || DimensionMode_MGR.instance == null) return;
 	        bool pressedThisFrame  = KeyMousePenInput.isRMBpressedThisFrame();
-	        bool hovering   =  MainViewport_UI.instance.isCursorHoveringMe();
+	        bool hovering   =  (MainViewport_UI.instance?.isCursorHoveringMe() ?? false);
 	        bool navAllowed =  DimensionMode_MGR.instance.is_3d_navigation_allowed;
 	        if(pressedThisFrame && hovering && navAllowed){
 	            _currentMover = this;
