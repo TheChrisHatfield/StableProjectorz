@@ -41,7 +41,7 @@ namespace spz {
 
 	    void StartOrbit_maybe(){
 	        bool pressedThisFrame  =  KeyMousePenInput.isLMBpressedThisFrame();
-	        bool hovering_mainView =  MainViewport_UI.instance.isCursorHoveringMe();
+	        bool hovering_mainView =  (MainViewport_UI.instance?.isCursorHoveringMe() ?? false);
 	        bool navAllowed = DimensionMode_MGR.instance.is_3d_navigation_allowed;
 
 	        if(!pressedThisFrame || !hovering_mainView || !navAllowed) { return; }

@@ -47,7 +47,7 @@ namespace spz {
 
 	     void StartMoveRotate_ifCan(){
 	        bool pressedThisFrame  = KeyMousePenInput.isMMBpressedThisFrame();
-	        bool hovering =  MainViewport_UI.instance.isCursorHoveringMe();
+	        bool hovering =  (MainViewport_UI.instance?.isCursorHoveringMe() ?? false);
 
 	        // ROLLBACK NOTE (if multi-view MMB+pin behavior must revert):
 	        // Previously pan only ran in MultiView "editing" mode and only for _curr_viewCamera:

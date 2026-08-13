@@ -45,7 +45,7 @@ namespace spz {
 
 
 	    void FocusMaybe(){
-	        if(MainViewport_UI.instance.isCursorHoveringMe() == false){ return; }
+	        if((MainViewport_UI.instance?.isCursorHoveringMe() ?? false) == false){ return; }
 	        if(KeyMousePenInput.isSomeInputFieldActive()) { return; }//maybe typing a prompt
 	        if(Input.GetKeyDown(KeyCode.F)){
 	            if(_focusCrtn!=null){  StopCoroutine(_focusCrtn); }
@@ -71,7 +71,7 @@ namespace spz {
 	    void HandlePanningState() {
 	        bool isMMBPressed = KeyMousePenInput.isMMBpressed();
 	        bool pressedThisFrame = KeyMousePenInput.isMMBpressedThisFrame();
-	        bool hovering = MainViewport_UI.instance.isCursorHoveringMe();
+	        bool hovering = (MainViewport_UI.instance?.isCursorHoveringMe() ?? false);
 
 	        // Start panning
 	        if(pressedThisFrame && hovering) {
@@ -93,11 +93,11 @@ namespace spz {
 	    void HandleZoomingState(){
 	        bool hasCtrl = KeyMousePenInput.isKey_CtrlOrCommand_pressed();
 	        float mouseScroll = (hasCtrl || KeyMousePenInput.isFileBrowserOpen()) ? 0 : Mouse.current.scroll.ReadValue().y;
-	        bool hasMouseScroll = mouseScroll != 0 && MainViewport_UI.instance.isCursorHoveringMe();
+	        bool hasMouseScroll = mouseScroll != 0 && (MainViewport_UI.instance?.isCursorHoveringMe() ?? false);
         
 	        bool isRMBPressed = KeyMousePenInput.isRMBpressed();
 	        bool pressedThisFrame = KeyMousePenInput.isRMBpressedThisFrame();
-	        bool hovering = MainViewport_UI.instance.isCursorHoveringMe();
+	        bool hovering = (MainViewport_UI.instance?.isCursorHoveringMe() ?? false);
 	        bool hasAlt = KeyMousePenInput.isKey_alt_pressed();
 
 	        // Start zooming

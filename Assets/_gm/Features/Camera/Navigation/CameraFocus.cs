@@ -204,7 +204,7 @@ namespace spz {
 	        _corotineCode_run_durUpdate?.Invoke();//do whatever our Focus-coroutine wants to do. Needed for order of execution.
 	        View_UserCamera nearestCam = UserCameras_MGR.instance.NearestToCursor();
 	        if(nearestCam != _view_camera_inParent){ return; }
-	        if(MainViewport_UI.instance.isCursorHoveringMe() == false){ return; }
+	        if((MainViewport_UI.instance?.isCursorHoveringMe() ?? false) == false){ return; }
 	        Focus_Selection_maybe();
 	    }
 

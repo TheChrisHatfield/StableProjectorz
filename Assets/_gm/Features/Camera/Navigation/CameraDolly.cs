@@ -40,7 +40,7 @@ namespace spz {
 	    }
 
 	    void StartDolly_maybe(){
-	        bool hovering   =  MainViewport_UI.instance.isCursorHoveringMe();
+	        bool hovering   =  (MainViewport_UI.instance?.isCursorHoveringMe() ?? false);
 	        if(!hovering){ return; }
 	        // Arm on Alt+RMB held — not only RMB-down. Move fly starts on bare RMB and clears
 	        // _allowZoom the same frame (StopDollyMaybe, no Alt yet); pressing Alt afterward while
@@ -61,7 +61,7 @@ namespace spz {
 	        bool hasRMB     = KeyMousePenInput.isRMBpressed();
 
 	        bool dontZoom  =  !_allowZoom || !hasLeftAlt || !hasRMB; 
-	             dontZoom &=  mouseScroll==0 || MainViewport_UI.instance.isCursorHoveringMe()==false;
+	             dontZoom &=  mouseScroll==0 || (MainViewport_UI.instance?.isCursorHoveringMe() ?? false)==false;
 
 	        if(dontZoom){
 	            _allowZoom = false;
@@ -82,7 +82,7 @@ namespace spz {
 
 	        float mouseScroll = (hasCtrl||hasShift||KeyMousePenInput.isFileBrowserOpen())? 0 : Mouse.current.scroll.ReadValue().y;
 
-	        bool hasMouseScroll = mouseScroll!=0  &&  MainViewport_UI.instance.isCursorHoveringMe();
+	        bool hasMouseScroll = mouseScroll!=0  &&  (MainViewport_UI.instance?.isCursorHoveringMe() ?? false);
         
 	        if (!_allowZoom && !hasMouseScroll){ return; }
 
