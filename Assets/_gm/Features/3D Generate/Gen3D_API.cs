@@ -26,10 +26,12 @@ namespace spz {
 
 	    public bool IsServerAvailable => Connection_MGR.is_3d_connected;
 
-	    // If you want to be notified when server availability changes:
-	    public bool isBusy => _generateStatus!=TaskStatus.COMPLETE  && 
-	                          _generateStatus!=TaskStatus.FAILED  &&
-	                          _gen_or_resume_crtn!=null;
+	    /// <summary>
+	    /// True while a generate/resume or final-mesh download coroutine is live.
+	    /// Do not gate on status alone — status becomes COMPLETE before Gen_downloadFinalData finishes,
+	    /// which left Cancel a no-op and allowed a second StartGeneration mid-download.
+	    /// </summary>
+	    public bool isBusy => _gen_or_resume_crtn != null || _download_crtn != null;
 
 
 	    //uppercase, must ensure the capitalization exactly matches the one in python script.
