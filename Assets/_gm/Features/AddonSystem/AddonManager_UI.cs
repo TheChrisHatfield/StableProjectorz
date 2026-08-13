@@ -1970,9 +1970,30 @@ namespace spz {
 			Transform expandT = header != null ? header.Find("ExpandChevron") : item.transform.Find("ExpandChevron");
 			if (expandT != null) {
 				var expandBtn = expandT.GetComponent<Button>();
+				var expandFace = expandT.GetComponent<Image>();
+				if (expandFace != null) {
+					AssignSolidFaceThenMarkRounded(expandFace);
+					if (SpzUiThemeOps.ShouldRecolorBoundChrome)
+						SpzUiThemeOps.ApplyBoundChromeGraphic(expandFace, t.panelBg);
+					else
+						expandFace.color = new Color(0.20f, 0.20f, 0.24f, 0.90f);
+				}
+				var expandLe = expandT.GetComponent<LayoutElement>();
+				if (expandLe != null) {
+					SpzUiThemeOps.SnapshotLayoutElementForTheme(expandLe);
+					expandLe.preferredWidth = 12f;
+					expandLe.minWidth = 12f;
+					expandLe.preferredHeight = 12f;
+					expandLe.minHeight = 12f;
+					expandLe.flexibleWidth = 0f;
+					expandLe.flexibleHeight = 0f;
+				}
 				var expandLabel = expandT.Find("Text")?.GetComponent<TextMeshProUGUI>();
 				if (expandLabel != null) {
-					float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(expandLabel, 14f);
+					var prefsOpen = item.transform.Find("PreferencesBody");
+					bool expanded = prefsOpen != null && prefsOpen.gameObject.activeSelf;
+					expandLabel.text = expanded ? "▼" : "▶";
+					float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(expandLabel, 9f);
 					SpzUiThemeOps.ApplyBoundChromeTmp(expandLabel, t.textMuted, basePt);
 				}
 				if (expandBtn != null)
@@ -2692,8 +2713,8 @@ namespace spz {
 			horizontalLayout.childForceExpandWidth = false;
 			horizontalLayout.childForceExpandHeight = false;
 
-			// Blender-like expand chevron (replaces Preferences label button).
-			const float chevronHit = 22f;
+			// Compact arrow button: ▶ collapsed, ▼ expanded (prefs open/closed affordance).
+			const float chevronHit = 12f;
 			var expandObj = new GameObject("ExpandChevron");
 			expandObj.transform.SetParent(headerObj.transform, false);
 			var expandRt = expandObj.AddComponent<RectTransform>();
@@ -2704,12 +2725,20 @@ namespace spz {
 			expandLE.preferredHeight = chevronHit;
 			expandLE.minHeight = chevronHit;
 			expandLE.flexibleWidth = 0f;
+			expandLE.flexibleHeight = 0f;
 			var expandHit = expandObj.AddComponent<Image>();
-			expandHit.color = Color.clear;
+			AssignSolidFaceThenMarkRounded(expandHit);
+			expandHit.color = new Color(0.20f, 0.20f, 0.24f, 0.90f);
 			expandHit.raycastTarget = true;
 			var expandBtn = expandObj.AddComponent<Button>();
 			expandBtn.targetGraphic = expandHit;
-			expandBtn.transition = Selectable.Transition.None;
+			expandBtn.transition = Selectable.Transition.ColorTint;
+			var expandColors = expandBtn.colors;
+			expandColors.normalColor = Color.white;
+			expandColors.highlightedColor = new Color(1.08f, 1.08f, 1.08f, 1f);
+			expandColors.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
+			expandColors.selectedColor = Color.white;
+			expandBtn.colors = expandColors;
 			var expandLabelGo = new GameObject("Text");
 			expandLabelGo.transform.SetParent(expandObj.transform, false);
 			var expandLabelRt = expandLabelGo.AddComponent<RectTransform>();
@@ -2718,12 +2747,19 @@ namespace spz {
 			expandLabelRt.offsetMin = Vector2.zero;
 			expandLabelRt.offsetMax = Vector2.zero;
 			var expandLabel = expandLabelGo.AddComponent<TextMeshProUGUI>();
-			expandLabel.text = "▸";
-			expandLabel.fontSize = 14f;
+			expandLabel.text = "▶";
+			expandLabel.fontSize = 9f;
 			expandLabel.alignment = TextAlignmentOptions.Center;
-			expandLabel.color = new Color(0.72f, 0.72f, 0.76f, 1f);
+			expandLabel.color = new Color(0.82f, 0.82f, 0.86f, 1f);
 			expandLabel.raycastTarget = false;
-			AttachTooltip(expandObj, "Show add-on details and host preferences.");
+			AttachTooltip(expandObj, "▶ Preferences closed — click to open. ▼ Preferences open — click to close.");
+
+			void SetExpandChevron(bool expanded) {
+				expandLabel.text = expanded ? "▼" : "▶";
+				AttachTooltip(expandObj, expanded
+					? "▼ Preferences open — click to close details."
+					: "▶ Preferences closed — click to open details.");
+			}
 
 			var toggleObj = new GameObject("StatusToggle");
 			toggleObj.transform.SetParent(headerObj.transform, false);
@@ -2998,8 +3034,6 @@ namespace spz {
 				}
 			}
 
-			void SetExpandChevron(bool expanded) {
-				expandLabel.text = expanded ? "▾" : "▸";
 			}
 
 			void CollapseOtherExpandedItems() {
@@ -3020,7 +3054,10 @@ namespace spz {
 						otherRt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 48f);
 					var otherChevron = other.Find("HeaderRow/ExpandChevron/Text")?.GetComponent<TextMeshProUGUI>();
 					if (otherChevron != null)
-						otherChevron.text = "▸";
+						otherChevron.text = "▶";
+					var otherExpand = other.Find("HeaderRow/ExpandChevron");
+					if (otherExpand != null)
+						AttachTooltip(otherExpand.gameObject, "▶ Preferences closed — click to open details.");
 				}
 				// Shrink siblings before measuring the newly expanded row so CSF content height is not briefly tall.
 				RebuildAddonListScrollLayout(null);

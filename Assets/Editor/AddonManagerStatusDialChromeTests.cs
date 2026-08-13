@@ -131,6 +131,10 @@ public sealed class AddonManagerStatusDialChromeTests {
 			"HeaderRow HLG must not control height (protects status dial).");
 		Assert.That(src, Does.Contain("ExpandChevron"),
 			"Blender-like chevron expands details (Preferences label button removed).");
+		Assert.That(src, Does.Contain("chevronHit = 12f"),
+			"Prefs expand arrow button is half-size (~12px).");
+		Assert.That(src, Does.Contain("expanded ? \"▼\" : \"▶\""),
+			"Arrow faces right when closed and down when preferences are open.");
 		Assert.That(src, Does.Contain("PreferencesCard"),
 			"Inset PreferencesCard overlay (not full-bleed).");
 		Assert.That(src, Does.Contain("PrefsCardWidthFrac = 0.45f"),
