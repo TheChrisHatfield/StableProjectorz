@@ -1584,7 +1584,7 @@ namespace spz {
 			foreach (var img in owner.GetComponentsInChildren<Image>(true)) {
 				if (img == null) continue;
 				string n = img.gameObject.name ?? "";
-				if (n == ControlLineIconChildName || n == "MonolithActiveBar")
+				if (n == ControlLineIconChildName || n == "MonolithActiveBar" || n == FillThumbOverlayChildName)
 					continue;
 				// Real Toggle ON glyphs must stay (Settings / context menus); tool cells hide those explicitly.
 				if (IsToggleCheckmarkGraphic(img))
@@ -1592,8 +1592,12 @@ namespace spz {
 				// Never disable a Selectable's targetGraphic — dead clicks under Nomad (name may contain "Icon").
 				if (IsSelectableTargetGraphic(img))
 					continue;
-				// Name match OR preserveAspect non-solid glyph (SERV folder sprites often lack "Icon" in name).
-				if (!IsAuthoredIconImageName(n) && !IsAuthoredIconFace(img))
+				if (IsUiMaskGraphic(img))
+					continue;
+				// Name match OR any non-solid sprite glyph. SERV folder Images often ship
+				// preserveAspect=false and names like "Image" — IsAuthoredIconFace alone left
+				// folder+Bullseye stacked on SD SERV (user litmus).
+				if (!IsAuthoredIconImageName(n) && !IsAuthoredIconFace(img) && !IsNonSolidDecorativeGlyph(img))
 					continue;
 				var tag = img.GetComponent<SpzUiThemeHiddenGraphic>();
 				if (tag == null) {
@@ -1607,6 +1611,18 @@ namespace spz {
 				}
 				img.enabled = false;
 			}
+		}
+
+		/// <summary>
+		/// Drawn sprite that is not the solid plate / SoftRect — hide under Monolith even when
+		/// preserveAspect is off (common for prefab folder silhouettes on SERV strip).
+		/// </summary>
+		static bool IsNonSolidDecorativeGlyph(Image img) {
+			if (img == null || img.sprite == null) return false;
+			if (UiRuntimeSprites.IsSolidRect(img.sprite)) return false;
+			if (UiRuntimeSprites.IsNomadSliderSegmentTile(img.sprite)) return false;
+			if (img.type == Image.Type.Filled) return false;
+			return true;
 		}
 
 		/// <summary>True when <paramref name="img"/> is any ancestor Selectable's click/raycast face.</summary>
