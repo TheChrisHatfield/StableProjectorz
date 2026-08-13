@@ -1940,9 +1940,15 @@ namespace spz {
 			}
 			Transform remove = null;
 			var prefsCardForRemove = item.transform.Find("PreferencesBody/PreferencesCard");
-			if (prefsCardForRemove != null)
+			if (prefsCardForRemove != null) {
 				remove = prefsCardForRemove.Find("RemoveButton");
-			if (remove == null && header != null) remove = header.Find("RemoveButton");
+				if (remove == null) remove = prefsCardForRemove.Find("RemoveBtn");
+			}
+			if (remove == null && header != null) {
+				remove = header.Find("RemoveBtn");
+				if (remove == null) remove = header.Find("RemoveButton");
+			}
+			if (remove == null) remove = item.transform.Find("RemoveBtn");
 			if (remove == null) remove = item.transform.Find("RemoveButton");
 			if (remove != null) {
 				var removeBtn = remove.GetComponent<Button>();
@@ -2091,15 +2097,6 @@ namespace spz {
 			var ribbonToggle = FindChildRecursive(item.transform, "ShowInRibbonToggle")?.GetComponent<Toggle>();
 			if (ribbonToggle != null && ribbonToggle.gameObject.activeSelf) {
 				ThemeShowInRibbonDial(ribbonToggle, ribbonToggle.isOn, t.success, t.textMuted, t.success);
-				var ribbonLabel = FindChildRecursive(item.transform, "ShowInRibbonLabel")?.GetComponent<TextMeshProUGUI>();
-				if (ribbonLabel != null) {
-					float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(ribbonLabel, 13f);
-					SpzUiThemeOps.ApplyBoundChromeTmp(ribbonLabel, t.textMuted, basePt);
-					ribbonLabel.enableWordWrapping = false;
-					ribbonLabel.overflowMode = TextOverflowModes.Ellipsis;
-					ribbonLabel.fontStyle = FontStyles.Normal;
-					ribbonLabel.alignment = TextAlignmentOptions.MidlineLeft;
-				}
 			}
 			// Keep status dial square after any theme pass (layout smash otherwise elongates CircleFilled).
 			if (toggle != null)
@@ -2254,16 +2251,11 @@ namespace spz {
 		}
 
 		/// <summary>
-		/// Show-in-Ribbon: clean radio dial + label (no giant tinted plate — Nomad painted that green block).
+		/// Show-in-Ribbon: clean ring radio (same family as enable dial) — never a filled green plate.
 		/// </summary>
 		static void ThemeShowInRibbonDial(Toggle toggle, bool isOn, Color ringOn, Color ringOff, Color fillOk) {
 			if (toggle == null) return;
 			LockShowInRibbonDialLayout(toggle);
-			// Hit target stays clear — never paint a solid plate under the dial.
-			if (toggle.targetGraphic is Image hit && hit.transform == toggle.transform) {
-				hit.color = Color.clear;
-				hit.raycastTarget = true;
-			}
 			var ringImg = toggle.transform.Find("Ring")?.GetComponent<Image>();
 			if (ringImg != null) {
 				TintStatusDialGraphic(ringImg, isOn ? ringOn : ringOff);
@@ -2282,6 +2274,11 @@ namespace spz {
 				fill.gameObject.SetActive(true);
 				fill.enabled = true;
 				fill.canvasRenderer.SetAlpha(isOn ? 1f : 0f);
+			}
+			// Hit target stays clear — never paint a green/grey square under the dial.
+			if (toggle.targetGraphic is Image hit && hit.transform == toggle.transform) {
+				hit.color = Color.clear;
+				hit.raycastTarget = true;
 			}
 		}
 
@@ -2530,22 +2527,19 @@ namespace spz {
 					rowHlg.childForceExpandWidth = false;
 					rowHlg.childAlignment = TextAnchor.MiddleLeft;
 				}
-				var ribbonBtn = row.Find("ShowInRibbonToggle")?.GetComponent<Toggle>();
-				if (ribbonBtn != null)
-					LockShowInRibbonDialLayout(ribbonBtn);
+				var ribbonDial = row.Find("ShowInRibbonToggle")?.GetComponent<Toggle>();
+				if (ribbonDial != null)
+					LockShowInRibbonDialLayout(ribbonDial);
 				var label = row.Find("ShowInRibbonLabel")?.GetComponent<TextMeshProUGUI>();
-				if (label == null)
-					label = row.Find("ShowInRibbonToggle/ShowInRibbonLabel")?.GetComponent<TextMeshProUGUI>();
 				if (label != null) {
 					var labelLE = label.GetComponent<LayoutElement>();
 					if (labelLE != null) {
 						labelLE.flexibleWidth = 1f;
-						labelLE.minWidth = narrow ? 120f : 160f;
+						labelLE.minWidth = narrow ? 120f : 140f;
 						labelLE.preferredHeight = rowH - 8f;
 					}
 					label.enableWordWrapping = false;
 					label.overflowMode = TextOverflowModes.Ellipsis;
-					label.alignment = TextAlignmentOptions.MidlineLeft;
 					const float labelDesign = 13f;
 					float labelBase = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(label, labelDesign);
 					if (SpzUiThemeOps.ShouldRecolorBoundChrome)
@@ -2814,7 +2808,7 @@ namespace spz {
 			nameText.overflowMode = TMPro.TextOverflowModes.Ellipsis;
 			nameText.raycastTarget = false;
 
-			// Nested Blender-like details under HeaderRow — inset card (not full-bleed grey band).
+			// Nested Blender-like details under HeaderRow — Uninstall lives inside prefs (not header far-right).
 			var prefsBody = new GameObject("PreferencesBody");
 			prefsBody.transform.SetParent(itemObj.transform, false);
 			prefsBody.AddComponent<RectTransform>();
@@ -2927,7 +2921,7 @@ namespace spz {
 			prefRowHLG.childForceExpandWidth = false;
 			prefRowHLG.childForceExpandHeight = false;
 
-			// Clean radio dial + label (not a giant green action plate).
+			// Clean radio dial + label (no filled green plate).
 			const float ribbonDialHit = 28f;
 			const float ribbonDialSize = 14f;
 			var ribbonToggleObj = new GameObject("ShowInRibbonToggle");
@@ -2981,7 +2975,7 @@ namespace spz {
 			ribbonLabelObj.transform.SetParent(prefRow.transform, false);
 			var ribbonLabelLE = ribbonLabelObj.AddComponent<LayoutElement>();
 			ribbonLabelLE.flexibleWidth = 1f;
-			ribbonLabelLE.minWidth = 160f;
+			ribbonLabelLE.minWidth = 140f;
 			ribbonLabelLE.preferredHeight = 28f;
 			ribbonLabelLE.flexibleHeight = 0f;
 			var ribbonLabel = ribbonLabelObj.AddComponent<TextMeshProUGUI>();
@@ -3004,7 +2998,6 @@ namespace spz {
 					"When on, an enabled add-on shows a Command Ribbon tab. When off, it stays active but the tab is hidden.");
 			}
 
-			// Uninstall lives under Host preferences (not far-right on the header row).
 			var removeBtnObj = new GameObject("RemoveButton");
 			removeBtnObj.transform.SetParent(prefsCard.transform, false);
 			var removeBtnLE = removeBtnObj.AddComponent<LayoutElement>();

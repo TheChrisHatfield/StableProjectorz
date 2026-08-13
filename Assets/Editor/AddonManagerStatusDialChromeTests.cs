@@ -121,7 +121,7 @@ public sealed class AddonManagerStatusDialChromeTests {
 		Assert.That(src, Does.Contain("prefsCardVLG.childControlHeight = true"),
 			"Prefs card must control child heights so Host preferences stacks under the section header.");
 		Assert.That(src, Does.Contain("prefRowHLG.childControlHeight = false"),
-			"Pref row HLG must not stretch the ribbon action button.");
+			"Pref row HLG must not stretch the ribbon radio dial.");
 		Assert.That(src, Does.Contain("PrefRow_ShowInRibbon"));
 		Assert.That(src, Does.Contain("ApplyResponsivePrefsDropdownLayout"));
 		Assert.That(src, Does.Contain("ResolveOrCaptureDesignFontPt(header"),
@@ -149,6 +149,8 @@ public sealed class AddonManagerStatusDialChromeTests {
 			"Header must be tall enough for 28px buttons without prefs overlap.");
 		Assert.That(src, Does.Contain("SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, h)"),
 			"Expanded item rect must sync with LayoutElement preferredHeight.");
+		Assert.That(src, Does.Contain("removeBtnObj.transform.SetParent(prefsCard.transform"),
+			"Uninstall must sit under preferences, not header far-right.");
 		int themeCb = src.IndexOf("static void ThemeShowInRibbonDial(", System.StringComparison.Ordinal);
 		int themeEnd = src.IndexOf("static void LockShowInRibbonDialLayout(", themeCb + 1, System.StringComparison.Ordinal);
 		Assert.That(themeCb, Is.GreaterThan(0));
@@ -160,6 +162,28 @@ public sealed class AddonManagerStatusDialChromeTests {
 			"Dial hit target must stay clear — no solid green plate.");
 		Assert.That(themeBody, Does.Not.Contain("AssignSolidFaceThenMarkRounded(face)"),
 			"Do not paint a solid rounded plate for Show-in-Ribbon.");
+	}
+
+	[Test]
+	public void Uninstall_LivesUnderPreferencesCard_NotHeaderFarRight() {
+		string path = Path.GetFullPath(Path.Combine(
+			Application.dataPath,
+			"..",
+			"Assets/_gm/Features/AddonSystem/AddonManager_UI.cs"));
+		string src = File.ReadAllText(path);
+		int create = src.IndexOf("void CreateAddonListItem(", System.StringComparison.Ordinal);
+		Assert.That(create, Is.GreaterThan(0));
+		int prefsCard = src.IndexOf("var prefsCard = new GameObject(\"PreferencesCard\")", create, System.StringComparison.Ordinal);
+		int removeUnderPrefs = src.IndexOf("removeBtnObj.transform.SetParent(prefsCard.transform", prefsCard, System.StringComparison.Ordinal);
+		Assert.That(prefsCard, Is.GreaterThan(create));
+		Assert.That(removeUnderPrefs, Is.GreaterThan(prefsCard),
+			"Uninstall must parent under PreferencesCard.");
+		int headerEnd = src.IndexOf("var prefsBody = new GameObject(\"PreferencesBody\")", create, System.StringComparison.Ordinal);
+		string headerBlock = src.Substring(create, headerEnd - create);
+		Assert.That(headerBlock, Does.Not.Contain("RemoveButton"),
+			"Header row must not own Uninstall (far-right).");
+		Assert.That(src, Does.Contain("PreferencesBody/PreferencesCard"),
+			"Theme must resolve Uninstall under prefs card.");
 	}
 
 	[Test]
