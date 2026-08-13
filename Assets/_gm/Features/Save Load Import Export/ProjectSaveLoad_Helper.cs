@@ -162,6 +162,13 @@ namespace spz {
 	        Serialize_SPZ_toJSON(saveFile, spz, out resultMessage);
 	        LastProjectSaveSucceeded = resultMessage != null
 		        && resultMessage.StartsWith("Saved the project", StringComparison.Ordinal);
+	        // If JSON write failed, restore wiped _Data and skip composite / last-path update.
+	        CommitOrRestoreDataDir(spz.filepath_dataDir, LastProjectSaveSucceeded);
+	        if (!LastProjectSaveSucceeded) {
+	            onResultMessage?.Invoke(resultMessage);
+	            saveFinalTexs?.Invoke(null);
+	            yield break;
+	        }
 	        // Do not report "Saved" yet — final composite / mesh textures may still fail below.
 
 	        // Now, save the final composite-texture, combinging all projections.
@@ -327,20 +334,52 @@ namespace spz {
 
 	    // A folder with the same name as the project-file, but with _Data suffix.
 	    // we can store all necessary things in that directory. Textures, etc.
+	    string _pendingDataDirBackup;
+
 	    string CreateDataDir(string project_file){
+	        _pendingDataDirBackup = null;
 	        var directory = Path.GetDirectoryName(project_file);
 	        var filenameWithoutExtension = Path.GetFileNameWithoutExtension(project_file);
 	        var newDirectoryPath = Path.Combine(directory, filenameWithoutExtension + "_Data");
         
 	        if (Directory.Exists(newDirectoryPath)){
-	            // Delete all files in the directory
-	            // Delete all subdirectories and their contents
-	            foreach (var file in Directory.GetFiles(newDirectoryPath)){  File.Delete(file);  }
-	            foreach (var dir in Directory.GetDirectories(newDirectoryPath)){  Directory.Delete(dir, true);  }
-	        }else{
-	            Directory.CreateDirectory(newDirectoryPath);
+	            // Move aside instead of wipe-first so a failed JSON write can restore textures.
+	            string bak = newDirectoryPath + "__spz_bak";
+	            try {
+	                if (Directory.Exists(bak))
+	                    Directory.Delete(bak, true);
+	                Directory.Move(newDirectoryPath, bak);
+	                _pendingDataDirBackup = bak;
+	            } catch (System.Exception ex) {
+	                UnityEngine.Debug.LogWarning(
+	                    "[ProjectSaveLoad_Helper] Could not stage _Data backup; falling back to wipe: " + ex.Message);
+	                foreach (var file in Directory.GetFiles(newDirectoryPath)){  File.Delete(file);  }
+	                foreach (var dir in Directory.GetDirectories(newDirectoryPath)){  Directory.Delete(dir, true);  }
+	            }
 	        }
+	        if (!Directory.Exists(newDirectoryPath))
+	            Directory.CreateDirectory(newDirectoryPath);
 	        return newDirectoryPath;
+	    }
+
+	    void CommitOrRestoreDataDir(string dataDir, bool saveSucceeded){
+	        if (string.IsNullOrEmpty(_pendingDataDirBackup)) return;
+	        string bak = _pendingDataDirBackup;
+	        _pendingDataDirBackup = null;
+	        try {
+	            if (saveSucceeded) {
+	                if (Directory.Exists(bak))
+	                    Directory.Delete(bak, true);
+	            } else {
+	                if (!string.IsNullOrEmpty(dataDir) && Directory.Exists(dataDir))
+	                    Directory.Delete(dataDir, true);
+	                if (Directory.Exists(bak))
+	                    Directory.Move(bak, dataDir);
+	            }
+	        } catch (System.Exception ex) {
+	            UnityEngine.Debug.LogWarning(
+	                "[ProjectSaveLoad_Helper] CommitOrRestoreDataDir failed: " + ex.Message);
+	        }
 	    }
 
 	    void Serialize_SPZ_toJSON(string file, StableProjectorz_SL spz, out string resultMessage_){
