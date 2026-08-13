@@ -1486,7 +1486,7 @@ public sealed class SpzUiThemeOpsTests {
 
 			Assert.That(panel, Is.Not.Null);
 			overlay = panel.GetComponentInParent<Canvas>(true)?.gameObject;
-			Assert.That(panel.transform.Find("StichAddonManager_v12"), Is.Not.Null);
+			Assert.That(panel.transform.Find("StichAddonManager_v13"), Is.Not.Null);
 			Assert.That(panel.transform.Find("Header/InstallButton")?.GetComponent<Button>(), Is.Not.Null);
 			Assert.That(panel.transform.Find("Header/InstallButton/LineIcon")?.GetComponent<Image>()?.sprite, Is.Not.Null);
 			Assert.That(panel.transform.Find("Header/RefreshButton")?.GetComponent<Button>(), Is.Not.Null);
@@ -1501,8 +1501,15 @@ public sealed class SpzUiThemeOpsTests {
 				"List Content must live under Viewport so ScrollRect can reach the last rows.");
 			var viewport = panel.transform.Find("ScrollView/Viewport");
 			Assert.That(viewport?.GetComponent<Mask>(), Is.Not.Null,
-				"Known-good list Viewport uses Mask (898dd6a); RectMask2D rewrite emptied the list.");
+				"Known-good list Viewport uses Mask; RectMask2D + clear Mask hid all rows.");
 			Assert.That(viewport?.GetComponent<Mask>()?.showMaskGraphic, Is.False);
+			Assert.That(viewport?.GetComponent<RectMask2D>(), Is.Null,
+				"Do not put RectMask2D on list Viewport (scroll-overlay mole hid rows).");
+			var viewportImg = viewport?.GetComponent<Image>();
+			Assert.That(viewportImg, Is.Not.Null);
+			Assert.That(viewportImg.enabled, Is.True);
+			Assert.That(viewportImg.color.a, Is.GreaterThan(0f),
+				"Mask stencil needs non-zero alpha or every row is clipped invisible.");
 			Assert.That(panel.transform.Find("StatusText")?.GetComponent<TextMeshProUGUI>(), Is.Not.Null);
 			panel.transform.parent.gameObject.SetActive(true);
 			panel.SetActive(true);

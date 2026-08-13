@@ -317,9 +317,8 @@ namespace spz {
 	bool AddonManagerPanelSetupIsComplete() {
 		if (_panel == null || _addonsListParent == null) return false;
 		if (!_addonsListParent.transform.IsChildOf(_panel.transform)) return false;
-		// v12 = last-known-good list shell (898dd6a Mask viewport + UX). Forces rebuild of
-		// broken v11 RectMask2D / white-bar shells that left an empty list + white square.
-		return _panel.transform.Find("StichAddonManager_v12") != null
+		// v13 = compact Remember + Mask stencil with non-zero alpha (v12+RectMask/clear clipped all rows invisible).
+		return _panel.transform.Find("StichAddonManager_v13") != null
 			&& _panel.transform.Find("FilterBar/FilterPills") != null;
 	}
 
@@ -729,7 +728,7 @@ namespace spz {
 		verticalLayout.childForceExpandHeight = false;
 		verticalLayout.childForceExpandWidth = true;
 
-		var versionMarker = new GameObject("StichAddonManager_v12");
+		var versionMarker = new GameObject("StichAddonManager_v13");
 		versionMarker.transform.SetParent(panelObj.transform, false);
 		var markerLE = versionMarker.AddComponent<LayoutElement>();
 		markerLE.ignoreLayout = true;
@@ -919,12 +918,11 @@ namespace spz {
 		var viewportImage = viewportObj.AddComponent<UnityEngine.UI.Image>();
 		viewportImage.sprite = UiRuntimeSprites.SolidRect;
 		viewportImage.type = Image.Type.Simple;
-		viewportImage.color = Color.clear;
+		// Mask stencil needs non-zero alpha — Color.clear clips every list row invisible.
+		viewportImage.color = new Color(0f, 0f, 0f, 0.01f);
 		viewportImage.raycastTarget = true;
 		var viewportMask = viewportObj.AddComponent<UnityEngine.UI.Mask>();
 		viewportMask.showMaskGraphic = false;
-		// RectMask2D avoids stencil ghost plates while scrolling; Mask kept for raycast Graphic.
-		viewportObj.AddComponent<RectMask2D>();
 
 		GameObject contentObj = new GameObject("Content");
 		contentObj.layer = UILayer;
@@ -1865,8 +1863,8 @@ namespace spz {
 
 		/// <summary>
 		/// Keep the known-good Mask viewport usable: BoundChrome can repaint Viewport Image white.
-		/// Keep Mask Image enabled (raycast/stencil source); add RectMask2D to stop scroll ghost plates.
-		/// Do not disable the Viewport Image (v11 mole emptied the list).
+		/// Mask stencil requires a tiny non-zero alpha — Color.clear makes every row invisible.
+		/// Do not add RectMask2D or disable the Viewport Image (emptied / hid the list).
 		/// </summary>
 		void ProtectListViewportMaskGraphic() {
 			if (_panel == null) return;
@@ -1877,18 +1875,18 @@ namespace spz {
 			var mask = viewport.GetComponent<Mask>();
 			if (mask != null)
 				mask.showMaskGraphic = false;
+			// Remove RectMask2D left by the scroll-overlay mole (bc386ff) — it hid rows with clear Mask.
+			var rectMask = viewport.GetComponent<RectMask2D>();
+			if (rectMask != null)
+				Destroy(rectMask);
 			var img = viewport.GetComponent<Image>();
 			if (img != null) {
 				img.sprite = UiRuntimeSprites.SolidRect;
 				img.type = Image.Type.Simple;
-				// Fully clear — even alpha 0.01 SolidRect can read as a scrolling plate under some UI materials.
-				img.color = Color.clear;
+				img.color = new Color(0f, 0f, 0f, 0.01f);
 				img.raycastTarget = true;
 				img.enabled = true;
 			}
-			// Soft stencil Mask can leave a ghost plate while scrolling; RectMask2D clips without drawing.
-			if (viewport.GetComponent<RectMask2D>() == null)
-				viewport.gameObject.AddComponent<RectMask2D>();
 		}
 
 		/// <summary>Keep Remember action button sized after theme passes.</summary>
