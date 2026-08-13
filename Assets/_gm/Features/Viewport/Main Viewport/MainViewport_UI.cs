@@ -53,12 +53,13 @@ namespace spz {
 
 	    public bool isCursorHoveringMe(){
 	        //those ones are on different canvas than this Viewport, so it's important to manually check if they are on:
-	        if(CheckForUpdates_MGR.instance.isShowing){ return false; }
+	        if(CheckForUpdates_MGR.instance != null && CheckForUpdates_MGR.instance.isShowing){ return false; }
 	        if(WelcomeScreenCMD_MGR._isShowing){ return false; }
-	        if(WelcomeScreenNovices_MGR.instance._isShowing){ return false; }
+	        if(WelcomeScreenNovices_MGR.instance != null && WelcomeScreenNovices_MGR.instance._isShowing){ return false; }
 	        if(LoadIntroScreen_Panel_UI.isShowing){ return false; }
-	        if(_viewportContextMenu_mgr.isShowing){ return false; }
+	        if(_viewportContextMenu_mgr != null && _viewportContextMenu_mgr.isShowing){ return false; }
 	        // No AddonManager_UI.IsModalOpen gate (matches OLD_TEST_REPO): raycast order already reflects modal overlay; a blunt false could stall pin/MMB pan.
+	        if (MainViewport_UI_EventListener.instance == null){ return false; }
 	        bool over = MainViewport_UI_EventListener.instance.TryRaycastTowardsSelf();
 	        DiagnoseAddonModalViewportRaycast(over);
 	        return over;
@@ -78,10 +79,11 @@ namespace spz {
 
 	    //Returns true even if cursor hovers a header, or some panel. As long as cursor is inside my horizontal span.
 	    public bool IsCursorInside_my_width(){
-	        if(CheckForUpdates_MGR.instance.isShowing){ return false; }
+	        if(CheckForUpdates_MGR.instance != null && CheckForUpdates_MGR.instance.isShowing){ return false; }
 	        if(WelcomeScreenCMD_MGR._isShowing){ return false; }
-	        if(WelcomeScreenNovices_MGR.instance._isShowing){ return false; }
+	        if(WelcomeScreenNovices_MGR.instance != null && WelcomeScreenNovices_MGR.instance._isShowing){ return false; }
 	        if(LoadIntroScreen_Panel_UI.isShowing){ return false; }
+	        if (MainViewport_UI_EventListener.instance == null){ return false; }
 	        return MainViewport_UI_EventListener.instance.IsCursorIn_my_width();
 	    }
 
