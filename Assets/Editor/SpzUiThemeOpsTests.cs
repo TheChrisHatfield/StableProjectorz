@@ -1486,7 +1486,7 @@ public sealed class SpzUiThemeOpsTests {
 
 			Assert.That(panel, Is.Not.Null);
 			overlay = panel.GetComponentInParent<Canvas>(true)?.gameObject;
-			Assert.That(panel.transform.Find("StichAddonManager_v11"), Is.Not.Null);
+			Assert.That(panel.transform.Find("StichAddonManager_v12"), Is.Not.Null);
 			Assert.That(panel.transform.Find("Header/InstallButton")?.GetComponent<Button>(), Is.Not.Null);
 			Assert.That(panel.transform.Find("Header/InstallButton/LineIcon")?.GetComponent<Image>()?.sprite, Is.Not.Null);
 			Assert.That(panel.transform.Find("Header/RefreshButton")?.GetComponent<Button>(), Is.Not.Null);
@@ -1500,12 +1500,9 @@ public sealed class SpzUiThemeOpsTests {
 			Assert.That(panel.transform.Find("ScrollView/Viewport/Content"), Is.Not.Null,
 				"List Content must live under Viewport so ScrollRect can reach the last rows.");
 			var viewport = panel.transform.Find("ScrollView/Viewport");
-			Assert.That(viewport?.GetComponent<RectMask2D>(), Is.Not.Null,
-				"Viewport must use RectMask2D (Mask+Image paints the white list bar).");
-			Assert.That(viewport?.GetComponent<Mask>(), Is.Null);
-			var viewportImg = viewport?.GetComponent<Image>();
-			Assert.That(viewportImg == null || !viewportImg.enabled, Is.True,
-				"Viewport Image must be absent or disabled.");
+			Assert.That(viewport?.GetComponent<Mask>(), Is.Not.Null,
+				"Known-good list Viewport uses Mask (898dd6a); RectMask2D rewrite emptied the list.");
+			Assert.That(viewport?.GetComponent<Mask>()?.showMaskGraphic, Is.False);
 			Assert.That(panel.transform.Find("StatusText")?.GetComponent<TextMeshProUGUI>(), Is.Not.Null);
 			panel.transform.parent.gameObject.SetActive(true);
 			panel.SetActive(true);
