@@ -17,11 +17,64 @@ public sealed class BrushRibbonDirectionFlatChromeThemeTests {
 	}
 
 	[Test]
+	public void ApplyPaintSmudgeEraseGaps_BuiltinThreeStackGrowsHeightSoIconsDoNotSquash() {
+		// Prefab: minHeight 140 / minWidth 70 for Paint|Erase. Smudge thirds without a height bump
+		// make short-wide cells; authored icons (preserveAspect=0) look vertically compressed.
+		var root = new GameObject("DirGapsBuiltin", typeof(RectTransform), typeof(LayoutElement));
+		root.SetActive(false);
+		try {
+			var le = root.GetComponent<LayoutElement>();
+			le.minWidth = 70f;
+			le.minHeight = 140f;
+			le.preferredHeight = -1f;
+
+			Toggle MakeToggle(string name) {
+				var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Toggle));
+				go.transform.SetParent(root.transform, false);
+				var rt = go.GetComponent<RectTransform>();
+				rt.anchorMin = Vector2.zero;
+				rt.anchorMax = Vector2.one;
+				rt.offsetMin = Vector2.zero;
+				rt.offsetMax = Vector2.zero;
+				return go.GetComponent<Toggle>();
+			}
+
+			var paint = MakeToggle("Paint");
+			var smudge = MakeToggle("Smudge");
+			var erase = MakeToggle("Erase");
+
+			var dir = root.AddComponent<BrushRibbon_UI_Direction>();
+			typeof(BrushRibbon_UI_Direction)
+				.GetField("_brushAdd_Toggle", BindingFlags.Instance | BindingFlags.NonPublic)
+				.SetValue(dir, paint);
+			typeof(BrushRibbon_UI_Direction)
+				.GetField("_brushErase_Toggle", BindingFlags.Instance | BindingFlags.NonPublic)
+				.SetValue(dir, erase);
+			typeof(BrushRibbon_UI_Direction)
+				.GetField("_brushSmudge_Toggle", BindingFlags.Instance | BindingFlags.NonPublic)
+				.SetValue(dir, smudge);
+
+			BrushRibbon_UI_Direction.ApplyPaintSmudgeEraseGaps(dir, nomadGaps: false);
+
+			const float builtinGap = 0.028f;
+			float expectedH = 70f / ((1f - 2f * builtinGap) / 3f);
+			Assert.That(le.preferredHeight, Is.EqualTo(expectedH).Within(0.01f),
+				"builtin three-stack must grow preferredHeight (not stay at 140)");
+			Assert.That(le.minHeight, Is.EqualTo(expectedH).Within(0.01f));
+			Assert.That(le.preferredHeight, Is.GreaterThan(140f));
+		}
+		finally {
+			Object.DestroyImmediate(root);
+		}
+	}
+
+	[Test]
 	public void ApplyPaintSmudgeEraseGaps_NomadPacksSquaresTightWithHairlineBreak() {
 		var root = new GameObject("DirGaps", typeof(RectTransform), typeof(LayoutElement));
 		root.SetActive(false);
 		try {
 			var le = root.GetComponent<LayoutElement>();
+			le.minWidth = 70f;
 			le.minHeight = 140f;
 
 			Toggle MakeToggle(string name) {
@@ -71,8 +124,7 @@ public sealed class BrushRibbonDirectionFlatChromeThemeTests {
 			Assert.That(paintH, Is.EqualTo(smudgeH).Within(0.0001f));
 			Assert.That(smudgeH, Is.EqualTo(eraseH).Within(0.0001f));
 			// Square stack height = column width / cellFrac (same as ApplyPaintSmudgeEraseGaps).
-			var rootRt = root.GetComponent<RectTransform>();
-			float colW = rootRt.rect.width > 4f ? rootRt.rect.width : 40f;
+			float colW = 70f;
 			float expectedH = colW / ((1f - 2f * nomadGap) / 3f);
 			Assert.That(le.minHeight, Is.EqualTo(expectedH).Within(0.01f));
 			Assert.That(le.preferredHeight, Is.EqualTo(expectedH).Within(0.01f));

@@ -10,7 +10,8 @@ public sealed class BrushDirectionAndFullSrnLeaveTests {
 		Assert.That(File.Exists(path), Is.True, path);
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("SnapshotLayoutElementForTheme(rootLayout)"));
-		Assert.That(src, Does.Contain("if (rootLayout != null && nomadGaps)"));
+		Assert.That(src, Does.Contain("if (nomadGaps)"));
+		Assert.That(src, Does.Contain("authored icons use preserveAspect=0 and squash"));
 		Assert.That(src, Does.Not.Contain("nomadGaps ? squareStackH : 210f"));
 	}
 

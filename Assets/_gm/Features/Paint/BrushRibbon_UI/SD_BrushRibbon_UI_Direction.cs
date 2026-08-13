@@ -256,33 +256,39 @@ namespace spz {
 	        }
 
 	        var rootLayout = dir.GetComponent<LayoutElement>();
-	        if (rootLayout != null && nomadGaps) {
-	            // Snapshot so RestoreBoundChromeUnder can unwind; leave must not hardcode 210 over Restore.
+	        if (rootLayout == null) return;
+
+	        // Nomad: snapshot so RestoreBoundChromeUnder can unwind LE (leave must not hardcode 210).
+	        if (nomadGaps)
 	            SpzUiThemeOps.SnapshotLayoutElementForTheme(rootLayout);
-	            if (smudgeRect != null) {
-	                // Square cells like bucket/trash: each band height ≈ column width (not a tall 280px stack).
-	                float colW = MeasureDirectionColumnWidth(dir);
-	                float cellFrac = (1f - 2f * gap) / 3f;
-	                float squareStackH = colW / Mathf.Max(0.05f, cellFrac);
-	                rootLayout.minHeight = squareStackH;
-	                rootLayout.preferredHeight = squareStackH;
-	            }
-	            else {
-	                float colW = MeasureDirectionColumnWidth(dir);
-	                float cellFrac = (1f - gap) * 0.5f;
-	                float squareStackH = colW / Mathf.Max(0.05f, cellFrac);
-	                rootLayout.minHeight = Mathf.Max(rootLayout.minHeight, squareStackH);
-	                rootLayout.preferredHeight = squareStackH;
-	            }
+
+	        // Prefab minHeight 140 was authored for Paint|Erase halves. Packing Smudge into the same
+	        // column makes each band short-wide; authored icons use preserveAspect=0 and squash.
+	        // Grow the stack so each band ≈ column width (Nomad and builtin / leave after Restore).
+	        float colW = MeasureDirectionColumnWidth(dir);
+	        if (smudgeRect != null) {
+	            float cellFrac = (1f - 2f * gap) / 3f;
+	            float squareStackH = colW / Mathf.Max(0.05f, cellFrac);
+	            rootLayout.minHeight = squareStackH;
+	            rootLayout.preferredHeight = squareStackH;
+	        }
+	        else if (nomadGaps) {
+	            float cellFrac = (1f - gap) * 0.5f;
+	            float squareStackH = colW / Mathf.Max(0.05f, cellFrac);
+	            rootLayout.minHeight = squareStackH;
+	            rootLayout.preferredHeight = squareStackH;
 	        }
 	    }
 
 	    static float MeasureDirectionColumnWidth(BrushRibbon_UI_Direction dir) {
+	        var le = dir != null ? dir.GetComponent<LayoutElement>() : null;
+	        float fromLe = (le != null && le.minWidth > 4f) ? le.minWidth : 40f;
 	        var rt = dir != null ? dir.transform as RectTransform : null;
-	        if (rt != null && rt.rect.width > 4f)
-	            return rt.rect.width;
-	        // Inactive / EditMode: match typical brush-strip square chrome (~bucket/trash).
-	        return 40f;
+	        if (rt == null) return fromLe;
+	        // Trust live width only under a LayoutGroup (unlaid-out RTs often report 100×100 stubs).
+	        if (rt.rect.width > 4f && rt.GetComponentInParent<LayoutGroup>() != null)
+	            return Mathf.Max(fromLe, rt.rect.width);
+	        return fromLe;
 	    }
 
 	    public BrushToolMode toolMode {
