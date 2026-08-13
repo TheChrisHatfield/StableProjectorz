@@ -23,8 +23,8 @@ public sealed class AddonManagerRememberToggleChromeTests {
 		Assert.That(body, Does.Contain("tgl.graphic = ckI;"));
 		Assert.That(body, Does.Not.Contain("ApplyRoundedControlSprite(ckI"),
 			"Checkmark must not be solid-squared before/after graphic assign");
-		Assert.That(body, Does.Contain("AssignSolidFaceThenMarkRounded(bgI)"),
-			"Button face must assign SolidRect via AssignSolidFaceThenMarkRounded.");
+		Assert.That(body, Does.Contain("bgI.sprite = UiRuntimeSprites.SolidRect"),
+			"Button face must stay a hard rectangle (SolidRect), not a rounded capsule.");
 		Assert.That(body, Does.Contain("UiRuntimeSprites.CircleFilled"),
 			"Remember checkmark must assign CircleFilled or ON is invisible.");
 	}
