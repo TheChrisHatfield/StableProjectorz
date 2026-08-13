@@ -93,4 +93,42 @@ public sealed class AuthoredIconHidePreservesTargetGraphicTests {
 			SpzUiThemeOps.ResetTheme();
 		}
 	}
+
+	[Test]
+	public void ApplyControlLineIconLeading_HidesFolderWhenPreserveAspectFalse() {
+		var root = new GameObject("ServFaceNoAspect", typeof(RectTransform), typeof(Image), typeof(Button));
+		root.SetActive(false);
+		try {
+			var face = root.GetComponent<Image>();
+			var btn = root.GetComponent<Button>();
+			btn.targetGraphic = face;
+			face.enabled = true;
+
+			var folderGo = new GameObject("Image", typeof(RectTransform), typeof(Image));
+			folderGo.transform.SetParent(root.transform, false);
+			var folder = folderGo.GetComponent<Image>();
+			folder.sprite = UiRuntimeSprites.GetLineIcon(StudioLineIcon.Folder);
+			folder.preserveAspect = false;
+			folder.enabled = true;
+
+			Assert.That(SpzUiThemeOps.TryApplyTheme(
+				"p1-experiment",
+				new JObject {
+					["control_bg"] = "#292A2EFF",
+					["icon_tint"] = "#D0C5AFFF",
+				},
+				"replace",
+				out string error), Is.True, error);
+
+			SpzUiThemeOps.ApplyControlLineIconLeading(root.transform, StudioLineIcon.Bullseye, 16f);
+
+			Assert.That(face.enabled, Is.True);
+			Assert.That(folder.enabled, Is.False,
+				"SERV folder with preserveAspect=false must hide so Bullseye does not stack");
+		}
+		finally {
+			Object.DestroyImmediate(root);
+			SpzUiThemeOps.ResetTheme();
+		}
+	}
 }
