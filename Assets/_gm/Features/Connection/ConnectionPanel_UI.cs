@@ -303,8 +303,11 @@ namespace spz {
 	            SpzUiThemeOps.ApplyBoundChromeSelectable(_openPanel_button, t.controlBg, t.accent);
 	            if (_openPanel_button.targetGraphic is Image face)
 	                SpzUiThemeOps.ApplyRoundedControlSprite(face, markEligible: true);
-	            // Lead Globe — centered stamps any TMP on the open cell (SERV-class ghost).
-	            SpzUiThemeOps.ApplyControlLineIconLeading(_openPanel_button.transform, StudioLineIcon.Globe, 16f);
+	            // Never stamp Globe Monolith — it overlays green "2D"/"3D" status as a circle (SERV litmus).
+	            Transform mono = SpzUiThemeOps.FindDirectChildIncludingInactive(
+	                _openPanel_button.transform, "MonolithLineIcon");
+	            if (mono != null)
+	                mono.gameObject.SetActive(false);
 	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_openPanel_button);
 	        }
 	        // Do not recolor _dim_text / _connectionIcon — CheckConnection owns live status green/red.
