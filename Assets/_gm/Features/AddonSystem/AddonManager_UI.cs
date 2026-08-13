@@ -1730,6 +1730,12 @@ namespace spz {
 			ApplyThemeTokens();
 			EnsureListScrollViewportHealthy();
 		}
+
+		/// <summary>
+		/// Maps REF palette roles to semantic theme tokens on known manager widgets only.
+		/// Re-run after list rebuilds; does not touch animation or layout.
+		/// </summary>
+		void ApplyThemeTokens() {
 			if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 				_statusOk = kAuthoredStatusOk;
 				_statusFail = kAuthoredStatusFail;
