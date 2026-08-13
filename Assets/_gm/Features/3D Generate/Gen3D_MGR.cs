@@ -173,14 +173,23 @@ namespace spz {
 
 
 	    void Gen_OnCancel(){
-	        // Shared cancel bus — only interrupt Gen3D when this API owns a live job.
-	        if (Gen3D_API.instance == null || !Gen3D_API.instance.isBusy)
-		        return;
-	        try {
-	            Gen3D_API.instance.CancelGeneration();
-	        } finally {
-	            // Always finish UI even if API throws — otherwise Cancel button stays stuck.
-	            GenerateButtons_UI.OnConfirmed_FinishedGenerate( canceled:true );
+	        // Shared cancel bus — interrupt Gen3D when this API owns a live job (incl. final download).
+	        var api = Gen3D_API.instance;
+	        if (api != null && api.isBusy) {
+	            try {
+	                api.CancelGeneration();
+	            } finally {
+	                // Always finish UI even if API throws — otherwise Cancel button stays stuck.
+	                GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled: true);
+	            }
+	            return;
+	        }
+	        // API destroyed mid-job: still unwind Cancel chrome in 3D mode (do not steal SD cancel).
+	        if (api == null
+	            && GenerateButtons_UI.isGenerating
+	            && DimensionMode_MGR.instance != null
+	            && DimensionMode_MGR.instance._dimensionMode == DimensionMode.dim_gen_3d) {
+	            GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled: true);
 	        }
 	    }
 	    void Gen_OnProgress(float val){

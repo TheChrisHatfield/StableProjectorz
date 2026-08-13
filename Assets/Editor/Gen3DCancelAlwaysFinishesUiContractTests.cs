@@ -18,6 +18,7 @@ public sealed class Gen3DCancelAlwaysFinishesUiContractTests {
 		string body = src.Substring(start, end - start);
 		Assert.That(body, Does.Contain("finally"));
 		Assert.That(body, Does.Contain("OnConfirmed_FinishedGenerate"));
-		Assert.That(body, Does.Contain("Gen3D_API.instance != null"));
+		Assert.That(body, Does.Contain("api.isBusy"));
+		Assert.That(body, Does.Contain("dim_gen_3d"));
 	}
 }
