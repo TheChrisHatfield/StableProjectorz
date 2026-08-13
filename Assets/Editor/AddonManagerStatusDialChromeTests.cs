@@ -74,7 +74,7 @@ public sealed class AddonManagerStatusDialChromeTests {
 	}
 
 	[Test]
-	public void PreferencesShowInRibbon_UsesLabeledActionButton() {
+	public void PreferencesShowInRibbon_UsesRadioDialNotGreenPlate() {
 		string path = Path.GetFullPath(Path.Combine(
 			Application.dataPath,
 			"..",
@@ -82,14 +82,14 @@ public sealed class AddonManagerStatusDialChromeTests {
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("ThemeShowInRibbonDial"),
 			"Show-in-Ribbon theming entry point must remain wired.");
-		Assert.That(src, Does.Contain("LockShowInRibbonButtonLayout"),
-			"Ribbon host pref must size as a labeled button, not a 28px dial.");
-		Assert.That(src, Does.Contain("ShowInRibbonButtonLabel"),
-			"Button face must show readable on/off copy.");
-		Assert.That(src, Does.Contain("In Command Ribbon"),
-			"On-state label must say the add-on is in the Command Ribbon.");
+		Assert.That(src, Does.Contain("LockShowInRibbonDialLayout"),
+			"Ribbon host pref must use dial geometry, not a wide green button.");
+		Assert.That(src, Does.Contain("Show in Command Ribbon"),
+			"Label must stay readable beside the radio dial.");
 		Assert.That(src, Does.Not.Contain("ThemeShowInRibbonCheckbox"),
 			"Legacy square-face ThemeShowInRibbonCheckbox must be removed.");
+		Assert.That(src, Does.Not.Contain("LockShowInRibbonButtonLayout"),
+			"Giant green action-button layout must stay removed.");
 		int themeItem = src.IndexOf("void ThemeAddonListItem(", System.StringComparison.Ordinal);
 		int next = src.IndexOf("static Transform FindChildRecursive(", themeItem, System.StringComparison.Ordinal);
 		string body = src.Substring(themeItem, next - themeItem);
@@ -101,7 +101,7 @@ public sealed class AddonManagerStatusDialChromeTests {
 		Assert.That(src, Does.Contain("prefRowBg.color = Color.clear"),
 			"Pref row must not paint a square/row plate under Host preferences.");
 		Assert.That(src, Does.Contain("prefsCardBg.color = Color.clear"),
-			"PreferencesCard must not paint a giant grey plate.");
+			"PreferencesCard must not paint a giant grey/green plate.");
 	}
 
 	[Test]
@@ -150,16 +150,16 @@ public sealed class AddonManagerStatusDialChromeTests {
 		Assert.That(src, Does.Contain("SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, h)"),
 			"Expanded item rect must sync with LayoutElement preferredHeight.");
 		int themeCb = src.IndexOf("static void ThemeShowInRibbonDial(", System.StringComparison.Ordinal);
-		int themeEnd = src.IndexOf("static void LockShowInRibbonButtonLayout(", themeCb, System.StringComparison.Ordinal);
+		int themeEnd = src.IndexOf("static void LockShowInRibbonDialLayout(", themeCb + 1, System.StringComparison.Ordinal);
 		Assert.That(themeCb, Is.GreaterThan(0));
 		Assert.That(themeEnd, Is.GreaterThan(themeCb));
 		string themeBody = src.Substring(themeCb, themeEnd - themeCb);
-		Assert.That(themeBody, Does.Contain("AssignSolidFaceThenMarkRounded(face)"),
-			"Ribbon host pref themes as a labeled button face.");
-		Assert.That(themeBody, Does.Contain("ShowInRibbonButtonLabel"),
-			"Button label must update with on/off copy.");
-		Assert.That(themeBody, Does.Not.Contain("CircleRing"),
-			"Ribbon action button must not use the enable-status ring dial chrome.");
+		Assert.That(themeBody, Does.Contain("CircleRing"),
+			"Ribbon host pref themes as a radio dial ring.");
+		Assert.That(themeBody, Does.Contain("hit.color = Color.clear"),
+			"Dial hit target must stay clear — no solid green plate.");
+		Assert.That(themeBody, Does.Not.Contain("AssignSolidFaceThenMarkRounded(face)"),
+			"Do not paint a solid rounded plate for Show-in-Ribbon.");
 	}
 
 	[Test]

@@ -27,9 +27,9 @@ public sealed class LeadingLeDialLeaveTests {
 		string path = Path.Combine(Application.dataPath, "_gm", "Features", "AddonSystem", "AddonManager_UI.cs");
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("LockShowInRibbonDialLayout(toggle)"),
-			"Enable status dial still uses ring geometry lock.");
-		Assert.That(src, Does.Contain("LockShowInRibbonButtonLayout(toggle)"),
-			"Host ribbon pref uses button geometry lock.");
+			"Enable status dial and ribbon radio share ring geometry lock.");
+		Assert.That(src, Does.Not.Contain("LockShowInRibbonButtonLayout"),
+			"Wide green button layout lock must stay removed.");
 		Assert.That(src, Does.Contain("SnapshotToolFaceLayout(rt)"));
 		int rem = src.IndexOf("static void LockRememberToggleSquare", System.StringComparison.Ordinal);
 		string remBody = src.Substring(rem, System.Math.Min(600, src.Length - rem));
