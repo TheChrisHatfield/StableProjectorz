@@ -280,20 +280,9 @@ namespace spz {
 			_openPanel_button.onClick.AddListener(OpenPanel);
 			AttachTooltip(_openPanel_button.gameObject, "Open the Add-on Manager.");
 		}
-		if (_closePanel_button != null) {
-			_closePanel_button.onClick.AddListener(ClosePanel);
-			AttachTooltip(_closePanel_button.gameObject, "Close the Add-on Manager.");
-		}
-		if (_installFromFile_button != null) {
-			_installFromFile_button.onClick.AddListener(OnInstallFromFile);
-		}
-		if (_refresh_button != null) {
-			_refresh_button.onClick.AddListener(RescanAndRefreshAddonsList);
-		}
-		
-		// Always run full connectivity check (panel + list parent + ref layout), not only _panel
+		// Header Install/Refresh/… may only exist after CreatePanelIfNeeded — bind after setup.
 		CreatePanelIfNeeded();
-		// Prefab-assigned header buttons / recovered shells need tips even if OpenPanel never runs this session.
+		EnsureHeaderActionButtonsWired();
 		EnsureChromeTooltips();
 		// Synchronous finish: no yield — avoids racing other coroutines that call OpenPanel the same frame.
 		FinishStartBootstrap();
@@ -329,6 +318,42 @@ namespace spz {
 		if (!_addonsListParent.transform.IsChildOf(_panel.transform)) return false;
 		return _panel.transform.Find("StichAddonManager_v10") != null
 			&& _panel.transform.Find("FilterBar/FilterPills") != null;
+	}
+
+	/// <summary>
+	/// Connectivity: recovered shells keep <see cref="_panel"/> but drop button refs — rebind Install/Refresh/etc.
+	/// </summary>
+	void EnsureHeaderActionButtonsWired() {
+		if (_panel == null) return;
+		Transform header = _panel.transform.Find("Header");
+		if (header == null) return;
+
+		void Bind(string childName, ref Button field, UnityEngine.Events.UnityAction handler, string tip) {
+			Transform t = header.Find(childName);
+			if (t == null) return;
+			var btn = t.GetComponent<Button>();
+			if (btn == null) return;
+			field = btn;
+			btn.onClick.RemoveListener(handler);
+			btn.onClick.AddListener(handler);
+			btn.interactable = true;
+			if (btn.targetGraphic != null)
+				btn.targetGraphic.raycastTarget = true;
+			AttachTooltip(btn.gameObject, tip);
+		}
+
+		Bind("InstallButton", ref _installFromFile_button, OnInstallFromFile,
+			"Install an add-on from a .zip file into StreamingAssets/Addons.");
+		Bind("RefreshButton", ref _refresh_button, RescanAndRefreshAddonsList,
+			"Rescan the Addons folder and refresh this list (keeps enable state for add-ons still present).");
+		Bind("LoadAddonsNowButton", ref _loadAddonsNow_button, OnLoadAddonsNow,
+			"Ask Python to load every currently enabled add-on now (register / create panels).");
+		Bind("SaveAddonSettingsButton", ref _saveAddonSettings_button, OnSaveAddonSettings,
+			"Persist enabled add-ons and Preferences (e.g. Show in Command Ribbon) for the next launch.");
+		Bind("RunWithAddonsButton", ref _restartWithAddons_button, OnRestartWithAddons,
+			"Quit and relaunch StableProjectorz with the add-on Python server (Run_with_Addons).");
+		Bind("CloseButton", ref _closePanel_button, ClosePanel,
+			"Close the Add-on Manager.");
 	}
 
 		void OnRememberEnabledAddonsToggleChanged(bool remember) {
@@ -592,6 +617,7 @@ namespace spz {
 		if (_panel != null && _addonsListParent == null)
 			TryResolveAddonsListParentFromPanel();
 		if (AddonManagerPanelSetupIsComplete()) {
+			EnsureHeaderActionButtonsWired();
 			return;
 		}
 		if (_panel != null)
@@ -1062,6 +1088,7 @@ namespace spz {
 				enabled = true;
 
 			CreatePanelIfNeeded();
+			EnsureHeaderActionButtonsWired();
 			TryAddRememberPreferenceRowIfMissing();
 			TryEnsureSaveSettingsButton();
 			EnsureChromeTooltips();
@@ -1379,48 +1406,60 @@ namespace spz {
 				_restartWithAddons_button.interactable = true;
 		}
 
+		Coroutine _installFromFilePickCo;
+
 		/// <summary>
-		/// Opens file browser to select a zip file for installation
+		/// Opens file browser to select a zip / __init__.py for installation.
+		/// Uses deferred helper so the dialog is not opened on the same pointer-up as the button click.
 		/// </summary>
 		void OnInstallFromFile() {
-			FileBrowser.SetFilters(true, new FileBrowser.Filter("Add-on", "zip"));
-			FileBrowser.SetDefaultFilter("zip");
-
-			// SimpleFileBrowser prefab uses sortingOrder ~2016; our overlay uses AddonManagerCanvasSortOrder — browser would render underneath.
-			Canvas fbCanvas = FileBrowser.Instance != null ? FileBrowser.Instance.GetComponent<Canvas>() : null;
-			int prevFbSort = fbCanvas != null ? fbCanvas.sortingOrder : 0;
-			bool prevFbOverride = fbCanvas != null && fbCanvas.overrideSorting;
-			if (fbCanvas != null) {
-				fbCanvas.overrideSorting = true;
-				fbCanvas.sortingOrder = AddonManagerCanvasSortOrder + 100;
+			if (!isActiveAndEnabled || !gameObject.activeInHierarchy) {
+				ShowStatus("Add-on Manager is not ready to install.", false);
+				return;
 			}
-
-			void RestoreFileBrowserSortOrder() {
-				var inst = FileBrowser.Instance;
-				if (inst == null) return;
-				var c = inst.GetComponent<Canvas>();
-				if (c == null) return;
-				c.sortingOrder = prevFbSort;
-				c.overrideSorting = prevFbOverride;
-			}
-
-			FileBrowser.ShowLoadDialog((paths) => {
-				RestoreFileBrowserSortOrder();
-				if (paths != null && paths.Length > 0)
-					InstallAddon(paths[0]);
-			}, RestoreFileBrowserSortOrder, FileBrowser.PickMode.Files, false, null, null, "Install Add-on", "Install");
+			if (_installFromFilePickCo != null)
+				StopCoroutine(_installFromFilePickCo);
+			_installFromFilePickCo = StartCoroutine(AddonInstallFromFile_Helper.CoDeferredThenPickZipOrInitPy(
+				AddonManagerCanvasSortOrder,
+				path => {
+					_installFromFilePickCo = null;
+					InstallAddon(path);
+				},
+				() => { _installFromFilePickCo = null; },
+				ex => {
+					_installFromFilePickCo = null;
+					Debug.LogError($"[AddonManager_UI] Install file browser failed: {ex.Message}\n{ex.StackTrace}");
+					ShowStatus("Could not open Install file browser.", false);
+				}));
 		}
 		
 		/// <summary>
-		/// Installs an add-on from a zip file
+		/// Installs an add-on from a zip path or an <c>__init__.py</c> path (folder install).
 		/// </summary>
-		void InstallAddon(string zipPath) {
-			// Validate input
-			if (string.IsNullOrEmpty(zipPath)) {
+		void InstallAddon(string path) {
+			if (string.IsNullOrEmpty(path)) {
 				ShowStatus("Invalid file path", false);
 				return;
 			}
-			
+
+			string ext = Path.GetExtension(path);
+			if (!string.IsNullOrEmpty(ext) && ext.Equals(".py", StringComparison.OrdinalIgnoreCase)) {
+				string root = Path.GetDirectoryName(path);
+				if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) {
+					ShowStatus("Could not resolve add-on folder from __init__.py", false);
+					return;
+				}
+				ShowStatus("Installing add-on folder...", true);
+				string addonsPath = Path.Combine(Application.streamingAssetsPath, "Addons");
+				if (AddonInstaller_MGR.TryPublishAddonRootToStreamingAssets(root, addonsPath, out string addonId, out string err)) {
+					ShowStatus($"Add-on '{addonId}' installed successfully!", true);
+					RefreshAddonsList();
+				} else {
+					ShowStatus($"Installation failed: {err}", false);
+				}
+				return;
+			}
+
 			if (AddonInstaller_MGR.instance == null) {
 				ShowStatus("Add-on installer not available", false);
 				return;
@@ -1428,7 +1467,7 @@ namespace spz {
 			
 			ShowStatus("Installing add-on...", true);
 			
-			AddonInstaller_MGR.instance.InstallAddonFromZip(zipPath, (success, message, addonId) => {
+			AddonInstaller_MGR.instance.InstallAddonFromZip(path, (success, message, addonId) => {
 				if (success) {
 					ShowStatus($"Add-on '{addonId}' installed successfully!", true);
 					RefreshAddonsList();
