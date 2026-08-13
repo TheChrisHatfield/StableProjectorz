@@ -2038,10 +2038,8 @@ namespace spz {
 			if (expandT != null) {
 				var prefsOpen = item.transform.Find("PreferencesBody");
 				bool expanded = prefsOpen != null && prefsOpen.gameObject.activeSelf;
-				ApplyExpandChevronVisual(expandT, expanded, t.textPrimary);
-				var expandBtn = expandT.GetComponent<Button>();
-				if (expandBtn != null)
-					SpzUiThemeOps.ClearNonFaceRaycastsForTheme(expandBtn);
+				// Same chevron in Nomad and default — do not ClearNonFace/RestoreBoundChrome (that undoes the arrow).
+				ApplyExpandChevronVisual(expandT, expanded);
 			}
 			var toggle = (header != null ? header.Find("StatusToggle") : null)?.GetComponent<Toggle>();
 			if (toggle == null)
@@ -2276,9 +2274,6 @@ namespace spz {
 		/// <summary>
 		/// Ensure a real sprite exists before BoundChrome marks the face eligible — otherwise Restore SPZ rewinds null.
 		/// </summary>
-		/// <summary>
-		/// Ensure a real sprite exists before BoundChrome marks the face eligible — otherwise Restore SPZ rewinds null.
-		/// </summary>
 		static void AssignSolidFaceThenMarkRounded(Image img) {
 			if (img == null) return;
 			if (img.sprite == null) {
@@ -2289,12 +2284,14 @@ namespace spz {
 		}
 
 		const float ExpandChevronHit = 18f;
+		/// <summary>Fixed arrow tint — identical under Nomad and default Addon Manager (not theme textPrimary).</summary>
+		static readonly Color ExpandChevronArrowColor = new Color(0.88f, 0.88f, 0.92f, 1f);
 
 		/// <summary>
 		/// Prefs expand control: ChevronRight image — 0° = closed (▶), −90° = open (▼).
-		/// No solid square face (Nomad BoundChrome plate looked like a stop icon).
+		/// Theme-agnostic: same sprite, size, rotation, and color in Nomad and default.
 		/// </summary>
-		static void ApplyExpandChevronVisual(Transform expandT, bool expanded, Color arrowColor) {
+		static void ApplyExpandChevronVisual(Transform expandT, bool expanded) {
 			if (expandT == null) return;
 			SpzUiThemeOps.RestoreControlLineIconsUnder(expandT);
 			var le = expandT.GetComponent<LayoutElement>();
@@ -2344,16 +2341,21 @@ namespace spz {
 			}
 			var arrowImg = arrowT.GetComponent<Image>();
 			if (arrowImg != null) {
+				// Nomad HideAuthoredIconsUnder can disable preserveAspect glyphs — force visible again.
+				var hidden = arrowImg.GetComponent<SpzUiThemeHiddenGraphic>();
+				if (hidden != null) {
+					if (Application.isPlaying)
+						UnityEngine.Object.Destroy(hidden);
+					else
+						UnityEngine.Object.DestroyImmediate(hidden);
+				}
 				arrowImg.sprite = UiRuntimeSprites.GetLineIcon(StudioLineIcon.ChevronRight);
 				arrowImg.type = Image.Type.Simple;
 				arrowImg.preserveAspect = true;
 				arrowImg.raycastTarget = false;
 				arrowImg.enabled = true;
-				Color c = arrowColor;
-				c.a = 1f;
-				if (SpzUiThemeOps.ShouldRecolorBoundChrome)
-					SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(arrowImg);
-				arrowImg.color = c;
+				// Do not ApplyLineIconTint — that diverges Nomad iconTint vs default authored color.
+				arrowImg.color = ExpandChevronArrowColor;
 			}
 		}
 
@@ -2848,11 +2850,11 @@ namespace spz {
 			expandColors.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
 			expandColors.selectedColor = Color.white;
 			expandBtn.colors = expandColors;
-			ApplyExpandChevronVisual(expandObj.transform, false, new Color(0.88f, 0.88f, 0.92f, 1f));
+			ApplyExpandChevronVisual(expandObj.transform, false);
 			AttachTooltip(expandObj, "▶ Preferences closed — click to open. ▼ Preferences open — click to close.");
 
 			void SetExpandChevron(bool expanded) {
-				ApplyExpandChevronVisual(expandObj.transform, expanded, new Color(0.88f, 0.88f, 0.92f, 1f));
+				ApplyExpandChevronVisual(expandObj.transform, expanded);
 				AttachTooltip(expandObj, expanded
 					? "▼ Preferences open — click to close details."
 					: "▶ Preferences closed — click to open details.");

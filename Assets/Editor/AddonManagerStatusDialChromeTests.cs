@@ -135,10 +135,16 @@ public sealed class AddonManagerStatusDialChromeTests {
 			"Prefs expand must use ChevronRight image arrow (not a solid square plate).");
 		Assert.That(src, Does.Contain("ExpandChevronHit = 18f"),
 			"Expand arrow hit target must be large enough to read.");
+		Assert.That(src, Does.Contain("ExpandChevronArrowColor"),
+			"Chevron tint must be fixed so Nomad and default match.");
 		Assert.That(src, Does.Contain("expanded ? -90f : 0f"),
 			"Arrow faces right when closed and down (−90°) when preferences are open.");
 		Assert.That(src, Does.Contain("StudioLineIcon.ChevronRight"),
 			"Expand control must use line-icon chevron, not Expand-frame square.");
+		Assert.That(src, Does.Not.Contain("ApplyExpandChevronVisual(expandT, expanded, t.textPrimary)"),
+			"Do not theme the chevron from textPrimary (Nomad vs default diverge).");
+		Assert.That(src, Does.Contain("Do not ApplyLineIconTint"),
+			"LineIconTint would recolor Nomad chevrons differently from default.");
 		Assert.That(src, Does.Contain("PreferencesCard"),
 			"Inset PreferencesCard overlay (not full-bleed).");
 		Assert.That(src, Does.Contain("PrefsCardWidthFrac = 0.45f"),
