@@ -462,6 +462,12 @@ namespace spz {
 			tLE.preferredHeight = RememberButtonHeight;
 			tLE.minHeight = RememberButtonHeight;
 			tLE.flexibleHeight = 0f;
+			var toggleRt = toggleContainer.GetComponent<RectTransform>();
+			if (toggleRt == null)
+				toggleRt = toggleContainer.AddComponent<RectTransform>();
+			toggleRt.anchorMin = toggleRt.anchorMax = new Vector2(0f, 0.5f);
+			toggleRt.pivot = new Vector2(0f, 0.5f);
+			toggleRt.sizeDelta = new Vector2(RememberButtonWidth, RememberButtonHeight);
 			var bgI = toggleContainer.AddComponent<UnityEngine.UI.Image>();
 			bgI.sprite = UiRuntimeSprites.SolidRect;
 			bgI.type = Image.Type.Simple;
@@ -958,6 +964,7 @@ namespace spz {
 		statusLE.preferredHeight = 36f;
 		statusLE.minHeight = 28f;
 		statusLE.flexibleWidth = 1f;
+		statusLE.flexibleHeight = 0f;
 		_statusText = statusObj.AddComponent<TextMeshProUGUI>();
 		_statusText.text = "";
 		_statusText.fontSize = 12f;
@@ -1205,6 +1212,9 @@ namespace spz {
 			} catch (System.Exception e) {
 				Debug.LogError($"[AddonManager_UI] RefreshAddonsList threw: {e.Message}\n{e.StackTrace}");
 			}
+			// List/footer layout is wrong until Canvas rebuilds — without this, Remember is a giant
+			// square overlapping Status until the user clicks.
+			ScheduleFlushAddonManagerShellLayout();
 		}
 		
 		/// <summary>
@@ -1681,13 +1691,8 @@ namespace spz {
 					ShowStatus($"Showing {filteredAddons.Count} of {addons.Count} add-on(s) ({enabledCount} enabled, {disabledCount} disabled) — Filter: {filterText}", true);
 			}
 			ApplyThemeTokens();
+			ScheduleFlushAddonManagerShellLayout();
 		}
-
-		/// <summary>
-		/// Maps REF palette roles to semantic theme tokens on known manager widgets only.
-		/// Re-run after list rebuilds; does not touch animation or layout.
-		/// </summary>
-		void ApplyThemeTokens() {
 			if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 				_statusOk = kAuthoredStatusOk;
 				_statusFail = kAuthoredStatusFail;
@@ -1905,7 +1910,13 @@ namespace spz {
 			var rt = toggle.transform as RectTransform;
 			if (rt != null) {
 				SpzUiThemeOps.SnapshotToolFaceLayout(rt);
+				// Fixed left-middle box — stretch anchors under panel forceExpandWidth made a huge square
+				// until a click rebuilt layout.
+				rt.anchorMin = rt.anchorMax = new Vector2(0f, 0.5f);
+				rt.pivot = new Vector2(0f, 0.5f);
+				rt.anchoredPosition = Vector2.zero;
 				rt.sizeDelta = new Vector2(RememberButtonWidth, RememberButtonHeight);
+				rt.localScale = Vector3.one;
 			}
 			var row = toggle.transform.parent;
 			if (row != null) {
@@ -1913,16 +1924,71 @@ namespace spz {
 				if (rowLe != null) {
 					rowLe.preferredHeight = RememberButtonHeight + 4f;
 					rowLe.minHeight = RememberButtonHeight + 2f;
+					rowLe.preferredWidth = RememberButtonWidth;
+					rowLe.minWidth = RememberButtonWidth;
 					rowLe.flexibleWidth = 0f;
 					rowLe.flexibleHeight = 0f;
+				}
+				var rowRt = row as RectTransform;
+				if (rowRt != null) {
+					// Row stays top-stretch horizontally for VLG width, but never grow taller than LE.
+					rowRt.anchorMin = new Vector2(0f, 1f);
+					rowRt.anchorMax = new Vector2(1f, 1f);
+					rowRt.pivot = new Vector2(0.5f, 1f);
 				}
 				var hlg = row.GetComponent<HorizontalLayoutGroup>();
 				if (hlg != null) {
 					hlg.childControlHeight = false;
+					hlg.childControlWidth = false;
 					hlg.childForceExpandHeight = false;
 					hlg.childForceExpandWidth = false;
+					hlg.childAlignment = TextAnchor.MiddleLeft;
 				}
 			}
+		}
+
+		/// <summary>
+		/// Panel VLG + list CSF need a full rebuild after open/refresh — otherwise Remember/Status
+		/// overlap as a giant square until the user clicks (which forces a canvas layout pass).
+		/// </summary>
+		void FlushAddonManagerShellLayout() {
+			if (_panel == null) return;
+			if (_rememberEnabledAddonToggle != null)
+				LockRememberToggleSquare(_rememberEnabledAddonToggle);
+			if (_statusText != null) {
+				var statusLe = _statusText.GetComponent<LayoutElement>();
+				if (statusLe != null) {
+					statusLe.preferredHeight = 36f;
+					statusLe.minHeight = 28f;
+					statusLe.flexibleHeight = 0f;
+					statusLe.flexibleWidth = 1f;
+				}
+			}
+			var panelRect = _panel.GetComponent<RectTransform>();
+			if (panelRect != null)
+				LayoutRebuilder.ForceRebuildLayoutImmediate(panelRect);
+			if (_addonsListParent != null)
+				RebuildAddonListScrollLayout(null);
+			Canvas.ForceUpdateCanvases();
+		}
+
+		Coroutine _flushShellLayoutCo;
+
+		IEnumerator CoFlushAddonManagerShellLayoutNextFrames() {
+			// List ContentSizeFitter settles a frame after item create; flush twice.
+			yield return null;
+			FlushAddonManagerShellLayout();
+			yield return null;
+			FlushAddonManagerShellLayout();
+			_flushShellLayoutCo = null;
+		}
+
+		void ScheduleFlushAddonManagerShellLayout() {
+			FlushAddonManagerShellLayout();
+			if (!isActiveAndEnabled || !gameObject.activeInHierarchy) return;
+			if (_flushShellLayoutCo != null)
+				StopCoroutine(_flushShellLayoutCo);
+			_flushShellLayoutCo = StartCoroutine(CoFlushAddonManagerShellLayoutNextFrames());
 		}
 
 		static void CaptureBasePt(ref float stored, TextMeshProUGUI tmp, float fallback) {

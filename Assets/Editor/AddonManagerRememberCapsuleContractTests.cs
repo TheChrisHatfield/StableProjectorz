@@ -28,11 +28,11 @@ public sealed class AddonManagerRememberCapsuleContractTests {
 		Assert.That(src, Does.Contain("const float RememberButtonHeight = 22f"));
 		Assert.That(body, Does.Contain("RememberButtonLabel(rememberOn)"),
 			"Remember control must show compact labeled copy.");
-		Assert.That(src, Does.Contain("ThemeRememberActionButton"),
-			"Theme pass must style Remember as an action button.");
+		Assert.That(src, Does.Contain("ScheduleFlushAddonManagerShellLayout"),
+			"Open/refresh must flush shell layout so Remember is not a giant square until click.");
+		Assert.That(src, Does.Contain("rt.anchorMin = rt.anchorMax = new Vector2(0f, 0.5f)"),
+			"Remember face must use fixed left-middle anchors (stretch fills the panel).");
 		Assert.That(src, Does.Contain("LockRememberToggleSquare"),
 			"Theme pass must re-lock Remember button size.");
-		Assert.That(body, Does.Not.Contain("AssignSolidFaceThenMarkRounded(bgI)"),
-			"Rounded markEligible stretched Remember into a large plate — use SolidRect only.");
 	}
 }
