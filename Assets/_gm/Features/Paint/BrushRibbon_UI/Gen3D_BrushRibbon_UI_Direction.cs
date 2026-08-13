@@ -30,10 +30,10 @@ namespace spz {
 	        if(!isOn){ return; } //toggles are in a mutually-exclusive group, so care only if ON.
 	        // Don't allow if we are currently dragging on the screen, painting.
 	        // Brush stroke must remain of the same color until the mouse button is released.
-	        if(Background_Painter.instance._isPainting){ return; }
+	        if(Background_Painter.instance != null && Background_Painter.instance._isPainting){ return; }
 
 	        bool isPositive =  toggle == _brushAdd_Toggle;
-	        Cursor_UI.instance.SetCursorColor( isPositive? Color.white : Color.black );
+	        Cursor_UI.instance?.SetCursorColor( isPositive? Color.white : Color.black );
 	        BrushRibbon_UI_Direction.RaiseDirectionToggleChanged();
 	    }
 
