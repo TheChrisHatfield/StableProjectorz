@@ -21,11 +21,14 @@ public sealed class ThemePassColorsServClearNonFaceTests {
 	}
 
 	[Test]
-	public void RestartWebui_LaunchGetsLineIcon() {
+	public void RestartWebui_LaunchDoesNotStampBullseyeOverlay() {
 		string path = Path.Combine(Application.dataPath, "_gm", "Features", "StableDiffusion", "Webui", "RestartTheWebui.cs");
 		Assert.That(File.Exists(path), Is.True, path);
 		string src = File.ReadAllText(path);
-		Assert.That(src, Does.Contain("StudioLineIcon.Bullseye"));
+		Assert.That(src, Does.Not.Contain("StudioLineIcon.Bullseye"));
+		Assert.That(src, Does.Contain("StudioLineIcon.Folder"));
+		Assert.That(src, Does.Contain("never stamp Bullseye"));
+		Assert.That(src, Does.Contain("MonolithLineIcon"));
 	}
 
 	[Test]
