@@ -127,6 +127,10 @@ namespace spz {
 	    }
 
 	    void LaunchTask(SD_3D_Mesh mesh3d){ // Begins a task for the mesh3d.
+	        if (mesh3d == null || mesh3d._sharedMesh == null) {
+	            Interlocked.Decrement(ref _runningTaskCount);
+	            return;
+	        }
 	        //access all unity properties now, won't be allowed to access them inside Task:
 	        Mesh sharedMesh = mesh3d._sharedMesh;
 	        List<Vector2> uvs = new List<Vector2>(sharedMesh.vertexCount);
@@ -135,11 +139,20 @@ namespace spz {
 	        var task =  Task.Run(() => { return CountUDIMsForMesh(uvs); });
 
 	        task.ContinueWith(t => {
-	            mesh3d.InitUDIMs(t.Result);
-	            foreach (UDIM_Sector udim in t.Result){
-	                _allKnownUdims_HS.Add(udim);
+	            try {
+	                if (t.IsFaulted || t.IsCanceled) {
+	                    UnityEngine.Debug.LogWarning(
+	                        "[UDIMs_Helper] UDIM scan task failed: " + (t.Exception?.GetBaseException().Message ?? t.Status.ToString()));
+	                    return;
+	                }
+	                mesh3d.InitUDIMs(t.Result);
+	                foreach (UDIM_Sector udim in t.Result){
+	                    _allKnownUdims_HS.Add(udim);
+	                }
+	            } finally {
+	                // Always decrement — faulted ContinueWith used to hang ManageTaskExecution forever.
+	                Interlocked.Decrement(ref _runningTaskCount);
 	            }
-	            Interlocked.Decrement(ref _runningTaskCount);
 	        }, TaskScheduler.FromCurrentSynchronizationContext());
 	    }
 
