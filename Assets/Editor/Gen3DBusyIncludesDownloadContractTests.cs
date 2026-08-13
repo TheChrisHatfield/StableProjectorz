@@ -37,4 +37,16 @@ public sealed class Gen3DBusyIncludesDownloadContractTests {
 		Assert.That(body, Does.Contain("dim_gen_3d"),
 			"null-API unwind must be scoped to 3D mode so SD cancel is not stolen");
 	}
+
+	[Test]
+	public void Trigger3DGeneration_Source_RefusesWhileGenerateButtonsBusy() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "3D Generate", "Gen3D_MGR.cs");
+		string src = File.ReadAllText(path);
+		int i = src.IndexOf("public bool Trigger3DGeneration()", System.StringComparison.Ordinal);
+		Assert.That(i, Is.GreaterThanOrEqualTo(0));
+		string body = src.Substring(i, System.Math.Min(500, src.Length - i));
+		Assert.That(body, Does.Contain("GenerateButtons_UI.isGenerating"));
+		Assert.That(body, Does.Contain("return false"));
+	}
 }

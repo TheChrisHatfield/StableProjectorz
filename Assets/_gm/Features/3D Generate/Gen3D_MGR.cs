@@ -82,6 +82,8 @@ namespace spz {
 	    /// </summary>
 	    public bool Trigger3DGeneration(){
 	        if( !isCanStart_make_meshes_and_tex() ){ return false; }
+	        // FastPath / API can race past button gates — refuse while Cancel chrome still owns a job.
+	        if (GenerateButtons_UI.isGenerating){ return false; }
 	        GenerateButtons_UI.OnConfirmed_StartedGenerate();
 	        Dictionary<string,object> all_values = gather_all_ui_inputs();
 	        all_values.Add("generate_what", "make_meshes_and_tex");

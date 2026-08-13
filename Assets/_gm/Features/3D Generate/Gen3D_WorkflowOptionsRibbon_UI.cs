@@ -143,7 +143,7 @@ namespace spz {
 	                                  KeyMousePenInput.isLMBreleasedThisFrame() &&
 	                                  KeyMousePenInput.isKey_alt_pressed() == false &&
 	                                  KeyMousePenInput.isKey_CtrlOrCommand_pressed() == false &&
-	                                  MainViewport_UI.instance.isCursorHoveringMe();
+	                                  (MainViewport_UI.instance?.isCursorHoveringMe() ?? false);
 	        if(wantScreenshot && Screenshot_MGR.instance.isPrefferCaptureSnippets()==false){
 	            string msg = "Screenshots are possible only if a 3D generator is connected.";
 	            Viewport_StatusText.instance.ShowStatusText(msg, false, 3, false);
