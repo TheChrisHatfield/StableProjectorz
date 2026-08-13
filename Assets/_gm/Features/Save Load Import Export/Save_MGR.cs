@@ -51,16 +51,23 @@ namespace spz {
 	        }
 
 	        void OnHaveAlbedo( Dictionary<Texture2D,UDIM_Sector> albedoDict ){
-	            var mgr = GenData2D_Archive.instance;
-	            var uvTex  = mgr.FindAll_GenData_ofKind( GenerationData_Kind.UvTextures_FromFile );
-	            var uvBrush= mgr.FindAll_GenData_ofKind( GenerationData_Kind.UvPaintedBrush );
-	            var prTex  = mgr.FindAll_GenData_ofKind( GenerationData_Kind.SD_ProjTextures );
-	            var allTex = uvTex.Union(prTex).Union(uvBrush);
-	            if(oldIcons_survive == false){ 
-	                foreach (GenData2D genDat in allTex){  mgr.DisposeGenerationData(genDat.total_GUID);  }
+	            try {
+	                var mgr = GenData2D_Archive.instance;
+	                if (mgr == null) {
+	                    onHaveAlbedo?.Invoke(albedoDict);
+	                    return;
+	                }
+	                var uvTex  = mgr.FindAll_GenData_ofKind( GenerationData_Kind.UvTextures_FromFile );
+	                var uvBrush= mgr.FindAll_GenData_ofKind( GenerationData_Kind.UvPaintedBrush );
+	                var prTex  = mgr.FindAll_GenData_ofKind( GenerationData_Kind.SD_ProjTextures );
+	                var allTex = uvTex.Union(prTex).Union(uvBrush);
+	                if(oldIcons_survive == false){ 
+	                    foreach (GenData2D genDat in allTex){  mgr.DisposeGenerationData(genDat.total_GUID);  }
+	                }
+	                onHaveAlbedo?.Invoke(albedoDict);
+	            } finally {
+	                _isSaving = false;
 	            }
-	            onHaveAlbedo(albedoDict);
-	            _isSaving = false;
 	        };
 	    }
 
