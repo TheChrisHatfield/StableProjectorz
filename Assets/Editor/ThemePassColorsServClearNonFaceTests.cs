@@ -32,11 +32,13 @@ public sealed class ThemePassColorsServClearNonFaceTests {
 	}
 
 	[Test]
-	public void ConnectionOpen_GetsGlobeLineIcon() {
+	public void ConnectionOpen_DoesNotStampGlobeOverlay() {
 		string path = Path.Combine(Application.dataPath, "_gm", "Features", "Connection", "ConnectionPanel_UI.cs");
 		Assert.That(File.Exists(path), Is.True, path);
 		string src = File.ReadAllText(path);
-		Assert.That(src, Does.Contain("ApplyControlLineIconLeading(_openPanel_button.transform, StudioLineIcon.Globe"));
+		Assert.That(src, Does.Not.Contain("StudioLineIcon.Globe"));
+		Assert.That(src, Does.Contain("Never stamp Globe Monolith"));
+		Assert.That(src, Does.Contain("MonolithLineIcon"));
 	}
 
 	[Test]
