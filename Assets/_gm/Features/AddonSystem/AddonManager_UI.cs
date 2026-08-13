@@ -1117,6 +1117,8 @@ namespace spz {
 		/// Opens the add-on manager panel
 		/// </summary>
 		public void OpenPanel() {
+			// Clear any stuck FileBrowser GlobalClickBlocker / disabled manager raycaster from a prior Install.
+			AddonInstallFromFile_Helper.AbortInstallDialogAndRestoreUi();
 			bool closeSettingsAfterShow = s_closeSettingsWhenModalShown;
 			// Disabled MB cannot run StartCoroutine; Start() may never have run → CreatePanelIfNeeded only here.
 			if (!gameObject.activeSelf)
@@ -1222,6 +1224,14 @@ namespace spz {
 		/// Closes the add-on manager panel
 		/// </summary>
 		public void ClosePanel() {
+			// FileBrowser locks GlobalClickBlocker while open — always dismiss it on close or the whole app stays unclickable.
+			AddonInstallFromFile_Helper.AbortInstallDialogAndRestoreUi();
+			if (_installFromFilePickCo != null) {
+				StopCoroutine(_installFromFilePickCo);
+				if (s_deferredOpenHost != null)
+					s_deferredOpenHost.StopCoroutine(_installFromFilePickCo);
+				_installFromFilePickCo = null;
+			}
 			string closeWarn = null;
 			if (_draftDirty) {
 				// Show-in-Ribbon was applied live — revert unsaved ribbon prefs so a later Save cannot persist a "discarded" flip.
@@ -1476,14 +1486,17 @@ namespace spz {
 				AddonManagerCanvasSortOrder,
 				path => {
 					_installFromFilePickCo = null;
+					AddonInstallFromFile_Helper.EnsureAddonManagerCanvasRaycastersEnabled();
 					InstallAddon(path);
 				},
 				() => {
 					_installFromFilePickCo = null;
+					AddonInstallFromFile_Helper.EnsureAddonManagerCanvasRaycastersEnabled();
 					ShowStatus("Install cancelled.", false);
 				},
 				ex => {
 					_installFromFilePickCo = null;
+					AddonInstallFromFile_Helper.AbortInstallDialogAndRestoreUi();
 					Debug.LogError($"[AddonManager_UI] Install file browser failed: {ex.Message}\n{ex.StackTrace}");
 					ShowStatus("Could not open Install file browser: " + ex.Message, false);
 				},
