@@ -314,11 +314,34 @@ namespace spz {
 	/// True when <see cref="_panel"/>, <see cref="_addonsListParent"/>, and reference chrome are wired so
 	/// <see cref="RefreshAddonsList"/> can run (connectivity rule: do not skip setup when only one ref exists).
 	/// </summary>
+	const string PanelShellVersionMarker = "StichAddonManager_v11";
+
 	bool AddonManagerPanelSetupIsComplete() {
 		if (_panel == null || _addonsListParent == null) return false;
 		if (!_addonsListParent.transform.IsChildOf(_panel.transform)) return false;
-		return _panel.transform.Find("StichAddonManager_v10") != null
-			&& _panel.transform.Find("FilterBar/FilterPills") != null;
+		// v11: RectMask2D list (no Mask white bar). Older v10 shells must rebuild.
+		return _panel.transform.Find(PanelShellVersionMarker) != null
+			&& _panel.transform.Find("FilterBar/FilterPills") != null
+			&& ListScrollViewportIsHealthy();
+	}
+
+	static Transform FindListViewport(Transform panel) {
+		if (panel == null) return null;
+		Transform viewport = panel.Find("ScrollView/Viewport");
+		if (viewport == null)
+			viewport = panel.Find("ListArea/ScrollView/Viewport");
+		return viewport;
+	}
+
+	bool ListScrollViewportIsHealthy() {
+		Transform viewport = FindListViewport(_panel != null ? _panel.transform : null);
+		if (viewport == null) return false;
+		if (viewport.GetComponent<Mask>() != null) return false;
+		if (viewport.GetComponent<RectMask2D>() == null) return false;
+		var img = viewport.GetComponent<Image>();
+		// Enabled opaque/near-opaque Viewport Image is the white vertical bar bug.
+		if (img != null && img.enabled && img.color.a > 0.02f) return false;
+		return true;
 	}
 
 	/// <summary>
@@ -359,13 +382,11 @@ namespace spz {
 
 		/// <summary>
 		/// Legacy shells used Mask+Image on Viewport — BoundChrome/SolidSquare turns that into a white vertical bar.
-		/// Migrate in place to RectMask2D + clear hit graphic (same as create path).
+		/// Disable any Viewport Image (RectMask2D does not need it); put a clear raycast plate on ScrollView instead.
 		/// </summary>
 		void EnsureListScrollViewportHealthy() {
 			if (_panel == null) return;
-			Transform viewport = _panel.transform.Find("ScrollView/Viewport");
-			if (viewport == null)
-				viewport = _panel.transform.Find("ListArea/ScrollView/Viewport");
+			Transform viewport = FindListViewport(_panel.transform);
 			if (viewport == null) return;
 
 			var legacyMask = viewport.GetComponent<Mask>();
@@ -376,15 +397,43 @@ namespace spz {
 				viewport.gameObject.AddComponent<RectMask2D>();
 
 			var img = viewport.GetComponent<Image>();
-			if (img == null) {
-				img = viewport.gameObject.AddComponent<Image>();
+			if (img != null) {
+				img.sprite = UiRuntimeSprites.SolidRect;
+				img.type = Image.Type.Simple;
+				img.color = Color.clear;
+				img.raycastTarget = false;
+				// Critical: even alpha~0 SolidRect can draw a white plate under some UI materials.
+				img.enabled = false;
 			}
-			img.sprite = UiRuntimeSprites.SolidRect;
-			img.type = Image.Type.Simple;
-			img.color = Color.clear;
-			img.raycastTarget = true;
-			// Never leave showMaskGraphic-style white stencil plate.
-			img.enabled = true;
+
+			Transform scrollT = viewport.parent;
+			if (scrollT != null) {
+				var scrollHit = scrollT.GetComponent<Image>();
+				if (scrollHit == null)
+					scrollHit = scrollT.gameObject.AddComponent<Image>();
+				scrollHit.sprite = UiRuntimeSprites.SolidRect;
+				scrollHit.type = Image.Type.Simple;
+				scrollHit.color = Color.clear;
+				scrollHit.raycastTarget = true;
+				scrollHit.enabled = true;
+			}
+
+			// Scrub any other opaque white plates left under the scroll hierarchy (legacy scrollbar faces, etc.).
+			if (scrollT != null) {
+				foreach (var childImg in scrollT.GetComponentsInChildren<Image>(true)) {
+					if (childImg == null) continue;
+					if (childImg.transform == scrollT) continue;
+					if (childImg.transform.IsChildOf(viewport) && childImg.transform != viewport)
+						continue; // list item chrome
+					string n = childImg.gameObject.name ?? "";
+					if (n == "Viewport" || n.IndexOf("Scrollbar", StringComparison.OrdinalIgnoreCase) >= 0) {
+						childImg.color = Color.clear;
+						childImg.enabled = n != "Viewport" ? childImg.enabled : false;
+						if (n.IndexOf("Scrollbar", StringComparison.OrdinalIgnoreCase) >= 0)
+							childImg.gameObject.SetActive(false);
+					}
+				}
+			}
 		}
 
 		void OnRememberEnabledAddonsToggleChanged(bool remember) {
@@ -733,7 +782,7 @@ namespace spz {
 		verticalLayout.childForceExpandHeight = false;
 		verticalLayout.childForceExpandWidth = true;
 
-		var versionMarker = new GameObject("StichAddonManager_v10");
+		var versionMarker = new GameObject(PanelShellVersionMarker);
 		versionMarker.transform.SetParent(panelObj.transform, false);
 		var markerLE = versionMarker.AddComponent<LayoutElement>();
 		markerLE.ignoreLayout = true;
@@ -909,9 +958,14 @@ namespace spz {
 		scrollView.movementType = ScrollRect.MovementType.Clamped;
 		scrollView.inertia = true;
 		scrollView.decelerationRate = 0.135f;
+		// Clear hit plate on ScrollView — never put an enabled Image on Viewport (white bar bug).
+		var scrollHit = scrollViewObj.AddComponent<UnityEngine.UI.Image>();
+		scrollHit.sprite = UiRuntimeSprites.SolidRect;
+		scrollHit.type = Image.Type.Simple;
+		scrollHit.color = Color.clear;
+		scrollHit.raycastTarget = true;
 
-		// Nested Viewport — RectMask2D clips the list. Do NOT use Mask+Image: Nomad/default
-		// SolidSquare on the mask graphic paints a white vertical bar over the add-on list.
+		// Nested Viewport — RectMask2D only (no Mask, no enabled Image).
 		GameObject viewportObj = new GameObject("Viewport");
 		viewportObj.layer = UILayer;
 		viewportObj.transform.SetParent(scrollViewObj.transform, false);
@@ -920,15 +974,7 @@ namespace spz {
 		viewportRect.anchorMax = Vector2.one;
 		viewportRect.sizeDelta = Vector2.zero;
 		viewportRect.pivot = new Vector2(0.5f, 0.5f);
-		var viewportImage = viewportObj.AddComponent<UnityEngine.UI.Image>();
-		viewportImage.sprite = UiRuntimeSprites.SolidRect;
-		viewportImage.type = Image.Type.Simple;
-		viewportImage.color = Color.clear;
-		viewportImage.raycastTarget = true;
-		if (viewportObj.GetComponent<Mask>() != null)
-			Destroy(viewportObj.GetComponent<Mask>());
-		if (viewportObj.GetComponent<RectMask2D>() == null)
-			viewportObj.AddComponent<RectMask2D>();
+		viewportObj.AddComponent<RectMask2D>();
 
 		GameObject contentObj = new GameObject("Content");
 		contentObj.layer = UILayer;
@@ -1682,13 +1728,8 @@ namespace spz {
 					ShowStatus($"Showing {filteredAddons.Count} of {addons.Count} add-on(s) ({enabledCount} enabled, {disabledCount} disabled) — Filter: {filterText}", true);
 			}
 			ApplyThemeTokens();
+			EnsureListScrollViewportHealthy();
 		}
-
-		/// <summary>
-		/// Maps REF palette roles to semantic theme tokens on known manager widgets only.
-		/// Re-run after list rebuilds; does not touch animation or layout.
-		/// </summary>
-		void ApplyThemeTokens() {
 			if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 				_statusOk = kAuthoredStatusOk;
 				_statusFail = kAuthoredStatusFail;
