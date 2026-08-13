@@ -1865,7 +1865,8 @@ namespace spz {
 
 		/// <summary>
 		/// Keep the known-good Mask viewport usable: BoundChrome can repaint Viewport Image white.
-		/// Do not swap to RectMask2D or disable the Image — that emptied the list (v11 mole).
+		/// Keep Mask Image enabled (raycast/stencil source); add RectMask2D to stop scroll ghost plates.
+		/// Do not disable the Viewport Image (v11 mole emptied the list).
 		/// </summary>
 		void ProtectListViewportMaskGraphic() {
 			if (_panel == null) return;
