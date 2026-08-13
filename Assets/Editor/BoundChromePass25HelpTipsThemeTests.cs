@@ -20,4 +20,16 @@ public sealed class BoundChromePass25HelpTipsThemeTests {
 		Assert.That(src, Does.Contain("RestoreBoundChromeUnder(_helpTipsPanel.transform)"));
 		Assert.That(src, Does.Contain("IsHelpTipAccentLine"));
 	}
+
+	[Test]
+	public void ViewportStatusText_HelpTipsLeaveSkipsFooterOwnershipAndResyncsOnOpen() {
+		string path = Path.GetFullPath(Path.Combine(
+			Application.dataPath,
+			"_gm/Features/Viewport/Main Viewport/Viewport_StatusText.cs"));
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("HideMonolithUnder(_helpTipsPanel.transform)"));
+		Assert.That(src, Does.Contain("ApplyBoundChromeReadableBodyTmp"));
+		Assert.That(src, Does.Contain("GetComponentInParent<Button>(true)"));
+		Assert.That(src, Does.Contain("Sync Nomad↔default when tips were inactive during ThemeChanged"));
+	}
 }
