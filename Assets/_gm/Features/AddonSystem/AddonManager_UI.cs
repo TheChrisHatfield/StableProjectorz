@@ -396,8 +396,10 @@ namespace spz {
 			}
 			Transform found = _panel.transform.Find("RememberEnabledRow");
 			if (found != null) {
-				// Old chrome: tiny unmarked corner checkbox + separate label — rebuild as labeled button.
-				if (found.Find("ToggleWrap/Label") == null) {
+				// Old chrome: tiny unmarked corner checkbox, or oversized 210px capsule — rebuild compact rectangle.
+				var wrapLe = found.Find("ToggleWrap")?.GetComponent<LayoutElement>();
+				bool staleSize = wrapLe != null && wrapLe.preferredWidth > RememberButtonWidth + 0.5f;
+				if (found.Find("ToggleWrap/Label") == null || staleSize) {
 					UnityEngine.Object.Destroy(found.gameObject);
 					found = null;
 					_rememberEnabledAddonToggle = null;
@@ -431,14 +433,19 @@ namespace spz {
 			var row = new GameObject("RememberEnabledRow");
 			row.layer = _panel != null ? _panel.gameObject.layer : 5;
 			var rowLE = row.AddComponent<LayoutElement>();
-			rowLE.preferredHeight = 34f;
-			rowLE.minHeight = 30f;
+			// Compact footer control — not a wide capsule.
+			rowLE.preferredHeight = 26f;
+			rowLE.minHeight = 24f;
+			rowLE.flexibleWidth = 0f;
+			rowLE.flexibleHeight = 0f;
 			var rowHit = row.AddComponent<Image>();
+			rowHit.sprite = UiRuntimeSprites.SolidRect;
+			rowHit.type = Image.Type.Simple;
 			rowHit.color = Color.clear;
-			rowHit.raycastTarget = true;
+			rowHit.raycastTarget = false;
 			var rowH = row.AddComponent<HorizontalLayoutGroup>();
 			rowH.spacing = grid;
-			rowH.padding = new RectOffset(0, 0, 2, 2);
+			rowH.padding = new RectOffset(0, 0, 1, 1);
 			rowH.childAlignment = TextAnchor.MiddleLeft;
 			rowH.childControlWidth = true;
 			// false: Nomad BoundChrome + force-expand stretched the Remember face into a green capsule.
@@ -446,18 +453,19 @@ namespace spz {
 			rowH.childForceExpandWidth = false;
 			rowH.childForceExpandHeight = false;
 
-			// Visible action button (not a tiny unmarked checkbox in the corner).
+			// Small labeled rectangle (not a full-width plate).
 			var toggleContainer = new GameObject("ToggleWrap");
 			toggleContainer.transform.SetParent(row.transform, false);
 			var tLE = toggleContainer.AddComponent<LayoutElement>();
-			tLE.preferredWidth = 210f;
-			tLE.minWidth = 180f;
+			tLE.preferredWidth = RememberButtonWidth;
+			tLE.minWidth = RememberButtonWidth;
 			tLE.flexibleWidth = 0f;
-			tLE.preferredHeight = 28f;
-			tLE.minHeight = 28f;
+			tLE.preferredHeight = RememberButtonHeight;
+			tLE.minHeight = RememberButtonHeight;
 			tLE.flexibleHeight = 0f;
 			var bgI = toggleContainer.AddComponent<UnityEngine.UI.Image>();
-			AssignSolidFaceThenMarkRounded(bgI);
+			bgI.sprite = UiRuntimeSprites.SolidRect;
+			bgI.type = Image.Type.Simple;
 			bgI.raycastTarget = true;
 			var ck = new GameObject("Checkmark");
 			ck.transform.SetParent(toggleContainer.transform, false);
@@ -466,8 +474,8 @@ namespace spz {
 			ckR.anchorMin = new Vector2(0f, 0.5f);
 			ckR.anchorMax = new Vector2(0f, 0.5f);
 			ckR.pivot = new Vector2(0.5f, 0.5f);
-			ckR.anchoredPosition = new Vector2(14f, 0f);
-			ckR.sizeDelta = new Vector2(12f, 12f);
+			ckR.anchoredPosition = new Vector2(10f, 0f);
+			ckR.sizeDelta = new Vector2(8f, 8f);
 			var ckI = ck.AddComponent<UnityEngine.UI.Image>();
 			ckI.sprite = UiRuntimeSprites.CircleFilled;
 			ckI.type = Image.Type.Simple;
@@ -479,12 +487,12 @@ namespace spz {
 			var labelRt = labelObj.AddComponent<RectTransform>();
 			labelRt.anchorMin = Vector2.zero;
 			labelRt.anchorMax = Vector2.one;
-			labelRt.offsetMin = new Vector2(28f, 0f);
-			labelRt.offsetMax = new Vector2(-8f, 0f);
+			labelRt.offsetMin = new Vector2(20f, 0f);
+			labelRt.offsetMax = new Vector2(-6f, 0f);
 			var labelT = labelObj.AddComponent<TextMeshProUGUI>();
 			bool rememberOn = Addon_MGR.GetRememberEnabledAddonsPreference();
-			labelT.text = rememberOn ? "Remembering next launch" : "Remember next launch";
-			labelT.fontSize = 12f;
+			labelT.text = RememberButtonLabel(rememberOn);
+			labelT.fontSize = 11f;
 			labelT.alignment = TextAlignmentOptions.MidlineLeft;
 			labelT.enableWordWrapping = false;
 			labelT.overflowMode = TextOverflowModes.Ellipsis;
@@ -502,8 +510,11 @@ namespace spz {
 			return row;
 		}
 
+		const float RememberButtonWidth = 118f;
+		const float RememberButtonHeight = 22f;
+
 		static string RememberButtonLabel(bool rememberOn) {
-			return rememberOn ? "Remembering next launch" : "Remember next launch";
+			return rememberOn ? "Remembering" : "Remember";
 		}
 
 		void ThemeRememberActionButton(Toggle toggle, bool isOn) {
@@ -511,11 +522,22 @@ namespace spz {
 			LockRememberToggleSquare(toggle);
 			var face = toggle.targetGraphic as Image;
 			if (face != null) {
-				AssignSolidFaceThenMarkRounded(face);
+				// Hard rectangle — avoid rounded markEligible (Nomad stretched it into a large capsule).
+				face.sprite = UiRuntimeSprites.SolidRect;
+				face.type = Image.Type.Simple;
 				face.color = isOn
 					? new Color(0.12f, 0.32f, 0.20f, 0.95f)
 					: new Color(0.24f, 0.24f, 0.28f, 0.95f);
 				face.raycastTarget = true;
+			}
+			var rowImg = toggle.transform.parent != null
+				? toggle.transform.parent.GetComponent<Image>()
+				: null;
+			if (rowImg != null) {
+				rowImg.sprite = UiRuntimeSprites.SolidRect;
+				rowImg.type = Image.Type.Simple;
+				rowImg.color = Color.clear;
+				rowImg.raycastTarget = false;
 			}
 			if (toggle.graphic is Image ck) {
 				UnwindDialFillHiddenForTheme(ck);
@@ -537,7 +559,7 @@ namespace spz {
 				label.color = isOn
 					? new Color(0.78f, 0.96f, 0.82f, 1f)
 					: new Color(0.88f, 0.88f, 0.92f, 1f);
-				float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(label, 12f);
+				float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(label, 11f);
 				if (SpzUiThemeOps.ShouldRecolorBoundChrome)
 					SpzUiThemeOps.ApplyBoundChromeTmp(label, label.color, basePt);
 				else
@@ -555,9 +577,11 @@ namespace spz {
 				var hit = rowOrToggle.GetComponent<Image>();
 				if (hit == null) {
 					hit = rowOrToggle.AddComponent<Image>();
-					hit.color = Color.clear;
+					hit.sprite = UiRuntimeSprites.SolidRect;
+					hit.type = Image.Type.Simple;
 				}
-				hit.raycastTarget = true;
+				hit.color = Color.clear;
+				hit.raycastTarget = false;
 			}
 			AttachTooltip(rowOrToggle, RememberRowTooltip);
 			if (_rememberEnabledAddonToggle != null)
@@ -893,10 +917,14 @@ namespace spz {
 		viewportRect.sizeDelta = Vector2.zero;
 		viewportRect.pivot = new Vector2(0.5f, 0.5f);
 		var viewportImage = viewportObj.AddComponent<UnityEngine.UI.Image>();
-		viewportImage.color = new Color(0f, 0f, 0f, 0.01f);
+		viewportImage.sprite = UiRuntimeSprites.SolidRect;
+		viewportImage.type = Image.Type.Simple;
+		viewportImage.color = Color.clear;
 		viewportImage.raycastTarget = true;
 		var viewportMask = viewportObj.AddComponent<UnityEngine.UI.Mask>();
 		viewportMask.showMaskGraphic = false;
+		// RectMask2D avoids stencil ghost plates while scrolling; Mask kept for raycast Graphic.
+		viewportObj.AddComponent<RectMask2D>();
 
 		GameObject contentObj = new GameObject("Content");
 		contentObj.layer = UILayer;
@@ -1852,10 +1880,14 @@ namespace spz {
 			if (img != null) {
 				img.sprite = UiRuntimeSprites.SolidRect;
 				img.type = Image.Type.Simple;
-				img.color = new Color(0f, 0f, 0f, 0.01f);
+				// Fully clear — even alpha 0.01 SolidRect can read as a scrolling plate under some UI materials.
+				img.color = Color.clear;
 				img.raycastTarget = true;
 				img.enabled = true;
 			}
+			// Soft stencil Mask can leave a ghost plate while scrolling; RectMask2D clips without drawing.
+			if (viewport.GetComponent<RectMask2D>() == null)
+				viewport.gameObject.AddComponent<RectMask2D>();
 		}
 
 		/// <summary>Keep Remember action button sized after theme passes.</summary>
@@ -1864,20 +1896,27 @@ namespace spz {
 			var le = toggle.GetComponent<LayoutElement>();
 			if (le != null) {
 				SpzUiThemeOps.SnapshotLayoutElementForTheme(le);
-				le.preferredWidth = 210f;
-				le.minWidth = 180f;
-				le.preferredHeight = 28f;
-				le.minHeight = 28f;
+				le.preferredWidth = RememberButtonWidth;
+				le.minWidth = RememberButtonWidth;
+				le.preferredHeight = RememberButtonHeight;
+				le.minHeight = RememberButtonHeight;
 				le.flexibleWidth = 0f;
 				le.flexibleHeight = 0f;
 			}
 			var rt = toggle.transform as RectTransform;
 			if (rt != null) {
 				SpzUiThemeOps.SnapshotToolFaceLayout(rt);
-				rt.sizeDelta = new Vector2(210f, 28f);
+				rt.sizeDelta = new Vector2(RememberButtonWidth, RememberButtonHeight);
 			}
 			var row = toggle.transform.parent;
 			if (row != null) {
+				var rowLe = row.GetComponent<LayoutElement>();
+				if (rowLe != null) {
+					rowLe.preferredHeight = RememberButtonHeight + 4f;
+					rowLe.minHeight = RememberButtonHeight + 2f;
+					rowLe.flexibleWidth = 0f;
+					rowLe.flexibleHeight = 0f;
+				}
 				var hlg = row.GetComponent<HorizontalLayoutGroup>();
 				if (hlg != null) {
 					hlg.childControlHeight = false;

@@ -18,6 +18,8 @@ public sealed class AddonManagerListViewportAndInstallWiringTests {
 			"Mask graphic must stay hidden so BoundChrome cannot paint a white bar.");
 		Assert.That(src, Does.Contain("ProtectListViewportMaskGraphic"),
 			"Theme must keep Mask.showMaskGraphic false after BoundChrome (white bar without killing the list).");
+		Assert.That(src, Does.Contain("AddComponent<RectMask2D>()"),
+			"RectMask2D pairs with Mask to stop stencil ghost plates while scrolling.");
 		Assert.That(src, Does.Not.Contain("EnsureListScrollViewportHealthy"),
 			"Do not migrate Mask→RectMask2D at runtime (that broke list population).");
 	}
