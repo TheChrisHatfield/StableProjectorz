@@ -10,16 +10,18 @@ public sealed class AddonManagerListViewportAndInstallWiringTests {
 		string src = File.ReadAllText(path);
 		// Last-known-good list (898dd6a UX + Install). Do not require RectMask2D — that path
 		// emptied the list and left a white square after the white-bar "fixes".
-		Assert.That(src, Does.Contain("StichAddonManager_v12"),
-			"Shell version must bump so broken v10/v11 panels rebuild to the known-good list.");
+		Assert.That(src, Does.Contain("StichAddonManager_v13"),
+			"Shell version must bump so broken clear-Mask / RectMask panels rebuild.");
 		Assert.That(src, Does.Contain("AddComponent<UnityEngine.UI.Mask>()"),
 			"List Viewport clips with Mask (known-good create path).");
 		Assert.That(src, Does.Contain("showMaskGraphic = false"),
 			"Mask graphic must stay hidden so BoundChrome cannot paint a white bar.");
 		Assert.That(src, Does.Contain("ProtectListViewportMaskGraphic"),
 			"Theme must keep Mask.showMaskGraphic false after BoundChrome (white bar without killing the list).");
-		Assert.That(src, Does.Contain("AddComponent<RectMask2D>()"),
-			"RectMask2D pairs with Mask to stop stencil ghost plates while scrolling.");
+		Assert.That(src, Does.Contain("0.01f"),
+			"Mask Image needs tiny non-zero alpha — Color.clear stencils every row invisible.");
+		Assert.That(src, Does.Contain("Destroy(rectMask)"),
+			"Protect must strip RectMask2D left by the scroll-overlay mole.");
 		Assert.That(src, Does.Not.Contain("EnsureListScrollViewportHealthy"),
 			"Do not migrate Mask→RectMask2D at runtime (that broke list population).");
 	}
