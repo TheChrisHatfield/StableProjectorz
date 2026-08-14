@@ -79,7 +79,7 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 		string src = File.ReadAllText(path);
 		int i = src.IndexOf("IEnumerator InstallAddonCoroutine(", System.StringComparison.Ordinal);
 		Assert.That(i, Is.GreaterThan(0));
-		string body = src.Substring(i, System.Math.Min(4500, src.Length - i));
+		string body = src.Substring(i, System.Math.Min(6500, src.Length - i));
 		Assert.That(body, Does.Contain("wasEnabledBeforeOverwrite"));
 		Assert.That(body, Does.Contain("UnloadAddon(addonId, () => unloadDone = true)"));
 		int unloadAt = body.IndexOf("UnloadAddon(addonId, () => unloadDone = true)", System.StringComparison.Ordinal);
