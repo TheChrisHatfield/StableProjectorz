@@ -458,8 +458,11 @@ namespace spz {
 				+ " matched and enabled)."
 			);
 			// isEnabled alone does not create tabs — mirror EnableAddon's ribbon half without HTTP load.
-			if (instance != null)
+			if (instance != null) {
 				instance.EnsureRibbonShellsForAllEnabledAddons();
+				if (instance.IsAddonEnabled(RibbonOnlyFullscreenAddonId))
+					instance.StartEnsureRibbonOnlyFullscreenViewportDock();
+			}
 		}
 
 		static void HandleApplicationQuitting() {
@@ -1225,6 +1228,8 @@ namespace spz {
 			yield return new WaitForSeconds(2.5f);
 			// Prefs-restored enables never called EnableAddon — create ribbon shells before Python load.
 			EnsureRibbonShellsForAllEnabledAddons();
+			if (IsAddonEnabled(RibbonOnlyFullscreenAddonId))
+				StartEnsureRibbonOnlyFullscreenViewportDock();
 			int count = 0;
 			foreach (var kvp in _registeredAddons) {
 				if (kvp.Value != null && kvp.Value.isEnabled) {
@@ -1250,6 +1255,8 @@ namespace spz {
 			// Same as auto-load: prefs-restored enables never called EnableAddon — shells must exist
 			// before Python create_panel or panels park off-ribbon with "Load finished" false success.
 			EnsureRibbonShellsForAllEnabledAddons();
+			if (IsAddonEnabled(RibbonOnlyFullscreenAddonId))
+				StartEnsureRibbonOnlyFullscreenViewportDock();
 			int count = 0;
 			int hardFail = 0;
 			int softFail = 0;
