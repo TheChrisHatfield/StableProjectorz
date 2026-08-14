@@ -178,9 +178,21 @@ namespace spz {
 	    void ExportTransform( GameObject go, Vector3 rotAdjust, FbxNode fbxNode){
 	        Transform tr = go.transform;
 	        var fbxTranslate = new FbxDouble3(-tr.localPosition.x, tr.localPosition.y, tr.localPosition.z);
-	        var fbxRotate = new FbxDouble3( tr.localRotation.x+rotAdjust.x, 
+	        FbxDouble3 fbxRotate;
+	        bool isRootWithAdjust = rotAdjust != Vector3.zero;
+	        if (isRootWithAdjust){
+	            // Legacy tuned root formula — rootLocalRot_adj was calibrated against these
+	            // quaternion components; keep byte-identical output for the model root.
+	            fbxRotate = new FbxDouble3( tr.localRotation.x+rotAdjust.x, 
 	                                       -tr.localRotation.y+rotAdjust.y, 
 	                                       -tr.localRotation.z+ rotAdjust.z );
+	        }else{
+	            // Children: quaternion x/y/z are NOT degrees — a 45° in-SPZ rotation exported as ~0.4°,
+	            // silently discarding user rotations on the SPZ→Blender trip. Use Euler degrees,
+	            // mirrored for the -x handedness flip (rotations about Y/Z negate under that mirror).
+	            Vector3 e = tr.localEulerAngles;
+	            fbxRotate = new FbxDouble3( e.x, -e.y, -e.z );
+	        }
 	        var fbxScale = new FbxDouble3(tr.localScale.x, tr.localScale.y, tr.localScale.z);
 	        fbxNode.LclTranslation.Set(fbxTranslate);
 	        fbxNode.LclRotation.Set(fbxRotate);
