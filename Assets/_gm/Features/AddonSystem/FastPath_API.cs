@@ -973,6 +973,10 @@ namespace spz {
 		public bool IsGenerating() {
 			if (!_isInitialized) return false;
 			
+			// Gen3D jobs must count too — agents/bridge polled false during live 3D generation.
+			var gen3d = Gen3D_API.instance;
+			if (gen3d != null && gen3d.isBusy) return true;
+			
 			var sdHub = StableDiffusion_Hub.instance;
 			if (sdHub == null) return false;
 			
