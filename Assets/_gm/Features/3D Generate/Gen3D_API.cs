@@ -383,6 +383,7 @@ namespace spz {
 	                callbacks.onError?.Invoke("Resume generation failed: " + www.error);
 	                _generateStatus = TaskStatus.FAILED;
 	                _gen_or_resume_crtn = null;
+	                yield break;
 	            }
 
 	            try{
@@ -392,7 +393,7 @@ namespace spz {
 	                Debug.LogError($"JSON parse failed: {e.Message}\n{www.downloadHandler.text}");
 	                _generateResponse = null;
 	                _generateStatus = TaskStatus.FAILED;
-	                _generateResponse = null;
+	                callbacks.onError?.Invoke("Resume generation: bad JSON from server");
 	            }
 	        }
 	    }
