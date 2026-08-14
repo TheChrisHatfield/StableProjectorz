@@ -233,6 +233,15 @@ namespace spz {
 			    UnityEngine.Debug.LogWarning("[Save_MGR] Export3D_with_textures_ToPath: refused — another save/export is in progress.");
 			    return false;
 		    }
+		    // Callers (in-app GO add-on, TCP/HTTP) may target an exchange folder that does not exist yet.
+		    try {
+			    string targetDir = Path.GetDirectoryName( meshFilePath );
+			    if( !string.IsNullOrEmpty( targetDir ) && !Directory.Exists( targetDir ) )
+				    Directory.CreateDirectory( targetDir );
+		    } catch( Exception ex ) {
+			    UnityEngine.Debug.LogWarning( "[Save_MGR] Export3D_with_textures_ToPath: could not create target dir: " + ex.Message );
+			    return false;
+		    }
 		    // Drop stale ready sidecar before rewriting FBX so Blender cannot auto-import a half-finished export.
 		    TryDeleteSpzGoExchangeReadyStamp( meshFilePath );
 		    _isSaving = true;
