@@ -125,7 +125,10 @@ namespace spz {
 	            byte[] fileData = File.ReadAllBytes(filePath);
 	            Texture2D tex = new Texture2D(2, 2);
 	            // Load the image data into the texture (size will be set automatically)
-	            if(tex.LoadImage(fileData) == false){ continue;}
+	            if(tex.LoadImage(fileData) == false){
+		            UnityEngine.Object.Destroy(tex);
+		            continue;
+	            }
 	            textures.Add(tex, filePath);
 	            // Apply the texture to a material or use it as needed
 	            // For example: GetComponent<Renderer>().material.mainTexture = tex;
