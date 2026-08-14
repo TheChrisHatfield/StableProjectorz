@@ -54,8 +54,8 @@ namespace spz {
 	        if(col == Color.clear){
 	            msg = "BG Clear Color:  'Text-to-Image' until some background icon is selected.";
 	        }
-	        Viewport_StatusText.instance.ShowStatusText(msg, false, 7, false);
-	        ArtBG_IconsUI_List.instance.Set_IsPretendNoBackground(true);
+	        Viewport_StatusText.instance?.ShowStatusText(msg, false, 7, false);
+	        ArtBG_IconsUI_List.instance?.Set_IsPretendNoBackground(true);
 	    }
 
 
@@ -167,7 +167,7 @@ namespace spz {
 	        if(kind != GenerationData_Kind.SD_Backgrounds){ return;}
 	        Assign_Skybox_Background( someIcon );
 	        string msg = "Background Picture:  always Image-to-Image. Showing background until color is selected.";
-	        Viewport_StatusText.instance.ShowStatusText(msg, false, 8, false);
+	        Viewport_StatusText.instance?.ShowStatusText(msg, false, 8, false);
 	    }
 
 

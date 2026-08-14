@@ -36,7 +36,8 @@ namespace spz {
 
 	    public bool hasBackground(bool considerGradientColors){
 
-	        bool hasGradientColors = SkyboxBackground_MGR.instance.isGradientColorClear==false;
+	        bool hasGradientColors = SkyboxBackground_MGR.instance != null
+	                                 && SkyboxBackground_MGR.instance.isGradientColorClear==false;
 	        if(considerGradientColors && hasGradientColors){ return true; }
 
 	        return base._mainSelectedIcon!=null && !_isPretendNoBackground;
@@ -52,7 +53,7 @@ namespace spz {
 
 	        prefab_ = _icons_PREFAB;
 	        //checking, to avoid changing the value which we could have loaded:
-	        if (Save_MGR.instance._isLoading == false){  Set_IsPretendNoBackground(false); }
+	        if (Save_MGR.instance == null || Save_MGR.instance._isLoading == false){  Set_IsPretendNoBackground(false); }
 	        return true;
 	    }
 
@@ -61,7 +62,7 @@ namespace spz {
 	        if(!relevantToMe){ return;}
 	        base._mainSelectedIcon = icon;
 	        //checking, to avoid changing the value which we could have loaded:
-	        if(Save_MGR.instance._isLoading == false){  Set_IsPretendNoBackground(false); }
+	        if(Save_MGR.instance == null || Save_MGR.instance._isLoading == false){  Set_IsPretendNoBackground(false); }
 	    }
 
 	    protected override void OnCustomImageImported_maybeChangeKind(ref GenerationData_Kind kind){
@@ -74,6 +75,7 @@ namespace spz {
 
 
 	    void On_import_BG_from_currView(){
+	        if (Screenshot_MGR.instance == null){ return; }
 	        Screenshot_MGR.instance.ScreenshotViewport_viaScript(Vector2.zero, Vector2.one, OnHaveScreenshot);
         
 	        void OnHaveScreenshot( Vector2 min_px,  Vector2 max_px, 
@@ -95,6 +97,7 @@ namespace spz {
 
 
 	    public void OnExportAllIcons_Button(){
+	        if (ConfirmPopup_UI.instance == null){ return; }
 	        ConfirmPopup_UI.instance.Show("Dump all Art BG images into a folder?\nThis might take some time\n<b>Can overwrite existing files!</b>", onYes, null);
 	        void onYes(){
             
@@ -118,10 +121,10 @@ namespace spz {
 	                        string tex_path = Path.Combine(folderPath, $"tex_{i}.png");
 	                        TextureTools_SPZ.EncodeAndSaveTexture(textures[i], tex_path);
 	                    }
-	                    Viewport_StatusText.instance.ShowStatusText("Exported all Art BG images", false, 4, false);
+	                    Viewport_StatusText.instance?.ShowStatusText("Exported all Art BG images", false, 4, false);
 	                }
 	                catch(Exception e){
-	                    Viewport_StatusText.instance.ShowStatusText("Failed to export some Art BG images", false, 4, false);
+	                    Viewport_StatusText.instance?.ShowStatusText("Failed to export some Art BG images", false, 4, false);
 	                }
 	                finally { 
 	                    //cleanup
