@@ -582,6 +582,7 @@ namespace spz {
 				ProcessDeferredUndoRedo();
 				TryStartCaptureProcessorIfNeeded();
 			} finally {
+				_isRestoring = false;
 				_restoreCrt = null;
 			}
 		}

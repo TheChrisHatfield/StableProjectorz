@@ -1005,12 +1005,25 @@ namespace spz {
 	        if (target == null)
 		        yield break;
 
+	        // Wait first so we do not queue a capture that becomes a silent no-op undo if the target flips.
+	        while (PaintUndo_MGR.instance != null && PaintUndo_MGR.instance.IsBusy)
+		        yield return null;
+
+	        if (!ReferenceEquals(GetPaintTarget(), target)) {
+		        Viewport_StatusText.instance?.ShowStatusText(
+			        "Fill/clear cancelled — paint target changed.", false, 4f, false);
+		        yield break;
+	        }
+
 	        PaintUndo_MGR.instance?.SchedulePreStrokeCapture(target);
 	        while (PaintUndo_MGR.instance != null && PaintUndo_MGR.instance.IsBusy)
 		        yield return null;
 
-	        if (!ReferenceEquals(GetPaintTarget(), target))
+	        if (!ReferenceEquals(GetPaintTarget(), target)) {
+		        Viewport_StatusText.instance?.ShowStatusText(
+			        "Fill/clear cancelled — paint target changed.", false, 4f, false);
 		        yield break;
+	        }
 
 	        OnBucketFill_orDelete_button(col, target.texArray, visibilTex: null);
 	        if (markMaskNonEmpty)

@@ -121,8 +121,8 @@ namespace spz {
 	            if (BrushRibbon_UI_Size.instance != null) BrushRibbon_UI_Size.instance.SetBrushSize(sliderVal);
 	            else if (SD_WorkflowOptionsRibbon_UI.instance != null) SD_WorkflowOptionsRibbon_UI.instance.SetBrushSize(sliderVal);
 	        }
-	        Cursor_UI.instance.SetCursorThickness(BrushRibbon_UI_Size.GetBrushSize01());
-	        Cursor_UI.instance.PositionCursor( _brushSizeScale.Evaluate(BrushRibbon_UI_Size.GetBrushSize01()) );
+	        Cursor_UI.instance?.SetCursorThickness(BrushRibbon_UI_Size.GetBrushSize01());
+	        Cursor_UI.instance?.PositionCursor( _brushSizeScale.Evaluate(BrushRibbon_UI_Size.GetBrushSize01()) );
 	    }
 
 
@@ -444,25 +444,28 @@ namespace spz {
 
 	        //render into temp, dilate it (expand borders), and paste into dest:
 	        RenderTexture destTemp = new RenderTexture(dest.descriptor);
-	        TextureTools_SPZ.ClearRenderTexture(destTemp, Color.clear);
+	        try {
+		        TextureTools_SPZ.ClearRenderTexture(destTemp, Color.clear);
 
-	        // NOT using clear color;  Ignore non-selected.
-	        // NOT using frustum cull: even if camera is looking at the object, remember that we are going to render into UVs.
-	        // This would likely cause the camera to ignore the object.
-	        UserCameras_MGR.instance._curr_viewCamera.RenderImmediate_Arr( destTemp,  ignore_nonSelected_meshes:true,
-	                                                                       _fillUVchunks_mat,  useClearingColor:false,//NOT clearing.
-	                                                                       Color.clear,  dontFrustumCull:true );
-	        var dilRule = TextureTools_SPZ.GetChannelCount(dest)==4? DilateByChannel.A
-	                                                              : DilateByChannel.R;
-	        // ONLY DILATE BY 1 TEXEL.
-	        // 2 is already too much, it would creep through seams of nearby uv islands
-	        // and be on various objects in Catacombs mesh (Oct 2024)
-	        var dilArg  = new DilationArg( destTemp,  numberOfTexelsExpand:1,
-	                                       dilRule,  null,  isRunInstantly:true );
-	        TextureDilation_MGR.instance.Dillate(dilArg);
+		        // NOT using clear color;  Ignore non-selected.
+		        // NOT using frustum cull: even if camera is looking at the object, remember that we are going to render into UVs.
+		        // This would likely cause the camera to ignore the object.
+		        UserCameras_MGR.instance._curr_viewCamera.RenderImmediate_Arr( destTemp,  ignore_nonSelected_meshes:true,
+		                                                                       _fillUVchunks_mat,  useClearingColor:false,//NOT clearing.
+		                                                                       Color.clear,  dontFrustumCull:true );
+		        var dilRule = TextureTools_SPZ.GetChannelCount(dest)==4? DilateByChannel.A
+		                                                              : DilateByChannel.R;
+		        // ONLY DILATE BY 1 TEXEL.
+		        // 2 is already too much, it would creep through seams of nearby uv islands
+		        // and be on various objects in Catacombs mesh (Oct 2024)
+		        var dilArg  = new DilationArg( destTemp,  numberOfTexelsExpand:1,
+		                                       dilRule,  null,  isRunInstantly:true );
+		        TextureDilation_MGR.instance.Dillate(dilArg);
 
-	        TextureTools_SPZ.Blit(destTemp, dest);
-	        DestroyImmediate(destTemp);
+		        TextureTools_SPZ.Blit(destTemp, dest);
+	        } finally {
+		        DestroyImmediate(destTemp);
+	        }
 
 	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
 	    }

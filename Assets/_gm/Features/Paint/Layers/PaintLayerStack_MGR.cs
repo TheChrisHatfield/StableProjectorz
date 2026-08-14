@@ -43,6 +43,15 @@ namespace spz {
 		Coroutine _collapseSliceCopyCrt;
 		int _collapsePathObsBucket;
 		int _collapsePathObsArm;
+		/// <summary>True only while collapse itself mutates the stack (AddLayer for the merge dest / orphan cleanup).</summary>
+		bool _collapseOwnsStackMutation;
+
+		bool RefuseLayerEditDuringScheduledCollapse(string op) {
+			if (_collapseSliceCopyCrt == null || _collapseOwnsStackMutation) return false;
+			Viewport_StatusText.instance?.ShowStatusText(
+				$"Can't {op} layers while collapse is in progress.", false, 3f, false);
+			return true;
+		}
 
 		/// <summary>Layers from bottom (index 0) to top. Do not modify list directly; use AddLayer/RemoveLayer/MoveLayer. </summary>
 		public IReadOnlyList<PaintLayer> Layers => _layers;
@@ -198,6 +207,7 @@ namespace spz {
 		/// <summary>Add a new layer. New layer is set active. Existing layers (including layer 0) are unchanged and remain visible. Scene/data injection runs via OnLayerAdded (e.g. Inpaint_MaskPainter).</summary>
 		public PaintLayer AddLayer(string name = null)
 		{
+			if (RefuseLayerEditDuringScheduledCollapse("add")) return null;
 			string layerName = name ?? ConsumeNextDefaultLayerName();
 			var layer = new PaintLayer(layerName);
 			layer.Visible = true;
@@ -276,6 +286,7 @@ namespace spz {
 		/// (an empty stack made strokes write the scene buffer while the viewport preferred Art UV and hid them).</summary>
 		public void RemoveLayer(int index)
 		{
+			if (RefuseLayerEditDuringScheduledCollapse("remove")) return;
 			if (index < 0 || index >= _layers.Count) return;
 			_layers[index].Dispose();
 			_layers.RemoveAt(index);
@@ -300,6 +311,7 @@ namespace spz {
 
 		public void MoveLayer(int fromIndex, int toIndex)
 		{
+			if (RefuseLayerEditDuringScheduledCollapse("reorder")) return;
 			if (fromIndex < 0 || fromIndex >= _layers.Count || toIndex < 0 || toIndex >= _layers.Count || fromIndex == toIndex) return;
 			var keepActive = ActiveLayer;
 			var layer = _layers[fromIndex];
@@ -451,44 +463,57 @@ namespace spz {
 
 				NotifyCollapseBegin(amortizedAcrossFrames: false, visCount, first.UdimsCount);
 				float tImmediate = Time.realtimeSinceStartup;
-				EnsureCollapseResultTemp(first);
-				CompositeTo(_collapseResultTemp);
-
 				var maskPainter = Inpaint_MaskPainter.instance;
 				PaintLayer newLayer = null;
+				bool pasted = false;
 				try {
 					if (maskPainter != null) maskPainter.IsCollapsingLayers = true;
-					newLayer = AddLayer(ConsumeNextDefaultCollapseLayerName());
-					EnsureContentForLayerIfNeeded(newLayer);
+					EnsureCollapseResultTemp(first);
+					CompositeTo(_collapseResultTemp);
+
+					_collapseOwnsStackMutation = true;
+					try {
+						newLayer = AddLayer(ConsumeNextDefaultCollapseLayerName());
+						EnsureContentForLayerIfNeeded(newLayer);
+					} finally {
+						_collapseOwnsStackMutation = false;
+					}
+
+					if (newLayer != null && newLayer.Content != null && newLayer.Content.texArray != null
+					    && newLayer.Content.width == _collapseResultTemp.width
+					    && newLayer.Content.height == _collapseResultTemp.height
+					    && newLayer.Content.UdimsCount == _collapseResultTemp.UdimsCount)
+					{
+						CopyAllSlices(_collapseResultTemp, newLayer.Content);
+						newLayer.SyncDataFromContent();
+						newLayer.HasReceivedSceneInject = true;
+						pasted = true;
+						PasteCollapsedNoColorMasksInto(newLayer, _layers.IndexOf(newLayer));
+					}
+					else
+						UnityEngine.Debug.LogWarning("[PaintLayerStack] Collapse: new layer has no Content; GPU path paste skipped.");
+
+					if (collapseSched != null) {
+						float elapsedMs = (Time.realtimeSinceStartup - tImmediate) * 1000f;
+						PaintUndo_Scheduler.EvaluateWorkload(first.width, first.height, first.UdimsCount, collapseSched.referencePixelsPerSlice,
+							out _, out float complexity01, out _);
+						bool ok = PaintUndo_Scheduler.CollapseImmediateObservationSuccess(elapsedMs, complexity01, visCount);
+						collapseSched.RegisterCollapsePathObservation(pathBucket, pathArm, ok);
+					}
 				}
 				finally {
+					if (!pasted && newLayer != null) {
+						_collapseOwnsStackMutation = true;
+						try {
+							int orphanIx = _layers.IndexOf(newLayer);
+							if (orphanIx >= 0) RemoveLayer(orphanIx);
+						} finally {
+							_collapseOwnsStackMutation = false;
+						}
+					}
 					if (maskPainter != null) maskPainter.IsCollapsingLayers = false;
+					NotifyCollapseEnd(pasted);
 				}
-
-				bool pasted = false;
-				if (newLayer != null && newLayer.Content != null && newLayer.Content.texArray != null
-				    && newLayer.Content.width == _collapseResultTemp.width
-				    && newLayer.Content.height == _collapseResultTemp.height
-				    && newLayer.Content.UdimsCount == _collapseResultTemp.UdimsCount)
-				{
-					CopyAllSlices(_collapseResultTemp, newLayer.Content);
-					newLayer.SyncDataFromContent();
-					newLayer.HasReceivedSceneInject = true;
-					pasted = true;
-					PasteCollapsedNoColorMasksInto(newLayer, _layers.IndexOf(newLayer));
-				}
-				else
-					UnityEngine.Debug.LogWarning("[PaintLayerStack] Collapse: new layer has no Content; GPU path paste skipped.");
-
-				if (collapseSched != null) {
-					float elapsedMs = (Time.realtimeSinceStartup - tImmediate) * 1000f;
-					PaintUndo_Scheduler.EvaluateWorkload(first.width, first.height, first.UdimsCount, collapseSched.referencePixelsPerSlice,
-						out _, out float complexity01, out _);
-					bool ok = PaintUndo_Scheduler.CollapseImmediateObservationSuccess(elapsedMs, complexity01, visCount);
-					collapseSched.RegisterCollapsePathObservation(pathBucket, pathArm, ok);
-				}
-
-				NotifyCollapseEnd(pasted);
 				return pasted;
 			}
 
@@ -522,7 +547,12 @@ namespace spz {
 
 				if (maskPainter != null) maskPainter.IsCollapsingLayers = true;
 
-				newLayer = AddLayer(ConsumeNextDefaultCollapseLayerName());
+				_collapseOwnsStackMutation = true;
+				try {
+					newLayer = AddLayer(ConsumeNextDefaultCollapseLayerName());
+				} finally {
+					_collapseOwnsStackMutation = false;
+				}
 				if (newLayer == null) {
 					UnityEngine.Debug.LogWarning("[PaintLayerStack] Collapse (scheduled): AddLayer returned null.");
 					yield break;
@@ -552,6 +582,11 @@ namespace spz {
 				int totalSlices = firstRef.UdimsCount;
 				int cursor = 0;
 				while (cursor < totalSlices) {
+					excludeIdx = _layers.IndexOf(newLayer);
+					if (excludeIdx < 0 || newLayer.Content == null || newLayer.Content.texArray == null) {
+						UnityEngine.Debug.LogWarning("[PaintLayerStack] Collapse (scheduled): dest layer left stack or lost Content; aborting.");
+						yield break;
+					}
 					float dt = Time.deltaTime;
 					if (dt <= 1e-4f) dt = 1f / 60f;
 					collapseSched.BeginRestoreTick(dt);
@@ -576,6 +611,11 @@ namespace spz {
 						yield return null;
 				}
 
+				excludeIdx = _layers.IndexOf(newLayer);
+				if (excludeIdx < 0) {
+					UnityEngine.Debug.LogWarning("[PaintLayerStack] Collapse (scheduled): dest layer missing before paste.");
+					yield break;
+				}
 				newLayer.SyncDataFromContent();
 				newLayer.HasReceivedSceneInject = true;
 				PasteCollapsedNoColorMasksInto(newLayer, excludeIdx);
@@ -590,9 +630,14 @@ namespace spz {
 				}
 				// Early yield-break after AddLayer left an empty/partial Collapse N layer in the Paint tab list.
 				if (!completedComposite && newLayer != null) {
-					int orphanIx = _layers.IndexOf(newLayer);
-					if (orphanIx >= 0)
-						RemoveLayer(orphanIx);
+					_collapseOwnsStackMutation = true;
+					try {
+						int orphanIx = _layers.IndexOf(newLayer);
+						if (orphanIx >= 0)
+							RemoveLayer(orphanIx);
+					} finally {
+						_collapseOwnsStackMutation = false;
+					}
 				}
 				NotifyCollapseEnd(completedComposite);
 				CleanupAfterScheduledCollapse();
@@ -665,26 +710,40 @@ namespace spz {
 
 			var maskPainter = Inpaint_MaskPainter.instance;
 			PaintLayer newLayer = null;
+			bool pasted = false;
 			try {
 				if (maskPainter != null) maskPainter.IsCollapsingLayers = true;
-				newLayer = AddLayer(ConsumeNextDefaultCollapseLayerName());
-				EnsureContentForLayerIfNeeded(newLayer);
+				_collapseOwnsStackMutation = true;
+				try {
+					newLayer = AddLayer(ConsumeNextDefaultCollapseLayerName());
+					EnsureContentForLayerIfNeeded(newLayer);
+				} finally {
+					_collapseOwnsStackMutation = false;
+				}
+
+				if (newLayer != null && newLayer.Content != null && newLayer.Content.texArray != null)
+				{
+					TextureTools_SPZ.TextureArray_Fill_N_Slices(newLayer.Content.texArray, resultTextures, 0);
+					newLayer.SyncDataFromContent();
+					newLayer.HasReceivedSceneInject = true;
+					pasted = true;
+					PasteCollapsedNoColorMasksInto_Cpu(newLayer, visibleLayers);
+				}
+				else
+					UnityEngine.Debug.LogWarning("[PaintLayerStack] Collapse: new layer has no Content; paste skipped.");
 			}
 			finally {
+				if (!pasted && newLayer != null) {
+					_collapseOwnsStackMutation = true;
+					try {
+						int orphanIx = _layers.IndexOf(newLayer);
+						if (orphanIx >= 0) RemoveLayer(orphanIx);
+					} finally {
+						_collapseOwnsStackMutation = false;
+					}
+				}
 				if (maskPainter != null) maskPainter.IsCollapsingLayers = false;
 			}
-
-			bool pasted = false;
-			if (newLayer != null && newLayer.Content != null && newLayer.Content.texArray != null)
-			{
-				TextureTools_SPZ.TextureArray_Fill_N_Slices(newLayer.Content.texArray, resultTextures, 0);
-				newLayer.SyncDataFromContent();
-				newLayer.HasReceivedSceneInject = true;
-				pasted = true;
-				PasteCollapsedNoColorMasksInto_Cpu(newLayer, visibleLayers);
-			}
-			else
-				UnityEngine.Debug.LogWarning("[PaintLayerStack] Collapse: new layer has no Content; paste skipped.");
 
 			foreach (var t in resultTextures) if (t != null) UnityEngine.Object.DestroyImmediate(t);
 
