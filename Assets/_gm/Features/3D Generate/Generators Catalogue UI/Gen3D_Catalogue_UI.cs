@@ -110,19 +110,21 @@ namespace spz {
 	        _moreToCome_text.SetAsLastSibling();
 	    }
 
-	    public void Show(){ 
+	    public void Show(){
+	        if (_whole_panel_GO == null){ return; }
 	        _whole_panel_GO.SetActive(true);
-	        if(_fetchCatalogue_crtn == null){ 
+	        if(_fetchCatalogue_crtn == null){
 	            _fetchCatalogue_crtn = StartCoroutine(FetchCatalogue_crtn());
 	        }
 	    }
 
-	    public void Hide(){ 
+	    public void Hide(){
 	        if (_fetchCatalogue_crtn != null){
 	            StopCoroutine(_fetchCatalogue_crtn);
 	            _fetchCatalogue_crtn = null;
 	        }
-	        _whole_panel_GO.SetActive(false);
+	        if (_whole_panel_GO != null)
+	            _whole_panel_GO.SetActive(false);
 	    }
 
 	    void OnJoinDiscordButton(){
