@@ -3513,10 +3513,17 @@ namespace spz {
 			public Vector3 popupRootScale;
 		}
 
+		static bool s_uninstallConfirmSessionActive;
+		static UninstallConfirmSession s_uninstallConfirmSession;
+
 		/// <summary>
 		/// Make Uninstall Yes/No visible and clickable above AddonManager_Canvas.
 		/// </summary>
 		UninstallConfirmSession BeginUninstallConfirmAboveManager() {
+			// Replace any leaked prior session (re-Show / failed restore).
+			if (s_uninstallConfirmSessionActive)
+				EndUninstallConfirmAboveManager(s_uninstallConfirmSession);
+
 			var session = new UninstallConfirmSession();
 			session.managerCanvas = FindAddonManagerOverlayCanvas();
 			if (session.managerCanvas != null) {
@@ -3528,6 +3535,8 @@ namespace spz {
 			var popup = ConfirmPopup_UI.instance;
 			if (popup == null) {
 				session.popupStates = Array.Empty<ConfirmPopupCanvasSortState>();
+				s_uninstallConfirmSession = session;
+				s_uninstallConfirmSessionActive = true;
 				return session;
 			}
 
@@ -3557,10 +3566,15 @@ namespace spz {
 				if (c.GetComponent<GraphicRaycaster>() == null)
 					c.gameObject.AddComponent<GraphicRaycaster>();
 			}
+			s_uninstallConfirmSession = session;
+			s_uninstallConfirmSessionActive = true;
 			return session;
 		}
 
 		static void EndUninstallConfirmAboveManager(UninstallConfirmSession session) {
+			if (!s_uninstallConfirmSessionActive)
+				return;
+			s_uninstallConfirmSessionActive = false;
 			if (session.popupStates != null) {
 				for (int i = 0; i < session.popupStates.Length; i++) {
 					var s = session.popupStates[i];
@@ -3574,6 +3588,7 @@ namespace spz {
 				session.popupRoot.localScale = session.popupRootScale;
 			if (session.managerCanvas != null)
 				session.managerCanvas.sortingOrder = session.managerSort;
+			s_uninstallConfirmSession = default;
 		}
 		
 		/// <summary>

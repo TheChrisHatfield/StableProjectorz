@@ -32,6 +32,8 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 			"Must temporarily drop Addon Manager below the confirm dialog.");
 		Assert.That(body, Does.Contain("GetComponentsInChildren<Canvas>(true)"),
 			"Must include nested confirm canvases, not only the root.");
+		Assert.That(body, Does.Contain("s_uninstallConfirmSessionActive"),
+			"Uninstall confirm session must be idempotent so re-Show / double End cannot leave manager sort stuck.");
 	}
 
 	[Test]

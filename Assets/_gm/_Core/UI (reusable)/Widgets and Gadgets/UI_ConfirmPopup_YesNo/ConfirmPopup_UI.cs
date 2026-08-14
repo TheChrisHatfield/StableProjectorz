@@ -19,6 +19,10 @@ namespace spz {
 	    Action _act_onNo;
 	    bool _alreadyShownOrHidden = false;
 
+	    /// <summary>True while the dimmer/card is active (Yes/No pending).</summary>
+	    public bool IsShowing =>
+		    _background_button != null && _background_button.gameObject.activeInHierarchy;
+
 	    private void Awake(){
 	        if(instance != null){ DestroyImmediate(this); return; }
 	        instance = this;
@@ -28,6 +32,15 @@ namespace spz {
 
 	    void OnDestroy() {
 	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	        // If Addon Manager parked sort for uninstall confirm, cancel restores it.
+	        if (_act_onNo != null) {
+		        Action cancel = _act_onNo;
+		        _act_onYes = null;
+		        _act_onNo = null;
+		        try { cancel.Invoke(); } catch (Exception ex) {
+			        Debug.LogWarning("[ConfirmPopup_UI] OnDestroy cancel: " + ex.Message);
+		        }
+	        }
 	        if (instance == this)
 	            instance = null;
 	    }
@@ -40,10 +53,22 @@ namespace spz {
 	    }
 
 	    void Update(){
+		    // Only while the dialog is visible — Escape must not steal keys when hidden.
+		    if (!IsShowing) return;
 	        if(Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame){  OnNoClicked(); }
 	    }
 
 	    public void Show( string text,  Action onYes,  Action onNo, string yesText="Yes", string noText="No" ){
+		    // Re-entrant Show overwrites callbacks. Invoke prior No/cleanup first so Addon Manager
+		    // uninstall session restore (manager sort / canvas modes) cannot leak.
+		    if (_act_onYes != null || _act_onNo != null) {
+			    Action priorCancel = _act_onNo;
+			    _act_onYes = null;
+			    _act_onNo = null;
+			    try { priorCancel?.Invoke(); } catch (Exception ex) {
+				    Debug.LogWarning("[ConfirmPopup_UI] Prior cancel on re-Show: " + ex.Message);
+			    }
+		    }
 	        _background_button.gameObject.SetActive(true);
 	        _header.text = text;
 	        _act_onYes = onYes;
