@@ -82,7 +82,7 @@ namespace spz {
 
 		/// <summary>Launch Run_with_Addons.bat (same pattern as LaunchWebUI). Returns true if launched.</summary>
 		public static bool LaunchAddonsBat(bool showStatusIfNotFound = false) {
-			return LaunchAddonsBat(showStatusIfNotFound, out _);
+			return LaunchAddonsBat(showStatusIfNotFound, out _, waitForPid: 0, breakAwayFromJob: false);
 		}
 
 		/// <summary>
@@ -90,6 +90,15 @@ namespace spz {
 		/// <c>unsupported</c>, or null on success.
 		/// </summary>
 		public static bool LaunchAddonsBat(bool showStatusIfNotFound, out string failureKind) {
+			return LaunchAddonsBat(showStatusIfNotFound, out failureKind, waitForPid: 0, breakAwayFromJob: false);
+		}
+
+		/// <summary>
+		/// Launch the addons bat. When <paramref name="waitForPid"/> &gt; 0, the bat waits for that PID to exit
+		/// before starting the exe (in-app restart). <paramref name="breakAwayFromJob"/> keeps the helper alive
+		/// after Unity's process job is torn down on quit.
+		/// </summary>
+		public static bool LaunchAddonsBat(bool showStatusIfNotFound, out string failureKind, uint waitForPid, bool breakAwayFromJob) {
 			failureKind = null;
 #if !UNITY_STANDALONE_WIN && !UNITY_EDITOR_WIN
 			failureKind = "unsupported";
@@ -110,10 +119,22 @@ namespace spz {
 				bool showExternalWindows = LaunchWebUIBatFile.PrefsWantShowExternalProcessWindows();
 				// attachToConsole:false — FreeConsole/AttachConsole on the Unity process during restart can stall or crash.
 				// keepWindow false — visibility via hidden only; /K is not "show while running".
-				uint pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
-					path, isJustFile: true, workDir, keepWindow: false, hidden: !showExternalWindows, attachToConsole: false);
+				uint pid;
+				if (waitForPid != 0) {
+					// Pass current PID so the bat waits for us to exit before relaunching.
+					// Quote path for spaces; arg is decimal PID only.
+					string cmd = $"\"{path}\" {waitForPid}";
+					pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
+						cmd, isJustFile: false, workDir, keepWindow: false, hidden: !showExternalWindows,
+						attachToConsole: false, breakAwayFromJob: breakAwayFromJob);
+				} else {
+					pid = StartExternalProcess.Run_Bat_or_Shortcut_or_Command(
+						path, isJustFile: true, workDir, keepWindow: false, hidden: !showExternalWindows,
+						attachToConsole: false, breakAwayFromJob: breakAwayFromJob);
+				}
 				if (pid != 0) {
-					Debug.Log($"[Launch_Addons] Launched {DefaultBatName} PID {pid}");
+					Debug.Log($"[Launch_Addons] Launched {DefaultBatName} PID {pid}" +
+					          (waitForPid != 0 ? $" (waits for PID {waitForPid})" : ""));
 					return true;
 				}
 				failureKind = "spawn_failed";
@@ -159,9 +180,11 @@ namespace spz {
 #else
 			s_restartInProgress = true;
 
-			// Launch first. Shutting down the API before a failed spawn permanently arms
-			// s_addonApiQuitShutdownDone and kills enable/load for the rest of the session.
-			if (!LaunchAddonsBat(showStatusIfNotFound: true, out string failKind)) {
+			// Wait for THIS process to exit before starting the new exe — otherwise:
+			// 1) Unity's Job can kill the child tree on quit (relaunches die silently), and
+			// 2) the new instance races the dying process for GPU/ports.
+			uint selfPid = StartExternalProcess.GetCurrentPid();
+			if (!LaunchAddonsBat(showStatusIfNotFound: true, out string failKind, waitForPid: selfPid, breakAwayFromJob: true)) {
 				s_restartInProgress = false;
 				if (AddonManager_UI.instance != null)
 					AddonManager_UI.instance.ShowRestartStatus(
