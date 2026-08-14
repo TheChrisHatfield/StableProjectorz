@@ -72,16 +72,18 @@ def get_project_info(base_url: str) -> dict:
 
 
 def post_export_3d_with_textures(base_url: str) -> dict:
-    return request_json(base_url, "POST", "/api/v1/export/3d_with_textures", {})
+    # Dialog + texture pipeline is a Unity long op (~300s budget); 120s default timed
+    # out while Unity was still writing (false failure in Blender).
+    return request_json(base_url, "POST", "/api/v1/export/3d_with_textures", {}, timeout_s=300.0)
 
 
 def post_export_projection_textures(base_url: str, is_dilate: bool = True) -> dict:
     q = urllib.parse.urlencode({"is_dilate": "true" if is_dilate else "false"})
-    return request_json(base_url, "POST", f"/api/v1/export/projection_textures?{q}", {})
+    return request_json(base_url, "POST", f"/api/v1/export/projection_textures?{q}", {}, timeout_s=300.0)
 
 
 def post_export_view_textures(base_url: str) -> dict:
-    return request_json(base_url, "POST", "/api/v1/export/view_textures", {})
+    return request_json(base_url, "POST", "/api/v1/export/view_textures", {}, timeout_s=300.0)
 
 
 def post_import_3d_model(base_url: str, filepath: str) -> dict:
