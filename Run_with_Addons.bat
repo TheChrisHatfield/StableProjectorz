@@ -51,13 +51,16 @@ for %%P in (
     "%ProgramFiles%\Python312\python.exe"
     "%ProgramFiles%\Python311\python.exe"
     "%ProgramFiles%\Python310\python.exe"
-) do if exist %%P (
-    for %%D in ("%%~dpP.") do set "PYDIR=%%~fD"
-    set "PATH=%PYDIR%;%PATH%"
-    set "PYTHON_ADDED=1"
-    echo Using Python: %%P
-    goto found_python
-)
+) do if exist %%P call :use_python %%P && goto found_python
+goto found_python
+
+:use_python
+for %%D in ("%~dp1.") do set "PYDIR=%%~fD"
+set "PATH=%PYDIR%;%PATH%"
+set "PYTHON_ADDED=1"
+echo Using Python: %~1
+exit /b 0
+
 :found_python
 if defined PYTHON_ADDED goto python_ready
 echo.
@@ -67,12 +70,14 @@ echo.
 if not defined SPZ_ADDONS_NONINTERACTIVE pause
 :python_ready
 
-REM Install addon server deps (FastAPI, uvicorn) so the exe's addon server has them at runtime
+REM Install addon server deps FastAPI / uvicorn so the exe's addon server has them at runtime.
+REM Keep this linear: unescaped ( ) inside an if-block aborted the whole bat with
+REM "... was unexpected at this time." so the exe was never started (restart looked like a plain close).
 set "REQ=Build_IL2CPP\StableProjectorz_Data\StreamingAssets\AddonSystem\requirements.txt"
-if exist "%REQ%" (
-    echo Ensuring addon dependencies (FastAPI, uvicorn)...
-    python -m pip install -r "%REQ%" -q 2>nul
-)
+if not exist "%REQ%" goto deps_done
+echo Ensuring addon dependencies ^(FastAPI, uvicorn^)...
+python -m pip install -r "%REQ%" -q 2>nul
+:deps_done
 
 REM So the exe can avoid auto-restart loop when it was already launched by this bat
 set "SPZ_ADDONS_LAUNCHED=1"
