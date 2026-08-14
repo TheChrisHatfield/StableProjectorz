@@ -282,16 +282,23 @@ namespace spz {
         
 	        // Define local callback to handle saving (replaces previous flow with confirmation popup)
 	        void onComplete(string path){
-	            _path_recentlyExported = path;
 	            if(string.IsNullOrEmpty(path)){
 		            onCancelledOrFailed?.Invoke();
 		            return;
 	            }
-	            var dir = Path.GetDirectoryName(path);
-	            if (!string.IsNullOrEmpty(dir)) {
-		            Directory.CreateDirectory( dir );
+	            try {
+		            var dir = Path.GetDirectoryName(path);
+		            if (!string.IsNullOrEmpty(dir)) {
+			            Directory.CreateDirectory( dir );
+		            }
+		            File.WriteAllBytes(path, _modelBytesCache);
+	            } catch (Exception ex) {
+		            UnityEngine.Debug.LogWarning("[ModelsHandler3D_ImportHelper] SaveCachedMesh_toFile failed: " + ex.Message);
+		            onCancelledOrFailed?.Invoke();
+		            return;
 	            }
-	            File.WriteAllBytes(path, _modelBytesCache);
+	            // Stamp path only after a successful write — otherwise export _isSaving never clears.
+	            _path_recentlyExported = path;
 	            Viewport_StatusText.instance?.ShowStatusText("Exported the mesh to\n"+path, false, 5, false);
 	            afterMeshWritten?.Invoke(path);
 	        }
@@ -399,11 +406,24 @@ namespace spz {
 	        if (_modelBytesCache != null){
 	            fp_relativeToDataDir = _modelBytesCache_filename; 
 	            string fp = Path.Combine(spz.filepath_dataDir, fp_relativeToDataDir);
-	            SaveCachedMesh_toFile(fp);
+	            bool wrote = false;
+	            Exception writeEx = null;
+	            SaveCachedMesh_toFile(fp,
+		            afterMeshWritten: _ => { wrote = true; },
+		            onCancelledOrFailed: () => { writeEx = new InvalidException("cached mesh write failed"); });
+	            // Path-provided SaveCachedMesh is synchronous.
+	            if (!wrote) {
+		            throw writeEx ?? new InvalidOperationException("cached mesh write failed for project save");
+	            }
 	        }else{
+	            if (o3d == null || o3d.currModelRootGO == null) {
+		            throw new InvalidOperationException("no model root to write into project _Data");
+	            }
 	            fp_relativeToDataDir = o3d.currModelRootGO.name + ".fbx";
 	            string fp = Path.Combine(spz.filepath_dataDir, fp_relativeToDataDir);
-	            _saveFBX_helper.SaveModels(fp, o3d.currModelRootGO);
+	            if (!_saveFBX_helper.SaveModels(fp, o3d.currModelRootGO)) {
+		            throw new InvalidOperationException("FBX mesh write failed for project save: " + fp);
+	            }
 	        }
 	        spz.modelsHandler3D.currModelRootGO = fp_relativeToDataDir;
 	    }

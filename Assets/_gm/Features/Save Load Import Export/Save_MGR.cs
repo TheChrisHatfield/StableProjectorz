@@ -150,10 +150,34 @@ namespace spz {
 	                //after loading, Unpress any ctrl, alt etc. Else unity might keep thinking they are still pressed:
 	                StartCoroutine( ResetCtrlKey_AfterLoadSave() );
 	            } finally {
-	                // Always clear — LoadProject try/catch invokes onResult, but status UI must not stick the gate.
-	                _isLoading = false;
+	                // Mesh Load kicks ImportModel_via_Filepath async — keep _isLoading until import idle
+	                // so socket/RPC does not report success while the model is still loading.
+	                var mh = ModelsHandler_3D.instance;
+	                if (mh != null && mh._isImportingModel) {
+		                StartCoroutine(CoClearLoadingWhenImportIdle());
+	                } else {
+		                _isLoading = false;
+	                }
 	            }
 	        });
+	    }
+
+	    IEnumerator CoClearLoadingWhenImportIdle(){
+		    float timeoutSec = 120f;
+		    float elapsed = 0f;
+		    while (ModelsHandler_3D.instance != null
+		           && ModelsHandler_3D.instance._isImportingModel
+		           && elapsed < timeoutSec) {
+			    elapsed += Time.unscaledDeltaTime;
+			    yield return null;
+		    }
+		    var mh = ModelsHandler_3D.instance;
+		    bool importOk = mh == null || (!mh._isImportingModel && mh._lastImportSucceeded);
+		    // If still importing past timeout, treat as failed for honesty flags.
+		    if (mh != null && mh._isImportingModel)
+			    importOk = false;
+		    _saveLoad_helper?.NoteDeferredImportOutcome(importOk);
+		    _isLoading = false;
 	    }
 
 	    IEnumerator ResetCtrlKey_AfterLoadSave(){
@@ -424,9 +448,14 @@ namespace spz {
         
 	        StartCoroutine( WaitForRenderAll_crtn(skipAO_blit:false, onReady) );
 
-	        void onReady(){ 
-	            Save_ViewTextures(basePath);
-	            onComplete?.Invoke();
+	        void onReady(){
+	            try {
+		            Save_ViewTextures(basePath);
+	            } catch (System.Exception e) {
+		            UnityEngine.Debug.LogError("[Save_MGR] Save_ViewTextures failed: " + e.Message);
+	            } finally {
+		            onComplete?.Invoke();
+	            }
 	        }
 	    }
 
@@ -455,15 +484,16 @@ namespace spz {
 	        }
 
 	        filepath = MakeUniquePath(filepath,suffix:"");
-	        EncodeAndSaveTextures(saveMe, filepath);
+	        if (saveMe != null)
+		        EncodeAndSaveTextures(saveMe, filepath);
 
-	        Viewport_StatusText.instance.ShowStatusText("Saved to "+ filepath.Replace("\\", "\\\\"), 
-	                                                    false, 10, progressVisibility: false);
-	        if(destroyTexs){  
+	        Viewport_StatusText.instance?.ShowStatusText("Saved to "+ filepath.Replace("\\", "\\\\"), 
+	                                                    false, 10, transitionVisibility: false);
+	        if(destroyTexs && saveMe != null){  
 	            foreach(var kvp in saveMe){ DestroyImmediate(kvp.Key); }
 	        }
 	    }
-    
+
 
 	    string MakeUniquePath(string basePath, string suffix){
 	        if (string.IsNullOrEmpty(basePath)){ return ""; }
@@ -515,10 +545,16 @@ namespace spz {
 	        string pathNormals = MakeUniquePath(basePath, "_Normals");
 	        string pathVertex  = MakeUniquePath(basePath, "_VertCols");
 
-	        Texture2D content = UserCameras_MGR.instance.camTextures.GetDisposable_ContentCamTexture();
-	        Texture2D depth  = UserCameras_MGR.instance.camTextures.GetDisposable_DepthTexture();
-	        Texture2D normals = UserCameras_MGR.instance.camTextures.GetDisposable_NormalsTexture();
-	        Texture2D vertCols = UserCameras_MGR.instance.camTextures.GetDisposable_VertexColorsTexture();
+	        var camTex = UserCameras_MGR.instance != null ? UserCameras_MGR.instance.camTextures : null;
+	        if (camTex == null) {
+		        UnityEngine.Debug.LogWarning("[Save_MGR] Save_ViewTextures: UserCameras_MGR/camTextures missing.");
+		        return;
+	        }
+
+	        Texture2D content = camTex.GetDisposable_ContentCamTexture();
+	        Texture2D depth  = camTex.GetDisposable_DepthTexture();
+	        Texture2D normals = camTex.GetDisposable_NormalsTexture();
+	        Texture2D vertCols = camTex.GetDisposable_VertexColorsTexture();
         
 	        encodeSaveDestroy(content, pathContent);
 	        encodeSaveDestroy(depth, pathDepth);
@@ -619,6 +655,7 @@ namespace spz {
 
     void EncodeAndSaveTextures( Dictionary<Texture2D,UDIM_Sector> textures,  string path, 
 	                                bool skipUdimSuffix_if_1_texture = true ){
+	        if (textures == null || textures.Count == 0) return;
 	        string pathBeforeExten = Path.Combine(Path.GetDirectoryName(path), Path.GetFileNameWithoutExtension(path));
 	        string exten = Path.GetExtension(path);
 

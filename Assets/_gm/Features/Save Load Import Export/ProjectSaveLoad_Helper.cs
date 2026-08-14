@@ -237,6 +237,11 @@ namespace spz {
 	    /// <summary>Set true only after a load dialog completed with a successful CreateFromJSON + apply.</summary>
 	    public bool LastProjectLoadSucceeded { get; private set; }
 
+	    /// <summary>Call when a deferred mesh import after load fails — RPC/socket must not keep reporting load ok.</summary>
+	    public void NoteDeferredImportOutcome(bool ok){
+		    if (!ok) LastProjectLoadSucceeded = false;
+	    }
+
 	    // CHANGED: Method signature updated to use Callback Action<string> instead of 'out string',
 	    // because SimpleFileBrowser operates asynchronously.
 	    public void LoadProject( Action<string> onResult ){
@@ -440,6 +445,7 @@ namespace spz {
 	        Texture2D tex2D_temp = new Texture2D(2, 2);
 	        if (!tex2D_temp.LoadImage( File.ReadAllBytes(path) )){
 	            Debug.LogError($"Failed to load texture at {path}");
+	            Destroy(tex2D_temp);
 	            return null; // Early return on load failure
 	        }
 	        // Create a RenderTexture with the desired format
@@ -479,6 +485,7 @@ namespace spz {
 	        Texture2D tempTex2D = new Texture2D(2, 2);
 	        if (!tempTex2D.LoadImage( File.ReadAllBytes(path) )){
 	            Debug.LogError($"Failed to load texture at {path}");
+	            Destroy(tempTex2D);
 	            return null; // Early return on load failure
 	        }
 	        // Create a RenderTexture with the desired format
