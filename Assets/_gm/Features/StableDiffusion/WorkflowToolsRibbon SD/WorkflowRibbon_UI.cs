@@ -42,10 +42,10 @@ namespace spz {
 	    public bool isPressedByCursor { get; private set; }//maybe no longer hovered, but still dragging one of our sliders.
 
 	    public bool has_brushed_mask()
-	        =>Inpaint_MaskPainter.instance.isPaintMaskEmpty==false;
+	        => Inpaint_MaskPainter.instance != null && Inpaint_MaskPainter.instance.isPaintMaskEmpty==false;
 
-	    public bool has_background_mask() 
-	        => ArtBG_IconsUI_List.instance.hasBackground(considerGradientColors:true);
+	    public bool has_background_mask()
+	        => ArtBG_IconsUI_List.instance != null && ArtBG_IconsUI_List.instance.hasBackground(considerGradientColors:true);
 
 
 	    // If there is a background (always generates whole silhuette) or brushed.
@@ -167,14 +167,14 @@ namespace spz {
 	        if (WorkflowRibbon_ProjMask_UI.didShowHint_thisFrame()){ return; }
 	        if (WorkflowRibbon_Colors_UI.didShowHint_thisFrame()){ return; }
 	        if (WorkflowRibbon_NoColor_UI.didShowHint_thisFrame()){ return; }//to avoid showing our own hint. (theirs is more important and rare).
-	        if (DimensionMode_MGR.instance._dimensionMode != DimensionMode.dim_sd){ return; }
+	        if (DimensionMode_MGR.instance == null || DimensionMode_MGR.instance._dimensionMode != DimensionMode.dim_sd){ return; }
 
 	        if (_skipShortcutHint){ return; }
 
 	        if(_shortcutHint_numShown < 4){
 	            _shortcutHint_numShown++;
-	            string modifier_key =  Settings_MGR.instance.get_useCtrlScroll_for_WorkflowMode_swaps() ? "Ctrl" : "Shift";
-	            Viewport_StatusText.instance.ShowStatusText($"{modifier_key} + Mouse Scroll Wheel to change mode easier :)", false, 2, false);
+	            string modifier_key =  Settings_MGR.instance != null && Settings_MGR.instance.get_useCtrlScroll_for_WorkflowMode_swaps() ? "Ctrl" : "Shift";
+	            Viewport_StatusText.instance?.ShowStatusText($"{modifier_key} + Mouse Scroll Wheel to change mode easier :)", false, 2, false);
 	        }
 	    }
 
@@ -235,10 +235,11 @@ namespace spz {
 	    void Scroll_to_ChangeMode_maybe(){
 	        if (KeyMousePenInput.isFileBrowserOpen()) { return; }
 	        //we either Shift+Scroll or Ctrl+Scroll, depends on the preferences:
+	        if (Settings_MGR.instance == null){ return; }
 	        bool use_ctrl = Settings_MGR.instance.get_useCtrlScroll_for_WorkflowMode_swaps();
-	        if (use_ctrl){ 
+	        if (use_ctrl){
 	            if(KeyMousePenInput.isKey_CtrlOrCommand_pressed() == false){ return; }
-	        }else { 
+	        }else {
 	            if(KeyMousePenInput.isKey_Shift_pressed() == false){ return; }
 	        }
 
@@ -287,7 +288,8 @@ namespace spz {
 	    }
 
 	    void Start(){
-	         EarlyUpdate_callbacks_MGR.instance.onEarlyUpdate3 += EarlyUpdate;
+	         if (EarlyUpdate_callbacks_MGR.instance != null)
+	             EarlyUpdate_callbacks_MGR.instance.onEarlyUpdate3 += EarlyUpdate;
 	         ApplyThemeTokens();
 	    }
 
