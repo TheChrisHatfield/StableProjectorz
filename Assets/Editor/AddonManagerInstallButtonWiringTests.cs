@@ -28,8 +28,8 @@ public sealed class AddonManagerInstallButtonWiringTests {
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("AddonInstallFromFile_Helper.CoDeferredThenPickZipOrInitPy"),
 			"Install must defer one frame so the browser is not opened on the same pointer-up.");
-		Assert.That(src, Does.Contain("Opening install file browser"),
-			"Install click must show status so a dead browser is visible.");
+		Assert.That(src, Does.Contain("Opening install file dialog"),
+			"Install click must show status so a dead picker is visible.");
 		int onInstall = src.IndexOf("void OnInstallFromFile()", System.StringComparison.Ordinal);
 		Assert.That(onInstall, Is.GreaterThan(0));
 		string body = src.Substring(onInstall, System.Math.Min(1200, src.Length - onInstall));
@@ -43,12 +43,25 @@ public sealed class AddonManagerInstallButtonWiringTests {
 			"Assets", "_gm", "Features", "AddonSystem", "AddonInstallFromFile_Helper.cs");
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("ElevateFileBrowserCanvas"),
-			"File browser canvas must sort above Addon Manager (32767).");
+			"Non-Windows fallback must still elevate SimpleFileBrowser above Addon Manager.");
 		Assert.That(src, Does.Contain("AbortInstallDialogAndRestoreUi"),
 			"Close/Open must hide FileBrowser so GlobalClickBlocker cannot freeze the app.");
 		Assert.That(src, Does.Not.Contain("SuppressOverlayRaycaster"),
 			"Disabling manager GraphicRaycaster + FileBrowser GlobalClickBlocker deadlocks all clicks.");
 		Assert.That(src, Does.Contain("EnsureAddonManagerCanvasRaycastersEnabled"),
 			"Must re-enable AddonManager_Canvas raycasters if an older build left them off.");
+	}
+
+	[Test]
+	public void InstallHelper_UsesNativeWindowsDialogOnWin_Source() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "AddonInstallFromFile_Helper.cs");
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("TryNativeWindowsOpenZipOrInitPy"),
+			"Windows Install must use OS GetOpenFileName so the picker is not buried under the modal.");
+		Assert.That(src, Does.Contain("GetOpenFileNameW"),
+			"Must call comdlg32 GetOpenFileNameW.");
+		Assert.That(src, Does.Contain("UNITY_STANDALONE_WIN"),
+			"Native dialog path must be gated to Windows builds.");
 	}
 }
