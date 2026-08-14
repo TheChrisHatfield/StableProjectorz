@@ -12,12 +12,18 @@ namespace spz {
 
 	    void Awake(){
 	        isShowing = true;
-	        _animator.SetTrigger("playIntro");
-	        _animator.speed = 0;
+	        if (_animator != null) {
+	            _animator.SetTrigger("playIntro");
+	            _animator.speed = 0;
+	        }
 	    }
 
 	    int numFrames = 0;
 	    void Update(){
+	        if (_animator == null){
+	            isShowing = false;
+	            return;
+	        }
 	        numFrames++;
 	        if(numFrames < 3){ return; }//to avoid massive spike at start, while everything loads.
 	        if (numFrames == 3){ _animator.speed=1; }
