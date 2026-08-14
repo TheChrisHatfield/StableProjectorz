@@ -53,6 +53,7 @@ namespace spz {
 	        if(Gen3D_API.instance.IsServerAvailable==false){ return false; }
 	        if(Gen3D_API.instance.isBusy){ return false; }
 	        if(_retexturePrepInFlight){ return false; }
+	        if(ModelsHandler_3D.instance != null && ModelsHandler_3D.instance._isImportingModel){ return false; }
 
 	        return true;
 	    }
@@ -99,6 +100,8 @@ namespace spz {
 	            onError = Gen_OnError,
 	            onComplete = Gen_OnComplete,
 	            onDataDownloaded = Gen_OnMeshReady,
+	            // Mesh Assimp/UDIM import is async — finish UI when Act_onImportComplete fires.
+	            suppressAutoComplete = true,
 	        };
 	        Gen3D_API.instance.StartGeneration(Gen3D_API.GenerateWhat.make_meshes_and_tex, all_values, callbacks);
 	        // Honesty: server-down path invokes onError sync and never starts a coroutine — do not report success.
@@ -191,7 +194,16 @@ namespace spz {
 	    }
 
 
+	    Action<bool, GameObject> _pendingMeshImportFinish;
+
+	    void ClearPendingMeshImportFinish(){
+	        if (_pendingMeshImportFinish == null) return;
+	        ModelsHandler_3D.Act_onImportComplete -= _pendingMeshImportFinish;
+	        _pendingMeshImportFinish = null;
+	    }
+
 	    void Gen_OnCancel(){
+	        ClearPendingMeshImportFinish();
 	        // Shared cancel bus — interrupt Gen3D when this API owns a live job (incl. final download).
 	        var api = Gen3D_API.instance;
 	        if (api != null && api.isBusy) {
@@ -222,12 +234,14 @@ namespace spz {
 
 	//MESH GENERATION CALLBACKS
 	    void Gen_OnError(string msg){
+	        ClearPendingMeshImportFinish();
 	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:true);
 	        Debug.Log("Error: " + msg);
 	        Viewport_StatusText.instance?.ShowStatusText("3D generation failed: " + msg, false, 6f, false);
 	    }
 
 	    void Gen_OnComplete(){
+	        ClearPendingMeshImportFinish();
 	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:false);
 	        Debug.Log("3D generation complete");
 	    }
@@ -244,6 +258,14 @@ namespace spz {
 	        string tempPath = Path.Combine(Application.temporaryCachePath, $"mesh_trellis.glb");
 	        if (File.Exists(tempPath)){  File.Delete(tempPath); }// Clean up temp file
 	        File.WriteAllBytes(tempPath, bytes);
+
+	        ClearPendingMeshImportFinish();
+	        _pendingMeshImportFinish = (ok, _) => {
+	            ClearPendingMeshImportFinish();
+	            if (ok) Gen_OnComplete();
+	            else Gen_OnError("downloaded mesh could not be imported");
+	        };
+	        ModelsHandler_3D.Act_onImportComplete += _pendingMeshImportFinish;
 	        ModelsHandler_3D.instance.ImportModel_via_Filepath(tempPath);
 	    }
 
@@ -375,6 +397,7 @@ namespace spz {
 
 
 	    void OnOpenCatalogue(){
+	        if(Gen3D_Catalogue_UI.instance == null){ return; }
 	        Gen3D_Catalogue_UI.instance.Show();
 	    }
 
