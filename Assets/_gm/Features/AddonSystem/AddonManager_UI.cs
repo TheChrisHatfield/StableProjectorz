@@ -3629,6 +3629,8 @@ namespace spz {
 
 		void OnDestroy() {
 			if (instance != this) return;
+			AbortPendingUninstallConfirm(alsoAbortPopup: true);
+			AddonInstallFromFile_Helper.AbortInstallDialogAndRestoreUi();
 			if (_deferredListRefresh != null) {
 				StopCoroutine(_deferredListRefresh);
 				_deferredListRefresh = null;
