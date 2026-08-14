@@ -42,8 +42,8 @@ namespace spz {
 	    /// </summary>
 	    public static void AllowQuitWithoutConfirmAndArmWatchdog(){
 	        s_allowQuitWithoutPrompt = true;
-	        if (instance != null)
-	            instance._quitPopupConfirmed = true;
+	        // Do not set _quitPopupConfirmed here — only WantsToQuit consumes s_allowQuitWithoutPrompt
+	        // so a stalled Quit cannot leave future closes skipping the Close prompt forever.
 	        Addon_MGR.ShutdownAddonApiBeforeQuit();
 	        ArmForceExitWatchdog();
 	    }
