@@ -539,6 +539,8 @@ namespace spz {
 	    const float SettingsOpenGraceSeconds = 0.35f;
 
 	    void OnButton_OpenSettingsPanel() {
+	        // Stuck Install GlobalClickBlocker / disabled AddonManager raycaster freezes Settings too.
+	        AddonInstallFromFile_Helper.AbortInstallDialogAndRestoreUi();
 	        var panel = EventsBinder.FindComponent<RectTransform>("Settings:SettingsPanel");
 	        if (panel != null) panel.gameObject.SetActive(true);
 	        _settingsOpenedAtUnscaled = Time.unscaledTime;
@@ -551,6 +553,7 @@ namespace spz {
 	    }
 
 	    void OnButton_OpenHelpSettingsPanel() {
+	        AddonInstallFromFile_Helper.AbortInstallDialogAndRestoreUi();
 	        var panel = EventsBinder.FindComponent<RectTransform>("Settings:SettingsPanel");
 	        if (panel != null) panel.gameObject.SetActive(true);
 	        _settingsOpenedAtUnscaled = Time.unscaledTime;

@@ -86,7 +86,7 @@ namespace spz {
 			    _act_onNo = null;
 		    }
 		    RestoreElevation();
-		    ElevateAboveAddonManagerIfOpen();
+		    ElevateForModalShow();
 	        _background_button.gameObject.SetActive(true);
 	        _header.text = text;
 	        _act_onYes = onYes;
@@ -96,21 +96,33 @@ namespace spz {
 	        _alreadyShownOrHidden = true;
 		    // Same pointer that clicked Uninstall must not dismiss via fullscreen dimmer.
 		    _suppressBackgroundDismissUntilPointerUp = true;
+		    if (_yes != null) {
+			    _yes.interactable = true;
+			    _yes.enabled = true;
+		    }
+		    if (_no != null) {
+			    _no.interactable = true;
+			    _no.enabled = true;
+		    }
+		    if (_background_button != null) {
+			    _background_button.interactable = true;
+			    _background_button.enabled = true;
+		    }
 	        ApplyThemeTokens();
 	    }
 
 	    /// <summary>
-	    /// AddonManager_Canvas is Overlay @ 32767; ConfirmPopup nested World Space (~1500) loses raycasts.
-	    /// Drop manager sort and force this popup to Screen Space Overlay while showing.
+	    /// ConfirmPopup nested World Space (~1500) loses raycasts under Settings and under
+	    /// AddonManager_Canvas (Overlay @ 32767). Always lift to Screen Space Overlay while showing;
+	    /// if Addon Manager is open, also drop its sort so Yes/No stay clickable.
 	    /// </summary>
-	    void ElevateAboveAddonManagerIfOpen() {
+	    void ElevateForModalShow() {
 		    Canvas mgr = FindActiveAddonManagerCanvas();
-		    if (mgr == null || !mgr.gameObject.activeInHierarchy)
-			    return;
-
-		    _parkedManagerCanvas = mgr;
-		    _parkedManagerSort = mgr.sortingOrder;
-		    mgr.sortingOrder = 100;
+		    if (mgr != null && mgr.gameObject.activeInHierarchy) {
+			    _parkedManagerCanvas = mgr;
+			    _parkedManagerSort = mgr.sortingOrder;
+			    mgr.sortingOrder = 100;
+		    }
 
 		    _popupRoot = transform;
 		    _popupRootScale = _popupRoot.localScale;
