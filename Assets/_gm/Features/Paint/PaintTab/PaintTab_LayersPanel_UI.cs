@@ -167,7 +167,7 @@ namespace spz {
 				SpzUiThemeOps.ApplyBoundChromeSelectable(_addLayerButton, t.success, t.accent);
 				foreach (var tmp in _addLayerButton.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
 					if (tmp != null)
-						SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+						ThemeLayerChromeLabel(tmp, t.textPrimary);
 				}
 				SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_addLayerButton);
 			}
@@ -176,7 +176,7 @@ namespace spz {
 				SpzUiThemeOps.ApplyBoundChromeSelectable(_collapseButton, t.controlBg, t.accent);
 				foreach (var tmp in _collapseButton.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
 					if (tmp != null)
-						SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+						ThemeLayerChromeLabel(tmp, t.textPrimary);
 				}
 				SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_collapseButton);
 			}
@@ -190,17 +190,27 @@ namespace spz {
 				if (del != null)
 				{
 					var delBtn = del.GetComponent<Button>();
+					bool hasCaption = false;
 					if (delBtn != null) {
 						SpzUiThemeOps.EnsureSelectableHitFace(delBtn);
 						SpzUiThemeOps.ApplyBoundChromeSelectable(delBtn, t.danger, t.accent);
 						foreach (var tmp in delBtn.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
-							if (tmp != null)
-								SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+							if (tmp == null) continue;
+							hasCaption = true;
+							ThemeLayerChromeLabel(tmp, t.textPrimary);
 						}
 						SpzUiThemeOps.ClearNonFaceRaycastsForTheme(delBtn);
 					}
-					// Lead Trash — centered Monolith stamps Delete caption.
-					SpzUiThemeOps.ApplyControlLineIconLeading(del, StudioLineIcon.Trash, 16f);
+					if (hasCaption) {
+						// Caption present — Trash Monolith overlays "Delete" (SERV litmus).
+						Transform mono = SpzUiThemeOps.FindDirectChildIncludingInactive(del, "MonolithLineIcon");
+						if (mono != null)
+							mono.gameObject.SetActive(false);
+					}
+					else {
+						// Icon-only 28px delete cell — Leading Trash is the glyph.
+						SpzUiThemeOps.ApplyControlLineIconLeading(del, StudioLineIcon.Trash, 16f);
+					}
 				}
 				var vis = row.transform.Find("Visibility");
 				if (vis != null) {
@@ -241,6 +251,16 @@ namespace spz {
 					&& _layerStack.Layers[layerIx].Visible;
 				visImg.color = visible ? _visOn : _visOff;
 			}
+		}
+
+		/// <summary>+ Layer / Delete captions — Compact Truncate clips; short chips stay Compact.</summary>
+		static void ThemeLayerChromeLabel(TMPro.TextMeshProUGUI tmp, Color ink) {
+			if (tmp == null) return;
+			string raw = tmp.text ?? "";
+			if (raw.IndexOf(' ') >= 0 || raw.Length >= 10)
+				SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, ink, 11f);
+			else
+				SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, ink, 11f);
 		}
 
 		void Start()

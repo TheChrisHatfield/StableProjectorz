@@ -27,6 +27,15 @@ public sealed class LayerVisibilityFaceOwnerThemeTests {
 		Assert.That(body, Does.Contain("visBtn.targetGraphic = authored"));
 		Assert.That(body, Does.Not.Contain("ClearNonFaceRaycastsForTheme(visBtn)"));
 	}
+
+	[Test]
+	public void LayersPanel_DeleteTrashOnlyWhenIconOnly_ReadableBodyForCaptions() {
+		string path = Path.Combine(Application.dataPath, "_gm", "Features", "Paint", "PaintTab", "PaintTab_LayersPanel_UI.cs");
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("ThemeLayerChromeLabel"));
+		Assert.That(src, Does.Contain("Caption present — Trash Monolith overlays"));
+		Assert.That(src, Does.Contain("Icon-only 28px delete cell"));
+	}
 }
 
 public sealed class ArtListPanelShellOwnerThemeTests {
