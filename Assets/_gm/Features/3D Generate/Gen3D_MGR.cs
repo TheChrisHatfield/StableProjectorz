@@ -266,7 +266,10 @@ namespace spz {
 	            else Gen_OnError("downloaded mesh could not be imported");
 	        };
 	        ModelsHandler_3D.Act_onImportComplete += _pendingMeshImportFinish;
-	        ModelsHandler_3D.instance.ImportModel_via_Filepath(tempPath);
+	        if (!ModelsHandler_3D.instance.TryImportModelFromFile(tempPath)) {
+	            ClearPendingMeshImportFinish();
+	            throw new InvalidOperationException("could not start mesh import (busy or invalid file)");
+	        }
 	    }
 
 

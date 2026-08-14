@@ -59,7 +59,14 @@ namespace spz {
 
 	    public void ImportModel_via_Filepath( string filepath ){
 
-	        Debug.Assert( File.Exists(filepath)  &&  _isImportingModel==false );
+	        if (_isImportingModel) {
+		        Debug.LogWarning("[ModelsHandler3D_ImportHelper] ImportModel_via_Filepath refused — already importing.");
+		        return;
+	        }
+	        if (!File.Exists(filepath)) {
+		        OnError("3d-model file doesn't exist: " + filepath);
+		        return;
+	        }
 
 	        // Clear prior success so deferred RPC cannot treat a failed new import as OK.
 	        _lastImportSucceeded = false;
