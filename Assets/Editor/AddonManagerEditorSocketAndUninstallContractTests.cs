@@ -15,27 +15,26 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 	public void UninstallConfirm_RaisesAboveAddonManager() {
 		string path = Path.Combine(Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "AddonSystem", "AddonManager_UI.cs");
+		string confirmPath = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "_Core", "UI (reusable)", "Widgets and Gadgets", "UI_ConfirmPopup_YesNo", "ConfirmPopup_UI.cs");
 		string src = File.ReadAllText(path);
+		string confirm = File.ReadAllText(confirmPath);
 		int i = src.IndexOf("void OnRemoveAddon(", System.StringComparison.Ordinal);
 		Assert.That(i, Is.GreaterThan(0));
 		int end = src.IndexOf("void ShowStatus(", i, System.StringComparison.Ordinal);
 		string body = end > i ? src.Substring(i, end - i) : src.Substring(i, System.Math.Min(5000, src.Length - i));
-		Assert.That(body, Does.Contain("BeginUninstallConfirmAboveManager"),
-			"Uninstall must lift ConfirmPopup above AddonManager_Canvas for visibility + clicks.");
-		Assert.That(body, Does.Contain("EndUninstallConfirmAboveManager"),
-			"Must restore manager/confirm sort after Yes/No.");
+		Assert.That(body, Does.Contain("ConfirmPopup_UI.instance.Show"),
+			"Uninstall must show ConfirmPopup.");
 		Assert.That(body, Does.Contain("RemoveAddon(addonId"),
 			"Yes must call AddonInstaller_MGR.RemoveAddon.");
-		Assert.That(body, Does.Contain("RenderMode.ScreenSpaceOverlay"),
-			"Confirm World Space canvas must become Overlay so Yes/No receive raycasts.");
-		Assert.That(body, Does.Contain("managerCanvas.sortingOrder = 100"),
-			"Must temporarily drop Addon Manager below the confirm dialog.");
-		Assert.That(body, Does.Contain("GetComponentsInChildren<Canvas>(true)"),
-			"Must include nested confirm canvases, not only the root.");
-		Assert.That(body, Does.Contain("s_uninstallConfirmSessionActive"),
-			"Uninstall confirm session must be idempotent so re-Show / double End cannot leave manager sort stuck.");
 		Assert.That(body, Does.Contain("refusing uninstall without confirmation"),
 			"Missing ConfirmPopup must hard-fail, not silently delete the add-on.");
+		Assert.That(confirm, Does.Contain("ElevateAboveAddonManagerIfOpen"),
+			"ConfirmPopup.Show must elevate above AddonManager_Canvas for Uninstall/Exit clicks.");
+		Assert.That(confirm, Does.Contain("RestoreElevation"),
+			"ConfirmPopup must restore manager sort on Yes/No.");
+		Assert.That(confirm, Does.Contain("RenderMode.ScreenSpaceOverlay"),
+			"Confirm World Space canvas must become Overlay so Yes/No receive raycasts.");
 	}
 
 	[Test]

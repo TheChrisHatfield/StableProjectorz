@@ -22,6 +22,8 @@ public sealed class ConfirmPopupAndHardnessThemeTests {
 			"Escape must only cancel while the confirm dialog is visible.");
 		Assert.That(src, Does.Contain("OnDestroy cancel"),
 			"Destroy must run cancel cleanup so manager sort is restored.");
+		Assert.That(src, Does.Contain("ElevateAboveAddonManagerIfOpen"),
+			"Show must elevate above AddonManager_Canvas for Exit/Uninstall while manager is open.");
 	}
 
 	[Test]

@@ -3462,14 +3462,10 @@ namespace spz {
 		void OnRemoveAddon(string addonId) {
 			Debug.Log($"[AddonManager_UI] Uninstall clicked for '{addonId}'.");
 			if (ConfirmPopup_UI.instance != null) {
-				// AddonManager is Screen Space Overlay @ 32767. ConfirmPopup's Yes/No live on a nested
-				// World Space canvas (~1500) — raising sort alone leaves raycasts on the manager, so
-				// Yes/No look dead. Drop manager below confirm and force confirm to Overlay.
-				var session = BeginUninstallConfirmAboveManager();
+				// ConfirmPopup_UI.Show elevates above AddonManager_Canvas (Overlay @ 32767) for clicks.
 				ConfirmPopup_UI.instance.Show(
 					$"Remove add-on '{addonId}'?\n\nThis cannot be undone.",
 					() => {
-						EndUninstallConfirmAboveManager(session);
 						if (AddonInstaller_MGR.instance == null) {
 							ShowStatus("Add-on installer not available", false);
 							return;
@@ -3481,109 +3477,13 @@ namespace spz {
 								RefreshAddonsList();
 						});
 					},
-					() => {
-						EndUninstallConfirmAboveManager(session);
-						ShowStatus("Uninstall cancelled.", false);
-					}
+					() => ShowStatus("Uninstall cancelled.", false)
 				);
 			} else {
 				// Never delete StreamingAssets without Yes/No — ConfirmPopup scene may be missing in a bad load.
 				Debug.LogError("[AddonManager_UI] ConfirmPopup_UI missing — refusing uninstall without confirmation.");
 				ShowStatus("Uninstall blocked: confirmation dialog unavailable. Restart the app and try again.", false);
 			}
-		}
-
-		struct ConfirmPopupCanvasSortState {
-			public Canvas canvas;
-			public int sortingOrder;
-			public bool overrideSorting;
-			public RenderMode renderMode;
-		}
-
-		struct UninstallConfirmSession {
-			public Canvas managerCanvas;
-			public int managerSort;
-			public ConfirmPopupCanvasSortState[] popupStates;
-			public Transform popupRoot;
-			public Vector3 popupRootScale;
-		}
-
-		static bool s_uninstallConfirmSessionActive;
-		static UninstallConfirmSession s_uninstallConfirmSession;
-
-		/// <summary>
-		/// Make Uninstall Yes/No visible and clickable above AddonManager_Canvas.
-		/// </summary>
-		UninstallConfirmSession BeginUninstallConfirmAboveManager() {
-			// Replace any leaked prior session (re-Show / failed restore).
-			if (s_uninstallConfirmSessionActive)
-				EndUninstallConfirmAboveManager(s_uninstallConfirmSession);
-
-			var session = new UninstallConfirmSession();
-			session.managerCanvas = FindAddonManagerOverlayCanvas();
-			if (session.managerCanvas != null) {
-				session.managerSort = session.managerCanvas.sortingOrder;
-				// Below authored confirm root (900) / nested (1500) while dialog is open.
-				session.managerCanvas.sortingOrder = 100;
-			}
-
-			var popup = ConfirmPopup_UI.instance;
-			if (popup == null) {
-				session.popupStates = Array.Empty<ConfirmPopupCanvasSortState>();
-				s_uninstallConfirmSession = session;
-				s_uninstallConfirmSessionActive = true;
-				return session;
-			}
-
-			// Additive confirm scene sometimes loads root at scale 0 — force visible for Overlay raycasts.
-			session.popupRoot = popup.transform;
-			session.popupRootScale = session.popupRoot.localScale;
-			if (session.popupRoot.localScale.sqrMagnitude < 1e-6f)
-				session.popupRoot.localScale = Vector3.one;
-
-			var canvases = popup.GetComponentsInChildren<Canvas>(true);
-			session.popupStates = new ConfirmPopupCanvasSortState[canvases.Length];
-			int baseOrder = Math.Max(AddonManagerCanvasSortOrder + 100, 40000);
-			for (int i = 0; i < canvases.Length; i++) {
-				var c = canvases[i];
-				session.popupStates[i] = new ConfirmPopupCanvasSortState {
-					canvas = c,
-					sortingOrder = c != null ? c.sortingOrder : 0,
-					overrideSorting = c != null && c.overrideSorting,
-					renderMode = c != null ? c.renderMode : RenderMode.ScreenSpaceOverlay
-				};
-				if (c == null) continue;
-				// World Space + null camera does not receive UI raycasts reliably under an Overlay modal.
-				c.renderMode = RenderMode.ScreenSpaceOverlay;
-				c.overrideSorting = true;
-				c.sortingOrder = baseOrder + i;
-				c.enabled = true;
-				if (c.GetComponent<GraphicRaycaster>() == null)
-					c.gameObject.AddComponent<GraphicRaycaster>();
-			}
-			s_uninstallConfirmSession = session;
-			s_uninstallConfirmSessionActive = true;
-			return session;
-		}
-
-		static void EndUninstallConfirmAboveManager(UninstallConfirmSession session) {
-			if (!s_uninstallConfirmSessionActive)
-				return;
-			s_uninstallConfirmSessionActive = false;
-			if (session.popupStates != null) {
-				for (int i = 0; i < session.popupStates.Length; i++) {
-					var s = session.popupStates[i];
-					if (s.canvas == null) continue;
-					s.canvas.sortingOrder = s.sortingOrder;
-					s.canvas.overrideSorting = s.overrideSorting;
-					s.canvas.renderMode = s.renderMode;
-				}
-			}
-			if (session.popupRoot != null)
-				session.popupRoot.localScale = session.popupRootScale;
-			if (session.managerCanvas != null)
-				session.managerCanvas.sortingOrder = session.managerSort;
-			s_uninstallConfirmSession = default;
 		}
 		
 		/// <summary>
