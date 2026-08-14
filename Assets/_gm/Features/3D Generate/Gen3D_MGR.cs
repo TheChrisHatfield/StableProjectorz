@@ -366,6 +366,9 @@ namespace spz {
 	            //It helps to keep the imported images etc, for comfort.
 	            return; 
 	        }
+	        // NRE here propagates into GetLayoutUI_Looped_crtn and kills the poll loop for the
+	        // whole session. Skip (without recording _layout_str_prev) so a later pass retries.
+	        if(Gen3D_InputPanelBuilder_UI.instance == null){ return; }
 	        _known_inputs = Gen3D_InputPanelBuilder_UI.instance.MakeLayout_from_text(layout_str);
 	        _layout_str_prev = layout_str;
 	    }
