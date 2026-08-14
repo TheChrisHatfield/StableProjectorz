@@ -17,8 +17,11 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 			"Assets", "_gm", "Features", "AddonSystem", "AddonManager_UI.cs");
 		string confirmPath = Path.Combine(Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "_Core", "UI (reusable)", "Widgets and Gadgets", "UI_ConfirmPopup_YesNo", "ConfirmPopup_UI.cs");
+		string installerPath = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "AddonInstaller_MGR.cs");
 		string src = File.ReadAllText(path);
 		string confirm = File.ReadAllText(confirmPath);
+		string installer = File.ReadAllText(installerPath);
 		int i = src.IndexOf("void OnRemoveAddon(", System.StringComparison.Ordinal);
 		Assert.That(i, Is.GreaterThan(0));
 		int end = src.IndexOf("void ShowStatus(", i, System.StringComparison.Ordinal);
@@ -27,18 +30,35 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 			"Uninstall must show ConfirmPopup.");
 		Assert.That(body, Does.Contain("CoShowUninstallConfirm"),
 			"Uninstall confirm must defer one frame so the dimmer cannot eat the opening click.");
+		Assert.That(body, Does.Contain("EnsureDeferredOpenCoroutineHost"),
+			"Uninstall confirm must run on DDOL host so list rebuild cannot kill it.");
+		Assert.That(body, Does.Contain("StopCoroutine(_uninstallConfirmCo)"),
+			"Double Uninstall must stop the prior confirm coroutine.");
 		Assert.That(body, Does.Contain("RemoveAddon(addonId"),
 			"Yes must call AddonInstaller_MGR.RemoveAddon.");
 		Assert.That(body, Does.Contain("refusing uninstall without confirmation"),
 			"Missing ConfirmPopup must hard-fail, not silently delete the add-on.");
-		Assert.That(confirm, Does.Contain("ElevateAboveAddonManagerIfOpen"),
-			"ConfirmPopup.Show must elevate above AddonManager_Canvas for Uninstall/Exit clicks.");
+		Assert.That(src, Does.Contain("removeBtn.onClick.RemoveAllListeners()"),
+			"Uninstall button must RemoveAllListeners before bind (double-fire → false cancel).");
+		Assert.That(confirm, Does.Contain("ElevateForModalShow"),
+			"ConfirmPopup.Show must Overlay-elevate for Settings/Uninstall/Exit clicks.");
 		Assert.That(confirm, Does.Contain("RestoreElevation"),
 			"ConfirmPopup must restore manager sort on Yes/No.");
 		Assert.That(confirm, Does.Contain("RenderMode.ScreenSpaceOverlay"),
 			"Confirm World Space canvas must become Overlay so Yes/No receive raycasts.");
 		Assert.That(confirm, Does.Contain("prior acts discarded, not cancelled"),
 			"Re-Show must not fire Uninstall cancelled via prior onNo.");
+		Assert.That(confirm, Does.Contain("_suppressBackgroundDismissUntilPointerUp"),
+			"Dimmer must ignore the opening pointer.");
+		int rem = installer.IndexOf("IEnumerator RemoveAddonCrtn(", System.StringComparison.Ordinal);
+		Assert.That(rem, Is.GreaterThan(0));
+		string remBody = installer.Substring(rem, System.Math.Min(2200, installer.Length - rem));
+		Assert.That(remBody, Does.Contain("unloadTimeoutSec"),
+			"RemoveAddon must not hang forever if UnloadAddon callback never fires.");
+		Assert.That(remBody, Does.Contain("IsPythonUnloadPending(addonId)"),
+			"RemoveAddon must wait Python unload pending before Directory.Delete.");
+		Assert.That(remBody, Does.Contain("Directory.Delete(addonPath"),
+			"Yes path must delete StreamingAssets/Addons/<id>.");
 	}
 
 	[Test]

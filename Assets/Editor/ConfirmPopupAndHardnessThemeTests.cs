@@ -22,8 +22,8 @@ public sealed class ConfirmPopupAndHardnessThemeTests {
 			"Escape must only cancel while the confirm dialog is visible.");
 		Assert.That(src, Does.Contain("_suppressBackgroundDismissUntilPointerUp"),
 			"Dimmer must ignore the same pointer that opened the dialog.");
-		Assert.That(src, Does.Contain("ElevateAboveAddonManagerIfOpen"),
-			"Show must elevate above AddonManager_Canvas for Exit/Uninstall while manager is open.");
+		Assert.That(src, Does.Contain("ElevateForModalShow"),
+			"Show must always Overlay-elevate ConfirmPopup (Settings + Addon Manager litmus).");
 		Assert.That(src, Does.Not.Contain("Prior cancel on re-Show"),
 			"Must not invoke prior onNo on re-Show (that was the Uninstall cancelled false positive).");
 	}

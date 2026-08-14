@@ -72,6 +72,18 @@ public sealed class SettingsPanelCloseIndependenceTests {
 		}
 	}
 
+	[Test]
+	public void SettingsOpen_AbortsStuckInstallDialog_Source() {
+		string path = System.IO.Path.Combine(Application.dataPath, "_gm", "Features", "Settings", "Settings_MGR.cs");
+		string src = System.IO.File.ReadAllText(path);
+		Assert.That(src, Does.Contain("AbortInstallDialogAndRestoreUi()"),
+			"Opening Settings must clear stuck FileBrowser GlobalClickBlocker so UI is not frozen.");
+		int open = src.IndexOf("void OnButton_OpenSettingsPanel()", System.StringComparison.Ordinal);
+		Assert.That(open, Is.GreaterThan(0));
+		string body = src.Substring(open, System.Math.Min(500, src.Length - open));
+		Assert.That(body, Does.Contain("AbortInstallDialogAndRestoreUi"));
+	}
+
 	static void SetPrivate(object target, string fieldName, object value) {
 		var f = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
 		Assert.That(f, Is.Not.Null, fieldName);
