@@ -166,6 +166,14 @@ namespace spz {
 	            }
 	        }
 
+	        // Callers already fired OnConfirmed_StartedGenerate — a bare NRE here would leave
+	        // the Cancel chrome generating forever. Unwind honestly instead.
+	        if (Gen3D_API.instance == null){
+	            GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:true);
+	            Viewport_StatusText.instance?.ShowStatusText("Retexture: 3D API unavailable.", false, 5f, false);
+	            return;
+	        }
+
 	        var callbacks = new Gen3D_API.GenerationCallbacks(){
 	            onProgress = Gen_OnProgress,
 	            onError = Gen_Retexture_OnError,
