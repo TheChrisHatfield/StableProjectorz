@@ -39,9 +39,9 @@ namespace spz {
 	    /// <summary>When several submeshes are selected, this is the one the user is steering (hover ray or last select). Add-ons and tools should use <see cref="GetManipulationTargetMesh"/> for single-mesh transform, not <c>selectedMeshes[0]</c>.</summary>
 	    SD_3D_Mesh _manipulationFocusMesh;
 
-	    public bool _isImportingModel => _importHelper._isImportingModel;
+	    public bool _isImportingModel => _importHelper != null && _importHelper._isImportingModel;
 	    public bool _lastImportSucceeded => _importHelper != null && _importHelper._lastImportSucceeded;
-	    public string _path_recentlyExported => _importHelper._path_recentlyExported;
+	    public string _path_recentlyExported => _importHelper != null ? _importHelper._path_recentlyExported : null;
 	    public void ClearRecentlyExportedPath() {
 		    if (_importHelper != null)
 			    _importHelper.ClearRecentlyExportedPath();
