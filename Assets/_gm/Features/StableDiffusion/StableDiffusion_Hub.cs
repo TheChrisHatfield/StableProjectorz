@@ -34,9 +34,10 @@ namespace spz {
 	    public void isCanGenerate(out bool canGenArt_, out bool canGenBG_){
 	        bool isOnCooldown =  Time.unscaledTime < _generationCooldownUntil;
 	        bool isConnected  =  Connection_MGR.is_sd_connected;
+	        bool gen3dBusy = Gen3D_API.instance != null && Gen3D_API.instance.isBusy;
 
-	        canGenBG_  =  !isOnCooldown  &&  !_generating  &&  isConnected;
-	        canGenArt_ =  !isOnCooldown  &&  !_generating  &&  isConnected;
+	        canGenBG_  =  !isOnCooldown  &&  !_generating  &&  isConnected && !gen3dBusy;
+	        canGenArt_ =  !isOnCooldown  &&  !_generating  &&  isConnected && !gen3dBusy;
 	        // Flux.2 Klein: Gen Art uses ImageStitch structure (not Fun-Union). Button enable = Klein ckpt;
 	        // fail-closed structure attach runs on Deny/payload (HasMeshDepthRt alone stays false until a
 	        // depth lock holder exists — would permanently disable Gen Art).
@@ -46,17 +47,21 @@ namespace spz {
 
 
 	    public bool DenyWithMessage_ifCantGenerate(bool allow_without_controlnets){
-	        if(AmbientOcclusion_Baker.instance.isGeneratingAO){
-	            Viewport_StatusText.instance.ShowStatusText("Can't Generate images while Baking AO. Please wait", false, 2, true);
+	        if(AmbientOcclusion_Baker.instance != null && AmbientOcclusion_Baker.instance.isGeneratingAO){
+	            Viewport_StatusText.instance?.ShowStatusText("Can't Generate images while Baking AO. Please wait", false, 2, true);
 	            return true; 
 	        }
-	        if (ModelsHandler_3D.instance._isImportingModel){
-	            Viewport_StatusText.instance.ShowStatusText("Can't Generate images while Loading 3D Model file. Please wait", false, 2, true);
+	        if (Gen3D_API.instance != null && Gen3D_API.instance.isBusy){
+	            Viewport_StatusText.instance?.ShowStatusText("Can't Generate images while 3D generation is running. Please wait", false, 2, true);
+	            return true;
+	        }
+	        if (ModelsHandler_3D.instance != null && ModelsHandler_3D.instance._isImportingModel){
+	            Viewport_StatusText.instance?.ShowStatusText("Can't Generate images while Loading 3D Model file. Please wait", false, 2, true);
 	            return true;
 	        }
 	        if (Connection_MGR.is_sd_connected == false){ 
 	            // OG health: actionable black-window guidance (dropdown captions stay on DisplayText).
-	            Viewport_StatusText.instance.ShowStatusText(SdDisconnectPlaceholder.StatusText, false, 2, true);
+	            Viewport_StatusText.instance?.ShowStatusText(SdDisconnectPlaceholder.StatusText, false, 2, true);
 	            return true;
 	        }
 	        bool klein = IsActiveCheckpointKlein();
