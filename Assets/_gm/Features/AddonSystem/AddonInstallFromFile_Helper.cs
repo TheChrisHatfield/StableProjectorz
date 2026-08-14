@@ -90,14 +90,19 @@ namespace spz {
 			if (nativeOk && !string.IsNullOrEmpty(nativePath)) {
 				Debug.Log("[AddonInstallFromFile_Helper] Native dialog picked: " + nativePath);
 				onPickedPath?.Invoke(nativePath);
-			} else if (string.Equals(nativeErr, "cancelled", StringComparison.Ordinal)) {
+				yield break;
+			}
+			if (string.Equals(nativeErr, "cancelled", StringComparison.Ordinal)) {
 				Debug.Log("[AddonInstallFromFile_Helper] Native dialog cancelled.");
 				onCanceled?.Invoke();
-			} else {
-				onSetupFailed?.Invoke(new InvalidOperationException(
-					string.IsNullOrEmpty(nativeErr) ? "Native file dialog failed." : nativeErr));
+				yield break;
 			}
-			yield break;
+			// Native failed (no HWND / COMDlg) — fall back so Install is not a dead button.
+			Debug.LogWarning("[AddonInstallFromFile_Helper] Native dialog failed (" +
+			                 (string.IsNullOrEmpty(nativeErr) ? "unknown" : nativeErr) +
+			                 ") — falling back to SimpleFileBrowser.");
+			yield return CoPickWithSimpleFileBrowser(
+				overlayCanvasSortOrder, onPickedPath, onCanceled, onSetupFailed, overlayCanvasToYield);
 #else
 			yield return CoPickWithSimpleFileBrowser(
 				overlayCanvasSortOrder, onPickedPath, onCanceled, onSetupFailed, overlayCanvasToYield);
@@ -250,6 +255,12 @@ namespace spz {
 		[DllImport("comdlg32.dll", CharSet = CharSet.Unicode)]
 		static extern int CommDlgExtendedError();
 
+		[DllImport("user32.dll")]
+		static extern IntPtr GetActiveWindow();
+
+		[DllImport("user32.dll")]
+		static extern IntPtr GetForegroundWindow();
+
 		static IntPtr AllocDoubleNullTerminatedFilter(string[] pairs) {
 			// OPENFILENAME filter is label\0pattern\0…\0\0 — raw buffer; C# string marshaling truncates at first \0.
 			int chars = 1;
@@ -295,6 +306,10 @@ namespace spz {
 
 				var ofn = new OpenFileNameNative();
 				ofn.structSize = Marshal.SizeOf(typeof(OpenFileNameNative));
+				// Owner HWND keeps the dialog above the Unity player (Zero often buries it / feels frozen).
+				ofn.dlgOwner = GetActiveWindow();
+				if (ofn.dlgOwner == IntPtr.Zero)
+					ofn.dlgOwner = GetForegroundWindow();
 				ofn.filter = filterBuf;
 				ofn.file = fileBuf;
 				ofn.maxFile = maxFile;

@@ -65,6 +65,12 @@ public sealed class AddonManagerInstallButtonWiringTests {
 			"Native dialog path must be gated to Windows builds.");
 		Assert.That(src, Does.Contain("CommDlgExtendedError"),
 			"Must distinguish user cancel from native dialog failure.");
+		Assert.That(src, Does.Contain("dlgOwner"),
+			"Native dialog must set owner HWND so it is not buried under the player.");
+		Assert.That(src, Does.Contain("GetActiveWindow"),
+			"Must own the dialog via GetActiveWindow/GetForegroundWindow.");
+		Assert.That(src, Does.Contain("falling back to SimpleFileBrowser"),
+			"Native failure must fall through to SimpleFileBrowser (not leave Install dead).");
 	}
 
 	[Test]
