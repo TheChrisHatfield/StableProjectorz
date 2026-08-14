@@ -17,9 +17,21 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 			"Assets", "_gm", "Features", "AddonSystem", "AddonManager_UI.cs");
 		string src = File.ReadAllText(path);
 		int i = src.IndexOf("void OnRemoveAddon(", System.StringComparison.Ordinal);
-		string body = src.Substring(i, System.Math.Min(900, src.Length - i));
-		Assert.That(body, Does.Contain("AddonManagerCanvasSortOrder + 100"));
-		Assert.That(body, Does.Contain("RestoreConfirmPopupSort"));
+		Assert.That(i, Is.GreaterThan(0));
+		int end = src.IndexOf("void ShowStatus(", i, System.StringComparison.Ordinal);
+		string body = end > i ? src.Substring(i, end - i) : src.Substring(i, System.Math.Min(5000, src.Length - i));
+		Assert.That(body, Does.Contain("BeginUninstallConfirmAboveManager"),
+			"Uninstall must lift ConfirmPopup above AddonManager_Canvas for visibility + clicks.");
+		Assert.That(body, Does.Contain("EndUninstallConfirmAboveManager"),
+			"Must restore manager/confirm sort after Yes/No.");
+		Assert.That(body, Does.Contain("RemoveAddon(addonId"),
+			"Yes must call AddonInstaller_MGR.RemoveAddon.");
+		Assert.That(body, Does.Contain("RenderMode.ScreenSpaceOverlay"),
+			"Confirm World Space canvas must become Overlay so Yes/No receive raycasts.");
+		Assert.That(body, Does.Contain("managerCanvas.sortingOrder = 100"),
+			"Must temporarily drop Addon Manager below the confirm dialog.");
+		Assert.That(body, Does.Contain("GetComponentsInChildren<Canvas>(true)"),
+			"Must include nested confirm canvases, not only the root.");
 	}
 
 	[Test]
