@@ -532,6 +532,12 @@ def _apply_spz_export_scale_litmus(fbx_path: str) -> None:
     if spz_fit <= 1e-8:
         return
     factor = cube / spz_fit  # 2/3
+    # Freshly imported objects can report stale/zero dimensions until the depsgraph
+    # evaluates — update first, or the legacy litmus silently skips and leaves ~3u size.
+    try:
+        bpy.context.view_layer.update()
+    except Exception as e:
+        print("SPZ GO scale litmus: view_layer.update failed:", e)
     # Only apply when the import looks like SPZ-fitted size (~fit target), not authoring meters.
     edge = _selected_mesh_max_edge(bpy.context)
     if edge <= 1e-8:
