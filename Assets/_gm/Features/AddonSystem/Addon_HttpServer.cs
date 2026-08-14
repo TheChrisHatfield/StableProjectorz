@@ -739,8 +739,10 @@ namespace spz {
 			while (sm != null && sm._isSaving && elapsed < timeoutSec) {
 				Thread.Sleep((int)(step * 1000));
 				elapsed += step;
+				sm = Save_MGR.instance;
 			}
-			return sm == null || !sm._isSaving;
+			// sm == null is not idle success (native UI path already learned this).
+			return sm != null && !sm._isSaving;
 		}
 		
 		/// <summary>
