@@ -547,10 +547,23 @@ namespace spz {
 			}
 			else if (action == "info") {
 				if (method == "GET") {
-					var info = new JObject();
-					info["path"] = ConvertToRestResponse(ExecuteJsonRpc("spz.cmd.get_project_path", new JObject()));
-					info["version"] = ConvertToRestResponse(ExecuteJsonRpc("spz.cmd.get_project_version", new JObject()));
-					return info;
+					// Flat shape matching the Python server — the Blender SPZ GO bridge reads
+					// data_dir / data_dir_available / version directly off this object.
+					var pathR = ExecuteJsonRpcSync("spz.cmd.get_project_path", new JObject());
+					var verR  = ExecuteJsonRpcSync("spz.cmd.get_project_version", new JObject());
+					var ddR   = ExecuteJsonRpcSync("spz.cmd.get_project_data_dir", new JObject());
+					bool pathOk = pathR?["success"]?.ToObject<bool>() ?? false;
+					bool ddOk = (ddR?["success"]?.ToObject<bool>() ?? false)
+						&& ddR["data_dir"] != null && ddR["data_dir"].Type != JTokenType.Null
+						&& !string.IsNullOrEmpty(ddR["data_dir"].ToString());
+					return new JObject {
+						["path"] = pathOk ? pathR["path"] : null,
+						["path_available"] = pathOk,
+						["version"] = verR?["version"],
+						["data_dir"] = ddOk ? ddR["data_dir"] : null,
+						["data_dir_available"] = ddOk,
+						["data_dir_is_session"] = ddR?["data_dir_is_session"] ?? false,
+					};
 				}
 			}
 			return new JObject { ["error"] = "Invalid action" };
