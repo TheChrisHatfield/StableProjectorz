@@ -26,18 +26,41 @@ namespace spz {
 		    public RenderMode renderMode;
 	    }
 
+	    struct RectTransformState {
+		    public RectTransform rt;
+		    public Vector2 anchorMin;
+		    public Vector2 anchorMax;
+		    public Vector2 offsetMin;
+		    public Vector2 offsetMax;
+		    public Vector2 pivot;
+		    public Vector3 localScale;
+		    public Quaternion localRotation;
+	    }
+
 	    Canvas _parkedManagerCanvas;
 	    int _parkedManagerSort;
-	    Transform _popupRoot;
-	    Vector3 _popupRootScale;
 	    CanvasSortState[] _elevatedPopupStates;
+	    RectTransformState _savedRootRt;
+	    RectTransformState _savedBackgroundRt;
+	    bool _hasSavedRootRt;
+	    bool _hasSavedBackgroundRt;
 	    bool _elevationActive;
 	    /// <summary>Ignore dimmer clicks until the opening pointer is released (same-click dismiss).</summary>
 	    bool _suppressBackgroundDismissUntilPointerUp;
+	    /// <summary>Hard cap so a missing Mouse/Pen device cannot freeze the whole app behind the dimmer.</summary>
+	    float _suppressBackgroundUntilUnscaled = -1f;
+	    const float SuppressBackgroundMaxSec = 0.45f;
+	    const int ConfirmOverlaySortBase = 50000;
 
 	    /// <summary>True while the dimmer/card is active (Yes/No pending).</summary>
 	    public bool IsShowing =>
 		    _background_button != null && _background_button.gameObject.activeInHierarchy;
+
+	    /// <summary>True when the visible prompt is the Exit "Close the program?" dialog.</summary>
+	    public bool IsCloseProgramPrompt =>
+		    IsShowing && _header != null
+		    && !string.IsNullOrEmpty(_header.text)
+		    && _header.text.IndexOf("Close the program?", StringComparison.Ordinal) >= 0;
 
 	    private void Awake(){
 	        if(instance != null){ DestroyImmediate(this); return; }
@@ -66,20 +89,39 @@ namespace spz {
 	    void Update(){
 		    if (!IsShowing) return;
 		    if (_suppressBackgroundDismissUntilPointerUp) {
-			    var mouse = Mouse.current;
-			    bool lmbDown = mouse != null && mouse.leftButton.isPressed;
-			    var pen = Pen.current;
-			    bool penDown = pen != null && pen.tip.isPressed;
-			    if (!lmbDown && !penDown)
+			    if (Time.unscaledTime >= _suppressBackgroundUntilUnscaled || !IsAnyPrimaryPointerDown())
 				    _suppressBackgroundDismissUntilPointerUp = false;
 		    }
-	        if(Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame){  OnNoClicked(); }
+	        bool esc =
+		        (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
+#pragma warning disable CS0618
+		        || Input.GetKeyDown(KeyCode.Escape);
+#pragma warning restore CS0618
+	        if (esc)
+		        OnNoClicked();
+	    }
+
+	    static bool IsAnyPrimaryPointerDown() {
+		    var mouse = Mouse.current;
+		    if (mouse != null && mouse.leftButton.isPressed)
+			    return true;
+		    var pen = Pen.current;
+		    if (pen != null && pen.tip.isPressed)
+			    return true;
+		    var touch = Touchscreen.current;
+		    if (touch != null && touch.primaryTouch.press.isPressed)
+			    return true;
+#pragma warning disable CS0618
+		    try {
+			    if (Input.GetMouseButton(0))
+				    return true;
+		    } catch { /* ignore */ }
+#pragma warning restore CS0618
+		    return false;
 	    }
 
 	    public void Show( string text,  Action onYes,  Action onNo, string yesText="Yes", string noText="No" ){
-		    // Re-entrant Show (double Uninstall listener / Exit over Uninstall): drop prior acts silently.
-		    // Invoking prior onNo falsely showed "Uninstall cancelled." while replacing the dialog.
-		    // Elevation restore is handled below — do not treat replace as user cancel.
+		    // Re-entrant Show: drop prior acts silently (do not invoke onNo — that falsely reported Uninstall cancelled).
 		    if (_act_onYes != null || _act_onNo != null) {
 			    Debug.Log("[ConfirmPopup_UI] Replacing open confirm (prior acts discarded, not cancelled).");
 			    _act_onYes = null;
@@ -88,17 +130,19 @@ namespace spz {
 		    RestoreElevation();
 		    ElevateForModalShow();
 	        _background_button.gameObject.SetActive(true);
+		    EnsureClickableLayout();
 	        _header.text = text;
 	        _act_onYes = onYes;
 	        _act_onNo = onNo;
 	        _yesText.text = yesText;
 	        _noText.text = noText;
 	        _alreadyShownOrHidden = true;
-		    // Same pointer that clicked Uninstall must not dismiss via fullscreen dimmer.
 		    _suppressBackgroundDismissUntilPointerUp = true;
+		    _suppressBackgroundUntilUnscaled = Time.unscaledTime + SuppressBackgroundMaxSec;
 		    if (_yes != null) {
 			    _yes.interactable = true;
 			    _yes.enabled = true;
+			    _yes.transform.SetAsLastSibling();
 		    }
 		    if (_no != null) {
 			    _no.interactable = true;
@@ -109,12 +153,27 @@ namespace spz {
 			    _background_button.enabled = true;
 		    }
 	        ApplyThemeTokens();
+		    Canvas.ForceUpdateCanvases();
 	    }
 
 	    /// <summary>
-	    /// ConfirmPopup nested World Space (~1500) loses raycasts under Settings and under
-	    /// AddonManager_Canvas (Overlay @ 32767). Always lift to Screen Space Overlay while showing;
-	    /// if Addon Manager is open, also drop its sort so Yes/No stay clickable.
+	    /// Hide without invoking Yes/No; restore Addon Manager sort / popup canvases.
+	    /// Used by Addon Manager Close and Exit (never leave an elevated dimmer up).
+	    /// </summary>
+	    public void AbortAndRestoreUi() {
+		    _act_onYes = null;
+		    _act_onNo = null;
+		    _suppressBackgroundDismissUntilPointerUp = false;
+		    _suppressBackgroundUntilUnscaled = -1f;
+		    RestoreElevation();
+		    if (_background_button != null)
+			    _background_button.gameObject.SetActive(false);
+	    }
+
+	    /// <summary>
+	    /// Scene root is authored scale 0 / zero size (hidden). Nested background is World Space @ 1500,
+	    /// which loses to AddonManager Overlay @ 32767. While showing: stretch root, convert canvases to
+	    /// Overlay above the manager, and put the dimmer canvas above the shell so Yes/No receive clicks.
 	    /// </summary>
 	    void ElevateForModalShow() {
 		    Canvas mgr = FindActiveAddonManagerCanvas();
@@ -124,14 +183,36 @@ namespace spz {
 			    mgr.sortingOrder = 100;
 		    }
 
-		    _popupRoot = transform;
-		    _popupRootScale = _popupRoot.localScale;
-		    if (_popupRoot.localScale.sqrMagnitude < 1e-6f)
-			    _popupRoot.localScale = Vector3.one;
+		    var rootRt = transform as RectTransform;
+		    if (rootRt != null) {
+			    _savedRootRt = CaptureRt(rootRt);
+			    _hasSavedRootRt = true;
+			    // Authored hide uses scale 0 + zero rect — Overlay needs a real fullscreen root.
+			    rootRt.localScale = Vector3.one;
+			    rootRt.localRotation = Quaternion.identity;
+			    rootRt.anchorMin = Vector2.zero;
+			    rootRt.anchorMax = Vector2.one;
+			    rootRt.offsetMin = Vector2.zero;
+			    rootRt.offsetMax = Vector2.zero;
+			    rootRt.pivot = new Vector2(0.5f, 0.5f);
+		    }
+
+		    if (_background_button != null) {
+			    var bgRt = _background_button.transform as RectTransform;
+			    if (bgRt != null) {
+				    _savedBackgroundRt = CaptureRt(bgRt);
+				    _hasSavedBackgroundRt = true;
+				    bgRt.localScale = Vector3.one;
+				    bgRt.localRotation = Quaternion.identity;
+				    bgRt.anchorMin = Vector2.zero;
+				    bgRt.anchorMax = Vector2.one;
+				    bgRt.offsetMin = Vector2.zero;
+				    bgRt.offsetMax = Vector2.zero;
+			    }
+		    }
 
 		    var canvases = GetComponentsInChildren<Canvas>(true);
 		    _elevatedPopupStates = new CanvasSortState[canvases.Length];
-		    const int baseOrder = 40000;
 		    for (int i = 0; i < canvases.Length; i++) {
 			    var c = canvases[i];
 			    _elevatedPopupStates[i] = new CanvasSortState {
@@ -143,12 +224,58 @@ namespace spz {
 			    if (c == null) continue;
 			    c.renderMode = RenderMode.ScreenSpaceOverlay;
 			    c.overrideSorting = true;
-			    c.sortingOrder = baseOrder + i;
+			    // Background (dimmer + Window + Yes/No) must sort above the shell canvas.
+			    bool isBackgroundCanvas = _background_button != null
+				    && c.gameObject == _background_button.gameObject;
+			    c.sortingOrder = isBackgroundCanvas
+				    ? ConfirmOverlaySortBase + 10
+				    : ConfirmOverlaySortBase + i;
 			    c.enabled = true;
 			    if (c.GetComponent<GraphicRaycaster>() == null)
 				    c.gameObject.AddComponent<GraphicRaycaster>();
 		    }
 		    _elevationActive = true;
+	    }
+
+	    void EnsureClickableLayout() {
+		    if (_background_button == null) return;
+		    var window = _background_button.transform.Find("Window");
+		    if (window != null) {
+			    window.gameObject.SetActive(true);
+			    window.SetAsLastSibling();
+			    var wrt = window as RectTransform;
+			    if (wrt != null && wrt.localScale.sqrMagnitude < 1e-6f)
+				    wrt.localScale = Vector3.one;
+		    }
+		    if (_yes != null)
+			    _yes.transform.SetAsLastSibling();
+		    if (_no != null && _yes != null)
+			    _no.transform.SetSiblingIndex(Mathf.Max(0, _yes.transform.GetSiblingIndex() - 1));
+	    }
+
+	    static RectTransformState CaptureRt(RectTransform rt) {
+		    return new RectTransformState {
+			    rt = rt,
+			    anchorMin = rt.anchorMin,
+			    anchorMax = rt.anchorMax,
+			    offsetMin = rt.offsetMin,
+			    offsetMax = rt.offsetMax,
+			    pivot = rt.pivot,
+			    localScale = rt.localScale,
+			    localRotation = rt.localRotation
+		    };
+	    }
+
+	    static void RestoreRt(RectTransformState s) {
+		    if (s.rt == null) return;
+		    s.rt.anchorMin = s.anchorMin;
+		    s.rt.anchorMax = s.anchorMax;
+		    s.rt.offsetMin = s.offsetMin;
+		    s.rt.offsetMax = s.offsetMax;
+		    s.rt.pivot = s.pivot;
+		    // Never restore authored scale 0 — CanvasScaler + next Show need a usable root.
+		    s.rt.localScale = s.localScale.sqrMagnitude < 1e-6f ? Vector3.one : s.localScale;
+		    s.rt.localRotation = s.localRotation;
 	    }
 
 	    void RestoreElevation() {
@@ -164,9 +291,13 @@ namespace spz {
 			    }
 			    _elevatedPopupStates = null;
 		    }
-		    if (_popupRoot != null) {
-			    _popupRoot.localScale = _popupRootScale;
-			    _popupRoot = null;
+		    if (_hasSavedRootRt) {
+			    RestoreRt(_savedRootRt);
+			    _hasSavedRootRt = false;
+		    }
+		    if (_hasSavedBackgroundRt) {
+			    RestoreRt(_savedBackgroundRt);
+			    _hasSavedBackgroundRt = false;
 		    }
 		    if (_parkedManagerCanvas != null) {
 			    _parkedManagerCanvas.sortingOrder = _parkedManagerSort;
@@ -249,6 +380,7 @@ namespace spz {
 	        Action act = _act_onYes;
 	        _act_onYes = null;
 	        _act_onNo = null;
+		    _suppressBackgroundDismissUntilPointerUp = false;
 	        RestoreElevation();
 	        act?.Invoke();
 	        _background_button.gameObject.SetActive(false);
@@ -258,6 +390,7 @@ namespace spz {
 	        Action act = _act_onNo;
 	        _act_onYes = null;
 	        _act_onNo = null;
+		    _suppressBackgroundDismissUntilPointerUp = false;
 	        RestoreElevation();
 	        act?.Invoke();
 	        _background_button.gameObject.SetActive(false);

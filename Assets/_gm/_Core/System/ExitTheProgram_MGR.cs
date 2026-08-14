@@ -6,6 +6,11 @@ namespace spz {
 	public class ExitTheProgram_MGR : MonoBehaviour
 	{
 	    bool _quitPopupConfirmed = false;
+	    /// <summary>True after we showed the "Close the program?" prompt until Yes/No.</summary>
+	    bool _exitPromptOpen;
+	    /// <summary>Window-close clicks while the exit prompt is already up (Yes/Close unresponsive → force quit).</summary>
+	    int _closeAttemptsWhileExitPrompt;
+	    const int ForceQuitAfterCloseAttempts = 3;
 	    /// <summary>Hard-exit cap so a hung OnDestroy / Dispose / native plugin can't keep the process alive forever
 	    /// (heavy painting + many RenderUdims layers can stall GPU release; some IL2CPP/Mono shutdown paths in standalone Win builds
 	    /// don't actually terminate the process on Application.Quit alone — see <c>Launch_Addons_Bat_File.RestartWithAddons</c>).</summary>
@@ -56,12 +61,42 @@ namespace spz {
 	            Debug.LogWarning("[ExitTheProgram_MGR] Confirm popup missing; refusing quit until UI is ready or AllowQuitWithoutConfirmAndArmWatchdog is used.");
 	            return false;
 	        }
-	        ConfirmPopup_UI.instance.Show("Close the program? Make sure to save progress first (Ctrl+S)", OnExitConfirm, OnExitCanceled, "Close", "Don't Close");
+
+	        // Exit prompt already up — do not Abort it (that wiped Close and locked quit). Leave it, or force-quit if unresponsive.
+	        // If deferred Uninstall Show stole the dialog, header will not match — reclaim Exit below.
+	        if (_exitPromptOpen && ConfirmPopup_UI.instance.IsShowing
+	            && ConfirmPopup_UI.instance.IsCloseProgramPrompt) {
+	            _closeAttemptsWhileExitPrompt++;
+	            if (_closeAttemptsWhileExitPrompt >= ForceQuitAfterCloseAttempts) {
+	                Debug.LogWarning("[ExitTheProgram_MGR] Exit confirm unresponsive — forcing quit after repeated window-close attempts.");
+	                OnExitConfirm();
+	                return true;
+	            }
+	            return false;
+	        }
+
+	        // Stop deferred Uninstall before Abort/Show so CoShowUninstallConfirm cannot replace Exit acts.
+	        AddonManager_UI.AbortPendingUninstallConfirm(alsoAbortPopup: false);
+
+	        // Never permanently block quit on a stuck Uninstall/Settings confirm.
+	        if (ConfirmPopup_UI.instance.IsShowing)
+	            ConfirmPopup_UI.instance.AbortAndRestoreUi();
+
+	        _exitPromptOpen = true;
+	        _closeAttemptsWhileExitPrompt = 0;
+	        ConfirmPopup_UI.instance.Show(
+	            "Close the program? Make sure to save progress first (Ctrl+S)",
+	            OnExitConfirm,
+	            OnExitCanceled,
+	            "Close",
+	            "Don't Close");
 	        return false;
 	    }
 
 
 	    void OnExitConfirm(){
+	        _exitPromptOpen = false;
+	        _closeAttemptsWhileExitPrompt = 0;
 	        _quitPopupConfirmed = true;
 	        // Do teardown now as well (not only on the second wantsToQuit pass) so external
 	        // servers/processes start closing immediately and cannot keep quit in a limbo state.
@@ -71,7 +106,8 @@ namespace spz {
 	    }
 
 	    void OnExitCanceled(){
-	        //do nothing.
+	        _exitPromptOpen = false;
+	        _closeAttemptsWhileExitPrompt = 0;
 	    }
 
 	    /// <summary>Background timer that hard-terminates the process if Unity's normal quit pipeline stalls.

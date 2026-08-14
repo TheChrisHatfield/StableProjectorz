@@ -24,6 +24,12 @@ public sealed class ConfirmPopupAndHardnessThemeTests {
 			"Dimmer must ignore the same pointer that opened the dialog.");
 		Assert.That(src, Does.Contain("ElevateForModalShow"),
 			"Show must always Overlay-elevate ConfirmPopup (Settings + Addon Manager litmus).");
+		Assert.That(src, Does.Contain("AbortAndRestoreUi"),
+			"Must be able to abort a stuck elevated dimmer without invoking Yes/No.");
+		Assert.That(src, Does.Contain("SuppressBackgroundMaxSec"),
+			"Background suppress must time out to prevent full-UI lock.");
+		Assert.That(src, Does.Contain("EnsureClickableLayout"),
+			"Authored ConfirmPopup root is scale 0 — Show must stretch it for Yes/No.");
 		Assert.That(src, Does.Not.Contain("Prior cancel on re-Show"),
 			"Must not invoke prior onNo on re-Show (that was the Uninstall cancelled false positive).");
 	}
