@@ -36,5 +36,31 @@ public class RestartWithAddonsContractTests {
 			"Run_with_Addons.bat must accept a PID and wait for it to exit.");
 		Assert.That(bat, Does.Contain("SPZ_ADDONS_NONINTERACTIVE"),
 			"Hidden restart must not block forever on pause.");
+		Assert.That(bat, Does.Contain("start \"\" \"%EXE%\""),
+			"Bat must actually launch the player exe.");
+	}
+
+	/// <summary>
+	/// `echo Ensuring addon dependencies (FastAPI, uvicorn)...` inside a parenthesized if-block
+	/// aborted the whole bat with "... was unexpected at this time." — the exe was never started,
+	/// so in-app "Restart with addons" looked like a plain close. Unescaped ( ) in echo is the trap.
+	/// </summary>
+	[Test]
+	public void RestartBat_HasNoUnescapedParensInEchoLines() {
+		string batPath = Path.Combine(Directory.GetCurrentDirectory(), "Run_with_Addons.bat");
+		Assert.That(File.Exists(batPath), Is.True, "Run_with_Addons.bat missing: " + batPath);
+		string[] lines = File.ReadAllLines(batPath);
+		for (int i = 0; i < lines.Length; i++) {
+			string trimmed = lines[i].Trim();
+			if (!trimmed.StartsWith("echo ", System.StringComparison.OrdinalIgnoreCase)) continue;
+			for (int c = 0; c < trimmed.Length; c++) {
+				char ch = trimmed[c];
+				if (ch != '(' && ch != ')') continue;
+				bool escaped = c > 0 && trimmed[c - 1] == '^';
+				Assert.That(escaped, Is.True,
+					$"Run_with_Addons.bat line {i + 1} has an unescaped '{ch}' in an echo — cmd aborts the " +
+					$"enclosing block and the exe never launches. Use ^( / ^). Line: {trimmed}");
+			}
+		}
 	}
 }
