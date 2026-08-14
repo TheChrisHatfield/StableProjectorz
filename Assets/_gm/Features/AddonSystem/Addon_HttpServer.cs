@@ -252,27 +252,30 @@ namespace spz {
 				}
 			}
 			
-			// Route to handler
+			// Route to handler.
+			// Singleton resources (scene/sd/project/background/workflow) take their action from
+			// the segment right after the resource (pathParts[3] == id), not pathParts[4] —
+			// e.g. GET /api/v1/project/info. Passing 'action' here made every such endpoint dead.
 			switch (resource.ToLower()) {
 				case "cameras":
 					return HandleCameraRequest(httpMethod, id, action, body, request);
 				case "meshes":
 					return HandleMeshRequest(httpMethod, id, action, body, request);
 				case "scene":
-					return HandleSceneRequest(httpMethod, action, body, request);
+					return HandleSceneRequest(httpMethod, id, body, request);
 				case "sd":
 				case "stablediffusion":
-					return HandleSDRequest(httpMethod, action, body, request);
+					return HandleSDRequest(httpMethod, id, body, request);
 				case "projection":
 					return HandleProjectionRequest(httpMethod, id, action, body, request);
 				case "project":
-					return HandleProjectRequest(httpMethod, action, body, request);
+					return HandleProjectRequest(httpMethod, id, body, request);
 				case "controlnet":
 					return HandleControlNetRequest(httpMethod, id, action, body, request);
 				case "background":
-					return HandleBackgroundRequest(httpMethod, action, body, request);
+					return HandleBackgroundRequest(httpMethod, id, body, request);
 				case "workflow":
-					return HandleWorkflowRequest(httpMethod, action, body, request);
+					return HandleWorkflowRequest(httpMethod, id, body, request);
 				default:
 					response.StatusCode = 404;
 					return new JObject { ["error"] = $"Resource '{resource}' not found" };
