@@ -708,9 +708,14 @@ namespace spz {
 	        if (hub != null && Time.unscaledTime < hub._generationCooldownUntil)
 	            cooldownLeft = hub._generationCooldownUntil - Time.unscaledTime;
 	        string ckpt = SD_InputPanel_UI.instance?.models?.selectedModel_name ?? "";
+	        bool gen3dBusy = Gen3D_API.instance != null && Gen3D_API.instance.isBusy;
+	        bool hubBusy = hub != null && hub._generating;
 	        ok(new Dictionary<string, object>{
-	            { "is_generating", hub != null && hub._generating },
-	            { "generating_what", hub != null ? hub._isGeneratingWhat.ToString() : "nothing" },
+	            { "is_generating", hubBusy || gen3dBusy },
+	            { "is_gen3d_busy", gen3dBusy },
+	            { "generating_what", hubBusy
+	                ? hub._isGeneratingWhat.ToString()
+	                : (gen3dBusy ? "gen3d" : "nothing") },
 	            { "final_preparations", hub != null && hub._finalPreparations_beforeGen },
 	            { "cooldown_seconds_left", cooldownLeft },
 	            { "can_gen_art", canArt },
