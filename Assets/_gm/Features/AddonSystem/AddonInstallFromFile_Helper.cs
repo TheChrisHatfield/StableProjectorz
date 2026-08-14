@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.UI;
 using SimpleFileBrowser;
@@ -7,21 +8,19 @@ using SimpleFileBrowser;
 namespace spz {
 
 	/// <summary>
-	/// Connects SimpleFileBrowser to add-on installation the same way other features do
-	/// (<see cref="Images_ImportHelper"/>, <see cref="BrushRibbon_UI_AlphaPicker"/>, <see cref="Art2D_IconsUI_List"/>):
-	/// <c>SetFilters</c> / <c>SetDefaultFilter</c>, then <c>ShowLoadDialog</c>.
-	/// Raises the browser canvas above fullscreen overlays (e.g. add-on manager at sort order 32767).
-	/// Does <b>not</b> disable the manager GraphicRaycaster — that plus FileBrowser's GlobalClickBlocker
-	/// deadlocked all UI when the dialog opened behind / failed to take clicks.
+	/// Install-from-file picker for Add-on Manager.
+	/// On Windows (Editor + player), uses the OS file dialog so Install is never buried under
+	/// AddonManager_Canvas (sort 32767). Elsewhere: parks the manager overlay and uses SimpleFileBrowser.
+	/// Never disables the manager GraphicRaycaster (that + FileBrowser GlobalClickBlocker freezes all clicks).
 	/// </summary>
 	public static class AddonInstallFromFile_Helper {
 
-		/// <summary>Sort order delta applied on top of the host overlay so the file browser receives clicks.</summary>
 		public const int SortOrderOffsetAboveOverlay = 100;
 
+		static GameObject s_parkedManagerOverlay;
+
 		/// <summary>
-		/// Hide any open install dialog and re-enable Addon Manager canvas raycasts.
-		/// Call from ClosePanel / OpenPanel so a stuck FileBrowser GlobalClickBlocker cannot freeze the app.
+		/// Hide any open install dialog and restore Addon Manager overlay visibility / raycasters.
 		/// </summary>
 		public static void AbortInstallDialogAndRestoreUi() {
 			try {
@@ -30,10 +29,10 @@ namespace spz {
 			} catch (Exception ex) {
 				Debug.LogWarning("[AddonInstallFromFile_Helper] HideDialog: " + ex.Message);
 			}
+			UnparkManagerOverlay();
 			EnsureAddonManagerCanvasRaycastersEnabled();
 		}
 
-		/// <summary>Re-enable GraphicRaycasters on AddonManager_Canvas (safety if an older build disabled them).</summary>
 		public static void EnsureAddonManagerCanvasRaycastersEnabled() {
 			var canvases = UnityEngine.Object.FindObjectsByType<Canvas>(FindObjectsInactive.Include, FindObjectsSortMode.None);
 			for (int i = 0; i < canvases.Length; i++) {
@@ -48,9 +47,21 @@ namespace spz {
 			}
 		}
 
-		/// <summary>
-		/// Waits one frame (avoids opening the browser on the same pointer-up frame as the button), closes any open dialog, then opens the zip / __init__.py picker.
-		/// </summary>
+		static void ParkManagerOverlay(Canvas overlayCanvas) {
+			UnparkManagerOverlay();
+			if (overlayCanvas == null) return;
+			s_parkedManagerOverlay = overlayCanvas.gameObject;
+			s_parkedManagerOverlay.SetActive(false);
+			Debug.Log("[AddonInstallFromFile_Helper] Parked AddonManager_Canvas for file browser.");
+		}
+
+		static void UnparkManagerOverlay() {
+			if (s_parkedManagerOverlay == null) return;
+			s_parkedManagerOverlay.SetActive(true);
+			s_parkedManagerOverlay = null;
+			Debug.Log("[AddonInstallFromFile_Helper] Restored AddonManager_Canvas.");
+		}
+
 		public static IEnumerator CoDeferredThenPickZipOrInitPy(
 			int overlayCanvasSortOrder,
 			Action<string> onPickedPath,
@@ -63,78 +74,109 @@ namespace spz {
 				yield return null;
 			}
 			EnsureAddonManagerCanvasRaycastersEnabled();
+
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+			// Native OS dialog is the reliable Install path under the Add-on Manager modal.
+			Debug.Log("[AddonInstallFromFile_Helper] Opening native Windows install file dialog…");
+			bool nativeOk = false;
+			string nativePath = null;
+			string nativeErr = null;
 			try {
-				OpenPickZipOrInitPyDialog(overlayCanvasSortOrder, onPickedPath, onCanceled, onSetupFailed, overlayCanvasToYield);
+				nativeOk = TryNativeWindowsOpenZipOrInitPy(out nativePath, out nativeErr);
 			} catch (Exception ex) {
-				AbortInstallDialogAndRestoreUi();
 				onSetupFailed?.Invoke(ex);
+				yield break;
 			}
+			if (nativeOk && !string.IsNullOrEmpty(nativePath)) {
+				Debug.Log("[AddonInstallFromFile_Helper] Native dialog picked: " + nativePath);
+				onPickedPath?.Invoke(nativePath);
+			} else if (string.Equals(nativeErr, "cancelled", StringComparison.Ordinal)) {
+				Debug.Log("[AddonInstallFromFile_Helper] Native dialog cancelled.");
+				onCanceled?.Invoke();
+			} else {
+				onSetupFailed?.Invoke(new InvalidOperationException(
+					string.IsNullOrEmpty(nativeErr) ? "Native file dialog failed." : nativeErr));
+			}
+			yield break;
+#else
+			yield return CoPickWithSimpleFileBrowser(
+				overlayCanvasSortOrder, onPickedPath, onCanceled, onSetupFailed, overlayCanvasToYield);
+#endif
 		}
 
-		/// <summary>Same as <see cref="CoDeferredThenPickZipOrInitPy"/> but for folder pick (tree with <c>__init__.py</c>).</summary>
-		public static IEnumerator CoDeferredThenPickAddonFolder(
-			int overlayCanvasSortOrder,
-			Action<string> onPickedFolderPath,
-			Action onCanceled,
-			Action<Exception> onSetupFailed,
-			Canvas overlayCanvasToYield = null) {
-			yield return null;
-			if (FileBrowser.IsOpen) {
-				FileBrowser.HideDialog(false);
-				yield return null;
-			}
-			EnsureAddonManagerCanvasRaycastersEnabled();
-			try {
-				OpenPickAddonFolderDialog(overlayCanvasSortOrder, onPickedFolderPath, onCanceled, onSetupFailed, overlayCanvasToYield);
-			} catch (Exception ex) {
-				AbortInstallDialogAndRestoreUi();
-				onSetupFailed?.Invoke(ex);
-			}
-		}
-
-		/// <summary>Pick a <c>.zip</c> or the add-on’s <c>__init__.py</c> (installs the folder that contains it).</summary>
-		public static void OpenPickZipOrInitPyDialog(
+		static IEnumerator CoPickWithSimpleFileBrowser(
 			int overlayCanvasSortOrder,
 			Action<string> onPickedPath,
 			Action onCanceled,
 			Action<Exception> onSetupFailed,
-			Canvas overlayCanvasToYield = null) {
+			Canvas overlayCanvasToYield) {
+			bool finished = false;
+			void DonePath(string path) {
+				finished = true;
+				UnparkManagerOverlay();
+				EnsureAddonManagerCanvasRaycastersEnabled();
+				if (!string.IsNullOrEmpty(path))
+					onPickedPath?.Invoke(path);
+				else
+					onCanceled?.Invoke();
+			}
+			void DoneCancel() {
+				finished = true;
+				UnparkManagerOverlay();
+				EnsureAddonManagerCanvasRaycastersEnabled();
+				onCanceled?.Invoke();
+			}
+			void DoneFail(Exception ex) {
+				finished = true;
+				AbortInstallDialogAndRestoreUi();
+				onSetupFailed?.Invoke(ex);
+			}
+
 			try {
+				ParkManagerOverlay(overlayCanvasToYield);
 				if (!EnsureFileBrowserInstance(out string deny)) {
-					onSetupFailed?.Invoke(new InvalidOperationException(deny));
-					return;
+					DoneFail(new InvalidOperationException(deny));
+					yield break;
 				}
 				FileBrowser.SetFilters(true,
 					new FileBrowser.Filter("Add-on (.zip)", "zip"),
 					new FileBrowser.Filter("Add-on entry (__init__.py)", "py"));
 				FileBrowser.SetDefaultFilter("zip");
-				ShowLoadDialogAboveOverlay(overlayCanvasSortOrder, FileBrowser.PickMode.Files,
-					"Install add-on (.zip or __init__.py)", "Install",
-					onPickedPath, onCanceled);
+				ElevateFileBrowserCanvas(overlayCanvasSortOrder);
+				FileBrowser.ShowLoadDialog(
+					paths => {
+						string p = (paths != null && paths.Length > 0) ? paths[0] : null;
+						DonePath(p);
+					},
+					DoneCancel,
+					FileBrowser.PickMode.Files,
+					false,
+					null,
+					null,
+					"Install add-on (.zip or __init__.py)",
+					"Install");
+				ElevateFileBrowserCanvas(overlayCanvasSortOrder);
+				Debug.Log($"[AddonInstallFromFile_Helper] ShowLoadDialog returned; IsOpen={FileBrowser.IsOpen}");
 			} catch (Exception ex) {
-				AbortInstallDialogAndRestoreUi();
-				onSetupFailed?.Invoke(ex);
+				DoneFail(ex);
+				yield break;
 			}
-		}
 
-		/// <summary>Pick a folder whose tree contains <c>__init__.py</c> (same rules as zip extract).</summary>
-		public static void OpenPickAddonFolderDialog(
-			int overlayCanvasSortOrder,
-			Action<string> onPickedFolderPath,
-			Action onCanceled,
-			Action<Exception> onSetupFailed,
-			Canvas overlayCanvasToYield = null) {
-			try {
-				if (!EnsureFileBrowserInstance(out string deny)) {
-					onSetupFailed?.Invoke(new InvalidOperationException(deny));
-					return;
-				}
-				ShowLoadDialogAboveOverlay(overlayCanvasSortOrder, FileBrowser.PickMode.Folders,
-					"Install add-on (folder with __init__.py)", "Select",
-					onPickedFolderPath, onCanceled);
-			} catch (Exception ex) {
+			yield return null;
+			if (!finished && !FileBrowser.IsOpen) {
+				DoneFail(new InvalidOperationException("In-game file browser failed to open."));
+				yield break;
+			}
+
+			float waited = 0f;
+			while (!finished && waited < 600f) {
+				waited += Time.unscaledDeltaTime;
+				yield return null;
+			}
+			if (!finished) {
+				Debug.LogWarning("[AddonInstallFromFile_Helper] File browser timed out — restoring UI.");
 				AbortInstallDialogAndRestoreUi();
-				onSetupFailed?.Invoke(ex);
+				onCanceled?.Invoke();
 			}
 		}
 
@@ -161,47 +203,126 @@ namespace spz {
 				fbCanvas = inst.GetComponentInChildren<Canvas>(true);
 			if (fbCanvas == null) return;
 			fbCanvas.overrideSorting = true;
-			fbCanvas.sortingOrder = overlayCanvasSortOrder + SortOrderOffsetAboveOverlay;
+			fbCanvas.sortingOrder = Math.Max(overlayCanvasSortOrder + SortOrderOffsetAboveOverlay, 40000);
 			if (fbCanvas.GetComponent<GraphicRaycaster>() == null)
 				fbCanvas.gameObject.AddComponent<GraphicRaycaster>();
+			fbCanvas.enabled = true;
+			inst.gameObject.SetActive(true);
 		}
 
-		static void ShowLoadDialogAboveOverlay(
-			int overlayCanvasSortOrder,
-			FileBrowser.PickMode pickMode,
-			string title,
-			string submitLabel,
-			Action<string> onPickedPath,
-			Action onCanceled) {
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+		const int OFN_FILEMUSTEXIST = 0x00001000;
+		const int OFN_PATHMUSTEXIST = 0x00000800;
+		const int OFN_NOCHANGEDIR = 0x00000008;
+		const int OFN_EXPLORER = 0x00080000;
+		const int OFN_HIDEREADONLY = 0x00000004;
 
-			ElevateFileBrowserCanvas(overlayCanvasSortOrder);
+		[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+		struct OpenFileNameNative {
+			public int structSize;
+			public IntPtr dlgOwner;
+			public IntPtr instance;
+			public IntPtr filter;
+			public IntPtr customFilter;
+			public int maxCustFilter;
+			public int filterIndex;
+			public IntPtr file;
+			public int maxFile;
+			public IntPtr fileTitle;
+			public int maxFileTitle;
+			public IntPtr initialDir;
+			public IntPtr title;
+			public int flags;
+			public short fileOffset;
+			public short fileExtension;
+			public IntPtr defExt;
+			public IntPtr custData;
+			public IntPtr hook;
+			public IntPtr templateName;
+			public IntPtr reservedPtr;
+			public int reservedInt;
+			public int flagsEx;
+		}
 
-			void Finish(Action next) {
-				EnsureAddonManagerCanvasRaycastersEnabled();
-				next?.Invoke();
+		[DllImport("comdlg32.dll", EntryPoint = "GetOpenFileNameW", CharSet = CharSet.Unicode, SetLastError = true)]
+		static extern bool GetOpenFileNameW(ref OpenFileNameNative ofn);
+
+		static IntPtr AllocDoubleNullTerminatedFilter(string[] pairs) {
+			// OPENFILENAME filter is label\0pattern\0…\0\0 — raw buffer; C# string marshaling truncates at first \0.
+			int chars = 1;
+			for (int i = 0; i < pairs.Length; i++)
+				chars += pairs[i].Length + 1;
+			var buf = new char[chars];
+			int o = 0;
+			for (int i = 0; i < pairs.Length; i++) {
+				string s = pairs[i];
+				s.CopyTo(0, buf, o, s.Length);
+				o += s.Length;
+				buf[o++] = '\0';
 			}
-
-			FileBrowser.ShowLoadDialog(
-				paths => {
-					Finish(() => {
-						if (paths != null && paths.Length > 0 && !string.IsNullOrEmpty(paths[0]))
-							onPickedPath?.Invoke(paths[0]);
-						else
-							onCanceled?.Invoke();
-					});
-				},
-				() => {
-					Finish(() => onCanceled?.Invoke());
-				},
-				pickMode,
-				false,
-				null,
-				null,
-				title,
-				submitLabel);
-
-			// Show() activates the canvas after our first elevate — assert again so we stay above the manager.
-			ElevateFileBrowserCanvas(overlayCanvasSortOrder);
+			buf[o] = '\0';
+			IntPtr p = Marshal.AllocHGlobal(buf.Length * 2);
+			Marshal.Copy(buf, 0, p, buf.Length);
+			return p;
 		}
+
+		static bool TryNativeWindowsOpenZipOrInitPy(out string path, out string error) {
+			path = null;
+			error = null;
+			IntPtr fileBuf = IntPtr.Zero;
+			IntPtr fileTitleBuf = IntPtr.Zero;
+			IntPtr filterBuf = IntPtr.Zero;
+			IntPtr titlePtr = IntPtr.Zero;
+			IntPtr defExtPtr = IntPtr.Zero;
+			try {
+				const int maxFile = 2048;
+				fileBuf = Marshal.AllocHGlobal(maxFile * 2);
+				fileTitleBuf = Marshal.AllocHGlobal(256 * 2);
+				for (int i = 0; i < maxFile * 2; i++)
+					Marshal.WriteByte(fileBuf, i, 0);
+				for (int i = 0; i < 256 * 2; i++)
+					Marshal.WriteByte(fileTitleBuf, i, 0);
+				filterBuf = AllocDoubleNullTerminatedFilter(new[] {
+					"Add-on zip (*.zip)", "*.zip",
+					"Add-on entry (__init__.py)", "__init__.py",
+					"All files (*.*)", "*.*"
+				});
+				titlePtr = Marshal.StringToHGlobalUni("Install add-on (.zip or __init__.py)");
+				defExtPtr = Marshal.StringToHGlobalUni("zip");
+
+				var ofn = new OpenFileNameNative();
+				ofn.structSize = Marshal.SizeOf(typeof(OpenFileNameNative));
+				ofn.filter = filterBuf;
+				ofn.file = fileBuf;
+				ofn.maxFile = maxFile;
+				ofn.fileTitle = fileTitleBuf;
+				ofn.maxFileTitle = 256;
+				ofn.title = titlePtr;
+				ofn.defExt = defExtPtr;
+				ofn.filterIndex = 1;
+				ofn.flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_EXPLORER | OFN_HIDEREADONLY;
+
+				if (!GetOpenFileNameW(ref ofn)) {
+					error = "cancelled";
+					return false;
+				}
+				path = Marshal.PtrToStringUni(fileBuf);
+				if (string.IsNullOrEmpty(path)) {
+					error = "cancelled";
+					return false;
+				}
+				return true;
+			} catch (Exception ex) {
+				error = ex.Message;
+				return false;
+			} finally {
+				if (fileBuf != IntPtr.Zero) Marshal.FreeHGlobal(fileBuf);
+				if (fileTitleBuf != IntPtr.Zero) Marshal.FreeHGlobal(fileTitleBuf);
+				if (filterBuf != IntPtr.Zero) Marshal.FreeHGlobal(filterBuf);
+				if (titlePtr != IntPtr.Zero) Marshal.FreeHGlobal(titlePtr);
+				if (defExtPtr != IntPtr.Zero) Marshal.FreeHGlobal(defExtPtr);
+			}
+		}
+#endif
 	}
 }
