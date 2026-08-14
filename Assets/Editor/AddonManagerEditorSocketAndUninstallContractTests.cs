@@ -98,6 +98,17 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 	}
 
 	[Test]
+	public void DiscoverAddons_SkipsInstallBackupFolders_Source() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "Addon_MGR.cs");
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("IsInstallBackupAddonFolderName"),
+			"Discover must filter installer _backup_ leftover folders.");
+		Assert.That(src, Does.Contain("Skipping install backup folder"),
+			"Backup skip must be logged for wiring visibility.");
+	}
+
+	[Test]
 	public void GetAddonIdFromRoot_OnlyParsesExplicitAddonIdAssignments() {
 		string path = Path.Combine(Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "AddonSystem", "AddonInstaller_MGR.cs");
