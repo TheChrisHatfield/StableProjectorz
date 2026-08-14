@@ -404,7 +404,7 @@ namespace spz {
 	        if (_showGrid_toggle != null) {
 	            var gLabel = _showGrid_toggle.GetComponentInChildren<TextMeshProUGUI>(true);
 	            if (gLabel != null)
-	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(gLabel, t.textPrimary, 11f);
+	                SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(gLabel, t.textPrimary, 11f);
 	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_showGrid_toggle);
 	        }
 	        if (_numCams_numberText != null) {
@@ -429,7 +429,7 @@ namespace spz {
 	                SpzUiThemeOps.ApplyBoundChromeSelectable(sortBtn, t.controlBg, t.accent);
 	            }
 	            foreach (var tmp in _sortPins_Button.GetComponentsInChildren<TextMeshProUGUI>(true))
-	                SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(tmp, t.textPrimary, 11f);
+	                SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, t.textPrimary, 11f);
 	            if (sortBtn != null)
 	                SpzUiThemeOps.ClearNonFaceRaycastsForTheme(sortBtn);
 	        }
