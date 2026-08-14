@@ -444,12 +444,24 @@ namespace spz {
 	                yield break;
 	            }
 
-	            if (www.result == UnityWebRequest.Result.Success){
-	                callbacks.onDataDownloaded?.Invoke(www.downloadHandler.data);
-	                callbacks.onComplete?.Invoke();
-	            }else{
-	                callbacks.onError?.Invoke($"Failed to download data: {www.error}");
-	            }
+			if (www.result == UnityWebRequest.Result.Success){
+				// Apply-data can throw (empty mesh, handler missing, import failure). Without this
+				// catch the coroutine died silently: no onError, Cancel stuck, isBusy stuck —
+				// or worse, onComplete reported success with nothing imported.
+				bool dataOk = true;
+				try {
+					callbacks.onDataDownloaded?.Invoke(www.downloadHandler.data);
+				} catch (Exception ex) {
+					dataOk = false;
+					Debug.LogError("Gen3D: applying downloaded data failed: " + ex.Message);
+					callbacks.onError?.Invoke("downloaded data could not be applied: " + ex.Message);
+				}
+				if (dataOk){
+					callbacks.onComplete?.Invoke();
+				}
+			}else{
+				callbacks.onError?.Invoke($"Failed to download data: {www.error}");
+			}
 	        }
 	    }//end()
 

@@ -218,8 +218,14 @@ namespace spz {
 	    }
 
 	    void Gen_OnMeshReady(byte[] bytes){
-	        if (bytes == null || bytes.Length == 0){ return; }
-	        if (ModelsHandler_3D.instance == null){ return; }
+	        // Throw instead of silent return — Gen3D_API converts this into onError so the UI
+	        // does not report a successful generation with no mesh imported.
+	        if (bytes == null || bytes.Length == 0){
+	            throw new InvalidOperationException("server returned an empty mesh");
+	        }
+	        if (ModelsHandler_3D.instance == null){
+	            throw new InvalidOperationException("ModelsHandler_3D unavailable for import");
+	        }
 	        string tempPath = Path.Combine(Application.temporaryCachePath, $"mesh_trellis.glb");
 	        if (File.Exists(tempPath)){  File.Delete(tempPath); }// Clean up temp file
 	        File.WriteAllBytes(tempPath, bytes);
