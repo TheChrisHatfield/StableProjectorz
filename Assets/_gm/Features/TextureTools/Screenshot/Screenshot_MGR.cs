@@ -23,6 +23,10 @@ namespace spz {
 	    bool _isDragging = false;
 	    bool _forbidFrameImage = false;
 
+	    // Scripted capture in flight — StopAllCoroutines must notify this before killing the coroutine,
+	    // otherwise agent/tool callers hang until their own timeout with _screenshotInFlight stuck.
+	    Action<Vector2, Vector2, Texture2D> _pendingScriptCaptureCb = null;
+
 	    // minimum screen coord (in pixels), maximum screen coord (in pixels).
 	    // NOTICE: each subscribe will BECOME THE OWNER of a texture2D (we clone them as needed).
 	    // SO, REMEMBER TO DESTROY YOUR TEXTURE WHEN ITS NO LONGER NEEDED, TO AVOID MEMORY LEAKS.
@@ -49,8 +53,26 @@ namespace spz {
 	        Vector2Int min_px = new Vector2Int( Mathf.RoundToInt(minScreen.x), Mathf.RoundToInt(minScreen.y));
 	        Vector2Int max_px = new Vector2Int( Mathf.RoundToInt(maxScreen.x), Mathf.RoundToInt(maxScreen.y));
 	        var size_px = max_px - min_px;
-	        StopAllCoroutines();
+	        // Notify the previous scripted caller before killing its coroutine (null tex = cancelled).
+	        CancelPendingScriptCapture();
+	        _pendingScriptCaptureCb = onHaveTexture_plzDeleteLater;
 	        StartCoroutine(MakeScreenshot_crtn(min_px, max_px, size_px, onHaveTexture_plzDeleteLater, isBecause_mouseDragged:false));
+	    }
+
+	    void CancelPendingScriptCapture() {
+	        var prev = _pendingScriptCaptureCb;
+	        _pendingScriptCaptureCb = null;
+	        StopAllCoroutines();
+	        // Unlock chrome that a killed mid-frame capture may have left locked.
+	        try { SkyboxBackground_MGR.instance?.FullAlpha_StopLock(originalRequestor: this); } catch { /* ignore */ }
+	        try { Viewport_StatusText.instance?.PreferVIsible(originalRequestor: this); } catch { /* ignore */ }
+	        _forbidFrameImage = false;
+	        if (prev != null) {
+	            try { prev.Invoke(Vector2.zero, Vector2.zero, null); }
+	            catch (Exception ex) {
+	                Debug.LogWarning("[Screenshot_MGR] cancelled capture callback threw: " + ex.Message);
+	            }
+	        }
 	    }
 
 
@@ -194,20 +216,26 @@ namespace spz {
 	        // Hide the framing-rectangle, capture.
 	        // We'll apply alpha during screenshot blit, so make sure skybox manager doesn't apply alpha this frame.
 	        _forbidFrameImage = true;
-	        _frameImage_moveMe.gameObject.SetActive(false);
-	        Viewport_StatusText.instance.PreferHidden(requestor:this);
-	        SkyboxBackground_MGR.instance.FullAlpha_Lock(requestor:this);
-	        yield return new WaitForEndOfFrame();
-	        ScreenCapture.CaptureScreenshotIntoRenderTexture(screenRT);
-	        SkyboxBackground_MGR.instance.FullAlpha_StopLock(originalRequestor: this);
-	        Viewport_StatusText.instance.PreferVIsible(originalRequestor:this);
-	        _forbidFrameImage = false;
+	        if (_frameImage_moveMe != null)
+	            _frameImage_moveMe.gameObject.SetActive(false);
+	        Viewport_StatusText.instance?.PreferHidden(requestor:this);
+	        SkyboxBackground_MGR.instance?.FullAlpha_Lock(requestor:this);
+	        try {
+	            yield return new WaitForEndOfFrame();
+	            ScreenCapture.CaptureScreenshotIntoRenderTexture(screenRT);
+	        } finally {
+	            SkyboxBackground_MGR.instance?.FullAlpha_StopLock(originalRequestor: this);
+	            Viewport_StatusText.instance?.PreferVIsible(originalRequestor:this);
+	            _forbidFrameImage = false;
+	        }
 
 	        Grab_Portion(screenRT, portionRT, min_px, max_px, size_px);
 
 	        // (8) Readback async
 	        bool isDone = false;
 	        Action<Texture2D> onTex2D_fetched = (Texture2D tex2D) => {
+	            if (!isBecause_mouseDragged && ReferenceEquals(_pendingScriptCaptureCb, onScreenshotRdy))
+	                _pendingScriptCaptureCb = null;
 	            // Fire the delegates
 	            Delegate[] delegates = onScreenshotRdy?.GetInvocationList();
 	            if (delegates == null || delegates.Length == 0){
