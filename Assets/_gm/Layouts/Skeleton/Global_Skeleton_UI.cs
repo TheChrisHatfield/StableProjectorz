@@ -131,14 +131,18 @@ namespace spz {
 	    }
 
 	    public void Place_onto_LeftColumn(RectTransform place_me){
+	        if (place_me == null || _leftColumn_rTransf == null){ return; }
 	        place_me.CopyValsFrom(_leftColumn_rTransf);
 	    }
 	    public void Place_onto_MainViewport(RectTransform place_me){
+	        if (place_me == null || _mainViewport_rTransf == null){ return; }
 	        place_me.CopyValsFrom(_mainViewport_rTransf);
 	    }
 
 	    public void Place_onto_MainViewport_between_ribbons(RectTransform place_me){
-	        if(MainViewport_UI.instance == null){ return; }
+	        if(place_me == null || MainViewport_UI.instance == null){ return; }
+	        var mainVp = MainViewport_UI.instance.mainViewportRect;
+	        if (mainVp == null){ return; }
 
 	        // Cache original state
 	        Transform originalParent = place_me.parent;
@@ -146,7 +150,7 @@ namespace spz {
 
 	        // 1. Temporarily parent to the target to inherit its coordinate space
 	        // false = reset local position/rotation/scale to match target immediately
-	        place_me.SetParent(MainViewport_UI.instance.mainViewportRect, false);
+	        place_me.SetParent(mainVp, false);
 
 	        // 2. Force stretch to corners (fill the target completely)
 	        place_me.anchorMin = Vector2.zero;
@@ -161,6 +165,7 @@ namespace spz {
 	    }
 
 	    public void Place_onto_RightColumn(RectTransform place_me){
+	        if (place_me == null || _rightColumn_rTransf == null){ return; }
 	        place_me.CopyValsFrom(_rightColumn_rTransf);
 	    }
 
