@@ -34,6 +34,8 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 			"Must include nested confirm canvases, not only the root.");
 		Assert.That(body, Does.Contain("s_uninstallConfirmSessionActive"),
 			"Uninstall confirm session must be idempotent so re-Show / double End cannot leave manager sort stuck.");
+		Assert.That(body, Does.Contain("refusing uninstall without confirmation"),
+			"Missing ConfirmPopup must hard-fail, not silently delete the add-on.");
 	}
 
 	[Test]

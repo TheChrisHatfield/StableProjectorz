@@ -3486,15 +3486,10 @@ namespace spz {
 						ShowStatus("Uninstall cancelled.", false);
 					}
 				);
-			} else if (AddonInstaller_MGR.instance != null) {
-				Debug.LogWarning("[AddonManager_UI] ConfirmPopup_UI missing — removing without confirm.");
-				AddonInstaller_MGR.instance.RemoveAddon(addonId, (success, message) => {
-					ShowStatus(message, success);
-					if (success)
-						RefreshAddonsList();
-				});
 			} else {
-				ShowStatus("Add-on installer not available", false);
+				// Never delete StreamingAssets without Yes/No — ConfirmPopup scene may be missing in a bad load.
+				Debug.LogError("[AddonManager_UI] ConfirmPopup_UI missing — refusing uninstall without confirmation.");
+				ShowStatus("Uninstall blocked: confirmation dialog unavailable. Restart the app and try again.", false);
 			}
 		}
 

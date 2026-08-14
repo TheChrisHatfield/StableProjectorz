@@ -974,13 +974,13 @@ namespace spz {
 				}
 				foreach (var key in toRemove) {
 					// Tear ribbon/UI immediately when soft-disabled; for still-enabled vanished folders
-					// UnloadAddon parks the tab sync then async-unregisters Python (do not leave orphan tabs).
+					// wait unload/pending before dropping registry (same contract as RemoveAddon).
 					if (_registeredAddons.TryGetValue(key, out var gone) && gone != null && !gone.isEnabled) {
 						DestroyAddonUiShell(key);
+						_registeredAddons.Remove(key);
 					} else {
-						UnloadAddon(key);
+						StartCoroutine(CoUnloadAndForgetVanishedAddon(key));
 					}
-					_registeredAddons.Remove(key);
 				}
 
 				// First discover only: restore prefs OR force default-off. Later Refresh/install rediscover
@@ -1021,6 +1021,29 @@ namespace spz {
 				if (!char.IsDigit(stamp[c])) return false;
 			}
 			return true;
+		}
+
+		IEnumerator CoUnloadAndForgetVanishedAddon(string addonId) {
+			if (string.IsNullOrEmpty(addonId))
+				yield break;
+			bool unloadDone = false;
+			UnloadAddon(addonId, () => unloadDone = true);
+			float waitUnload = 0f;
+			const float unloadTimeoutSec = 45f;
+			while (!unloadDone && waitUnload < unloadTimeoutSec) {
+				waitUnload += Time.unscaledDeltaTime;
+				yield return null;
+			}
+			float waitPending = 0f;
+			const float pendingTimeoutSec = 45f;
+			while (IsPythonUnloadPending(addonId) && waitPending < pendingTimeoutSec) {
+				waitPending += Time.unscaledDeltaTime;
+				yield return null;
+			}
+			if (IsPythonUnloadPending(addonId))
+				UnityEngine.Debug.LogWarning(
+					$"[Addon_MGR] Vanished add-on '{addonId}': Python unload still pending after timeout — dropping registry entry anyway.");
+			_registeredAddons.Remove(addonId);
 		}
 		
 		/// <summary>
