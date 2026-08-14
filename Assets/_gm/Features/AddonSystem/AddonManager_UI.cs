@@ -2584,33 +2584,39 @@ namespace spz {
 		/// </summary>
 		static void ThemeShowInRibbonDial(Toggle toggle, bool isOn, Color ringOn, Color ringOff, Color fillOk) {
 			if (toggle == null) return;
-			LockShowInRibbonDialLayout(toggle);
+			bool nomad = SpzUiThemeOps.ShouldRecolorBoundChrome;
+			if (nomad)
+				LockShowInRibbonDialLayout(toggle);
 			var ringImg = toggle.transform.Find("Ring")?.GetComponent<Image>();
 			if (ringImg != null) {
 				TintStatusDialGraphic(ringImg, isOn ? ringOn : ringOff);
-				ringImg.sprite = UiRuntimeSprites.CircleRing;
-				ringImg.preserveAspect = true;
-				ringImg.type = Image.Type.Simple;
-				ringImg.enabled = true;
+				if (nomad) {
+					ringImg.sprite = UiRuntimeSprites.CircleRing;
+					ringImg.preserveAspect = true;
+					ringImg.type = Image.Type.Simple;
+					ringImg.enabled = true;
+				}
 			}
 			Image fill = toggle.graphic as Image;
 			if (fill == null)
 				fill = toggle.transform.Find("Ring/Checkmark")?.GetComponent<Image>();
 			if (fill != null) {
 				UnwindDialFillHiddenForTheme(fill);
-				fill.sprite = UiRuntimeSprites.CircleFilled;
-				fill.preserveAspect = true;
-				fill.type = Image.Type.Simple;
-				fill.gameObject.SetActive(true);
-				fill.enabled = true;
+				if (nomad) {
+					fill.sprite = UiRuntimeSprites.CircleFilled;
+					fill.preserveAspect = true;
+					fill.type = Image.Type.Simple;
+					fill.gameObject.SetActive(true);
+					fill.enabled = true;
+				}
 				Color fillColor = fillOk;
 				fillColor.a = 1f;
 				TintStatusDialGraphic(fill, fillColor);
 				// ON = filled center (normal radio); OFF = empty ring only.
 				fill.canvasRenderer.SetAlpha(isOn ? 1f : 0f);
 			}
-			// Hit target stays clear — never paint a green/grey square under the dial.
-			if (toggle.targetGraphic is Image hit && hit.transform == toggle.transform) {
+			// Hit target stays clear under Nomad — never paint a green/grey square under the dial.
+			if (nomad && toggle.targetGraphic is Image hit && hit.transform == toggle.transform) {
 				hit.color = Color.clear;
 				hit.raycastTarget = true;
 			}
@@ -2632,6 +2638,9 @@ namespace spz {
 		/// <summary>Nomad-only geometry lock — leave must not re-stamp 28×28 after RestoreBoundChromeUnder.</summary>
 		static void LockShowInRibbonDialLayout(Toggle toggle) {
 			if (toggle == null) return;
+			// Leave litmus: RestoreBoundChromeUnder already unwound LE/RT — do not re-lock Nomad 28×28.
+			if (!SpzUiThemeOps.ShouldRecolorBoundChrome)
+				return;
 			var le = toggle.GetComponent<LayoutElement>();
 			if (le != null) {
 				SpzUiThemeOps.SnapshotLayoutElementForTheme(le);

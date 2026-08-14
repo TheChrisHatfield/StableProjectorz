@@ -31,6 +31,11 @@ public sealed class LeadingLeDialLeaveTests {
 		Assert.That(src, Does.Not.Contain("LockShowInRibbonButtonLayout"),
 			"Green plate button layout must stay removed.");
 		Assert.That(src, Does.Contain("SnapshotToolFaceLayout(rt)"));
+		int lockFn = src.IndexOf("static void LockShowInRibbonDialLayout", System.StringComparison.Ordinal);
+		Assert.That(lockFn, Is.GreaterThan(0));
+		string lockBody = src.Substring(lockFn, System.Math.Min(500, src.Length - lockFn));
+		Assert.That(lockBody, Does.Contain("ShouldRecolorBoundChrome"),
+			"Leave must not re-stamp 28×28 after RestoreBoundChromeUnder.");
 		int rem = src.IndexOf("static void LockRememberToggleSquare", System.StringComparison.Ordinal);
 		string remBody = src.Substring(rem, System.Math.Min(600, src.Length - rem));
 		Assert.That(remBody, Does.Contain("SnapshotToolFaceLayout(rt)"));
