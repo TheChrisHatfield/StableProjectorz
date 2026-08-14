@@ -18,5 +18,7 @@ public sealed class ArtListHeaderGlyphChromeThemeTests {
 		Assert.That(body, Does.Contain("preserveAspect"));
 		Assert.That(body, Does.Contain("UiRuntimeSprites.IsSolidRect"));
 		Assert.That(body, Does.Contain("ApplyBoundChromeGraphic(glyphFace, t.iconTint)"));
+		Assert.That(body, Does.Contain("ApplyBoundChromeReadableBodyTmp(label"));
+		Assert.That(body, Does.Contain("IndexOf(' ')"));
 	}
 }

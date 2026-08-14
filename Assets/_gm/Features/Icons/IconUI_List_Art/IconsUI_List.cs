@@ -541,8 +541,13 @@ namespace spz {
 	                }
 	                SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
 	                var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
-	                if (label != null)
-	                    SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, t.textPrimary, 11f);
+	                if (label != null) {
+	                    string raw = label.text ?? "";
+	                    if (raw.IndexOf(' ') >= 0 || raw.Length >= 10)
+	                        SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(label, t.textPrimary, 11f);
+	                    else
+	                        SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, t.textPrimary, 11f);
+	                }
 	                SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 	            }
 	            foreach (var tmp in _header.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
