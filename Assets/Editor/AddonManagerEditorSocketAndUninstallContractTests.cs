@@ -66,6 +66,10 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 		Assert.That(backupAt, Is.GreaterThan(unloadAt), "Must unload before replacing files on disk.");
 		Assert.That(enableAt, Is.GreaterThan(backupAt), "Must re-enable after Discover when overwrite replaced a live add-on.");
 		Assert.That(body, Does.Contain("if (wasEnabledBeforeOverwrite"));
+		Assert.That(body, Does.Contain("IsPythonUnloadPending(addonId)"),
+			"Zip overwrite must wait Python unload pending like RemoveAddon before Directory.Move.");
+		Assert.That(body, Does.Contain("Installation blocked"),
+			"Must fail install with a clear status when unload/pending times out (not hang forever).");
 	}
 
 	[Test]

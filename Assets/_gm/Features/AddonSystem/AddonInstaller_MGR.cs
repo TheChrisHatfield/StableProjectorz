@@ -210,8 +210,33 @@ namespace spz {
 				if (wasRegistered) {
 					bool unloadDone = false;
 					Addon_MGR.instance.UnloadAddon(addonId, () => unloadDone = true);
-					while (!unloadDone)
+					float waitUnload = 0f;
+					const float unloadTimeoutSec = 45f;
+					while (!unloadDone && waitUnload < unloadTimeoutSec) {
+						waitUnload += Time.unscaledDeltaTime;
 						yield return null;
+					}
+					if (!unloadDone) {
+						onComplete?.Invoke(false,
+							$"Installation blocked: Unity unload for '{addonId}' timed out. Retry after the add-on server is up.",
+							null);
+						yield break;
+					}
+					// UnloadAddon may only queue HTTP unregister — wait like RemoveAddon before moving files.
+					float waitPending = 0f;
+					const float pendingTimeoutSec = 45f;
+					while (Addon_MGR.instance != null
+					       && Addon_MGR.instance.IsPythonUnloadPending(addonId)
+					       && waitPending < pendingTimeoutSec) {
+						waitPending += Time.unscaledDeltaTime;
+						yield return null;
+					}
+					if (Addon_MGR.instance != null && Addon_MGR.instance.IsPythonUnloadPending(addonId)) {
+						onComplete?.Invoke(false,
+							$"Installation blocked: Python unload for '{addonId}' is still pending (HTTP not ready). Retry after the add-on server is up.",
+							null);
+						yield break;
+					}
 				}
 			}
 
