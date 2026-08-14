@@ -739,7 +739,7 @@ namespace spz {
 	            { "klein_refcontrol_lora", SD_KleinStructureChannel.RefControlLoraName },
 	            { "klein_last_reject_reason", KleinStructureTrace.LastRejectReason },
 	            { "is_importing", ModelsHandler_3D.instance != null && ModelsHandler_3D.instance._isImportingModel },
-	            { "is_project_busy", Save_MGR.instance != null && Save_MGR.instance._isSaving },
+	            { "is_project_busy", FastPath_API.instance != null && FastPath_API.instance.IsProjectOperationInProgress() },
 	            { "klein_structure_trace", KleinStructureTrace.SnapshotOrNull() },
 	        });
 	    }

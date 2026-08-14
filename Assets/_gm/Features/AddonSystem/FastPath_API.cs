@@ -1800,11 +1800,15 @@ namespace spz {
 		/// </summary>
 		public bool IsProjectOperationInProgress() {
 			if (!_isInitialized) return false;
-			
+
 			var saveMGR = Save_MGR.instance;
-			if (saveMGR == null) return false;
-			
-			return saveMGR._isSaving || saveMGR._isLoading;
+			if (saveMGR != null) {
+				if (saveMGR._isSaving || saveMGR._isLoading) return true;
+				if (saveMGR.SaveLoadHelper != null && saveMGR.SaveLoadHelper.IsProjectSaveInFlight) return true;
+			}
+			var mh = ModelsHandler_3D.instance;
+			if (mh != null && mh._isImportingModel) return true;
+			return false;
 		}
 		
 		// ============================================
