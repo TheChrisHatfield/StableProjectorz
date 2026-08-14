@@ -1297,7 +1297,11 @@ namespace spz {
 							false);
 					else
 						ShowStatus($"Load finished for {requested} add-on(s).", true);
+					string loadStatus = _statusText != null ? _statusText.text : null;
+					bool loadOk = _lastStatusIsSuccess;
 					RefreshAddonsList();
+					if (!string.IsNullOrEmpty(loadStatus))
+						ShowStatus(loadStatus, loadOk);
 				});
 			} else {
 				_loadAddonsNowInFlight = false;
@@ -1514,6 +1518,10 @@ namespace spz {
 		void InstallAddon(string path) {
 			if (string.IsNullOrEmpty(path)) {
 				ShowStatus("Invalid file path", false);
+				return;
+			}
+			if (AddonInstaller_MGR.instance != null && AddonInstaller_MGR.instance.HasRemoveInFlight) {
+				ShowStatus("Cannot install while an Uninstall is still running. Wait for removal to finish.", false);
 				return;
 			}
 
@@ -2455,7 +2463,8 @@ namespace spz {
 			bool stillVisible = _filterState == 0
 				|| (_filterState == 1 && showOn)
 				|| (_filterState == 2 && !showOn);
-			if (!stillVisible && !_suppressEnabledListRefresh)
+			if (!stillVisible && !_suppressEnabledListRefresh
+			    && (AddonInstaller_MGR.instance == null || !AddonInstaller_MGR.instance.HasRemoveInFlight))
 				ScheduleRefreshAddonsList();
 		}
 
