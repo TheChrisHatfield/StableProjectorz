@@ -123,7 +123,7 @@ namespace spz {
 
 
 	    protected override bool isAllowedToShow_BrushCursorNow(){
-	        return MainViewport_UI.instance.showing == MainViewport_UI.Showing.UsualView;
+	        return MainViewport_UI.instance?.showing == MainViewport_UI.Showing.UsualView;
 	    }
 
 	    protected override bool isAllowedToPaintNow( bool also_check_viewportHovered ){

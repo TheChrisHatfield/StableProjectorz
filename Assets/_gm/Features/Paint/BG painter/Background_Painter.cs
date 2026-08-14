@@ -126,9 +126,9 @@ namespace spz {
     
 	    // Show the brush only if dimension mode = dim_bg
 	    protected override bool isAllowedToShow_BrushCursorNow(){
-	        return DimensionMode_MGR.instance._dimensionMode == DimensionMode.dim_gen_3d
-	               && MainViewport_UI.instance.showing == MainViewport_UI.Showing.UsualView
-	               && Gen3D_WorkflowOptionsRibbon_UI.instance._is_can_adjust_BG;
+	        return DimensionMode_MGR.instance?._dimensionMode == DimensionMode.dim_gen_3d
+	               && MainViewport_UI.instance?.showing == MainViewport_UI.Showing.UsualView
+	               && (Gen3D_WorkflowOptionsRibbon_UI.instance?._is_can_adjust_BG ?? false);
 	    }
 
 	    // Paint only if dimension mode = dim_bg
