@@ -648,9 +648,10 @@ namespace spz {
 	                fail("Klein structure layout failed (need mesh depth RT; CN models None; ImageStitch channel).");
 	                return;
 	            }
+	            Texture2D styleProbe = null;
 	            bool hasCustomFileBitmap = cn != null
-	                && cn.TryGetDisposableLoadedCustomFileBitmap(out Texture2D styleProbe, out _);
-	            if (styleProbe != null) Object.DestroyImmediate(styleProbe);
+	                && cn.TryGetDisposableLoadedCustomFileBitmap(out styleProbe, out _);
+	            if (styleProbe != null) UnityEngine.Object.DestroyImmediate(styleProbe);
 	            if (result is Dictionary<string, object> dict){
 	                dict["klein_structure_armed"] = structureArmed;
 	                // Legacy key: was depth-as-img2img; now means structure channel ready.
@@ -740,13 +741,22 @@ namespace spz {
 
 
 	    static void Tool_StopGeneration(JObject prms, Action<object> ok, Action<string> fail){
+	        // Hub.OnStopGenerate_Button alone no-ops for Gen3D / custom workflows — use the
+	        // multicast cancel bus, same as FastPath_API.StopGeneration.
 	        var hub = StableDiffusion_Hub.instance;
-	        if (hub == null){ fail("StableDiffusion_Hub not ready."); return; }
-	        bool was = hub._generating;
-	        hub.OnStopGenerate_Button();
+	        bool hubBusy = hub != null && hub._generating;
+	        bool gen3dBusy = Gen3D_API.instance != null && Gen3D_API.instance.isBusy;
+	        if (!hubBusy && !gen3dBusy){
+	            fail("Nothing is generating (SD hub idle, no Gen3D job).");
+	            return;
+	        }
+	        GenerateButtons_UI.OnCancelGenerationButton?.Invoke();
 	        ok(new Dictionary<string, object>{
-	            { "was_generating", was },
-	            { "is_generating", hub._generating },
+	            { "was_generating", true },
+	            { "was_sd", hubBusy },
+	            { "was_gen3d", gen3dBusy },
+	            { "is_generating", (hub != null && hub._generating)
+	                               || (Gen3D_API.instance != null && Gen3D_API.instance.isBusy) },
 	        });
 	    }
 
