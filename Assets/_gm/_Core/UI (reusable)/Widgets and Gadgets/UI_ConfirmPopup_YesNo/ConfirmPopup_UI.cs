@@ -19,6 +19,20 @@ namespace spz {
 	    Action _act_onNo;
 	    bool _alreadyShownOrHidden = false;
 
+	    struct CanvasSortState {
+		    public Canvas canvas;
+		    public int sortingOrder;
+		    public bool overrideSorting;
+		    public RenderMode renderMode;
+	    }
+
+	    Canvas _parkedManagerCanvas;
+	    int _parkedManagerSort;
+	    Transform _popupRoot;
+	    Vector3 _popupRootScale;
+	    CanvasSortState[] _elevatedPopupStates;
+	    bool _elevationActive;
+
 	    /// <summary>True while the dimmer/card is active (Yes/No pending).</summary>
 	    public bool IsShowing =>
 		    _background_button != null && _background_button.gameObject.activeInHierarchy;
@@ -32,7 +46,6 @@ namespace spz {
 
 	    void OnDestroy() {
 	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
-	        // If Addon Manager parked sort for uninstall confirm, cancel restores it.
 	        if (_act_onNo != null) {
 		        Action cancel = _act_onNo;
 		        _act_onYes = null;
@@ -41,6 +54,7 @@ namespace spz {
 			        Debug.LogWarning("[ConfirmPopup_UI] OnDestroy cancel: " + ex.Message);
 		        }
 	        }
+	        RestoreElevation();
 	        if (instance == this)
 	            instance = null;
 	    }
@@ -53,14 +67,11 @@ namespace spz {
 	    }
 
 	    void Update(){
-		    // Only while the dialog is visible — Escape must not steal keys when hidden.
 		    if (!IsShowing) return;
 	        if(Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame){  OnNoClicked(); }
 	    }
 
 	    public void Show( string text,  Action onYes,  Action onNo, string yesText="Yes", string noText="No" ){
-		    // Re-entrant Show overwrites callbacks. Invoke prior No/cleanup first so Addon Manager
-		    // uninstall session restore (manager sort / canvas modes) cannot leak.
 		    if (_act_onYes != null || _act_onNo != null) {
 			    Action priorCancel = _act_onNo;
 			    _act_onYes = null;
@@ -69,6 +80,8 @@ namespace spz {
 				    Debug.LogWarning("[ConfirmPopup_UI] Prior cancel on re-Show: " + ex.Message);
 			    }
 		    }
+		    RestoreElevation();
+		    ElevateAboveAddonManagerIfOpen();
 	        _background_button.gameObject.SetActive(true);
 	        _header.text = text;
 	        _act_onYes = onYes;
@@ -76,14 +89,83 @@ namespace spz {
 	        _yesText.text = yesText;
 	        _noText.text = noText;
 	        _alreadyShownOrHidden = true;
-	        // Re-assert chrome when shown — popup often starts inactive under ThemeChanged.
 	        ApplyThemeTokens();
 	    }
 
 	    /// <summary>
-	    /// Nomad flat dialog: panel shell + solid Yes/No cells (not Unity default light gradient bricks).
-	    /// Ensure hit faces so label raycast clears cannot kill Close / Don't Close (exit litmus).
+	    /// AddonManager_Canvas is Overlay @ 32767; ConfirmPopup nested World Space (~1500) loses raycasts.
+	    /// Drop manager sort and force this popup to Screen Space Overlay while showing.
 	    /// </summary>
+	    void ElevateAboveAddonManagerIfOpen() {
+		    Canvas mgr = FindActiveAddonManagerCanvas();
+		    if (mgr == null || !mgr.gameObject.activeInHierarchy)
+			    return;
+
+		    _parkedManagerCanvas = mgr;
+		    _parkedManagerSort = mgr.sortingOrder;
+		    mgr.sortingOrder = 100;
+
+		    _popupRoot = transform;
+		    _popupRootScale = _popupRoot.localScale;
+		    if (_popupRoot.localScale.sqrMagnitude < 1e-6f)
+			    _popupRoot.localScale = Vector3.one;
+
+		    var canvases = GetComponentsInChildren<Canvas>(true);
+		    _elevatedPopupStates = new CanvasSortState[canvases.Length];
+		    const int baseOrder = 40000;
+		    for (int i = 0; i < canvases.Length; i++) {
+			    var c = canvases[i];
+			    _elevatedPopupStates[i] = new CanvasSortState {
+				    canvas = c,
+				    sortingOrder = c != null ? c.sortingOrder : 0,
+				    overrideSorting = c != null && c.overrideSorting,
+				    renderMode = c != null ? c.renderMode : RenderMode.ScreenSpaceOverlay
+			    };
+			    if (c == null) continue;
+			    c.renderMode = RenderMode.ScreenSpaceOverlay;
+			    c.overrideSorting = true;
+			    c.sortingOrder = baseOrder + i;
+			    c.enabled = true;
+			    if (c.GetComponent<GraphicRaycaster>() == null)
+				    c.gameObject.AddComponent<GraphicRaycaster>();
+		    }
+		    _elevationActive = true;
+	    }
+
+	    void RestoreElevation() {
+		    if (!_elevationActive) return;
+		    _elevationActive = false;
+		    if (_elevatedPopupStates != null) {
+			    for (int i = 0; i < _elevatedPopupStates.Length; i++) {
+				    var s = _elevatedPopupStates[i];
+				    if (s.canvas == null) continue;
+				    s.canvas.sortingOrder = s.sortingOrder;
+				    s.canvas.overrideSorting = s.overrideSorting;
+				    s.canvas.renderMode = s.renderMode;
+			    }
+			    _elevatedPopupStates = null;
+		    }
+		    if (_popupRoot != null) {
+			    _popupRoot.localScale = _popupRootScale;
+			    _popupRoot = null;
+		    }
+		    if (_parkedManagerCanvas != null) {
+			    _parkedManagerCanvas.sortingOrder = _parkedManagerSort;
+			    _parkedManagerCanvas = null;
+		    }
+	    }
+
+	    static Canvas FindActiveAddonManagerCanvas() {
+		    var canvases = FindObjectsByType<Canvas>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+		    for (int i = 0; i < canvases.Length; i++) {
+			    var c = canvases[i];
+			    if (c == null || c.gameObject == null) continue;
+			    if (c.gameObject.name != "AddonManager_Canvas") continue;
+			    return c;
+		    }
+		    return null;
+	    }
+
 	    void ApplyThemeTokens() {
 	        Transform root = _background_button != null ? _background_button.transform : transform;
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
@@ -98,13 +180,11 @@ namespace spz {
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
-	        // Dimmer / panel shells — walk host + background (dialog card may be a sibling of the blocker).
 	        ThemeShellImagesUnder(root, t);
 	        if (!ReferenceEquals(root, transform))
 	            ThemeShellImagesUnder(transform, t);
 	        if (_header != null)
 	            SpzUiThemeOps.ApplyBoundChromeTmp(_header, t.textPrimary, 16f);
-	        // Don't Close = neutral; Close = danger (exit confirm).
 	        ThemePopupButton(_no, t.controlBg, t.accent, _noText, t);
 	        ThemePopupButton(_yes, t.danger, t.accent, _yesText, t);
 	    }
@@ -150,6 +230,7 @@ namespace spz {
 	        Action act = _act_onYes;
 	        _act_onYes = null;
 	        _act_onNo = null;
+	        RestoreElevation();
 	        act?.Invoke();
 	        _background_button.gameObject.SetActive(false);
 	    }
@@ -158,6 +239,7 @@ namespace spz {
 	        Action act = _act_onNo;
 	        _act_onYes = null;
 	        _act_onNo = null;
+	        RestoreElevation();
 	        act?.Invoke();
 	        _background_button.gameObject.SetActive(false);
 	    }
