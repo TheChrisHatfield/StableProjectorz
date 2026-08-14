@@ -992,9 +992,9 @@ class SPZ_OT_request_spz_import_fbx(Operator):
         ok = (r.get("success") is True) if isinstance(r, dict) else False
         if ok:
             self.report({"INFO"}, "SPZ import request OK.")
-        else:
-            self.report({"WARNING"}, f"Response: {r!r}")
-        return {"FINISHED"}
+            return {"FINISHED"}
+        self.report({"WARNING"}, f"Response: {r!r}")
+        return {"CANCELLED"}
 
 
 class SPZ_OT_request_spz_export_to_path(Operator):
@@ -1020,9 +1020,9 @@ class SPZ_OT_request_spz_export_to_path(Operator):
         ok = (r.get("success") is True) if isinstance(r, dict) else False
         if ok:
             self.report({"INFO"}, f"Request OK — SPZ writes: {fbx} (+ textures beside base name)")
-        else:
-            self.report({"WARNING"}, f"Response: {r!r}")
-        return {"FINISHED"}
+            return {"FINISHED"}
+        self.report({"WARNING"}, f"Response: {r!r}")
+        return {"CANCELLED"}
 
 
 # --- Panel -----------------------------------------------------------------------
