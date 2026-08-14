@@ -1643,6 +1643,9 @@ namespace spz {
 			if (StableDiffusion_Hub.instance != null && StableDiffusion_Hub.instance._generating) {
 				return false;
 			}
+			if (Gen3D_API.instance != null && Gen3D_API.instance.isBusy) {
+				return false;
+			}
 			
 			// Use standard save with dialog
 			saveMGR.DoSaveProject();
@@ -1665,6 +1668,9 @@ namespace spz {
 			
 			// Check if generating (blocks load)
 			if (StableDiffusion_Hub.instance != null && StableDiffusion_Hub.instance._generating) {
+				return false;
+			}
+			if (Gen3D_API.instance != null && Gen3D_API.instance.isBusy) {
 				return false;
 			}
 			
