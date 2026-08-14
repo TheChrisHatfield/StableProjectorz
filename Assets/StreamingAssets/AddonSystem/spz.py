@@ -1058,6 +1058,20 @@ class ProjectAPI:
         if result.get("data_dir_is_session") is True:
             return None
         return result.get("data_dir", None)
+
+    def get_data_dir_or_session(self):
+        """Data dir for file exchange: saved project dir, or the per-machine session folder.
+
+        The Blender bridge uses this same folder over HTTP for unsaved projects —
+        in-app exchange paths must match it, not the stricter get_data_dir().
+
+        Returns:
+            str or None if Unity has no folder at all.
+        """
+        result = self._client._send_request("spz.cmd.get_project_data_dir", {})
+        if not result.get("success", False):
+            return None
+        return result.get("data_dir", None)
     
     def is_operation_in_progress(self):
         """Check if save or load operation is in progress
@@ -1614,6 +1628,22 @@ class AddonAPI:
         return self._client._send_request("spz.cmd.get_addon_context", {})
 
 
+class AgentBridgeAPI:
+    """Host agent-bridge socket settings (``SpzMcpSPZ`` / SPZ MCP add-on)."""
+
+    def __init__(self, client):
+        self._client = client
+
+    def get_status(self):
+        return self._client._send_request("spz.cmd.agent_bridge_get_status", {})
+
+    def apply_settings(self, listen=False, port=8765, token=""):
+        return self._client._send_request(
+            "spz.cmd.agent_bridge_apply_settings",
+            {"listen": bool(listen), "port": int(port), "token": str(token or "")},
+        )
+
+
 # ============================================
 # Main API Module
 # ============================================
@@ -1624,6 +1654,7 @@ class SPZAPI:
     def __init__(self):
         self._client = _get_client()
         self.addon = AddonAPI(self._client)
+        self.agent_bridge = AgentBridgeAPI(self._client)
         self.cameras = CameraAPI(self._client)
         self.view_cameras = ViewCamerasAPI(self._client)
         self.models = ModelsAPI(self._client)

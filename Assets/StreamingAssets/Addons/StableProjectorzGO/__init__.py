@@ -242,13 +242,21 @@ def find_blender_executable():
     return max(set(candidates), key=_ver_key)
 
 
+def _exchange_data_dir(api):
+    """Same folder the Blender bridge resolves over HTTP: saved project dir or session dir."""
+    getter = getattr(api.project, "get_data_dir_or_session", None)
+    if callable(getter):
+        return getter()
+    return api.project.get_data_dir()
+
+
 def default_import_mesh_path():
     """Mesh file Blender should have written, for SPZ to import (absolute path if project saved)."""
     if not _SPZ_OK:
         return ""
     try:
         api = spz.get_api()
-        d = api.project.get_data_dir()
+        d = _exchange_data_dir(api)
         if d:
             return os.path.join(d, EXCHANGE_DIRNAME, DEFAULT_EXCHANGE_IMPORT)
     except Exception:
@@ -262,7 +270,7 @@ def default_export_mesh_path():
         return ""
     try:
         api = spz.get_api()
-        d = api.project.get_data_dir()
+        d = _exchange_data_dir(api)
         if d:
             return os.path.join(d, EXCHANGE_DIRNAME, DEFAULT_EXCHANGE_EXPORT)
     except Exception:
@@ -394,7 +402,7 @@ def do_show_data_dir():
     if not _SPZ_OK:
         return
     api = spz.get_api()
-    d = api.project.get_data_dir()
+    d = _exchange_data_dir(api)
     if d:
         print(ADDON_ID + " data_dir:", d)
     else:
