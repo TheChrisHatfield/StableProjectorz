@@ -128,10 +128,8 @@ namespace spz {
 						yield return null;
 					}
 					if (!unloadDone) {
-						onComplete?.Invoke(false,
-							$"Installation blocked: Unity unload for '{addonId}' timed out. Retry after the add-on server is up.",
-							null);
-						yield break;
+						UnityEngine.Debug.LogWarning(
+							$"[AddonInstaller] Unity unload for '{addonId}' timed out during folder install — proceeding with overwrite.");
 					}
 					float waitPending = 0f;
 					const float pendingTimeoutSec = 45f;
@@ -142,10 +140,8 @@ namespace spz {
 						yield return null;
 					}
 					if (Addon_MGR.instance != null && Addon_MGR.instance.IsPythonUnloadPending(addonId)) {
-						onComplete?.Invoke(false,
-							$"Installation blocked: Python unload for '{addonId}' is still pending (HTTP not ready). Retry after the add-on server is up.",
-							null);
-						yield break;
+						UnityEngine.Debug.LogWarning(
+							$"[AddonInstaller] Python unload for '{addonId}' still pending during folder install — proceeding with overwrite.");
 					}
 				}
 			}
@@ -290,10 +286,8 @@ namespace spz {
 						yield return null;
 					}
 					if (!unloadDone) {
-						onComplete?.Invoke(false,
-							$"Installation blocked: Unity unload for '{addonId}' timed out. Retry after the add-on server is up.",
-							null);
-						yield break;
+						UnityEngine.Debug.LogWarning(
+							$"[AddonInstaller] Unity unload for '{addonId}' timed out during zip install — proceeding with overwrite.");
 					}
 					// UnloadAddon may only queue HTTP unregister — wait like RemoveAddon before moving files.
 					float waitPending = 0f;
@@ -305,10 +299,8 @@ namespace spz {
 						yield return null;
 					}
 					if (Addon_MGR.instance != null && Addon_MGR.instance.IsPythonUnloadPending(addonId)) {
-						onComplete?.Invoke(false,
-							$"Installation blocked: Python unload for '{addonId}' is still pending (HTTP not ready). Retry after the add-on server is up.",
-							null);
-						yield break;
+						UnityEngine.Debug.LogWarning(
+							$"[AddonInstaller] Python unload for '{addonId}' still pending during zip install — proceeding with overwrite.");
 					}
 				}
 			}
