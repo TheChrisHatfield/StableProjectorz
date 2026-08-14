@@ -49,39 +49,45 @@ namespace spz {
 
 	        UnityWebRequest request = UnityWebRequest.Get(fileUrl);
 	        _url_to_Request[fileUrl] = request;
-	        request.SendWebRequest();
+	        try {
+	            request.SendWebRequest();
 
-	        while (!request.isDone){
-	            string msg = $"<b>Downloading</b>  {fileUrl}  <b>and storing it into</b>  {absFilepath_withExten}";
-	            prnt(printStatusMsg, msg, request.downloadProgress, showProgress:true);
-	            onProgress?.Invoke(request.downloadProgress);
-	            yield return null;
-	        }
-
-	        if (request.result != UnityWebRequest.Result.Success){
-	            if (printStatusMsg){
-	                string msg = "Downloading failed: " + request.error;
-	                prnt(printStatusMsg, msg, request.downloadProgress, showProgress:false);
+	            while (!request.isDone){
+	                string msg = $"<b>Downloading</b>  {fileUrl}  <b>and storing it into</b>  {absFilepath_withExten}";
+	                prnt(printStatusMsg, msg, request.downloadProgress, showProgress:true);
+	                onProgress?.Invoke(request.downloadProgress);
+	                yield return null;
 	            }
-	        }else{
-	            Directory.CreateDirectory(Path.GetDirectoryName(absFilepath_withExten));
-	            File.WriteAllBytes(absFilepath_withExten, request.downloadHandler.data);
 
-	            if (printStatusMsg){
-	                string msg = "<b>File downloaded and saved to</b> " + absFilepath_withExten;
-	                prnt(printStatusMsg, msg, request.downloadProgress, showProgress:false);
+	            if (request.result != UnityWebRequest.Result.Success){
+	                if (printStatusMsg){
+	                    string msg = "Downloading failed: " + request.error;
+	                    prnt(printStatusMsg, msg, request.downloadProgress, showProgress:false);
+	                }
+	            }else{
+	                string dir = Path.GetDirectoryName(absFilepath_withExten);
+	                if (!string.IsNullOrEmpty(dir))
+	                    Directory.CreateDirectory(dir);
+	                File.WriteAllBytes(absFilepath_withExten, request.downloadHandler.data);
+
+	                if (printStatusMsg){
+	                    string msg = "<b>File downloaded and saved to</b> " + absFilepath_withExten;
+	                    prnt(printStatusMsg, msg, request.downloadProgress, showProgress:false);
+	                }
 	            }
+	            onProgress?.Invoke(1.0f);//once again, to ensure that defenitely reported 100% progress, to allow for completions.
+	        } finally {
+	            _url_to_Download_crtn.Remove(fileUrl);
+	            _url_to_Request.Remove(fileUrl);
+	            try { request.Dispose(); } catch { /* already disposed by CancelDownload */ }
 	        }
-	        onProgress?.Invoke(1.0f);//once again, to ensure that defenitely reported 100% progress, to allow for completions.
-	        _url_to_Download_crtn.Remove(fileUrl);
-	        _url_to_Request.Remove(fileUrl);
 	    }
 
 
 	    void prnt(bool print, string msg, float progress01, bool showProgress){
 	        if(!print){ return; }
-	        Viewport_StatusText.instance.ShowStatusText(msg, false,  showProgress?12:10,  showProgress?false:true);
-	        Viewport_StatusText.instance.ReportProgress(progress01);
+	        Viewport_StatusText.instance?.ShowStatusText(msg, false,  showProgress?12:10,  showProgress?false:true);
+	        Viewport_StatusText.instance?.ReportProgress(progress01);
 	    }
     
 
