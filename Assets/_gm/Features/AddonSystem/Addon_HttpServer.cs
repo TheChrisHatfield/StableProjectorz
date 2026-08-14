@@ -371,17 +371,31 @@ namespace spz {
 				if (method == "GET") {
 					return ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.get_all_mesh_ids", new JObject()));
 				}
-				// POST /api/v1/meshes/batch/position - Batch operations
-				if (method == "POST" && action == "batch" && body != null) {
-					string batchAction = request.QueryString["action"] ?? "position";
-					if (batchAction == "position") {
-						return ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.set_mesh_positions", body));
-					}
-				}
 				return new JObject { ["error"] = "Invalid request" };
 			}
 			
-			ushort meshId = ushort.Parse(id);
+			// POST /api/v1/meshes/import — DCC bridge headless import (same RPC as the Python server).
+			if (id == "import") {
+				if (method == "POST" && body?["filepath"] != null) {
+					return ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.import_3d_model", new JObject {
+						["filepath"] = body["filepath"]
+					}));
+				}
+				return new JObject { ["error"] = "POST with JSON body {\"filepath\": ...} required" };
+			}
+			
+			// POST /api/v1/meshes/batch/position — id is 'batch' here, so this must run before the numeric parse.
+			if (id == "batch") {
+				string batchAction = action ?? request.QueryString["action"] ?? "position";
+				if (method == "POST" && body != null && batchAction == "position") {
+					return ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.set_mesh_positions", body));
+				}
+				return new JObject { ["error"] = "Invalid batch request" };
+			}
+			
+			if (!ushort.TryParse(id, out ushort meshId)) {
+				return new JObject { ["error"] = $"Invalid mesh id: {id}" };
+			}
 			
 			if (string.IsNullOrEmpty(action)) {
 				// GET /api/v1/meshes/{id} - Get mesh info
