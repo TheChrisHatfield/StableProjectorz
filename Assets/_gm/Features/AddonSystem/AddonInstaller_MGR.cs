@@ -14,11 +14,15 @@ namespace spz {
 	public class AddonInstaller_MGR : MonoBehaviour {
 		public static AddonInstaller_MGR instance { get; private set; }
 		readonly HashSet<string> _removeInFlight = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		readonly HashSet<string> _installInFlight = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		bool _installBusy;
 
 		public bool IsRemoveInFlight(string addonId) =>
 			!string.IsNullOrEmpty(addonId) && _removeInFlight.Contains(addonId);
 
 		public bool HasRemoveInFlight => _removeInFlight.Count > 0;
+
+		public bool HasInstallInFlight => _installBusy || _installInFlight.Count > 0;
 		
 		void Awake() {
 			if (instance != null) { DestroyImmediate(this); return; }
@@ -91,7 +95,24 @@ namespace spz {
 				}
 			}
 			
-			StartCoroutine(InstallAddonCoroutine(zipFilePath, addonsPath, onComplete));
+			StartCoroutine(InstallAddonCoroutineGuarded(zipFilePath, addonsPath, onComplete));
+		}
+
+		IEnumerator InstallAddonCoroutineGuarded(string zipFilePath, string addonsPath, Action<bool, string, string> onComplete) {
+			if (_installBusy) {
+				onComplete?.Invoke(false, "Installation already in progress", null);
+				yield break;
+			}
+			if (HasRemoveInFlight) {
+				onComplete?.Invoke(false, "Cannot install while an Uninstall is still running", null);
+				yield break;
+			}
+			_installBusy = true;
+			try {
+				yield return InstallAddonCoroutine(zipFilePath, addonsPath, onComplete);
+			} finally {
+				_installBusy = false;
+			}
 		}
 
 		/// <summary>
@@ -99,7 +120,24 @@ namespace spz {
 		/// the same way zip install does before moving StreamingAssets.
 		/// </summary>
 		public void InstallAddonFromFolder(string addonRootOrInitPy, Action<bool, string, string> onComplete) {
-			StartCoroutine(InstallAddonFromFolderCrtn(addonRootOrInitPy, onComplete));
+			StartCoroutine(InstallAddonFromFolderGuarded(addonRootOrInitPy, onComplete));
+		}
+
+		IEnumerator InstallAddonFromFolderGuarded(string addonRootOrInitPy, Action<bool, string, string> onComplete) {
+			if (_installBusy) {
+				onComplete?.Invoke(false, "Installation already in progress", null);
+				yield break;
+			}
+			if (HasRemoveInFlight) {
+				onComplete?.Invoke(false, "Cannot install while an Uninstall is still running", null);
+				yield break;
+			}
+			_installBusy = true;
+			try {
+				yield return InstallAddonFromFolderCrtn(addonRootOrInitPy, onComplete);
+			} finally {
+				_installBusy = false;
+			}
 		}
 
 		IEnumerator InstallAddonFromFolderCrtn(string addonRootOrInitPy, Action<bool, string, string> onComplete) {
