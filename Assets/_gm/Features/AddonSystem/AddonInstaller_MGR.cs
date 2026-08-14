@@ -17,6 +17,8 @@ namespace spz {
 
 		public bool IsRemoveInFlight(string addonId) =>
 			!string.IsNullOrEmpty(addonId) && _removeInFlight.Contains(addonId);
+
+		public bool HasRemoveInFlight => _removeInFlight.Count > 0;
 		
 		void Awake() {
 			if (instance != null) { DestroyImmediate(this); return; }

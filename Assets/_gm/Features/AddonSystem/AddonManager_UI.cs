@@ -1525,11 +1525,11 @@ namespace spz {
 				}
 				ShowStatus("Installing add-on folder...", true);
 				AddonInstaller_MGR.instance.InstallAddonFromFolder(path, (success, message, addonId) => {
+					if (success)
+						RefreshAddonsList();
 					ShowStatus(success
 						? $"Add-on '{addonId}' installed successfully!"
 						: $"Installation failed: {message}", success);
-					if (success)
-						RefreshAddonsList();
 				});
 				return;
 			}
@@ -1542,12 +1542,11 @@ namespace spz {
 			ShowStatus("Installing add-on...", true);
 			
 			AddonInstaller_MGR.instance.InstallAddonFromZip(path, (success, message, addonId) => {
-				if (success) {
-					ShowStatus($"Add-on '{addonId}' installed successfully!", true);
+				if (success)
 					RefreshAddonsList();
-				} else {
-					ShowStatus($"Installation failed: {message}", false);
-				}
+				ShowStatus(success
+					? $"Add-on '{addonId}' installed successfully!"
+					: $"Installation failed: {message}", success);
 			});
 		}
 		
@@ -2376,6 +2375,12 @@ namespace spz {
 			if (_suppressEnabledListRefresh) {
 				SyncAddonRowVisual(addonId);
 				RefreshStatusCountsOnly();
+				return;
+			}
+			// Unload during RemoveAddon flips isEnabled immediately — defer list rebuild until delete finishes
+			// so "Removing…" status and the row are not wiped mid-uninstall.
+			if (AddonInstaller_MGR.instance != null && AddonInstaller_MGR.instance.HasRemoveInFlight) {
+				SyncAddonRowVisual(addonId);
 				return;
 			}
 			// Defer so EventSystem finishes with the clicked dial before we destroy list rows.
@@ -3547,9 +3552,10 @@ namespace spz {
 						return;
 					}
 					AddonInstaller_MGR.instance.RemoveAddon(addonId, (success, message) => {
-						ShowStatus(message, success);
 						if (success)
 							RefreshAddonsList();
+						// RefreshAddonsList overwrites status with "Showing N of M…" — restore outcome.
+						ShowStatus(message, success);
 					});
 				},
 				// Archive used onNo:null — keep a quiet status so Esc/dimmer is honest without noise.
