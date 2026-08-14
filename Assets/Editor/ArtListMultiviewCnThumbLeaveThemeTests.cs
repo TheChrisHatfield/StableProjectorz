@@ -20,6 +20,8 @@ public sealed class ArtListMultiviewCnThumbLeaveThemeTests {
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("RestoreBoundChromeUnder(_BlendCams_button.transform)"));
 		Assert.That(src, Does.Contain("RestoreBoundChromeUnder(_sortPins_Button.transform)"));
+		Assert.That(src, Does.Contain("ApplyBoundChromeReadableBodyTmp(gLabel"));
+		Assert.That(src, Does.Contain("ApplyBoundChromeReadableBodyTmp(tmp, t.textPrimary, 11f)"));
 	}
 
 	[Test]
