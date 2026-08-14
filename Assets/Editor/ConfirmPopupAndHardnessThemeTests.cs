@@ -16,14 +16,16 @@ public sealed class ConfirmPopupAndHardnessThemeTests {
 	public void ConfirmPopup_ReShowInvokesPriorCancelAndGatesEscape_Source() {
 		string path = Path.Combine(Application.dataPath, "_gm", "_Core", "UI (reusable)", "Widgets and Gadgets", "UI_ConfirmPopup_YesNo", "ConfirmPopup_UI.cs");
 		string src = File.ReadAllText(path);
-		Assert.That(src, Does.Contain("Prior cancel on re-Show"),
-			"Re-entrant Show must invoke prior onNo so Addon Manager uninstall session cannot leak.");
+		Assert.That(src, Does.Contain("prior acts discarded, not cancelled"),
+			"Re-entrant Show must discard prior acts silently — invoking onNo falsely reports Uninstall cancelled.");
 		Assert.That(src, Does.Contain("if (!IsShowing) return"),
 			"Escape must only cancel while the confirm dialog is visible.");
-		Assert.That(src, Does.Contain("OnDestroy cancel"),
-			"Destroy must run cancel cleanup so manager sort is restored.");
+		Assert.That(src, Does.Contain("_suppressBackgroundDismissUntilPointerUp"),
+			"Dimmer must ignore the same pointer that opened the dialog.");
 		Assert.That(src, Does.Contain("ElevateAboveAddonManagerIfOpen"),
 			"Show must elevate above AddonManager_Canvas for Exit/Uninstall while manager is open.");
+		Assert.That(src, Does.Not.Contain("Prior cancel on re-Show"),
+			"Must not invoke prior onNo on re-Show (that was the Uninstall cancelled false positive).");
 	}
 
 	[Test]

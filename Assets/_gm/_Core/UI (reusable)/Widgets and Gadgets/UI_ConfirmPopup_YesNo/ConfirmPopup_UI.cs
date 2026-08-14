@@ -32,6 +32,8 @@ namespace spz {
 	    Vector3 _popupRootScale;
 	    CanvasSortState[] _elevatedPopupStates;
 	    bool _elevationActive;
+	    /// <summary>Ignore dimmer clicks until the opening pointer is released (same-click dismiss).</summary>
+	    bool _suppressBackgroundDismissUntilPointerUp;
 
 	    /// <summary>True while the dimmer/card is active (Yes/No pending).</summary>
 	    public bool IsShowing =>
@@ -46,14 +48,9 @@ namespace spz {
 
 	    void OnDestroy() {
 	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
-	        if (_act_onNo != null) {
-		        Action cancel = _act_onNo;
-		        _act_onYes = null;
-		        _act_onNo = null;
-		        try { cancel.Invoke(); } catch (Exception ex) {
-			        Debug.LogWarning("[ConfirmPopup_UI] OnDestroy cancel: " + ex.Message);
-		        }
-	        }
+	        // Do not invoke user onNo here — that falsely reports "Uninstall cancelled" on scene unload.
+	        _act_onYes = null;
+	        _act_onNo = null;
 	        RestoreElevation();
 	        if (instance == this)
 	            instance = null;
@@ -68,17 +65,25 @@ namespace spz {
 
 	    void Update(){
 		    if (!IsShowing) return;
+		    if (_suppressBackgroundDismissUntilPointerUp) {
+			    var mouse = Mouse.current;
+			    bool lmbDown = mouse != null && mouse.leftButton.isPressed;
+			    var pen = Pen.current;
+			    bool penDown = pen != null && pen.tip.isPressed;
+			    if (!lmbDown && !penDown)
+				    _suppressBackgroundDismissUntilPointerUp = false;
+		    }
 	        if(Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame){  OnNoClicked(); }
 	    }
 
 	    public void Show( string text,  Action onYes,  Action onNo, string yesText="Yes", string noText="No" ){
+		    // Re-entrant Show (double Uninstall listener / Exit over Uninstall): drop prior acts silently.
+		    // Invoking prior onNo falsely showed "Uninstall cancelled." while replacing the dialog.
+		    // Elevation restore is handled below — do not treat replace as user cancel.
 		    if (_act_onYes != null || _act_onNo != null) {
-			    Action priorCancel = _act_onNo;
+			    Debug.Log("[ConfirmPopup_UI] Replacing open confirm (prior acts discarded, not cancelled).");
 			    _act_onYes = null;
 			    _act_onNo = null;
-			    try { priorCancel?.Invoke(); } catch (Exception ex) {
-				    Debug.LogWarning("[ConfirmPopup_UI] Prior cancel on re-Show: " + ex.Message);
-			    }
 		    }
 		    RestoreElevation();
 		    ElevateAboveAddonManagerIfOpen();
@@ -89,6 +94,8 @@ namespace spz {
 	        _yesText.text = yesText;
 	        _noText.text = noText;
 	        _alreadyShownOrHidden = true;
+		    // Same pointer that clicked Uninstall must not dismiss via fullscreen dimmer.
+		    _suppressBackgroundDismissUntilPointerUp = true;
 	        ApplyThemeTokens();
 	    }
 
@@ -245,6 +252,7 @@ namespace spz {
 	    }
 
 	    void OnBackgroundClicked(){
+		    if (_suppressBackgroundDismissUntilPointerUp) return;
 	        OnNoClicked();
 	    }
 	}
