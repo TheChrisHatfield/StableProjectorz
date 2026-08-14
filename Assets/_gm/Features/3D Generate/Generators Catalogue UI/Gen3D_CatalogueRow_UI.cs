@@ -126,13 +126,17 @@ namespace spz {
 	        while (!downloadSuccess && _download_info.CurrentUrlIndex < _download_info.mirrors.Length) {
 	            string currentUrl = _download_info.mirrors[_download_info.CurrentUrlIndex];
 
+	            if (Download_MGR.instance == null) {
+	                _wholeCataloguePanel?.statusText?.ShowStatusText("Download manager unavailable", 5);
+	                break;
+	            }
 	            Download_MGR.instance.DownloadFile(
 	                currentUrl,
 	                zipPath,
 	                (progress) => _progressBar_stretchMe.localScale = new Vector3(progress * 0.8f, 1, 1),
 	                false
 	            );
-	            while (Download_MGR.instance.IsDownloading(currentUrl)) {
+	            while (Download_MGR.instance != null && Download_MGR.instance.IsDownloading(currentUrl)) {
 	                yield return null;
 	            }
 	            if (File.Exists(zipPath)) {
@@ -260,8 +264,8 @@ namespace spz {
 	    void OnDisable() {
 	        if (_onDownloadRepo_crtn != null){
 	            //show in both, in case if the panel is closed:
-	            _wholeCataloguePanel.statusText.ShowStatusText($"Download Cancelled", 8);
-	            Viewport_StatusText.instance.ShowStatusText($"Download Cancelled", false, 8, false);
+	            _wholeCataloguePanel?.statusText?.ShowStatusText($"Download Cancelled", 8);
+	            Viewport_StatusText.instance?.ShowStatusText($"Download Cancelled", false, 8, false);
 
 	            StopCoroutine(_onDownloadRepo_crtn);
 	            _onDownloadRepo_crtn = null;
