@@ -296,7 +296,9 @@ namespace spz {
 				return new JObject { ["error"] = "Camera ID required", ["status"] = 400 };
 			}
 			
-			int cameraIndex = int.Parse(id);
+			if (!int.TryParse(id, out int cameraIndex)) {
+				return new JObject { ["error"] = $"Invalid camera id: {id}" };
+			}
 			
 			if (string.IsNullOrEmpty(action)) {
 				// GET /api/v1/cameras/{id}/position
@@ -526,7 +528,9 @@ namespace spz {
 				return new JObject { ["error"] = "Camera ID required" };
 			}
 			
-			int cameraIndex = int.Parse(id);
+			if (!int.TryParse(id, out int cameraIndex)) {
+				return new JObject { ["error"] = $"Invalid projection camera id: {id}" };
+			}
 			
 			if (action == "position") {
 				if (method == "GET") {
@@ -605,7 +609,9 @@ namespace spz {
 				return new JObject { ["error"] = "Unit ID required" };
 			}
 			
-			int unitIndex = int.Parse(id);
+			if (!int.TryParse(id, out int unitIndex)) {
+				return new JObject { ["error"] = $"Invalid ControlNet unit id: {id}" };
+			}
 			
 			if (action == "enabled") {
 				if (method == "GET") {
