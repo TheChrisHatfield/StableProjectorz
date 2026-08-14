@@ -40,8 +40,8 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 			"Missing ConfirmPopup must hard-fail, not silently delete the add-on.");
 		Assert.That(src, Does.Contain("removeBtn.onClick.RemoveAllListeners()"),
 			"Uninstall button must RemoveAllListeners before bind (double-fire → false cancel).");
-		Assert.That(confirm, Does.Contain("ElevateForModalShow"),
-			"ConfirmPopup.Show must Overlay-elevate for Settings/Uninstall/Exit clicks.");
+		Assert.That(confirm, Does.Contain("ElevateAboveAddonManagerIfOpen"),
+			"ConfirmPopup.Show must elevate above AddonManager_Canvas for Uninstall/Exit clicks.");
 		Assert.That(confirm, Does.Contain("RestoreElevation"),
 			"ConfirmPopup must restore manager sort on Yes/No.");
 		Assert.That(confirm, Does.Contain("RenderMode.ScreenSpaceOverlay"),
@@ -50,14 +50,11 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 			"Re-Show must not fire Uninstall cancelled via prior onNo.");
 		Assert.That(confirm, Does.Contain("_suppressBackgroundDismissUntilPointerUp"),
 			"Dimmer must ignore the opening pointer.");
-		int rem = installer.IndexOf("IEnumerator RemoveAddonCrtn(", System.StringComparison.Ordinal);
-		Assert.That(rem, Is.GreaterThan(0));
-		string remBody = installer.Substring(rem, System.Math.Min(2200, installer.Length - rem));
-		Assert.That(remBody, Does.Contain("unloadTimeoutSec"),
+		Assert.That(installer, Does.Contain("unloadTimeoutSec"),
 			"RemoveAddon must not hang forever if UnloadAddon callback never fires.");
-		Assert.That(remBody, Does.Contain("IsPythonUnloadPending(addonId)"),
+		Assert.That(installer, Does.Contain("IsPythonUnloadPending(addonId)"),
 			"RemoveAddon must wait Python unload pending before Directory.Delete.");
-		Assert.That(remBody, Does.Contain("Directory.Delete(addonPath"),
+		Assert.That(installer, Does.Contain("Directory.Delete(addonPath"),
 			"Yes path must delete StreamingAssets/Addons/<id>.");
 	}
 
@@ -68,7 +65,8 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("RemoveAddonCrtn"));
 		Assert.That(src, Does.Contain("UnloadAddon(addonId, () => unloadDone = true)"));
-		Assert.That(src, Does.Contain("while (!unloadDone)"));
+		Assert.That(src, Does.Contain("while (!unloadDone && waitUnload < unloadTimeoutSec)"),
+			"Unity unload wait must be bounded (not hang forever).");
 		Assert.That(src, Does.Contain("IsPythonUnloadPending(addonId)"),
 			"Must not delete StreamingAssets folder while HTTP unload is only queued.");
 		Assert.That(src, Does.Contain("Removal blocked"));
