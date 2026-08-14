@@ -89,6 +89,7 @@ namespace spz {
 	                return true;
 	        }
 
+	        if (_raycaster == null){ return false; }
 	        PointerEventData eventData = new PointerEventData( EventSystem.current );
 	        eventData.position = Input.mousePosition;
 
@@ -142,7 +143,7 @@ namespace spz {
 
 	                if (setColorToPending_once || noConn_butJustStarted ){
 	                    setColorToPending_once = false;
-	                    _dim_text.color = _connectionIcon.color = pendingColor;
+	                    SetStatusColor( pendingColor );
 	                }
 	                // Increase threshold 'connected'/not to 20 during generation, or if already connected.
 	                // Because people had disconnects during generation if just 4.
@@ -158,11 +159,11 @@ namespace spz {
 
 	                if (request.result == UnityWebRequest.Result.Success){//connection successful:
 	                    PlayerPrefs_SaveConnDetails();
-	                    _dim_text.color = _connectionIcon.color = Color.green;
+	                    SetStatusColor( Color.green );
 	                    isConnected = true;
 	                }
 	                else{//Connection failed:
-	                    _dim_text.color =  _connectionIcon.color =  isStill_warmingUp()?  pendingColor : Color.red;
+	                    SetStatusColor( isStill_warmingUp()?  pendingColor : Color.red );
 	                    isConnected = false;
 	                }
 	            }
@@ -172,6 +173,12 @@ namespace spz {
 	    }
 
     
+	    /// <summary>Missing/destroyed status graphics must not kill the ping loop (it never restarts).</summary>
+	    void SetStatusColor( Color c ){
+	        if (_dim_text != null) _dim_text.color = c;
+	        if (_connectionIcon != null) _connectionIcon.color = c;
+	    }
+
 	    string where_to_ping(ConnectionPanel_UI panel){
 	        switch (_panelKind){
 	            case ConnectionPanel_Kind.StableDiffusion:
