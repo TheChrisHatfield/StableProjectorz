@@ -80,6 +80,11 @@ namespace spz {
 	        public Action<byte[]> onDataDownloaded;
 	        public Action<string> onError;
 	        public Action onComplete;
+	        /// <summary>
+	        /// When true, Gen_downloadFinalData does not call onComplete after onDataDownloaded
+	        /// (e.g. mesh import is async — Gen3D_MGR finishes UI when Assimp/UDIMs complete).
+	        /// </summary>
+	        public bool suppressAutoComplete;
 	    }
 
 
@@ -458,7 +463,9 @@ namespace spz {
 					callbacks.onError?.Invoke("downloaded data could not be applied: " + ex.Message);
 				}
 				if (dataOk){
-					callbacks.onComplete?.Invoke();
+					if (!callbacks.suppressAutoComplete){
+						callbacks.onComplete?.Invoke();
+					}
 				}
 			}else{
 				callbacks.onError?.Invoke($"Failed to download data: {www.error}");

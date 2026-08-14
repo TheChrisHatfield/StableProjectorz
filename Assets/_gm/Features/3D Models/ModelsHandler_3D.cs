@@ -48,6 +48,8 @@ namespace spz {
 	    }
 	    public static Action<ModelsHandler_ImporingInfo> Act_onWillLoadModel { get; set; } = null;
 	    public static Action<GameObject> Act_onImported { get; set; } = null;
+	    /// <summary>Fires for every import finish (success or fail). Used by Gen3D to wait before reporting complete.</summary>
+	    public static Action<bool, GameObject> Act_onImportComplete { get; set; } = null;
 
 
 	    public bool hasModelRootGO => o3d.currModelRootGO != null;
@@ -220,6 +222,7 @@ namespace spz {
 
 	    void OnImportModel_Done(bool isSuccess, GameObject loadedRoot){
 	        _importingInfo = null;
+	        Act_onImportComplete?.Invoke(isSuccess, loadedRoot);
 	        if(!isSuccess){ return; }
          
 	        o3d.meshes.ForEach(sm => sm.TryChange_SelectionStatus(true, out bool isSuccessOut, isDeselectOthers:false));
