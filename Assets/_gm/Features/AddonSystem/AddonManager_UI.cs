@@ -377,7 +377,8 @@ namespace spz {
 			if (existing != null) {
 				_saveAddonSettings_button = existing.GetComponent<Button>();
 				if (_saveAddonSettings_button != null) {
-					_saveAddonSettings_button.onClick.RemoveListener(OnSaveAddonSettings);
+					// IL2CPP: method-group RemoveListener often misses; RemoveAllListeners matches Install Bind.
+					_saveAddonSettings_button.onClick.RemoveAllListeners();
 					_saveAddonSettings_button.onClick.AddListener(OnSaveAddonSettings);
 					AttachTooltip(_saveAddonSettings_button.gameObject,
 						"Persist enabled add-ons and Preferences (e.g. Show in Command Ribbon) for the next launch.");
@@ -406,7 +407,7 @@ namespace spz {
 				} else {
 					_rememberEnabledAddonToggle = found.GetComponentInChildren<Toggle>(true);
 					if (_rememberEnabledAddonToggle != null) {
-						_rememberEnabledAddonToggle.onValueChanged.RemoveListener(OnRememberEnabledAddonsToggleChanged);
+						_rememberEnabledAddonToggle.onValueChanged.RemoveAllListeners();
 						_rememberEnabledAddonToggle.onValueChanged.AddListener(OnRememberEnabledAddonsToggleChanged);
 					}
 					EnsureRememberRowTooltip(found.gameObject);

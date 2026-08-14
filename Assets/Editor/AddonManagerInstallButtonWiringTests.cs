@@ -63,5 +63,26 @@ public sealed class AddonManagerInstallButtonWiringTests {
 			"Must call comdlg32 GetOpenFileNameW.");
 		Assert.That(src, Does.Contain("UNITY_STANDALONE_WIN"),
 			"Native dialog path must be gated to Windows builds.");
+		Assert.That(src, Does.Contain("CommDlgExtendedError"),
+			"Must distinguish user cancel from native dialog failure.");
+	}
+
+	[Test]
+	public void SaveAndRemember_RebindUsesRemoveAllListeners_Source() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "AddonManager_UI.cs");
+		string src = File.ReadAllText(path);
+		int saveAt = src.IndexOf("void TryEnsureSaveSettingsButton()", System.StringComparison.Ordinal);
+		Assert.That(saveAt, Is.GreaterThan(0));
+		string saveBody = src.Substring(saveAt, System.Math.Min(900, src.Length - saveAt));
+		Assert.That(saveBody, Does.Contain("RemoveAllListeners()"),
+			"Save settings rebind must RemoveAllListeners (IL2CPP-safe).");
+		Assert.That(saveBody, Does.Not.Contain("RemoveListener(OnSaveAddonSettings)"),
+			"Method-group RemoveListener on Save must not remain.");
+		int remAt = src.IndexOf("void TryAddRememberPreferenceRowIfMissing()", System.StringComparison.Ordinal);
+		Assert.That(remAt, Is.GreaterThan(0));
+		string remBody = src.Substring(remAt, System.Math.Min(1200, src.Length - remAt));
+		Assert.That(remBody, Does.Contain("RemoveAllListeners()"),
+			"Remember toggle rebind must RemoveAllListeners (IL2CPP-safe).");
 	}
 }
