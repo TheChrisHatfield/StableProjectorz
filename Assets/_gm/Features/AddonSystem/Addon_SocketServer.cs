@@ -596,6 +596,19 @@ namespace spz {
 		}
 		
 		/// <summary>
+		/// Bool toggles (set_sd_* etc): a missing value/on param must be an error,
+		/// not a silent "turn the feature off and report success".
+		/// </summary>
+		static bool TryReadBoolParam(JObject @params, out bool value, out string error) {
+			value = false;
+			error = null;
+			JToken tok = @params?["value"] ?? @params?["on"];
+			if (tok == null) { error = "Missing value/on (boolean)"; return false; }
+			try { value = tok.ToObject<bool>(); return true; }
+			catch { error = "Invalid value/on (boolean)"; return false; }
+		}
+
+		/// <summary>
 		/// Executes a command on the main thread
 		/// </summary>
 		JObject ExecuteCommand(string method, JObject @params) {
@@ -2044,44 +2057,40 @@ namespace spz {
 							@params["value"]?.ToObject<float>() ?? float.NaN);
 						break;
 
-					case "spz.cmd.set_sd_inpainting_mask_invert":
-						try {
-							bool invOn = @params["value"]?.ToObject<bool>()
-							              ?? @params["on"]?.ToObject<bool>()
-							              ?? false;
-							result["success"] = fastPath.SetSdInpaintingMaskInvert(invOn);
-						}
-						catch {
-							result["error"] = "Invalid value/on (boolean)";
-						}
-						break;
+				case "spz.cmd.set_sd_inpainting_mask_invert":
+					if (TryReadBoolParam(@params, out bool invOn, out string invErr))
+						result["success"] = fastPath.SetSdInpaintingMaskInvert(invOn);
+					else
+						result["error"] = invErr;
+					break;
 
-					case "spz.cmd.set_sd_soft_inpaint":
-						result["success"] = fastPath.SetSdSoftInpaint(
-							@params["value"]?.ToObject<bool>() ?? @params["on"]?.ToObject<bool>() ?? false);
-						break;
+				case "spz.cmd.set_sd_soft_inpaint":
+					if (TryReadBoolParam(@params, out bool softOn, out string softErr))
+						result["success"] = fastPath.SetSdSoftInpaint(softOn);
+					else
+						result["error"] = softErr;
+					break;
 
-					case "spz.cmd.set_sd_strict_isolation_flip":
-						try {
-							bool flipOn = @params["value"]?.ToObject<bool>()
-							               ?? @params["on"]?.ToObject<bool>()
-							               ?? false;
-							result["success"] = fastPath.SetSdStrictIsolationFlip(flipOn);
-						}
-						catch {
-							result["error"] = "Invalid value/on (boolean)";
-						}
-						break;
+				case "spz.cmd.set_sd_strict_isolation_flip":
+					if (TryReadBoolParam(@params, out bool flipOn, out string flipErr))
+						result["success"] = fastPath.SetSdStrictIsolationFlip(flipOn);
+					else
+						result["error"] = flipErr;
+					break;
 
-					case "spz.cmd.set_sd_tileable_inpaint":
-						result["success"] = fastPath.SetSdTileableInpaint(
-							@params["value"]?.ToObject<bool>() ?? @params["on"]?.ToObject<bool>() ?? false);
-						break;
+				case "spz.cmd.set_sd_tileable_inpaint":
+					if (TryReadBoolParam(@params, out bool tileOn, out string tileErr))
+						result["success"] = fastPath.SetSdTileableInpaint(tileOn);
+					else
+						result["error"] = tileErr;
+					break;
 
-					case "spz.cmd.set_sd_ignore_depth_or_normals":
-						result["success"] = fastPath.SetSdIgnoreDepthOrNormals(
-							@params["value"]?.ToObject<bool>() ?? @params["on"]?.ToObject<bool>() ?? false);
-						break;
+				case "spz.cmd.set_sd_ignore_depth_or_normals":
+					if (TryReadBoolParam(@params, out bool ignOn, out string ignErr))
+						result["success"] = fastPath.SetSdIgnoreDepthOrNormals(ignOn);
+					else
+						result["error"] = ignErr;
+					break;
 
 					case "spz.cmd.get_addon_context":
 						fastPath.PopulateAddonContext(result);
