@@ -112,8 +112,10 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 		Assert.That(body, Does.Contain("if (wasEnabledBeforeOverwrite"));
 		Assert.That(body, Does.Contain("IsPythonUnloadPending(addonId)"),
 			"Zip overwrite must wait Python unload pending like RemoveAddon before Directory.Move.");
-		Assert.That(body, Does.Contain("Installation blocked"),
-			"Must fail install with a clear status when unload/pending times out (not hang forever).");
+		Assert.That(body, Does.Contain("proceeding with overwrite"),
+			"Unload timeout must not soft-lock Install — proceed like RemoveAddon after warn.");
+		Assert.That(body, Does.Not.Contain("Installation blocked"),
+			"Must not hard-fail Install solely because unload timed out.");
 	}
 
 	[Test]
