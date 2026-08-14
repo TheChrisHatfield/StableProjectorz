@@ -50,4 +50,18 @@ public sealed class SaveLoadPaintUiHonestyContractTests {
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("FindObjectOfType<PaintLayerStack_MGR>(true)"));
 	}
+
+	[Test]
+	public void ApplyColorLayer_KeepsCompositingLayerStackWhileSaving_Source() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "Paint", "Inpaint", "Inpaint_MaskPainter.cs");
+		string src = File.ReadAllText(path);
+		int i = src.IndexOf("public void ApplyColorLayer_To_UV_Textures(", System.StringComparison.Ordinal);
+		Assert.That(i, Is.GreaterThan(0));
+		string body = src.Substring(i, System.Math.Min(1200, src.Length - i));
+		Assert.That(body, Does.Contain("hasLayerStack"),
+			"Must detect layer stack before the save early-out.");
+		Assert.That(body, Does.Contain("!hasLayerStack && Save_MGR.instance != null && Save_MGR.instance._isSaving"),
+			"Save dialog must not blank mesh paint when a layer stack exists.");
+	}
 }
