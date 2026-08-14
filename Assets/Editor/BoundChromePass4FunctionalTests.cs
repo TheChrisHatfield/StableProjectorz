@@ -90,6 +90,8 @@ public sealed class BoundChromePass4FunctionalTests {
 		string body = src.Substring(idx, next - idx);
 		Assert.That(body, Does.Contain("ApplyBoundChromeSelectable"));
 		Assert.That(body, Does.Contain("ApplyBoundChromeTmp"));
+		Assert.That(body, Does.Contain("ApplyBoundChromeReadableBodyTmp"));
+		Assert.That(body, Does.Contain("IndexOf(' ')"));
 	}
 
 	[Test]

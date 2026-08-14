@@ -2595,8 +2595,15 @@ namespace spz {
 					continue;
 				}
 				if (text.GetComponentInParent<Button>(true) != null
-				    || text.GetComponentInParent<Toggle>(true) != null)
-					ApplyBoundChromeCompactToolLabelTmp(text, tokens.textPrimary, 11f);
+				    || text.GetComponentInParent<Toggle>(true) != null) {
+					// Multi-word menu actions (Restore Camera, Move To Layer, …) — Compact Truncate clips.
+					string raw = text.text ?? "";
+					bool useReadable = raw.IndexOf(' ') >= 0 || raw.Length >= 10;
+					if (useReadable)
+						ApplyBoundChromeReadableBodyTmp(text, tokens.textPrimary, 11f);
+					else
+						ApplyBoundChromeCompactToolLabelTmp(text, tokens.textPrimary, 11f);
+				}
 				else
 					ApplyBoundChromeTmp(text, tokens.textPrimary);
 			}
