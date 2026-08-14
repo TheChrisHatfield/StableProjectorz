@@ -593,6 +593,12 @@ def _exchange_watch_timer():
     fbx = os.path.join(exdir, base + ".fbx")
     fp = _file_fingerprint(stamp)
     if fp is None:
+        # No stamp at all — that IS a complete seed. Without this, the first stamp SPZ
+        # writes after Blender starts gets adopted as "stale" and the first one-click
+        # export silently never imports (user had to export twice).
+        if _watch_needs_seed:
+            _watch_last_ready_fp = None
+            _watch_needs_seed = False
         return 1.0
     # First sight of exchange (e.g. SPZ was down at register): adopt stamp, do not import stale mesh.
     if _watch_needs_seed:
