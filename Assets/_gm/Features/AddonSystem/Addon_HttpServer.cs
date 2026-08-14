@@ -276,6 +276,8 @@ namespace spz {
 					return HandleBackgroundRequest(httpMethod, id, body, request);
 				case "workflow":
 					return HandleWorkflowRequest(httpMethod, id, body, request);
+				case "export":
+					return HandleExportRequest(httpMethod, id, body, request);
 				default:
 					response.StatusCode = 404;
 					return new JObject { ["error"] = $"Resource '{resource}' not found" };
@@ -654,6 +656,65 @@ namespace spz {
 				}
 			}
 			return new JObject { ["error"] = "Invalid action" };
+		}
+		
+		/// <summary>
+		/// Handles export requests — same endpoints as the Python server so the Blender
+		/// SPZ GO bridge works against either HTTP server on :5557.
+		/// </summary>
+		JObject HandleExportRequest(string method, string action, JObject body, HttpListenerRequest request) {
+			if (method != "POST") {
+				return new JObject { ["error"] = "POST required" };
+			}
+			switch (action) {
+				case "3d_with_textures":
+					return ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.export_3d_with_textures", new JObject()));
+				case "3d_to_path": {
+					if (body?["mesh_filepath"] == null) {
+						return new JObject { ["error"] = "JSON body {\"mesh_filepath\": ...} required" };
+					}
+					var started = ExecuteJsonRpcSync("spz.cmd.export_3d_with_textures_to_path", new JObject {
+						["mesh_filepath"] = body["mesh_filepath"]
+					});
+					bool ok = started?["success"]?.ToObject<bool>() ?? false;
+					if (!ok) {
+						return ConvertToRestResponse(started ?? new JObject());
+					}
+					// Socket clients get a deferred response (CoRespondWhenProjectSaveIdle); HTTP must
+					// match, or Blender imports the FBX before texture encode finishes.
+					if (!WaitForProjectSaveIdle_offMainThread(timeoutSec: 300f)) {
+						return new JObject { ["success"] = false, ["error"] = "export to path timed out waiting for texture write" };
+					}
+					return ConvertToRestResponse(started);
+				}
+				case "projection_textures": {
+					bool isDilate = true;
+					string q = request.QueryString["is_dilate"];
+					if (q != null && bool.TryParse(q, out bool qVal)) isDilate = qVal;
+					if (body?["is_dilate"] != null) isDilate = body["is_dilate"].ToObject<bool>();
+					return ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.export_projection_textures", new JObject {
+						["is_dilate"] = isDilate
+					}));
+				}
+				case "view_textures":
+					return ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.export_view_textures", new JObject()));
+			}
+			return new JObject { ["error"] = "Invalid action" };
+		}
+		
+		/// <summary>
+		/// Blocks the HTTP listener thread until <see cref="Save_MGR._isSaving"/> clears.
+		/// Plain bool field read — safe off the main thread. Returns false on timeout.
+		/// </summary>
+		static bool WaitForProjectSaveIdle_offMainThread(float timeoutSec) {
+			var sm = Save_MGR.instance;
+			float elapsed = 0f;
+			const float step = 0.05f;
+			while (sm != null && sm._isSaving && elapsed < timeoutSec) {
+				Thread.Sleep((int)(step * 1000));
+				elapsed += step;
+			}
+			return sm == null || !sm._isSaving;
 		}
 		
 		/// <summary>
