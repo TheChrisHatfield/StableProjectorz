@@ -84,6 +84,7 @@ namespace spz {
 	        if( !isCanStart_make_meshes_and_tex() ){ return false; }
 	        // FastPath / API can race past button gates — refuse while Cancel chrome still owns a job.
 	        if (GenerateButtons_UI.isGenerating){ return false; }
+	        if (Gen3D_API.instance == null){ return false; }
 	        GenerateButtons_UI.OnConfirmed_StartedGenerate();
 	        Dictionary<string,object> all_values = gather_all_ui_inputs();
 	        all_values.Add("generate_what", "make_meshes_and_tex");
@@ -95,7 +96,8 @@ namespace spz {
 	            onDataDownloaded = Gen_OnMeshReady,
 	        };
 	        Gen3D_API.instance.StartGeneration(Gen3D_API.GenerateWhat.make_meshes_and_tex, all_values, callbacks);
-	        return true;
+	        // Honesty: server-down path invokes onError sync and never starts a coroutine — do not report success.
+	        return Gen3D_API.instance != null && Gen3D_API.instance.isBusy;
 	    }
 
 

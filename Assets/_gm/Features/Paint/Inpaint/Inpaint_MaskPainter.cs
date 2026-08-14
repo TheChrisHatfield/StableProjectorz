@@ -150,12 +150,9 @@ namespace spz {
 	        var sd = SD_WorkflowOptionsRibbon_UI.instance;
 	        if (sd == null || !sd.isSoftInpaint) return null;
 
+	        // Neo/Forge alwayson expects 7 positional scalars (forge-neo-swap R4.2), not a labeled object.
 	        var entry = new SoftInpaintingArgsEntry{};//keep default values, they don't have much difference (Jul 2024)
-
-	        var sft_args = new SoftInpaintingArgs(){
-	            args = new SoftInpaintingArgsEntry[1]{ entry },
-	        };
-	        return sft_args;
+	        return SoftInpaintingArgs.FromEntry(entry);
 	    }
 
 
@@ -173,7 +170,12 @@ namespace spz {
 		        return;
 	        }
 	        bool isColorless  = WorkflowRibbon_UI.instance != null && WorkflowRibbon_UI.instance.currentMode() == WorkflowRibbon_CurrMode.Inpaint_NoColor;
-	        if (!forStableDiffusionCapture && Save_MGR.instance != null && Save_MGR.instance._isSaving){ return; }
+	        // Save dialogs hold _isSaving for the whole picker lifetime — skipping the layer blit blanks
+	        // the mesh while ReRenderAll clears accumulation. Keep compositing when a layer stack exists
+	        // (same honesty as SD capture / post-gen paint). No-stack path still guards concurrent write.
+	        var stackEarly = PaintLayerStack_MGR.instance;
+	        bool hasLayerStack = stackEarly != null && stackEarly.Layers != null && stackEarly.Layers.Count >= 1;
+	        if (!forStableDiffusionCapture && !hasLayerStack && Save_MGR.instance != null && Save_MGR.instance._isSaving){ return; }
 	        // Upstream (single-layer): when No Color + few frames before SD send, skip this blit — "Don't blit, keep as is."
 	        // Paint-layer path must still run when forStableDiffusionCapture is true so EnsureInpaintColorLayerAppliedForCapture
 	        // can composite layers onto accumulation before content-cam ReadPixels (see SD_GenRequests_Helper.Generate_img2img_crtn).
