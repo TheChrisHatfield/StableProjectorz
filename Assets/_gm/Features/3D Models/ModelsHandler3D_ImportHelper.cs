@@ -131,7 +131,14 @@ namespace spz {
 	        _isImportingModel = true;
 	        _latestSuccessRoot = loadedRoot;
 
-	        bool success = o3d.Init(loadedRoot);
+	        bool success;
+	        try {
+		        success = o3d.Init(loadedRoot);
+	        } catch (Exception ex) {
+		        Debug.LogError("[ModelsHandler3D_ImportHelper] Init failed: " + ex.Message);
+		        OnError("Model Init failed: " + ex.Message);
+		        return;
+	        }
 	        if(!success){
 		        _lastImportSucceeded = false;
 		        _isImportingModel = false;
@@ -139,7 +146,12 @@ namespace spz {
 		        return;
 	        }
 
-	        _udims_helper.Init_FindAll_UDIMs( o3d.meshes, (pcnt01)=>OnUDIMsProgress01(pcnt01, loadedRoot) );
+	        try {
+		        _udims_helper.Init_FindAll_UDIMs( o3d.meshes, (pcnt01)=>OnUDIMsProgress01(pcnt01, loadedRoot) );
+	        } catch (Exception ex) {
+		        Debug.LogError("[ModelsHandler3D_ImportHelper] UDIM scan failed: " + ex.Message);
+		        OnError("UDIM scan failed: " + ex.Message);
+	        }
 	    }
 
 
