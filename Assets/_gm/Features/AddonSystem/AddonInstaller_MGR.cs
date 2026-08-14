@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using UnityEngine;
@@ -12,6 +13,10 @@ namespace spz {
 	/// </summary>
 	public class AddonInstaller_MGR : MonoBehaviour {
 		public static AddonInstaller_MGR instance { get; private set; }
+		readonly HashSet<string> _removeInFlight = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+		public bool IsRemoveInFlight(string addonId) =>
+			!string.IsNullOrEmpty(addonId) && _removeInFlight.Contains(addonId);
 		
 		void Awake() {
 			if (instance != null) { DestroyImmediate(this); return; }
@@ -679,10 +684,26 @@ namespace spz {
 		/// Removes an add-on by ID
 		/// </summary>
 		public void RemoveAddon(string addonId, Action<bool, string> onComplete) {
+			if (string.IsNullOrEmpty(addonId)) {
+				onComplete?.Invoke(false, "Invalid add-on ID");
+				return;
+			}
+			if (!_removeInFlight.Add(addonId)) {
+				onComplete?.Invoke(false, $"Removal already in progress for '{addonId}'");
+				return;
+			}
 			StartCoroutine(RemoveAddonCrtn(addonId, onComplete));
 		}
 
 		IEnumerator RemoveAddonCrtn(string addonId, Action<bool, string> onComplete) {
+			try {
+				yield return RemoveAddonCrtnBody(addonId, onComplete);
+			} finally {
+				_removeInFlight.Remove(addonId);
+			}
+		}
+
+		IEnumerator RemoveAddonCrtnBody(string addonId, Action<bool, string> onComplete) {
 			if (string.IsNullOrEmpty(addonId)) {
 				onComplete?.Invoke(false, "Invalid add-on ID");
 				yield break;
