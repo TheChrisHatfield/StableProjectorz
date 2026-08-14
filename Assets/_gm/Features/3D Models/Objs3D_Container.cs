@@ -196,7 +196,7 @@ namespace spz {
 	        currModelRootGO = newRootGO;
 
 	        if(newRootGO== null){
-	            Viewport_StatusText.instance.ShowStatusText("Problem loading a 3d-model. Looks like it's empty.", false, 2.5f, false);
+	            Viewport_StatusText.instance?.ShowStatusText("Problem loading a 3d-model. Looks like it's empty.", false, 2.5f, false);
 	            return false; 
 	        }
 	        currModelRootGO.transform.SetParent(transform);
