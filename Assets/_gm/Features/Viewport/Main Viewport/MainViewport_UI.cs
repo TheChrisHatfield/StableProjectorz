@@ -216,6 +216,7 @@ namespace spz {
 	    void ShowOrderOfProjections_maybe(){
 	        ProjectorCameras_MGR projs = ProjectorCameras_MGR.instance;
 	        if(projs ==null){ return; } //scenes are probably still loading
+	        if (Keyboard.current == null){ return; }
 
 	        bool key_held =  Keyboard.current.rKey.isPressed;
 	        bool key_down =  Keyboard.current.rKey.wasPressedThisFrame;
@@ -228,7 +229,7 @@ namespace spz {
 	        projs._showOrderOfProjections = true;
 	        //user wants to erase the mask. Exit the inpaint for comfort, to avoid user frustration:
 	        if (key_down){ 
-	            WorkflowRibbon_UI.instance.Set_CurrentMode( WorkflowRibbon_CurrMode.ProjectionsMasking, playAttentionAnim:true);
+	            WorkflowRibbon_UI.instance?.Set_CurrentMode( WorkflowRibbon_CurrMode.ProjectionsMasking, playAttentionAnim:true);
 	        }
 	    }
 
