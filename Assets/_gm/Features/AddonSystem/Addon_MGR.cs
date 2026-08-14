@@ -931,6 +931,11 @@ namespace spz {
 						if (string.IsNullOrEmpty(addonId)) {
 							continue;
 						}
+						// Installer overwrite leaves {id}_backup_{yyyyMMdd_HHmmss} under Addons/ — not real add-ons.
+						if (IsInstallBackupAddonFolderName(addonId)) {
+							UnityEngine.Debug.Log($"[Addon_MGR] Skipping install backup folder: {addonId}");
+							continue;
+						}
 						
 						if (File.Exists(initFile)) {
 							foundIds.Add(addonId);
@@ -995,6 +1000,24 @@ namespace spz {
 			} catch (System.Exception e) {
 				UnityEngine.Debug.LogError($"[Addon_MGR] Fatal error in DiscoverAddons(): {e.Message}\n{e.StackTrace}");
 			}
+		}
+
+		/// <summary>
+		/// True for installer overwrite leftovers named <c>{id}_backup_{yyyyMMdd_HHmmss}</c> under StreamingAssets/Addons.
+		/// </summary>
+		public static bool IsInstallBackupAddonFolderName(string folderName) {
+			if (string.IsNullOrEmpty(folderName)) return false;
+			const string marker = "_backup_";
+			int i = folderName.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+			if (i <= 0) return false;
+			string stamp = folderName.Substring(i + marker.Length);
+			// yyyyMMdd_HHmmss → 15 chars with underscore at index 8
+			if (stamp.Length != 15 || stamp[8] != '_') return false;
+			for (int c = 0; c < stamp.Length; c++) {
+				if (c == 8) continue;
+				if (!char.IsDigit(stamp[c])) return false;
+			}
+			return true;
 		}
 		
 		/// <summary>
