@@ -40,8 +40,8 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 			"Missing ConfirmPopup must hard-fail, not silently delete the add-on.");
 		Assert.That(src, Does.Contain("removeBtn.onClick.RemoveAllListeners()"),
 			"Uninstall button must RemoveAllListeners before bind (double-fire → false cancel).");
-		Assert.That(confirm, Does.Contain("ElevateAboveAddonManagerIfOpen"),
-			"ConfirmPopup.Show must elevate above AddonManager_Canvas for Uninstall/Exit clicks.");
+		Assert.That(confirm, Does.Contain("ElevateForModalShow"),
+			"ConfirmPopup.Show must Overlay-elevate for Settings/Uninstall/Exit clicks.");
 		Assert.That(confirm, Does.Contain("RestoreElevation"),
 			"ConfirmPopup must restore manager sort on Yes/No.");
 		Assert.That(confirm, Does.Contain("RenderMode.ScreenSpaceOverlay"),
