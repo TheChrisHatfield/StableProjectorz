@@ -112,6 +112,9 @@ namespace Lavender.Systems
 	    const uint NORMAL_PRIORITY_CLASS = 0x0020;
 	    const uint CREATE_NO_WINDOW = 0x08000000;
 	    const uint CREATE_NEW_CONSOLE = 0x00000010;
+	    const uint CREATE_NEW_PROCESS_GROUP = 0x00000200;
+	    /// <summary>Child survives when Unity's process job is torn down on quit (required for in-app restart).</summary>
+	    const uint CREATE_BREAKAWAY_FROM_JOB = 0x01000000;
 	    const uint STARTF_USESHOWWINDOW = 0x00000001;
 	    const uint INFINITE = 0xFFFFFFFF;
 	    // Prefer limited rights — PROCESS_ALL_ACCESS often fails OpenProcess after CreateProcess
@@ -144,8 +147,10 @@ namespace Lavender.Systems
 
 	    /// <param name="attachToConsole">If true, attach Unity to the child's console. Prefer false for game launches.</param>
 	    /// <param name="hidden">Default true — black CMD/console stays hidden unless caller opts into a visible window.</param>
+	    /// <param name="breakAwayFromJob">If true, child survives Unity quit (Job teardown). Required for Restart with addons.</param>
 	    public static uint Run_Bat_or_Shortcut_or_Command( string filepath_or_command,  bool isJustFile,  string workingDir, 
-	                                                        bool keepWindow=false,  bool hidden = true, bool attachToConsole = false ){
+	                                                        bool keepWindow=false,  bool hidden = true, bool attachToConsole = false,
+	                                                        bool breakAwayFromJob = false ){
 	        string fileToLaunch = "C:\\Windows\\System32\\cmd.exe";
 	        string arguments = "";
 
@@ -178,6 +183,10 @@ namespace Lavender.Systems
 	        // Own console for visible child when we are not attaching Unity to it (avoids FreeConsole on our process).
 	        if (!hidden && !attachToConsole)
 	            creationFlags |= CREATE_NEW_CONSOLE;
+	        // Restart-with-addons: Unity often sits in a Job that kills children on exit. Break away or
+	        // the bat/`start` relaunch dies with Application.Quit and the user only sees "closed".
+	        if (breakAwayFromJob)
+	            creationFlags |= CREATE_BREAKAWAY_FROM_JOB | CREATE_NEW_PROCESS_GROUP;
 
 	        string commandLine = $"{fileToLaunch} {arguments}";
 	        Debug.Log($"Attempting to execute: {commandLine}");
@@ -198,8 +207,18 @@ namespace Lavender.Systems
 	                                        creationFlags,  IntPtr.Zero,  workingDir,  ref si,  out pi );
 	        if (!success){
 	            int error = Marshal.GetLastWin32Error();
-	            Debug.LogError($"Failed to start process. Error code: {error}, Error message: {new System.ComponentModel.Win32Exception(error).Message}");
-	            return 0;
+	            // Breakaway can fail if the process is not in a job — retry without it.
+	            if (breakAwayFromJob) {
+	                Debug.LogWarning($"[StartExternalProcess] Breakaway launch failed ({error}: {new Win32Exception(error).Message}) — retrying without CREATE_BREAKAWAY_FROM_JOB.");
+	                uint retryFlags = creationFlags & ~(CREATE_BREAKAWAY_FROM_JOB | CREATE_NEW_PROCESS_GROUP);
+	                success = CreateProcessW(null, commandLine, IntPtr.Zero, IntPtr.Zero, false,
+	                    retryFlags, IntPtr.Zero, workingDir, ref si, out pi);
+	            }
+	            if (!success) {
+	                error = Marshal.GetLastWin32Error();
+	                Debug.LogError($"Failed to start process. Error code: {error}, Error message: {new Win32Exception(error).Message}");
+	                return 0;
+	            }
 	        }
 	        Debug.Log($"Process started successfully. Process ID: {pi.dwProcessId}");
 
