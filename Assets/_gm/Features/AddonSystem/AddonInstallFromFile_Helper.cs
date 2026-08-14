@@ -208,7 +208,10 @@ namespace spz {
 				fbCanvas = inst.GetComponentInChildren<Canvas>(true);
 			if (fbCanvas == null) return;
 			fbCanvas.overrideSorting = true;
-			fbCanvas.sortingOrder = Math.Max(overlayCanvasSortOrder + SortOrderOffsetAboveOverlay, 40000);
+			// Canvas.sortingOrder is signed 16-bit — above 32767 it wraps NEGATIVE and the file
+			// browser renders below the whole UI (invisible dialog, Install appears dead).
+			fbCanvas.sortingOrder = Math.Min(
+				Math.Max(overlayCanvasSortOrder + SortOrderOffsetAboveOverlay, 32000), 32767);
 			if (fbCanvas.GetComponent<GraphicRaycaster>() == null)
 				fbCanvas.gameObject.AddComponent<GraphicRaycaster>();
 			fbCanvas.enabled = true;

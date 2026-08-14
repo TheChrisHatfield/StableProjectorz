@@ -58,6 +58,20 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 			"Show must stretch authored scale-0 ConfirmPopup root so Yes/No are visible.");
 		Assert.That(confirm, Does.Contain("ConfirmOverlaySortBase"),
 			"Background canvas must sort above the shell so Yes receives clicks.");
+		// Canvas.sortingOrder is signed 16-bit: values > 32767 wrap negative and the popup
+		// renders BELOW the whole UI (invisible confirm, stuck IsShowing — the uninstall lockup).
+		var sortMatch = System.Text.RegularExpressions.Regex.Match(
+			confirm, @"ConfirmOverlaySortBase\s*=\s*(\d+)");
+		Assert.That(sortMatch.Success, Is.True, "ConfirmOverlaySortBase must be a numeric const.");
+		Assert.That(int.Parse(sortMatch.Groups[1].Value), Is.LessThanOrEqualTo(32767),
+			"ConfirmOverlaySortBase must stay within Canvas sortingOrder 16-bit range (wraps negative above 32767).");
+		var sortMaxMatch = System.Text.RegularExpressions.Regex.Match(
+			confirm, @"ConfirmOverlaySortMax\s*=\s*(\d+)");
+		Assert.That(sortMaxMatch.Success, Is.True, "ConfirmOverlaySortMax must be a numeric const.");
+		Assert.That(int.Parse(sortMaxMatch.Groups[1].Value), Is.LessThanOrEqualTo(32767),
+			"ConfirmOverlaySortMax must stay within Canvas sortingOrder 16-bit range.");
+		Assert.That(confirm, Does.Not.Contain("Input.GetKeyDown(KeyCode.Escape);").Or.Contain("#if ENABLE_LEGACY_INPUT_MANAGER"),
+			"Legacy Input calls must be guarded — project is Input System-only (activeInputHandler: 2) and unguarded calls throw per frame.");
 		Assert.That(body, Does.Contain("_pendingUninstallAddonId"),
 			"Duplicate Uninstall while confirm is open must not re-Show.");
 		Assert.That(src, Does.Contain("AbortPendingUninstallConfirm"),
@@ -104,7 +118,10 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 		string src = File.ReadAllText(path);
 		int i = src.IndexOf("IEnumerator InstallAddonCoroutine(", System.StringComparison.Ordinal);
 		Assert.That(i, Is.GreaterThan(0));
-		string body = src.Substring(i, System.Math.Min(6500, src.Length - i));
+		// Slice to the next coroutine so the window covers the whole method — a fixed char
+		// count silently truncated as the method grew and reported wiring as missing.
+		int next = src.IndexOf("IEnumerator ", i + 1, System.StringComparison.Ordinal);
+		string body = next > i ? src.Substring(i, next - i) : src.Substring(i);
 		Assert.That(body, Does.Contain("wasEnabledBeforeOverwrite"));
 		Assert.That(body, Does.Contain("UnloadAddon(addonId, () => unloadDone = true)"));
 		int unloadAt = body.IndexOf("UnloadAddon(addonId, () => unloadDone = true)", System.StringComparison.Ordinal);
