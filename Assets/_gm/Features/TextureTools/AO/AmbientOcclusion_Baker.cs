@@ -98,20 +98,27 @@ namespace spz {
 
 
 	    public void BakeAO( AmbientOcclusionBake_Args args,  System.Action<bool> onBakeComplete ){
-	        if(StableDiffusion_Hub.instance._generating){
-	            Viewport_StatusText.instance.ShowStatusText("Can't Bake AO while Generating images. Please wait.", false, 1.5f, true);
+	        if(StableDiffusion_Hub.instance != null && StableDiffusion_Hub.instance._generating){
+	            Viewport_StatusText.instance?.ShowStatusText("Can't Bake AO while Generating images. Please wait.", false, 1.5f, true);
 	            onBakeComplete?.Invoke(false);
 	            return; 
-	        }if(isGeneratingAO){ //already baking
+	        }
+	        if(Gen3D_API.instance != null && Gen3D_API.instance.isBusy){
+	            Viewport_StatusText.instance?.ShowStatusText("Can't Bake AO while 3D generation is running. Please wait.", false, 1.5f, true);
 	            onBakeComplete?.Invoke(false);
 	            return;
-	        }if(ModelsHandler_3D.instance.hasModelRootGO==false){
-	            Viewport_StatusText.instance.ShowStatusText("Can't Bake AO because there are no 3D models. Please import them.", false, 1.5f, false);
+	        }
+	        if(isGeneratingAO){ //already baking
+	            onBakeComplete?.Invoke(false);
+	            return;
+	        }
+	        if(ModelsHandler_3D.instance == null || ModelsHandler_3D.instance.hasModelRootGO==false){
+	            Viewport_StatusText.instance?.ShowStatusText("Can't Bake AO because there are no 3D models. Please import them.", false, 1.5f, false);
 	            onBakeComplete?.Invoke(false);
 	            return;
 	        }
 	        if(ModelsHandler_3D.instance._isImportingModel){
-	            Viewport_StatusText.instance.ShowStatusText("Can't Bake AO while loading a 3D model file. Please wait.", false, 1.5f, false);
+	            Viewport_StatusText.instance?.ShowStatusText("Can't Bake AO while loading a 3D model file. Please wait.", false, 1.5f, false);
 	            onBakeComplete?.Invoke(false);
 	            return;
 	        }
@@ -286,9 +293,9 @@ namespace spz {
 	    void CompleteBake_and_Cleanup(){
 	        isGeneratingAO = false;
 	        _interruptBake_asap = false;
-	        Viewport_StatusText.instance.ShowStatusText("", false, 0.1f, progressVisibility:false);
+	        Viewport_StatusText.instance?.ShowStatusText("", false, 0.1f, progressVisibility:false);
 
-	        Objects_Renderer_MGR.instance.ShowFinalMat_on_ALL( finalTextureColor:_ao_accumulation_uvTex );
+	        Objects_Renderer_MGR.instance?.ShowFinalMat_on_ALL( finalTextureColor:_ao_accumulation_uvTex );
 
 	        _helper_uvTex.Dispose();
 	        _preview_AO_texture1.Dispose();
