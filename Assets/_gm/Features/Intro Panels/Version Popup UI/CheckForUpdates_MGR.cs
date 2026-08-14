@@ -24,10 +24,11 @@ namespace spz {
 
 	    Coroutine _checkForUpdates_crtn = null;
 
-	    public bool isShowing => _versionPopup.isShowing; 
+	    public bool isShowing => _versionPopup != null && _versionPopup.isShowing;
 
 
 	    public void ShowPanel(bool recheckForUpdates){
+	        if (_versionPopup == null){ return; }
 	        if (recheckForUpdates){
 	            _versionPopup.ShowPanel( VersionPopupPanel_UI.VersionDecision.Checking );
 	            if(_checkForUpdates_crtn!=null){ StopCoroutine(_checkForUpdates_crtn);  }
@@ -94,7 +95,7 @@ namespace spz {
 	        bool foundNewerVersion = ProcessWebResponse(pastebinWWW, ref latestVersion, ref description);// Process Pastebin response
 	            foundNewerVersion |= ProcessWebResponse(websiteWWW, ref latestVersion, ref description);// Process website response
 
-	        bool panelShowing = _versionPopup.isShowing;
+	        bool panelShowing = _versionPopup != null && _versionPopup.isShowing;
         
 	        if (!foundNewerVersion){
 	            if(panelShowing){ 
@@ -105,6 +106,10 @@ namespace spz {
 	        }
 	        //A newer version is available:
 
+	        if (_versionPopup == null){
+	            _checkForUpdates_crtn = null;
+	            yield break;
+	        }
 	        if (panelShowing){
 	            _versionPopup.UpdateVersionDecision(VersionPopupPanel_UI.VersionDecision.CanDownloadNewer, latestVersion, description);
 	        }else { 
