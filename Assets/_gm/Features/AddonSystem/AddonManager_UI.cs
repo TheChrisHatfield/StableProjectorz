@@ -3466,33 +3466,42 @@ namespace spz {
 			_addonUIItems[addonId] = itemObj;
 		}
 		
+		Coroutine _uninstallConfirmCo;
+
 		/// <summary>
 		/// Handles removal of an add-on
 		/// </summary>
 		void OnRemoveAddon(string addonId) {
 			Debug.Log($"[AddonManager_UI] Uninstall clicked for '{addonId}'.");
+			if (string.IsNullOrEmpty(addonId)) {
+				ShowStatus("Invalid add-on ID", false);
+				return;
+			}
 			if (ConfirmPopup_UI.instance == null) {
 				Debug.LogError("[AddonManager_UI] ConfirmPopup_UI missing — refusing uninstall without confirmation.");
 				ShowStatus("Uninstall blocked: confirmation dialog unavailable. Restart the app and try again.", false);
 				return;
 			}
-			// Defer one frame like Install — opening confirm on the same pointer-up as Uninstall
-			// lets the fullscreen dimmer eat the click (or a double-bound listener re-Show).
-			if (!isActiveAndEnabled || !gameObject.activeInHierarchy) {
-				EnsureDeferredOpenCoroutineHost();
-				if (s_deferredOpenHost != null)
-					s_deferredOpenHost.StartCoroutine(CoShowUninstallConfirm(addonId));
+			// Always host on DDOL — list rebuild / inactive AddonManager_UI must not kill the confirm coroutine.
+			// Defer one frame so the Uninstall pointer-up cannot hit the fullscreen dimmer.
+			EnsureDeferredOpenCoroutineHost();
+			if (s_deferredOpenHost == null) {
+				ShowStatus("Uninstall blocked: could not start confirmation.", false);
 				return;
 			}
-			StartCoroutine(CoShowUninstallConfirm(addonId));
+			if (_uninstallConfirmCo != null)
+				s_deferredOpenHost.StopCoroutine(_uninstallConfirmCo);
+			_uninstallConfirmCo = s_deferredOpenHost.StartCoroutine(CoShowUninstallConfirm(addonId));
 		}
 
 		IEnumerator CoShowUninstallConfirm(string addonId) {
 			yield return null;
+			_uninstallConfirmCo = null;
 			if (ConfirmPopup_UI.instance == null) {
 				ShowStatus("Uninstall blocked: confirmation dialog unavailable.", false);
 				yield break;
 			}
+			// Already showing a confirm — replace silently (ConfirmPopup discards prior acts without "cancelled").
 			ConfirmPopup_UI.instance.Show(
 				$"Remove add-on '{addonId}'?\n\nThis cannot be undone.",
 				() => {
@@ -3501,6 +3510,7 @@ namespace spz {
 						return;
 					}
 					Debug.Log($"[AddonManager_UI] Uninstall confirmed for '{addonId}' — removing…");
+					ShowStatus($"Removing '{addonId}'…", true);
 					AddonInstaller_MGR.instance.RemoveAddon(addonId, (success, message) => {
 						ShowStatus(message, success);
 						if (success)
