@@ -68,16 +68,23 @@ namespace spz {
 	    }
 
 	    void MultiPOV_Set_UvMasks( Material mat,  GenData_Masks masks ){
+	        if (mat == null || masks == null) return;
 	        int maskIx = 0;
 	        bool udimsSet = false;
+	        int n = masks._ObjectUV_brushedMaskR8 != null ? masks._ObjectUV_brushedMaskR8.Count : 0;
 
-	        for (int i=0; i<masks.numPOV; ++i){
+	        for (int i = 0; i < n; ++i){
+	            var brush = masks._ObjectUV_brushedMaskR8[i];
+	            var vis = masks._ObjectUV_visibilityR8G8 != null && i < masks._ObjectUV_visibilityR8G8.Count
+		            ? masks._ObjectUV_visibilityR8G8[i]
+		            : null;
+	            if (brush == null || vis == null) continue;
 	            if(!udimsSet){ 
-	                RenderUdims.SetNumUdims(masks._ObjectUV_visibilityR8G8[i], intoHere: mat);
+	                RenderUdims.SetNumUdims(vis, intoHere: mat);
 	                udimsSet=true; 
 	            }
-	            RenderTexture uvMask   = masks._ObjectUV_brushedMaskR8[i].texArray;
-	            RenderTexture pVisibil = masks._ObjectUV_visibilityR8G8[i].texArray;
+	            RenderTexture uvMask   = brush.texArray;
+	            RenderTexture pVisibil = vis.texArray;
 	            if(uvMask == null){ continue; }
 	            mat.SetTexture( $"_POV{maskIx}_additive_uvMask", uvMask);
 	            mat.SetTexture( $"_POV{maskIx}_ProjVisibility", pVisibil);

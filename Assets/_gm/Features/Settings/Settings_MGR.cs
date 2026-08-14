@@ -656,6 +656,7 @@ namespace spz {
 	            bool escape = UnityEngine.InputSystem.Keyboard.current != null
 	                && UnityEngine.InputSystem.Keyboard.current.escapeKey.wasPressedThisFrame;
 	            if (escape) {
+	                CommitSoftSettingsIntegerFields();
 	                settingsPanel.gameObject.SetActive(false);
 	            }
 	            else if (Time.unscaledTime >= _settingsOpenedAtUnscaled + SettingsOpenGraceSeconds
@@ -668,8 +669,10 @@ namespace spz {
 	                    : null;
 	                bool isInsidePanel = RectTransformUtility.RectangleContainsScreenPoint(settingsPanel, cursorPos, cam);
 	                bool onLauncher = IsPointerOverSettingsLauncher(cursorPos, cam);
-	                if (!isInsidePanel && !onLauncher)
+	                if (!isInsidePanel && !onLauncher) {
+	                    CommitSoftSettingsIntegerFields();
 	                    settingsPanel.gameObject.SetActive(false);
+	                }
 	            }
 	        }
 
@@ -679,6 +682,21 @@ namespace spz {
 	                colorPicker.Hide();
 	            }
 	        }
+	    }
+
+	    /// <summary>
+	    /// Escape / click-outside close without EndEdit would leave typed GPU/FPS/undo values
+	    /// on screen while PlayerPrefs stayed stale — commit soft IntegerInputField drafts on dismiss.
+	    /// </summary>
+	    static void CommitSoftSettingsIntegerFields() {
+	        CommitIntegerField("Settings:set_targetFrameRate");
+	        CommitIntegerField("Settings:set_sdGpuDeviceId");
+	        CommitIntegerField("Settings:set_paintUndo_maxDepth");
+	    }
+
+	    static void CommitIntegerField(string binderId) {
+	        var field = EventsBinder.FindComponent<IntegerInputField>(binderId);
+	        field?.CommitCurrentText();
 	    }
 
 	    /// <summary>
