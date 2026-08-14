@@ -14,7 +14,6 @@ namespace spz {
 	public class AddonInstaller_MGR : MonoBehaviour {
 		public static AddonInstaller_MGR instance { get; private set; }
 		readonly HashSet<string> _removeInFlight = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-		readonly HashSet<string> _installInFlight = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 		bool _installBusy;
 
 		public bool IsRemoveInFlight(string addonId) =>
@@ -22,7 +21,7 @@ namespace spz {
 
 		public bool HasRemoveInFlight => _removeInFlight.Count > 0;
 
-		public bool HasInstallInFlight => _installBusy || _installInFlight.Count > 0;
+		public bool HasInstallInFlight => _installBusy;
 		
 		void Awake() {
 			if (instance != null) { DestroyImmediate(this); return; }
