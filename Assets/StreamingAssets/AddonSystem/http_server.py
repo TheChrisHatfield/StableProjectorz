@@ -1178,17 +1178,9 @@ async def get_project_info():
         call_unity_async("spz.cmd.get_project_version", {}),
         call_unity_async("spz.cmd.get_project_data_dir", {}),
     )
-    if not version.get("success"):
-        raise HTTPException(
-            status_code=502,
-            detail="spz.cmd.get_project_version did not return a version",
-        )
-    ver = version.get("version")
-    if ver is None:
-        raise HTTPException(
-            status_code=502,
-            detail="spz.cmd.get_project_version succeeded but omitted 'version'",
-        )
+    # Version is informational — do not 502 the whole endpoint while FastPath is
+    # still initializing; the Blender bridge only needs data_dir to start exchanging.
+    ver = version.get("version") if version.get("success") else None
 
     path_ok = bool(path.get("success"))
     if path_ok and path.get("path") is None:
