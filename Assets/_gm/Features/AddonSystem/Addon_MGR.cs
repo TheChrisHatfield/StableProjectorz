@@ -1569,6 +1569,7 @@ namespace spz {
 				string responseBody = req.downloadHandler?.text ?? "";
 				if (loadSucceeded) {
 					UnityEngine.Debug.Log($"[Addon_MGR] Successfully loaded addon: {addonId}. Response: {responseBody}");
+					_pythonLoadSoftFailedIds.Remove(addonId);
 					// Stale load (user disabled mid-flight): ask Python to unload so UI stays removed.
 					if (!IsAddonEnabled(addonId))
 						StartAddonLifecycleOp(addonId, false);
