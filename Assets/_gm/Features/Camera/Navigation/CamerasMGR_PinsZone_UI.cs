@@ -455,6 +455,7 @@ namespace spz {
 	        Vector2 pinScreenPos =  KeyMousePenInput.cursorScreenPos() + _draggedPin_cursorOffset;
 
 	        var vp = MainViewport_UI.instance;
+	        if (vp == null || vp.innerViewportRect == null){ return; }
 	        Vector2 localPoint;
 	        RectTransformUtility.ScreenPointToLocalPointInRectangle(vp.innerViewportRect, pinScreenPos, null, out localPoint);
 	        Vector2 cursorPos01 = NormalizedPositionInRect_unclamped(vp.innerViewportRect.rect, localPoint);
@@ -624,10 +625,12 @@ namespace spz {
 	#endregion
 
 	    void OnWillFocus(CameraFocus whoFocused, Vector3 boundsCenter){
+	        var vpFocus = MainViewport_UI.instance;
+	        if (vpFocus == null || vpFocus.innerViewportRect == null || UserCameras_MGR.instance == null){ return; }
 	        for(int i=0; i<_cameraPins.Count; ++i){
-            
+
 	            Vector2 pinScreenPos = _cameraPins[i].transform.position;
-	            var vp = MainViewport_UI.instance;
+	            var vp = vpFocus;
 	            Vector2 localPoint;
 	            RectTransformUtility.ScreenPointToLocalPointInRectangle(vp.innerViewportRect, pinScreenPos, null, out localPoint);
 	            Vector2 cursorPos01 = Rect.PointToNormalized(vp.innerViewportRect.rect, localPoint);
