@@ -379,9 +379,29 @@ namespace spz {
 			// POST /api/v1/meshes/import — DCC bridge headless import (same RPC as the Python server).
 			if (id == "import") {
 				if (method == "POST" && body?["filepath"] != null) {
-					return ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.import_3d_model", new JObject {
+					var started = ExecuteJsonRpcSync("spz.cmd.import_3d_model", new JObject {
 						["filepath"] = body["filepath"]
-					}));
+					});
+					bool ok = started?["success"]?.ToObject<bool>() ?? false;
+					if (!ok) {
+						return ConvertToRestResponse(started ?? new JObject());
+					}
+					// Socket clients defer until Assimp/UDIM finishes (CoRespondWhenImportIdle);
+					// HTTP must match, or Blender's Export→SPZ reports success mid-load / after async failure.
+					var mh = ModelsHandler_3D.instance;
+					float elapsed = 0f;
+					while (mh != null && mh._isImportingModel && elapsed < 300f) {
+						Thread.Sleep(50);
+						elapsed += 0.05f;
+						mh = ModelsHandler_3D.instance;
+					}
+					if (mh == null || mh._isImportingModel) {
+						return new JObject { ["success"] = false, ["error"] = "import timed out waiting for Assimp/UDIM load" };
+					}
+					if (!mh._lastImportSucceeded) {
+						return new JObject { ["success"] = false, ["error"] = "import failed (Assimp/Init/UDIM)" };
+					}
+					return ConvertToRestResponse(started);
 				}
 				return new JObject { ["error"] = "POST with JSON body {\"filepath\": ...} required" };
 			}
