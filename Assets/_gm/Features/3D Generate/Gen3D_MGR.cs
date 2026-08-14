@@ -36,6 +36,10 @@ namespace spz {
 	    public static bool isCanStart_retexture()
 	        => isReadyBasic()  &&  instance._known_inputs.All( i=>i.isReady_ForGenerate("retexture") );
 
+	    // True while retexture gathers icon textures asynchronously, before Gen3D_API.isBusy
+	    // turns on — without this a second generate could race into that window.
+	    static bool _retexturePrepInFlight = false;
+
 	    static bool isReadyBasic(){
 	        if(instance == null){ return false; }
 
@@ -48,6 +52,7 @@ namespace spz {
 	        if(Gen3D_API.instance == null){ return false; }
 	        if(Gen3D_API.instance.IsServerAvailable==false){ return false; }
 	        if(Gen3D_API.instance.isBusy){ return false; }
+	        if(_retexturePrepInFlight){ return false; }
 
 	        return true;
 	    }
@@ -117,8 +122,10 @@ namespace spz {
 	                return;
 	            }
 	            // Defer StartedGenerate until merge finishes — else MergeIcons refuse leaves UI generating forever.
+	            _retexturePrepInFlight = true;
 	            Art2D_IconsUI_List.instance.GetTextures_FromAllIcons( 
 	                (List<Texture2D> textures) => {
+	                    _retexturePrepInFlight = false;
 	                    if (textures == null){
 	                        Viewport_StatusText.instance?.ShowStatusText(
 	                            "Can't retexture: icon merge was refused (save/export busy).", false, 5f, false);
