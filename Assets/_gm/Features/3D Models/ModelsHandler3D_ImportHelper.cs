@@ -39,6 +39,11 @@ namespace spz {
 		    _path_recentlyExported = "";
 	    }
 
+	    /// <summary>Restore after internal temp writes (e.g. door_temp.fbx) so GO stamp checks keep the real export path.</summary>
+	    public void RestoreRecentlyExportedPath( string path ) {
+		    _path_recentlyExported = path ?? "";
+	    }
+
 	    public Action _Act_onStartedImporting{ get; set; } = null;// isSuccess,What.
 	    public Action<bool, GameObject> _Act_onImportComplete { get; set; } = null;// isSuccess,What.
     

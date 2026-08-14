@@ -332,7 +332,11 @@ namespace spz {
 	            //dump our default door into file, and read the bytes from there:
 	            string path = Directory.GetParent(Application.dataPath).FullName;
 	                   path = Path.Combine(path, "door_temp.fbx");
+	            // This temp write must not pollute _path_recentlyExported — GO export stamp
+	            // verification prefers that path and would look beside door_temp.fbx.
+	            string keepRecentlyExported = _importHelper._path_recentlyExported;
 	            _importHelper.SaveDefaultDoor_toFile(path);
+	            _importHelper.RestoreRecentlyExportedPath(keepRecentlyExported);
 	            mesh_extension_ = "fbx";
 	            if( !File.Exists( path ) ){
 		            UnityEngine.Debug.LogWarning("[ModelsHandler_3D] Get_3dModel_asBytes: FBX was not written: " + path);
