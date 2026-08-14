@@ -73,6 +73,31 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 	}
 
 	[Test]
+	public void FolderInstall_UnloadsBeforePublish_Source() {
+		string installerPath = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "AddonInstaller_MGR.cs");
+		string uiPath = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "AddonManager_UI.cs");
+		string installer = File.ReadAllText(installerPath);
+		string ui = File.ReadAllText(uiPath);
+		Assert.That(installer, Does.Contain("InstallAddonFromFolder"),
+			"Folder/__init__.py install must go through an unload-aware installer API.");
+		Assert.That(installer, Does.Contain("InstallAddonFromFolderCrtn"),
+			"Folder install must be a coroutine so UnloadAddon can complete before publish.");
+		int i = installer.IndexOf("IEnumerator InstallAddonFromFolderCrtn(", System.StringComparison.Ordinal);
+		Assert.That(i, Is.GreaterThan(0));
+		string body = installer.Substring(i, System.Math.Min(2800, installer.Length - i));
+		Assert.That(body, Does.Contain("UnloadAddon(addonId"),
+			"Folder overwrite must unload before TryPublish.");
+		Assert.That(body, Does.Contain("IsPythonUnloadPending(addonId)"),
+			"Folder overwrite must wait Python unload pending like zip/RemoveAddon.");
+		Assert.That(body, Does.Contain("wasEnabledBeforeOverwrite"),
+			"Folder overwrite must re-enable when the target was live.");
+		Assert.That(ui, Does.Contain("InstallAddonFromFolder"),
+			"AddonManager Install .py path must use InstallAddonFromFolder, not sync TryPublish alone.");
+	}
+
+	[Test]
 	public void GetAddonIdFromRoot_OnlyParsesExplicitAddonIdAssignments() {
 		string path = Path.Combine(Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "AddonSystem", "AddonInstaller_MGR.cs");

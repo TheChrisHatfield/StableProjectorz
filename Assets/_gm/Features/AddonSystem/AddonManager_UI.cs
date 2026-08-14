@@ -1514,19 +1514,18 @@ namespace spz {
 
 			string ext = Path.GetExtension(path);
 			if (!string.IsNullOrEmpty(ext) && ext.Equals(".py", StringComparison.OrdinalIgnoreCase)) {
-				string root = Path.GetDirectoryName(path);
-				if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) {
-					ShowStatus("Could not resolve add-on folder from __init__.py", false);
+				if (AddonInstaller_MGR.instance == null) {
+					ShowStatus("Add-on installer not available", false);
 					return;
 				}
 				ShowStatus("Installing add-on folder...", true);
-				string addonsPath = Path.Combine(Application.streamingAssetsPath, "Addons");
-				if (AddonInstaller_MGR.TryPublishAddonRootToStreamingAssets(root, addonsPath, out string addonId, out string err)) {
-					ShowStatus($"Add-on '{addonId}' installed successfully!", true);
-					RefreshAddonsList();
-				} else {
-					ShowStatus($"Installation failed: {err}", false);
-				}
+				AddonInstaller_MGR.instance.InstallAddonFromFolder(path, (success, message, addonId) => {
+					ShowStatus(success
+						? $"Add-on '{addonId}' installed successfully!"
+						: $"Installation failed: {message}", success);
+					if (success)
+						RefreshAddonsList();
+				});
 				return;
 			}
 

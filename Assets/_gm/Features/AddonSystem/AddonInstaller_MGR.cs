@@ -86,7 +86,80 @@ namespace spz {
 			
 			StartCoroutine(InstallAddonCoroutine(zipFilePath, addonsPath, onComplete));
 		}
-		
+
+		/// <summary>
+		/// Install from an on-disk add-on folder (or its <c>__init__.py</c>). Unloads overwrite targets
+		/// the same way zip install does before moving StreamingAssets.
+		/// </summary>
+		public void InstallAddonFromFolder(string addonRootOrInitPy, Action<bool, string, string> onComplete) {
+			StartCoroutine(InstallAddonFromFolderCrtn(addonRootOrInitPy, onComplete));
+		}
+
+		IEnumerator InstallAddonFromFolderCrtn(string addonRootOrInitPy, Action<bool, string, string> onComplete) {
+			string root = addonRootOrInitPy;
+			if (!string.IsNullOrEmpty(root) && File.Exists(root)
+			    && Path.GetExtension(root).Equals(".py", StringComparison.OrdinalIgnoreCase)) {
+				root = Path.GetDirectoryName(root);
+			}
+			if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) {
+				onComplete?.Invoke(false, "Could not resolve add-on folder", null);
+				yield break;
+			}
+
+			string addonId = GetAddonIdFromRoot(root);
+			if (string.IsNullOrEmpty(addonId)) {
+				try {
+					addonId = Path.GetFileName(root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+				} catch { /* fall through */ }
+			}
+
+			bool wasEnabledBeforeOverwrite = false;
+			if (Addon_MGR.instance != null && !string.IsNullOrEmpty(addonId)) {
+				var registered = Addon_MGR.instance.GetAddons();
+				bool wasRegistered = registered != null && registered.ContainsKey(addonId);
+				wasEnabledBeforeOverwrite = wasRegistered && Addon_MGR.instance.IsAddonEnabled(addonId);
+				if (wasRegistered) {
+					bool unloadDone = false;
+					Addon_MGR.instance.UnloadAddon(addonId, () => unloadDone = true);
+					float waitUnload = 0f;
+					const float unloadTimeoutSec = 45f;
+					while (!unloadDone && waitUnload < unloadTimeoutSec) {
+						waitUnload += Time.unscaledDeltaTime;
+						yield return null;
+					}
+					if (!unloadDone) {
+						onComplete?.Invoke(false,
+							$"Installation blocked: Unity unload for '{addonId}' timed out. Retry after the add-on server is up.",
+							null);
+						yield break;
+					}
+					float waitPending = 0f;
+					const float pendingTimeoutSec = 45f;
+					while (Addon_MGR.instance != null
+					       && Addon_MGR.instance.IsPythonUnloadPending(addonId)
+					       && waitPending < pendingTimeoutSec) {
+						waitPending += Time.unscaledDeltaTime;
+						yield return null;
+					}
+					if (Addon_MGR.instance != null && Addon_MGR.instance.IsPythonUnloadPending(addonId)) {
+						onComplete?.Invoke(false,
+							$"Installation blocked: Python unload for '{addonId}' is still pending (HTTP not ready). Retry after the add-on server is up.",
+							null);
+						yield break;
+					}
+				}
+			}
+
+			string addonsPath = Path.Combine(Application.streamingAssetsPath, "Addons");
+			if (!TryPublishAddonRootToStreamingAssets(root, addonsPath, out string publishedId, out string err)) {
+				onComplete?.Invoke(false, err ?? "Folder install failed", null);
+				yield break;
+			}
+			if (wasEnabledBeforeOverwrite && Addon_MGR.instance != null && !string.IsNullOrEmpty(publishedId))
+				Addon_MGR.instance.EnableAddon(publishedId);
+			onComplete?.Invoke(true, $"Add-on '{publishedId}' installed successfully", publishedId);
+		}
+
 		IEnumerator InstallAddonCoroutine(string zipFilePath, string addonsPath, Action<bool, string, string> onComplete) {
 			string tempExtractPath = null;
 			string targetPath = null; // Track for cleanup on partial install failure
