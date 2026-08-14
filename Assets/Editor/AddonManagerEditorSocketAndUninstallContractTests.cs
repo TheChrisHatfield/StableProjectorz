@@ -50,12 +50,30 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 			"Re-Show must not fire Uninstall cancelled via prior onNo.");
 		Assert.That(confirm, Does.Contain("_suppressBackgroundDismissUntilPointerUp"),
 			"Dimmer must ignore the opening pointer.");
+		Assert.That(confirm, Does.Contain("SuppressBackgroundMaxSec"),
+			"Dimmer suppress must time out so a missing Mouse.current cannot freeze the app.");
+		Assert.That(confirm, Does.Contain("AbortAndRestoreUi"),
+			"ConfirmPopup must expose AbortAndRestoreUi for Addon Manager Close / Exit.");
+		Assert.That(confirm, Does.Contain("EnsureClickableLayout"),
+			"Show must stretch authored scale-0 ConfirmPopup root so Yes/No are visible.");
+		Assert.That(confirm, Does.Contain("ConfirmOverlaySortBase"),
+			"Background canvas must sort above the shell so Yes receives clicks.");
+		Assert.That(body, Does.Contain("_pendingUninstallAddonId"),
+			"Duplicate Uninstall while confirm is open must not re-Show.");
+		Assert.That(src, Does.Contain("AbortPendingUninstallConfirm"),
+			"Exit/Settings/Close must stop deferred Uninstall so it cannot steal Exit confirm.");
+		Assert.That(src, Does.Contain("AbortAndRestoreUi()"),
+			"Addon Manager Close must abort a stuck elevated confirm.");
+		Assert.That(confirm, Does.Contain("IsCloseProgramPrompt"),
+			"Exit force-quit must only apply when Close-the-program prompt is still showing.");
 		Assert.That(installer, Does.Contain("unloadTimeoutSec"),
 			"RemoveAddon must not hang forever if UnloadAddon callback never fires.");
 		Assert.That(installer, Does.Contain("IsPythonUnloadPending(addonId)"),
 			"RemoveAddon must wait Python unload pending before Directory.Delete.");
 		Assert.That(installer, Does.Contain("Directory.Delete(addonPath"),
 			"Yes path must delete StreamingAssets/Addons/<id>.");
+		Assert.That(installer, Does.Contain("proceeding with folder delete"),
+			"Unload timeout must not permanently block Uninstall (folder delete still runs).");
 	}
 
 	[Test]
@@ -68,8 +86,11 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 		Assert.That(src, Does.Contain("while (!unloadDone && waitUnload < unloadTimeoutSec)"),
 			"Unity unload wait must be bounded (not hang forever).");
 		Assert.That(src, Does.Contain("IsPythonUnloadPending(addonId)"),
-			"Must not delete StreamingAssets folder while HTTP unload is only queued.");
-		Assert.That(src, Does.Contain("Removal blocked"));
+			"Must wait for Python unload pending (bounded) before Directory.Delete.");
+		Assert.That(src, Does.Contain("proceeding with folder delete"),
+			"Timed-out unload must still delete — Uninstall must not soft-lock on HTTP down.");
+		Assert.That(src, Does.Not.Contain("Removal blocked"),
+			"Must not hard-fail Uninstall solely because unload timed out.");
 	}
 
 	[Test]

@@ -713,6 +713,7 @@ namespace spz {
 			}
 			
 			// Must finish Python unregister + UI tear-down before deleting the folder (HTTP unload is async).
+			// If unload times out (server down), still delete the folder — otherwise Uninstall appears dead forever.
 			if (Addon_MGR.instance != null) {
 				bool unloadDone = false;
 				Addon_MGR.instance.UnloadAddon(addonId, () => unloadDone = true);
@@ -723,11 +724,9 @@ namespace spz {
 					yield return null;
 				}
 				if (!unloadDone) {
-					onComplete?.Invoke(false,
-						$"Removal blocked: Unity unload for '{addonId}' timed out. Retry after the add-on server is up.");
-					yield break;
+					UnityEngine.Debug.LogWarning(
+						$"[AddonInstaller] Unity unload for '{addonId}' timed out — proceeding with folder delete.");
 				}
-				// UnloadAddon may only queue HTTP unregister when :5557 is down — do not delete while Python may still hold the module.
 				float waitPending = 0f;
 				const float pendingTimeoutSec = 45f;
 				while (Addon_MGR.instance != null
@@ -737,9 +736,8 @@ namespace spz {
 					yield return null;
 				}
 				if (Addon_MGR.instance != null && Addon_MGR.instance.IsPythonUnloadPending(addonId)) {
-					onComplete?.Invoke(false,
-						$"Removal blocked: Python unload for '{addonId}' is still pending (HTTP not ready). Retry after the add-on server is up.");
-					yield break;
+					UnityEngine.Debug.LogWarning(
+						$"[AddonInstaller] Python unload for '{addonId}' still pending — proceeding with folder delete.");
 				}
 			}
 			

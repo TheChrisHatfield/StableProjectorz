@@ -1120,6 +1120,8 @@ namespace spz {
 		public void OpenPanel() {
 			// Clear any stuck FileBrowser GlobalClickBlocker / disabled manager raycaster from a prior Install.
 			AddonInstallFromFile_Helper.AbortInstallDialogAndRestoreUi();
+			// Do NOT AbortAndRestoreUi here — OpenPanel runs while the manager is already open (refresh /
+			// pending-open) and must not kill an in-flight Uninstall confirm.
 			bool closeSettingsAfterShow = s_closeSettingsWhenModalShown;
 			// Disabled MB cannot run StartCoroutine; Start() may never have run → CreatePanelIfNeeded only here.
 			if (!gameObject.activeSelf)
@@ -1227,6 +1229,8 @@ namespace spz {
 		public void ClosePanel() {
 			// FileBrowser locks GlobalClickBlocker while open — always dismiss it on close or the whole app stays unclickable.
 			AddonInstallFromFile_Helper.AbortInstallDialogAndRestoreUi();
+			// Elevated Uninstall confirm covers the whole screen — abort so Close / dimmer cannot leave UI frozen.
+			AbortPendingUninstallConfirm(alsoAbortPopup: true);
 			if (_installFromFilePickCo != null) {
 				StopCoroutine(_installFromFilePickCo);
 				if (s_deferredOpenHost != null)
@@ -3467,9 +3471,30 @@ namespace spz {
 		}
 		
 		Coroutine _uninstallConfirmCo;
+		string _pendingUninstallAddonId;
 
 		/// <summary>
-		/// Handles removal of an add-on
+		/// Stop deferred Uninstall Show and clear pending id. Call before Exit/Settings Abort so a
+		/// one-frame-deferred CoShowUninstallConfirm cannot steal the Exit/Settings confirm.
+		/// </summary>
+		public static void AbortPendingUninstallConfirm(bool alsoAbortPopup = false) {
+			var ui = instance;
+			if (ui != null) {
+				if (ui._uninstallConfirmCo != null && s_deferredOpenHost != null) {
+					s_deferredOpenHost.StopCoroutine(ui._uninstallConfirmCo);
+					ui._uninstallConfirmCo = null;
+				}
+				ui._pendingUninstallAddonId = null;
+			}
+			if (alsoAbortPopup && ConfirmPopup_UI.instance != null)
+				ConfirmPopup_UI.instance.AbortAndRestoreUi();
+		}
+
+		/// <summary>
+		/// Handles removal of an add-on.
+		/// Intent (modern archive / git-main): ConfirmPopup.Show → Yes → RemoveAddon → RefreshAddonsList.
+		/// Fork extras: one-frame defer (dimmer must not eat the opening click); DDOL host; refuse silent
+		/// delete if ConfirmPopup is missing (safer than archive fallback).
 		/// </summary>
 		void OnRemoveAddon(string addonId) {
 			Debug.Log($"[AddonManager_UI] Uninstall clicked for '{addonId}'.");
@@ -3482,8 +3507,12 @@ namespace spz {
 				ShowStatus("Uninstall blocked: confirmation dialog unavailable. Restart the app and try again.", false);
 				return;
 			}
-			// Always host on DDOL — list rebuild / inactive AddonManager_UI must not kill the confirm coroutine.
-			// Defer one frame so the Uninstall pointer-up cannot hit the fullscreen dimmer.
+			// Already prompting for this add-on — do not re-Show (re-arms dimmer suppress / discards Yes acts).
+			if (ConfirmPopup_UI.instance.IsShowing
+			    && string.Equals(_pendingUninstallAddonId, addonId, StringComparison.Ordinal)) {
+				Debug.Log($"[AddonManager_UI] Uninstall confirm already open for '{addonId}' — ignoring duplicate click.");
+				return;
+			}
 			EnsureDeferredOpenCoroutineHost();
 			if (s_deferredOpenHost == null) {
 				ShowStatus("Uninstall blocked: could not start confirmation.", false);
@@ -3491,6 +3520,7 @@ namespace spz {
 			}
 			if (_uninstallConfirmCo != null)
 				s_deferredOpenHost.StopCoroutine(_uninstallConfirmCo);
+			_pendingUninstallAddonId = addonId;
 			_uninstallConfirmCo = s_deferredOpenHost.StartCoroutine(CoShowUninstallConfirm(addonId));
 		}
 
@@ -3498,13 +3528,14 @@ namespace spz {
 			yield return null;
 			_uninstallConfirmCo = null;
 			if (ConfirmPopup_UI.instance == null) {
+				_pendingUninstallAddonId = null;
 				ShowStatus("Uninstall blocked: confirmation dialog unavailable.", false);
 				yield break;
 			}
-			// Already showing a confirm — replace silently (ConfirmPopup discards prior acts without "cancelled").
 			ConfirmPopup_UI.instance.Show(
 				$"Remove add-on '{addonId}'?\n\nThis cannot be undone.",
 				() => {
+					_pendingUninstallAddonId = null;
 					if (AddonInstaller_MGR.instance == null) {
 						ShowStatus("Add-on installer not available", false);
 						return;
@@ -3517,7 +3548,11 @@ namespace spz {
 							RefreshAddonsList();
 					});
 				},
-				() => ShowStatus("Uninstall cancelled.", false)
+				// Archive used onNo:null — keep a quiet status so Esc/dimmer is honest without noise.
+				() => {
+					_pendingUninstallAddonId = null;
+					ShowStatus("Uninstall cancelled.", false);
+				}
 			);
 		}
 		

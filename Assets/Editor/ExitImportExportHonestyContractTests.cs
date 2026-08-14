@@ -17,6 +17,21 @@ public sealed class ExitImportExportHonestyContractTests {
 	}
 
 	[Test]
+	public void Exit_AbortsStuckConfirmThenShowsClosePrompt() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "_Core", "System", "ExitTheProgram_MGR.cs");
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("AbortPendingUninstallConfirm"),
+			"Quit must stop deferred Uninstall Show before Abort/Show Exit.");
+		Assert.That(src, Does.Contain("IsCloseProgramPrompt"),
+			"Force-quit after repeated X must only apply while Exit prompt is still showing.");
+		Assert.That(src, Does.Contain("ForceQuitAfterCloseAttempts"),
+			"Repeated window-close while Exit prompt is up must force quit if Yes/Close is unresponsive.");
+		Assert.That(src, Does.Not.Contain("another confirm is already open"),
+			"Must not return false solely because another confirm is open (that locked the app).");
+	}
+
+	[Test]
 	public void ExportRpc_DefersDialogExportsUntilSaveIdle() {
 		string path = Path.Combine(Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "AddonSystem", "Addon_SocketServer.cs");
