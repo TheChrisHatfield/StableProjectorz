@@ -3370,6 +3370,7 @@ namespace spz {
 			removeBtnTextComp.alignment = TextAlignmentOptions.Center;
 			removeBtnTextComp.color = new Color(0.96f, 0.44f, 0.44f, 0.9f);
 			removeBtnTextComp.raycastTarget = false;
+			removeBtn.onClick.RemoveAllListeners();
 			removeBtn.onClick.AddListener(() => OnRemoveAddon(addonId));
 			AttachTooltip(removeBtnObj, "Uninstall this add-on from StreamingAssets/Addons (cannot be undone).");
 
@@ -3470,29 +3471,44 @@ namespace spz {
 		/// </summary>
 		void OnRemoveAddon(string addonId) {
 			Debug.Log($"[AddonManager_UI] Uninstall clicked for '{addonId}'.");
-			if (ConfirmPopup_UI.instance != null) {
-				// ConfirmPopup_UI.Show elevates above AddonManager_Canvas (Overlay @ 32767) for clicks.
-				ConfirmPopup_UI.instance.Show(
-					$"Remove add-on '{addonId}'?\n\nThis cannot be undone.",
-					() => {
-						if (AddonInstaller_MGR.instance == null) {
-							ShowStatus("Add-on installer not available", false);
-							return;
-						}
-						Debug.Log($"[AddonManager_UI] Uninstall confirmed for '{addonId}' — removing…");
-						AddonInstaller_MGR.instance.RemoveAddon(addonId, (success, message) => {
-							ShowStatus(message, success);
-							if (success)
-								RefreshAddonsList();
-						});
-					},
-					() => ShowStatus("Uninstall cancelled.", false)
-				);
-			} else {
-				// Never delete StreamingAssets without Yes/No — ConfirmPopup scene may be missing in a bad load.
+			if (ConfirmPopup_UI.instance == null) {
 				Debug.LogError("[AddonManager_UI] ConfirmPopup_UI missing — refusing uninstall without confirmation.");
 				ShowStatus("Uninstall blocked: confirmation dialog unavailable. Restart the app and try again.", false);
+				return;
 			}
+			// Defer one frame like Install — opening confirm on the same pointer-up as Uninstall
+			// lets the fullscreen dimmer eat the click (or a double-bound listener re-Show).
+			if (!isActiveAndEnabled || !gameObject.activeInHierarchy) {
+				EnsureDeferredOpenCoroutineHost();
+				if (s_deferredOpenHost != null)
+					s_deferredOpenHost.StartCoroutine(CoShowUninstallConfirm(addonId));
+				return;
+			}
+			StartCoroutine(CoShowUninstallConfirm(addonId));
+		}
+
+		IEnumerator CoShowUninstallConfirm(string addonId) {
+			yield return null;
+			if (ConfirmPopup_UI.instance == null) {
+				ShowStatus("Uninstall blocked: confirmation dialog unavailable.", false);
+				yield break;
+			}
+			ConfirmPopup_UI.instance.Show(
+				$"Remove add-on '{addonId}'?\n\nThis cannot be undone.",
+				() => {
+					if (AddonInstaller_MGR.instance == null) {
+						ShowStatus("Add-on installer not available", false);
+						return;
+					}
+					Debug.Log($"[AddonManager_UI] Uninstall confirmed for '{addonId}' — removing…");
+					AddonInstaller_MGR.instance.RemoveAddon(addonId, (success, message) => {
+						ShowStatus(message, success);
+						if (success)
+							RefreshAddonsList();
+					});
+				},
+				() => ShowStatus("Uninstall cancelled.", false)
+			);
 		}
 		
 		/// <summary>

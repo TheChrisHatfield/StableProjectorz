@@ -25,6 +25,8 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 		string body = end > i ? src.Substring(i, end - i) : src.Substring(i, System.Math.Min(5000, src.Length - i));
 		Assert.That(body, Does.Contain("ConfirmPopup_UI.instance.Show"),
 			"Uninstall must show ConfirmPopup.");
+		Assert.That(body, Does.Contain("CoShowUninstallConfirm"),
+			"Uninstall confirm must defer one frame so the dimmer cannot eat the opening click.");
 		Assert.That(body, Does.Contain("RemoveAddon(addonId"),
 			"Yes must call AddonInstaller_MGR.RemoveAddon.");
 		Assert.That(body, Does.Contain("refusing uninstall without confirmation"),
@@ -35,6 +37,8 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 			"ConfirmPopup must restore manager sort on Yes/No.");
 		Assert.That(confirm, Does.Contain("RenderMode.ScreenSpaceOverlay"),
 			"Confirm World Space canvas must become Overlay so Yes/No receive raycasts.");
+		Assert.That(confirm, Does.Contain("prior acts discarded, not cancelled"),
+			"Re-Show must not fire Uninstall cancelled via prior onNo.");
 	}
 
 	[Test]
