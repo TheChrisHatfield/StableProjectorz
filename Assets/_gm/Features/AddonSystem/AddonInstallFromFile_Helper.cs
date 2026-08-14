@@ -247,6 +247,9 @@ namespace spz {
 		[DllImport("comdlg32.dll", EntryPoint = "GetOpenFileNameW", CharSet = CharSet.Unicode, SetLastError = true)]
 		static extern bool GetOpenFileNameW(ref OpenFileNameNative ofn);
 
+		[DllImport("comdlg32.dll", CharSet = CharSet.Unicode)]
+		static extern int CommDlgExtendedError();
+
 		static IntPtr AllocDoubleNullTerminatedFilter(string[] pairs) {
 			// OPENFILENAME filter is label\0pattern\0…\0\0 — raw buffer; C# string marshaling truncates at first \0.
 			int chars = 1;
@@ -303,7 +306,9 @@ namespace spz {
 				ofn.flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_EXPLORER | OFN_HIDEREADONLY;
 
 				if (!GetOpenFileNameW(ref ofn)) {
-					error = "cancelled";
+					int dlgErr = CommDlgExtendedError();
+					// 0 = user cancelled; non-zero = buffer/path/COMDlg failure (do not report as cancel).
+					error = dlgErr == 0 ? "cancelled" : $"native dialog error 0x{dlgErr:X8}";
 					return false;
 				}
 				path = Marshal.PtrToStringUni(fileBuf);
