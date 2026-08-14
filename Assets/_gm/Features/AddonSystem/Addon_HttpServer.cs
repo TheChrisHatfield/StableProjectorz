@@ -423,9 +423,9 @@ namespace spz {
 				// GET /api/v1/meshes/{id} - Get mesh info
 				if (method == "GET") {
 					var info = new JObject();
-					var pos = ConvertToRestResponse(ExecuteJsonRpc("spz.cmd.get_mesh_pos", new JObject { ["mesh_id"] = meshId }));
-					var rot = ConvertToRestResponse(ExecuteJsonRpc("spz.cmd.get_mesh_rot", new JObject { ["mesh_id"] = meshId }));
-					var scale = ConvertToRestResponse(ExecuteJsonRpc("spz.cmd.get_mesh_scale", new JObject { ["mesh_id"] = meshId }));
+					var pos = ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.get_mesh_pos", new JObject { ["mesh_id"] = meshId }));
+					var rot = ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.get_mesh_rot", new JObject { ["mesh_id"] = meshId }));
+					var scale = ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.get_mesh_scale", new JObject { ["mesh_id"] = meshId }));
 					info["position"] = pos;
 					info["rotation"] = rot;
 					info["scale"] = scale;
@@ -461,8 +461,8 @@ namespace spz {
 			if (action == "info") {
 				if (method == "GET") {
 					var info = new JObject();
-					info["total_meshes"] = ConvertToRestResponse(ExecuteJsonRpc("spz.cmd.get_total_mesh_count", new JObject()));
-					info["selected_meshes"] = ConvertToRestResponse(ExecuteJsonRpc("spz.cmd.get_selected_mesh_count", new JObject()));
+					info["total_meshes"] = ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.get_total_mesh_count", new JObject()));
+					info["selected_meshes"] = ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.get_selected_mesh_count", new JObject()));
 					return info;
 				}
 			}
@@ -481,16 +481,16 @@ namespace spz {
 			else if (action == "status") {
 				if (method == "GET") {
 					var status = new JObject();
-					status["generating"] = ConvertToRestResponse(ExecuteJsonRpc("spz.cmd.is_generating", new JObject()));
-					status["connected"] = ConvertToRestResponse(ExecuteJsonRpc("spz.cmd.is_sd_connected", new JObject()));
+					status["generating"] = ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.is_generating", new JObject()));
+					status["connected"] = ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.is_sd_connected", new JObject()));
 					return status;
 				}
 			}
 			else if (action == "prompt") {
 				if (method == "GET") {
 					var prompt = new JObject();
-					prompt["positive"] = ConvertToRestResponse(ExecuteJsonRpc("spz.cmd.get_positive_prompt", new JObject()));
-					prompt["negative"] = ConvertToRestResponse(ExecuteJsonRpc("spz.cmd.get_negative_prompt", new JObject()));
+					prompt["positive"] = ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.get_positive_prompt", new JObject()));
+					prompt["negative"] = ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.get_negative_prompt", new JObject()));
 					return prompt;
 				}
 				if (method == "POST" && body != null) {
@@ -498,12 +498,12 @@ namespace spz {
 					bool ok = true;
 					if (body["positive"] != null) {
 						any = true;
-						var r = ExecuteJsonRpc("spz.cmd.set_positive_prompt", new JObject { ["prompt"] = body["positive"] });
+						var r = ExecuteJsonRpcSync("spz.cmd.set_positive_prompt", new JObject { ["prompt"] = body["positive"] });
 						ok &= r["success"]?.ToObject<bool>() ?? (r["error"] == null);
 					}
 					if (body["negative"] != null) {
 						any = true;
-						var r = ExecuteJsonRpc("spz.cmd.set_negative_prompt", new JObject { ["prompt"] = body["negative"] });
+						var r = ExecuteJsonRpcSync("spz.cmd.set_negative_prompt", new JObject { ["prompt"] = body["negative"] });
 						ok &= r["success"]?.ToObject<bool>() ?? (r["error"] == null);
 					}
 					if (!any) {
@@ -598,8 +598,8 @@ namespace spz {
 			if (string.IsNullOrEmpty(id)) {
 				if (method == "GET") {
 					var info = new JObject();
-					info["total_units"] = ConvertToRestResponse(ExecuteJsonRpc("spz.cmd.get_controlnet_unit_count", new JObject()));
-					info["active_units"] = ConvertToRestResponse(ExecuteJsonRpc("spz.cmd.get_active_controlnet_unit_count", new JObject()));
+					info["total_units"] = ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.get_controlnet_unit_count", new JObject()));
+					info["active_units"] = ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.get_active_controlnet_unit_count", new JObject()));
 					return info;
 				}
 				return new JObject { ["error"] = "Unit ID required" };
@@ -644,8 +644,8 @@ namespace spz {
 			if (action == "color") {
 				if (method == "GET") {
 					var color = new JObject();
-					color["top"] = ConvertToRestResponse(ExecuteJsonRpc("spz.cmd.get_skybox_top_color", new JObject()));
-					color["bottom"] = ConvertToRestResponse(ExecuteJsonRpc("spz.cmd.get_skybox_bottom_color", new JObject()));
+					color["top"] = ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.get_skybox_top_color", new JObject()));
+					color["bottom"] = ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.get_skybox_bottom_color", new JObject()));
 					return color;
 				}
 				if (method == "POST" && body != null) {
