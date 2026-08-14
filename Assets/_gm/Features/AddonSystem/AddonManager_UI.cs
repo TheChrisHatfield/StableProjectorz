@@ -3542,6 +3542,10 @@ namespace spz {
 					}
 					Debug.Log($"[AddonManager_UI] Uninstall confirmed for '{addonId}' — removing…");
 					ShowStatus($"Removing '{addonId}'…", true);
+					if (AddonInstaller_MGR.instance.IsRemoveInFlight(addonId)) {
+						ShowStatus($"Removal already in progress for '{addonId}'", false);
+						return;
+					}
 					AddonInstaller_MGR.instance.RemoveAddon(addonId, (success, message) => {
 						ShowStatus(message, success);
 						if (success)

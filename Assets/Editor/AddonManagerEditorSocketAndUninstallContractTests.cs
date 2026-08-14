@@ -81,17 +81,21 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 		string path = Path.Combine(Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "AddonSystem", "AddonInstaller_MGR.cs");
 		string src = File.ReadAllText(path);
-		Assert.That(src, Does.Contain("RemoveAddonCrtn"));
-		Assert.That(src, Does.Contain("UnloadAddon(addonId, () => unloadDone = true)"));
-		Assert.That(src, Does.Contain("while (!unloadDone && waitUnload < unloadTimeoutSec)"),
-			"Unity unload wait must be bounded (not hang forever).");
-		Assert.That(src, Does.Contain("IsPythonUnloadPending(addonId)"),
-			"Must wait for Python unload pending (bounded) before Directory.Delete.");
-		Assert.That(src, Does.Contain("proceeding with folder delete"),
-			"Timed-out unload must still delete — Uninstall must not soft-lock on HTTP down.");
-		Assert.That(src, Does.Not.Contain("Removal blocked"),
-			"Must not hard-fail Uninstall solely because unload timed out.");
-	}
+			Assert.That(src, Does.Contain("IsRemoveInFlight"),
+				"RemoveAddon must expose in-flight guard against overlapping deletes.");
+			Assert.That(src, Does.Contain("Removal already in progress"),
+				"Second RemoveAddon for same id must fail fast, not start a second coroutine.");
+			Assert.That(src, Does.Contain("RemoveAddonCrtn"));
+			Assert.That(src, Does.Contain("UnloadAddon(addonId, () => unloadDone = true)"));
+			Assert.That(src, Does.Contain("while (!unloadDone && waitUnload < unloadTimeoutSec)"),
+				"Unity unload wait must be bounded (not hang forever).");
+			Assert.That(src, Does.Contain("IsPythonUnloadPending(addonId)"),
+				"Must wait for Python unload pending (bounded) before Directory.Delete.");
+			Assert.That(src, Does.Contain("proceeding with folder delete"),
+				"Timed-out unload must still delete — Uninstall must not soft-lock on HTTP down.");
+			Assert.That(src, Does.Not.Contain("Removal blocked"),
+				"Must not hard-fail Uninstall solely because unload timed out.");
+		}
 
 	[Test]
 	public void InstallOverwrite_UnloadsThenReEnablesWhenWasEnabled() {
