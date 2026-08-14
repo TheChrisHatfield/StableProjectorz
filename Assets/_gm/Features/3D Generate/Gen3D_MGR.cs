@@ -281,11 +281,17 @@ namespace spz {
 
 	            foreach(var kvp in textures_dict){
 	                List<Texture2D> textures_list = kvp.Value;
+	                if (Art2D_IconsUI_List.instance == null){
+	                    throw new InvalidOperationException("Art2D icon list unavailable — retexture textures dropped");
+	                }
 	                Art2D_IconsUI_List.instance.ImportCustomImages(GenerationData_Kind.UvTextures_FromFile, textures_list);
 	            }
 	        }
 	        catch (Exception e){
 	            Debug.LogError($"Error processing texture data: {e.Message}\nStack trace: {e.StackTrace}");
+	            // Rethrow so Gen3D_API reports onError instead of onComplete claiming success
+	            // while every downloaded texture was discarded.
+	            throw;
 	        }
 	    }
 
