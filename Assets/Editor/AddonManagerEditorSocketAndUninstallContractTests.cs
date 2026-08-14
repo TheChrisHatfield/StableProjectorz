@@ -130,6 +130,8 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 			"Folder/__init__.py install must go through an unload-aware installer API.");
 		Assert.That(installer, Does.Contain("InstallAddonFromFolderCrtn"),
 			"Folder install must be a coroutine so UnloadAddon can complete before publish.");
+		Assert.That(installer, Does.Contain("is already installed"),
+			"Folder install of StreamingAssets/Addons/<id> must no-op before unload (self-path).");
 		int i = installer.IndexOf("IEnumerator InstallAddonFromFolderCrtn(", System.StringComparison.Ordinal);
 		Assert.That(i, Is.GreaterThan(0));
 		string body = installer.Substring(i, System.Math.Min(2800, installer.Length - i));

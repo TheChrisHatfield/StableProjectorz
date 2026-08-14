@@ -113,6 +113,25 @@ namespace spz {
 				} catch { /* fall through */ }
 			}
 
+			string addonsPathEarly = null;
+			try {
+				addonsPathEarly = Path.Combine(Application.streamingAssetsPath, "Addons");
+			} catch { /* fall through to normal install */ }
+			if (!string.IsNullOrEmpty(addonsPathEarly) && !string.IsNullOrEmpty(addonId) && !string.IsNullOrEmpty(root)) {
+				try {
+					string rootFull = Path.GetFullPath(root);
+					string targetFull = Path.GetFullPath(Path.Combine(addonsPathEarly, addonId));
+					if (string.Equals(rootFull, targetFull, StringComparison.OrdinalIgnoreCase)) {
+						// Picking StreamingAssets/Addons/<id> (or its __init__.py) would Move the folder
+						// then fail to copy from the moved path — leave files alone.
+						onComplete?.Invoke(true, $"Add-on '{addonId}' is already installed", addonId);
+						yield break;
+					}
+				} catch (Exception e) {
+					UnityEngine.Debug.LogWarning($"[AddonInstaller] Self-path check failed (continuing install): {e.Message}");
+				}
+			}
+
 			bool wasEnabledBeforeOverwrite = false;
 			if (Addon_MGR.instance != null && !string.IsNullOrEmpty(addonId)) {
 				var registered = Addon_MGR.instance.GetAddons();
