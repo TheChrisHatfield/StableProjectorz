@@ -50,7 +50,11 @@ namespace spz {
 	    /// <summary>Hard cap so a missing Mouse/Pen device cannot freeze the whole app behind the dimmer.</summary>
 	    float _suppressBackgroundUntilUnscaled = -1f;
 	    const float SuppressBackgroundMaxSec = 0.45f;
-	    const int ConfirmOverlaySortBase = 50000;
+	    // Canvas.sortingOrder is 16-bit signed (max 32767) — values above WRAP NEGATIVE and sink the
+	    // popup below the whole UI (invisible + unclickable). AddonManager_Canvas authors 32767 and is
+	    // parked to 100 while the confirm is up, so 327xx keeps the popup on top without wrapping.
+	    const int ConfirmOverlaySortBase = 32750;
+	    const int ConfirmOverlaySortMax = 32766;
 
 	    /// <summary>True while the dimmer/card is active (Yes/No pending).</summary>
 	    public bool IsShowing =>
@@ -92,11 +96,11 @@ namespace spz {
 			    if (Time.unscaledTime >= _suppressBackgroundUntilUnscaled || !IsAnyPrimaryPointerDown())
 				    _suppressBackgroundDismissUntilPointerUp = false;
 		    }
-	        bool esc =
-		        (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
-#pragma warning disable CS0618
-		        || Input.GetKeyDown(KeyCode.Escape);
-#pragma warning restore CS0618
+		    // Project is Input System-only (activeInputHandler: 2) — legacy Input.* THROWS here.
+		    bool esc = Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame;
+#if ENABLE_LEGACY_INPUT_MANAGER
+		    esc = esc || Input.GetKeyDown(KeyCode.Escape);
+#endif
 	        if (esc)
 		        OnNoClicked();
 	    }
@@ -111,12 +115,10 @@ namespace spz {
 		    var touch = Touchscreen.current;
 		    if (touch != null && touch.primaryTouch.press.isPressed)
 			    return true;
-#pragma warning disable CS0618
-		    try {
-			    if (Input.GetMouseButton(0))
-				    return true;
-		    } catch { /* ignore */ }
-#pragma warning restore CS0618
+#if ENABLE_LEGACY_INPUT_MANAGER
+		    if (Input.GetMouseButton(0))
+			    return true;
+#endif
 		    return false;
 	    }
 
@@ -228,8 +230,8 @@ namespace spz {
 			    bool isBackgroundCanvas = _background_button != null
 				    && c.gameObject == _background_button.gameObject;
 			    c.sortingOrder = isBackgroundCanvas
-				    ? ConfirmOverlaySortBase + 10
-				    : ConfirmOverlaySortBase + i;
+				    ? ConfirmOverlaySortMax
+				    : Mathf.Min(ConfirmOverlaySortBase + i, ConfirmOverlaySortMax - 1);
 			    c.enabled = true;
 			    if (c.GetComponent<GraphicRaycaster>() == null)
 				    c.gameObject.AddComponent<GraphicRaycaster>();
