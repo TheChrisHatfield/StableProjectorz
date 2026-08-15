@@ -35,6 +35,13 @@ namespace spz {
 
 
 	    public void SaveProject( Action<string> saveFinalTex,  Action<string> onResultMessage){
+	        SaveProject(null, saveFinalTex, onResultMessage);
+	    }
+
+	    /// <summary>
+	    /// Save to an explicit .spz path (headless/RPC). Null/empty <paramref name="forcedFilepath"/> opens the file dialog.
+	    /// </summary>
+	    public void SaveProject( string forcedFilepath, Action<string> saveFinalTex,  Action<string> onResultMessage){
 	        // Do not StopAllCoroutines while headless export owns final-composite / _isSaving —
 	        // that orphans texture encode and makes deferred RPC report false success.
 	        var sm = Save_MGR.instance;
@@ -56,7 +63,7 @@ namespace spz {
 	        _projectSaveInFlight = true;
 	        LastProjectSaveSucceeded = false;
 	        StopAllCoroutines();
-	        StartCoroutine(SaveProj_crtn(saveFinalTex, onResultMessage));
+	        StartCoroutine(SaveProj_crtn(saveFinalTex, onResultMessage, forcedFilepath));
 	    }
 
 
@@ -91,8 +98,20 @@ namespace spz {
 	    }
 
 
-	    IEnumerator SaveProj_crtn( Action<string> saveFinalTexs,  Action<string> onResultMessage ){
+	    IEnumerator SaveProj_crtn( Action<string> saveFinalTexs,  Action<string> onResultMessage, string forcedFilepath = null ){
 	        try {
+	        string saveFile;
+	        if (!string.IsNullOrEmpty(forcedFilepath)) {
+		        saveFile = forcedFilepath.Trim();
+		        if (!saveFile.EndsWith(".spz", StringComparison.OrdinalIgnoreCase))
+			        saveFile += ".spz";
+		        string parent = Path.GetDirectoryName(saveFile);
+		        if (!string.IsNullOrEmpty(parent) && !Directory.Exists(parent)) {
+			        onResultMessage?.Invoke("Didn't save - directory does not exist: " + parent);
+			        saveFinalTexs?.Invoke(null);
+			        yield break;
+		        }
+	        } else {
 	        string defaultName = _last_saveFilepath == "" ? "SPZ_Project" : Path.GetFileNameWithoutExtension(_last_saveFilepath);
         
 	        // CHANGED: Using SimpleFileBrowser Coroutine pattern for saving.
@@ -109,7 +128,8 @@ namespace spz {
 	            yield break;
 	        }
 
-	        string saveFile = FileBrowser.Result[0];
+	        saveFile = FileBrowser.Result[0];
+	        }
 
 	        if (StableDiffusion_Hub.instance != null && StableDiffusion_Hub.instance._generating) {
 	            onResultMessage?.Invoke("Can't save while generating.");
@@ -251,14 +271,37 @@ namespace spz {
 	        FileBrowser.SetDefaultFilter("spz");
 
 	        FileBrowser.ShowLoadDialog((paths) => {
-	            try {
 	            if (paths == null || paths.Length == 0){
 	                onResult?.Invoke("Load cancelled — no file selected.");
 	                return;
 	            }
+	            ApplyProjectFile(paths[0], onResult);
+	        }, 
+	        () => {
+	             // Cancelled
+	             onResult?.Invoke("Load Cancelled");
+	        },
+	        FileBrowser.PickMode.Files, false, null, null, "Load Project", "Load");
+	    }
 
-	            string spzFilepath = paths[0];
+	    /// <summary>
+	    /// Load an explicit .spz path without a file dialog (headless/RPC <c>filepath</c>).
+	    /// </summary>
+	    public void LoadProjectFromPath( string spzFilepath, Action<string> onResult ){
+	        LastProjectLoadSucceeded = false;
+	        if (string.IsNullOrEmpty(spzFilepath)) {
+		        onResult?.Invoke("Load failed — filepath was empty.");
+		        return;
+	        }
+	        if (!File.Exists(spzFilepath)) {
+		        onResult?.Invoke("Load failed — file not found: " + spzFilepath);
+		        return;
+	        }
+	        ApplyProjectFile(spzFilepath, onResult);
+	    }
 
+	    void ApplyProjectFile( string spzFilepath, Action<string> onResult ){
+	            try {
 	            if (StableDiffusion_Hub.instance != null && StableDiffusion_Hub.instance._generating){
 	                onResult?.Invoke("Can't Load while generating.");
 	                return;
@@ -340,13 +383,6 @@ namespace spz {
 	                LastProjectLoadSucceeded = false;
 	                onResult?.Invoke("Error loading the project: " + ex.Message);
 	            }
-
-	        }, 
-	        () => {
-	             // Cancelled
-	             onResult?.Invoke("Load Cancelled");
-	        },
-	        FileBrowser.PickMode.Files, false, null, null, "Load Project", "Load");
 	    }
 
 

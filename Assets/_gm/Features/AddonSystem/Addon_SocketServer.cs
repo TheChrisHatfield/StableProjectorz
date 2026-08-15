@@ -1955,11 +1955,11 @@ namespace spz {
 						break;
 						
 					case "spz.cmd.save_project":
-						result["success"] = fastPath.SaveProject();
+						result["success"] = fastPath.SaveProject(@params?["filepath"]?.ToString());
 						break;
 						
 					case "spz.cmd.load_project":
-						result["success"] = fastPath.LoadProject();
+						result["success"] = fastPath.LoadProject(@params?["filepath"]?.ToString());
 						break;
 						
 					case "spz.cmd.get_project_path":

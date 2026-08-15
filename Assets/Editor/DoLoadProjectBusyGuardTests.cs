@@ -13,7 +13,7 @@ public sealed class DoLoadProjectBusyGuardTests {
 			"Assets", "_gm", "Features", "Save Load Import Export", "Save_MGR.cs");
 		Assert.That(File.Exists(path), Is.True);
 		string src = File.ReadAllText(path);
-		int method = src.IndexOf("public void DoLoadProject()", System.StringComparison.Ordinal);
+		int method = src.IndexOf("public void DoLoadProject(string filepath)", System.StringComparison.Ordinal);
 		Assert.That(method, Is.GreaterThan(0));
 		int next = src.IndexOf("IEnumerator ResetCtrlKey_AfterLoadSave()", method, System.StringComparison.Ordinal);
 		Assert.That(next, Is.GreaterThan(method));
