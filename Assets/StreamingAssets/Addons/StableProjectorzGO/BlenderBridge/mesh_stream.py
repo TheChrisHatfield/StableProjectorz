@@ -261,42 +261,61 @@ def materialize_next(context=None) -> Optional[list]:
         return None
 
     ctx = context if context is not None else bpy.context
-    _remove_previous_stream_objects()
     created = []
-    for item in transfer.meshes:
-        mesh = bpy.data.meshes.new(item.name)
-        mesh.vertices.add(len(item.positions))
-        mesh.vertices.foreach_set("co", item.positions.ravel())
+    created_meshes = []
+    try:
+        for item in transfer.meshes:
+            mesh = bpy.data.meshes.new(item.name)
+            created_meshes.append(mesh)
+            mesh.vertices.add(len(item.positions))
+            mesh.vertices.foreach_set("co", item.positions.ravel())
 
-        loop_count = len(item.indices)
-        poly_count = loop_count // 3
-        mesh.loops.add(loop_count)
-        mesh.loops.foreach_set("vertex_index", item.indices)
-        mesh.polygons.add(poly_count)
-        starts = np.arange(0, loop_count, 3, dtype=np.int32)
-        totals = np.full(poly_count, 3, dtype=np.int32)
-        mesh.polygons.foreach_set("loop_start", starts)
-        mesh.polygons.foreach_set("loop_total", totals)
-        mesh.polygons.foreach_set("use_smooth", np.ones(poly_count, dtype=np.bool_))
+            loop_count = len(item.indices)
+            poly_count = loop_count // 3
+            mesh.loops.add(loop_count)
+            mesh.loops.foreach_set("vertex_index", item.indices)
+            mesh.polygons.add(poly_count)
+            starts = np.arange(0, loop_count, 3, dtype=np.int32)
+            totals = np.full(poly_count, 3, dtype=np.int32)
+            mesh.polygons.foreach_set("loop_start", starts)
+            mesh.polygons.foreach_set("loop_total", totals)
+            mesh.polygons.foreach_set("use_smooth", np.ones(poly_count, dtype=np.bool_))
 
-        if item.uv0 is not None:
-            uv_layer = mesh.uv_layers.new(name="UVMap")
-            loop_uv = item.uv0[item.indices]
-            uv_layer.data.foreach_set("uv", loop_uv.ravel())
+            if item.uv0 is not None:
+                uv_layer = mesh.uv_layers.new(name="UVMap")
+                loop_uv = item.uv0[item.indices]
+                uv_layer.data.foreach_set("uv", loop_uv.ravel())
 
-        mesh.update(calc_edges=True)
-        obj = bpy.data.objects.new(item.name, mesh)
+            mesh.update(calc_edges=True)
+            obj = bpy.data.objects.new(item.name, mesh)
+            created.append(obj)
+            ctx.collection.objects.link(obj)
+    except Exception:
+        for obj in created:
+            bpy.data.objects.remove(obj, do_unlink=True)
+        for mesh in created_meshes:
+            if mesh.users == 0:
+                bpy.data.meshes.remove(mesh)
+        raise
+
+    # Commit replacement only after every new mesh was built and linked successfully.
+    _remove_previous_stream_objects()
+    for obj in created:
         obj["spz_mesh_stream"] = True
-        ctx.collection.objects.link(obj)
-        created.append(obj)
 
     try:
         bpy.ops.object.select_all(action="DESELECT")
     except Exception:
         pass
     for obj in created:
-        obj.select_set(True)
+        try:
+            obj.select_set(True)
+        except Exception:
+            pass
     if created:
-        ctx.view_layer.objects.active = created[0]
+        try:
+            ctx.view_layer.objects.active = created[0]
+        except Exception:
+            pass
     print(f"SPZ GO: materialized {len(created)} streamed mesh object(s).")
     return created
