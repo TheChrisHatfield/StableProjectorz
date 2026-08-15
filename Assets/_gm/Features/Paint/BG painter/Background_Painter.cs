@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
@@ -234,21 +235,42 @@ namespace spz {
 
 	    // Bucket-fill entire mask with white or black.
 	    protected override void OnBucketFill_button(){
-	        if(DimensionMode_MGR.instance._dimensionMode != DimensionMode.dim_gen_3d){ return; }
+	        if(DimensionMode_MGR.instance?._dimensionMode != DimensionMode.dim_gen_3d){ return; }
 	        RenderUdims maskUDIM = current_BG_MaskRenderUdim();
 	        if(maskUDIM==null){ return; }
 	        PaintUndo_MGR.EnsureExists();
-	        PaintUndo_MGR.instance?.SchedulePreStrokeCapture(maskUDIM, PaintUndoNonStackTarget.BackgroundGenMask);
-	        // Fill with 1 or 0:
-	        Color fillC =  SD_WorkflowOptionsRibbon_UI.instance.isPositive? Color.white : Color.black;
-	        TextureTools_SPZ.ClearRenderTexture(maskUDIM.texArray, fillC);
+	        Color fillC =  SD_WorkflowOptionsRibbon_UI.instance != null && SD_WorkflowOptionsRibbon_UI.instance.isPositive
+		        ? Color.white : Color.black;
+	        StartCoroutine(BgFillOrDeleteWithUndo_Coroutine(maskUDIM, fillC));
 	    }
 
 	    protected override void OnDelete_button(){
-	        if(DimensionMode_MGR.instance._dimensionMode != DimensionMode.dim_gen_3d){ return; }
+	        if(DimensionMode_MGR.instance?._dimensionMode != DimensionMode.dim_gen_3d){ return; }
 	        RenderUdims maskUDIM = current_BG_MaskRenderUdim();
 	        if(maskUDIM == null){ return; }
-	        TextureTools_SPZ.ClearRenderTexture(maskUDIM.texArray, Color.black);
+	        PaintUndo_MGR.EnsureExists();
+	        StartCoroutine(BgFillOrDeleteWithUndo_Coroutine(maskUDIM, Color.black));
+	    }
+
+	    /// <summary>
+	    /// Wait for any in-flight undo capture before mutating the BG mask (same race as inpaint fill).
+	    /// </summary>
+	    IEnumerator BgFillOrDeleteWithUndo_Coroutine(RenderUdims maskUDIM, Color fillC){
+	        while (PaintUndo_MGR.instance != null && PaintUndo_MGR.instance.IsBusy)
+		        yield return null;
+	        if (maskUDIM == null || maskUDIM.texArray == null)
+		        yield break;
+	        if (!ReferenceEquals(current_BG_MaskRenderUdim(), maskUDIM)) {
+		        Viewport_StatusText.instance?.ShowStatusText(
+			        "Background fill/clear cancelled — mask target changed.", false, 4f, false);
+		        yield break;
+	        }
+	        PaintUndo_MGR.instance?.SchedulePreStrokeCapture(maskUDIM, PaintUndoNonStackTarget.BackgroundGenMask);
+	        while (PaintUndo_MGR.instance != null && PaintUndo_MGR.instance.IsBusy)
+		        yield return null;
+	        if (!ReferenceEquals(current_BG_MaskRenderUdim(), maskUDIM) || maskUDIM.texArray == null)
+		        yield break;
+	        TextureTools_SPZ.ClearRenderTexture(maskUDIM.texArray, fillC);
 	    }
 
 
