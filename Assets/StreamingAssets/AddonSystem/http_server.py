@@ -267,6 +267,14 @@ class Export3DToPathBody(BaseModel):
 
     mesh_filepath: str
 
+
+class MeshStreamBody(BaseModel):
+    """Blender SPZ GO loopback listener and portable V1 compression codec."""
+
+    host: str = "127.0.0.1"
+    port: int = 5560
+    codec: str = "gzip"
+
 class LoadAddonRequest(BaseModel):
     addon_id: str
 
@@ -1260,6 +1268,15 @@ async def gen3d_trigger():
 @app.post("/api/v1/export/3d_with_textures", tags=["export"])
 async def export_3d_with_textures():
     return await call_unity_async("spz.cmd.export_3d_with_textures", {})
+
+
+@app.post("/api/v1/export/mesh_stream", tags=["export"])
+async def export_mesh_stream(body: MeshStreamBody):
+    """Push current geometry to Blender without creating or parsing an intermediary FBX."""
+    return await call_unity_async(
+        "spz.cmd.stream_mesh_to_blender",
+        {"host": body.host, "port": body.port, "codec": body.codec},
+    )
 
 
 @app.post("/api/v1/meshes/import", tags=["meshes"])

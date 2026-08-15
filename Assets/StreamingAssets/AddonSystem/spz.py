@@ -32,6 +32,7 @@ class SPZClient:
     _LONG_OP_METHODS = {
         "spz.cmd.export_3d_with_textures_to_path",
         "spz.cmd.export_3d_with_textures",
+        "spz.cmd.stream_mesh_to_blender",
         "spz.cmd.import_3d_model",
         "spz.cmd.save_project",
         "spz.cmd.load_project",

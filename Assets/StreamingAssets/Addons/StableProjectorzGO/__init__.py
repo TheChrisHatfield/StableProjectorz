@@ -28,6 +28,8 @@ ADDON_ID = "StableProjectorzGO"
 EXCHANGE_DIRNAME = "StableProjectorzGO_exchange"
 DEFAULT_EXCHANGE_IMPORT = "from_blender.fbx"  # Blender → disk → SPZ import
 DEFAULT_EXCHANGE_EXPORT = "from_spz.fbx"  # SPZ → disk (Blender can import)
+BLENDER_MESH_STREAM_HOST = "127.0.0.1"
+BLENDER_MESH_STREAM_PORT = 5560
 BLENDER_BRIDGE_MODULE = "spz_blender_bridge"
 BLENDER_INSTALL_TIMEOUT_S = 180
 
@@ -346,6 +348,19 @@ def do_export_to_path():
     print("  normalized path:", path)
     print("  dir exists before:", os.path.isdir(os.path.dirname(path) if os.path.dirname(path) else "."))
     api = spz.get_api()
+    # Progressive handoff: Blender can show geometry immediately while the existing FBX/texture
+    # export continues. Failure is intentionally soft so older/missing Blender add-ons use FBX.
+    try:
+        stream_payload = {
+            "host": BLENDER_MESH_STREAM_HOST,
+            "port": BLENDER_MESH_STREAM_PORT,
+            "codec": "gzip",
+        }
+        print("  rpc:", "spz.cmd.stream_mesh_to_blender", stream_payload)
+        stream_resp = api._client._send_request("spz.cmd.stream_mesh_to_blender", stream_payload)
+        print(ADDON_ID + " mesh stream response:", repr(stream_resp))
+    except Exception as e:
+        print(ADDON_ID + " mesh stream unavailable; continuing with FBX:", e)
     try:
         payload = {"mesh_filepath": str(path)}
         print("  rpc:", "spz.cmd.export_3d_with_textures_to_path", payload)

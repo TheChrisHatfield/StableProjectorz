@@ -1076,6 +1076,27 @@ namespace spz {
 			
 			return saveMGR.Export3D_with_textures();
 		}
+
+		/// <summary>
+		/// Send current visible geometry directly to the Blender SPZ GO listener.
+		/// This is geometry-only; the existing FBX/texture export remains the progressive completion path.
+		/// </summary>
+		public bool StreamCurrentModelToBlender(
+			string host, int port, bool useGzip, out int meshCount, out string error
+		) {
+			meshCount = 0;
+			error = null;
+			if (!_isInitialized) {
+				error = "FastPath API not initialized";
+				return false;
+			}
+			var mh = ModelsHandler_3D.instance;
+			if (mh == null) {
+				error = "ModelsHandler unavailable";
+				return false;
+			}
+			return mh.TryStreamCurrentModelToBlender(host, port, useGzip, out meshCount, out error);
+		}
 		
 		/// <summary>
 		/// Load a 3D file from an absolute path (DCC / automation; same as Load model, no file dialog).

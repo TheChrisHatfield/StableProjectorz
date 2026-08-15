@@ -20,7 +20,7 @@ import sys
 
 
 MODULE_NAME = "spz_blender_bridge"
-SHIP_FILES = ("__init__.py", "spz_http.py", "blender_manifest.toml")
+SHIP_FILES = ("__init__.py", "spz_http.py", "mesh_stream.py", "blender_manifest.toml")
 
 
 def _parse_bl_info_version(init_path: str):
@@ -78,6 +78,7 @@ def main(argv=None) -> int:
 		and inst_ver is not None
 		and ship_ver == inst_ver
 		and os.path.isfile(os.path.join(dest, "spz_http.py"))
+		and os.path.isfile(os.path.join(dest, "mesh_stream.py"))
 	):
 		# Still ensure enabled — SKIP must not hide a failed enable.
 		if not _enable(MODULE_NAME):

@@ -396,6 +396,7 @@ namespace spz {
 				case "spz.cmd.import_3d_model":
 				case "spz.cmd.export_3d_with_textures":
 				case "spz.cmd.export_3d_with_textures_to_path":
+				case "spz.cmd.stream_mesh_to_blender":
 				case "spz.cmd.save_project":
 				case "spz.cmd.load_project":
 				case "spz.cmd.export_projection_textures":
@@ -655,7 +656,7 @@ namespace spz {
 			var cmd = new JArray {
 				"spz.cmd.deselect_all_meshes", "spz.cmd.deselect_mesh", "spz.cmd.export_3d_with_textures",
 				"spz.cmd.export_3d_with_textures_to_path", "spz.cmd.export_projection_textures", "spz.cmd.export_view_textures",
-				"spz.cmd.import_3d_model",
+				"spz.cmd.import_3d_model", "spz.cmd.stream_mesh_to_blender",
 				"spz.cmd.agent_bridge_apply_settings", "spz.cmd.agent_bridge_get_status",
 				"spz.cmd.get_active_controlnet_unit_count", "spz.cmd.get_addon_context", "spz.cmd.get_all_camera_fovs",
 				"spz.cmd.get_all_camera_positions", "spz.cmd.get_all_camera_rotations", "spz.cmd.get_all_mesh_ids",
@@ -1680,6 +1681,22 @@ namespace spz {
 					case "spz.cmd.export_3d_with_textures":
 						result["success"] = fastPath.Export3DWithTextures();
 						break;
+
+					case "spz.cmd.stream_mesh_to_blender": {
+						string streamHost = @params["host"]?.ToString() ?? "127.0.0.1";
+						int streamPort = @params["port"]?.ToObject<int>() ?? SpzGoMeshStream.DefaultPort;
+						string codec = @params["codec"]?.ToString() ?? "gzip";
+						bool useGzip = !string.Equals(codec, "none", StringComparison.OrdinalIgnoreCase);
+						bool streamOk = fastPath.StreamCurrentModelToBlender(
+							streamHost, streamPort, useGzip, out int streamedMeshes, out string streamError);
+						result["success"] = streamOk;
+						result["protocol_version"] = SpzGoMeshStream.ProtocolVersion;
+						result["mesh_count"] = streamedMeshes;
+						result["codec"] = useGzip ? "gzip" : "none";
+						if (!streamOk)
+							result["error"] = streamError ?? "mesh stream failed";
+						break;
+					}
 					
 					case "spz.cmd.import_3d_model": {
 						string imPath = @params["filepath"]?.ToString() ?? "";

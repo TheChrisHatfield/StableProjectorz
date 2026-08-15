@@ -10,7 +10,7 @@
 bl_info = {
     "name": "SPZ GO (HTTP)",
     "author": "StableProjectorz / community",
-    "version": (0, 2, 0),
+    "version": (0, 3, 0),
     "blender": (4, 0, 0),
     "location": "3D Viewport: N (toggle sidebar) → top tab 'SPZ GO' (not auto-open; scroll tab row if needed)",
     "description": "Link with StableProjectorz: pull/push 3D via REST; shared exchange folder; FBX and UV (SVG) helpers",
@@ -18,6 +18,8 @@ bl_info = {
 }
 
 import os
+import queue
+import threading
 import time
 from pathlib import Path
 from typing import Optional, Tuple
@@ -26,10 +28,10 @@ from typing import Optional, Tuple
 EXCHANGE_FBX_FROM_BLENDER = "from_blender.fbx"
 
 import bpy
-from bpy.props import StringProperty, BoolProperty
+from bpy.props import StringProperty, BoolProperty, IntProperty
 from bpy.types import Operator, Panel, AddonPreferences
 
-from . import spz_http
+from . import mesh_stream, spz_http
 
 # blender_manifest "id" — preferences bl_idname and official extension install key
 ADDON_ID_MANIFEST = "spz_blender_bridge"
@@ -123,6 +125,18 @@ class StableProjectorzGOPreferences(AddonPreferences):
         default=True,
         description="Watch the exchange folder; when StableProjectorz finishes Export, import into Blender automatically",
     )
+    prefer_mesh_stream: BoolProperty(
+        name="Prefer direct mesh stream",
+        default=True,
+        description="Receive SPZ geometry directly with bulk mesh writes; use FBX automatically when streaming is unavailable",
+    )
+    mesh_stream_port: IntProperty(
+        name="Mesh stream port",
+        default=5560,
+        min=1024,
+        max=65535,
+        description="Loopback-only SPZ GO binary mesh listener",
+    )
 
     def draw(self, context):
         info = self.layout.box()
@@ -136,6 +150,8 @@ class StableProjectorzGOPreferences(AddonPreferences):
         self.layout.prop(self, "uv_svg_name")
         self.layout.prop(self, "spz_pull_basename")
         self.layout.prop(self, "auto_import_from_spz")
+        self.layout.prop(self, "prefer_mesh_stream")
+        self.layout.prop(self, "mesh_stream_port")
         self.layout.separator()
         box = self.layout.box()
         box.label(
@@ -429,9 +445,61 @@ _watch_cached_exchange_dir = ""
 _watch_cached_exchange_at = 0.0
 # True until we have observed the current exchange stamp once (avoid importing leftovers on enable).
 _watch_needs_seed = True
+# Successful stream materialization makes the next FBX a texture-completion artifact, not geometry to import.
+_stream_skip_next_ready_fbx = False
+_stream_texture_results = queue.Queue()
 
 
 _GO_IMPORT_MAX_TICKS = 900  # 900 * 0.2s ≈ 180s fallback wait (HTTP path already waited for textures)
+
+
+def _mesh_stream_drain_timer():
+    """Main-thread bridge from receiver queue to bpy mesh collections."""
+    global _stream_skip_next_ready_fbx
+    try:
+        created = mesh_stream.materialize_next()
+        if created is not None:
+            _stream_skip_next_ready_fbx = bool(created)
+    except Exception as e:
+        _stream_skip_next_ready_fbx = False
+        print("SPZ GO mesh stream materialize:", e)
+    deferred = []
+    while True:
+        try:
+            ok, fbx_path, detail = _stream_texture_results.get_nowait()
+        except queue.Empty:
+            break
+        if not ok:
+            _stream_skip_next_ready_fbx = False
+            print("SPZ GO: streamed geometry is active, but texture completion failed:", detail)
+            continue
+        has_streamed_objects = any(
+            getattr(obj, "type", None) == "MESH" and bool(obj.get("spz_mesh_stream"))
+            for obj in bpy.data.objects
+        )
+        if not has_streamed_objects:
+            if _stream_skip_next_ready_fbx:
+                deferred.append((ok, fbx_path, detail))
+            else:
+                print("SPZ GO: texture completion discarded because streamed geometry failed.")
+            continue
+        _auto_apply_exchange_texture_after_import(fbx_path)
+        _mark_exchange_stamp_seen_for_fbx(fbx_path)
+        _stream_skip_next_ready_fbx = False
+        print("SPZ GO: applied completed textures to streamed geometry.")
+    for item in deferred:
+        _stream_texture_results.put(item)
+    return 0.05
+
+
+def _request_stream_texture_completion(base_url: str, fbx_path: str) -> None:
+    """Worker-only HTTP wait; bpy work is handed back to _mesh_stream_drain_timer."""
+    try:
+        result = spz_http.post_export_3d_to_path(base_url, fbx_path)
+        ok = isinstance(result, dict) and result.get("success") is True
+        _stream_texture_results.put((ok, fbx_path, result))
+    except Exception as exc:
+        _stream_texture_results.put((False, fbx_path, str(exc)))
 
 
 def _file_fingerprint(path: str):
@@ -578,7 +646,7 @@ def _resolve_exchange_dir_cached() -> str:
 
 def _exchange_watch_timer():
     """Persistent timer: when SPZ writes from_spz.spz_go_ready, auto-import the FBX."""
-    global _watch_last_ready_fp, _watch_needs_seed
+    global _watch_last_ready_fp, _watch_needs_seed, _stream_skip_next_ready_fbx
     try:
         p = prefs()
     except Exception:
@@ -611,6 +679,19 @@ def _exchange_watch_timer():
     mesh_fp = _file_fingerprint(fbx)
     if mesh_fp is None or mesh_fp[1] <= 32:
         return 0.5
+    if _stream_skip_next_ready_fbx:
+        # Geometry already arrived. The legacy export continued so textures and its ready stamp
+        # could complete; consume this stamp and attach maps without duplicating FBX geometry.
+        if not any(
+            getattr(obj, "type", None) == "MESH" and bool(obj.get("spz_mesh_stream"))
+            for obj in bpy.data.objects
+        ):
+            return 0.1
+        _stream_skip_next_ready_fbx = False
+        _watch_last_ready_fp = fp
+        _auto_apply_exchange_texture_after_import(fbx)
+        print("SPZ GO: streamed geometry already active; consumed FBX stamp for textures only.")
+        return 1.0
     if _try_import_exchange_fbx(fbx):
         # Only advance after success so a transient lock/AV miss can retry the same stamp.
         _watch_last_ready_fp = fp
@@ -816,7 +897,7 @@ class SPZ_OT_go_import(Operator):
     )
 
     def execute(self, context):
-        global _go_timer_state
+        global _go_timer_state, _stream_skip_next_ready_fbx
         p = prefs()
         fbx, err = _spz_headless_out_fbx()
         if fbx is None:
@@ -826,6 +907,38 @@ class SPZ_OT_go_import(Operator):
         if d and not _ensure_dir(d):
             self.report({"ERROR"}, f"Could not create: {d}")
             return {"CANCELLED"}
+        streamed_ok = False
+        stream_count = 0
+        if getattr(p, "prefer_mesh_stream", True):
+            port = int(getattr(p, "mesh_stream_port", mesh_stream.DEFAULT_PORT))
+            if mesh_stream.ensure_listener(port):
+                try:
+                    streamed = spz_http.post_mesh_stream(p.base_url, port=port, codec="gzip")
+                    if isinstance(streamed, dict) and streamed.get("success") is True:
+                        streamed_ok = True
+                        stream_count = int(streamed.get("mesh_count", 0) or 0)
+                        # Geometry is already (or soon) in Blender; keep FBX for textures only.
+                        _stream_skip_next_ready_fbx = True
+                    else:
+                        print("SPZ GO: direct mesh stream unavailable; falling back to FBX:", streamed)
+                except spz_http.SpzHttpError as e:
+                    print("SPZ GO: direct mesh stream request failed; falling back to FBX:", e)
+            else:
+                print("SPZ GO: mesh listener unavailable; falling back to FBX:", mesh_stream.last_error())
+        if streamed_ok:
+            # Do not block Blender's main thread for the FBX/texture pipeline: the 50ms drain
+            # timer must be allowed to materialize the packet immediately.
+            threading.Thread(
+                target=_request_stream_texture_completion,
+                args=(p.base_url, fbx),
+                name="SPZ GO Texture Completion",
+                daemon=True,
+            ).start()
+            self.report(
+                {"INFO"},
+                f"SPZ stream queued ({stream_count} mesh(es)); textures continue in background",
+            )
+            return {"FINISHED"}
         # Snapshot before SPZ rewrite so the wait timer does not import a stale exchange FBX.
         prior = _file_fingerprint(fbx)
         try:
@@ -1067,6 +1180,7 @@ class SPZ_PT_main(Panel):
         l.label(text="• Blender Export → SPZ: re-fits to SPZ volume (~3u)")
         l.prop(p, "base_url", text="Base URL")
         l.prop(p, "exchange_subdir", text="Exchange subfolder")
+        l.prop(p, "prefer_mesh_stream", text="Prefer direct mesh stream")
         l.prop(p, "auto_import_from_spz", text="Auto-import SPZ exports")
         l.separator()
         b = l.box()
@@ -1150,6 +1264,12 @@ def register():
             print("SPZ GO: register_class failed for", getattr(c, "__name__", str(c)), "—", e)
     _watch_needs_seed = True
     _seed_watch_fingerprint()
+    try:
+        mesh_stream.ensure_listener(int(getattr(prefs(), "mesh_stream_port", mesh_stream.DEFAULT_PORT)))
+    except Exception as e:
+        print("SPZ GO: mesh stream listener did not start:", e)
+    if not bpy.app.timers.is_registered(_mesh_stream_drain_timer):
+        bpy.app.timers.register(_mesh_stream_drain_timer, first_interval=0.05, persistent=True)
     if not bpy.app.timers.is_registered(_exchange_watch_timer):
         bpy.app.timers.register(_exchange_watch_timer, first_interval=1.0, persistent=True)
     print(
@@ -1158,6 +1278,12 @@ def register():
 
 
 def unregister():
+    if bpy.app.timers.is_registered(_mesh_stream_drain_timer):
+        try:
+            bpy.app.timers.unregister(_mesh_stream_drain_timer)
+        except Exception as e:
+            print("SPZ GO: unregister mesh stream timer:", e)
+    mesh_stream.stop_listener()
     if bpy.app.timers.is_registered(_exchange_watch_timer):
         try:
             bpy.app.timers.unregister(_exchange_watch_timer)

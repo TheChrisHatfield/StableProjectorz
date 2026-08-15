@@ -77,6 +77,22 @@ def post_export_3d_with_textures(base_url: str) -> dict:
     return request_json(base_url, "POST", "/api/v1/export/3d_with_textures", {}, timeout_s=300.0)
 
 
+def post_mesh_stream(
+    base_url: str,
+    host: str = "127.0.0.1",
+    port: int = 5560,
+    codec: str = "gzip",
+) -> dict:
+    """Ask SPZ to push geometry to this Blender add-on's loopback listener."""
+    return request_json(
+        base_url,
+        "POST",
+        "/api/v1/export/mesh_stream",
+        {"host": str(host), "port": int(port), "codec": str(codec)},
+        timeout_s=30.0,
+    )
+
+
 def post_export_projection_textures(base_url: str, is_dilate: bool = True) -> dict:
     q = urllib.parse.urlencode({"is_dilate": "true" if is_dilate else "false"})
     return request_json(base_url, "POST", f"/api/v1/export/projection_textures?{q}", {}, timeout_s=300.0)
