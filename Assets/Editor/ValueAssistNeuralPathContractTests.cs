@@ -187,6 +187,46 @@ public sealed class ValueAssistNeuralPathContractTests {
 		Assert.That(b.Blend01, Is.EqualTo(a.Blend01).Within(1e-6f));
 	}
 
+	// LAVD lock — measured feedback only: a deterministic propose runs no Decimacon
+	// forward, so it must never train the bandit as if one had run.
+	[Test]
+	public void DeterministicLivePredict_DoesNotTrainBandit() {
+		bool prevEnabled = PaintTab_ValueAssistOptions.Enabled;
+		bool prevNeural = PaintTab_ValueAssistOptions.UseNeural;
+		bool prevLive = PaintTab_ValueAssistOptions.LivePredict;
+		try {
+			PaintTab_ValueAssistOptions.SetEnabled(true);
+			PaintTab_ValueAssistOptions.SetUseNeural(false);
+			PaintTab_ValueAssistOptions.SetLivePredict(true);
+			ValuePaintLivePredictor.InvalidateAssist();
+			DecimaconProductGate.ResetForTests(23);
+
+			var alpha = new float[4];
+			var beta = new float[4];
+			for (int i = 0; i < 4; i++) {
+				alpha[i] = DecimaconProductGate.Scheduler.GetAlpha((BanditArm)i);
+				beta[i] = DecimaconProductGate.Scheduler.GetBeta((BanditArm)i);
+			}
+
+			// Arm will refuse (no workflow UI in tests) or succeed — either way the assist is
+			// deterministic, so no bandit alpha/beta may move.
+			ValuePaintLivePredictor.TryPredictFromSurface(new Color(0.42f, 0.4f, 0.44f, 1f), out _);
+
+			for (int i = 0; i < 4; i++) {
+				Assert.That(DecimaconProductGate.Scheduler.GetAlpha((BanditArm)i),
+					Is.EqualTo(alpha[i]).Within(1e-6f), "alpha moved for arm " + (BanditArm)i);
+				Assert.That(DecimaconProductGate.Scheduler.GetBeta((BanditArm)i),
+					Is.EqualTo(beta[i]).Within(1e-6f), "beta moved for arm " + (BanditArm)i);
+			}
+		} finally {
+			PaintTab_ValueAssistOptions.SetLivePredict(prevLive);
+			PaintTab_ValueAssistOptions.SetUseNeural(prevNeural);
+			PaintTab_ValueAssistOptions.SetEnabled(prevEnabled);
+			ValuePaintLivePredictor.InvalidateAssist();
+			DecimaconProductGate.ResetForTests();
+		}
+	}
+
 	// Requiring value heads is deliberate: a body without heads cannot propose (B8.5).
 	[Test]
 	public void Runtime_RequireValueHeads_IsEnforced() {
