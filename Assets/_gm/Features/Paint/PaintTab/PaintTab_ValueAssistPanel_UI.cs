@@ -716,7 +716,10 @@ namespace spz {
 				return;
 			}
 			if (!keepMessage || string.IsNullOrEmpty(_statusTmp.text) || _statusTmp.text == "Dismissed.")
-				_statusTmp.text = "Idle";
+				// B8.6 — an unwanted deterministic fallback must be visible, not silent.
+				_statusTmp.text = ValueAssistNeuralHealth.IsUnwantedFallback
+					? "Idle — neural unavailable, deterministic fallback"
+					: "Idle";
 		}
 
 		static Color CurrentBrushColor() {
