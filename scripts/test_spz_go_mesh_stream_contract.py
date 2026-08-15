@@ -31,6 +31,11 @@ class SpzGoMeshStreamContractTests(unittest.TestCase):
         self.assertIn('mesh.loops.foreach_set("vertex_index"', src)
         self.assertIn('uv_layer.data.foreach_set("uv"', src)
         self.assertNotIn("from_pydata", src)
+        start_at = src.find("def start_listener")
+        self.assertGreater(start_at, 0)
+        start_body = src[start_at:src.find("def ensure_listener", start_at)]
+        self.assertIn("_ready.wait(", start_body)
+        self.assertIn("_listener_socket is None", start_body)
 
     def test_rpc_and_http_are_wired(self):
         socket_src = SOCKET.read_text(encoding="utf-8")
