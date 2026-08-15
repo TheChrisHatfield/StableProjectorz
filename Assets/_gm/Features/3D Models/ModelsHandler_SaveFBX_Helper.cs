@@ -173,21 +173,24 @@ namespace spz {
 
     
 	    /// <summary>
-	    /// Unity is left-handed Y-up; FBX is right-handed Y-up. Mirroring x (vertices, normals,
-	    /// translations, plus reversed winding) is the whole conversion, so <b>up stays Y</b> and
-	    /// Blender's Y-up → Z-up import lands the model upright. Do not bake an extra axis rotation
-	    /// into the model root: upstream wrote (90,-90,180) there, which tipped exported figures onto
-	    /// their side in Blender and double-rotated the FBX we re-import on project load
-	    /// (<see cref="Objs3D_Container"/> already compensates Assimp's MakeLeftHanded with 180° yaw).
+	    /// Unity is left-handed Y-up; FBX is right-handed Y-up. Mirroring <b>z</b> (vertices, normals,
+	    /// translations, plus reversed winding) is the whole conversion: up stays Y, so Blender's
+	    /// Y-up → Z-up import lands the model upright, and it is the exact inverse of Assimp's
+	    /// <c>MakeLeftHanded</c> that <see cref="AssimpLoader"/> imports with — a model survives
+	    /// export → import unchanged, facing included.
+	    /// Do not mirror x instead (that is this same mirror plus 180° yaw, which needed a matching
+	    /// yaw in <see cref="Objs3D_Container"/> that then flipped every Blender-authored import), and
+	    /// do not bake an axis rotation into the root (upstream's (90,-90,180) tipped figures onto
+	    /// their side in Blender).
 	    /// </summary>
 	    void ExportTransform( GameObject go, FbxNode fbxNode){
 	        Transform tr = go.transform;
-	        var fbxTranslate = new FbxDouble3(-tr.localPosition.x, tr.localPosition.y, tr.localPosition.z);
+	        var fbxTranslate = new FbxDouble3(tr.localPosition.x, tr.localPosition.y, -tr.localPosition.z);
 	        // Quaternion x/y/z are NOT degrees — a 45° in-SPZ rotation exported as ~0.4°, silently
 	        // discarding user rotations on the SPZ→Blender trip. Use Euler degrees, mirrored for the
-	        // -x handedness flip (rotations about Y/Z negate under that mirror).
+	        // -z handedness flip (rotations about X/Y negate under that mirror).
 	        Vector3 e = tr.localEulerAngles;
-	        var fbxRotate = new FbxDouble3( e.x, -e.y, -e.z );
+	        var fbxRotate = new FbxDouble3( -e.x, -e.y, e.z );
 	        var fbxScale = new FbxDouble3(tr.localScale.x, tr.localScale.y, tr.localScale.z);
 	        fbxNode.LclTranslation.Set(fbxTranslate);
 	        fbxNode.LclRotation.Set(fbxRotate);
@@ -224,9 +227,9 @@ namespace spz {
 	            FbxLayerElementArray fbxElementArray = fbxLayerElement.GetDirectArray ();
 
 	            for (int n=0; n<normals.Length; n++){
-	                fbxElementArray.Add (new FbxVector4( -normals[n][0],//NOTICE -x otherwise normals are point in another dir along Y in 3ds max.
+	                fbxElementArray.Add (new FbxVector4(  normals[n][0],
 	                                                      normals[n][1],
-	                                                      normals[n][2]) );
+	                                                     -normals[n][2]) );//mirror z, same as control points (see ExportTransform).
 	            }
 	            fbxLayer.SetNormals(fbxLayerElement);
 	        }
@@ -348,7 +351,7 @@ namespace spz {
 	        fbxMesh.InitControlPoints(NumControlPoints);
 
 	        for (int v = 0; v < NumControlPoints; v++){
-	            fbxMesh.SetControlPointAt(new FbxVector4(-mesh.Vertices[v].x, mesh.Vertices[v].y, mesh.Vertices[v].z), v);
+	            fbxMesh.SetControlPointAt(new FbxVector4(mesh.Vertices[v].x, mesh.Vertices[v].y, -mesh.Vertices[v].z), v);
 	        }
 
 	        ExportNormalsEtc(mesh, fbxMesh);

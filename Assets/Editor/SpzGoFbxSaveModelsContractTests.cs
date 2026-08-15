@@ -22,11 +22,13 @@ public sealed class SpzGoFbxSaveModelsContractTests {
 	}
 
 	/// <summary>
-	/// Unity LH Y-up → FBX RH Y-up is an x mirror only. An extra axis rotation on the model root
-	/// (upstream wrote 90,-90,180) put exported figures on their side in Blender.
+	/// Unity LH Y-up → FBX RH Y-up is a z mirror only — the exact inverse of the importer's Assimp
+	/// MakeLeftHanded. An extra axis rotation on the root (upstream wrote 90,-90,180) put exported
+	/// figures on their side in Blender; mirroring x instead needed a 180° yaw on import, which
+	/// flipped every Blender-authored model.
 	/// </summary>
 	[Test]
-	public void ExportTransform_MirrorsXOnly_NoBakedRootAxisRotation() {
+	public void ExportMirrorsZ_MatchingImport_NoBakedRotations() {
 		string helper = Path.Combine(
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "3D Models", "ModelsHandler_SaveFBX_Helper.cs");
@@ -38,8 +40,25 @@ public sealed class SpzGoFbxSaveModelsContractTests {
 			"Root and children must share one transform path (no root-only rotation adjust).");
 		Assert.That(src, Does.Contain("Vector3 e = tr.localEulerAngles"),
 			"Rotations must be exported as Euler degrees, not quaternion components.");
-		Assert.That(src, Does.Contain("new FbxDouble3( e.x, -e.y, -e.z )"),
-			"Euler must be mirrored for the -x handedness flip.");
+		Assert.That(src, Does.Contain("new FbxDouble3( -e.x, -e.y, e.z )"),
+			"Euler must be mirrored for the -z handedness flip.");
+		Assert.That(src, Does.Contain("-mesh.Vertices[v].z"),
+			"Control points must mirror z, not x.");
+
+		string container = Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "3D Models", "Objs3D_Container.cs");
+		Assert.That(File.Exists(container), Is.True);
+		string containerSrc = File.ReadAllText(container);
+		Assert.That(containerSrc, Does.Not.Contain("Quaternion.Euler(0f, 180f, 0f)"),
+			"Import must not yaw the model root — MakeLeftHanded already gives Unity orientation.");
+
+		string loader = Path.Combine(
+			Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "3D Models", "AssimpLoader.cs");
+		Assert.That(File.Exists(loader), Is.True);
+		Assert.That(File.ReadAllText(loader), Does.Contain("MakeLeftHanded"),
+			"Export mirror axis is chosen to invert this import step.");
 
 		string bridge = Path.Combine(
 			Directory.GetCurrentDirectory(), "External", "Blender_SpzBridge", "__init__.py");
