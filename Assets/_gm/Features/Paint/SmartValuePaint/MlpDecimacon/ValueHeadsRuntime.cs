@@ -81,6 +81,12 @@ namespace spz.MlpDecimacon {
 			// is present all of it must be, or the forward silently drops to the raw latent.
 			bool anyProj = feat_proj_weight != null || feat_proj2_weight != null;
 			if (anyProj) {
+				// Forward hardcodes the trained input width (7 floats). A self-consistent export
+				// with a different feature_dim would pass length checks and then misindex.
+				if (f != 7) {
+					invalidKey = "feature_dim=" + feature_dim + " != trained 7";
+					return false;
+				}
 				if (!Check(feat_proj_weight, w * f, "feat_proj_weight", out invalidKey)) return false;
 				if (!Check(feat_proj_bias, w, "feat_proj_bias", out invalidKey)) return false;
 				if (!Check(feat_proj2_weight, w * w, "feat_proj2_weight", out invalidKey)) return false;
