@@ -16,6 +16,30 @@ public sealed class MergeIconsRefuseCallbackContractTests {
 		int doSave = src.IndexOf("public void DoSaveProject()", merge, System.StringComparison.Ordinal);
 		string body = src.Substring(merge, doSave - merge);
 		Assert.That(body, Does.Contain("onHaveAlbedo?.Invoke(null)"));
+		Assert.That(body, Does.Contain("ClearSavingIfStillHeld"),
+			"MergeIcons must clear _isSaving if Save_Mesh_Textures fails before the albedo callback.");
+	}
+
+	[Test]
+	public void SaveMeshTextures_DeliversAlbedoCallbackOnException() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "Save Load Import Export", "Save_MGR.cs");
+		string src = File.ReadAllText(path);
+		int method = src.IndexOf("void Save_Mesh_Textures(", System.StringComparison.Ordinal);
+		string body = src.Substring(method, System.Math.Min(2200, src.Length - method));
+		Assert.That(body, Does.Contain("albedoCallbackDelivered"));
+		Assert.That(body, Does.Contain("if (!albedoCallbackDelivered)"));
+	}
+
+	[Test]
+	public void Save2DArt_ClearsSavingInFinally() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "Save Load Import Export", "Save_MGR.cs");
+		string src = File.ReadAllText(path);
+		int method = src.IndexOf("public void Save2DArt(", System.StringComparison.Ordinal);
+		string body = src.Substring(method, System.Math.Min(900, src.Length - method));
+		Assert.That(body, Does.Contain("finally"));
+		Assert.That(body, Does.Contain("_isSaving = false"));
 	}
 
 	[Test]
