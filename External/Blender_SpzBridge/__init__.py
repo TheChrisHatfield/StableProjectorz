@@ -458,8 +458,11 @@ def _mesh_stream_drain_timer():
     global _stream_skip_next_ready_fbx
     try:
         created = mesh_stream.materialize_next()
-        if created is not None:
-            _stream_skip_next_ready_fbx = bool(created)
+        # go_import arms _stream_skip_next_ready_fbx; watch/texture paths clear it after
+        # consuming the textures-only FBX stamp. Do not re-arm on materialize success —
+        # a late duplicate packet after skip was cleared would skip the next real FBX import.
+        if created is not None and not created:
+            _stream_skip_next_ready_fbx = False
     except Exception as e:
         _stream_skip_next_ready_fbx = False
         print("SPZ GO mesh stream materialize:", e)
