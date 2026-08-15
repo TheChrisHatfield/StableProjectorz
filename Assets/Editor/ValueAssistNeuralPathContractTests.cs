@@ -36,6 +36,18 @@ public sealed class ValueAssistNeuralPathContractTests {
 		Assert.That(bad, Does.Contain("des_weight"), bad);
 	}
 
+	// B8.5 — Forward hardcodes the trained 7-float input; a self-consistent export with a
+	// different feature_dim must fail validation instead of misindexing at runtime.
+	[Test]
+	public void ValueHeadsWeights_ForeignFeatureDim_FailsLoud() {
+		Assert.That(ValueHeadsWeightsDto.TryLoad(out var dto, out _), Is.True);
+		int w = dto.width > 0 ? dto.width : DecimaconDims.Width;
+		dto.feature_dim = 9;
+		dto.feat_proj_weight = new float[w * 9]; // lengths made consistent on purpose
+		Assert.That(dto.Validate(out string bad), Is.False, "foreign feature_dim validated");
+		Assert.That(bad, Does.Contain("feature_dim"), bad);
+	}
+
 	[Test]
 	public void ValueHeadsWeights_NonFiniteTensor_FailsWithKey() {
 		Assert.That(ValueHeadsWeightsDto.TryLoad(out var dto, out _), Is.True);
