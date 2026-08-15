@@ -1694,7 +1694,7 @@ namespace spz {
 				yield return null;
 				sm = Save_MGR.instance;
 			}
-			// sm == null must not count as success (previously: sm == null || !sm._isSaving).
+			// sm == null must not count as success (previously treated null Save_MGR as idle).
 			bool saveIdle = sm != null && !sm._isSaving;
 			if (sm == null)
 				UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO native export: Save_MGR unavailable during texture write.");

@@ -81,5 +81,14 @@ public sealed class SpzGoExportDeferTests {
 			"Ready stamp is ToPath-only; dialog export must not require .spz_go_ready.");
 		Assert.That(src, Does.Contain("export cancelled or mesh not written"),
 			"Dialog export must fail when cancel leaves no written mesh.");
+		Assert.That(src, Does.Contain("export_projection_textures"),
+			"Texture-only projection export must share the deferred idle path.");
+		int texOnlyAt = src.IndexOf(
+			"Texture-only exports never write an FBX", System.StringComparison.Ordinal);
+		int meshRequireAt = src.IndexOf(
+			"export cancelled or mesh not written", System.StringComparison.Ordinal);
+		Assert.That(texOnlyAt, Is.GreaterThan(0),
+			"Projection/view exports must not reuse the dialog mesh-written check.");
+		Assert.That(meshRequireAt, Is.GreaterThan(texOnlyAt));
 	}
 }

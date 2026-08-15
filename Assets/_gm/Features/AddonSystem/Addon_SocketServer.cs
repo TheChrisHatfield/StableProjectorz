@@ -550,8 +550,13 @@ namespace spz {
 					result["error"] = "export to path failed (ready stamp missing for Blender auto-import)";
 					UnityEngine.Debug.LogWarning("[Addon_SocketServer] export_3d_with_textures_to_path: ready stamp missing: " + stamp);
 				}
+			} else if (string.Equals(method, "spz.cmd.export_projection_textures", StringComparison.Ordinal)
+			           || string.Equals(method, "spz.cmd.export_view_textures", StringComparison.Ordinal)) {
+				// Texture-only exports never write an FBX. Idle Save_MGR means the encode finished.
+				// Do not require _path_recentlyExported (that stamps a prior mesh export and causes
+				// false failures on a fresh session, or false success after a cancelled mesh dialog).
 			} else {
-				// Dialog export: no .spz_go_ready. Succeed only if this op wrote a mesh (path cleared at start).
+				// Dialog mesh+texture export: no .spz_go_ready. Succeed only if this op wrote a mesh.
 				var mh = ModelsHandler_3D.instance;
 				string written = mh != null ? mh._path_recentlyExported : null;
 				if (string.IsNullOrEmpty(written) || !File.Exists(written)) {
