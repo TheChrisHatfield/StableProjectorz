@@ -286,6 +286,13 @@ namespace spz {
 				reason = _lastFailReason = "SetBrushColorFromApi failed";
 				return false;
 			}
+			// SetBrushColorFromApi routes through the palette path, which treats the write as a
+			// user pick and re-bases the Live chroma to OUR remapped tint. Re-base back to the
+			// artist's chroma so Live (resuming after the first stroke) never remaps its own output.
+			if (_haveLiveChromaBase) {
+				_liveChromaBase = baseCol;
+				_liveChromaBase.a = 1f;
+			}
 
 			float width01 = SanitizeBrushWidthHint01(proposal.BrushWidthHint01);
 			sd.SetBrushSize(width01);
