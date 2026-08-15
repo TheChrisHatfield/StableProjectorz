@@ -395,9 +395,9 @@ namespace spz {
 	    }
 
 
-	    public void Load( StableProjectorz_SL sl ){
-	        if (sl.modelsHandler3D == null) return;
-	        _importHelper.Load(sl.modelsHandler3D, sl.filepath_dataDir); //before we start importing from filepath!
+	    public bool Load( StableProjectorz_SL sl ){
+	        if (sl.modelsHandler3D == null) return true;
+	        return _importHelper.TryLoad(sl.modelsHandler3D, sl.filepath_dataDir, out _);
 	    }
 
 

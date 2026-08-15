@@ -100,6 +100,21 @@ namespace spz {
 		        }
 		        return;
 	        }
+	        if( ModelsHandler_3D.instance != null && ModelsHandler_3D.instance._isImportingModel ){
+		        Viewport_StatusText.instance?.ShowStatusText(
+			        "Can't save project while a mesh import is still in progress.", false, 5f, false );
+		        return;
+	        }
+	        if( Gen3D_API.instance != null && Gen3D_API.instance.isBusy ){
+		        Viewport_StatusText.instance?.ShowStatusText(
+			        "Can't save project while Gen3D is busy.", false, 5f, false );
+		        return;
+	        }
+	        if( StableDiffusion_Hub.instance != null && StableDiffusion_Hub.instance._generating ){
+		        Viewport_StatusText.instance?.ShowStatusText(
+			        "Can't save project while generating.", false, 5f, false );
+		        return;
+	        }
 
 	        Action<string> onResultMessage = msg => {
 		        if( Viewport_StatusText.instance != null )
@@ -133,6 +148,16 @@ namespace spz {
 				        ? "Load already in progress."
 				        : "Can't load while a save/export is still writing.",
 			        false, 5f, false );
+		        return;
+	        }
+	        if( ModelsHandler_3D.instance != null && ModelsHandler_3D.instance._isImportingModel ){
+		        Viewport_StatusText.instance?.ShowStatusText(
+			        "Can't load while a mesh import is still in progress.", false, 5f, false );
+		        return;
+	        }
+	        if( Gen3D_API.instance != null && Gen3D_API.instance.isBusy ){
+		        Viewport_StatusText.instance?.ShowStatusText(
+			        "Can't load while Gen3D is busy.", false, 5f, false );
 		        return;
 	        }
 	        if( StableDiffusion_Hub.instance != null && StableDiffusion_Hub.instance._generating ){
@@ -488,7 +513,7 @@ namespace spz {
 		        EncodeAndSaveTextures(saveMe, filepath);
 
 	        Viewport_StatusText.instance?.ShowStatusText("Saved to "+ filepath.Replace("\\", "\\\\"), 
-	                                                    false, 10, transitionVisibility: false);
+	                                                    false, 10, progressVisibility: false);
 	        if(destroyTexs && saveMe != null){  
 	            foreach(var kvp in saveMe){ DestroyImmediate(kvp.Key); }
 	        }
