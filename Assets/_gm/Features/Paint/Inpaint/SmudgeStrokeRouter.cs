@@ -62,7 +62,8 @@ namespace spz {
 		}
 
 		/// <summary>
-		/// <b>Barrier:</b> layer smudge only when the active layer is visible and <paramref name="layerPaintTarget"/> is exactly that layer’s <c>Content</c>.
+		/// <b>Barrier:</b> layer smudge only when the active layer is visible and <paramref name="layerPaintTarget"/> is
+		/// exactly that layer’s <c>Content</c> or <c>NoColorMask</c>.
 		/// Prevents smudging a hidden active buffer while other layers are visible, or mixing mesh/art writes with the wrong buffer.
 		/// </summary>
 		public static bool LayerSmudgeGateOpen(PaintLayerStack_MGR stack, RenderUdims layerPaintTarget) {
@@ -70,7 +71,8 @@ namespace spz {
 			var active = stack?.ActiveLayer;
 			if (active == null || active.Content == null) return false;
 			if (!active.Visible) return false;
-			return ReferenceEquals(layerPaintTarget, active.Content);
+			return ReferenceEquals(layerPaintTarget, active.Content)
+			       || ReferenceEquals(layerPaintTarget, active.NoColorMask);
 		}
 
 		static bool UnderlayBarrierOk(RenderUdims dest, RenderUdims underlay) {
@@ -126,7 +128,9 @@ namespace spz {
 			bool meshOk = meshAccumulation != null && SameShape(layerPaintTarget, meshAccumulation);
 			bool hasLayerStack = stack != null && stack.Layers != null && stack.Layers.Count > 0;
 			var activeContent = stack?.ActiveLayer?.Content;
-			bool targetIsActiveLayerBuffer = activeContent != null && ReferenceEquals(layerPaintTarget, activeContent);
+			var activeNoColor = stack?.ActiveLayer?.NoColorMask;
+			bool targetIsActiveLayerBuffer = (activeContent != null && ReferenceEquals(layerPaintTarget, activeContent))
+			                                || (activeNoColor != null && ReferenceEquals(layerPaintTarget, activeNoColor));
 			var effectiveWritePreference = writePreference;
 
 			// Layer-stack fence: when the stroke target *is* the active layer buffer, require the gate (visible + same Content ref).
@@ -148,7 +152,9 @@ namespace spz {
 			if (layerGate && (effectiveWritePreference == SmudgeWriteTargetPreference.LayerStack
 			                  || effectiveWritePreference == SmudgeWriteTargetPreference.Auto)) {
 				plan.Dest = layerPaintTarget;
-				plan.UndoKind = PaintUndoNonStackTarget.InpaintColor;
+				plan.UndoKind = (activeNoColor != null && ReferenceEquals(layerPaintTarget, activeNoColor))
+					? PaintUndoNonStackTarget.InpaintNoColorMask
+					: PaintUndoNonStackTarget.InpaintColor;
 				plan.Domain = WriteDomain.LayerStack;
 				plan.KernelSpacingMultiplier = ComputeKernelSpacingMultiplier(layerPaintTarget);
 
@@ -199,14 +205,18 @@ namespace spz {
 
 			// Do not smudge into a hidden active layer buffer; other domains (mesh / art) already handled above.
 			var active = stack?.ActiveLayer;
-			if (active != null && !active.Visible && ReferenceEquals(layerPaintTarget, active.Content)) {
+			if (active != null && !active.Visible
+			    && (ReferenceEquals(layerPaintTarget, active.Content)
+			        || ReferenceEquals(layerPaintTarget, active.NoColorMask))) {
 				plan.Domain = WriteDomain.None;
 				return plan;
 			}
 
 			plan.Dest = layerPaintTarget;
 			plan.Underlay = null;
-			plan.UndoKind = PaintUndoNonStackTarget.InpaintColor;
+			plan.UndoKind = (active?.NoColorMask != null && ReferenceEquals(layerPaintTarget, active.NoColorMask))
+				? PaintUndoNonStackTarget.InpaintNoColorMask
+				: PaintUndoNonStackTarget.InpaintColor;
 			plan.Domain = WriteDomain.LayerOnlyNoUnderlay;
 			plan.KernelSpacingMultiplier = ComputeKernelSpacingMultiplier(layerPaintTarget);
 			if (includeUvMeshUnderLayerSmudge) {
