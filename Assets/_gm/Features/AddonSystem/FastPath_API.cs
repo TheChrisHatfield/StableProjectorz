@@ -1090,6 +1090,14 @@ namespace spz {
 				error = "FastPath API not initialized";
 				return false;
 			}
+			var save = Save_MGR.instance;
+			if (save != null
+			    && (save._isSaving
+			        || save._isLoading
+			        || (save.SaveLoadHelper != null && save.SaveLoadHelper.IsProjectSaveInFlight))) {
+				error = "another save, load, or export is in progress";
+				return false;
+			}
 			var mh = ModelsHandler_3D.instance;
 			if (mh == null) {
 				error = "ModelsHandler unavailable";

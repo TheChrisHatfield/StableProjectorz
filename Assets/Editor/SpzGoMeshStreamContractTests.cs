@@ -1,5 +1,6 @@
 using System.IO;
 using System.IO.Compression;
+using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -81,6 +82,36 @@ namespace spz.EditorTests {
 				Assert.That(error, Does.Contain("no visible readable"));
 			} finally {
 				Object.DestroyImmediate(root);
+			}
+		}
+
+		[Test]
+		public void StreamCommand_RefusesWhileTextureExportOwnsSavePipeline() {
+			var saveGo = new GameObject("Save");
+			var fastGo = new GameObject("FastPath");
+			var save = saveGo.AddComponent<Save_MGR>();
+			var fast = fastGo.AddComponent<FastPath_API>();
+			var instanceField = typeof(Save_MGR)
+				.GetField("<instance>k__BackingField", BindingFlags.Static | BindingFlags.NonPublic);
+			var previousSave = Save_MGR.instance;
+			try {
+				instanceField.SetValue(null, save);
+				typeof(FastPath_API)
+					.GetField("_isInitialized", BindingFlags.Instance | BindingFlags.NonPublic)
+					.SetValue(fast, true);
+				typeof(Save_MGR)
+					.GetProperty("_isSaving", BindingFlags.Instance | BindingFlags.Public)
+					.SetValue(save, true);
+
+				Assert.That(
+					fast.StreamCurrentModelToBlender(
+						"127.0.0.1", SpzGoMeshStream.DefaultPort, true, out _, out var error),
+					Is.False);
+				Assert.That(error, Does.Contain("in progress"));
+			} finally {
+				instanceField.SetValue(null, previousSave);
+				Object.DestroyImmediate(fastGo);
+				Object.DestroyImmediate(saveGo);
 			}
 		}
 	}
