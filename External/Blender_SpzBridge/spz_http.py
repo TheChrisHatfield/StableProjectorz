@@ -84,12 +84,14 @@ def post_mesh_stream(
     codec: str = "gzip",
 ) -> dict:
     """Ask SPZ to push geometry to this Blender add-on's loopback listener."""
+    # Encode + TCP push can exceed 30s on large meshes; match Unity long-op budget (~300s)
+    # so a late ACK cannot arrive after Blender already fell back to FBX (duplicate geometry).
     return request_json(
         base_url,
         "POST",
         "/api/v1/export/mesh_stream",
         {"host": str(host), "port": int(port), "codec": str(codec)},
-        timeout_s=30.0,
+        timeout_s=300.0,
     )
 
 
