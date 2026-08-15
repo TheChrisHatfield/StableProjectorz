@@ -17,6 +17,8 @@ namespace spz {
 	    [SerializeField] ApplyBrushStroke_ToUvMask _applyBrushStroke_toUvMask;
 
 	    float _prevStrength = 0;
+	    /// <summary>True after multi-view stroke scheduled undo captures for every POV; cleared on stroke end.</summary>
+	    bool _multiViewUndoCapturesArmed = false;
 
 	    public static Action Act_OnPaintStrokeEnd { get; set; } = null;
 
@@ -239,14 +241,30 @@ namespace spz {
 	            _applyBrushStroke_toUvMask = FindObjectOfType<ApplyBrushStroke_ToUvMask>(true);
 	        if (_applyBrushStroke_toUvMask != null) {
 	            var mu = genData._masking_utils;
-	            // Single-POV only: Apply_intoMask_multiView can write every POV mask in one dispatch (shrink others).
-	            // Undo is one snapshot per stack entry; capturing only the active POV would leave other masks wrong on restore.
-	            if (isFirstFrameOfStroke && mu != null && mu.numPOV == 1 && mu._ObjectUV_brushedMaskR8 != null
-	                && povIx >= 0 && povIx < mu._ObjectUV_brushedMaskR8.Count) {
-	                var uvMask = mu._ObjectUV_brushedMaskR8[povIx];
-	                if (uvMask != null && uvMask.texArray != null) {
-	                    PaintUndo_MGR.EnsureExists();
-	                    PaintUndo_MGR.instance?.SchedulePreStrokeCapture(uvMask, PaintUndoNonStackTarget.ProjectionGenMask, povIx);
+	            // Multi-view apply can rewrite every POV mask in one dispatch. Capture all POV slots
+	            // before any Apply, and delay Apply while captures are still draining (async readback).
+	            if (mu != null && mu._ObjectUV_brushedMaskR8 != null) {
+	                PaintUndo_MGR.EnsureExists();
+	                if (mu.numPOV > 1) {
+	                    if (!_multiViewUndoCapturesArmed) {
+	                        if (PaintUndo_MGR.instance != null && PaintUndo_MGR.instance.IsBusy)
+	                            return;
+	                        for (int i = 0; i < mu._ObjectUV_brushedMaskR8.Count; i++) {
+	                            var uvMask = mu._ObjectUV_brushedMaskR8[i];
+	                            if (uvMask != null && uvMask.texArray != null)
+	                                PaintUndo_MGR.instance?.SchedulePreStrokeCapture(
+	                                    uvMask, PaintUndoNonStackTarget.ProjectionGenMask, i);
+	                        }
+	                        _multiViewUndoCapturesArmed = true;
+	                    }
+	                    if (PaintUndo_MGR.instance != null && PaintUndo_MGR.instance.IsBusy)
+	                        return;
+	                } else if (isFirstFrameOfStroke && povIx >= 0 && povIx < mu._ObjectUV_brushedMaskR8.Count) {
+	                    var uvMask = mu._ObjectUV_brushedMaskR8[povIx];
+	                    if (uvMask != null && uvMask.texArray != null) {
+	                        PaintUndo_MGR.instance?.SchedulePreStrokeCapture(
+	                            uvMask, PaintUndoNonStackTarget.ProjectionGenMask, povIx);
+	                    }
 	                }
 	            }
 	            _applyBrushStroke_toUvMask.Apply_into_MaskUtils(prevBrushStroke_R8, currBrushStroke_R8,  sign,  genData._masking_utils, povIx);
@@ -260,6 +278,7 @@ namespace spz {
 
 
 	    protected override void OnFinal_ApplyIncomingVals_intoMask( RenderTexture prevBrushStroke_R8, RenderTexture currBrushStroke_R8 ){
+	        _multiViewUndoCapturesArmed = false;
 	        Act_OnPaintStrokeEnd?.Invoke();
 	    }
     
