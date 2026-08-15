@@ -73,15 +73,15 @@ class SpzGoMeshStreamContractTests(unittest.TestCase):
         self.assertGreater(thread_at, stream_at)
         self.assertGreater(fallback_at, thread_at)
         self.assertIn("post_export_3d_to_path", src[worker_at:operator_at])
-        self.assertIn("_stream_skip_next_ready_fbx = True", src)
-        self.assertIn("textures continue in background", src)
+        self.assertIn("_stream_skip_pending = True", src)
+        self.assertIn("materialize + textures continue in background", src)
         drain_at = src.find("def _mesh_stream_drain_timer")
         self.assertGreater(drain_at, 0)
         drain_body = src[drain_at:src.find("def _request_stream_texture_completion", drain_at)]
         self.assertIn("materialize_next()", drain_body)
+        self.assertIn("_stream_skip_pending", drain_body)
+        self.assertIn("_stream_skip_next_ready_fbx = True", drain_body)
         self.assertNotIn("_stream_skip_next_ready_fbx = bool(created)", drain_body)
-        self.assertNotIn("_stream_skip_next_ready_fbx = True", drain_body)
-        self.assertIn("_stream_skip_next_ready_fbx = False", drain_body)
 
 
 if __name__ == "__main__":

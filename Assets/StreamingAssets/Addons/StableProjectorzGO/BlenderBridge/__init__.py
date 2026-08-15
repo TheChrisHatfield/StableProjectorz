@@ -447,6 +447,8 @@ _watch_cached_exchange_at = 0.0
 _watch_needs_seed = True
 # Successful stream materialization makes the next FBX a texture-completion artifact, not geometry to import.
 _stream_skip_next_ready_fbx = False
+# Set when go_import got a stream ACK; converted to _stream_skip_next_ready_fbx only after materialize succeeds.
+_stream_skip_pending = False
 _stream_texture_results = queue.Queue()
 
 
@@ -455,15 +457,18 @@ _GO_IMPORT_MAX_TICKS = 900  # 900 * 0.2s ≈ 180s fallback wait (HTTP path alrea
 
 def _mesh_stream_drain_timer():
     """Main-thread bridge from receiver queue to bpy mesh collections."""
-    global _stream_skip_next_ready_fbx
+    global _stream_skip_next_ready_fbx, _stream_skip_pending
     try:
         created = mesh_stream.materialize_next()
-        # go_import arms _stream_skip_next_ready_fbx; watch/texture paths clear it after
-        # consuming the textures-only FBX stamp. Do not re-arm on materialize success —
-        # a late duplicate packet after skip was cleared would skip the next real FBX import.
-        if created is not None and not created:
-            _stream_skip_next_ready_fbx = False
+        if created is not None:
+            if created and _stream_skip_pending:
+                # Arm textures-only skip exactly once per intentional stream ACK.
+                _stream_skip_next_ready_fbx = True
+            elif not created:
+                _stream_skip_next_ready_fbx = False
+            _stream_skip_pending = False
     except Exception as e:
+        _stream_skip_pending = False
         _stream_skip_next_ready_fbx = False
         print("SPZ GO mesh stream materialize:", e)
     deferred = []
@@ -900,7 +905,7 @@ class SPZ_OT_go_import(Operator):
     )
 
     def execute(self, context):
-        global _go_timer_state, _stream_skip_next_ready_fbx
+        global _go_timer_state, _stream_skip_next_ready_fbx, _stream_skip_pending
         p = prefs()
         fbx, err = _spz_headless_out_fbx()
         if fbx is None:
@@ -920,8 +925,8 @@ class SPZ_OT_go_import(Operator):
                     if isinstance(streamed, dict) and streamed.get("success") is True:
                         streamed_ok = True
                         stream_count = int(streamed.get("mesh_count", 0) or 0)
-                        # Geometry is already (or soon) in Blender; keep FBX for textures only.
-                        _stream_skip_next_ready_fbx = True
+                        # Packet is queued; arm textures-only skip only after materialize succeeds.
+                        _stream_skip_pending = True
                     else:
                         print("SPZ GO: direct mesh stream unavailable; falling back to FBX:", streamed)
                 except spz_http.SpzHttpError as e:
@@ -939,7 +944,7 @@ class SPZ_OT_go_import(Operator):
             ).start()
             self.report(
                 {"INFO"},
-                f"SPZ stream queued ({stream_count} mesh(es)); textures continue in background",
+                f"SPZ stream queued ({stream_count} mesh(es)); materialize + textures continue in background",
             )
             return {"FINISHED"}
         # Snapshot before SPZ rewrite so the wait timer does not import a stale exchange FBX.
