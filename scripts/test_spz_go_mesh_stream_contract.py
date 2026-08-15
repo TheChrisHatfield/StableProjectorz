@@ -45,6 +45,14 @@ class SpzGoMeshStreamContractTests(unittest.TestCase):
         self.assertIn('@app.post("/api/v1/export/mesh_stream"', http_src)
         self.assertIn('"spz.cmd.stream_mesh_to_blender"', http_src)
 
+    def test_mesh_stream_http_timeout_matches_long_op(self):
+        src = (EXTERNAL / "spz_http.py").read_text(encoding="utf-8")
+        at = src.find("def post_mesh_stream")
+        self.assertGreater(at, 0)
+        body = src[at : src.find("\ndef ", at + 1)]
+        self.assertIn("timeout_s=300.0", body)
+        self.assertNotIn("timeout_s=30.0", body)
+
     def test_in_app_export_streams_before_fbx_and_keeps_fallback(self):
         src = IN_APP.read_text(encoding="utf-8")
         stream_at = src.find('"spz.cmd.stream_mesh_to_blender"')
