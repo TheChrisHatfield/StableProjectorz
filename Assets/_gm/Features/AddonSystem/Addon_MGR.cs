@@ -1544,7 +1544,7 @@ namespace spz {
 				req.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(body));
 				req.downloadHandler = new DownloadHandlerBuffer();
 				req.SetRequestHeader("Content-Type", "application/json");
-				req.timeout = 8; // avoid indefinite stalls on addon load wiring
+				req.timeout = 120; // register()/create_panel can exceed 8s under main-thread RPC load
 				yield return req.SendWebRequest();
 				if (epoch >= 0 && !IsLifecycleEpochCurrent(addonId, epoch))
 					yield break;
