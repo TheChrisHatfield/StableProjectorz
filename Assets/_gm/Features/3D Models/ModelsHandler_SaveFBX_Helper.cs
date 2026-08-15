@@ -55,8 +55,7 @@ namespace spz {
 					}
 					FbxScene scene = FbxScene.Create(fbxManager, "StableProjectorz Scene");
 					FbxNode fbxRootNode = scene.GetRootNode();
-					Vector3 rootLocalRot_adj = new Vector3(90, -90, 180);
-					FBX_ExportComponents(saveMe, rootLocalRot_adj, scene, fbxRootNode);
+					FBX_ExportComponents(saveMe, scene, fbxRootNode);
 					if (!exporter.Export(scene)) {
 						UnityEngine.Debug.LogError(
 							"[SPZ] FBX Export() failed: " + exporter.GetStatus().GetErrorString()
@@ -157,42 +156,38 @@ namespace spz {
 
 
 	    // https://github.com/Unity-Technologies/com.autodesk.fbx/blob/master/examples/export/Assets/Editor/FbxExporter02.cs
-	    // root_rotAdjust: local rotation of go gets adjusted by these angles. But children have no such adjustments.
-	    protected void FBX_ExportComponents(GameObject go, Vector3 root_rotAdjust, FbxScene fbxScene, FbxNode fbxNodeParent){
+	    // Every node (root included) is written with the same handedness conversion — see ExportTransform.
+	    protected void FBX_ExportComponents(GameObject go, FbxScene fbxScene, FbxNode fbxNodeParent){
 	        // create an node and add it as a child of parent
 	        FbxNode fbxNode = FbxNode.Create(fbxScene,  go.name);
 	        fbxNodeParent.AddChild(fbxNode);
 
-	        ExportTransform(go, root_rotAdjust, fbxNode);
+	        ExportTransform(go, fbxNode);
 	        ExportMesh( GetMeshInfo(go), fbxNode, fbxScene);
-
-	        root_rotAdjust = Vector3.zero;//consecutive children won't get rotation adjustment (only first obj could).
 
 	        // now  unityGo  through our children and recurse
 	        foreach (Transform childT in  go.transform){
-	            FBX_ExportComponents(childT.gameObject, root_rotAdjust, fbxScene, fbxNode);
+	            FBX_ExportComponents(childT.gameObject, fbxScene, fbxNode);
 	        }
 	    }
 
     
-	    void ExportTransform( GameObject go, Vector3 rotAdjust, FbxNode fbxNode){
+	    /// <summary>
+	    /// Unity is left-handed Y-up; FBX is right-handed Y-up. Mirroring x (vertices, normals,
+	    /// translations, plus reversed winding) is the whole conversion, so <b>up stays Y</b> and
+	    /// Blender's Y-up → Z-up import lands the model upright. Do not bake an extra axis rotation
+	    /// into the model root: upstream wrote (90,-90,180) there, which tipped exported figures onto
+	    /// their side in Blender and double-rotated the FBX we re-import on project load
+	    /// (<see cref="Objs3D_Container"/> already compensates Assimp's MakeLeftHanded with 180° yaw).
+	    /// </summary>
+	    void ExportTransform( GameObject go, FbxNode fbxNode){
 	        Transform tr = go.transform;
 	        var fbxTranslate = new FbxDouble3(-tr.localPosition.x, tr.localPosition.y, tr.localPosition.z);
-	        FbxDouble3 fbxRotate;
-	        bool isRootWithAdjust = rotAdjust != Vector3.zero;
-	        if (isRootWithAdjust){
-	            // Legacy tuned root formula — rootLocalRot_adj was calibrated against these
-	            // quaternion components; keep byte-identical output for the model root.
-	            fbxRotate = new FbxDouble3( tr.localRotation.x+rotAdjust.x, 
-	                                       -tr.localRotation.y+rotAdjust.y, 
-	                                       -tr.localRotation.z+ rotAdjust.z );
-	        }else{
-	            // Children: quaternion x/y/z are NOT degrees — a 45° in-SPZ rotation exported as ~0.4°,
-	            // silently discarding user rotations on the SPZ→Blender trip. Use Euler degrees,
-	            // mirrored for the -x handedness flip (rotations about Y/Z negate under that mirror).
-	            Vector3 e = tr.localEulerAngles;
-	            fbxRotate = new FbxDouble3( e.x, -e.y, -e.z );
-	        }
+	        // Quaternion x/y/z are NOT degrees — a 45° in-SPZ rotation exported as ~0.4°, silently
+	        // discarding user rotations on the SPZ→Blender trip. Use Euler degrees, mirrored for the
+	        // -x handedness flip (rotations about Y/Z negate under that mirror).
+	        Vector3 e = tr.localEulerAngles;
+	        var fbxRotate = new FbxDouble3( e.x, -e.y, -e.z );
 	        var fbxScale = new FbxDouble3(tr.localScale.x, tr.localScale.y, tr.localScale.z);
 	        fbxNode.LclTranslation.Set(fbxTranslate);
 	        fbxNode.LclRotation.Set(fbxRotate);
