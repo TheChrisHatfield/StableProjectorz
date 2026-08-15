@@ -106,6 +106,18 @@ namespace spz.EditorTests {
 		}
 
 		[Test]
+		public void TrySendPacket_RejectsNonLoopbackHosts() {
+			Assert.That(SpzGoMeshStream.IsLoopbackHost("127.0.0.1"), Is.True);
+			Assert.That(SpzGoMeshStream.IsLoopbackHost("localhost"), Is.True);
+			Assert.That(SpzGoMeshStream.IsLoopbackHost("::1"), Is.True);
+			Assert.That(SpzGoMeshStream.IsLoopbackHost("8.8.8.8"), Is.False);
+			Assert.That(
+				SpzGoMeshStream.TrySendPacket("8.8.8.8", SpzGoMeshStream.DefaultPort, new byte[SpzGoMeshStream.HeaderBytes], out var error),
+				Is.False);
+			Assert.That(error, Does.Contain("loopback"));
+		}
+
+		[Test]
 		public void StreamCommand_RefusesWhileTextureExportOwnsSavePipeline() {
 			var saveGo = new GameObject("Save");
 			var fastGo = new GameObject("FastPath");
