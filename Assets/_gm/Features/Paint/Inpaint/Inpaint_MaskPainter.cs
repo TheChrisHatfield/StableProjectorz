@@ -83,6 +83,9 @@ namespace spz {
 	    Vector2 _valueAssistLiveLastVp01 = new Vector2(-1f, -1f);
 	    float _valueAssistLiveLastTime;
 	    GraphicsFormat _valueAssistLivePendingFormat;
+	    // Live tinted the brush ring — restore the tool-default cursor color when Live ends,
+	    // otherwise the last band tint sticks until an unrelated tool/direction event.
+	    bool _valueAssistCursorTinted;
 
 	    [Tooltip("Auto: contextual Thompson + layer opacity steers underlay policy. With a paint layer stack present, smudge writes are fenced to ActiveLayer.Content; GeneratedMesh applies only when no layer stack is active.")]
 	    [SerializeField] SmudgeWriteTargetPreference _smudgeWriteTargetPreference = SmudgeWriteTargetPreference.Auto;
@@ -1073,7 +1076,10 @@ namespace spz {
 	    /// <summary>Value Assist live predict: throttled GPU texel under cursor → MLP → quiet ribbon arm.</summary>
 	    void UpdateValueAssistLiveCursorSample()
 	    {
-		    if (!ValuePaintLivePredictor.IsLiveActive) return;
+		    if (!ValuePaintLivePredictor.IsLiveActive) {
+			    RestoreValueAssistCursorTint_IfHeld();
+			    return;
+		    }
 		    if (_valueAssistLiveReadInFlight) return;
 		    var sd = SD_WorkflowOptionsRibbon_UI.instance;
 		    if (sd == null || sd.isSmudge || !sd.isPositive) return;
@@ -1133,7 +1139,20 @@ namespace spz {
 			    Cursor_UI.instance.SetCursorColor(sdRibbon != null
 				    ? sdRibbon.brushColor
 				    : ValuePaintProposalApplier.ColorAtDesiredValue(c, ValuePaintLivePredictor.LastProposal.DesiredBin));
+			    _valueAssistCursorTinted = true;
 		    }
+	    }
+
+	    /// <summary>Live ended — hand the brush ring back to the tool default (white/black per direction).</summary>
+	    void RestoreValueAssistCursorTint_IfHeld()
+	    {
+		    if (!_valueAssistCursorTinted) return;
+		    _valueAssistCursorTinted = false;
+		    var sd = SD_WorkflowOptionsRibbon_UI.instance;
+		    if (Cursor_UI.instance == null || sd == null) return;
+		    // Smudge hover owns the ring tint while smudging — do not fight it.
+		    if (sd.isSmudge) return;
+		    Cursor_UI.instance.SetCursorColor(sd.isPositive ? Color.white : Color.black);
 	    }
 
 	    /// <summary>While smudge is active, tint the viewport brush ring from the mesh accumulation color under the cursor (throttled GPU readback).</summary>
