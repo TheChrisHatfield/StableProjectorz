@@ -695,6 +695,14 @@ namespace spz {
 			switch (action) {
 				case "3d_with_textures":
 					return ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.export_3d_with_textures", new JObject()));
+				case "mesh_stream": {
+					var streamParams = new JObject {
+						["host"] = body?["host"]?.ToString() ?? "127.0.0.1",
+						["port"] = body?["port"]?.ToObject<int>() ?? SpzGoMeshStream.DefaultPort,
+						["codec"] = body?["codec"]?.ToString() ?? "gzip",
+					};
+					return ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.stream_mesh_to_blender", streamParams));
+				}
 				case "3d_to_path": {
 					if (body?["mesh_filepath"] == null) {
 						return new JObject { ["error"] = "JSON body {\"mesh_filepath\": ...} required" };

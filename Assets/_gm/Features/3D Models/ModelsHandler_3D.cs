@@ -314,6 +314,31 @@ namespace spz {
 		    _importHelper.ExportModelToPath( absolutePath );
 	    }
 
+	    /// <summary>
+	    /// Capture the live model at authoring scale and send it to the Blender SPZ GO loopback listener.
+	    /// The fit-to-volume transform is restored even when serialization or transport fails.
+	    /// </summary>
+	    public bool TryStreamCurrentModelToBlender( string host, int port, bool useGzip, out int meshCount, out string error ){
+		    meshCount = 0;
+		    error = null;
+		    if( o3d==null || o3d.currModelRootGO==null ){
+			    error = "no current model";
+			    return false;
+		    }
+		    bool undidFit = o3d.TryBeginFbxExportAuthoringScale( out var restoreScale );
+		    try {
+			    if( !SpzGoMeshStream.TryBuildPacket(
+				    o3d.currModelRootGO, useGzip, out byte[] packet, out meshCount, out error ) ){
+				    return false;
+			    }
+			    return SpzGoMeshStream.TrySendPacket( host, port, packet, out error );
+		    } finally {
+			    if( undidFit ){
+				    o3d.EndFbxExportAuthoringScale( restoreScale );
+			    }
+		    }
+	    }
+
 	    /// <summary>Import a mesh from a file (same as Load model). Returns false if busy or file invalid.</summary>
 	    public bool TryImportModelFromFile( string absolutePath ){
 		    if( _importHelper==null || string.IsNullOrEmpty( absolutePath ) ){
