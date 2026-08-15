@@ -47,7 +47,13 @@ namespace spz {
 	        void OnReady1() => StartCoroutine( WaitForRenderAll_crtn(skipAO_blit:true, OnReady2) );
      
 	        void OnReady2(){//save + ensure albedo won't be deleted, - we'll keep using it in new generation:
-	            Save_Mesh_Textures(OnHaveAlbedo, "", isDilate: false, forbid_albedoDelete: true);
+	            Save_Mesh_Textures(OnHaveAlbedo, "", isDilate: false, forbid_albedoDelete: true,
+		            onComplete: ClearSavingIfStillHeld);
+	        }
+
+	        void ClearSavingIfStillHeld(){
+		        // Save_Mesh_Textures catch path only runs onComplete — never leave MergeIcons sticky.
+		        if (_isSaving) _isSaving = false;
 	        }
 
 	        void OnHaveAlbedo( Dictionary<Texture2D,UDIM_Sector> albedoDict ){
@@ -410,8 +416,11 @@ namespace spz {
 	        GetBasePathForTextures(defaultName, OnReady);
         
 	        void OnReady(string file){
-	            OnBasePathForTextures_Chosen(file, saveMe, destroyTexs);
-	            _isSaving=false;
+	            try {
+	                OnBasePathForTextures_Chosen(file, saveMe, destroyTexs);
+	            } finally {
+	                _isSaving = false;
+	            }
 	        }
 	    }
 
@@ -599,6 +608,7 @@ namespace spz {
 	    void Save_Mesh_Textures( Action<Dictionary<Texture2D,UDIM_Sector>> onHaveAlbedo=null,  
 	                            string save_to_basePath="",  bool isDilate=false,
 	                            bool forbid_albedoDelete = false,  Action onComplete=null){
+	        bool albedoCallbackDelivered = false;
 	        try {
 	            Dictionary<Texture2D,UDIM_Sector> albedo;
 	            Dictionary<Texture2D,UDIM_Sector> ao;
@@ -609,9 +619,11 @@ namespace spz {
 
 	            if(albedo==null && ao==null){
 	                onHaveAlbedo?.Invoke(null);
+	                albedoCallbackDelivered = true;
 	                return;
 	            }
 	            onHaveAlbedo?.Invoke(albedo);
+	            albedoCallbackDelivered = true;
 
 	            if( save_to_basePath!=""){
 	                string pathAlbedo = MakeUniquePath(save_to_basePath, "");
@@ -625,6 +637,9 @@ namespace spz {
 	            if(ao_destroyWhenDone && ao != null){     foreach(var kvp in ao){Texture.DestroyImmediate(kvp.Key);}   }
 	        } catch (System.Exception e) {
 	            UnityEngine.Debug.LogError("[Save_MGR] Save_Mesh_Textures failed: " + e.Message);
+	            // MergeIcons and similar callers only pass onHaveAlbedo — without this they hang busy forever.
+	            if (!albedoCallbackDelivered)
+		            onHaveAlbedo?.Invoke(null);
 	        } finally {
 	            onComplete?.Invoke();
 	        }
