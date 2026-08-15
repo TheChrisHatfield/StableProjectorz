@@ -49,6 +49,9 @@ namespace spz {
 		LayoutElement _panelLe;
 		bool _suppressToggleSync;
 		bool _proposalFromNeural;
+		// True only when the pending proposal actually ran a Decimacon forward — user Accept/Dismiss
+		// outcomes may train the LAVD bandit only for measured neural work (never deterministic).
+		bool _proposalRanNeuralForward;
 		bool _haveSyncedNeuralPref;
 		bool _collapsed;
 		bool _headerWired;
@@ -617,6 +620,7 @@ namespace spz {
 			_proposalBaseColor = sample;
 			_hasProposal = true;
 			_proposalFromNeural = PaintTab_ValueAssistOptions.UseNeural;
+			_proposalRanNeuralForward = neuralForward;
 			_haveSyncedNeuralPref = true;
 			if (_acceptBtn != null) _acceptBtn.interactable = true;
 			if (_swatchImg != null)
@@ -638,7 +642,9 @@ namespace spz {
 			}
 			bool ok = ValuePaintProposalApplier.TryAccept(_proposal, _proposalBaseColor, out string reason);
 			if (ok) {
-				spz.MlpDecimacon.DecimaconProductGate.ReportUserOutcome(accepted: true);
+				// Bandit outcome only for measured neural work (deterministic ran no forward).
+				if (_proposalRanNeuralForward)
+					spz.MlpDecimacon.DecimaconProductGate.ReportUserOutcome(accepted: true);
 				// Snapshot consumed — Accept locks the brush; pending Propose UI must release so Armed status works.
 				_hasProposal = false;
 				if (_acceptBtn != null) _acceptBtn.interactable = false;
@@ -656,7 +662,11 @@ namespace spz {
 		}
 
 		void OnDismiss() {
-			spz.MlpDecimacon.DecimaconProductGate.ReportUserOutcome(accepted: false);
+			// Only a pending NEURAL proposal earns a negative bandit outcome. Dismiss with nothing
+			// pending (double-Dismiss, dismiss-after-accept) or with a deterministic proposal must
+			// not punish whatever arm the last unrelated dispatch happened to select.
+			if (_hasProposal && _proposalRanNeuralForward)
+				spz.MlpDecimacon.DecimaconProductGate.ReportUserOutcome(accepted: false);
 			ClearPendingProposal(null);
 			ValuePaintProposalApplier.ClearArmed();
 			// Stop Live from immediately re-arming under the tip; clear when Live dial turns on again.
