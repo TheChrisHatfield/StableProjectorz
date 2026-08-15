@@ -118,6 +118,9 @@ namespace spz {
 	        string statusMsg = $"Importing failed.\nError: {errorMsg}";
 	        Viewport_StatusText.instance?.ShowStatusText(statusMsg, false, 15, true);
 	        Resources.UnloadUnusedAssets();
+	        // Never leave a deferred project-load SL attached to a failed/aborted import —
+	        // the next successful import would otherwise apply the wrong mesh metadata.
+	        _modelsHandler_SL = null;
 	        _lastImportSucceeded = false;
 	        _isImportingModel = false;
 	        _Act_onImportComplete?.Invoke(false, null);
@@ -128,6 +131,7 @@ namespace spz {
         
 	        Resources.UnloadUnusedAssets();
 	        if(loadedRoot == null){
+		        _modelsHandler_SL = null;
 		        _lastImportSucceeded = false;
 		        _isImportingModel = false;
 		        _Act_onImportComplete?.Invoke(false, null);
@@ -147,6 +151,7 @@ namespace spz {
 		        return;
 	        }
 	        if(!success){
+		        _modelsHandler_SL = null;
 		        _lastImportSucceeded = false;
 		        _isImportingModel = false;
 		        _Act_onImportComplete?.Invoke(false, _latestSuccessRoot);
@@ -410,7 +415,7 @@ namespace spz {
 	            Exception writeEx = null;
 	            SaveCachedMesh_toFile(fp,
 		            afterMeshWritten: _ => { wrote = true; },
-		            onCancelledOrFailed: () => { writeEx = new InvalidException("cached mesh write failed"); });
+		            onCancelledOrFailed: () => { writeEx = new InvalidOperationException("cached mesh write failed"); });
 	            // Path-provided SaveCachedMesh is synchronous.
 	            if (!wrote) {
 		            throw writeEx ?? new InvalidOperationException("cached mesh write failed for project save");
@@ -430,9 +435,43 @@ namespace spz {
 
 
 	    public void Load(ModelsHandler_3D_SL sl, string dataDir){
-	        _modelsHandler_SL = sl;
+	        if (!TryLoad(sl, dataDir, out var error)) {
+		        Debug.LogWarning("[ModelsHandler3D_ImportHelper] Project mesh Load refused: " + error);
+	        }
+	    }
+
+	    /// <summary>
+	    /// Attach project mesh SL only when a new import can actually start.
+	    /// Otherwise a concurrent import's completion would apply the wrong SL.
+	    /// </summary>
+	    public bool TryLoad(ModelsHandler_3D_SL sl, string dataDir, out string error){
+	        error = null;
+	        if (sl == null) {
+		        error = "project mesh payload is null";
+		        return false;
+	        }
+	        if (_isImportingModel) {
+		        error = "another mesh import is already in flight";
+		        return false;
+	        }
+	        if (string.IsNullOrEmpty(dataDir) || string.IsNullOrEmpty(sl.currModelRootGO)) {
+		        error = "project mesh path is missing";
+		        return false;
+	        }
 	        string fp = Path.Combine(dataDir, sl.currModelRootGO);
-	        ImportModel_via_Filepath( fp );
+	        if (!File.Exists(fp)) {
+		        error = "3d-model file doesn't exist: " + fp;
+		        return false;
+	        }
+	        _modelsHandler_SL = sl;
+	        ImportModel_via_Filepath(fp);
+	        if (!_isImportingModel) {
+		        // ImportModel_via_Filepath cleared itself via OnError without starting.
+		        _modelsHandler_SL = null;
+		        error = "mesh import failed to start";
+		        return false;
+	        }
+	        return true;
 	    }
 
 

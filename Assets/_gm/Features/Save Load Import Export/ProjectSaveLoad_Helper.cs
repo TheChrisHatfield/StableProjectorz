@@ -280,7 +280,8 @@ namespace spz {
 	            LeftRibbon_UI.instance?.Load(spz);
 	            UserCameras_MGR.instance?.Load(spz);
 
-	            ModelsHandler_3D.instance?.Load(spz);//befores the projector cameras
+	            bool meshLoadOk = ModelsHandler_3D.instance == null
+		            || ModelsHandler_3D.instance.Load(spz);// before the projector cameras
 	            ModelsHandler_3D_UI.instance?.Load(spz);
 	            ProjectorCameras_MGR.instance?.Load(spz);
 	            SD_InputPanel_UI.instance?.Load(spz);
@@ -327,7 +328,11 @@ namespace spz {
 
 	            // Same as SaveProj: so GetProjectDataDirOrSession / SPZ GO exchange use this project, not a prior save or session folder.
 	            _last_saveFilepath = spzFilepath;
-	            LastProjectLoadSucceeded = true;
+	            LastProjectLoadSucceeded = meshLoadOk;
+	            if (!meshLoadOk) {
+		            resultMessage_ = (resultMessage_ ?? "Loaded project JSON")
+			            + " — but mesh import could not start (another import is in flight or the mesh file is missing).";
+	            }
             
 	            onResult?.Invoke(resultMessage_);
 	            }
