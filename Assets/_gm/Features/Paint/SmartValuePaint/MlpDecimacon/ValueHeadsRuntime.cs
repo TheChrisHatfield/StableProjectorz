@@ -30,27 +30,80 @@ namespace spz.MlpDecimacon {
 		public static bool TryLoad(out ValueHeadsWeightsDto dto, out string error) {
 			dto = null;
 			error = null;
+			string source = "(unresolved)";
 			try {
 				string path = Path.Combine(Application.streamingAssetsPath, StreamingRelative.Replace('/', Path.DirectorySeparatorChar));
 				if (File.Exists(path)) {
+					source = path;
 					dto = JsonConvert.DeserializeObject<ValueHeadsWeightsDto>(File.ReadAllText(path));
 				} else {
+					source = "Resources/" + ResourcesPath;
 					var ta = Resources.Load<TextAsset>(ResourcesPath);
 					if (ta == null) {
-						error = "missing value heads at StreamingAssets/" + StreamingRelative;
+						error = "missing value heads: no file at " + path + " and no TextAsset at " + source;
 						return false;
 					}
 					dto = JsonConvert.DeserializeObject<ValueHeadsWeightsDto>(ta.text);
 				}
-				if (dto == null || dto.des_weight == null || dto.cur_weight == null) {
-					error = "invalid value heads json";
+				if (dto == null) {
+					error = "value heads json deserialized to null (" + source + ")";
+					return false;
+				}
+				if (!dto.Validate(out string invalidKey)) {
+					error = "invalid value heads json: " + invalidKey + " (" + source + ")";
 					return false;
 				}
 				return true;
 			} catch (Exception e) {
-				error = e.Message;
+				error = e.Message + " (" + source + ")";
 				return false;
 			}
+		}
+
+		/// <summary>
+		/// Shape-validate every tensor the forward pass indexes (brush-behavior B8.5).
+		/// A truncated or mis-exported head must fail here with the offending key, not
+		/// silently produce garbage proposals.
+		/// </summary>
+		public bool Validate(out string invalidKey) {
+			int w = width > 0 ? width : DecimaconDims.Width;
+			int f = feature_dim > 0 ? feature_dim : 7;
+			if (w <= 0) { invalidKey = "width=" + width; return false; }
+			if (!Check(cur_weight, 5 * w, "cur_weight", out invalidKey)) return false;
+			if (!Check(cur_bias, 5, "cur_bias", out invalidKey)) return false;
+			if (!Check(des_weight, 5 * w, "des_weight", out invalidKey)) return false;
+			if (!Check(des_bias, 5, "des_bias", out invalidKey)) return false;
+			if (!Check(role_weight, 5 * w, "role_weight", out invalidKey)) return false;
+			if (!Check(role_bias, 5, "role_bias", out invalidKey)) return false;
+			if (!Check(cont_weight, 4 * w, "cont_weight", out invalidKey)) return false;
+			if (!Check(cont_bias, 4, "cont_bias", out invalidKey)) return false;
+			// Feature projection is the trained input path (z = proj(features7)); when any part
+			// is present all of it must be, or the forward silently drops to the raw latent.
+			bool anyProj = feat_proj_weight != null || feat_proj2_weight != null;
+			if (anyProj) {
+				if (!Check(feat_proj_weight, w * f, "feat_proj_weight", out invalidKey)) return false;
+				if (!Check(feat_proj_bias, w, "feat_proj_bias", out invalidKey)) return false;
+				if (!Check(feat_proj2_weight, w * w, "feat_proj2_weight", out invalidKey)) return false;
+				if (!Check(feat_proj2_bias, w, "feat_proj2_bias", out invalidKey)) return false;
+			}
+			invalidKey = null;
+			return true;
+		}
+
+		static bool Check(float[] a, int expected, string key, out string invalidKey) {
+			if (a == null) { invalidKey = key + " missing"; return false; }
+			if (a.Length != expected) {
+				invalidKey = key + " length " + a.Length + " != expected " + expected;
+				return false;
+			}
+			for (int i = 0; i < a.Length; i++) {
+				if (!float.IsFinite(a[i])) {
+					invalidKey = key + " non-finite at " + i;
+					return false;
+				}
+			}
+			invalidKey = null;
+			return true;
 		}
 	}
 
@@ -77,6 +130,13 @@ namespace spz.MlpDecimacon {
 			_width = w.width > 0 ? w.width : DecimaconDims.Width;
 		}
 
+		/// <summary>
+		/// False when the trained feature projection drives the heads. Value heads were trained as
+		/// <c>z = proj(features7)</c> (train_decimacon_value_heads.py), so the stage-DAG fused latent
+		/// is deliberately not an input — see brush-behavior B8.7. Mixing it in breaks train parity.
+		/// </summary>
+		public bool UsesBodyLatent => _w.feat_proj_weight == null || _w.feat_proj2_weight == null;
+
 		public static bool TryCreate(out ValueHeadsRuntime runtime, out string error) {
 			runtime = null;
 			if (!ValueHeadsWeightsDto.TryLoad(out var dto, out error)) return false;
@@ -85,6 +145,8 @@ namespace spz.MlpDecimacon {
 		}
 
 		public Output Forward(float[] fused, float[] features7) {
+			// Trained path: z = proj2(gelu(proj(features7))). `fused` is only the untrained
+			// fallback latent (B8.7) — do not blend it in without retraining.
 			if (_w.feat_proj_weight != null && _w.feat_proj2_weight != null && features7 != null) {
 				Linear(_w.feat_proj_weight, _w.feat_proj_bias, features7, 7, _mid, _width);
 				for (int i = 0; i < _width; i++)
