@@ -92,7 +92,7 @@ namespace spz {
 	        if(isAllowedToShow_BrushCursorNow()){
 	            CursorPreviewUI_Reposition();
 	        }
-	        if(isAllowedToPaintNow(also_check_viewportHovered:false)  &&  MainViewport_UI.instance.isCursorHoveringMe() ){ 
+	        if(isAllowedToPaintNow(also_check_viewportHovered:false)  &&  (MainViewport_UI.instance?.isCursorHoveringMe() ?? false) ){ 
 	            OnPointerDown_maybe();
 	        }
 	        OnDrag_maybe();
