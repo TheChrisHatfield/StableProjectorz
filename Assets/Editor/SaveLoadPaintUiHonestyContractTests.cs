@@ -8,7 +8,7 @@ public sealed class SaveLoadPaintUiHonestyContractTests {
 		string path = Path.Combine(Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "Save Load Import Export", "Save_MGR.cs");
 		string src = File.ReadAllText(path);
-		int i = src.IndexOf("public void DoSaveProject()", System.StringComparison.Ordinal);
+		int i = src.IndexOf("public void DoSaveProject(string filepath)", System.StringComparison.Ordinal);
 		int j = src.IndexOf("public void DoLoadProject()", i, System.StringComparison.Ordinal);
 		string body = src.Substring(i, j - i);
 		Assert.That(body, Does.Contain("_isLoading"));

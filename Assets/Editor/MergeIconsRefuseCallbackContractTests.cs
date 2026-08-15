@@ -13,7 +13,7 @@ public sealed class MergeIconsRefuseCallbackContractTests {
 		Assert.That(File.Exists(path), Is.True);
 		string src = File.ReadAllText(path);
 		int merge = src.IndexOf("public void MergeIcons(", System.StringComparison.Ordinal);
-		int doSave = src.IndexOf("public void DoSaveProject()", merge, System.StringComparison.Ordinal);
+		int doSave = src.IndexOf("public void DoSaveProject(", merge, System.StringComparison.Ordinal);
 		string body = src.Substring(merge, doSave - merge);
 		Assert.That(body, Does.Contain("onHaveAlbedo?.Invoke(null)"));
 		Assert.That(body, Does.Contain("ClearSavingIfStillHeld"),

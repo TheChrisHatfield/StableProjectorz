@@ -12,7 +12,7 @@ public sealed class SaveMgrProjectSaveInFlightGuardContractTests {
 			"Assets", "_gm", "Features", "Save Load Import Export", "Save_MGR.cs");
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("IsProjectSaveDialogOrWriteInFlight"));
-		int i = src.IndexOf("public void DoLoadProject()", System.StringComparison.Ordinal);
+		int i = src.IndexOf("public void DoLoadProject(string filepath)", System.StringComparison.Ordinal);
 		string body = src.Substring(i, System.Math.Min(700, src.Length - i));
 		Assert.That(body, Does.Contain("IsProjectSaveDialogOrWriteInFlight()"));
 	}

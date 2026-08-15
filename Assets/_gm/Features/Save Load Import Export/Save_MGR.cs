@@ -82,7 +82,11 @@ namespace spz {
 		    return _saveLoad_helper != null && _saveLoad_helper.IsProjectSaveInFlight;
 	    }
 
-	    public void DoSaveProject(){
+	    public void DoSaveProject() {
+		    DoSaveProject(null);
+	    }
+
+	    public void DoSaveProject(string filepath){
 	        // Must not set _isSaving before SaveProject: that helper refuses while _isSaving and
 	        // would invoke saveFinalTex(null) without ever clearing a flag we already set (self-deadlock).
 	        if( _isSaving ){
@@ -126,7 +130,7 @@ namespace spz {
 		        if( Viewport_StatusText.instance != null )
 			        Viewport_StatusText.instance.ShowStatusText(msg, false, 6, false);
 	        };
-	        _saveLoad_helper.SaveProject( onReady1, onResultMessage );
+	        _saveLoad_helper.SaveProject( filepath, onReady1, onResultMessage );
         
 	        void onReady1(string path) {
 		        if( string.IsNullOrEmpty( path ) ){
@@ -144,7 +148,11 @@ namespace spz {
 	        }
 	    }
 
-	    public void DoLoadProject(){
+	    public void DoLoadProject() {
+		    DoLoadProject(null);
+	    }
+
+	    public void DoLoadProject(string filepath){
 	        // Align with FastPath_API.LoadProject — Ctrl+L / UI must not load over an in-flight export
 	        // or open a second dialog that clears _isLoading while the first load still runs.
 	        // Also refuse while Save Project dialog is open (_projectSaveInFlight before _isSaving).
@@ -175,7 +183,7 @@ namespace spz {
 	        _isLoading = true;
         
 	        // CHANGED: LoadProject is now Async, so we use a callback instead of 'out string'
-	        _saveLoad_helper.LoadProject( (resultMessage_) => {
+	        Action<string> onLoaded = (resultMessage_) => {
 	            try {
 	                Viewport_StatusText.instance?.ShowStatusText(resultMessage_, false, 6, false);
 	                //after loading, Unpress any ctrl, alt etc. Else unity might keep thinking they are still pressed:
@@ -190,7 +198,11 @@ namespace spz {
 		                _isLoading = false;
 	                }
 	            }
-	        });
+	        };
+	        if (!string.IsNullOrEmpty(filepath))
+		        _saveLoad_helper.LoadProjectFromPath(filepath, onLoaded);
+	        else
+		        _saveLoad_helper.LoadProject(onLoaded);
 	    }
 
 	    IEnumerator CoClearLoadingWhenImportIdle(){

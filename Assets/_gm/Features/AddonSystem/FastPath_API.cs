@@ -1658,7 +1658,7 @@ namespace spz {
 		/// Save project (shows file dialog)
 		/// Note: This is async - returns immediately, actual save happens in background
 		/// </summary>
-		public bool SaveProject() {
+		public bool SaveProject(string filepath = null) {
 			if (!_isInitialized) return false;
 			
 			var saveMGR = Save_MGR.instance;
@@ -1679,16 +1679,16 @@ namespace spz {
 				return false;
 			}
 			
-			// Use standard save with dialog
-			saveMGR.DoSaveProject();
+			// Null/empty filepath keeps the file dialog; HTTP/RPC may pass an explicit path.
+			saveMGR.DoSaveProject(filepath);
 			return true;
 		}
 		
 		/// <summary>
-		/// Load project (shows file dialog)
+		/// Load project. Null/empty <paramref name="filepath"/> shows the file dialog; otherwise loads that .spz.
 		/// Note: This is async - returns immediately, actual load happens in background
 		/// </summary>
-		public bool LoadProject() {
+		public bool LoadProject(string filepath = null) {
 			if (!_isInitialized) return false;
 			
 			var saveMGR = Save_MGR.instance;
@@ -1709,8 +1709,7 @@ namespace spz {
 				return false;
 			}
 			
-			// Use standard load with dialog
-			saveMGR.DoLoadProject();
+			saveMGR.DoLoadProject(filepath);
 			return true;
 		}
 		

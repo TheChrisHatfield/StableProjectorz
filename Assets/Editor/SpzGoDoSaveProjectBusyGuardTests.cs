@@ -13,7 +13,7 @@ public sealed class SpzGoDoSaveProjectBusyGuardTests {
 			"Assets", "_gm", "Features", "Save Load Import Export", "Save_MGR.cs");
 		Assert.That(File.Exists(path), Is.True);
 		string src = File.ReadAllText(path);
-		int method = src.IndexOf("public void DoSaveProject()");
+		int method = src.IndexOf("public void DoSaveProject(string filepath)", System.StringComparison.Ordinal);
 		Assert.That(method, Is.GreaterThan(0));
 		int nextMethod = src.IndexOf("public void DoLoadProject()", method + 1);
 		Assert.That(nextMethod, Is.GreaterThan(method));

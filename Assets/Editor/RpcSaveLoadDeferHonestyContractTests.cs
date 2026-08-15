@@ -30,7 +30,7 @@ public sealed class RpcSaveLoadDeferHonestyContractTests {
 		string path = Path.Combine(Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "AddonSystem", "FastPath_API.cs");
 		string src = File.ReadAllText(path);
-		int i = src.IndexOf("public bool SaveProject()", System.StringComparison.Ordinal);
+		int i = src.IndexOf("public bool SaveProject(", System.StringComparison.Ordinal);
 		string body = src.Substring(i, System.Math.Min(900, src.Length - i));
 		Assert.That(body, Does.Contain("IsProjectSaveInFlight"),
 			"Second RPC must not return true while the save dialog is still open.");
@@ -43,7 +43,7 @@ public sealed class RpcSaveLoadDeferHonestyContractTests {
 		string path = Path.Combine(Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "AddonSystem", "FastPath_API.cs");
 		string src = File.ReadAllText(path);
-		int i = src.IndexOf("public bool LoadProject()", System.StringComparison.Ordinal);
+		int i = src.IndexOf("public bool LoadProject(", System.StringComparison.Ordinal);
 		string body = src.Substring(i, System.Math.Min(900, src.Length - i));
 		Assert.That(body, Does.Contain("_isImportingModel"),
 			"Load must refuse while a mesh import is in flight.");
@@ -56,8 +56,8 @@ public sealed class RpcSaveLoadDeferHonestyContractTests {
 		string path = Path.Combine(Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "Save Load Import Export", "Save_MGR.cs");
 		string src = File.ReadAllText(path);
-		int saveAt = src.IndexOf("public void DoSaveProject()", System.StringComparison.Ordinal);
-		int loadAt = src.IndexOf("public void DoLoadProject()", System.StringComparison.Ordinal);
+		int saveAt = src.IndexOf("public void DoSaveProject(string filepath)", System.StringComparison.Ordinal);
+		int loadAt = src.IndexOf("public void DoLoadProject(string filepath)", System.StringComparison.Ordinal);
 		string saveBody = src.Substring(saveAt, System.Math.Min(1600, loadAt - saveAt));
 		string loadBody = src.Substring(loadAt, System.Math.Min(1600, src.Length - loadAt));
 		Assert.That(saveBody, Does.Contain("_isImportingModel"));
