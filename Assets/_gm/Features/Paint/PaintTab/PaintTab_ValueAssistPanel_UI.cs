@@ -13,10 +13,11 @@ namespace spz {
 
 		const string RootName = "ValueAssistPanel";
 		const string ExpandoName = "ValueAssistExpando";
+		const string CollapseBarName = "ValueAssistCollapseBtn";
 		const float FontSize = 9.5f;
 		const float DialRing = 18f;
 		const float DialHit = 22f;
-		const int UiChromeVersion = 10;
+		const int UiChromeVersion = 11;
 
 		// Match Brush options: start closed so the tool row stays usable.
 		static bool _sessionCollapsed = true;
@@ -36,8 +37,7 @@ namespace spz {
 		Button _proposeBtn;
 		Button _acceptBtn;
 		Button _dismissBtn;
-		Button _collapseBtn;
-		GameObject _pinnedCollapseGo;
+		GameObject _collapseBar;
 		Toggle _enabledToggle;
 		Toggle _neuralToggle;
 		Toggle _hardnessToggle;
@@ -223,7 +223,7 @@ namespace spz {
 		void OnEnable() {
 			PaintTab_ValueAssistOptions.Changed -= OnOptionsChanged;
 			PaintTab_ValueAssistOptions.Changed += OnOptionsChanged;
-			// Stay subscribed while collapsed — Leave SPZ must still unwind BoundChrome + pinned bar.
+			// Stay subscribed while collapsed — Leave SPZ must still unwind BoundChrome.
 			SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 			SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
 			if (_blendDial != null) {
@@ -237,49 +237,22 @@ namespace spz {
 		void OnDisable() {
 			PaintTab_ValueAssistOptions.Changed -= OnOptionsChanged;
 			// Do NOT unsubscribe ThemeChanged here — inactive panels must still Leave SPZ (CN menu litmus).
-			if (_pinnedCollapseGo != null)
-				_pinnedCollapseGo.SetActive(false);
 		}
 
 		void OnDestroy() {
 			PaintTab_ValueAssistOptions.Changed -= OnOptionsChanged;
 			SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
-			if (_pinnedCollapseGo != null) {
-				// Immediate: same-frame EnsureUnder must not Find a deferred-destroy pin.
-				UnityEngine.Object.DestroyImmediate(_pinnedCollapseGo);
-				_pinnedCollapseGo = null;
-			}
 		}
 
 		void ApplyThemeTokens() {
 			// ApplyContextMenuChrome self-silos (restore on builtin). Do not re-SolidSquare here —
 			// ThemeOwnedSection also skips this panel to avoid triple ownership crush.
 			SpzUiThemeOps.ApplyContextMenuChrome(gameObject);
-			// Pinned collapse lives under ScrollRect.viewport — outside this panel root.
-			ThemeOrRestorePinnedCollapse();
 			if (!SpzUiThemeOps.ShouldRecolorBoundChrome)
 				return;
 			var bg = GetComponent<Image>();
 			if (bg != null)
 				SpzUiThemeOps.ApplyRoundedControlSprite(bg, markEligible: true);
-		}
-
-		void ThemeOrRestorePinnedCollapse() {
-			if (_pinnedCollapseGo == null) return;
-			if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
-				SpzUiThemeOps.RestoreBoundChromeUnder(_pinnedCollapseGo.transform);
-				return;
-			}
-			var t = SpzUiThemeOps.Active;
-			var btn = _pinnedCollapseGo.GetComponent<Button>();
-			if (btn == null) return;
-			SpzUiThemeOps.EnsureSelectableHitFace(btn);
-			SpzUiThemeOps.ApplyBoundChromeSelectable(btn, t.controlBg, t.accent);
-			foreach (var tmp in _pinnedCollapseGo.GetComponentsInChildren<TextMeshProUGUI>(true)) {
-				if (tmp != null)
-					SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, t.textPrimary, 11f);
-			}
-			SpzUiThemeOps.ClearNonFaceRaycastsForTheme(btn);
 		}
 
 		void Update() {
@@ -381,7 +354,8 @@ namespace spz {
 			_proposeBtn = null;
 			_acceptBtn = null;
 			_dismissBtn = null;
-			_collapseBtn = null;
+			// Bar lives in the Tool Options viewport (not a child), so it survives this wipe — re-resolved below.
+			_collapseBar = null;
 			_enabledToggle = null;
 			_neuralToggle = null;
 			_hardnessToggle = null;
@@ -476,89 +450,19 @@ namespace spz {
 			var statusLe = _statusTmp.GetComponent<LayoutElement>() ?? _statusTmp.gameObject.AddComponent<LayoutElement>();
 			statusLe.minHeight = 15f;
 
-			// In-panel collapse (always reachable while scrolling the panel itself).
-			_collapseBtn = MakeBtn(transform, "Collapse ▲", new Color(0.22f, 0.28f, 0.36f, 1f), CollapseFromUi);
-			var collapseLe = _collapseBtn.GetComponent<LayoutElement>();
-			if (collapseLe != null) {
-				collapseLe.minWidth = 0f;
-				collapseLe.preferredWidth = -1f;
-				collapseLe.flexibleWidth = 1f;
-				collapseLe.minHeight = 26f;
-				collapseLe.preferredHeight = 28f;
-			}
-			AttachTip(_collapseBtn.gameObject, "Collapse\nClose Value Assist and return to the tool row.");
-
-			EnsurePinnedCollapseBar();
-
 			_acceptBtn.interactable = false;
+			EnsureCollapseBar();
 			ApplyEnabledChrome();
 			RefreshStatusLine();
 			RefreshHeaderLabel();
 			// Collapse applied by EnsureUnder after BuildUi — do not SetActive(false) mid-build.
 		}
 
-		void EnsurePinnedCollapseBar() {
-			var sr = GetComponentInParent<ScrollRect>();
-			if (sr == null || sr.viewport == null) return;
-
-			// Never reuse a viewport pin from a prior instance — Destroy() is deferred, so Find can
-			// adopt a doomed GO whose onClick still targets a destroyed MonoBehaviour (dead Collapse).
-			if (_pinnedCollapseGo == null) {
-				Transform existing = sr.viewport.Find("ValueAssistCollapseBtn");
-				if (existing != null)
-					UnityEngine.Object.DestroyImmediate(existing.gameObject);
-			}
-
-			if (_pinnedCollapseGo == null) {
-				const float collapseBarA = 0.78f;
-				const float collapseBarHoverA = 0.86f;
-				const float collapseBarPressA = 0.74f;
-				_pinnedCollapseGo = new GameObject("ValueAssistCollapseBtn");
-				_pinnedCollapseGo.transform.SetParent(sr.viewport, false);
-				var collapseRt = _pinnedCollapseGo.AddComponent<RectTransform>();
-				collapseRt.anchorMin = new Vector2(0f, 0f);
-				collapseRt.anchorMax = new Vector2(1f, 0f);
-				collapseRt.pivot = new Vector2(0.5f, 0f);
-				collapseRt.anchoredPosition = Vector2.zero;
-				collapseRt.offsetMin = new Vector2(6f, 4f);
-				collapseRt.offsetMax = new Vector2(-6f, 4f + 30f);
-				var collapseImg = _pinnedCollapseGo.AddComponent<Image>();
-				collapseImg.raycastTarget = true;
-				var btn = _pinnedCollapseGo.AddComponent<Button>();
-				btn.targetGraphic = collapseImg;
-				var colors = btn.colors;
-				colors.normalColor = new Color(0.22f, 0.28f, 0.36f, collapseBarA);
-				colors.highlightedColor = new Color(0.30f, 0.36f, 0.44f, collapseBarHoverA);
-				colors.pressedColor = new Color(0.17f, 0.22f, 0.30f, collapseBarPressA);
-				colors.selectedColor = colors.normalColor;
-				colors.disabledColor = new Color(0.22f, 0.28f, 0.36f, 0.45f);
-				btn.colors = colors;
-				collapseImg.color = colors.normalColor;
-
-				var txtGo = new GameObject("Label");
-				txtGo.transform.SetParent(_pinnedCollapseGo.transform, false);
-				var txtRt = txtGo.AddComponent<RectTransform>();
-				txtRt.anchorMin = Vector2.zero;
-				txtRt.anchorMax = Vector2.one;
-				txtRt.offsetMin = new Vector2(4, 0);
-				txtRt.offsetMax = new Vector2(-4, 0);
-				var tmp = txtGo.AddComponent<TextMeshProUGUI>();
-				tmp.font = TMP_Settings.defaultFontAsset;
-				tmp.fontSize = FontSize;
-				tmp.color = Color.white;
-				tmp.alignment = TextAlignmentOptions.Center;
-				tmp.raycastTarget = false;
-				tmp.text = "Collapse ▲";
-				AttachTip(_pinnedCollapseGo, "Collapse\nClose Value Assist and return to the tool row.");
-			}
-
-			// Always (re)bind to this panel instance — chrome rebuild / EnsureUnder must not leave a dead listener.
-			var pinBtn = _pinnedCollapseGo.GetComponent<Button>();
-			if (pinBtn != null) {
-				pinBtn.onClick.RemoveAllListeners();
-				pinBtn.onClick.AddListener(CollapseFromUi);
-			}
-			_pinnedCollapseGo.SetActive(false);
+		/// <summary>Same pinned "Collapse ▲" bar as Brush options — built by the shared Tool Options helper.</summary>
+		GameObject EnsureCollapseBar() {
+			_collapseBar = PaintTab_CollectPaintUI.EnsureToolOptionsCollapseBar(
+				transform.parent as RectTransform, gameObject, CollapseBarName, CollapseFromUi);
+			return _collapseBar;
 		}
 
 		void CollapseFromUi() {
@@ -566,15 +470,6 @@ namespace spz {
 			_collapsed = true;
 			_sessionCollapsed = true;
 			ApplyCollapsedChrome(scrollIntoView: false);
-		}
-
-		void SyncPinnedCollapseVisibility(bool open) {
-			if (_pinnedCollapseGo == null)
-				EnsurePinnedCollapseBar();
-			if (_pinnedCollapseGo == null) return;
-			_pinnedCollapseGo.SetActive(open);
-			if (open)
-				_pinnedCollapseGo.transform.SetAsLastSibling();
 		}
 
 		static GameObject MakeDialRow(Transform parent, string name, float height) {
@@ -613,12 +508,7 @@ namespace spz {
 
 		/// <summary>Close from Brush options accordion without scrolling.</summary>
 		public void ForceCollapse() {
-			// Always hide pin even when already collapsed — accordion open of Brush must not leave
-			// a leftover ValueAssistCollapseBtn covering the viewport bottom.
-			if (_collapsed && !gameObject.activeSelf) {
-				SyncPinnedCollapseVisibility(false);
-				return;
-			}
+			if (_collapsed) return;
 			_collapsed = true;
 			_sessionCollapsed = true;
 			ApplyCollapsedChrome(scrollIntoView: false);
@@ -640,8 +530,14 @@ namespace spz {
 			// Same as BrushOptsPanel: hide whole panel when closed (header stays in the tool row).
 			if (gameObject.activeSelf != open)
 				gameObject.SetActive(open);
+			var collapseBar = _collapseBar != null ? _collapseBar : EnsureCollapseBar();
+			if (collapseBar != null) {
+				if (collapseBar.activeSelf != open)
+					collapseBar.SetActive(open);
+				if (open)
+					collapseBar.transform.SetAsLastSibling();
+			}
 			RefreshHeaderLabel();
-			SyncPinnedCollapseVisibility(open);
 			var parent = transform.parent as RectTransform;
 			if (parent != null)
 				LayoutRebuilder.ForceRebuildLayoutImmediate(parent);
@@ -712,9 +608,12 @@ namespace spz {
 			if (ValuePaintProposalApplier.TryGetUserChromaBase(out Color chromaBase))
 				sample = chromaBase;
 			var sw = spz.MlpDecimacon.DecimaconProductGate.StartTimer();
+			// Deterministic assist runs no Decimacon forward — bandit gets hitch only, not a
+			// fabricated ranForward sample (measured-feedback-only LAVD lock).
+			bool neuralForward = _assist is MlpDecimaconPaintAssist;
 			_proposal = _assist.ProposeFromColor(sample, default);
 			spz.MlpDecimacon.DecimaconProductGate.EndInference(
-				lavd, spz.MlpDecimacon.DecimaconProductGate.ElapsedMs(sw), ranForward: true);
+				lavd, spz.MlpDecimacon.DecimaconProductGate.ElapsedMs(sw), ranForward: neuralForward);
 			_proposalBaseColor = sample;
 			_hasProposal = true;
 			_proposalFromNeural = PaintTab_ValueAssistOptions.UseNeural;

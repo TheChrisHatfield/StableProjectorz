@@ -52,6 +52,10 @@ namespace spz {
 				return false;
 			}
 			var sw = DecimaconProductGate.StartTimer();
+			// Measured-feedback-only: a deterministic assist (neural off / decimacon unavailable)
+			// runs no Decimacon forward, so the bandit must only observe the hitch — never a
+			// fabricated ranForward sample (LAVD lock).
+			bool neuralForward = _assist is MlpDecimaconPaintAssist;
 			var proposal = _assist.ProposeFromColor(surfaceSample, default);
 			float lum = DeterministicValuePaintAssist.Luminance01(surfaceSample);
 			ValuePaintBand plane = DeterministicValuePaintAssist.BandFromLuminance(lum);
@@ -64,10 +68,10 @@ namespace spz {
 			else
 				proposal.OpacityHint01 = Mathf.Lerp(proposal.OpacityHint01, OpacityForPlane(plane), 0.65f);
 			if (!ValuePaintProposalApplier.TryLiveArm(proposal, out reason)) {
-				DecimaconProductGate.EndInference(lavd, DecimaconProductGate.ElapsedMs(sw), ranForward: true, accuracy: 0.4f);
+				DecimaconProductGate.EndInference(lavd, DecimaconProductGate.ElapsedMs(sw), ranForward: neuralForward, accuracy: 0.4f);
 				return false;
 			}
-			DecimaconProductGate.EndInference(lavd, DecimaconProductGate.ElapsedMs(sw), ranForward: true);
+			DecimaconProductGate.EndInference(lavd, DecimaconProductGate.ElapsedMs(sw), ranForward: neuralForward);
 			LastProposal = proposal;
 			HasLastProposal = true;
 			return true;
