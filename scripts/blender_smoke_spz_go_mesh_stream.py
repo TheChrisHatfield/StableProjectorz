@@ -8,6 +8,7 @@ import sys
 import time
 
 import bpy
+import numpy as np
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -56,6 +57,27 @@ def main():
     assert len(obj.data.uv_layers) == 1
     assert tuple(round(v, 5) for v in obj.data.vertices[0].co) == (1.0, 3.0, 2.0)
     assert list(obj.data.polygons[0].vertices) == [2, 1, 0]
+    mesh_stream._pending.put(
+        mesh_stream.Transfer(
+            meshes=[
+                mesh_stream.MeshArrays(
+                    name="BrokenReplacement",
+                    positions=np.array([[1.0, 2.0]], dtype=np.float32),
+                    indices=np.array([], dtype=np.uint32),
+                    uv0=None,
+                )
+            ],
+            codec=mesh_stream.CODEC_NONE,
+        )
+    )
+    try:
+        mesh_stream.materialize_next()
+        raise AssertionError("invalid replacement unexpectedly materialized")
+    except RuntimeError:
+        pass
+    assert obj.name in bpy.data.objects
+    assert bool(obj.get("spz_mesh_stream"))
+    assert "BrokenReplacement" not in bpy.data.objects
     mesh_stream.stop_listener()
     bpy.data.objects.remove(obj, do_unlink=True)
     print("SPZ_MESH_STREAM_SMOKE_OK")
