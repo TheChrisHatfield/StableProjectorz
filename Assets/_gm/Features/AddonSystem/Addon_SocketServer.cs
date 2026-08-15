@@ -43,6 +43,8 @@ namespace spz {
 		
 		// Dictionary to store pending responses by request ID
 		private ConcurrentDictionary<string, JObject> _pendingResponses = new ConcurrentDictionary<string, JObject>();
+		/// <summary>Request ids the waiter already timed out on — late main-thread/coroutine completions must not re-park a response.</summary>
+		private ConcurrentDictionary<string, byte> _abandonedResponseIds = new ConcurrentDictionary<string, byte>();
 		
 		// Maximum commands to process per frame
 		private const int MAX_COMMANDS_PER_FRAME = 10;
@@ -359,10 +361,10 @@ namespace spz {
 					}
 					JObject response = ExecuteCommand(method, @params);
 					response["id"] = JToken.FromObject(id);
-					_pendingResponses[id] = response;
+					TryPublishPendingResponse(id, response);
 				}
 				catch (Exception e) {
-					_pendingResponses[id] = CreateErrorResponse(-32603, $"Internal error: {e.Message}", JToken.FromObject(id));
+					TryPublishPendingResponse(id, CreateErrorResponse(-32603, $"Internal error: {e.Message}", JToken.FromObject(id)));
 				}
 			});
 			
@@ -382,10 +384,29 @@ namespace spz {
 				elapsed += checkInterval;
 			}
 			
-			// Cleanup on timeout
+			// Cleanup on timeout — mark abandoned so a late ExecuteCommand / CoRespond* write is dropped.
+			_abandonedResponseIds[id] = 0;
 			_pendingResponses.TryRemove(id, out _);
 			UnityEngine.Debug.LogWarning($"[Addon_SocketServer] Command '{method}' timed out after {timeout}ms");
 			return CreateErrorResponse(-32603, "Command execution timeout", JToken.FromObject(id));
+		}
+
+		/// <summary>
+		/// Publish a JSON-RPC response for a waiter still holding <paramref name="id"/>.
+		/// No-ops when the background thread already timed out (avoids orphan dict entries and duplicate client retries).
+		/// </summary>
+		bool TryPublishPendingResponse(string id, JObject response) {
+			if (string.IsNullOrEmpty(id) || response == null)
+				return false;
+			if (_abandonedResponseIds.TryRemove(id, out _)) {
+				UnityEngine.Debug.LogWarning(
+					$"[Addon_SocketServer] Dropping late response for timed-out request id={id}");
+				return false;
+			}
+			if (!_pendingResponses.ContainsKey(id))
+				return false;
+			_pendingResponses[id] = response;
+			return true;
 		}
 
 		static bool IsLongRunningMethod(string method) {
@@ -433,16 +454,16 @@ namespace spz {
 			try {
 				result = ExecuteFastPathCommand(method, @params ?? new JObject());
 			} catch (Exception e) {
-				_pendingResponses[id] = CreateErrorResponse(-32603, $"Internal error: {e.Message}", JToken.FromObject(id));
+				TryPublishPendingResponse(id, CreateErrorResponse(-32603, $"Internal error: {e.Message}", JToken.FromObject(id)));
 				return;
 			}
 			bool started = result["success"]?.ToObject<bool>() ?? false;
 			if (!started) {
-				_pendingResponses[id] = new JObject {
+				TryPublishPendingResponse(id, new JObject {
 					["jsonrpc"] = "2.0",
 					["result"] = result,
 					["id"] = JToken.FromObject(id)
-				};
+				});
 				return;
 			}
 			string meshPath = @params?["mesh_filepath"]?.ToString() ?? "";
@@ -454,16 +475,16 @@ namespace spz {
 			try {
 				result = ExecuteFastPathCommand(method, @params ?? new JObject());
 			} catch (Exception e) {
-				_pendingResponses[id] = CreateErrorResponse(-32603, $"Internal error: {e.Message}", JToken.FromObject(id));
+				TryPublishPendingResponse(id, CreateErrorResponse(-32603, $"Internal error: {e.Message}", JToken.FromObject(id)));
 				return;
 			}
 			bool started = result["success"]?.ToObject<bool>() ?? false;
 			if (!started) {
-				_pendingResponses[id] = new JObject {
+				TryPublishPendingResponse(id, new JObject {
 					["jsonrpc"] = "2.0",
 					["result"] = result,
 					["id"] = JToken.FromObject(id)
-				};
+				});
 				return;
 			}
 			StartCoroutine(CoRespondWhenImportIdle(id, result));
@@ -505,11 +526,11 @@ namespace spz {
 					result["success"] = ok;
 					if (!ok) result["error"] = "load cancelled or failed";
 				}
-				_pendingResponses[id] = new JObject {
+				TryPublishPendingResponse(id, new JObject {
 					["jsonrpc"] = "2.0",
 					["result"] = result,
 					["id"] = JToken.FromObject(id)
-				};
+				});
 				yield break;
 			}
 
@@ -564,11 +585,11 @@ namespace spz {
 					result["error"] = "export cancelled or mesh not written";
 				}
 			}
-			_pendingResponses[id] = new JObject {
+			TryPublishPendingResponse(id, new JObject {
 				["jsonrpc"] = "2.0",
 				["result"] = result,
 				["id"] = JToken.FromObject(id)
-			};
+			});
 		}
 
 		IEnumerator CoRespondWhenImportIdle(string id, JObject result) {
@@ -594,11 +615,11 @@ namespace spz {
 			} else {
 				result["success"] = true;
 			}
-			_pendingResponses[id] = new JObject {
+			TryPublishPendingResponse(id, new JObject {
 				["jsonrpc"] = "2.0",
 				["result"] = result,
 				["id"] = JToken.FromObject(id)
-			};
+			});
 		}
 		
 		/// <summary>
@@ -2579,6 +2600,7 @@ namespace spz {
 					UnityEngine.Debug.LogWarning("[Addon_SocketServer] Listener thread did not terminate within timeout (quit).");
 			}
 			_pendingResponses.Clear();
+			_abandonedResponseIds.Clear();
 			while (_mainThreadQueue.TryDequeue(out _)) { }
 			try {
 				string markerPath = GetReadyMarkerPath(_port);
