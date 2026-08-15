@@ -48,6 +48,7 @@ _pending: queue.Queue[Transfer] = queue.Queue(maxsize=4)
 _listener_socket: Optional[socket.socket] = None
 _listener_thread: Optional[threading.Thread] = None
 _stop = threading.Event()
+_ready = threading.Event()
 _last_error = ""
 _bound_port = 0
 
@@ -169,7 +170,9 @@ def _listen() -> None:
         _bound_port = int(sock.getsockname()[1])
         sock.listen(2)
         sock.settimeout(0.5)
+        _last_error = ""
         print(f"SPZ GO mesh stream: listening on {DEFAULT_HOST}:{_bound_port}")
+        _ready.set()
         while not _stop.is_set():
             try:
                 conn, _addr = sock.accept()
@@ -181,6 +184,14 @@ def _listen() -> None:
         if not _stop.is_set():
             _last_error = str(exc)
             print("SPZ GO mesh stream listener:", exc)
+        try:
+            sock.close()
+        except OSError:
+            pass
+        if _listener_socket is sock:
+            _listener_socket = None
+        _ready.set()
+        return
     finally:
         try:
             sock.close()
@@ -193,15 +204,24 @@ def _listen() -> None:
 def start_listener(port: int = DEFAULT_PORT) -> bool:
     global _listener_thread, _bound_port, _last_error
     if _listener_thread is not None and _listener_thread.is_alive():
-        return _bound_port == int(port)
+        return _listener_socket is not None and _bound_port == int(port)
     if port < 1 or port > 65535:
         _last_error = "invalid listener port"
         return False
     _bound_port = int(port)
     _last_error = ""
     _stop.clear()
+    _ready.clear()
     _listener_thread = threading.Thread(target=_listen, name="SPZ GO Mesh Stream", daemon=True)
     _listener_thread.start()
+    # Bind runs asynchronously; do not report success until listen() is ready or failed.
+    if not _ready.wait(2.0):
+        _last_error = _last_error or "listener bind timed out"
+        stop_listener()
+        return False
+    if _listener_socket is None or _last_error:
+        stop_listener()
+        return False
     return True
 
 
