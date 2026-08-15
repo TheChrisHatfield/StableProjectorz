@@ -36,6 +36,14 @@ namespace spz {
 			public Vector2[] Uv;
 		}
 
+		static long CalculateMeshRawBytes(int nameBytes, int vertexCount, int indexCount, bool hasUv) {
+			return 12L
+			       + nameBytes
+			       + (long)vertexCount * 3L * sizeof(float)
+			       + (long)indexCount * sizeof(uint)
+			       + (hasUv ? (long)vertexCount * 2L * sizeof(float) : 0L);
+		}
+
 		public static bool TryBuildPacket(
 			GameObject root,
 			bool useGzip,
@@ -100,12 +108,19 @@ namespace spz {
 			try {
 				using (var rawStream = new MemoryStream())
 				using (var writer = new BinaryWriter(rawStream, new UTF8Encoding(false), leaveOpen: true)) {
+					long projectedRawBytes = 0;
 					foreach (var capture in captures) {
 						byte[] name = Encoding.UTF8.GetBytes(capture.Name);
 						if (name.Length > MaxNameBytes) {
 							Array.Resize(ref name, MaxNameBytes);
 						}
 						bool hasUv = capture.Uv != null && capture.Uv.Length == capture.Vertices.Length;
+						projectedRawBytes += CalculateMeshRawBytes(
+							name.Length, capture.Vertices.Length, capture.Triangles.Length, hasUv);
+						if (projectedRawBytes > MaxRawBytes) {
+							error = "raw mesh payload exceeds protocol limit";
+							return false;
+						}
 						writer.Write((ushort)name.Length);
 						writer.Write((ushort)(hasUv ? MeshFlagUv0 : 0u));
 						writer.Write((uint)capture.Vertices.Length);

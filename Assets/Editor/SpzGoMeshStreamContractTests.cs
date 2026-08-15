@@ -86,6 +86,26 @@ namespace spz.EditorTests {
 		}
 
 		[Test]
+		public void RawPayloadSize_IsPreflightedWithoutAllocatingHugeBuffers() {
+			var calculate = typeof(SpzGoMeshStream)
+				.GetMethod("CalculateMeshRawBytes", BindingFlags.Static | BindingFlags.NonPublic);
+			long bytes = (long)calculate.Invoke(null, new object[] {
+				SpzGoMeshStream.MaxNameBytes,
+				int.MaxValue,
+				int.MaxValue,
+				true,
+			});
+			Assert.That(bytes, Is.GreaterThan(SpzGoMeshStream.MaxRawBytes));
+
+			string source = File.ReadAllText(
+				Path.Combine(Application.dataPath, "_gm/Features/AddonSystem/SpzGoMeshStream.cs"));
+			int preflightAt = source.IndexOf("projectedRawBytes > MaxRawBytes", System.StringComparison.Ordinal);
+			int firstVertexWriteAt = source.IndexOf("writer.Write(p.x)", System.StringComparison.Ordinal);
+			Assert.That(preflightAt, Is.GreaterThan(0));
+			Assert.That(firstVertexWriteAt, Is.GreaterThan(preflightAt));
+		}
+
+		[Test]
 		public void StreamCommand_RefusesWhileTextureExportOwnsSavePipeline() {
 			var saveGo = new GameObject("Save");
 			var fastGo = new GameObject("FastPath");
