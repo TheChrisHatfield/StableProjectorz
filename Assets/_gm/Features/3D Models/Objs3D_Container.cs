@@ -142,6 +142,12 @@ namespace spz {
 	    }
 
 	    //this will prevent issues with depth-testing (when applying projections, painting, etc etc).
+	    /// <remarks>
+	    /// Rotation stays identity: <see cref="AssimpLoader"/> imports with <c>MakeLeftHanded</c>, which
+	    /// mirrors z and already lands a right-handed Y-up source (Blender/OBJ/glTF) in Unity orientation.
+	    /// A blanket 180° yaw here made every imported model face away from the viewport, so the FBX
+	    /// writer mirrors the same z axis instead of compensating with yaw.
+	    /// </remarks>
 	    void RescaleModel_fitIntoVolume(){
 	        // Always clear prior fit so a failed/empty Init cannot leave a stale factor for GO export undo.
 	        currModelRoot_scaleAfterImport = 1f;
@@ -166,7 +172,6 @@ namespace spz {
 		        currModelRoot_scaleAfterImport = 1f;
 		        currModelRootGO.transform.localScale = Vector3.one;
 		        currModelRootGO.transform.position = Vector3.zero;
-		        currModelRootGO.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
 		        UnityEngine.Debug.LogWarning("[Objs3D_Container] fit-to-volume skipped: mesh bounds were empty/degenerate.");
 		        return;
 	        }
@@ -176,7 +181,6 @@ namespace spz {
 
 	        currModelRootGO.transform.localScale =  Vector3.one*scaleFactor;
 	        currModelRootGO.transform.position -= totalBounds.center*scaleFactor;
-	        currModelRootGO.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
 	    }
 
 
