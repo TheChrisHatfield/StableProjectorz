@@ -44,6 +44,16 @@ namespace spz {
 			       + (hasUv ? (long)vertexCount * 2L * sizeof(float) : 0L);
 		}
 
+		public static bool IsLoopbackHost(string host) {
+			if (string.IsNullOrWhiteSpace(host)) return true;
+			host = host.Trim();
+			if (string.Equals(host, "localhost", System.StringComparison.OrdinalIgnoreCase)) return true;
+			if (string.Equals(host, "127.0.0.1", System.StringComparison.OrdinalIgnoreCase)) return true;
+			if (string.Equals(host, "::1", System.StringComparison.OrdinalIgnoreCase)) return true;
+			if (string.Equals(host, "[::1]", System.StringComparison.OrdinalIgnoreCase)) return true;
+			return false;
+		}
+
 		public static bool TryBuildPacket(
 			GameObject root,
 			bool useGzip,
@@ -208,6 +218,11 @@ namespace spz {
 		public static bool TrySendPacket(string host, int port, byte[] packet, out string error) {
 			error = null;
 			if (string.IsNullOrWhiteSpace(host)) host = "127.0.0.1";
+			host = host.Trim();
+			if (!IsLoopbackHost(host)) {
+				error = "mesh stream host must be loopback (127.0.0.1 / ::1 / localhost)";
+				return false;
+			}
 			if (port < 1 || port > 65535) {
 				error = "invalid Blender stream port";
 				return false;
