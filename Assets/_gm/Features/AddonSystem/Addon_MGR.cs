@@ -1894,31 +1894,52 @@ namespace spz {
 		IEnumerator CoEnsureViewportAxisGizmo() {
 			try {
 				yield return null;
-				const int maxFrames = 600;
-				for (int f = 0; f < maxFrames; f++) {
+				const int maxFramesWaitingForHost = 600;
+				int waitedForHost = 0;
+				bool announcedMount = false;
+				while (true) {
 					if (this == null) {
 						yield break;
 					}
 					if (!IsAddonEnabled(ViewportAxisGizmoAddonId)) {
+						// Defensive: any path that flips isEnabled without StopEnsureAndTeardown must not leave a
+						// mounted gizmo behind when this coroutine notices the dial is off.
+						ViewportAxisGizmo_UI.TeardownAllForAddonDisabled();
 						yield break;
 					}
 					if (ViewportAxisGizmo_UI.IsAnyMountedGizmo()) {
-						UnityEngine.Debug.Log(
-							"[Addon_MGR] ViewportAxisGizmoSPZ: orientation gizmo is mounted on the main viewport.");
-						yield break;
+						if (!announcedMount) {
+							announcedMount = true;
+							UnityEngine.Debug.Log(
+								"[Addon_MGR] ViewportAxisGizmoSPZ: orientation gizmo is mounted on the main viewport.");
+						}
+						// Keep watching: a MainViewport rebuild can Destroy children while the add-on stays enabled.
+						waitedForHost = 0;
+						yield return null;
+						continue;
 					}
+					announcedMount = false;
 					ViewportAxisGizmo_AddonBridge.TryAttachFromCore(null);
 					// Disable can land between the enabled check and this attach; do not leave a zombie behind.
 					if (!IsAddonEnabled(ViewportAxisGizmoAddonId)) {
 						ViewportAxisGizmo_UI.TeardownAllForAddonDisabled();
 						yield break;
 					}
+					if (ViewportAxisGizmo_UI.IsAnyMountedGizmo()) {
+						waitedForHost = 0;
+						yield return null;
+						continue;
+					}
+					waitedForHost++;
+					if (waitedForHost >= maxFramesWaitingForHost) {
+						UnityEngine.Debug.LogWarning(
+							"[Addon_MGR] ViewportAxisGizmoSPZ: no mounted orientation gizmo after "
+							+ maxFramesWaitingForHost
+							+ " frames waiting for the host. The main viewport (MainViewport_UI) must be loaded; check the Console for attach errors.");
+						yield break;
+					}
 					yield return null;
 				}
-				UnityEngine.Debug.LogWarning(
-					"[Addon_MGR] ViewportAxisGizmoSPZ: no visible orientation gizmo after "
-					+ maxFrames
-					+ " frames. The main viewport (MainViewport_UI) must be loaded; check the Console for attach errors.");
 			} finally {
 				_axisGizmoEnsureCrtn = null;
 			}
