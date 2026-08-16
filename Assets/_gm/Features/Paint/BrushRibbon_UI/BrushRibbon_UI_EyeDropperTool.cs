@@ -185,12 +185,17 @@ namespace spz {
 
 
 	    void OnDestroy(){
-	        _textureFetchHelper.Dispose();
+	        // Release first: our coroutine lives on Coroutines_MGR and is stopped below, so its own
+	        // Unlock_if_can can never run. Destroying while locked would leave the whole app unclickable.
+	        GlobalClickBlocker.Unlock_if_can(who_is_requesting:this);
 	        if (_pickColor_crtn != null && Coroutines_MGR.instance!=null){
 	            Coroutines_MGR.instance.StopCoroutine(_pickColor_crtn);
 	        }
 	        _pickColor_crtn = null;
-	        _eyeDropper_toggle.onValueChanged.RemoveListener(OnEyeDropperToggle);
+	        if (_textureFetchHelper != null){ _textureFetchHelper.Dispose(); }//null when destroyed before Start
+	        if (_eyeDropper_toggle != null){
+	            _eyeDropper_toggle.onValueChanged.RemoveListener(OnEyeDropperToggle);
+	        }
 	    }
 	}
 
