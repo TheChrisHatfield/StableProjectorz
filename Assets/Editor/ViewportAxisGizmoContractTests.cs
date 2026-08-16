@@ -323,8 +323,18 @@ public sealed class ViewportAxisGizmoContractTests {
 	public void RelativeCenterIconResolvesInsideStreamingAssets() {
 		string resolved = ViewportAxisGizmo_AddonBridge.ResolveIconPath("Addons/ViewportAxisGizmoSPZ/lantern.png");
 		Assert.That(resolved, Does.StartWith(Application.streamingAssetsPath));
+		Assert.That(File.Exists(resolved), Is.True, "The shipped lantern must resolve when given the StreamingAssets-relative path.");
 		Assert.That(ViewportAxisGizmo_AddonBridge.ResolveIconPath(null),
 			Is.EqualTo(ViewportAxisGizmo_AddonBridge.DefaultCenterIconPath));
+	}
+
+	[Test]
+	public void BareLanternFilenameResolvesInsideTheAddonFolder() {
+		// Python docs say relative names resolve inside the add-on folder; a bare filename must not silently
+		// look under StreamingAssets root and then fall back to the Bullseye line icon.
+		string resolved = ViewportAxisGizmo_AddonBridge.ResolveIconPath("lantern.png");
+		Assert.That(resolved, Is.EqualTo(ViewportAxisGizmo_AddonBridge.DefaultCenterIconPath));
+		Assert.That(File.Exists(resolved), Is.True);
 	}
 
 	[Test]
