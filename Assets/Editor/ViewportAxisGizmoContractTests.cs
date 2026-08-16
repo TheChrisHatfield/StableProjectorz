@@ -367,6 +367,19 @@ public sealed class ViewportAxisGizmoContractTests {
 	}
 
 	[Test]
+	public void DomainReloadOffClearsAndDestroysCachedLanternTextures() {
+		string src = ReadRepo("Assets/_gm/Features/Viewport/Main Viewport/ViewportAxisGizmo_UI.cs");
+		int reset = src.IndexOf("static void ResetStatics()", StringComparison.Ordinal);
+		Assert.That(reset, Is.GreaterThan(0));
+		string body = src.Substring(reset, Math.Min(900, src.Length - reset));
+		Assert.That(body, Does.Contain("CenterSpriteCache"));
+		Assert.That(body, Does.Contain("Destroy(kvp.Value)"),
+			"Domain-reload-off Play Mode must Destroy cached sprites, not only drop the dictionary entries.");
+		Assert.That(body, Does.Contain("Destroy(tex)"),
+			"The Texture2D behind each lantern sprite must be released too.");
+	}
+
+	[Test]
 	public void AttachRpcReportsMountedAndVisibleSeparately() {
 		string bridge = ReadRepo("Assets/_gm/Features/AddonSystem/ViewportAxisGizmo_AddonBridge.cs");
 		Assert.That(bridge, Does.Contain("r[\"mounted\"] = mounted"));
