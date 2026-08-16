@@ -261,6 +261,22 @@ public sealed class ViewportAxisGizmoContractTests {
 
 	#endregion
 
+	[Test]
+	public void SnapRecordsAUsableFovAndRetargetsAnInFlightCameraMove() {
+		Assert.That(ViewportAxisGizmo_CameraOps.ResolveFov(null), Is.InRange(1f, 179f),
+			"A snap POV must never carry the -1 sentinel that ViewCamera_FOV starts with.");
+
+		string ops = ReadRepo("Assets/_gm/Features/Viewport/Main Viewport/ViewportAxisGizmo_CameraOps.cs");
+		Assert.That(ops, Does.Contain("interruptCurrentFly: true"),
+			"A second axis click during the fly animation must retarget instead of being silently dropped.");
+		Assert.That(ops, Does.Contain("ResolveFov(cam)"));
+
+		string focus = ReadRepo("Assets/_gm/Features/Camera/Navigation/CameraFocus.cs");
+		Assert.That(focus, Does.Contain("bool interruptCurrentFly=false"),
+			"Existing POV-restore callers must keep the old drop-if-busy behaviour by default.");
+		Assert.That(focus, Does.Contain("public bool isFlyingCamera"));
+	}
+
 	#region rpc + add-on wiring
 
 	[Test]
