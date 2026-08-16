@@ -424,8 +424,18 @@ public sealed class ViewportAxisGizmoContractTests {
 		string src = ReadRepo("Assets/_gm/Features/AddonSystem/Addon_MGR.cs");
 		Assert.That(src, Does.Contain("StartEnsureViewportAxisGizmo"),
 			"HTTP-off / register() failure must still attach the widget on the main thread.");
+		Assert.That(src, Does.Contain("StopEnsureAndTeardownViewportAxisGizmo"),
+			"Disable must stop the attach-retry coroutine before destroying the widget.");
 		Assert.That(src, Does.Contain("ViewportAxisGizmo_UI.TeardownAllForAddonDisabled()"),
 			"Turning the add-on off must remove the widget.");
+		int ensure = src.IndexOf("IEnumerator CoEnsureViewportAxisGizmo()", StringComparison.Ordinal);
+		Assert.That(ensure, Is.GreaterThan(0));
+		string body = src.Substring(ensure, Math.Min(1400, src.Length - ensure));
+		Assert.That(body, Does.Contain("TryAttachFromCore(null)"));
+		int attachAt = body.IndexOf("TryAttachFromCore(null)", StringComparison.Ordinal);
+		int recheckAt = body.IndexOf("if (!IsAddonEnabled(ViewportAxisGizmoAddonId))", attachAt, StringComparison.Ordinal);
+		Assert.That(recheckAt, Is.GreaterThan(attachAt),
+			"After TryAttach the loop must re-check enabled state so a mid-frame disable cannot leave a zombie.");
 	}
 
 	[Test]
