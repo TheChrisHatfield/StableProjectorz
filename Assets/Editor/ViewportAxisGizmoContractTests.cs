@@ -384,10 +384,27 @@ public sealed class ViewportAxisGizmoContractTests {
 		string src = ReadRepo("Assets/_gm/Features/Viewport/Main Viewport/ViewportAxisGizmo_UI.cs");
 		int refresh = src.IndexOf("public void RefreshFromCamera()", StringComparison.Ordinal);
 		Assert.That(refresh, Is.GreaterThan(0));
-		string body = src.Substring(refresh, Math.Min(1200, src.Length - refresh));
+		string body = src.Substring(refresh, Math.Min(1400, src.Length - refresh));
 		Assert.That(body, Does.Contain("Mathf.Approximately(_canvasGroup.alpha, wantedAlpha)"));
-		Assert.That(body, Does.Contain("_root.parent != wantedHost"),
-			"Re-host only when the inner viewport rect actually changed.");
+		Assert.That(body, Does.Contain("ApplyCornerDock(_spec.MarginPx)"),
+			"Aspect fit moves the inner rect every frame — the corner dock must be re-applied.");
+	}
+
+	[Test]
+	public void GizmoParentsToMainViewportChromeNotTheSizeReference() {
+		string src = ReadRepo("Assets/_gm/Features/Viewport/Main Viewport/ViewportAxisGizmo_UI.cs");
+		int resolve = src.IndexOf("public static RectTransform ResolveViewportParent()", StringComparison.Ordinal);
+		int dock = src.IndexOf("public static RectTransform ResolveDockReference()", StringComparison.Ordinal);
+		Assert.That(resolve, Is.GreaterThan(0));
+		Assert.That(dock, Is.GreaterThan(resolve));
+		string parentBody = src.Substring(resolve, dock - resolve);
+		Assert.That(parentBody, Does.Contain("mainViewportRect"));
+		Assert.That(parentBody, Does.Not.Contain("innerViewportRect"),
+			"The size-reference rect is the first sibling under the viewport — parenting there draws behind the view RT.");
+		string dockBody = src.Substring(dock, Math.Min(500, src.Length - dock));
+		Assert.That(dockBody, Does.Contain("innerViewportRect"),
+			"Corner placement must still track the aspect-fitted image.");
+		Assert.That(src, Does.Contain("ApplyCornerDock"));
 	}
 
 	[Test]

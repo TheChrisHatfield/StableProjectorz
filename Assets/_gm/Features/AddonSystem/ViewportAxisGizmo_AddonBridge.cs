@@ -83,7 +83,7 @@ namespace spz {
 				r["success"] = attached;
 				r["mounted"] = mounted;
 				r["visible"] = visible;
-				r["host"] = "MainViewport_UI.innerViewportRect";
+				r["host"] = "MainViewport_UI.mainViewportRect";
 				if (!attached) {
 					r["error"] = "Main viewport is not in the scene yet; Add-on Manager retries the attach on the main thread.";
 				}
