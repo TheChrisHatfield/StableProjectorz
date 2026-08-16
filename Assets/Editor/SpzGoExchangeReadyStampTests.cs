@@ -17,14 +17,19 @@ public sealed class SpzGoExchangeReadyStampTests {
 			"Export must expose a ready-stamp helper for Blender auto-import.");
 		Assert.That(src, Does.Contain(".spz_go_ready"),
 			"Stamp filename must use .spz_go_ready sidecar next to the FBX.");
-		int onComplete = src.IndexOf("void OnComplete()");
-		int stampCall = src.IndexOf("TryWriteSpzGoExchangeReadyStamp( meshPathForStamp )");
-		int clearSaving = src.IndexOf("_isSaving = false;", onComplete >= 0 ? onComplete : 0);
-		Assert.That(onComplete, Is.GreaterThan(0));
-		Assert.That(stampCall, Is.GreaterThan(onComplete),
+		// Anchor on the stamping callback itself. Several export paths declare their own OnComplete,
+		// so keying off the first one in the file silently compares against an unrelated block.
+		int stampCall = src.IndexOf("TryWriteSpzGoExchangeReadyStamp( meshPathForStamp )",
+			System.StringComparison.Ordinal);
+		Assert.That(stampCall, Is.GreaterThan(0));
+		int owningOnComplete = src.LastIndexOf("void OnComplete()", stampCall, System.StringComparison.Ordinal);
+		Assert.That(owningOnComplete, Is.GreaterThan(0),
 			"Ready stamp must be written from texture OnComplete, not before maps finish.");
+		int clearSaving = src.IndexOf("_isSaving = false;", stampCall, System.StringComparison.Ordinal);
 		Assert.That(clearSaving, Is.GreaterThan(stampCall),
 			"Ready stamp must be written before _isSaving clears, or waiters race a missing sidecar.");
+		Assert.That(src.Substring(stampCall, clearSaving - stampCall), Does.Not.Contain("}"),
+			"The busy-clear must sit in the same OnComplete body as the stamp write.");
 		Assert.That(src, Does.Contain("TryDeleteSpzGoExchangeReadyStamp"),
 			"Export must clear a stale ready stamp before rewriting the exchange FBX.");
 		int deleteAt = src.IndexOf("TryDeleteSpzGoExchangeReadyStamp( meshFilePath )");

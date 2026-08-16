@@ -25,8 +25,11 @@ public sealed class MergeIconsRefuseCallbackContractTests {
 		string path = Path.Combine(Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "Save Load Import Export", "Save_MGR.cs");
 		string src = File.ReadAllText(path);
-		int method = src.IndexOf("void Save_Mesh_Textures(", System.StringComparison.Ordinal);
-		string body = src.Substring(method, System.Math.Min(2200, src.Length - method));
+		// Anchor on the coroutine: Save_Mesh_Textures itself is now just a StartCoroutine wrapper,
+		// so a window taken from it would not cover the callback logic at all.
+		int method = src.IndexOf("IEnumerator Save_Mesh_Textures_crtn(", System.StringComparison.Ordinal);
+		Assert.That(method, Is.GreaterThan(0));
+		string body = src.Substring(method);
 		Assert.That(body, Does.Contain("albedoCallbackDelivered"));
 		Assert.That(body, Does.Contain("if (!albedoCallbackDelivered)"));
 	}
