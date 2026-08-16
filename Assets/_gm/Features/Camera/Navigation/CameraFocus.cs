@@ -264,9 +264,13 @@ namespace spz {
 
 	    void OnDestroy(){
 	        ModelsHandler_3D.Act_onImported -= OnUser_loaded3Dmodel;
+	        MultiView_Ribbon_UI.OnStartEditMode -= OnStartEditMode_MultiView;
+	        MultiView_Ribbon_UI.OnStop2_EditMode -= OnStop2EditMode_MultiView;
 	        if (_tempPivot != null){ Destroy(_tempPivot.gameObject);  }
 
-	        Update_callbacks_MGR.navigation = OnUpdate;
+	        // Must be -=, never =. This delegate is shared with CameraOrbit/Panning/Dolly/Move, so an
+	        // assignment here drops all of them and leaves our destroyed OnUpdate as the only handler.
+	        Update_callbacks_MGR.navigation -= OnUpdate;
 	    }
 
 	}
