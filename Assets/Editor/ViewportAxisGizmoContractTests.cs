@@ -227,6 +227,30 @@ public sealed class ViewportAxisGizmoContractTests {
 	}
 
 	[Test]
+	public void RetiredGizmoIsNeverHandedBackWhileItsDestroyIsStillPending() {
+		RectTransform host = NewHost();
+		try {
+			ViewportAxisGizmo_UI gizmo = ViewportAxisGizmo_UI.BuildInto(host, ViewportAxisGizmo_Spec.Default);
+			gizmo.MarkTornDown();
+
+			Assert.That(ViewportAxisGizmo_UI.FindAnyLiveGizmo(), Is.Null,
+				"A re-enable in the same frame must build a fresh widget, not refresh the dying one.");
+			Assert.That(ViewportAxisGizmo_UI.FindUnder(host), Is.Null);
+			Assert.That(ViewportAxisGizmo_UI.IsAnyVisibleGizmo(), Is.False);
+			Assert.That(gizmo.gameObject.activeSelf, Is.False);
+
+			gizmo.RefreshFromCamera();
+			Assert.That(gizmo.EnsureHostedUnder(host), Is.False,
+				"The retired widget must not parent itself back onto the viewport for its last frame.");
+			Assert.That(gizmo.RootRect.parent, Is.Null);
+			UnityEngine.Object.DestroyImmediate(gizmo.gameObject);
+		}
+		finally {
+			UnityEngine.Object.DestroyImmediate(host.gameObject);
+		}
+	}
+
+	[Test]
 	public void SpecClampsSizeAndDefaultsTheCenterCommand() {
 		var tiny = new ViewportAxisGizmo_Spec(1f, -5f, null, null);
 		Assert.That(tiny.SizePx, Is.InRange(64f, 240f));
