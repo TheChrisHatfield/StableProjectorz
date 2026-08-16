@@ -745,8 +745,11 @@ namespace spz {
 	            filePath += ".png";         //Otherwise, user need to explicitly mention extension if filename.
 	        }
 	        else{
-	            Viewport_StatusText.instance.ShowStatusText("Saving texture failed - Unsupported file format", 
+	            // Headless/RPC export has no viewport status bar; an unguarded singleton here turned an
+	            // "unsupported format" message into an exception that aborted the whole export coroutine.
+	            Viewport_StatusText.instance?.ShowStatusText("Saving texture failed - Unsupported file format",
 	                                                          false, 5, progressVisibility:false);
+	            Debug.LogWarning("[TextureTools_SPZ] Unsupported texture format for: " + filePath);
 	            return;
 	        }
 	        if(bytes != null){ File.WriteAllBytes(filePath, bytes); }

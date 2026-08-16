@@ -741,14 +741,33 @@ namespace spz {
 	    // Encode + write each UDIM texture on a worker thread (raw pixels snapshotted on the main thread first),
 	    // spread across frames with progress p0..p1. Falls back to the synchronous encoder if a platform can't
 	    // encode off-thread. Blocks nothing on the main thread except cheap per-texture pixel snapshots.
+	    /// <summary>
+	    /// Splits a texture destination into "name without image extension" + "image extension".
+	    /// Export hands us a base path built by stripping the MESH extension, so whatever Path reads as
+	    /// an extension is usually part of the model's own name: "robot_v1.2.fbx" arrives as
+	    /// "robot_v1.2", and treating ".2" as the format makes every encoder reject it — the export then
+	    /// finishes, stamps itself ready, and writes no textures at all. Only honour a format we can
+	    /// actually encode; otherwise keep the whole name and write PNG beside the mesh.
+	    /// </summary>
+	    static void SplitTexturePath( string path, out string pathBeforeExten, out string exten ){
+	        exten = Path.GetExtension(path) ?? "";
+	        bool isImageExten = exten.Equals(".png", StringComparison.OrdinalIgnoreCase)
+	                         || exten.Equals(".jpg", StringComparison.OrdinalIgnoreCase)
+	                         || exten.Equals(".tga", StringComparison.OrdinalIgnoreCase);
+	        string baseName = isImageExten ? Path.GetFileNameWithoutExtension(path) : Path.GetFileName(path);
+	        if (!isImageExten){ exten = ".png"; }
+	        string dir = Path.GetDirectoryName(path);
+	        pathBeforeExten = string.IsNullOrEmpty(dir) ? baseName : Path.Combine(dir, baseName);
+	    }
+
+
 	    IEnumerator EncodeAndSaveTextures_crtn( Dictionary<Texture2D,UDIM_Sector> textures, string path,
 	                                            float p0, float p1, bool skipUdimSuffix_if_1_texture = true ){
 	        if (textures == null || textures.Count == 0){
 	            Viewport_StatusText.instance?.ReportProgress(p1);
 	            yield break;
 	        }
-	        string pathBeforeExten = Path.Combine(Path.GetDirectoryName(path), Path.GetFileNameWithoutExtension(path));
-	        string exten = Path.GetExtension(path);
+	        SplitTexturePath(path, out string pathBeforeExten, out string exten);
 
 	        bool canUseIx    = textures.Count > 1;
 	        bool canUseUdims = textures.Count > 1 || !skipUdimSuffix_if_1_texture;
@@ -828,8 +847,7 @@ namespace spz {
     void EncodeAndSaveTextures( Dictionary<Texture2D,UDIM_Sector> textures,  string path, 
 	                                bool skipUdimSuffix_if_1_texture = true ){
 	        if (textures == null || textures.Count == 0) return;
-	        string pathBeforeExten = Path.Combine(Path.GetDirectoryName(path), Path.GetFileNameWithoutExtension(path));
-	        string exten = Path.GetExtension(path);
+	        SplitTexturePath(path, out string pathBeforeExten, out string exten);
 
 	        bool canUseIx    = textures.Count>1;
 	        bool canUseUdims = textures.Count>1 || !skipUdimSuffix_if_1_texture;
