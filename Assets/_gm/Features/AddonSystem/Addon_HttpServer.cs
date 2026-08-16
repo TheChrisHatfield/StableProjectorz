@@ -91,6 +91,14 @@ namespace spz {
 			}
 			catch (Exception e) {
 				UnityEngine.Debug.LogError($"[Addon_HttpServer] Failed to start server: {e.Message}");
+				// Start() may have bound the port before the accept thread failed. Dropping the
+				// reference without Close() keeps :5557 held for the session — addons/REST cannot
+				// reconnect and the next launch reports address already in use.
+				_isRunning = false;
+				try { _listener?.Stop(); } catch { }
+				try { _listener?.Close(); } catch { }
+				_listener = null;
+				_listenerThread = null;
 			}
 		}
 		
