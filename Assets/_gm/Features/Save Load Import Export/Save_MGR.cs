@@ -59,7 +59,7 @@ namespace spz {
      
 	        void OnReady2(){//save + ensure albedo won't be deleted, - we'll keep using it in new generation:
 	            Save_Mesh_Textures(OnHaveAlbedo, "", isDilate: false, forbid_albedoDelete: true,
-		            onComplete: ClearSavingIfStillHeld);
+		            onComplete: _ => ClearSavingIfStillHeld());
 	        }
 
 	        void ClearSavingIfStillHeld(){
@@ -288,7 +288,7 @@ namespace spz {
 			        // export leaves the fresh mesh sitting beside the previous run's textures.
 			        void OnReady2() => Save_Mesh_Textures( onHaveAlbedo:null, path_exported3D, isDilate: true,
 				        forbid_albedoDelete:false, onComplete:OnComplete, overwriteExisting:true );
-			        void OnComplete() => _isSaving = false;
+			        void OnComplete( bool _ ) => _isSaving = false;
 		        },
 		        onCancelledOrFailed: () => {
 			        _isSaving = false;
@@ -352,9 +352,20 @@ namespace spz {
 		    // folder and let Blender re-apply a texture from an earlier export.
 		    void OnReady2() => Save_Mesh_Textures( onHaveAlbedo:null, path_exported3D, isDilate: true,
 			    forbid_albedoDelete:false, onComplete:OnComplete, overwriteExisting:true );
-		    void OnComplete() {
-			    // Stamp before clearing _isSaving so waiters (native UI / TCP) never race an absent sidecar.
-			    TryWriteSpzGoExchangeReadyStamp( meshPathForStamp );
+		    void OnComplete( bool texturesWritten ) {
+			    // The stamp is the other application's cue to auto-import "mesh + maps". Writing it after a
+			    // texture stage that bailed (no accumulation textures) hands the DCC an untextured mesh and
+			    // calls it a finished export, so leave the stamp off and say what happened instead.
+			    if( texturesWritten ){
+				    // Stamp before clearing _isSaving so waiters (native UI / TCP) never race an absent sidecar.
+				    TryWriteSpzGoExchangeReadyStamp( meshPathForStamp );
+			    } else {
+				    TryDeleteSpzGoExchangeReadyStamp( meshPathForStamp );
+				    if( Viewport_StatusText.instance!=null ){
+					    Viewport_StatusText.instance.ShowStatusText(
+						    "Export: mesh written, textures were not — not marking it ready.", false, 6f, false );
+				    }
+			    }
 			    _isSaving = false;
 		    }
 		    return true;
@@ -531,7 +542,8 @@ namespace spz {
         
 	        StartCoroutine( WaitForRenderAll_crtn(skipAO_blit:true, onReady) );
         
-	        void onReady() => Save_Mesh_Textures(null, basePath, isDilate, forbid_albedoDelete:false, onComplete);
+	        void onReady() => Save_Mesh_Textures(null, basePath, isDilate, forbid_albedoDelete:false,
+		        onComplete: _ => onComplete?.Invoke());
 	    }
 
     
@@ -656,18 +668,24 @@ namespace spz {
 	    /// whichever it finds. False for "save textures as…" dialogs, where clobbering the user's own
 	    /// files would be the bug.
 	    /// </param>
+	    /// <param name="onComplete">
+	    /// Always runs. The flag is <c>true</c> only when the texture stage ran all the way through; an
+	    /// early bail (no accumulation textures) or a throw reports <c>false</c> so callers that publish
+	    /// the export to another application do not announce maps that were never written.
+	    /// </param>
 	    void Save_Mesh_Textures( Action<Dictionary<Texture2D,UDIM_Sector>> onHaveAlbedo=null,
 	                            string save_to_basePath="",  bool isDilate=false,
-	                            bool forbid_albedoDelete = false,  Action onComplete=null,
+	                            bool forbid_albedoDelete = false,  Action<bool> onComplete=null,
 	                            bool overwriteExisting = false){
 	        StartCoroutine( Save_Mesh_Textures_crtn(onHaveAlbedo, save_to_basePath, isDilate, forbid_albedoDelete, onComplete, overwriteExisting) );
 	    }
 
 	    IEnumerator Save_Mesh_Textures_crtn( Action<Dictionary<Texture2D,UDIM_Sector>> onHaveAlbedo,
 	                                         string save_to_basePath, bool isDilate,
-	                                         bool forbid_albedoDelete, Action onComplete,
+	                                         bool forbid_albedoDelete, Action<bool> onComplete,
 	                                         bool overwriteExisting ){
 	        bool albedoCallbackDelivered = false;
+	        bool completedTextureStage = false;
 	        bool isFileExport = !string.IsNullOrEmpty(save_to_basePath);
 	        bool showedProgress = false;
 	        Dictionary<Texture2D,UDIM_Sector> albedo = null;
@@ -756,6 +774,7 @@ namespace spz {
 
 	            if (albedo_destroyWhenDone && albedo != null){ foreach (var kvp in albedo){ if (kvp.Key != null) Texture.DestroyImmediate(kvp.Key); } }
 	            if (ao_destroyWhenDone && ao != null){        foreach (var kvp in ao){ if (kvp.Key != null) Texture.DestroyImmediate(kvp.Key); } }
+	            completedTextureStage = true;
 	        } finally {
 	            // MergeIcons and similar callers only pass onHaveAlbedo — without this they hang busy forever.
 	            if (!albedoCallbackDelivered) onHaveAlbedo?.Invoke(null);
@@ -763,7 +782,7 @@ namespace spz {
 	                Viewport_StatusText.instance?.ReportProgress(1f);
 	                Viewport_StatusText.instance?.SetProgressVisible(false);
 	            }
-	            onComplete?.Invoke();
+	            onComplete?.Invoke(completedTextureStage);
 	        }
 	    }
 
