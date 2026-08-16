@@ -10,7 +10,7 @@
 bl_info = {
     "name": "SPZ GO (HTTP)",
     "author": "StableProjectorz / community",
-    "version": (0, 4, 0),
+    "version": (0, 5, 0),
     "blender": (4, 0, 0),
     "location": "3D Viewport: N (toggle sidebar) → top tab 'SPZ GO' (not auto-open; scroll tab row if needed)",
     "description": "Link with StableProjectorz: pull/push 3D via REST; shared exchange folder; FBX and UV (SVG) helpers",
@@ -270,9 +270,16 @@ def _find_best_exchange_texture_for_fbx(fbx_path: str) -> Optional[str]:
             score += 30
         if "normal" in low or "rough" in low or "metal" in low or "ao" in low:
             score -= 20
-        ranked.append((score, name))
-    ranked.sort(key=lambda x: (-x[0], x[1]))
-    best = ranked[0][1]
+        try:
+            mtime = os.path.getmtime(os.path.join(folder, name))
+        except OSError:
+            mtime = 0.0
+        ranked.append((score, mtime, name))
+    # Break ties by newest file, not by name. Older SPZ builds uniquified repeat exports, so an
+    # exchange folder can hold "from_spz.png" next to "from_spz 2.png" - and a name sort puts the
+    # space before the dot, handing the win to a texture from an earlier export.
+    ranked.sort(key=lambda x: (-x[0], -x[1], x[2]))
+    best = ranked[0][2]
     return str(Path(folder) / best)
 
 

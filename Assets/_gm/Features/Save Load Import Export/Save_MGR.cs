@@ -284,8 +284,10 @@ namespace spz {
 				        return;
 			        }
 			        void OnReady1() => StartCoroutine( WaitForRenderAll_crtn( skipAO_blit: true, OnReady2 ) );
+			        // The mesh at this path was just overwritten; its maps must be too, or a repeat
+			        // export leaves the fresh mesh sitting beside the previous run's textures.
 			        void OnReady2() => Save_Mesh_Textures( onHaveAlbedo:null, path_exported3D, isDilate: true,
-				        forbid_albedoDelete:false, onComplete:OnComplete );
+				        forbid_albedoDelete:false, onComplete:OnComplete, overwriteExisting:true );
 			        void OnComplete() => _isSaving = false;
 		        },
 		        onCancelledOrFailed: () => {
@@ -345,7 +347,11 @@ namespace spz {
 			    return false;
 		    }
 		    void OnReady1() => StartCoroutine( WaitForRenderAll_crtn( skipAO_blit:true, OnReady2 ) );
-		    void OnReady2() => Save_Mesh_Textures( onHaveAlbedo:null, path_exported3D, isDilate: true, forbid_albedoDelete:false, onComplete:OnComplete );
+		    // Exchange export: the FBX is rewritten in place every run, so the maps must land on the
+		    // same names too. Uniquing them is what made repeat exports stack files in the exchange
+		    // folder and let Blender re-apply a texture from an earlier export.
+		    void OnReady2() => Save_Mesh_Textures( onHaveAlbedo:null, path_exported3D, isDilate: true,
+			    forbid_albedoDelete:false, onComplete:OnComplete, overwriteExisting:true );
 		    void OnComplete() {
 			    // Stamp before clearing _isSaving so waiters (native UI / TCP) never race an absent sidecar.
 			    TryWriteSpzGoExchangeReadyStamp( meshPathForStamp );
@@ -552,6 +558,19 @@ namespace spz {
 	    }
 
 
+	    /// <summary>
+	    /// Where a texture goes next to <paramref name="basePath"/>, with no uniquing. Used when the
+	    /// caller has just overwritten a mesh at that path and the maps must land on the matching names.
+	    /// </summary>
+	    string ComposeTexturePath(string basePath, string suffix){
+	        if (string.IsNullOrEmpty(basePath)){ return ""; }
+	        string dir = Path.GetDirectoryName(basePath);
+	        if (string.IsNullOrEmpty(dir))
+		        dir = ".";
+	        return Path.Combine(dir, Path.GetFileNameWithoutExtension(basePath) + suffix + Path.GetExtension(basePath));
+	    }
+
+
 	    string MakeUniquePath(string basePath, string suffix){
 	        if (string.IsNullOrEmpty(basePath)){ return ""; }
 
@@ -563,7 +582,7 @@ namespace spz {
 
 	        // First candidate: base + optional suffix. If that exists, append " 2", " 3", …
 	        string baseFilename = $"{filenameWithoutExtension}{suffix}";
-	        string candidate = Path.Combine(dir, baseFilename + extension);
+	        string candidate = ComposeTexturePath(basePath, suffix);
 	        if (!File.Exists(candidate))
 		        return candidate;
 	        for (int n = 2; n < 10000; n++) {
@@ -630,15 +649,24 @@ namespace spz {
 
 	    // Fire-and-forget entry (unchanged signature): all callers pass callbacks + rely on _isSaving,
 	    // so the actual work now runs as a frame-budgeted coroutine that keeps the app responsive.
+	    /// <param name="overwriteExisting">
+	    /// True when the maps accompany a mesh we just rewrote at a fixed path. The mesh write always
+	    /// overwrites, so uniquing the textures desynchronises them: the second export leaves a fresh
+	    /// from_spz.fbx beside a stale from_spz.png plus a new "from_spz 2.png", and Blender picks up
+	    /// whichever it finds. False for "save textures as…" dialogs, where clobbering the user's own
+	    /// files would be the bug.
+	    /// </param>
 	    void Save_Mesh_Textures( Action<Dictionary<Texture2D,UDIM_Sector>> onHaveAlbedo=null,
 	                            string save_to_basePath="",  bool isDilate=false,
-	                            bool forbid_albedoDelete = false,  Action onComplete=null){
-	        StartCoroutine( Save_Mesh_Textures_crtn(onHaveAlbedo, save_to_basePath, isDilate, forbid_albedoDelete, onComplete) );
+	                            bool forbid_albedoDelete = false,  Action onComplete=null,
+	                            bool overwriteExisting = false){
+	        StartCoroutine( Save_Mesh_Textures_crtn(onHaveAlbedo, save_to_basePath, isDilate, forbid_albedoDelete, onComplete, overwriteExisting) );
 	    }
 
 	    IEnumerator Save_Mesh_Textures_crtn( Action<Dictionary<Texture2D,UDIM_Sector>> onHaveAlbedo,
 	                                         string save_to_basePath, bool isDilate,
-	                                         bool forbid_albedoDelete, Action onComplete ){
+	                                         bool forbid_albedoDelete, Action onComplete,
+	                                         bool overwriteExisting ){
 	        bool albedoCallbackDelivered = false;
 	        bool isFileExport = !string.IsNullOrEmpty(save_to_basePath);
 	        bool showedProgress = false;
@@ -716,8 +744,10 @@ namespace spz {
 
 	            // Stage 3 — encode + write to disk off the main thread, per texture, budgeted.
 	            if (isFileExport){
-	                string pathAlbedo = MakeUniquePath(save_to_basePath, "");
-	                string pathAO = MakeUniquePath(save_to_basePath, "_AO");
+	                string pathAlbedo = overwriteExisting ? ComposeTexturePath(save_to_basePath, "")
+	                                                     : MakeUniquePath(save_to_basePath, "");
+	                string pathAO = overwriteExisting ? ComposeTexturePath(save_to_basePath, "_AO")
+	                                                  : MakeUniquePath(save_to_basePath, "_AO");
 	                yield return StartCoroutine( EncodeAndSaveTextures_crtn(albedo, pathAlbedo, 0.55f, 0.80f) );
 	                yield return StartCoroutine( EncodeAndSaveTextures_crtn(ao, pathAO, 0.80f, 1.0f) );
 	                Viewport_StatusText.instance?.ShowStatusText("Saved to "+ pathAlbedo.Replace("\\", "\\\\"),
