@@ -460,7 +460,7 @@ namespace spz {
 
 
 	    void OnSomeUnit_StartDownloadModel(ControlNetUnit_DownloadHelper who) => _model_dropdown.gameObject.SetActive(false);//keep dropdown hidden
-	    void OnSomeUnit_StopDownloadModel(ControlNetUnit_DownloadHelper who) => _model_dropdown.gameObject.SetActive(true);
+	    void OnSomeUnit_StopDownloadModel(ControlNetUnit_DownloadHelper who, bool didDownload) => _model_dropdown.gameObject.SetActive(true);
 
 
 	    public void Save( ControlNetUnit_SL unit_sl ){
