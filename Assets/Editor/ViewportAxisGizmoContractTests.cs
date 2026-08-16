@@ -262,6 +262,34 @@ public sealed class ViewportAxisGizmoContractTests {
 	#endregion
 
 	[Test]
+	public void IdleViewDoesNoPerFrameWorkButSizeChangesReproject() {
+		RectTransform host = NewHost();
+		try {
+			ViewportAxisGizmo_UI gizmo = ViewportAxisGizmo_UI.BuildInto(host, ViewportAxisGizmo_Spec.Default);
+			var rotation = Quaternion.Euler(20f, 55f, 0f);
+
+			Assert.That(gizmo.ApplyOrientation(rotation), Is.True, "First pass for a new rotation must project.");
+			Assert.That(gizmo.ApplyOrientation(rotation), Is.False,
+				"A static camera must not re-sort the canvas hierarchy or re-generate TMP meshes every frame.");
+			Assert.That(gizmo.ApplyOrientation(Quaternion.Euler(20f, 55.005f, 0f)), Is.False,
+				"Sub-pixel jitter must not churn the hierarchy either.");
+			Assert.That(gizmo.ApplyOrientation(Quaternion.Euler(20f, 70f, 0f)), Is.True,
+				"A real orbit must still re-project.");
+
+			gizmo.ApplySpec(new ViewportAxisGizmo_Spec(200f, 20f, string.Empty, null));
+			Assert.That(gizmo.ApplyOrientation(Quaternion.Euler(20f, 70f, 0f)), Is.True,
+				"A resize changes the orbit radius, so the cached projection must be discarded.");
+
+			var center = (RectTransform)gizmo.RootRect.Find(ViewportAxisGizmo_UI.CenterName);
+			Assert.That(center.GetSiblingIndex(), Is.EqualTo(gizmo.RootRect.childCount - 1),
+				"Skipping redundant re-sorts must not lose the lantern-on-top rule.");
+		}
+		finally {
+			UnityEngine.Object.DestroyImmediate(host.gameObject);
+		}
+	}
+
+	[Test]
 	public void SnapRecordsAUsableFovAndRetargetsAnInFlightCameraMove() {
 		Assert.That(ViewportAxisGizmo_CameraOps.ResolveFov(null), Is.InRange(1f, 179f),
 			"A snap POV must never carry the -1 sentinel that ViewCamera_FOV starts with.");
