@@ -25,6 +25,12 @@ namespace spz {
 
 		static PaintTab_CollectPaintUI _paintTabTmpStyleSource;
 		const float kPaintTabUiFontSize = 10f;
+		/// <summary> Name of the Brush options collapse bar; <see cref="CloseBrushOptionsPanel"/> finds it by this. </summary>
+		public const string BRUSH_OPTS_COLLAPSE_BAR = "BrushOptsCollapseBtn";
+		/// <summary> Height of every Tool Options collapse bar (Brush options, Value Assist). </summary>
+		public const float TOOL_OPTIONS_COLLAPSE_BAR_H = 30f;
+		/// <summary> Label shared by Tool Options collapse bars. </summary>
+		public const string TOOL_OPTIONS_COLLAPSE_LABEL = "Collapse ▲";
 		/// <summary> Rich-text size for symmetry on/off subline (was 8pt; +3 for readability). </summary>
 		const int kSymmetryOnOffSublineTmpSize = 11;
 		static readonly System.Collections.Generic.List<System.Action> _brushSettingsHandlers = new System.Collections.Generic.List<System.Action>();
@@ -522,13 +528,44 @@ namespace spz {
 			_brushSettingsHandlers.Clear();
 		}
 
+		/// <summary>Returns the RectTransform that should parent ToolOptionsRow. Prefab section roots
+		/// hold Header+Content (childCount &gt;= 2); the row belongs in ScrollContent, same as Layers/Brush.</summary>
+		static RectTransform GetToolOptionsCreateParent(RectTransform toolOptionsSection)
+		{
+			if (toolOptionsSection == null) return null;
+			for (int i = 0; i < toolOptionsSection.childCount; i++)
+			{
+				var child = toolOptionsSection.GetChild(i);
+				if (child != null && child.name == "Content")
+				{
+					var scroll = child.GetComponent<ScrollRect>();
+					if (scroll != null && scroll.content != null)
+						return scroll.content;
+					break;
+				}
+			}
+			return toolOptionsSection;
+		}
+
 		static bool HasRuntimeToolOptionsRow(Transform toolOptionsSection)
 		{
 			if (toolOptionsSection == null) return false;
+			// Direct child (runtime CreateSectionsIfMissing / already created under section).
 			for (int i = 0; i < toolOptionsSection.childCount; i++)
 			{
 				if (toolOptionsSection.GetChild(i) != null && toolOptionsSection.GetChild(i).name == "ToolOptionsRow")
 					return true;
+			}
+			// Prefab: row lives under Content/ScrollContent — a section-root-only scan would miss it
+			// and the childCount<=1 create gate would also refuse, leaving Tool Options empty forever.
+			var parent = GetToolOptionsCreateParent(toolOptionsSection as RectTransform);
+			if (parent != null && parent != (Transform)toolOptionsSection)
+			{
+				for (int i = 0; i < parent.childCount; i++)
+				{
+					if (parent.GetChild(i) != null && parent.GetChild(i).name == "ToolOptionsRow")
+						return true;
+				}
 			}
 			return false;
 		}
@@ -1090,9 +1127,12 @@ namespace spz {
 			}
 
 			// --- Tool Options section ---
-			if (_layout.ToolOptionsSection != null && _layout.ToolOptionsSection.childCount <= 1)
+			// Create when the row is missing — never gate on childCount alone. A prefab section root
+			// already has Header+Content (childCount >= 2), so the old <=1 check skipped create and
+			// left Bucket Fill / Invert / Clear / brush opts unreachable with no later heal path.
+			if (_layout.ToolOptionsSection != null && !HasRuntimeToolOptionsRow(_layout.ToolOptionsSection))
 			{
-				CreateToolOptionsRuntime(_layout.ToolOptionsSection);
+				CreateToolOptionsRuntime(GetToolOptionsCreateParent(_layout.ToolOptionsSection));
 				did = true;
 			}
 			else if (_layout.ToolOptionsSection != null && HasRuntimeToolOptionsRow(_layout.ToolOptionsSection))
@@ -1629,6 +1669,21 @@ namespace spz {
 					return true;
 				}
 			}
+			// Prefab: row may live under Content/ScrollContent.
+			var parent = GetToolOptionsCreateParent(section);
+			if (parent != null && parent != (Transform)section)
+			{
+				for (int i = 0; i < parent.childCount; i++)
+				{
+					var c = parent.GetChild(i);
+					if (c != null && c.name == "ToolOptionsRow")
+					{
+						row = c;
+						expando = c.Find("BrushToolOptionsExpando");
+						return true;
+					}
+				}
+			}
 			return false;
 		}
 
@@ -1662,7 +1717,7 @@ namespace spz {
 			}
 			var sr = toolSectionParent.GetComponentInParent<ScrollRect>();
 			if (sr != null && sr.viewport != null) {
-				Transform collapse = sr.viewport.Find("BrushOptsCollapseBtn");
+				Transform collapse = sr.viewport.Find(BRUSH_OPTS_COLLAPSE_BAR);
 				if (collapse != null)
 					collapse.gameObject.SetActive(false);
 			}
@@ -2106,9 +2161,6 @@ namespace spz {
 			panelCsf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
 			panelCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-			var toolOptsScroll = toolSectionParent.GetComponentInParent<ScrollRect>();
-			bool pinCollapseToToolViewport = toolOptsScroll != null && toolOptsScroll.viewport != null;
-
 			MakeBrushOptsSectionLabel(panelGo.transform, "Scatter (viewport jitter)");
 			var scatterRow = new GameObject("ScatterRow");
 			scatterRow.transform.SetParent(panelGo.transform, false);
@@ -2327,65 +2379,9 @@ namespace spz {
 					ShowToolFeedback("Mirror plane: use Mesh or Face mode to flip");
 			}, 72);
 
-			if (pinCollapseToToolViewport)
-			{
-				var spacerGo = new GameObject("BrushOptsBottomSpacer");
-				spacerGo.transform.SetParent(panelGo.transform, false);
-				spacerGo.AddComponent<RectTransform>();
-				var spacerLe = spacerGo.AddComponent<LayoutElement>();
-				spacerLe.minHeight = 40;
-				spacerLe.preferredHeight = 40;
-			}
-
-			// Slight transparency so scrolling content remains visible under the pinned collapse bar (viewport overlay).
-			const float collapseBarA = 0.78f;
-			const float collapseBarHoverA = 0.86f;
-			const float collapseBarPressA = 0.74f;
-
-			var collapseBtnGo = new GameObject("BrushOptsCollapseBtn");
-			collapseBtnGo.AddComponent<RectTransform>();
-			var collapseImg = collapseBtnGo.AddComponent<Image>();
-			collapseImg.raycastTarget = true;
-			var collapseBtn = collapseBtnGo.AddComponent<Button>();
-			var collapseColors = collapseBtn.colors;
-			collapseColors.normalColor = new Color(0.22f, 0.28f, 0.36f, collapseBarA);
-			collapseColors.highlightedColor = new Color(0.30f, 0.36f, 0.44f, collapseBarHoverA);
-			collapseColors.pressedColor = new Color(0.17f, 0.22f, 0.30f, collapseBarPressA);
-			collapseColors.selectedColor = collapseColors.normalColor;
-			collapseColors.disabledColor = new Color(0.22f, 0.28f, 0.36f, 0.45f);
-			collapseBtn.colors = collapseColors;
-			collapseImg.color = collapseColors.normalColor;
-			var collapseTxtGo = new GameObject("Label");
-			collapseTxtGo.transform.SetParent(collapseBtnGo.transform, false);
-			var collapseTxtRt = collapseTxtGo.AddComponent<RectTransform>();
-			collapseTxtRt.anchorMin = Vector2.zero;
-			collapseTxtRt.anchorMax = Vector2.one;
-			collapseTxtRt.offsetMin = new Vector2(4, 0);
-			collapseTxtRt.offsetMax = new Vector2(-4, 0);
-			var collapseTxt = collapseTxtGo.AddComponent<TextMeshProUGUI>();
-			collapseTxt.color = Color.white;
-			StylePaintTabTmp(collapseTxt, "Collapse ▲", kPaintTabUiFontSize, TextAlignmentOptions.Center);
-
-			var collapseRt = collapseBtnGo.GetComponent<RectTransform>();
-			if (pinCollapseToToolViewport)
-			{
-				collapseBtnGo.transform.SetParent(toolOptsScroll.viewport, false);
-				collapseRt.anchorMin = new Vector2(0f, 0f);
-				collapseRt.anchorMax = new Vector2(1f, 0f);
-				collapseRt.pivot = new Vector2(0.5f, 0f);
-				collapseRt.anchoredPosition = Vector2.zero;
-				collapseRt.offsetMin = new Vector2(6f, 4f);
-				collapseRt.offsetMax = new Vector2(-6f, 4f + 30f);
-				collapseBtnGo.SetActive(false);
-				collapseBtnGo.transform.SetAsLastSibling();
-			}
-			else
-			{
-				collapseBtnGo.transform.SetParent(panelGo.transform, false);
-				var collapseLe = collapseBtnGo.AddComponent<LayoutElement>();
-				collapseLe.minHeight = 30;
-				collapseLe.preferredHeight = 30;
-			}
+			// Same bar as Value Assist: pinned bottom "Collapse ▲", click closes this panel.
+			var collapseBtnGo = EnsureToolOptionsCollapseBar(toolSectionParent, panelGo, BRUSH_OPTS_COLLAPSE_BAR,
+				() => CloseBrushOptionsPanel(toolSectionParent));
 
 			void ApplyRadioRowTint(Toggle[] group)
 			{
@@ -2435,7 +2431,7 @@ namespace spz {
 				if (open)
 					CloseValueAssistPanel(toolSectionParent);
 				panelGo.SetActive(open);
-				if (pinCollapseToToolViewport)
+				if (collapseBtnGo != null)
 					collapseBtnGo.SetActive(open);
 				panelLe.preferredHeight = open ? -1f : 0f;
 				headerTxt.text = open ? "Brush options ▴" : "Brush options ▼";
@@ -2461,23 +2457,115 @@ namespace spz {
 						else
 							sr.verticalNormalizedPosition = 0f;
 					}
-					if (pinCollapseToToolViewport)
+					if (collapseBtnGo != null)
 						collapseBtnGo.transform.SetAsLastSibling();
 				}
 			});
 
-			collapseBtn.onClick.AddListener(() =>
-			{
-				panelGo.SetActive(false);
-				if (pinCollapseToToolViewport)
-					collapseBtnGo.SetActive(false);
-				panelLe.preferredHeight = 0f;
-				headerTxt.text = "Brush options ▼";
-				SyncToolOptionsRowModalBlockForSection(toolSectionParent);
-				LayoutRebuilder.ForceRebuildLayoutImmediate(toolSectionParent);
-			});
-
 			SyncBrushToolRadiosFromSize();
+		}
+
+		/// <summary>
+		/// Shared collapse affordance for Tool Options expandos (Brush options, Value Assist): one full-width
+		/// "Collapse ▲" bar pinned to the bottom of the Tool Options scroll viewport, or appended at the end of
+		/// <paramref name="panelGo"/> when the section has no scroll view. Both panels build their bar here so
+		/// they look and collapse identically. A freshly created bar starts hidden — show it with the panel.
+		/// </summary>
+		public static GameObject EnsureToolOptionsCollapseBar(RectTransform toolSectionParent, GameObject panelGo,
+			string barName, UnityEngine.Events.UnityAction onCollapse)
+		{
+			if (panelGo == null || string.IsNullOrEmpty(barName)) return null;
+
+			// includeInactive: Paint tab chrome is often built while the tab is hidden — without it the bar
+			// would silently fall back to an inline row and the two expandos would look different again.
+			var scroll = toolSectionParent != null ? toolSectionParent.GetComponentInParent<ScrollRect>(true) : null;
+			bool pinToViewport = scroll != null && scroll.viewport != null;
+			Transform barParent = pinToViewport ? (Transform)scroll.viewport : panelGo.transform;
+
+			var found = barParent.Find(barName);
+			GameObject barGo = found != null ? found.gameObject : null;
+			bool created = barGo == null;
+			if (created)
+			{
+				barGo = new GameObject(barName);
+				barGo.AddComponent<RectTransform>();
+				var barImg = barGo.AddComponent<Image>();
+				barImg.raycastTarget = true;
+				var barBtn = barGo.AddComponent<Button>();
+				barBtn.targetGraphic = barImg;
+				// Slight transparency so scrolling content remains visible under the pinned bar (viewport overlay).
+				var barColors = barBtn.colors;
+				barColors.normalColor = new Color(0.22f, 0.28f, 0.36f, 0.78f);
+				barColors.highlightedColor = new Color(0.30f, 0.36f, 0.44f, 0.86f);
+				barColors.pressedColor = new Color(0.17f, 0.22f, 0.30f, 0.74f);
+				barColors.selectedColor = barColors.normalColor;
+				barColors.disabledColor = new Color(0.22f, 0.28f, 0.36f, 0.45f);
+				barBtn.colors = barColors;
+				barImg.color = barColors.normalColor;
+
+				var lblGo = new GameObject("Label");
+				lblGo.transform.SetParent(barGo.transform, false);
+				var lblRt = lblGo.AddComponent<RectTransform>();
+				lblRt.anchorMin = Vector2.zero;
+				lblRt.anchorMax = Vector2.one;
+				lblRt.offsetMin = new Vector2(4, 0);
+				lblRt.offsetMax = new Vector2(-4, 0);
+				var lbl = lblGo.AddComponent<TextMeshProUGUI>();
+				lbl.color = Color.white;
+				StylePaintTabTmp(lbl, TOOL_OPTIONS_COLLAPSE_LABEL, kPaintTabUiFontSize, TextAlignmentOptions.Center);
+			}
+
+			var clickBtn = barGo.GetComponent<Button>();
+			if (clickBtn != null)
+			{
+				clickBtn.onClick.RemoveAllListeners();
+				if (onCollapse != null) clickBtn.onClick.AddListener(onCollapse);
+			}
+
+			var barRt = barGo.GetComponent<RectTransform>();
+			if (pinToViewport)
+			{
+				if (barGo.transform.parent != scroll.viewport)
+					barGo.transform.SetParent(scroll.viewport, false);
+				barRt.anchorMin = new Vector2(0f, 0f);
+				barRt.anchorMax = new Vector2(1f, 0f);
+				barRt.pivot = new Vector2(0.5f, 0f);
+				barRt.anchoredPosition = Vector2.zero;
+				barRt.offsetMin = new Vector2(6f, 4f);
+				barRt.offsetMax = new Vector2(-6f, 4f + TOOL_OPTIONS_COLLAPSE_BAR_H);
+				// Pinned bar floats over the panel, so keep its last row reachable.
+				EnsureCollapseBarBottomSpacer(panelGo, barName);
+			}
+			else
+			{
+				if (barGo.transform.parent != panelGo.transform)
+					barGo.transform.SetParent(panelGo.transform, false);
+				var barLe = barGo.GetComponent<LayoutElement>() ?? barGo.AddComponent<LayoutElement>();
+				barLe.minHeight = TOOL_OPTIONS_COLLAPSE_BAR_H;
+				barLe.preferredHeight = TOOL_OPTIONS_COLLAPSE_BAR_H;
+			}
+			barGo.transform.SetAsLastSibling();
+
+			if (created)
+				barGo.SetActive(false);
+			return barGo;
+		}
+
+		static void EnsureCollapseBarBottomSpacer(GameObject panelGo, string barName)
+		{
+			string spacerName = barName + "Spacer";
+			var found = panelGo.transform.Find(spacerName);
+			GameObject spacerGo = found != null ? found.gameObject : null;
+			if (spacerGo == null)
+			{
+				spacerGo = new GameObject(spacerName);
+				spacerGo.transform.SetParent(panelGo.transform, false);
+				spacerGo.AddComponent<RectTransform>();
+			}
+			var le = spacerGo.GetComponent<LayoutElement>() ?? spacerGo.AddComponent<LayoutElement>();
+			le.minHeight = TOOL_OPTIONS_COLLAPSE_BAR_H + 10f;
+			le.preferredHeight = TOOL_OPTIONS_COLLAPSE_BAR_H + 10f;
+			spacerGo.transform.SetAsLastSibling();
 		}
 
 		static void TryPickSymmetryPlaneUnderCursor()
