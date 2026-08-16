@@ -22,6 +22,33 @@ public sealed class ExportPipelineChunkingContractTests {
 	}
 
 	[Test]
+	public void BudgetedReadback_RebindsSharedMaterialEverySlice() {
+		string src = Read("Assets", "_gm", "Features", "TextureTools", "TextureTools_SPZ.cs");
+		int fn = src.IndexOf("void ReadBackSlice(int sliceIx)", StringComparison.Ordinal);
+		Assert.That(fn, Is.GreaterThan(0), "budgeted readback must have a per-slice helper");
+		int end = src.IndexOf("outList.Add(texture2D);", fn, StringComparison.Ordinal);
+		Assert.That(end, Is.GreaterThan(fn));
+		string body = src.Substring(fn, end - fn);
+
+		// TextureArrayReadSlice_mat is shared global state and this loop yields between slices, so
+		// any other texture-array read in between rebinds it and the rest of our slices would come
+		// from the wrong source. Binding once before the loop is only correct for the single-frame
+		// variant of this call.
+		Assert.That(body, Does.Contain("mat.SetTexture(\"_MainTex\", textureArray)"),
+			"each slice must re-bind the source array on the shared material");
+		Assert.That(body, Does.Contain("RenderUdims.SetNumUdims"),
+			"UDIM count must be re-applied per slice, not trusted across frames");
+		Assert.That(body, Does.Contain("SAMPLER_POINT"),
+			"sampler keywords must be re-applied per slice");
+
+		int loop = src.IndexOf("IEnumerator TextureArray_to_Texture2DList_Budgeted", StringComparison.Ordinal);
+		Assert.That(loop, Is.GreaterThan(0));
+		string coroutine = src.Substring(loop, fn - loop);
+		Assert.That(coroutine, Does.Contain("textureArray == null"),
+			"a source array destroyed mid-export must stop the readback, not write garbage slices");
+	}
+
+	[Test]
 	public void SaveMgr_DilatesNonInstantly() {
 		string src = Read("Assets", "_gm", "Features", "Save Load Import Export", "Save_MGR.cs");
 		Assert.That(src, Does.Contain("isRunInstantly = false"),

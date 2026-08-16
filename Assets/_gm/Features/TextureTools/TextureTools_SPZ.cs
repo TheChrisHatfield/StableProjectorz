@@ -422,11 +422,6 @@ namespace spz {
 	        tempRT.filterMode = SceneResolution_MGR.resultTexFilterMode;
 	        RenderTexture.active = tempRT;
 
-	        mat.SetTexture("_MainTex", textureArray);
-	        RenderUdims.SetNumUdims(true, textureArray.volumeDepth, mat);
-	        SetKeyword_Material(mat, "RRR1", arg==TexArr_toTex2dList_arg.RRR1);
-	        SetKeyword_Material(mat, "SAMPLER_POINT", SceneResolution_MGR.resultTexFilterMode==FilterMode.Point);
-
 	        sched?.BeginSession(wh.x, wh.y, slices);
 
 	        // Unlike the single-frame variant this spans many frames, so it can be stopped midway
@@ -436,6 +431,13 @@ namespace spz {
 	        try {
 	            int i = 0;
 	            while (i < slices){
+	                // The source belongs to the live accumulation, which a paint stroke or a finished
+	                // generation can rebuild while this coroutine is yielded. Reading a destroyed array
+	                // would write garbage slices into a file the user thinks is their texture.
+	                if (textureArray == null){
+	                    Debug.LogWarning("[TextureTools_SPZ] Budgeted readback: source array went away mid-export; stopping at slice " + i + ".");
+	                    yield break;
+	                }
 	                if (sched != null){
 	                    sched.BeginTick(Time.deltaTime);
 	                    sched.GetFrameBudget(slices - i, out float budgetMs, out int maxUnits);
@@ -462,6 +464,15 @@ namespace spz {
 	        onProgress01?.Invoke(1f);
 
 	        void ReadBackSlice(int sliceIx){
+	            // Re-bind every slice instead of once before the loop. This material is shared global
+	            // state and the loop now spans frames by design, so anything else that reads a texture
+	            // array in between — a finished generation, an icon merge, the single-frame variant of
+	            // this call — rebinds _MainTex and the keywords, and every remaining slice would be
+	            // sampled from that other array. A few SetX calls are nothing beside a full-size blit.
+	            mat.SetTexture("_MainTex", textureArray);
+	            RenderUdims.SetNumUdims(true, textureArray.volumeDepth, mat);
+	            SetKeyword_Material(mat, "RRR1", arg==TexArr_toTex2dList_arg.RRR1);
+	            SetKeyword_Material(mat, "SAMPLER_POINT", SceneResolution_MGR.resultTexFilterMode==FilterMode.Point);
 	            mat.SetInteger("_SliceIx", sliceIx);
 	            Graphics.Blit(null, tempRT, mat);
 	            Texture2D texture2D = new Texture2D(wh.x, wh.y, dest_format, textureArray.mipmapCount, TextureCreationFlags.None);
