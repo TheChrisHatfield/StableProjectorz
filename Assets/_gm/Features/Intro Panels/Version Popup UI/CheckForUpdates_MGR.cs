@@ -82,6 +82,7 @@ namespace spz {
 
 	        UnityWebRequest pastebinWWW = UnityWebRequest.Get(PASTEBIN_VERSION_URL);
 	        UnityWebRequest websiteWWW = UnityWebRequest.Get(WEBSITE_VERSION_URL);
+	        try {
 
 	        // Send both web requests simultaneously
 	        var pastebinRequest = pastebinWWW.SendWebRequest();
@@ -117,6 +118,10 @@ namespace spz {
 	        }
 
 	        _checkForUpdates_crtn = null;
+	        } finally {
+	            pastebinWWW?.Dispose();
+	            websiteWWW?.Dispose();
+	        }
 	    }
 
 
