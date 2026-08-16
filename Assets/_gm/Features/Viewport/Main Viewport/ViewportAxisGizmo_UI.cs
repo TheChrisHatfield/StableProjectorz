@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using TMPro;
@@ -74,6 +75,14 @@ namespace spz {
 		readonly List<TextMeshProUGUI> _handleLabels = new List<TextMeshProUGUI>();
 		readonly List<RectTransform> _lineRects = new List<RectTransform>();
 		readonly List<Image> _lineImages = new List<Image>();
+
+		/// <summary>Below this the re-projection is invisible, so an idle view can skip the whole pass.</summary>
+		const float RotationEpsilonDeg = 0.02f;
+		static readonly Comparison<KeyValuePair<int, int>> ByDrawOrder = (a, b) => a.Value.CompareTo(b.Value);
+		readonly List<KeyValuePair<int, int>> _orderBuffer = new List<KeyValuePair<int, int>>(6);
+		readonly List<int> _appliedOrder = new List<int>(6);
+		Quaternion _lastAppliedRotation = Quaternion.identity;
+		bool _hasAppliedOrientation;
 
 		public ViewportAxisGizmo_Spec Spec => _spec;
 		public RectTransform RootRect => _root;
@@ -428,6 +437,8 @@ namespace spz {
 				float centerSize = spec.SizePx * 0.42f;
 				_centerRt.sizeDelta = new Vector2(centerSize, centerSize);
 			}
+			// Radius and handle size just changed, so the cached projection is stale even if the view did not move.
+			_hasAppliedOrientation = false;
 		}
 
 		float HandleDiameterPx => Mathf.Max(12f, _spec.SizePx * 0.235f);
@@ -458,12 +469,23 @@ namespace spz {
 			ApplyOrientation(camRot);
 		}
 
-		/// <summary>Placement pass for an explicit camera rotation (used by <see cref="RefreshFromCamera"/> and tests).</summary>
-		public void ApplyOrientation(Quaternion cameraRotation) {
+		/// <summary>
+		/// Placement pass for an explicit camera rotation (used by <see cref="RefreshFromCamera"/> and tests).
+		/// Returns false when the view has not moved since the last pass: this runs every frame next to painting and
+		/// generation, so an idle camera must not re-sort the canvas hierarchy or re-generate TMP meshes.
+		/// </summary>
+		public bool ApplyOrientation(Quaternion cameraRotation) {
+			if (_hasAppliedOrientation && Quaternion.Angle(_lastAppliedRotation, cameraRotation) < RotationEpsilonDeg) {
+				return false;
+			}
+			_lastAppliedRotation = cameraRotation;
+			_hasAppliedOrientation = true;
+
 			var axes = ViewportAxisGizmo_Math.AxisDirections;
 			float radius = OrbitRadiusPx;
 			float diameter = HandleDiameterPx;
-			var order = new List<KeyValuePair<int, int>>(axes.Length);
+			var order = _orderBuffer;
+			order.Clear();
 
 			for (int i = 0; i < axes.Length && i < _handleRects.Count; i++) {
 				Vector3 axis = axes[i];
@@ -494,25 +516,46 @@ namespace spz {
 					if (label.color != lc) {
 						label.color = lc;
 					}
-					label.fontSize = Mathf.Max(8f, diameter * ViewportAxisGizmo_Math.HandleScale(towards) * 0.52f);
+					float wantedFontSize = Mathf.Max(8f, diameter * ViewportAxisGizmo_Math.HandleScale(towards) * 0.52f);
+					// Assigning fontSize dirties the text even with the same value, forcing a mesh rebuild.
+					if (Mathf.Abs(label.fontSize - wantedFontSize) > 0.01f) {
+						label.fontSize = wantedFontSize;
+					}
 				}
 
 				UpdateAxisLine(i, offset, towards);
 				order.Add(new KeyValuePair<int, int>(i, ViewportAxisGizmo_Math.DrawOrderKey(towards)));
 			}
 
-			order.Sort((a, b) => a.Value.CompareTo(b.Value));
-			for (int i = 0; i < order.Count; i++) {
-				var rt = _handleRects[order[i].Key];
-				if (rt != null) {
-					rt.SetAsLastSibling();
+			order.Sort(ByDrawOrder);
+			if (DepthOrderChanged(order)) {
+				_appliedOrder.Clear();
+				for (int i = 0; i < order.Count; i++) {
+					var rt = _handleRects[order[i].Key];
+					if (rt != null) {
+						rt.SetAsLastSibling();
+					}
+					_appliedOrder.Add(order[i].Key);
+				}
+				// The axis parallel to the view collapses onto the middle (a front view puts -Z exactly there), so the
+				// lantern has to stay the topmost sibling or it gets hidden and its clicks are eaten by that handle.
+				if (_centerRt != null) {
+					_centerRt.SetAsLastSibling();
 				}
 			}
-			// The axis parallel to the view collapses onto the middle (a front view puts -Z exactly there), so the
-			// lantern has to stay the topmost sibling or it gets hidden and its clicks are eaten by that handle.
-			if (_centerRt != null) {
-				_centerRt.SetAsLastSibling();
+			return true;
+		}
+
+		bool DepthOrderChanged(List<KeyValuePair<int, int>> order) {
+			if (_appliedOrder.Count != order.Count) {
+				return true;
 			}
+			for (int i = 0; i < order.Count; i++) {
+				if (_appliedOrder[i] != order[i].Key) {
+					return true;
+				}
+			}
+			return false;
 		}
 
 		void UpdateAxisLine(int axisIndex, Vector2 handleOffset, float towardsViewer01) {
