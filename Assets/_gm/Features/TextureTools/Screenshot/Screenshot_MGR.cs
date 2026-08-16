@@ -27,6 +27,12 @@ namespace spz {
 	    // otherwise agent/tool callers hang until their own timeout with _screenshotInFlight stuck.
 	    Action<Vector2, Vector2, Texture2D> _pendingScriptCaptureCb = null;
 
+	    // Capture RenderTextures that are alive right now. MakeScreenshot_crtn destroys its pair on the
+	    // last line, but StopAllCoroutines (cancel, or a superseding scripted request) kills it long
+	    // before that — every cancelled capture would orphan a screen-sized RT plus its crop.
+	    // A list, not one pair: the mouse-drag path can start a capture without cancelling a scripted one.
+	    readonly List<RenderTexture> _inFlightCaptureRTs = new List<RenderTexture>();
+
 	    // minimum screen coord (in pixels), maximum screen coord (in pixels).
 	    // NOTICE: each subscribe will BECOME THE OWNER of a texture2D (we clone them as needed).
 	    // SO, REMEMBER TO DESTROY YOUR TEXTURE WHEN ITS NO LONGER NEEDED, TO AVOID MEMORY LEAKS.
@@ -63,6 +69,7 @@ namespace spz {
 	        var prev = _pendingScriptCaptureCb;
 	        _pendingScriptCaptureCb = null;
 	        StopAllCoroutines();
+	        DestroyInFlightCaptureRTs();//the killed coroutine can no longer reach its own cleanup
 	        // Unlock chrome that a killed mid-frame capture may have left locked.
 	        try { SkyboxBackground_MGR.instance?.FullAlpha_StopLock(originalRequestor: this); } catch { /* ignore */ }
 	        try { Viewport_StatusText.instance?.PreferVIsible(originalRequestor: this); } catch { /* ignore */ }
@@ -213,6 +220,8 @@ namespace spz {
 
 	        RenderTexture portionRT = new RenderTexture(Mathf.RoundToInt(size_px.x),
 	                                                    Mathf.RoundToInt(size_px.y),  0);
+	        _inFlightCaptureRTs.Add(screenRT);
+	        _inFlightCaptureRTs.Add(portionRT);
 	        // Hide the framing-rectangle, capture.
 	        // We'll apply alpha during screenshot blit, so make sure skybox manager doesn't apply alpha this frame.
 	        _forbidFrameImage = true;
@@ -265,8 +274,21 @@ namespace spz {
 	        TextureTools_SPZ.RenderTexture_to_Texture2D_Async(portionRT, onTex2D_fetched);
 	        while(!isDone){ yield return null; }
 
-	        DestroyImmediate(screenRT);
-	        DestroyImmediate(portionRT);
+	        ReleaseCaptureRT(screenRT);
+	        ReleaseCaptureRT(portionRT);
+	    }
+
+	    void ReleaseCaptureRT(RenderTexture rt){
+	        if (rt == null){ return; }
+	        _inFlightCaptureRTs.Remove(rt);
+	        DestroyImmediate(rt);
+	    }
+
+	    void DestroyInFlightCaptureRTs(){
+	        for (int i = 0; i < _inFlightCaptureRTs.Count; i++){
+	            if (_inFlightCaptureRTs[i] != null){ DestroyImmediate(_inFlightCaptureRTs[i]); }
+	        }
+	        _inFlightCaptureRTs.Clear();
 	    }
 
 
@@ -383,6 +405,7 @@ namespace spz {
 	    }
 
 	    void OnDestroy(){
+	        DestroyInFlightCaptureRTs();//teardown mid-capture must not orphan the screen-sized RTs
 	        DestroyImmediate(_screenshotRegion_mat);
 	    }
 
