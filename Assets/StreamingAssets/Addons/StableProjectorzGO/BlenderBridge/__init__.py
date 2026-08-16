@@ -10,7 +10,7 @@
 bl_info = {
     "name": "SPZ GO (HTTP)",
     "author": "StableProjectorz / community",
-    "version": (0, 3, 0),
+    "version": (0, 4, 0),
     "blender": (4, 0, 0),
     "location": "3D Viewport: N (toggle sidebar) → top tab 'SPZ GO' (not auto-open; scroll tab row if needed)",
     "description": "Link with StableProjectorz: pull/push 3D via REST; shared exchange folder; FBX and UV (SVG) helpers",
@@ -533,8 +533,42 @@ def _mark_exchange_stamp_seen_for_fbx(fbx_path: str) -> None:
         _watch_needs_seed = False
 
 
+_SPZ_IMPORT_MARKER = "spz_go_import"
+
+
+def _spz_owned_objects() -> list:
+    """Objects a previous SPZ handoff put in the scene — FBX import or direct mesh stream."""
+    out = []
+    for obj in list(bpy.data.objects):
+        try:
+            if obj.get(_SPZ_IMPORT_MARKER) or obj.get("spz_mesh_stream"):
+                out.append(obj)
+        except (ReferenceError, TypeError):
+            continue
+    return out
+
+
+def _remove_objects(objs) -> int:
+    removed = 0
+    for obj in objs:
+        try:
+            mesh = obj.data if getattr(obj, "type", None) == "MESH" else None
+            bpy.data.objects.remove(obj, do_unlink=True)
+            removed += 1
+            if mesh is not None and mesh.users == 0:
+                bpy.data.meshes.remove(mesh)
+        except (ReferenceError, TypeError, RuntimeError) as e:
+            print("SPZ GO: could not remove superseded object:", e)
+    return removed
+
+
 def _try_import_exchange_fbx(path: str) -> bool:
     """Import FBX + auto-apply maps. Returns True only when import finished."""
+    # Re-importing must REPLACE the previous SPZ model, not stack another copy beside it: each
+    # export/import cycle used to leave one more duplicate in the scene. Snapshot first so the new
+    # objects can be told apart from the ones being superseded.
+    previous = _spz_owned_objects()
+    before = set(bpy.data.objects)
     try:
         ret = bpy.ops.import_scene.fbx(
             filepath=path,
@@ -547,6 +581,18 @@ def _try_import_exchange_fbx(path: str) -> bool:
         if ret is None or "FINISHED" not in ret:
             print("SPZ GO import_scene.fbx did not finish:", ret, "path=", path)
             return False
+        created = [o for o in bpy.data.objects if o not in before]
+        for obj in created:
+            try:
+                obj[_SPZ_IMPORT_MARKER] = True
+            except (ReferenceError, TypeError):
+                pass
+        # Commit the replacement only once the new objects exist, matching the mesh-stream path:
+        # a cancelled or failed import must leave the previous model untouched.
+        if created:
+            dropped = _remove_objects([o for o in previous if o not in created])
+            if dropped:
+                print(f"SPZ GO: replaced {dropped} superseded SPZ object(s).")
         _apply_spz_export_scale_litmus(path)
         _auto_apply_exchange_texture_after_import(path)
         # Manual Import and auto-watch share this path — prevent the watcher from importing again.

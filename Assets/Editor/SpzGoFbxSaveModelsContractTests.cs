@@ -47,6 +47,18 @@ public sealed class SpzGoFbxSaveModelsContractTests {
 		Assert.That(src, Does.Contain("if (basis.IsDefault) return parent;"),
 			"Default settings must preserve the authored no-extra-root-transform path.");
 
+		// The whole tangent frame shares the positions'/normals' handedness conversion. Mirroring only
+		// part of it hands consumers a basis that disagrees with the surface, which reads as broken
+		// tangent-space texturing — and gets worse under a mirroring export axis.
+		Assert.That(src, Does.Contain("-normals[n][2]"),
+			"Normals must mirror z.");
+		Assert.That(src, Does.Contain("-binormals[n][2]"),
+			"Binormals must mirror z with the normals, not stay in Unity handedness.");
+		Assert.That(src, Does.Contain("-tangents[n][2]"),
+			"Tangents must mirror z with the normals.");
+		Assert.That(src, Does.Contain("-tangents[n][3]"),
+			"Bitangent sign must invert: the z mirror reverses cross(normal, tangent).");
+
 		string container = Path.Combine(
 			Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "3D Models", "Objs3D_Container.cs");

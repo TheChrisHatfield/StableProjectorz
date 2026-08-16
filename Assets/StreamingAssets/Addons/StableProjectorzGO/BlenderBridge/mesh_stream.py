@@ -261,9 +261,11 @@ def last_error() -> str:
 
 
 def _remove_previous_stream_objects() -> None:
+    # Both markers count as "the SPZ model currently in the scene": a stream that only cleared its
+    # own objects would stack a duplicate on top of a model that arrived via FBX import.
     for obj in list(bpy.data.objects):
         try:
-            if not obj.get("spz_mesh_stream"):
+            if not (obj.get("spz_mesh_stream") or obj.get("spz_go_import")):
                 continue
         except (ReferenceError, TypeError):
             continue
