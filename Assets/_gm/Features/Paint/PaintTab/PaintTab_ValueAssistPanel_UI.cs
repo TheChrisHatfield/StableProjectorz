@@ -284,6 +284,17 @@ namespace spz {
 				           && _statusTmp.text != null && _statusTmp.text.StartsWith("Live ")) {
 					// Live turned off (or Accept arm took over) — do not leave a stale Live line.
 					RefreshStatusLine();
+				} else if (!_hasProposal && !acceptArm && ValuePaintLivePredictor.IsLiveActive
+				           && !string.IsNullOrEmpty(ValuePaintLivePredictor.LastRefusalReason)) {
+					// B2.2b — Live on but refusing must not read as a silent "Idle". A deliberate
+					// self-read hold reports no reason, so only real refusals reach here.
+					// B4 still outranks us: Accept refusals and "Dismissed." keep the line.
+					string cur = _statusTmp.text ?? "";
+					if (!cur.StartsWith("Accept refused") && cur != "Dismissed.") {
+						string refusalLine = "Live idle — " + ValuePaintLivePredictor.LastRefusalReason;
+						if (cur != refusalLine)
+							_statusTmp.text = refusalLine;
+					}
 				}
 			}
 			if (!ValuePaintProposalApplier.IsArmed || _statusTmp == null) return;
@@ -717,6 +728,13 @@ namespace spz {
 			if (ValuePaintLivePredictor.IsLiveActive && ValuePaintLivePredictor.HasLastProposal) {
 				var p = ValuePaintLivePredictor.LastProposal;
 				_statusTmp.text = "Live " + p.CurrentBin + "→" + p.DesiredBin + " · " + ValuePaintLivePredictor.LastAssistWhich;
+				return;
+			}
+			// B2.2b — Live on but refusing must never read as a silent "Idle". A deliberate
+			// self-read hold reports no reason, so only real refusals surface here.
+			if (ValuePaintLivePredictor.IsLiveActive
+			    && !string.IsNullOrEmpty(ValuePaintLivePredictor.LastRefusalReason)) {
+				_statusTmp.text = "Live idle — " + ValuePaintLivePredictor.LastRefusalReason;
 				return;
 			}
 			if (armed) {

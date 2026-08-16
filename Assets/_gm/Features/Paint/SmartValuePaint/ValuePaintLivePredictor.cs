@@ -14,10 +14,18 @@ namespace spz {
 		static bool _assistNeural;
 		static ValuePaintBand _lastDesired = (ValuePaintBand)(-1);
 		static float _lastLiveArmTime = -999f;
+		/// <summary>Band Live last armed as DesiredBin — a mid-stroke sample matching it is our own paint (B2.2a).</summary>
+		static ValuePaintBand _lastArmedDesired = (ValuePaintBand)(-1);
 
 		public static string LastAssistWhich => _assistWhich;
 		public static ValuePaintProposal LastProposal { get; private set; }
 		public static bool HasLastProposal { get; private set; }
+
+		/// <summary>
+		/// Why Live last refused to arm, or "" when Live is healthy or deliberately holding
+		/// its arm (B2.2b). "Live is on and nothing happens" must always be explainable.
+		/// </summary>
+		public static string LastRefusalReason { get; private set; } = "";
 
 		public static bool IsLiveActive =>
 			PaintTab_ValueAssistOptions.Enabled && PaintTab_ValueAssistOptions.LivePredict;
@@ -29,16 +37,37 @@ namespace spz {
 			LastProposal = default;
 			_lastDesired = (ValuePaintBand)(-1);
 			_lastLiveArmTime = -999f;
+			_lastArmedDesired = (ValuePaintBand)(-1);
+			LastRefusalReason = "";
 		}
 
-		public static bool TryPredictFromSurface(Color surfaceSample, out string reason) {
+		/// <param name="strokeActive">True while the user is mid-stroke — enables the self-read hold (B2.2a).</param>
+		public static bool TryPredictFromSurface(Color surfaceSample, out string reason, bool strokeActive = false) {
+			bool ok = PredictCore(surfaceSample, strokeActive, out reason, out bool holding);
+			// A hold is normal operation, not a fault: it must not light up the status line.
+			LastRefusalReason = (ok || holding) ? "" : reason;
+			return ok;
+		}
+
+		static bool PredictCore(Color surfaceSample, bool strokeActive, out string reason, out bool holding) {
 			reason = "";
+			holding = false;
 			if (!IsLiveActive) {
 				reason = "live off";
 				return false;
 			}
 			if (!IsFiniteColor(surfaceSample)) {
 				reason = "non-finite sample";
+				return false;
+			}
+			float lum = DeterministicValuePaintAssist.Luminance01(surfaceSample);
+			ValuePaintBand plane = DeterministicValuePaintAssist.BandFromLuminance(lum);
+			// B2.2a — mid-stroke the accumulation already holds the paint laid earlier this frame.
+			// A sample landing on the band we armed is the brush reading itself; stepping again
+			// ratchets value away run-away. Hold the arm until the tip reaches different form.
+			if (strokeActive && HasLastProposal && plane == _lastArmedDesired) {
+				holding = true;
+				reason = "hold: self-read";
 				return false;
 			}
 			var lavd = DecimaconProductGate.BeginLive();
@@ -57,12 +86,14 @@ namespace spz {
 			// fabricated ranForward sample (LAVD lock).
 			bool neuralForward = _assist is MlpDecimaconPaintAssist;
 			var proposal = _assist.ProposeFromColor(surfaceSample, default);
-			float lum = DeterministicValuePaintAssist.Luminance01(surfaceSample);
-			ValuePaintBand plane = DeterministicValuePaintAssist.BandFromLuminance(lum);
+			// B2.2 — Rec.709 owns the plane we are standing on; the value heads own the step.
+			// (Until 2026-08-16 DesiredBin was forced to the plane as a MultiHead-collapse
+			// workaround; measured false for Decimacon, and it made every stroke a no-op.)
 			proposal.CurrentBin = plane;
-			proposal.DesiredBin = plane;
 			proposal.MeanLuminance01 = lum;
-			proposal.StrokeRole = ValuePaintStrokeRole.ReinforcePlane;
+			if (proposal.DesiredBin == plane)
+				proposal.DesiredBin = DeterministicValuePaintAssist.DesireAdjacentValueStep(plane);
+			proposal.StrokeRole = DeterministicValuePaintAssist.RoleForTransition(plane, proposal.DesiredBin);
 			if (!float.IsFinite(proposal.OpacityHint01) || proposal.OpacityHint01 < 0.05f)
 				proposal.OpacityHint01 = OpacityForPlane(plane);
 			else
@@ -74,6 +105,7 @@ namespace spz {
 			DecimaconProductGate.EndInference(lavd, DecimaconProductGate.ElapsedMs(sw), ranForward: neuralForward);
 			LastProposal = proposal;
 			HasLastProposal = true;
+			_lastArmedDesired = proposal.DesiredBin;
 			return true;
 		}
 
