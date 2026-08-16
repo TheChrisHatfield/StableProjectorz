@@ -151,7 +151,11 @@ namespace spz {
 	    }
 
 	    IEnumerator Generate_crtn( GenerateWhat what,  Dictionary<string,object> inputs,  GenerationCallbacks callbacks ){
-  
+	        // isBusy keys off _gen_or_resume_crtn. A throw before the bottom assignment (SerializeObject,
+	        // null callbacks, nested yield) used to leave that handle set forever: save/load/Gen Art/AO
+	        // all refuse "Gen3D is busy" and Cancel may never appear if StartedGenerate never ran.
+	        try {
+
 	        // Decide which endpoint:
 	        string destin_url = $"{Connection_MGR.GEN3D_URL}/generate";
 
@@ -174,14 +178,12 @@ namespace spz {
 	        }
 
 	        if (_cancelRequested) {
-	            _gen_or_resume_crtn = null;
 	            yield break;
 	        }
 
 	        if (_generateResponse == null){
 	            // We might have had an error or something else
 	            callbacks.onError?.Invoke("No response from generation request");
-	            _gen_or_resume_crtn = null;
 	            yield break;
 	        }
 
@@ -207,7 +209,6 @@ namespace spz {
 	            if(_progress_crtn!=null){ StopCoroutine(_progress_crtn); }
 	            _progress_crtn = null;
 	            if (_cancelRequested) {
-		            _gen_or_resume_crtn = null;
 		            yield break;
 	            }
 	            if (_generateStatus == TaskStatus.FAILED){
@@ -234,7 +235,9 @@ namespace spz {
 	        else if (!_cancelRequested) {
 	            callbacks.onError?.Invoke($"Unexpected generation status: {_generateStatus}");
 	        }
-	        _gen_or_resume_crtn = null;
+	        } finally {
+	            _gen_or_resume_crtn = null;
+	        }
 	    }
 
 
