@@ -39,8 +39,34 @@ public sealed class SaveMeshTexturesNullGuardContractTests {
 		Assert.That(i, Is.GreaterThan(0), "the real work must live in the coroutine");
 		string body = src.Substring(i);
 		Assert.That(body, Does.Contain("finally"));
-		Assert.That(body, Does.Contain("onComplete?.Invoke()"),
+		Assert.That(body, Does.Contain("onComplete?.Invoke("),
 			"every exit path (including yield break) must release the caller's busy flag");
+		Assert.That(body, Does.Contain("onComplete?.Invoke(completedTextureStage)"),
+			"completion must carry whether the texture stage actually ran, not just that it ended");
+		int done = body.IndexOf("completedTextureStage = true;", StringComparison.Ordinal);
+		int fin = body.IndexOf("} finally {", StringComparison.Ordinal);
+		Assert.That(done, Is.GreaterThan(0).And.LessThan(fin),
+			"the flag must be set at the end of the try body, so an early yield break reports false");
+	}
+
+	[Test]
+	public void ExchangeExport_OnlyMarksItselfReadyWhenTexturesWereWritten() {
+		// The .spz_go_ready sidecar is the other application's cue to auto-import "mesh + maps". The
+		// texture stage can bail early (no accumulation textures) while the mesh write succeeded, and
+		// stamping anyway hands the DCC an untextured mesh as a finished export.
+		string src = ReadSaveMgr();
+		int i = src.IndexOf("public bool Export3D_with_textures_ToPath(", StringComparison.Ordinal);
+		Assert.That(i, Is.GreaterThan(0));
+		int end = src.IndexOf("public static void TryDeleteSpzGoExchangeReadyStamp(", StringComparison.Ordinal);
+		Assert.That(end, Is.GreaterThan(i));
+		string body = src.Substring(i, end - i);
+
+		Assert.That(body, Does.Contain("void OnComplete( bool texturesWritten )"),
+			"the exchange completion must receive the texture-stage result");
+		int guard = body.IndexOf("if( texturesWritten )", StringComparison.Ordinal);
+		int stamp = body.IndexOf("TryWriteSpzGoExchangeReadyStamp(", StringComparison.Ordinal);
+		Assert.That(guard, Is.GreaterThan(0), "the stamp must be conditional");
+		Assert.That(stamp, Is.GreaterThan(guard), "the stamp must sit inside the success branch");
 	}
 
 	[Test]
