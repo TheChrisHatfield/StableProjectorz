@@ -86,6 +86,40 @@ namespace spz {
 				return p;
 			}
 
+			/// <summary>
+			/// Exact inverse of <see cref="MapOutput"/>. MapOutput permutes then flips, so undoing it
+			/// means flipping first and then applying the inverse permutation (YZX and ZXY invert each
+			/// other; the remaining orders are self-inverse).
+			/// </summary>
+			public Vector3 MapInput(Vector3 value) {
+				Vector3 p = value;
+				if (FlipX) p.x = -p.x;
+				if (FlipY) p.y = -p.y;
+				if (FlipZ) p.z = -p.z;
+				switch (Order) {
+					case AxisOrder.XZY: return new Vector3(p.x, p.z, p.y);
+					case AxisOrder.YXZ: return new Vector3(p.y, p.x, p.z);
+					case AxisOrder.YZX: return new Vector3(p.z, p.x, p.y);
+					case AxisOrder.ZXY: return new Vector3(p.y, p.z, p.x);
+					case AxisOrder.ZYX: return new Vector3(p.z, p.y, p.x);
+					default: return p;
+				}
+			}
+
+			/// <summary>
+			/// Correction for a vertex that Assimp already converted to Unity space, so that
+			/// export → external edit → import is the identity for any basis.
+			///
+			/// Export is C(B(p)) where B swaps Unity y/z into standard output space; Assimp's fixed
+			/// conversion undoes only B, leaving B(C(B(p))). Undoing that is B(C^-1(B(v))). B is its
+			/// own inverse, which is why it appears on both sides.
+			/// </summary>
+			public Vector3 MapImportedUnityVertex(Vector3 unityVertex) {
+				Vector3 standard = new Vector3(unityVertex.x, unityVertex.z, unityVertex.y);
+				Vector3 undone = MapInput(standard);
+				return new Vector3(undone.x, undone.z, undone.y);
+			}
+
 			/// <summary>True when the optional output mapping changes handedness.</summary>
 			public bool FlipsHandedness {
 				get {
