@@ -316,6 +316,17 @@ public sealed class ViewportAxisGizmoContractTests {
 			Assert.That(gizmo.ApplyOrientation(Quaternion.Euler(20f, 70f, 0f)), Is.True,
 				"A real orbit must still re-project.");
 
+			// Theme silo: an idle camera must still scrub spilled tints back to authored axis RGB.
+			var xHandle = gizmo.RootRect.Find(ViewportAxisGizmo_UI.HandlePrefix + "+X");
+			Assert.That(xHandle, Is.Not.Null);
+			var xImg = xHandle.GetComponent<Image>();
+			Color authored = xImg.color;
+			xImg.color = Color.magenta;
+			Assert.That(gizmo.ApplyOrientation(Quaternion.Euler(20f, 70f, 0f)), Is.False,
+				"Same rotation stays idle for layout, but…");
+			Assert.That(xImg.color, Is.EqualTo(authored),
+				"…authored axis colors must be reasserted so Nomad/BoundChrome spill cannot stick.");
+
 			gizmo.ApplySpec(new ViewportAxisGizmo_Spec(200f, 20f, string.Empty, null));
 			Assert.That(gizmo.ApplyOrientation(Quaternion.Euler(20f, 70f, 0f)), Is.True,
 				"A resize changes the orbit radius, so the cached projection must be discarded.");
@@ -403,6 +414,15 @@ public sealed class ViewportAxisGizmoContractTests {
 			"Domain-reload-off Play Mode must Destroy cached sprites, not only drop the dictionary entries.");
 		Assert.That(body, Does.Contain("Destroy(tex)"),
 			"The Texture2D behind each lantern sprite must be released too.");
+	}
+
+	[Test]
+	public void ThemeSilo_GizmoNeverCallsBoundChromeAndReassertsAuthoredColorsWhenIdle() {
+		string src = ReadRepo("Assets/_gm/Features/Viewport/Main Viewport/ViewportAxisGizmo_UI.cs");
+		Assert.That(src, Does.Not.Contain("ApplyBoundChrome"),
+			"Gizmo keeps Blender-style authored RGB; it must not opt into Nomad BoundChrome mutators.");
+		Assert.That(src, Does.Contain("ReassertAuthoredAxisColors"),
+			"Idle ApplyOrientation must scrub spilled tints without hierarchy/TMP churn.");
 	}
 
 	[Test]

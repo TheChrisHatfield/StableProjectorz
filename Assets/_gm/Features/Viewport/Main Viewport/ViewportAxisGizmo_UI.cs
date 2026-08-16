@@ -572,9 +572,12 @@ namespace spz {
 		/// Placement pass for an explicit camera rotation (used by <see cref="RefreshFromCamera"/> and tests).
 		/// Returns false when the view has not moved since the last pass: this runs every frame next to painting and
 		/// generation, so an idle camera must not re-sort the canvas hierarchy or re-generate TMP meshes.
+		/// Authored axis colors are still reasserted on the idle path so a Nomad / BoundChrome spill cannot stick
+		/// until the next orbit (theme silo: gizmo never opts into BoundChrome; it keeps Blender-style RGB).
 		/// </summary>
 		public bool ApplyOrientation(Quaternion cameraRotation) {
 			if (_hasAppliedOrientation && Quaternion.Angle(_lastAppliedRotation, cameraRotation) < RotationEpsilonDeg) {
+				ReassertAuthoredAxisColors(_lastAppliedRotation);
 				return false;
 			}
 			_lastAppliedRotation = cameraRotation;
@@ -599,22 +602,11 @@ namespace spz {
 					handleRt.sizeDelta = new Vector2(scaled, scaled);
 				}
 
-				var img = _handleImages[i];
-				if (img != null) {
-					Color c = ViewportAxisGizmo_Math.AxisColor(axis);
-					c.a = ViewportAxisGizmo_Math.HandleAlpha(towards, positive);
-					if (img.color != c) {
-						img.color = c;
-					}
-				}
+				ApplyAuthoredHandleColors(i, axis, positive, towards);
+				UpdateAxisLine(i, offset, towards);
 
 				var label = _handleLabels[i];
 				if (label != null) {
-					Color lc = label.color;
-					lc.a = ViewportAxisGizmo_Math.HandleAlpha(towards, true);
-					if (label.color != lc) {
-						label.color = lc;
-					}
 					float wantedFontSize = Mathf.Max(8f, diameter * ViewportAxisGizmo_Math.HandleScale(towards) * 0.52f);
 					// Assigning fontSize dirties the text even with the same value, forcing a mesh rebuild.
 					if (Mathf.Abs(label.fontSize - wantedFontSize) > 0.01f) {
@@ -622,7 +614,6 @@ namespace spz {
 					}
 				}
 
-				UpdateAxisLine(i, offset, towards);
 				order.Add(new KeyValuePair<int, int>(i, ViewportAxisGizmo_Math.DrawOrderKey(towards)));
 			}
 
@@ -643,6 +634,47 @@ namespace spz {
 				}
 			}
 			return true;
+		}
+
+		/// <summary>
+		/// Re-write axis RGB/alpha from <see cref="ViewportAxisGizmo_Math"/> without touching layout, sibling order,
+		/// or TMP fontSize — safe to call every idle frame for theme-silo honesty.
+		/// </summary>
+		void ReassertAuthoredAxisColors(Quaternion cameraRotation) {
+			var axes = ViewportAxisGizmo_Math.AxisDirections;
+			for (int i = 0; i < axes.Length && i < _handleRects.Count; i++) {
+				Vector3 axis = axes[i];
+				bool positive = ViewportAxisGizmo_Math.IsPositiveAxis(axis);
+				float towards = ViewportAxisGizmo_Math.TowardsViewer01(cameraRotation, axis);
+				ApplyAuthoredHandleColors(i, axis, positive, towards);
+				if (i < _lineImages.Count && _lineImages[i] != null) {
+					Color c = ViewportAxisGizmo_Math.AxisColor(axis);
+					c.a = ViewportAxisGizmo_Math.HandleAlpha(towards, true) * 0.8f;
+					if (_lineImages[i].color != c) {
+						_lineImages[i].color = c;
+					}
+				}
+			}
+		}
+
+		void ApplyAuthoredHandleColors(int i, Vector3 axis, bool positive, float towards) {
+			var img = i < _handleImages.Count ? _handleImages[i] : null;
+			if (img != null) {
+				Color c = ViewportAxisGizmo_Math.AxisColor(axis);
+				c.a = ViewportAxisGizmo_Math.HandleAlpha(towards, positive);
+				if (img.color != c) {
+					img.color = c;
+				}
+			}
+			var label = i < _handleLabels.Count ? _handleLabels[i] : null;
+			if (label != null) {
+				Color lc = label.color;
+				lc.a = ViewportAxisGizmo_Math.HandleAlpha(towards, true);
+				// Keep the dark ink RGB the build authored; only depth-fade the alpha.
+				if (label.color != lc) {
+					label.color = lc;
+				}
+			}
 		}
 
 		bool DepthOrderChanged(List<KeyValuePair<int, int>> order) {
