@@ -11,11 +11,18 @@ namespace spz {
 	/// </summary>
 	public static class ViewportAxisGizmo_CameraOps {
 
-		/// <summary>Camera the gizmo reflects and drives (the orbit-priority one).</summary>
+		/// <summary>
+		/// Camera the gizmo reflects and drives. Prefer the one under the cursor (same rule as orbit / F-focus) so
+		/// a multiview click on column 4 moves camera 4 instead of whichever view is currently marked "current".
+		/// </summary>
 		public static View_UserCamera ResolveGizmoCamera() {
 			var mgr = UserCameras_MGR.instance;
 			if (mgr == null) {
 				return null;
+			}
+			var underCursor = mgr.NearestToCursor();
+			if (underCursor != null && underCursor.gameObject.activeInHierarchy) {
+				return underCursor;
 			}
 			var cam = mgr._curr_viewCamera;
 			if (cam != null && cam.gameObject.activeInHierarchy) {

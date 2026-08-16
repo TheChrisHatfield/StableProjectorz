@@ -271,6 +271,8 @@ public sealed class ViewportAxisGizmoContractTests {
 			"TryOverview must check selection before claiming success.");
 		Assert.That(ops, Does.Contain("Nothing selected to frame"),
 			"The lantern click must tell the user why overview did nothing.");
+		Assert.That(ops, Does.Contain("NearestToCursor()"),
+			"Multiview: the gizmo must drive the camera under the cursor, not only _curr_viewCamera.");
 	}
 
 	[Test]
