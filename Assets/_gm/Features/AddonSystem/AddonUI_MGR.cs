@@ -2273,32 +2273,21 @@ namespace spz {
 			
 			var dropdown = fieldObj.AddComponent<TMP_Dropdown>();
 			dropdown.captionText = labelText2;
+			BuildDropdownListTemplate(fieldObj, dropdown, options.Count);
 			dropdown.options = new List<TMP_Dropdown.OptionData>();
 			foreach (var option in options) {
 				dropdown.options.Add(new TMP_Dropdown.OptionData(option));
 			}
 			dropdown.value = defaultIndex;
+			dropdown.RefreshShownValue();
 
-			void CycleDropdownValue() {
-				if (dropdown.options == null || dropdown.options.Count == 0) return;
-				int next = (dropdown.value + 1) % dropdown.options.Count;
-				dropdown.SetValueWithoutNotify(next);
-				labelText2.text = dropdown.options[next].text;
-				string idLocal = dropdownObj.GetInstanceID().ToString();
-				_uiElementValues[idLocal] = next;
-				PersistSpzGoExportAxisOrderIfNeeded(addonId, label, next);
-				SendValueChangeToPython(addonId, idLocal, "dropdown", next);
-			}
-			// Button-only click path — MouseClickSensor + Button both firing skipped every other option.
-			var clickBtn = fieldObj.GetComponent<Button>();
-			if (clickBtn == null) clickBtn = fieldObj.AddComponent<Button>();
-			clickBtn.targetGraphic = fieldBg;
-			clickBtn.onClick.AddListener(CycleDropdownValue);
-			// Also make the entire row clickable (users often click label/empty area).
+			// Clicking the label band (the top half of the row) opens the same list as clicking the
+			// field. Note this Button lives on the ROW, not on the field: a second Selectable beside
+			// TMP_Dropdown on one GameObject is unsupported and made both fight over the click.
 			var rowBtn = dropdownObj.GetComponent<Button>();
 			if (rowBtn == null) rowBtn = dropdownObj.AddComponent<Button>();
 			rowBtn.targetGraphic = rowBg;
-			rowBtn.onClick.AddListener(CycleDropdownValue);
+			rowBtn.onClick.AddListener(() => dropdown.Show());
 			
 			// Update value when selection changes
 			dropdown.onValueChanged.AddListener((index) => {
@@ -2322,6 +2311,124 @@ namespace spz {
 			SpzUiThemeOps.ApplyToAddonUiRoot(dropdownObj);
 			
 			return elementId;
+		}
+
+		/// <summary>
+		/// Builds the popup list a <see cref="TMP_Dropdown"/> needs in order to actually be a dropdown.
+		/// TMP validates the template strictly — it must contain a child <see cref="Toggle"/> that is not
+		/// the template root, whose parent is a RectTransform, with the item label parented under that
+		/// toggle — and refuses to open (logging an error on every click) when any of that is missing.
+		/// Runtime add-on panels build their widgets in code, so nothing supplies this by default.
+		/// </summary>
+		void BuildDropdownListTemplate(GameObject fieldObj, TMP_Dropdown dropdown, int optionCount) {
+			const float ItemHeight = 26f;
+			const float MaxListHeight = 208f;
+
+			var templateObj = new GameObject("Template");
+			templateObj.transform.SetParent(fieldObj.transform, false);
+			var templateRt = templateObj.AddComponent<RectTransform>();
+			templateRt.anchorMin = new Vector2(0f, 0f);
+			templateRt.anchorMax = new Vector2(1f, 0f);
+			templateRt.pivot = new Vector2(0.5f, 1f);
+			templateRt.anchoredPosition = new Vector2(0f, 2f);
+			templateRt.sizeDelta = new Vector2(0f, Mathf.Min(MaxListHeight, Mathf.Max(1, optionCount) * ItemHeight + 4f));
+			var templateBg = templateObj.AddComponent<Image>();
+			templateBg.sprite = UiRuntimeSprites.SolidRect;
+			templateBg.type = Image.Type.Simple;
+			templateBg.color = new Color(0.11f, 0.11f, 0.11f, 1f);
+
+			var viewportObj = new GameObject("Viewport");
+			viewportObj.transform.SetParent(templateObj.transform, false);
+			var viewportRt = viewportObj.AddComponent<RectTransform>();
+			viewportRt.anchorMin = Vector2.zero;
+			viewportRt.anchorMax = Vector2.one;
+			viewportRt.pivot = new Vector2(0f, 1f);
+			viewportRt.sizeDelta = Vector2.zero;
+			var viewportImg = viewportObj.AddComponent<Image>();
+			viewportImg.sprite = UiRuntimeSprites.SolidRect;
+			viewportImg.type = Image.Type.Simple;
+			viewportImg.color = new Color(0f, 0f, 0f, 0.004f);
+			var viewportMask = viewportObj.AddComponent<Mask>();
+			viewportMask.showMaskGraphic = false;
+
+			var contentObj = new GameObject("Content");
+			contentObj.transform.SetParent(viewportObj.transform, false);
+			var contentRt = contentObj.AddComponent<RectTransform>();
+			contentRt.anchorMin = new Vector2(0f, 1f);
+			contentRt.anchorMax = new Vector2(1f, 1f);
+			contentRt.pivot = new Vector2(0.5f, 1f);
+			contentRt.anchoredPosition = Vector2.zero;
+			contentRt.sizeDelta = new Vector2(0f, ItemHeight);
+
+			var itemObj = new GameObject("Item");
+			itemObj.transform.SetParent(contentObj.transform, false);
+			var itemRt = itemObj.AddComponent<RectTransform>();
+			itemRt.anchorMin = new Vector2(0f, 0.5f);
+			itemRt.anchorMax = new Vector2(1f, 0.5f);
+			itemRt.pivot = new Vector2(0.5f, 0.5f);
+			itemRt.sizeDelta = new Vector2(0f, ItemHeight);
+			var itemToggle = itemObj.AddComponent<Toggle>();
+
+			var itemBgObj = new GameObject("Item Background");
+			itemBgObj.transform.SetParent(itemObj.transform, false);
+			var itemBgRt = itemBgObj.AddComponent<RectTransform>();
+			itemBgRt.anchorMin = Vector2.zero;
+			itemBgRt.anchorMax = Vector2.one;
+			itemBgRt.sizeDelta = Vector2.zero;
+			var itemBgImg = itemBgObj.AddComponent<Image>();
+			itemBgImg.sprite = UiRuntimeSprites.SolidRect;
+			itemBgImg.type = Image.Type.Simple;
+			itemBgImg.color = new Color(0.15f, 0.15f, 0.15f, 1f);
+
+			var itemCheckObj = new GameObject("Item Checkmark");
+			itemCheckObj.transform.SetParent(itemObj.transform, false);
+			var itemCheckRt = itemCheckObj.AddComponent<RectTransform>();
+			itemCheckRt.anchorMin = Vector2.zero;
+			itemCheckRt.anchorMax = Vector2.one;
+			itemCheckRt.sizeDelta = Vector2.zero;
+			var itemCheckImg = itemCheckObj.AddComponent<Image>();
+			itemCheckImg.sprite = UiRuntimeSprites.SolidRect;
+			itemCheckImg.type = Image.Type.Simple;
+			itemCheckImg.color = new Color(0.20f, 0.40f, 0.70f, 1f);
+
+			// Label last so it draws over the selection fill.
+			var itemLabelObj = new GameObject("Item Label");
+			itemLabelObj.transform.SetParent(itemObj.transform, false);
+			var itemLabelRt = itemLabelObj.AddComponent<RectTransform>();
+			itemLabelRt.anchorMin = Vector2.zero;
+			itemLabelRt.anchorMax = Vector2.one;
+			itemLabelRt.sizeDelta = Vector2.zero;
+			itemLabelRt.offsetMin = new Vector2(10f, 1f);
+			itemLabelRt.offsetMax = new Vector2(-10f, -1f);
+			var itemLabelTmp = itemLabelObj.AddComponent<TextMeshProUGUI>();
+			itemLabelTmp.text = "Option";
+			itemLabelTmp.fontSize = 12;
+			itemLabelTmp.color = Color.white;
+			itemLabelTmp.alignment = TextAlignmentOptions.Left;
+			itemLabelTmp.raycastTarget = false;
+			ApplyRuntimeTmpFont(itemLabelTmp);
+
+			// graphic before isOn, so the fill's alpha matches the state it is given (see AddToggle).
+			itemToggle.targetGraphic = itemBgImg;
+			itemToggle.graphic = itemCheckImg;
+			itemToggle.isOn = false;
+			itemCheckImg.canvasRenderer.SetAlpha(0f);
+
+			var scroll = templateObj.AddComponent<ScrollRect>();
+			scroll.content = contentRt;
+			scroll.viewport = viewportRt;
+			scroll.horizontal = false;
+			scroll.vertical = true;
+			scroll.movementType = ScrollRect.MovementType.Clamped;
+			scroll.scrollSensitivity = 18f;
+
+			// TMP re-activates the template while it builds the popup and hides it again afterwards;
+			// leaving it active here would park an empty list box permanently under the field.
+			templateObj.SetActive(false);
+
+			dropdown.template = templateRt;
+			dropdown.itemText = itemLabelTmp;
+			dropdown.itemImage = null;
 		}
 
 		static void PersistSpzGoExportAxisOrderIfNeeded(string addonId, string label, int index) {
