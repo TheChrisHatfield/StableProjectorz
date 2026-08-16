@@ -706,8 +706,14 @@ namespace spz {
 	            _dynamicTabMovementRowsCreated = false;
 	            return;
 	        }
-	        if (_dynamicTabMovementRowsCreated && _dynamicTabMovement_toggle != null)
-	            return;
+	        if (_dynamicTabMovementRowsCreated && _dynamicTabMovement_toggle != null) {
+	            // Toggle alone is not enough — Save/Reset Order live on a second row.
+	            if (DynamicTabMovementRowsPresentUnder(content))
+	                return;
+	            DestroyDynamicTabMovementRowsUnder(content);
+	            _dynamicTabMovementRowsCreated = false;
+	            _dynamicTabMovement_toggle = null;
+	        }
 
 	        bool unlocked = Settings_MGR.instance != null
 		        ? Settings_MGR.instance.get_ui_dynamicTabMovement()
@@ -773,6 +779,26 @@ namespace spz {
 		        new Color(0.42f, 0.32f, 0.32f, 1f), "Settings:OnButton_ResetRibbonTabOrder");
 
 	        _dynamicTabMovementRowsCreated = true;
+	    }
+
+	    static bool DynamicTabMovementRowsPresentUnder(RectTransform content) {
+	        if (content == null) return false;
+	        bool hasToggle = false, hasOrder = false;
+	        for (int i = 0; i < content.childCount; i++) {
+	            var n = content.GetChild(i).name;
+	            if (n == "Row_DynamicTabMovement") hasToggle = true;
+	            else if (n == "Row_DynamicTabMovement_Order") hasOrder = true;
+	        }
+	        return hasToggle && hasOrder;
+	    }
+
+	    static void DestroyDynamicTabMovementRowsUnder(RectTransform content) {
+	        if (content == null) return;
+	        for (int i = content.childCount - 1; i >= 0; i--) {
+	            Transform c = content.GetChild(i);
+	            if (c.name == "Row_DynamicTabMovement" || c.name == "Row_DynamicTabMovement_Order")
+	                UnityEngine.Object.DestroyImmediate(c.gameObject);
+	        }
 	    }
 
 	    /// <summary>Simple settings-panel button (label + flat face) wired to a <see cref="StaticEvents"/> id via <see cref="EventsBinder"/>.</summary>
