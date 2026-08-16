@@ -171,7 +171,9 @@ namespace spz {
 			return true;
 		}
 
-		public static bool IsAnyVisibleGizmo() {
+		/// <summary>True when a live gizmo GameObject is active in the hierarchy (mounted). Not the same as on-screen —
+		/// UV mode keeps the widget mounted with CanvasGroup alpha 0. Prefer this for attach-retry loops.</summary>
+		public static bool IsAnyMountedGizmo() {
 			PruneRegistered();
 			for (int i = 0; i < Registered.Count; i++) {
 				var g = Registered[i];
@@ -181,6 +183,9 @@ namespace spz {
 			}
 			return false;
 		}
+
+		/// <summary>Obsolete name for <see cref="IsAnyMountedGizmo"/> — does not mean CanvasGroup alpha &gt; 0.</summary>
+		public static bool IsAnyVisibleGizmo() => IsAnyMountedGizmo();
 
 		/// <summary>Remove every gizmo (add-on turned off in Add-on Manager).</summary>
 		public static void TeardownAllForAddonDisabled() {
