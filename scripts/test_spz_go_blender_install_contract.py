@@ -38,7 +38,22 @@ class SpzGoBlenderInstallContractTests(unittest.TestCase):
 	def test_parse_bl_info_version(self):
 		mod = _load_addon_helpers()
 		ver = mod.parse_bl_info_version(str(BRIDGE / "__init__.py"))
-		self.assertEqual(ver, (0, 2, 0))
+		self.assertIsNotNone(ver)
+		self.assertEqual(len(ver), 3)
+		# Pinning the literal here just rots on every bridge bump. What actually matters is that
+		# the parsed version tracks bl_info, since auto-install compares it to decide whether an
+		# already-installed bridge must be refreshed.
+		src = (BRIDGE / "__init__.py").read_text(encoding="utf-8")
+		self.assertIn('"version": (%d, %d, %d)' % ver, src)
+		self.assertGreaterEqual(ver, (0, 4, 0),
+			"bridge behaviour changed; bump bl_info or installed copies never update")
+
+	def test_manifest_version_matches_bl_info(self):
+		mod = _load_addon_helpers()
+		ver = mod.parse_bl_info_version(str(BRIDGE / "__init__.py"))
+		manifest = (BRIDGE / "blender_manifest.toml").read_text(encoding="utf-8")
+		self.assertIn('version = "%d.%d.%d"' % ver, manifest,
+			"extension manifest and bl_info must agree or Blender 4.2+ reports a stale version")
 
 	def test_parse_bl_info_version_missing_file(self):
 		mod = _load_addon_helpers()

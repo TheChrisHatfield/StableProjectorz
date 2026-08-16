@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 id = "spz_blender_bridge"
 name = "SPZ GO (HTTP)"
-version = "0.3.0"
+version = "0.4.0"
 tagline = "Blender ↔ StableProjectorz: direct mesh stream with FBX/texture fallback"
 maintainer = "StableProjectorz fork / community"
 type = "add-on"

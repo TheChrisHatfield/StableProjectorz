@@ -282,10 +282,14 @@ namespace spz {
 	            // Add one normal per each vertex face index (3 per triangle)
 	            FbxLayerElementArray fbxElementArray = fbxLayerElement.GetDirectArray ();
 
+	            // Mirror z exactly like normals and control points. Leaving the tangent frame in Unity's
+	            // handedness while positions/normals are mirrored gives consumers a basis that disagrees
+	            // with the surface, which shows up as wrong tangent-space (normal/detail) texturing.
+	            // Unity's binormal already folds in tangent.w, so this needs the mirror only.
 	            for (int n=0; n<binormals.Length; n++){
-	                fbxElementArray.Add (new FbxVector4 (binormals[n][0], 
+	                fbxElementArray.Add (new FbxVector4 (binormals[n][0],
 	                                                     binormals[n][1],
-	                                                     binormals[n][2]));
+	                                                    -binormals[n][2]));
 	            }
 	            fbxLayer.SetBinormals (fbxLayerElement);
 	        }
@@ -303,10 +307,15 @@ namespace spz {
 	            // Add one normal per each vertex face index (3 per triangle)
 	            FbxLayerElementArray fbxElementArray = fbxLayerElement.GetDirectArray ();
 
+	            // Mirror z with the rest of the frame, and negate w: the mirror reverses handedness, so
+	            // cross(normal, tangent) changes sign and the stored bitangent sign must follow, or the
+	            // reconstructed bitangent points the wrong way. Dropping w entirely (the previous
+	            // behaviour) also lost mirrored-UV islands.
 	            for (int n = 0; n<tangents.Length; n++) {
 	                fbxElementArray.Add (new FbxVector4 (tangents[n][0],
 	                                                     tangents[n][1],
-	                                                     tangents[n][2]));
+	                                                    -tangents[n][2],
+	                                                    -tangents[n][3]));
 	            }
 	            fbxLayer.SetTangents (fbxLayerElement);
 	        }
