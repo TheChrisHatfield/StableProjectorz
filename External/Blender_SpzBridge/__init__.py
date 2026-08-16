@@ -10,7 +10,7 @@
 bl_info = {
     "name": "SPZ GO (HTTP)",
     "author": "StableProjectorz / community",
-    "version": (0, 5, 0),
+    "version": (0, 6, 0),
     "blender": (4, 0, 0),
     "location": "3D Viewport: N (toggle sidebar) → top tab 'SPZ GO' (not auto-open; scroll tab row if needed)",
     "description": "Link with StableProjectorz: pull/push 3D via REST; shared exchange folder; FBX and UV (SVG) helpers",
@@ -19,6 +19,7 @@ bl_info = {
 
 import os
 import queue
+import re
 import threading
 import time
 from pathlib import Path
@@ -542,13 +543,37 @@ def _mark_exchange_stamp_seen_for_fbx(fbx_path: str) -> None:
 
 _SPZ_IMPORT_MARKER = "spz_go_import"
 
+# Nodes SPZ's exporter synthesises itself. The name is ours rather than the user's model's, so a
+# leftover carrying one is always a superseded handoff.
+_SPZ_GENERATED_NODE_STEMS = ("SPZ_ExportAxis",)
 
-def _spz_owned_objects() -> list:
-    """Objects a previous SPZ handoff put in the scene — FBX import or direct mesh stream."""
+
+def spz_name_stem(name: str) -> str:
+    """Blender resolves a name collision by appending ".001"; strip that back off."""
+    base = name or ""
+    if len(base) > 4 and base[-4] == "." and base[-3:].isdigit():
+        base = base[:-4]
+    return base
+
+
+def _spz_owned_objects(created_names=()) -> list:
+    """Objects a previous SPZ handoff left in the scene — FBX import or direct mesh stream.
+
+    Markers alone cannot answer this. Bridges before 0.6.0 marked nothing, so any scene that has
+    been through an older add-on holds copies that no future import would ever claim, and the pile
+    the user is looking at would never shrink no matter how many times replacement runs. Names
+    close that gap: an incoming model reuses the names of the copy it supersedes (Blender only
+    adds the ".001" suffix because the older one is still there), and SPZ's own synthetic nodes
+    belong to us by definition.
+    """
+    stems = set(_SPZ_GENERATED_NODE_STEMS)
+    for name in created_names:
+        stems.add(spz_name_stem(name))
     out = []
     for obj in list(bpy.data.objects):
         try:
-            if obj.get(_SPZ_IMPORT_MARKER) or obj.get("spz_mesh_stream"):
+            if (obj.get(_SPZ_IMPORT_MARKER) or obj.get("spz_mesh_stream")
+                    or spz_name_stem(obj.name) in stems):
                 out.append(obj)
         except (ReferenceError, TypeError):
             continue
@@ -574,7 +599,6 @@ def _try_import_exchange_fbx(path: str) -> bool:
     # Re-importing must REPLACE the previous SPZ model, not stack another copy beside it: each
     # export/import cycle used to leave one more duplicate in the scene. Snapshot first so the new
     # objects can be told apart from the ones being superseded.
-    previous = _spz_owned_objects()
     before = set(bpy.data.objects)
     try:
         ret = bpy.ops.import_scene.fbx(
@@ -595,9 +619,12 @@ def _try_import_exchange_fbx(path: str) -> bool:
             except (ReferenceError, TypeError):
                 pass
         # Commit the replacement only once the new objects exist, matching the mesh-stream path:
-        # a cancelled or failed import must leave the previous model untouched.
+        # a cancelled or failed import must leave the previous model untouched. Ownership is
+        # resolved here rather than before the import because the names of what just arrived are
+        # what identify the copies it supersedes.
         if created:
-            dropped = _remove_objects([o for o in previous if o not in created])
+            owned = _spz_owned_objects([o.name for o in created])
+            dropped = _remove_objects([o for o in owned if o not in created])
             if dropped:
                 print(f"SPZ GO: replaced {dropped} superseded SPZ object(s).")
         _apply_spz_export_scale_litmus(path)
@@ -1207,6 +1234,43 @@ class SPZ_OT_request_spz_export_to_path(Operator):
 
 # --- Panel -----------------------------------------------------------------------
 
+def loaded_bridge_version() -> tuple:
+    return tuple(bl_info.get("version") or ())
+
+
+_disk_version_cache = (0.0, ())
+
+
+def installed_bridge_version() -> tuple:
+    """Version of the add-on source on disk, which can be newer than what this session imported."""
+    global _disk_version_cache
+    now = time.time()
+    checked_at, cached = _disk_version_cache
+    if now - checked_at < 5.0:
+        return cached
+    version = ()
+    try:
+        with open(__file__, "r", encoding="utf-8", errors="replace") as f:
+            m = re.search(r'"version"\s*:\s*\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)\)', f.read())
+        if m:
+            version = (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    except OSError:
+        version = cached
+    _disk_version_cache = (now, version)
+    return version
+
+
+def pending_bridge_upgrade() -> tuple:
+    """Newer version waiting on disk, or () when this session is current.
+
+    SPZ installs bridge upgrades from a separate background Blender, so a session that is already
+    open keeps running whatever it imported at startup — for as long as it stays open. Without
+    saying so, every fix shipped in the bridge looks like it simply did not work.
+    """
+    on_disk = installed_bridge_version()
+    return on_disk if on_disk and on_disk > loaded_bridge_version() else ()
+
+
 class SPZ_PT_main(Panel):
     bl_label = "SPZ GO"
     bl_idname = "SPZ_GO_PT_main"
@@ -1236,6 +1300,14 @@ class SPZ_PT_main(Panel):
             l.label(text="Could not read add-on preferences", icon="ERROR")
             l.label(text=str(e))
             return
+        pending = pending_bridge_upgrade()
+        if pending:
+            warn = l.box()
+            warn.alert = True
+            warn.label(text="Restart Blender to finish the SPZ GO update", icon="ERROR")
+            warn.label(text="Running %s, installed %s" % (
+                ".".join(str(x) for x in loaded_bridge_version()),
+                ".".join(str(x) for x in pending)))
         l.label(text="StableProjectorz link (HTTP :5557):", icon="URL")
         l.label(text="• SPZ Export → Blender: undoes fit (cube litmus ~2m)")
         l.label(text="• Blender Export → SPZ: re-fits to SPZ volume (~3u)")
