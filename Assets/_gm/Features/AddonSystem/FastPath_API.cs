@@ -1373,26 +1373,40 @@ namespace spz {
 			try {
 				string publicRoot = Environment.GetEnvironmentVariable("PUBLIC");
 				if (string.IsNullOrEmpty(publicRoot)) publicRoot = @"C:\Users\Public";
-				string publicDocs = Path.Combine(publicRoot, "Documents");
-				string docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-				string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-				var matches = new List<string>();
-				foreach (var root in new[] { publicDocs, docs, home }) {
-					if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) continue;
-					foreach (var dir in Directory.GetDirectories(root)) {
-						string name = Path.GetFileName(dir);
-						if (name.StartsWith("ZBrushData", StringComparison.OrdinalIgnoreCase)
-						    || name.IndexOf("zbrush", StringComparison.OrdinalIgnoreCase) >= 0)
-							matches.Add(dir);
-					}
-				}
-				return matches
-					.OrderByDescending(p => { try { return Directory.GetLastWriteTimeUtc(p); } catch { return DateTime.MinValue; } })
-					.FirstOrDefault() ?? "";
+				return PickZBrushDataDir(new[] {
+					Path.Combine(publicRoot, "Documents"),
+					Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+					Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+				});
 			} catch (Exception ex) {
 				UnityEngine.Debug.LogWarning("[FastPath_API] FindZBrushUserScriptsDir: " + ex.Message);
 				return "";
 			}
+		}
+
+		/// <summary>
+		/// Rank ZBrush data folders found under <paramref name="roots"/>. "ZBrushData&lt;year&gt;" is the
+		/// folder ZBrush actually creates; anything that merely contains "zbrush" (a user's "ZBrush
+		/// Projects" scratch folder, a backup) is a last resort. Without that split a recently touched
+		/// scratch folder outranks the real one and the bridge lands somewhere ZBrush never reads.
+		/// </summary>
+		public static string PickZBrushDataDir(IEnumerable<string> roots) {
+			var canonical = new List<string>();
+			var loose = new List<string>();
+			foreach (var root in roots) {
+				if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) continue;
+				foreach (var dir in Directory.GetDirectories(root)) {
+					string name = Path.GetFileName(dir);
+					if (name.StartsWith("ZBrushData", StringComparison.OrdinalIgnoreCase))
+						canonical.Add(dir);
+					else if (name.IndexOf("zbrush", StringComparison.OrdinalIgnoreCase) >= 0)
+						loose.Add(dir);
+				}
+			}
+			var ranked = canonical.Count > 0 ? canonical : loose;
+			return ranked
+				.OrderByDescending(p => { try { return Directory.GetLastWriteTimeUtc(p); } catch { return DateTime.MinValue; } })
+				.FirstOrDefault() ?? "";
 		}
 
 		/// <summary>User Substance Painter python/plugins folder (Documents; never Program Files).</summary>
