@@ -380,6 +380,17 @@ public sealed class ViewportAxisGizmoContractTests {
 	}
 
 	[Test]
+	public void RefreshOnlyTouchesCanvasGroupWhenUsableStateFlips() {
+		string src = ReadRepo("Assets/_gm/Features/Viewport/Main Viewport/ViewportAxisGizmo_UI.cs");
+		int refresh = src.IndexOf("public void RefreshFromCamera()", StringComparison.Ordinal);
+		Assert.That(refresh, Is.GreaterThan(0));
+		string body = src.Substring(refresh, Math.Min(1200, src.Length - refresh));
+		Assert.That(body, Does.Contain("Mathf.Approximately(_canvasGroup.alpha, wantedAlpha)"));
+		Assert.That(body, Does.Contain("_root.parent != wantedHost"),
+			"Re-host only when the inner viewport rect actually changed.");
+	}
+
+	[Test]
 	public void AttachRpcReportsMountedAndVisibleSeparately() {
 		string bridge = ReadRepo("Assets/_gm/Features/AddonSystem/ViewportAxisGizmo_AddonBridge.cs");
 		Assert.That(bridge, Does.Contain("r[\"mounted\"] = mounted"));

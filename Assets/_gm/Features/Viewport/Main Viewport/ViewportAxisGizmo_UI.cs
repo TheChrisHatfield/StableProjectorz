@@ -499,12 +499,22 @@ namespace spz {
 			if (_tornDown || _root == null) {
 				return;
 			}
-			EnsureHostedUnder(ResolveViewportParent());
+			RectTransform wantedHost = ResolveViewportParent();
+			if (wantedHost != null && _root.parent != wantedHost) {
+				EnsureHostedUnder(wantedHost);
+			}
 			bool usable = ViewportAxisGizmo_CameraOps.IsGizmoUsable();
 			if (_canvasGroup != null) {
-				_canvasGroup.alpha = usable ? 1f : 0f;
-				_canvasGroup.blocksRaycasts = usable;
-				_canvasGroup.interactable = usable;
+				float wantedAlpha = usable ? 1f : 0f;
+				if (!Mathf.Approximately(_canvasGroup.alpha, wantedAlpha)) {
+					_canvasGroup.alpha = wantedAlpha;
+				}
+				if (_canvasGroup.blocksRaycasts != usable) {
+					_canvasGroup.blocksRaycasts = usable;
+				}
+				if (_canvasGroup.interactable != usable) {
+					_canvasGroup.interactable = usable;
+				}
 			}
 			if (!usable) {
 				return;
