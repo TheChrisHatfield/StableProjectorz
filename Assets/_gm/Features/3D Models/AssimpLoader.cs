@@ -32,11 +32,20 @@ namespace spz {
 	    // basis flips handedness). Snapshotted once per load, never read per vertex.
 	    private ExportAxisSettings.Basis _axisBasis;
 
-	    public GameObject Load(string filePath)
+	    /// <param name="applyExportAxisBasis">
+	    /// Whether incoming geometry should be mapped back out of the user's export basis. True for
+	    /// interchange with their external tool. MUST be false for restoring geometry SPZ itself owns —
+	    /// project load re-imports the original mesh bytes off disk, so honouring the basis there means
+	    /// a saved project silently changes shape whenever the user changes an EXPORT preference, and
+	    /// its paint and UV data no longer lines up with the mesh.
+	    /// </param>
+	    public GameObject Load(string filePath, bool applyExportAxisBasis = true)
 	    {
 	        if (!File.Exists(filePath)) return null;
 
-	        _axisBasis = ExportAxisSettings.Snapshot();
+	        _axisBasis = applyExportAxisBasis
+	            ? ExportAxisSettings.Snapshot()
+	            : new ExportAxisSettings.Basis(ExportAxisSettings.AxisOrder.XYZ, false, false, false);
 	        _baseDirectory = Path.GetDirectoryName(filePath);
 	        _loadedMaterials = new Dictionary<string, UnityMat>();
 	        _loadedTextures = new Dictionary<string, Texture2D>();

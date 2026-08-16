@@ -16,10 +16,14 @@ public sealed class ImportKeepsModelUntilFileIsReadableTests {
 		return File.ReadAllText(path);
 	}
 
+	/// Anchor on the signature prefix: pinning the full parameter list makes this test evaporate the
+	/// next time a parameter is added, which is exactly when it still needs to hold.
+	const string ImportEntry = "public void ImportModel_via_Filepath( string filepath";
+
 	[Test]
 	public void FileIsReadBeforeTheDestructiveStartCallback() {
 		string src = ImportHelperSource();
-		int method = src.IndexOf("public void ImportModel_via_Filepath( string filepath )", StringComparison.Ordinal);
+		int method = src.IndexOf(ImportEntry, StringComparison.Ordinal);
 		Assert.That(method, Is.GreaterThan(0));
 		int end = src.IndexOf("void OnError(", method, StringComparison.Ordinal);
 		Assert.That(end, Is.GreaterThan(method));
@@ -40,8 +44,10 @@ public sealed class ImportKeepsModelUntilFileIsReadableTests {
 	[Test]
 	public void ReadFailureStillReportsCompletion() {
 		string src = ImportHelperSource();
-		int method = src.IndexOf("public void ImportModel_via_Filepath( string filepath )", StringComparison.Ordinal);
+		int method = src.IndexOf(ImportEntry, StringComparison.Ordinal);
+		Assert.That(method, Is.GreaterThan(0));
 		int end = src.IndexOf("void OnError(", method, StringComparison.Ordinal);
+		Assert.That(end, Is.GreaterThan(method));
 		string body = src.Substring(method, end - method);
 		Assert.That(body, Does.Contain("OnError(\"Could not read file: \""),
 			"an unreadable file must go through OnError, which clears _isImportingModel and notifies waiters");
