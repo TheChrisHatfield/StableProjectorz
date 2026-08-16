@@ -1908,6 +1908,11 @@ namespace spz {
 						yield break;
 					}
 					ViewportAxisGizmo_AddonBridge.TryAttachFromCore(null);
+					// Disable can land between the enabled check and this attach; do not leave a zombie behind.
+					if (!IsAddonEnabled(ViewportAxisGizmoAddonId)) {
+						ViewportAxisGizmo_UI.TeardownAllForAddonDisabled();
+						yield break;
+					}
 					yield return null;
 				}
 				UnityEngine.Debug.LogWarning(
@@ -2019,8 +2024,20 @@ namespace spz {
 				RibbonViewportFullViewOnScreen_Toggle_UI.TeardownAllDocksForAddonDisabled();
 			}
 			if (string.Equals(addonId, ViewportAxisGizmoAddonId, StringComparison.Ordinal)) {
-				ViewportAxisGizmo_UI.TeardownAllForAddonDisabled();
+				StopEnsureAndTeardownViewportAxisGizmo();
 			}
+		}
+
+		/// <summary>
+		/// Stops the attach-retry coroutine before destroying the widget. Leaving the coroutine alive lets it
+		/// <c>TryAttach</c> after disable and put a zombie gizmo back on the viewport.
+		/// </summary>
+		void StopEnsureAndTeardownViewportAxisGizmo() {
+			if (_axisGizmoEnsureCrtn != null) {
+				StopCoroutine(_axisGizmoEnsureCrtn);
+				_axisGizmoEnsureCrtn = null;
+			}
+			ViewportAxisGizmo_UI.TeardownAllForAddonDisabled();
 		}
 
 		IEnumerator CoPythonUnloadThenDestroyUi(string addonId, Action onComplete = null) {
@@ -2107,7 +2124,7 @@ namespace spz {
 					if (on)
 						StartEnsureViewportAxisGizmo();
 					else
-						ViewportAxisGizmo_UI.TeardownAllForAddonDisabled();
+						StopEnsureAndTeardownViewportAxisGizmo();
 					return;
 				}
 				if (on)
