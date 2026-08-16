@@ -50,6 +50,25 @@ public sealed class ExportPipelineChunkingContractTests {
 	}
 
 	[Test]
+	public void SaveMgr_UdimPairingSurvivesMissingSectors() {
+		string src = Read("Assets", "_gm", "Features", "Save Load Import Export", "Save_MGR.cs");
+		int pair = src.IndexOf("int pairCount", StringComparison.Ordinal);
+		Assert.That(pair, Is.GreaterThan(0), "slices must be paired to UDIM sectors under a clamp");
+		string body = src.Substring(pair, Math.Min(900, src.Length - pair));
+
+		// A null sector list must yield zero pairs, never an index into null. Indexing it would abort
+		// the coroutine after onHaveAlbedo: slices leak and onComplete still reports success.
+		Assert.That(body, Does.Not.Contain("albedoUdims.udims_sectors[i]"),
+			"must not index the sector list that was just null-checked");
+		Assert.That(src, Does.Contain("int sectorCount = sectors != null ? sectors.Count : 0"),
+			"a missing sector list must count as zero, not as slices.Count");
+		Assert.That(body, Does.Contain("LogWarning"),
+			"a slice/sector mismatch drops tiles and must not be silent");
+		Assert.That(body, Does.Contain("DestroyImmediate"),
+			"unpaired slices must be released rather than leaked");
+	}
+
+	[Test]
 	public void SaveMgr_ReadsBackBudgetedAndEncodesOffThread() {
 		string src = Read("Assets", "_gm", "Features", "Save Load Import Export", "Save_MGR.cs");
 		Assert.That(src, Does.Contain("TextureArray_to_Texture2DList_Budgeted"),
