@@ -114,6 +114,9 @@ namespace spz {
 	        Vector4 tex_invSize;
 	        Dilate_Preliminaries(a, out tex_invSize);
 
+	        // Preliminaries checks out GetTemporary helpers. StopCoroutine / exception before Cleanup
+	        // would leave them held until the next dilate's prelim dispose.
+	        try {
 	        if (a.findUVchunkBorders_thenBlurThem){
 	            RenderTexture_DetectBorders( tex_invSize,  a);
 	            Improve_UV_Chunk_Edges( tex_invSize,  a.bordersWiderBlur,  a.this_and_intoHere);
@@ -126,8 +129,10 @@ namespace spz {
 	            yield return StartCoroutine(  dilate_iters_crtn(a, tex_invSize)  );
 	        }
 
-	        Cleanup();
 	        a.onCompleted_withYourRenderTex?.Invoke(a.this_and_intoHere);
+	        } finally {
+	            Cleanup();
+	        }
 	    }
 
 
