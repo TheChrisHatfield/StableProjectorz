@@ -4,6 +4,23 @@ using NUnit.Framework;
 
 public sealed class ExitImportExportHonestyContractTests {
 
+	/// <summary>
+	/// The block starting at the first '{' at or after <paramref name="from"/>, through its matching
+	/// '}'. Fixed character windows silently slide off the code they meant to check as soon as a
+	/// comment or log message grows, which is exactly how these assertions stopped meaning anything.
+	/// </summary>
+	static string BlockAt(string src, int from) {
+		int open = src.IndexOf('{', from);
+		Assert.That(open, Is.GreaterThanOrEqualTo(0), "expected a block after the anchor");
+		int depth = 0;
+		for (int i = open; i < src.Length; i++) {
+			if (src[i] == '{') depth++;
+			else if (src[i] == '}' && --depth == 0) return src.Substring(from, i - from + 1);
+		}
+		Assert.Fail("unbalanced braces after the anchor");
+		return "";
+	}
+
 	[Test]
 	public void Exit_BlocksQuitWhenPopupMissing() {
 		string path = Path.Combine(Directory.GetCurrentDirectory(),
@@ -11,9 +28,11 @@ public sealed class ExitImportExportHonestyContractTests {
 		string src = File.ReadAllText(path);
 		int i = src.IndexOf("ConfirmPopup_UI.instance==null", System.StringComparison.Ordinal);
 		Assert.That(i, Is.GreaterThanOrEqualTo(0));
-		string snip = src.Substring(i, Math.Min(280, src.Length - i));
-		Assert.That(snip, Does.Contain("return false"));
-		Assert.That(snip, Does.Not.Contain("OnExitConfirm()"));
+		string guard = BlockAt(src, i);
+		Assert.That(guard, Does.Contain("return false"),
+			"no popup means no \"save first?\" prompt, so quit must be refused");
+		Assert.That(guard, Does.Not.Contain("OnExitConfirm()"),
+			"the missing-popup guard must never quit outright");
 	}
 
 	[Test]
@@ -36,10 +55,13 @@ public sealed class ExitImportExportHonestyContractTests {
 		string path = Path.Combine(Directory.GetCurrentDirectory(),
 			"Assets", "_gm", "Features", "AddonSystem", "Addon_SocketServer.cs");
 		string src = File.ReadAllText(path);
-		int i = src.IndexOf("DefersResponseUntilProjectSaveIdle", System.StringComparison.Ordinal);
-		int j = src.IndexOf("DefersResponseUntilImportIdle", i + 10, System.StringComparison.Ordinal);
-		string body = src.Substring(i, j - i);
+		// Anchor on the definition, not the first mention: the earlier call site made this window four
+		// lines of dispatch code that could never contain a method name.
+		int i = src.IndexOf("bool DefersResponseUntilProjectSaveIdle(string method)", System.StringComparison.Ordinal);
+		Assert.That(i, Is.GreaterThanOrEqualTo(0), "deferral predicate must exist");
+		string body = BlockAt(src, i);
 		Assert.That(body, Does.Contain("export_3d_with_textures\""));
+		Assert.That(body, Does.Contain("export_3d_with_textures_to_path"));
 		Assert.That(body, Does.Contain("export_projection_textures"));
 		Assert.That(body, Does.Contain("export_view_textures"));
 	}
