@@ -123,7 +123,13 @@ namespace spz {
 				return true;
 			} catch (Exception e) {
 				UnityEngine.Debug.LogError($"[Addon_SocketServer] Failed to bind port {_port}: {e.Message}");
+				// Start() may already have bound the port before the thread failed to launch. Dropping
+				// the reference without Stop() keeps 127.0.0.1:_port held for the rest of the session:
+				// addons cannot connect and the next launch reports "port already in use".
+				_isRunning = false;//never leave "running" true with no listener thread
+				try { _listener?.Stop(); } catch { }
 				_listener = null;
+				_listenerThread = null;
 				return false;
 			}
 		}
@@ -730,7 +736,9 @@ namespace spz {
 				"spz.cmd.trigger_3d_generation", "spz.cmd.trigger_texture_generation",
 			};
 			var ui = new JArray {
-				"spz.ui.add_button", "spz.ui.add_dropdown", "spz.ui.add_slider", "spz.ui.add_text_input", "spz.ui.add_toggle",
+				"spz.ui.add_button", "spz.ui.add_dropdown", "spz.ui.add_foldout", "spz.ui.add_host_sections",
+				"spz.ui.add_slider", "spz.ui.add_text_input", "spz.ui.add_toggle",
+				"spz.ui.attach_viewport_axis_gizmo",
 				"spz.ui.attach_viewport_fullview_toggle",
 				"spz.ui.apply_theme", "spz.ui.create_panel", "spz.ui.get_theme", "spz.ui.get_value",
 				"spz.ui.list_line_icons", "spz.ui.list_themes", "spz.ui.register_theme", "spz.ui.reset_theme",
@@ -738,7 +746,7 @@ namespace spz {
 			};
 			return new JObject {
 				["success"] = true,
-				["addon_rpc_version"] = "1.15",
+				["addon_rpc_version"] = "1.17",
 				["spz_cmd"] = cmd,
 				["spz_ui"] = ui,
 				["context_command"] = "spz.cmd.get_addon_context",
@@ -2282,6 +2290,15 @@ namespace spz {
 		public static JObject TryAttachViewportFullViewToggleFromCore(JObject @params) {
 			return TryExecuteAttachViewportFullViewToggle(@params ?? new JObject());
 		}
+
+		/// <summary>
+		/// JSON-RPC <c>spz.ui.attach_viewport_axis_gizmo</c>: mounts the orientation gizmo (axis balls + lantern
+		/// overview button) in the top-right of the 3D view. Not a command-ribbon tab; see
+		/// <see cref="ViewportAxisGizmo_AddonBridge"/> for parameters.
+		/// </summary>
+		static JObject TryExecuteAttachViewportAxisGizmo(JObject @params) {
+			return ViewportAxisGizmo_AddonBridge.TryAttachFromCore(@params ?? new JObject());
+		}
 		
 		/// <summary>
 		/// Executes UI commands (delegates to AddonUI_MGR)
@@ -2290,6 +2307,9 @@ namespace spz {
 			UnityEngine.Debug.Log($"[Addon_SocketServer] Executing UI Command: {method} with params: {@params?.ToString(Formatting.None)}");
 			if (string.Equals(method, "spz.ui.attach_viewport_fullview_toggle", StringComparison.Ordinal)) {
 				return TryExecuteAttachViewportFullViewToggle(@params ?? new JObject());
+			}
+			if (string.Equals(method, "spz.ui.attach_viewport_axis_gizmo", StringComparison.Ordinal)) {
+				return TryExecuteAttachViewportAxisGizmo(@params ?? new JObject());
 			}
 			if (string.Equals(method, "spz.ui.get_theme", StringComparison.Ordinal)) {
 				return SpzUiThemeOps.GetThemeResult();
@@ -2476,6 +2496,44 @@ namespace spz {
 						}
 						break;
 						
+					case "spz.ui.add_foldout":
+						addonId = @params["addon_id"]?.ToString() ?? "";
+						panelIdParam = @params["panel_id"]?.ToString() ?? "";
+						label = @params["label"]?.ToString() ?? "Settings";
+						bool startOpen = @params["open"]?.ToObject<bool>() ?? false;
+						// The CONTENT id, so the caller adds widgets straight into the drop-tab.
+						string foldoutId = uiMgr.AddFoldout(addonId, panelIdParam, label, startOpen);
+						if (foldoutId != null) {
+							result["success"] = true;
+							result["element_id"] = foldoutId;
+						} else {
+							result["error"] = "Failed to create foldout";
+						}
+						break;
+
+					case "spz.ui.add_host_sections": {
+						addonId = @params["addon_id"]?.ToString() ?? "";
+						panelIdParam = @params["panel_id"]?.ToString() ?? "";
+						string onlyHost = @params["host_id"]?.ToString();
+						var built = new JArray();
+						foreach (var host in SpzGoHosts.All) {
+							if (!string.IsNullOrEmpty(onlyHost)
+							    && !string.Equals(host.Id, onlyHost, StringComparison.OrdinalIgnoreCase))
+								continue;
+							string sectionId = uiMgr.AddHostSection(addonId, panelIdParam, host.Id);
+							if (sectionId != null)
+								built.Add(host.Id);
+						}
+						// Partial success is still a failure to build the shell — say so rather than
+						// letting the add-on report a load that produced half a panel.
+						int wanted = string.IsNullOrEmpty(onlyHost) ? SpzGoHosts.All.Count : 1;
+						result["success"] = built.Count == wanted;
+						result["host_ids"] = built;
+						if (built.Count != wanted)
+							result["error"] = $"Built {built.Count} of {wanted} host sections";
+						break;
+					}
+
 					case "spz.ui.get_value":
 						string elementId = @params["element_id"]?.ToString() ?? "";
 						object value = uiMgr.GetUIElementValue(elementId);
