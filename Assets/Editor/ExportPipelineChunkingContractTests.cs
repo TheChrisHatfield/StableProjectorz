@@ -96,6 +96,29 @@ public sealed class ExportPipelineChunkingContractTests {
 	}
 
 	[Test]
+	public void BudgetedReadback_ReleasesTempRtOnEveryExit() {
+		string src = Read("Assets", "_gm", "Features", "TextureTools", "TextureTools_SPZ.cs");
+		int i = src.IndexOf("TextureArray_to_Texture2DList_Budgeted", StringComparison.Ordinal);
+		Assert.That(i, Is.GreaterThan(0));
+		int end = src.IndexOf("Texture2DList_to_TextureArray", i, StringComparison.Ordinal);
+		string body = src.Substring(i, (end > i ? end : src.Length) - i);
+
+		// This variant spans frames, so it can be stopped midway; the single-frame original could not.
+		Assert.That(body, Does.Contain("finally"),
+			"the temp render target must be released even if the coroutine is stopped or throws");
+		int release = body.IndexOf("ReleaseTemporary(tempRT)", StringComparison.Ordinal);
+		int fin = body.IndexOf("} finally {", StringComparison.Ordinal);
+		Assert.That(fin, Is.GreaterThan(0));
+		Assert.That(release, Is.GreaterThan(fin), "release must live inside the finally block");
+
+		// The material lookup must not sit between the allocation and its guard.
+		int alloc = body.IndexOf("RenderTexture.GetTemporary", StringComparison.Ordinal);
+		int matLookup = body.IndexOf("StaticShaders_MGR.instance", StringComparison.Ordinal);
+		Assert.That(matLookup, Is.LessThan(alloc),
+			"resolve the blit material before allocating, or a missing manager leaks the render target");
+	}
+
+	[Test]
 	public void StatusText_ExposesProgressToggle() {
 		string src = Read("Assets", "_gm", "Features", "Viewport", "Main Viewport", "Viewport_StatusText.cs");
 		Assert.That(src, Does.Contain("SetProgressVisible"), "status text must allow hiding just the progress bar");
