@@ -329,6 +329,33 @@ public sealed class ViewportAxisGizmoContractTests {
 	}
 
 	[Test]
+	public void ReattachWithANewCenterIconUpdatesTheLanternSprite() {
+		RectTransform host = NewHost();
+		try {
+			var first = new ViewportAxisGizmo_Spec(104f, 8f, ViewportAxisGizmo_AddonBridge.DefaultCenterIconPath, null);
+			ViewportAxisGizmo_UI gizmo = ViewportAxisGizmo_UI.BuildInto(host, first);
+			var centerImg = gizmo.RootRect.Find(ViewportAxisGizmo_UI.CenterName).GetComponent<Image>();
+			Sprite firstSprite = centerImg.sprite;
+			Assert.That(firstSprite, Is.Not.Null);
+
+			string missing = Path.Combine(Application.streamingAssetsPath, "Addons", "ViewportAxisGizmoSPZ", "does-not-exist.png");
+			gizmo.ApplySpec(new ViewportAxisGizmo_Spec(104f, 8f, missing, null));
+			Assert.That(centerImg.sprite, Is.Not.Null);
+			Assert.That(centerImg.sprite, Is.Not.EqualTo(firstSprite),
+				"A re-attach with a different center_icon must refresh the lantern, not keep the first sprite.");
+			Assert.That(centerImg.sprite, Is.EqualTo(UiRuntimeSprites.GetLineIcon(StudioLineIcon.Bullseye)),
+				"A missing icon must fall back to the line icon instead of leaving a stale lantern.");
+
+			gizmo.ApplySpec(new ViewportAxisGizmo_Spec(104f, 8f, missing, null));
+			Assert.That(centerImg.sprite, Is.EqualTo(UiRuntimeSprites.GetLineIcon(StudioLineIcon.Bullseye)),
+				"Repeating the same path must be a no-op, not thrash the sprite.");
+		}
+		finally {
+			UnityEngine.Object.DestroyImmediate(host.gameObject);
+		}
+	}
+
+	[Test]
 	public void BareLanternFilenameResolvesInsideTheAddonFolder() {
 		// Python docs say relative names resolve inside the add-on folder; a bare filename must not silently
 		// look under StreamingAssets root and then fall back to the Bullseye line icon.

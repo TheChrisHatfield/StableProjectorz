@@ -70,6 +70,8 @@ namespace spz {
 		RectTransform _root;
 		CanvasGroup _canvasGroup;
 		RectTransform _centerRt;
+		Image _centerImage;
+		string _loadedCenterIconPath = string.Empty;
 		readonly List<RectTransform> _handleRects = new List<RectTransform>();
 		readonly List<Image> _handleImages = new List<Image>();
 		readonly List<TextMeshProUGUI> _handleLabels = new List<TextMeshProUGUI>();
@@ -367,6 +369,8 @@ namespace spz {
 			button.onClick.AddListener(OnCenterClicked);
 
 			_centerRt = centerRt;
+			_centerImage = img;
+			_loadedCenterIconPath = spec.CenterIconPath ?? string.Empty;
 		}
 
 		static RectTransform CreateChild(string name, RectTransform parent) {
@@ -438,8 +442,26 @@ namespace spz {
 				float centerSize = spec.SizePx * 0.42f;
 				_centerRt.sizeDelta = new Vector2(centerSize, centerSize);
 			}
+			RefreshCenterIconIfNeeded(spec.CenterIconPath);
 			// Radius and handle size just changed, so the cached projection is stale even if the view did not move.
 			_hasAppliedOrientation = false;
+		}
+
+		/// <summary>
+		/// Re-attach with a different <c>center_icon</c> must update the lantern, not leave the sprite from the
+		/// first attach. Same path is a no-op so per-frame / retry attaches stay cheap.
+		/// </summary>
+		void RefreshCenterIconIfNeeded(string centerIconPath) {
+			if (_centerImage == null) {
+				return;
+			}
+			string path = centerIconPath ?? string.Empty;
+			if (string.Equals(path, _loadedCenterIconPath, StringComparison.Ordinal)) {
+				return;
+			}
+			Sprite lantern = LoadCenterSprite(path);
+			_centerImage.sprite = lantern != null ? lantern : UiRuntimeSprites.GetLineIcon(StudioLineIcon.Bullseye);
+			_loadedCenterIconPath = path;
 		}
 
 		float HandleDiameterPx => Mathf.Max(12f, _spec.SizePx * 0.235f);
