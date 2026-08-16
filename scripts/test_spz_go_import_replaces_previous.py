@@ -110,6 +110,48 @@ class SpzGoImportReplacesPreviousTests(unittest.TestCase):
 				self.assertIn("spz_go_import", body,
 					"a stream must also clear a model that arrived via FBX import")
 
+	def test_stream_marks_new_objects_before_removing_old_ones(self):
+		# Marking last means anything that throws in between strands the new objects unmarked,
+		# and nothing would ever claim them again.
+		for name in ("External/Blender_SpzBridge", "Assets/StreamingAssets/Addons/StableProjectorzGO/BlenderBridge"):
+			with self.subTest(bridge=name):
+				src = (ROOT / name / "mesh_stream.py").read_text(encoding="utf-8")
+				body = src[src.index("def materialize_next("):]
+				mark = body.index('obj["spz_mesh_stream"] = True')
+				drop = body.index("_remove_previous_stream_objects(")
+				self.assertLess(mark, drop,
+					"new objects must be marked before the previous ones are removed")
+
+	def _run_stream_cleanup(self, bridge_dir, existing, created):
+		"""Exec the real _remove_previous_stream_objects against a stub bpy."""
+		src = (ROOT / bridge_dir / "mesh_stream.py").read_text(encoding="utf-8")
+		start = src.index("_SPZ_GENERATED_NODE_STEMS = (")
+		end = src.index("\ndef materialize_next(", start)
+		bpy_stub = FakeBpy()
+		for obj in list(existing) + list(created):
+			bpy_stub.data.objects.append(obj)
+			if obj.data is not None:
+				bpy_stub.data.meshes.append(obj.data)
+		ns = {"bpy": bpy_stub, "print": lambda *a, **k: None}
+		exec(src[start:end], ns)
+		ns["_remove_previous_stream_objects"](created)
+		return [o.name for o in bpy_stub.data.objects]
+
+	def test_stream_clears_unmarked_copies_from_an_older_bridge(self):
+		# Bridges before 0.6.0 marked nothing, so a scene that has been through one holds copies
+		# no marker check can ever claim. The pile has to drain on the next handoff regardless.
+		for bridge_dir in ("External/Blender_SpzBridge",
+						   "Assets/StreamingAssets/Addons/StableProjectorzGO/BlenderBridge"):
+			with self.subTest(bridge=bridge_dir):
+				legacy = [FakeObj("MAN_FINAL_MESH_BASE", "EMPTY"),
+						  FakeObj("MAN_FINAL_MESH_BASE.004", "EMPTY"),
+						  FakeObj("SPZ_ExportAxis", "EMPTY"),
+						  FakeObj("SPZ_ExportAxis.007", "EMPTY")]
+				user = FakeObj("UserCube", data=FakeMesh("UserMesh"))
+				fresh = FakeObj("MAN_FINAL_MESH_BASE.009", data=FakeMesh("FreshMesh"))
+				names = self._run_stream_cleanup(bridge_dir, legacy + [user], [fresh])
+				self.assertEqual(names, ["UserCube", "MAN_FINAL_MESH_BASE.009"])
+
 	def _run_import(self, bridge, existing, import_result="FINISHED", spawn_count=1):
 		bpy_stub = FakeBpy()
 		for obj in existing:
@@ -177,6 +219,31 @@ class SpzGoImportReplacesPreviousTests(unittest.TestCase):
 				self.assertIn("OldSpz", [o.name for o in bpy_stub.data.objects],
 					"a cancelled import must not delete the model already in the scene")
 				self.assertEqual(calls["texture"], 0)
+
+	def test_import_clears_unmarked_copies_from_an_older_bridge(self):
+		# The scene this was found in: nine SPZ_ExportAxis empties and nineteen model nodes, none
+		# of them marked, because the running Blender session was still on bridge 0.2.0.
+		for bridge in BRIDGES:
+			with self.subTest(bridge=bridge.name):
+				legacy = [FakeObj("SPZ_ExportAxis", "EMPTY"),
+						  FakeObj("SPZ_ExportAxis.008", "EMPTY"),
+						  FakeObj("NewObj0", data=FakeMesh("StaleMesh")),
+						  FakeObj("NewObj0.003", data=FakeMesh("StaleMesh3"))]
+				ok, bpy_stub, _ = self._run_import(bridge, legacy)
+				self.assertTrue(ok)
+				self.assertEqual([o.name for o in bpy_stub.data.objects], ["NewObj0"],
+					"unmarked leftovers from an older bridge must not survive the next import")
+
+	def test_unrelated_user_objects_survive_the_name_sweep(self):
+		for bridge in BRIDGES:
+			with self.subTest(bridge=bridge.name):
+				keep = [FakeObj("UserCube", data=FakeMesh("UserMesh")),
+						FakeObj("Camera", "CAMERA"),
+						FakeObj("Light", "LIGHT")]
+				ok, bpy_stub, _ = self._run_import(bridge, keep)
+				self.assertTrue(ok)
+				self.assertEqual([o.name for o in bpy_stub.data.objects],
+					["UserCube", "Camera", "Light", "NewObj0"])
 
 	def test_new_objects_are_marked_for_the_next_replacement(self):
 		for bridge in BRIDGES:

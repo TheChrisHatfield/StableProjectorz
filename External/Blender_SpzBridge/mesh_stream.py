@@ -260,19 +260,41 @@ def last_error() -> str:
     return _last_error
 
 
-def _remove_previous_stream_objects() -> None:
+_SPZ_GENERATED_NODE_STEMS = ("SPZ_ExportAxis",)
+
+
+def spz_name_stem(name: str) -> str:
+    """Blender resolves a name collision by appending ".001"; strip that back off."""
+    base = name or ""
+    if len(base) > 4 and base[-4] == "." and base[-3:].isdigit():
+        base = base[:-4]
+    return base
+
+
+def _remove_previous_stream_objects(keep=()) -> int:
     # Both markers count as "the SPZ model currently in the scene": a stream that only cleared its
     # own objects would stack a duplicate on top of a model that arrived via FBX import.
+    # Names are consulted too, because bridges before 0.6.0 marked nothing — without that, a scene
+    # carrying copies from an older add-on keeps them forever and replacement looks broken.
+    stems = set(_SPZ_GENERATED_NODE_STEMS)
+    for obj in keep:
+        stems.add(spz_name_stem(obj.name))
+    removed = 0
     for obj in list(bpy.data.objects):
         try:
-            if not (obj.get("spz_mesh_stream") or obj.get("spz_go_import")):
+            if obj in keep:
+                continue
+            if not (obj.get("spz_mesh_stream") or obj.get("spz_go_import")
+                    or spz_name_stem(obj.name) in stems):
                 continue
         except (ReferenceError, TypeError):
             continue
         mesh = obj.data if getattr(obj, "type", None) == "MESH" else None
         bpy.data.objects.remove(obj, do_unlink=True)
+        removed += 1
         if mesh is not None and mesh.users == 0:
             bpy.data.meshes.remove(mesh)
+    return removed
 
 
 def materialize_next(context=None) -> Optional[list]:
@@ -320,10 +342,14 @@ def materialize_next(context=None) -> Optional[list]:
                 bpy.data.meshes.remove(mesh)
         raise
 
-    # Commit replacement only after every new mesh was built and linked successfully.
-    _remove_previous_stream_objects()
+    # Commit replacement only after every new mesh was built and linked successfully. Mark before
+    # removing, not after: the marker is what lets the NEXT cycle claim these objects, so anything
+    # that throws in between would strand them unmarked and permanently un-replaceable.
     for obj in created:
         obj["spz_mesh_stream"] = True
+    dropped = _remove_previous_stream_objects(created)
+    if dropped:
+        print(f"SPZ GO: replaced {dropped} superseded SPZ object(s).")
 
     try:
         bpy.ops.object.select_all(action="DESELECT")
