@@ -199,6 +199,34 @@ public sealed class ViewportAxisGizmoContractTests {
 	}
 
 	[Test]
+	public void GizmoMovesToTheRealViewportRectInsteadOfDuplicating() {
+		RectTransform early = NewHost();
+		RectTransform inner = NewHost();
+		try {
+			// Attach that happened before the inner aspect-fitted rect existed.
+			var spec = new ViewportAxisGizmo_Spec(120f, 16f, string.Empty, ViewportAxisGizmo_UI.OverviewCommandId);
+			ViewportAxisGizmo_UI gizmo = ViewportAxisGizmo_UI.BuildInto(early, spec);
+
+			Assert.That(gizmo.EnsureHostedUnder(inner), Is.True, "The widget must follow the viewport rect it belongs on.");
+			Assert.That(gizmo.RootRect.parent, Is.EqualTo((Transform)inner));
+			Assert.That(early.GetComponentsInChildren<ViewportAxisGizmo_UI>(true).Length, Is.EqualTo(0),
+				"No stale copy may stay behind on the old rect.");
+			Assert.That(inner.GetComponentsInChildren<ViewportAxisGizmo_UI>(true).Length, Is.EqualTo(1));
+			Assert.That(gizmo.RootRect.anchorMin, Is.EqualTo(new Vector2(1f, 1f)), "Re-hosting re-applies the corner dock.");
+			Assert.That(gizmo.RootRect.anchoredPosition, Is.EqualTo(new Vector2(-16f, -16f)));
+
+			Assert.That(gizmo.EnsureHostedUnder(inner), Is.False, "Steady state must not touch the hierarchy.");
+			Assert.That(gizmo.EnsureHostedUnder(null), Is.False, "A missing viewport must not orphan the widget.");
+			Assert.That(ViewportAxisGizmo_UI.FindAnyLiveGizmo(), Is.EqualTo(gizmo),
+				"Attach reuses the live widget wherever it is parented, so it cannot build a second one.");
+		}
+		finally {
+			UnityEngine.Object.DestroyImmediate(early.gameObject);
+			UnityEngine.Object.DestroyImmediate(inner.gameObject);
+		}
+	}
+
+	[Test]
 	public void SpecClampsSizeAndDefaultsTheCenterCommand() {
 		var tiny = new ViewportAxisGizmo_Spec(1f, -5f, null, null);
 		Assert.That(tiny.SizePx, Is.InRange(64f, 240f));
