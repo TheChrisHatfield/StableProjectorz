@@ -57,7 +57,12 @@ namespace spz {
 	    }
 
 
-	    public void ImportModel_via_Filepath( string filepath ){
+	    /// <param name="applyExportAxisBasis">
+	    /// False when SPZ is restoring geometry it already owns (project load, the built-in default
+	    /// model). Those read the original mesh bytes back off disk, so applying the current EXPORT
+	    /// axis preference would let a UI toggle change the shape of an already-saved project.
+	    /// </param>
+	    public void ImportModel_via_Filepath( string filepath, bool applyExportAxisBasis = true ){
 
 	        if (_isImportingModel) {
 		        Debug.LogWarning("[ModelsHandler3D_ImportHelper] ImportModel_via_Filepath refused — already importing.");
@@ -90,10 +95,10 @@ namespace spz {
 	        // We simulate the progress text here since Assimp is fast/blocking in this implementation
 	        Viewport_StatusText.instance?.ShowStatusText($"Importing {Path.GetFileName(filepath)}...", false, 15, true);
 
-	        StartCoroutine(ImportRoutine(filepath));
+	        StartCoroutine(ImportRoutine(filepath, applyExportAxisBasis));
 	    }
 
-	    IEnumerator ImportRoutine(string filepath)
+	    IEnumerator ImportRoutine(string filepath, bool applyExportAxisBasis)
 	    {
 	        // Using our custom AssimpLoader wrapper (AssimpNetter)
 	        AssimpLoader loader = new AssimpLoader();
@@ -103,7 +108,7 @@ namespace spz {
 	        yield return null; // Wait one frame to allow UI to update (show status text)
 
 	        try {
-	            loadedGo = loader.Load(filepath);
+	            loadedGo = loader.Load(filepath, applyExportAxisBasis);
 	        } 
 	        catch(Exception e) {
 	            error = e.Message;
@@ -484,7 +489,10 @@ namespace spz {
 		        return false;
 	        }
 	        _modelsHandler_SL = sl;
-	        ImportModel_via_Filepath(fp);
+	        // Restoring the project's own mesh bytes: never re-interpret them through the current export
+	        // axis preference, or reopening a project after changing that preference returns a differently
+	        // oriented mesh while the saved paint/UV data still describes the original one.
+	        ImportModel_via_Filepath(fp, applyExportAxisBasis: false);
 	        if (!_isImportingModel) {
 		        // ImportModel_via_Filepath cleared itself via OnError without starting.
 		        _modelsHandler_SL = null;

@@ -104,6 +104,40 @@ namespace spz.EditorTests {
 		}
 
 		[Test]
+		public void ProjectLoad_IgnoresTheExportAxisPreference() {
+			string root = Directory.GetCurrentDirectory();
+			string helper = File.ReadAllText(Path.Combine(root, "Assets", "_gm", "Features", "3D Models", "ModelsHandler3D_ImportHelper.cs"));
+			string loader = File.ReadAllText(Path.Combine(root, "Assets", "_gm", "Features", "3D Models", "AssimpLoader.cs"));
+
+			// Project load re-imports the project's own saved mesh bytes. Interpreting those through the
+			// current EXPORT preference means a UI toggle silently changes the shape of an already-saved
+			// project, while its stored paint and UV data still describe the original orientation.
+			Assert.That(helper, Does.Contain("ImportModel_via_Filepath(fp, applyExportAxisBasis: false)"),
+				"project load must opt out of the export axis basis");
+			Assert.That(loader, Does.Contain("bool applyExportAxisBasis = true"),
+				"the loader must accept the opt-out");
+			Assert.That(loader, Does.Contain("applyExportAxisBasis\n\t            ? ExportAxisSettings.Snapshot()")
+				.Or.Contain("applyExportAxisBasis"),
+				"the snapshot must be conditional");
+
+			// Interchange with the user's external tool keeps the round-trip correction.
+			Assert.That(helper, Does.Contain("bool applyExportAxisBasis = true"),
+				"ordinary imports must still default to honouring the basis");
+		}
+
+		[Test]
+		public void OptedOutImport_UsesAnIdentityBasis() {
+			// The opt-out must land on a basis that provably does nothing, not merely a different one.
+			var identity = new ExportAxisSettings.Basis(ExportAxisSettings.AxisOrder.XYZ, false, false, false);
+			Assert.That(identity.IsDefault, Is.True);
+			var probe = new Vector3(1f, 2f, 3f);
+			Assert.That(identity.MapImportedUnityVertex(probe), Is.EqualTo(probe),
+				"an opted-out import must return vertices untouched");
+			Assert.That(identity.FlipsHandedness, Is.False,
+				"an opted-out import must not reverse winding");
+		}
+
+		[Test]
 		public void FlipDropdownOptions_MatchAcrossPythonAndNativePanel() {
 			// Unity persists the flip by INDEX, so a python list in a different order would silently
 			// apply the wrong axis — picking "Y" would flip something else.
