@@ -104,8 +104,25 @@ namespace spz {
 			if (focus == null) {
 				return false;
 			}
+			// Focus_Selection_maybe quietly returns when nothing is selected, so check first instead of reporting
+			// success for a button press that cannot move the camera.
+			if (!HasSomethingToFrame()) {
+				Viewport_StatusText.instance?.ShowStatusText(
+					"Nothing selected to frame — select a mesh first.", false, 2f, false);
+				return false;
+			}
 			focus.Focus_Selection_maybe(forceTheFocus: true);
 			return true;
+		}
+
+		/// <summary>Overview needs at least one selected mesh — that is all <see cref="CameraFocus"/> will frame.</summary>
+		public static bool HasSomethingToFrame() {
+			var models = ModelsHandler_3D.instance;
+			if (models == null) {
+				return false;
+			}
+			var selected = models.selectedMeshes;
+			return selected != null && selected.Count > 0;
 		}
 	}
 }
