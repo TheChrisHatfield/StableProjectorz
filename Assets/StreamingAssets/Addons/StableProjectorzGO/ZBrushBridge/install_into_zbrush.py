@@ -33,7 +33,7 @@ def find_zbrush_user_scripts() -> str:
     there first. We install into a ``SpzGoBridge`` subfolder of the ZBrushData root (writable without
     elevation); the user loads the script once via ZPlugin/ZScript → Python → Load.
     """
-    roots = []
+    canonical, loose = [], []
     public_docs = os.path.join(os.environ.get("PUBLIC", r"C:\Users\Public"), "Documents")
     home = os.path.expanduser("~")
     for base in (public_docs, os.path.join(home, "Documents"), home):
@@ -42,13 +42,22 @@ def find_zbrush_user_scripts() -> str:
         try:
             for name in os.listdir(base):
                 low = name.lower()
-                if low.startswith("zbrushdata") or "zbrush" in low or low.startswith("maxon zbrush"):
-                    roots.append(os.path.join(base, name))
+                full = os.path.join(base, name)
+                if not os.path.isdir(full):
+                    continue
+                if low.startswith("zbrushdata"):
+                    canonical.append(full)
+                elif "zbrush" in low:
+                    loose.append(full)
         except OSError:
             pass
-    # Newest ZBrushData* wins (handles multiple installed years).
-    roots.sort(key=lambda p: os.path.getmtime(p) if os.path.exists(p) else 0, reverse=True)
-    return roots[0] if roots else ""
+    # "ZBrushData<year>" is what ZBrush actually creates; a folder that merely says "zbrush" (a
+    # scratch/projects folder) is a last resort. Ranking them together lets a recently touched
+    # scratch folder win and the bridge lands somewhere ZBrush never reads.
+    ranked = canonical or loose
+    # Newest wins within a tier (handles multiple installed years).
+    ranked.sort(key=lambda p: os.path.getmtime(p) if os.path.exists(p) else 0, reverse=True)
+    return ranked[0] if ranked else ""
 
 
 def main(argv=None) -> int:

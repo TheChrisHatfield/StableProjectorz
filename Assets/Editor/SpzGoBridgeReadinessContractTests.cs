@@ -94,6 +94,31 @@ namespace spz.EditorTests {
 		}
 
 		[Test]
+		public void ZBrushDataFolder_BeatsAnUnrelatedFolderThatMerelySaysZBrush() {
+			string root = Path.Combine(_tmpRoot, "docs");
+			string real = Path.Combine(root, "ZBrushData2026");
+			string scratch = Path.Combine(root, "ZBrush Projects");
+			Directory.CreateDirectory(real);
+			Directory.CreateDirectory(scratch);
+			// Make the scratch folder the most recently touched, which is what a working artist's
+			// machine looks like — the real data folder is written rarely.
+			Directory.SetLastWriteTimeUtc(real, new System.DateTime(2020, 1, 1));
+			Directory.SetLastWriteTimeUtc(scratch, System.DateTime.UtcNow);
+
+			Assert.That(FastPath_API.PickZBrushDataDir(new[] { root }), Is.EqualTo(real),
+				"the folder ZBrush actually creates must win over any recently touched 'zbrush' folder");
+		}
+
+		[Test]
+		public void WithNoZBrushDataFolder_AZBrushishFolderIsStillBetterThanNothing() {
+			string root = Path.Combine(_tmpRoot, "docs2");
+			string scratch = Path.Combine(root, "zbrush_stuff");
+			Directory.CreateDirectory(scratch);
+			Assert.That(FastPath_API.PickZBrushDataDir(new[] { root }), Is.EqualTo(scratch));
+			Assert.That(FastPath_API.PickZBrushDataDir(new[] { Path.Combine(_tmpRoot, "missing") }), Is.Empty);
+		}
+
+		[Test]
 		public void UnsetProbe_LeavesStubsNotReady() {
 			SpzGoHosts.BridgeInstalledProbe = null;
 			Assert.That(SpzGoHosts.IsBridgeReady(SpzGoHosts.ZBrushId), Is.False,
