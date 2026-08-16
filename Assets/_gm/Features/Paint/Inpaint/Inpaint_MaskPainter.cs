@@ -1128,7 +1128,9 @@ namespace spz {
 		    // Skip this sample; next ticks may hit filled Content or accum (when Content source unavailable).
 		    if (c.a < 0.04f)
 			    return;
-		    if (!ValuePaintLivePredictor.TryPredictFromSurface(c, out _))
+		    // Mid-stroke the accumulation already holds this frame's paint — let the predictor
+		    // hold its arm instead of stepping off its own output (B2.2a).
+		    if (!ValuePaintLivePredictor.TryPredictFromSurface(c, out _, strokeActive: _isPainting))
 			    return;
 		    // Tint the cursor with the ACTUAL armed brush color (post live soft-arm), not a remap of the
 		    // surface sample — otherwise the ring shows a color the stroke will never lay down.
