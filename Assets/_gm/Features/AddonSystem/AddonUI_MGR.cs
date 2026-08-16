@@ -1702,6 +1702,14 @@ namespace spz {
 			if (okNative) {
 				return;
 			}
+			// Host sections qualify the callback with the host id (do_export_to_path__zbrush). Unity
+			// invents that suffix, so no Python handler of that name can exist — posting it only
+			// replaces the specific reason the native run already put on the status line ("path is
+			// empty", "panel not ready") with a generic add-on failure.
+			if (SpzGoHostSection.HostIdFromCallback(callbackName) != null) {
+				UnityEngine.Debug.LogWarning($"[AddonUI_MGR] SPZ GO native {(isImport ? "import" : "export")} failed for {callbackName}; host-qualified callbacks have no Python handler, so the native reason stands.");
+				return;
+			}
 			UnityEngine.Debug.LogWarning($"[AddonUI_MGR] SPZ GO native {(isImport ? "import" : "export")} failed; falling back to Python callback {addonId}.{callbackName}.");
 			SendCallbackToPython(addonId, callbackName);
 		}

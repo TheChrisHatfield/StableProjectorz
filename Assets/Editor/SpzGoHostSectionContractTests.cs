@@ -267,6 +267,49 @@ public sealed class SpzGoHostSectionContractTests {
 	}
 
 	[Test]
+	public void ANativeExportFailure_DoesNotPostACallbackPythonCannotHave() {
+		string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "SpzGoNoFallback_" + System.Guid.NewGuid().ToString("N"));
+		string plugin = System.IO.Path.Combine(root, "plugin");
+		string savedOverride = SpzGoBridgeInstall.InstallRootOverride;
+		var savedProbe = SpzGoHosts.BridgeInstalledProbe;
+		var logs = new List<string>();
+		Application.LogCallback handler = (msg, stack, type) => logs.Add(msg ?? "");
+		try {
+			System.IO.Directory.CreateDirectory(plugin);
+			SpzGoBridgeInstall.InstallRootOverride = root;
+			SpzGoHosts.BridgeInstalledProbe = SpzGoBridgeInstall.IsInstalled;
+			SpzGoBridgeInstall.MarkInstalled(SpzGoHosts.ZBrushId, plugin);
+			SpzGoHostPrefs.SetMode(SpzGoHosts.ZBrushId, SpzGoMode.Export);
+
+			// Empty export path is the cheapest way to make the native run fail with a specific reason.
+			var row = FindDescendant(SettingsContent(SpzGoHosts.ZBrushId),
+				"TextInput_" + SpzGoHostSection.ExportPathLabel);
+			Assert.That(row, Is.Not.Null);
+			var input = row.GetComponentInChildren<TMPro.TMP_InputField>(true);
+			Assert.That(input, Is.Not.Null);
+			input.text = "";
+
+			Application.logMessageReceived += handler;
+			Section(SpzGoHosts.ZBrushId)
+				.Find(SpzGoHostSection.LogoName(SpzGoHosts.ZBrushId))
+				.GetComponent<Button>().onClick.Invoke();
+		} finally {
+			Application.logMessageReceived -= handler;
+			SpzGoBridgeInstall.ClearInstalled(SpzGoHosts.ZBrushId);
+			SpzGoBridgeInstall.InstallRootOverride = savedOverride;
+			SpzGoHosts.BridgeInstalledProbe = savedProbe;
+			try { System.IO.Directory.Delete(root, true); } catch { }
+		}
+
+		// Unity invents the "__zbrush" suffix, so a Python handler by that name cannot exist. Posting it
+		// would only bury the real reason under a generic add-on failure.
+		foreach (string msg in logs) {
+			Assert.That(msg.Contains("Invoking addon callback"), Is.False,
+				"native failure must not post a host-qualified callback: " + msg);
+		}
+	}
+
+	[Test]
 	public void SettingsStateSurvivesARebuiltPanel() {
 		SpzGoHostPrefs.SetSettingsOpen(SpzGoHosts.PainterId, true);
 		SpzGoHostPrefs.SetMode(SpzGoHosts.PainterId, SpzGoMode.Import);
