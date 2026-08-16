@@ -9,6 +9,9 @@ namespace spz {
 		public enum AxisOrder { XYZ, XZY, YXZ, YZX, ZXY, ZYX }
 
 		public const string AxisOrderLabel = "Export axis order";
+		public const string FlipLabel = "Export flip";
+		// Retained: older panels seeded one toggle per axis, and those rows must still persist
+		// correctly until they are pruned in favour of <see cref="FlipLabel"/>.
 		public const string FlipXLabel = "Export flip X";
 		public const string FlipYLabel = "Export flip Y";
 		public const string FlipZLabel = "Export flip Z";
@@ -45,7 +48,43 @@ namespace spz {
 			set => SetBool(FlipZPrefKey, value);
 		}
 
+		/// <summary>
+		/// Flip combinations as one pickable list, so the axis choice is a single selection instead of
+		/// three loose buttons. Single axes come first: picking just X, Y or Z is the common case.
+		/// </summary>
+		public static readonly string[] FlipNames = {
+			"None", "X", "Y", "Z", "X + Y", "X + Z", "Y + Z", "X + Y + Z"
+		};
+
+		// Bit 0 = X, bit 1 = Y, bit 2 = Z, in the same order as FlipNames.
+		static readonly int[] FlipMasks = { 0, 1, 2, 4, 3, 5, 6, 7 };
+
 		public static int AxisOrderIndex => (int)Order;
+
+		/// <summary>
+		/// The per-axis flags projected onto <see cref="FlipNames"/>. The three bools stay the source
+		/// of truth so existing preferences, writers and the import path are unaffected by the UI shape.
+		/// </summary>
+		public static int FlipIndex {
+			get => FlipIndexForFlags(FlipX, FlipY, FlipZ);
+			set => SetFlipIndex(value);
+		}
+
+		public static int FlipIndexForFlags(bool flipX, bool flipY, bool flipZ) {
+			int mask = (flipX ? 1 : 0) | (flipY ? 2 : 0) | (flipZ ? 4 : 0);
+			for (int i = 0; i < FlipMasks.Length; i++) {
+				if (FlipMasks[i] == mask) return i;
+			}
+			return 0;
+		}
+
+		public static void SetFlipIndex(int index) {
+			int mask = FlipMasks[Mathf.Clamp(index, 0, FlipMasks.Length - 1)];
+			FlipX = (mask & 1) != 0;
+			FlipY = (mask & 2) != 0;
+			FlipZ = (mask & 4) != 0;
+		}
+
 		public static bool IsDefault => Snapshot().IsDefault;
 
 		/// <summary>

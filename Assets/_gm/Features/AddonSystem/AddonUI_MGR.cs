@@ -856,9 +856,8 @@ namespace spz {
 			AddTextInput(StableProjectorzGoAddonId, panelId, "Blender.exe (optional)", "");
 			AddDropdown(StableProjectorzGoAddonId, panelId, ExportAxisSettings.AxisOrderLabel,
 				new List<string>(ExportAxisSettings.AxisOrderNames), ExportAxisSettings.AxisOrderIndex);
-			AddToggle(StableProjectorzGoAddonId, panelId, ExportAxisSettings.FlipXLabel, ExportAxisSettings.FlipX);
-			AddToggle(StableProjectorzGoAddonId, panelId, ExportAxisSettings.FlipYLabel, ExportAxisSettings.FlipY);
-			AddToggle(StableProjectorzGoAddonId, panelId, ExportAxisSettings.FlipZLabel, ExportAxisSettings.FlipZ);
+			AddDropdown(StableProjectorzGoAddonId, panelId, ExportAxisSettings.FlipLabel,
+				new List<string>(ExportAxisSettings.FlipNames), ExportAxisSettings.FlipIndex);
 			AddButton(StableProjectorzGoAddonId, panelId, "Import", "do_import_from_path");
 			AddButton(StableProjectorzGoAddonId, panelId, "Export", "do_export_to_path");
 			AddButton(StableProjectorzGoAddonId, panelId, "Install into Blender", "do_install_blender_addon_force");
@@ -890,12 +889,14 @@ namespace spz {
 			if (!PanelHasNamedControlPrefix(panel, "Dropdown_" + ExportAxisSettings.AxisOrderLabel))
 				AddDropdown(StableProjectorzGoAddonId, panelId, ExportAxisSettings.AxisOrderLabel,
 					new List<string>(ExportAxisSettings.AxisOrderNames), ExportAxisSettings.AxisOrderIndex);
-			if (!PanelHasNamedControlPrefix(panel, "Toggle_" + ExportAxisSettings.FlipXLabel))
-				AddToggle(StableProjectorzGoAddonId, panelId, ExportAxisSettings.FlipXLabel, ExportAxisSettings.FlipX);
-			if (!PanelHasNamedControlPrefix(panel, "Toggle_" + ExportAxisSettings.FlipYLabel))
-				AddToggle(StableProjectorzGoAddonId, panelId, ExportAxisSettings.FlipYLabel, ExportAxisSettings.FlipY);
-			if (!PanelHasNamedControlPrefix(panel, "Toggle_" + ExportAxisSettings.FlipZLabel))
-				AddToggle(StableProjectorzGoAddonId, panelId, ExportAxisSettings.FlipZLabel, ExportAxisSettings.FlipZ);
+			// Panels outlive a session, so a panel seeded before the flips became one dropdown still
+			// carries the three loose toggles. Drop them, or the user sees both surfaces at once.
+			RemoveNamedControls(StableProjectorzGoAddonId, panel, "Toggle_" + ExportAxisSettings.FlipXLabel);
+			RemoveNamedControls(StableProjectorzGoAddonId, panel, "Toggle_" + ExportAxisSettings.FlipYLabel);
+			RemoveNamedControls(StableProjectorzGoAddonId, panel, "Toggle_" + ExportAxisSettings.FlipZLabel);
+			if (!PanelHasNamedControlPrefix(panel, "Dropdown_" + ExportAxisSettings.FlipLabel))
+				AddDropdown(StableProjectorzGoAddonId, panelId, ExportAxisSettings.FlipLabel,
+					new List<string>(ExportAxisSettings.FlipNames), ExportAxisSettings.FlipIndex);
 			if (!PanelHasNamedControlPrefix(panel, "Button_Import"))
 				AddButton(StableProjectorzGoAddonId, panelId, "Import", "do_import_from_path");
 			if (!PanelHasNamedControlPrefix(panel, "Button_Export"))
@@ -936,6 +937,34 @@ namespace spz {
 					return true;
 			}
 			return false;
+		}
+
+		/// <summary>
+		/// Destroys panel rows whose name starts with <paramref name="namePrefix"/>, used to retire a
+		/// control that a newer layout replaced. Registry entries go with them: a stale element id
+		/// would keep answering get_value for a control the user can no longer see.
+		/// </summary>
+		int RemoveNamedControls(string addonId, GameObject panel, string namePrefix) {
+			if (panel == null || string.IsNullOrEmpty(namePrefix)) return 0;
+			var doomed = new List<GameObject>();
+			var transforms = panel.GetComponentsInChildren<Transform>(true);
+			for (int c = 0; c < transforms.Length; c++) {
+				var ch = transforms[c];
+				if (ch == null || ch == panel.transform) continue;
+				if (ch.name.StartsWith(namePrefix, StringComparison.Ordinal))
+					doomed.Add(ch.gameObject);
+			}
+			for (int i = 0; i < doomed.Count; i++) {
+				GameObject go = doomed[i];
+				if (go == null) continue;
+				string elementId = go.GetInstanceID().ToString();
+				_uiElementValues.Remove(elementId);
+				_uiElementComponents.Remove(elementId);
+				if (_addonUIElements.TryGetValue(addonId, out var owned))
+					owned.Remove(go);
+				Destroy(go);
+			}
+			return doomed.Count;
 		}
 
 		void EnsureNativeNomadThemePanel() {
@@ -2150,9 +2179,11 @@ namespace spz {
 				UnityEngine.Debug.LogError($"[AddonUI_MGR] Dropdown requires at least one option");
 				return null;
 			}
-			if (string.Equals(addonId, StableProjectorzGoAddonId, StringComparison.Ordinal)
-			    && string.Equals(label, ExportAxisSettings.AxisOrderLabel, StringComparison.Ordinal)) {
-				defaultIndex = ExportAxisSettings.AxisOrderIndex;
+			if (string.Equals(addonId, StableProjectorzGoAddonId, StringComparison.Ordinal)) {
+				if (string.Equals(label, ExportAxisSettings.AxisOrderLabel, StringComparison.Ordinal))
+					defaultIndex = ExportAxisSettings.AxisOrderIndex;
+				else if (string.Equals(label, ExportAxisSettings.FlipLabel, StringComparison.Ordinal))
+					defaultIndex = ExportAxisSettings.FlipIndex;
 			}
 			
 			// Edge case: Invalid default index - clamp to valid range
@@ -2294,9 +2325,11 @@ namespace spz {
 		}
 
 		static void PersistSpzGoExportAxisOrderIfNeeded(string addonId, string label, int index) {
-			if (string.Equals(addonId, StableProjectorzGoAddonId, StringComparison.Ordinal)
-			    && string.Equals(label, ExportAxisSettings.AxisOrderLabel, StringComparison.Ordinal))
+			if (!string.Equals(addonId, StableProjectorzGoAddonId, StringComparison.Ordinal)) return;
+			if (string.Equals(label, ExportAxisSettings.AxisOrderLabel, StringComparison.Ordinal))
 				ExportAxisSettings.SetAxisOrderIndex(index);
+			else if (string.Equals(label, ExportAxisSettings.FlipLabel, StringComparison.Ordinal))
+				ExportAxisSettings.SetFlipIndex(index);
 		}
 		
 		/// <summary>
