@@ -25,7 +25,18 @@ namespace spz {
 
 	    void OnDestroy(){
 	        GenerateButtons_UI.OnCancelGenerationButton -= OnCancelShadowR_Button;
+	        ReleaseGenerationGate_ifMine();
 	        KillActiveShadowRProcess();
+	    }
+
+	    // ShadowR_crtn dies with this component, so its MarkCustomWorkflow_Done can never run. Leaving the
+	    // hub in Shadow_R_delighting keeps Generate stuck in Cancel and refuses every later request.
+	    void ReleaseGenerationGate_ifMine(){
+	        var hub = StableDiffusion_Hub.instance;
+	        if (hub == null){ return; }
+	        if (hub._isGeneratingWhat != Generate_RequestingWhat.Shadow_R_delighting){ return; }
+	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:true);
+	        hub.MarkCustomWorkflow_Done();
 	    }
 
 

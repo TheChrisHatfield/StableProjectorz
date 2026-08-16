@@ -199,8 +199,19 @@ namespace spz {
 
 	    void OnDestroy(){
 	        GenerateButtons_UI.OnCancelGenerationButton -= OnCancelRembg_Button;
+	        ReleaseGenerationGate_ifMine();
 	        KillActiveRembgProcess();
 	        if (instance == this) instance = null;
+	    }
+
+	    // Rembg_crtn dies with this component, so its MarkCustomWorkflow_Done can never run. Leaving the
+	    // hub in rembg_backgroundRemoval keeps Generate stuck in Cancel and refuses every later request.
+	    void ReleaseGenerationGate_ifMine(){
+	        var hub = StableDiffusion_Hub.instance;
+	        if (hub == null){ return; }
+	        if (hub._isGeneratingWhat != Generate_RequestingWhat.rembg_backgroundRemoval){ return; }
+	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled: true);
+	        hub.MarkCustomWorkflow_Done();
 	    }
 	}
 }//end namespace
