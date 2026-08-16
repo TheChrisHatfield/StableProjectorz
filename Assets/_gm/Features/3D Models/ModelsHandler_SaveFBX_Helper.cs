@@ -12,6 +12,10 @@ namespace spz {
 	// Useful when saving the project.
 	public class ModelsHandler_SaveFBX_Helper : MonoBehaviour
 	{
+		// Snapshotted once per SaveModels so the axis correction node and every mesh's winding
+		// come from the same basis (and so PlayerPrefs is not read per triangle).
+		static ExportAxisSettings.Basis _axisBasis;
+
 		static readonly string[] s_fbxBinaryWriterDescriptionHints = {
 			"FBX binary (*.fbx)",
 			"Autodesk FBX (binary) (*.fbx)", "Autodesk FBX 2014 (binary) (*.fbx)", "Autodesk FBX 2010 (binary) (*.fbx)",
@@ -55,7 +59,11 @@ namespace spz {
 					}
 					FbxScene scene = FbxScene.Create(fbxManager, "StableProjectorz Scene");
 					FbxNode fbxRootNode = scene.GetRootNode();
-					FBX_ExportComponents(saveMe, scene, fbxRootNode);
+					// One snapshot for the whole export: the correction node and per-mesh winding must
+					// agree, and the static accessors hit PlayerPrefs (too costly per triangle).
+					_axisBasis = ExportAxisSettings.Snapshot();
+					FbxNode contentParent = CreateExportAxisCorrectionNode(scene, fbxRootNode, _axisBasis);
+					FBX_ExportComponents(saveMe, scene, contentParent);
 					if (!exporter.Export(scene)) {
 						UnityEngine.Debug.LogError(
 							"[SPZ] FBX Export() failed: " + exporter.GetStatus().GetErrorString()
@@ -65,6 +73,34 @@ namespace spz {
 				}
 			}
 			return File.Exists(finalFilepath_with_exten);
+		}
+
+		/// <summary>
+		/// Adds the user's output-axis correction above the authored hierarchy. Keeping it at one
+		/// synthetic root preserves every child translation/rotation while allowing arbitrary signed
+		/// axis permutations. The matrix is expressed in FBX Y-up space and becomes the same correction
+		/// after Blender's fixed -Z/Y import conversion.
+		/// </summary>
+		static FbxNode CreateExportAxisCorrectionNode(FbxScene scene, FbxNode parent, ExportAxisSettings.Basis basis) {
+			if (basis.IsDefault) return parent;
+
+			Matrix4x4 m = basis.GetFbxCorrectionMatrix();
+			Vector3 right = m.GetColumn(0);
+			Vector3 up = m.GetColumn(1);
+			Vector3 forward = m.GetColumn(2);
+			float determinantSign = Vector3.Dot(Vector3.Cross(right, up), forward) < 0f ? -1f : 1f;
+
+			// Pull one reflection into local scale, leaving a proper rotation for Quaternion.
+			Vector3 rotationForward = forward * determinantSign;
+			Quaternion rotation = Quaternion.LookRotation(rotationForward, up);
+			Vector3 e = rotation.eulerAngles;
+
+			FbxNode correction = FbxNode.Create(scene, "SPZ_ExportAxis");
+			parent.AddChild(correction);
+			correction.LclTranslation.Set(new FbxDouble3(0d, 0d, 0d));
+			correction.LclRotation.Set(new FbxDouble3(e.x, e.y, e.z));
+			correction.LclScaling.Set(new FbxDouble3(1d, 1d, determinantSign));
+			return correction;
 		}
 
 		static int TryInvokeIntNoArgs(object target, string methodName) {
@@ -302,12 +338,14 @@ namespace spz {
 	            // Add one normal per each vertex face index (3 per triangle)
 	            FbxLayerElementArray fbxElementArray = fbxLayerElement.GetDirectArray ();
 
-	            for (int n = 0; n < mesh.VertexColors.Length; n++) 
+	            // Cache once: mesh.VertexColors allocates a full Color32[] copy every property access.
+	            Color32[] colors = mesh.VertexColors;
+	            for (int n = 0; n < colors.Length; n++)
 	            {
 	                // Converting to Color from Color32, as Color32 stores the colors
 	                // as ints between 0-255, while FbxColor and Color
 	                // use doubles between 0-1
-	                Color color = mesh.VertexColors [n];
+	                Color color = colors[n];
 	                fbxElementArray.Add (new FbxColor (color.r,
 	                                                    color.g,
 	                                                    color.b,
@@ -333,9 +371,11 @@ namespace spz {
 
 	            FbxLayerElementArray fbxElementArray = fbxLayerElement.GetDirectArray();
 
-	            for (int i = 0; i < mesh.UV.Length; i++)
+	            // Cache once: mesh.UV allocates a full Vector2[] copy every property access.
+	            Vector2[] uvs = mesh.UV;
+	            for (int i = 0; i < uvs.Length; i++)
 	            {
-	                fbxElementArray.Add(new FbxVector2(mesh.UV[i].x, mesh.UV[i].y));
+	                fbxElementArray.Add(new FbxVector2(uvs[i].x, uvs[i].y));
 	            }
 
 	            fbxLayer.SetUVs(fbxLayerElement, FbxLayerElement.EType.eTextureDiffuse);
@@ -347,22 +387,27 @@ namespace spz {
 
 	        FbxMesh fbxMesh = FbxMesh.Create(fbxScene, "Mesh");
 
-	        int NumControlPoints = mesh.VertexCount;
+	        // Cache once: MeshInfo.Vertices/Triangles re-call mesh.vertices/triangles (full managed copies)
+	        // on every indexer access — for a 1M-vert mesh that was millions of redundant array allocations.
+	        Vector3[] verts = mesh.Vertices;
+	        int[] tris = mesh.Triangles;
+	        int NumControlPoints = verts.Length;
 	        fbxMesh.InitControlPoints(NumControlPoints);
 
 	        for (int v = 0; v < NumControlPoints; v++){
-	            fbxMesh.SetControlPointAt(new FbxVector4(mesh.Vertices[v].x, mesh.Vertices[v].y, -mesh.Vertices[v].z), v);
+	            fbxMesh.SetControlPointAt(new FbxVector4(verts[v].x, verts[v].y, -verts[v].z), v);
 	        }
 
 	        ExportNormalsEtc(mesh, fbxMesh);
 	        ExportVertexColors(mesh, fbxMesh);
 	        ExportUVs(mesh, fbxMesh);
 
-	        for (int f=0; f<mesh.Triangles.Length; f+=3){
+	        bool reverseWinding = !_axisBasis.FlipsHandedness;
+	        for (int f=0; f<tris.Length; f+=3){
 	            fbxMesh.BeginPolygon();
-	            fbxMesh.AddPolygon(mesh.Triangles[f + 2]);
-	            fbxMesh.AddPolygon(mesh.Triangles[f + 1]);
-	            fbxMesh.AddPolygon(mesh.Triangles[f + 0]);
+	            fbxMesh.AddPolygon(tris[reverseWinding ? f + 2 : f]);
+	            fbxMesh.AddPolygon(tris[f + 1]);
+	            fbxMesh.AddPolygon(tris[reverseWinding ? f : f + 2]);
 	            fbxMesh.EndPolygon();
 	        }
 

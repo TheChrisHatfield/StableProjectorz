@@ -114,6 +114,12 @@ namespace spz {
 				return false;
 			}
 
+			// Snapshot the user's axis basis ONCE: the static accessors read PlayerPrefs, which would
+			// cost millions of reads if evaluated per vertex/triangle. Also keeps positions and winding
+			// consistent if the user toggles a flip mid-stream.
+			var axisBasis = ExportAxisSettings.Snapshot();
+			bool reverseWinding = !axisBasis.FlipsHandedness;
+
 			byte[] raw;
 			try {
 				using (var rawStream = new MemoryStream())
@@ -139,17 +145,19 @@ namespace spz {
 
 						// Existing route: mirror Unity Z into FBX, then Blender's -Z/Y axis matrix.
 						// Combined direct result is (x, z, y). Bake hierarchy transforms to avoid
-						// per-object Euler/handedness ambiguity.
+						// per-object Euler/handedness ambiguity. Apply the user's shared output-axis
+						// permutation/flips last so direct stream and FBX export remain equivalent.
 						for (int i = 0; i < capture.Vertices.Length; i++) {
 							Vector3 p = capture.Transform.TransformPoint(capture.Vertices[i]);
-							writer.Write(p.x);
-							writer.Write(p.z);
-							writer.Write(p.y);
+							Vector3 output = axisBasis.MapOutput(new Vector3(p.x, p.z, p.y));
+							writer.Write(output.x);
+							writer.Write(output.y);
+							writer.Write(output.z);
 						}
 						for (int i = 0; i < capture.Triangles.Length; i += 3) {
-							int a = capture.Triangles[i + 2];
+							int a = capture.Triangles[reverseWinding ? i + 2 : i];
 							int b = capture.Triangles[i + 1];
-							int c = capture.Triangles[i];
+							int c = capture.Triangles[reverseWinding ? i : i + 2];
 							if ((uint)a >= capture.Vertices.Length
 							    || (uint)b >= capture.Vertices.Length
 							    || (uint)c >= capture.Vertices.Length) {

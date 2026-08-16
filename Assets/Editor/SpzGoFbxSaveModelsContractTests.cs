@@ -42,8 +42,10 @@ public sealed class SpzGoFbxSaveModelsContractTests {
 			"Rotations must be exported as Euler degrees, not quaternion components.");
 		Assert.That(src, Does.Contain("new FbxDouble3( -e.x, -e.y, e.z )"),
 			"Euler must be mirrored for the -z handedness flip.");
-		Assert.That(src, Does.Contain("-mesh.Vertices[v].z"),
+		Assert.That(src, Does.Contain("-verts[v].z"),
 			"Control points must mirror z, not x.");
+		Assert.That(src, Does.Contain("if (basis.IsDefault) return parent;"),
+			"Default settings must preserve the authored no-extra-root-transform path.");
 
 		string container = Path.Combine(
 			Directory.GetCurrentDirectory(),
