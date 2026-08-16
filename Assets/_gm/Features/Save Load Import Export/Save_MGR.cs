@@ -694,8 +694,18 @@ namespace spz {
 	                p => { if (showedProgress) Viewport_StatusText.instance?.ReportProgress(0.30f + 0.25f * Mathf.Clamp01(p)); } ) );
 
 	            albedo = new Dictionary<Texture2D, UDIM_Sector>();
-	            int pairCount = Mathf.Min(slices.Count, albedoUdims.udims_sectors != null ? albedoUdims.udims_sectors.Count : slices.Count);
-	            for (int i = 0; i < pairCount; ++i){ albedo.Add(slices[i], albedoUdims.udims_sectors[i]); }
+	            // Slices and sectors are expected 1:1. Upstream indexed sectors by slice and threw on any
+	            // mismatch, which here would abort the coroutine after onHaveAlbedo — leaking every slice
+	            // and reporting a finished export that wrote no files. Clamp instead, but say so loudly:
+	            // a silent clamp would drop UDIM tiles with no trace.
+	            List<UDIM_Sector> sectors = albedoUdims.udims_sectors;
+	            int sectorCount = sectors != null ? sectors.Count : 0;
+	            int pairCount = Mathf.Min(slices.Count, sectorCount);
+	            if (sectorCount != slices.Count){
+	                UnityEngine.Debug.LogWarning("[Save_MGR] UDIM slice/sector mismatch: " + slices.Count
+	                    + " slice(s) vs " + sectorCount + " sector(s); exporting " + pairCount + ".");
+	            }
+	            for (int i = 0; i < pairCount; ++i){ albedo.Add(slices[i], sectors[i]); }
 	            for (int i = pairCount; i < slices.Count; ++i){ if (slices[i] != null) Texture.DestroyImmediate(slices[i]); }
 	            bool albedo_destroyWhenDone = !forbid_albedoDelete;
 
