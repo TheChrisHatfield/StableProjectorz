@@ -115,7 +115,7 @@ namespace spz {
 	        if(StableDiffusion_Hub.instance._generating){ yield break; }
 
 	        _isSendingReceiving = true;
-	        UnityWebRequest request = UnityWebRequest.Get(Connection_MGR.A1111_SD_API_URL + "/options");
+	        using (UnityWebRequest request = UnityWebRequest.Get(Connection_MGR.A1111_SD_API_URL + "/options")) {
 	        yield return request.SendWebRequest();
 	        bool isBad = request.result == UnityWebRequest.Result.ConnectionError;
 	             isBad |= request.result == UnityWebRequest.Result.ProtocolError;
@@ -127,6 +127,7 @@ namespace spz {
 
 	        currentOptions = JsonUtility.FromJson<SD_OptionsPacket>(request.downloadHandler.text);
 	        Act_onOptionsRetrieved?.Invoke(currentOptions);
+	        }// dispose before nested send — options polling is frequent
 
 	        if (_wantsToSend_Asap || _neverSentYet){// if never sent yet, send once.
 	            yield return (SendOptionsRequest());// It gives ability for important settings to activate from start.
@@ -143,7 +144,7 @@ namespace spz {
 
 	        string json = currentOptions.ToOutboundJson();
 	        byte[] jsonToSend = new System.Text.UTF8Encoding().GetBytes(json);
-	        UnityWebRequest request = new UnityWebRequest(Connection_MGR.A1111_SD_API_URL + "/options", "POST");
+	        using (UnityWebRequest request = new UnityWebRequest(Connection_MGR.A1111_SD_API_URL + "/options", "POST")) {
 	        request.uploadHandler = new UploadHandlerRaw(jsonToSend);
 	        request.downloadHandler = new DownloadHandlerBuffer();
 
@@ -156,6 +157,7 @@ namespace spz {
 	            Debug.LogError("Error sending options: " + request.error);
 	        }
 	        Act_OnSendOptions_done?.Invoke(request.result, request.error);
+	        }
 	        _isSendingReceiving = false;
 	        // Drain coalesced SubmitOptions_Asap calls that arrived mid-POST (e.g. Klein VAE heal).
 	        if (_wantsToSend_Asap && currentOptions != null)
