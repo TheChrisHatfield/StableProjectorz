@@ -854,6 +854,11 @@ namespace spz {
 			AddTextInput(StableProjectorzGoAddonId, panelId, "Import path", importDefault);
 			AddTextInput(StableProjectorzGoAddonId, panelId, "Export path", exportDefault);
 			AddTextInput(StableProjectorzGoAddonId, panelId, "Blender.exe (optional)", "");
+			AddDropdown(StableProjectorzGoAddonId, panelId, ExportAxisSettings.AxisOrderLabel,
+				new List<string>(ExportAxisSettings.AxisOrderNames), ExportAxisSettings.AxisOrderIndex);
+			AddToggle(StableProjectorzGoAddonId, panelId, ExportAxisSettings.FlipXLabel, ExportAxisSettings.FlipX);
+			AddToggle(StableProjectorzGoAddonId, panelId, ExportAxisSettings.FlipYLabel, ExportAxisSettings.FlipY);
+			AddToggle(StableProjectorzGoAddonId, panelId, ExportAxisSettings.FlipZLabel, ExportAxisSettings.FlipZ);
 			AddButton(StableProjectorzGoAddonId, panelId, "Import", "do_import_from_path");
 			AddButton(StableProjectorzGoAddonId, panelId, "Export", "do_export_to_path");
 			AddButton(StableProjectorzGoAddonId, panelId, "Install into Blender", "do_install_blender_addon_force");
@@ -882,6 +887,15 @@ namespace spz {
 				if (!PanelHasNamedControlPrefix(panel, "TextInput_Blender.exe"))
 					AddTextInput(StableProjectorzGoAddonId, panelId, "Blender.exe (optional)", "");
 			}
+			if (!PanelHasNamedControlPrefix(panel, "Dropdown_" + ExportAxisSettings.AxisOrderLabel))
+				AddDropdown(StableProjectorzGoAddonId, panelId, ExportAxisSettings.AxisOrderLabel,
+					new List<string>(ExportAxisSettings.AxisOrderNames), ExportAxisSettings.AxisOrderIndex);
+			if (!PanelHasNamedControlPrefix(panel, "Toggle_" + ExportAxisSettings.FlipXLabel))
+				AddToggle(StableProjectorzGoAddonId, panelId, ExportAxisSettings.FlipXLabel, ExportAxisSettings.FlipX);
+			if (!PanelHasNamedControlPrefix(panel, "Toggle_" + ExportAxisSettings.FlipYLabel))
+				AddToggle(StableProjectorzGoAddonId, panelId, ExportAxisSettings.FlipYLabel, ExportAxisSettings.FlipY);
+			if (!PanelHasNamedControlPrefix(panel, "Toggle_" + ExportAxisSettings.FlipZLabel))
+				AddToggle(StableProjectorzGoAddonId, panelId, ExportAxisSettings.FlipZLabel, ExportAxisSettings.FlipZ);
 			if (!PanelHasNamedControlPrefix(panel, "Button_Import"))
 				AddButton(StableProjectorzGoAddonId, panelId, "Import", "do_import_from_path");
 			if (!PanelHasNamedControlPrefix(panel, "Button_Export"))
@@ -1110,6 +1124,12 @@ namespace spz {
 				return null;
 			}
 
+			if (string.Equals(addonId, StableProjectorzGoAddonId, StringComparison.Ordinal)) {
+				if (string.Equals(label, ExportAxisSettings.FlipXLabel, StringComparison.Ordinal)) defaultOn = ExportAxisSettings.FlipX;
+				else if (string.Equals(label, ExportAxisSettings.FlipYLabel, StringComparison.Ordinal)) defaultOn = ExportAxisSettings.FlipY;
+				else if (string.Equals(label, ExportAxisSettings.FlipZLabel, StringComparison.Ordinal)) defaultOn = ExportAxisSettings.FlipZ;
+			}
+
 			GameObject toggleObj = new GameObject($"Toggle_{label}");
 			toggleObj.transform.SetParent(panelObj.transform, false);
 			var toggleRect = toggleObj.AddComponent<RectTransform>();
@@ -1132,7 +1152,6 @@ namespace spz {
 
 			var toggle = toggleObj.AddComponent<Toggle>();
 			toggle.targetGraphic = bg;
-			toggle.isOn = defaultOn;
 
 			var checkGo = new GameObject("Checkmark");
 			checkGo.transform.SetParent(toggleObj.transform, false);
@@ -1150,6 +1169,13 @@ namespace spz {
 			checkImg.raycastTarget = false;
 			// Assign graphic before BoundChrome; never solid-square the ON glyph (IsToggleCheckmarkGraphic).
 			toggle.graphic = checkImg;
+			// Set isOn only now that the checkmark exists, then sync its alpha by hand. Toggle.graphic is a
+			// plain UGUI field (no refresh on assign), Toggle.OnEnable already ran its PlayEffect while the
+			// graphic was still null, and Set() early-returns when the value is unchanged — so without this
+			// the checkmark keeps its as-created full alpha and EVERY toggle renders ON whatever its state.
+			// Must stay above the onValueChanged registration so restoring state does not fire a change RPC.
+			toggle.isOn = defaultOn;
+			checkImg.canvasRenderer.SetAlpha(defaultOn ? 1f : 0f);
 
 			var labelGo = new GameObject("Label");
 			labelGo.transform.SetParent(toggleObj.transform, false);
@@ -1171,6 +1197,7 @@ namespace spz {
 			_uiElementComponents[elementId] = toggle;
 			toggle.onValueChanged.AddListener(isOn => {
 				_uiElementValues[elementId] = isOn;
+				PersistSpzGoExportToggleIfNeeded(addonId, label, isOn);
 				SendValueChangeToPython(addonId, elementId, "toggle", isOn);
 				if (!string.IsNullOrEmpty(callbackName)) {
 					string callbackId = $"{addonId}_{callbackName}";
@@ -1187,6 +1214,16 @@ namespace spz {
 				_addonUIElements[addonId].Add(toggleObj);
 			SpzUiThemeOps.ApplyToAddonUiRoot(toggleObj);
 			return elementId;
+		}
+
+		static void PersistSpzGoExportToggleIfNeeded(string addonId, string label, bool isOn) {
+			if (!string.Equals(addonId, StableProjectorzGoAddonId, StringComparison.Ordinal)) return;
+			if (string.Equals(label, ExportAxisSettings.FlipXLabel, StringComparison.Ordinal))
+				ExportAxisSettings.FlipX = isOn;
+			else if (string.Equals(label, ExportAxisSettings.FlipYLabel, StringComparison.Ordinal))
+				ExportAxisSettings.FlipY = isOn;
+			else if (string.Equals(label, ExportAxisSettings.FlipZLabel, StringComparison.Ordinal))
+				ExportAxisSettings.FlipZ = isOn;
 		}
 		
 		/// <summary>
@@ -2113,6 +2150,10 @@ namespace spz {
 				UnityEngine.Debug.LogError($"[AddonUI_MGR] Dropdown requires at least one option");
 				return null;
 			}
+			if (string.Equals(addonId, StableProjectorzGoAddonId, StringComparison.Ordinal)
+			    && string.Equals(label, ExportAxisSettings.AxisOrderLabel, StringComparison.Ordinal)) {
+				defaultIndex = ExportAxisSettings.AxisOrderIndex;
+			}
 			
 			// Edge case: Invalid default index - clamp to valid range
 			if (defaultIndex < 0 || defaultIndex >= options.Count) {
@@ -2214,6 +2255,7 @@ namespace spz {
 				labelText2.text = dropdown.options[next].text;
 				string idLocal = dropdownObj.GetInstanceID().ToString();
 				_uiElementValues[idLocal] = next;
+				PersistSpzGoExportAxisOrderIfNeeded(addonId, label, next);
 				SendValueChangeToPython(addonId, idLocal, "dropdown", next);
 			}
 			// Button-only click path — MouseClickSensor + Button both firing skipped every other option.
@@ -2234,6 +2276,7 @@ namespace spz {
 				if (index >= 0 && index < dropdown.options.Count) {
 					labelText2.text = dropdown.options[index].text;
 				}
+				PersistSpzGoExportAxisOrderIfNeeded(addonId, label, index);
 				SendValueChangeToPython(addonId, elementId, "dropdown", index);
 			});
 			
@@ -2248,6 +2291,12 @@ namespace spz {
 			SpzUiThemeOps.ApplyToAddonUiRoot(dropdownObj);
 			
 			return elementId;
+		}
+
+		static void PersistSpzGoExportAxisOrderIfNeeded(string addonId, string label, int index) {
+			if (string.Equals(addonId, StableProjectorzGoAddonId, StringComparison.Ordinal)
+			    && string.Equals(label, ExportAxisSettings.AxisOrderLabel, StringComparison.Ordinal))
+				ExportAxisSettings.SetAxisOrderIndex(index);
 		}
 		
 		/// <summary>

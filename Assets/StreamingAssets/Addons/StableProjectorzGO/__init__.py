@@ -452,6 +452,12 @@ def register():
     _eid_import = _panel.add_text_input("Import path", i_default)
     _eid_export = _panel.add_text_input("Export path", o_default)
     _eid_blender = _panel.add_text_input("Blender.exe (optional)", b_default)
+    # Unity overrides these defaults from shared PlayerPrefs when constructing the widgets.
+    # The same persisted basis drives FBX and direct mesh streaming.
+    _panel.add_dropdown("Export axis order", ["XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX"], 0)
+    _panel.add_toggle("Export flip X", False)
+    _panel.add_toggle("Export flip Y", False)
+    _panel.add_toggle("Export flip Z", False)
 
     _panel.add_button("Import", "do_import_from_path")
     _panel.add_button("Export", "do_export_to_path")
