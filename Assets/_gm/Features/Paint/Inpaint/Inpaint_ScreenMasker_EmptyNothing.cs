@@ -60,12 +60,19 @@ namespace spz {
 	            edgeBlur01   = oRib.edgeBlur;
 	        }
 	        public void Dispose(){
-	            mask?.Release(); 
-	            mask = null; 
-	            edges?.Release(); edges = null;
-	            edgesBuffer?.Release(); edgesBuffer = null;
+	            // These came from GetTemporary, so they must go back to the pool. Release() frees the
+	            // surface but leaves them checked out forever, so every rebuild allocates another one.
+	            ReturnToPool(mask);        mask = null;
+	            ReturnToPool(edges);       edges = null;
+	            ReturnToPool(edgesBuffer); edgesBuffer = null;
 	            depthLinear_ref = null;//depth doesn't belong to us, don't release just forget.
 	            depthNonLinear_contrast_ref = null;
+	        }
+
+	        static void ReturnToPool(RenderTexture rt){
+	            if (rt == null){ return; }
+	            if (RenderTexture.active == rt){ RenderTexture.active = null; }
+	            RenderTexture.ReleaseTemporary(rt);
 	        }
 	    }
 
