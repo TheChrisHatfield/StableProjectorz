@@ -7,6 +7,7 @@ using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.InputSystem;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 
 
 namespace spz {
@@ -24,6 +25,16 @@ namespace spz {
 	    public bool _isSaving { get; private set; } = false;
 	    public bool _isLoading { get; private set; } = false;
 	    public ProjectSaveLoad_Helper SaveLoadHelper => _saveLoad_helper;
+
+	    // Thompson frame-budget scheduler (mirrors PaintUndo_Scheduler): spreads the export's blocking
+	    // GPU readback / encode work across frames so the app stays responsive instead of freezing.
+	    readonly ExportFrameScheduler _exportScheduler = new ExportFrameScheduler();
+
+	    // Generous upper bound on cross-frame dilation. Real dilation is a few dozen frames even at 4K,
+	    // so this only trips when the dilation manager stops reporting completion at all.
+	    const float DilationWatchdogSeconds = 60f;
+
+	    class _EncodeInFlight { public Task task; public Texture2D tex; public string fp; }
 
 
 	    public void MergeIcons( Action<Dictionary<Texture2D,UDIM_Sector>> onHaveAlbedo,  bool oldIcons_survive=false ){
@@ -617,91 +628,190 @@ namespace spz {
 	    }
 
 
-	    void Save_Mesh_Textures( Action<Dictionary<Texture2D,UDIM_Sector>> onHaveAlbedo=null,  
+	    // Fire-and-forget entry (unchanged signature): all callers pass callbacks + rely on _isSaving,
+	    // so the actual work now runs as a frame-budgeted coroutine that keeps the app responsive.
+	    void Save_Mesh_Textures( Action<Dictionary<Texture2D,UDIM_Sector>> onHaveAlbedo=null,
 	                            string save_to_basePath="",  bool isDilate=false,
 	                            bool forbid_albedoDelete = false,  Action onComplete=null){
-	        bool albedoCallbackDelivered = false;
-	        try {
-	            Dictionary<Texture2D,UDIM_Sector> albedo;
-	            Dictionary<Texture2D,UDIM_Sector> ao;
-	            bool albedo_destroyWhenDone;
-	            bool ao_destroyWhenDone;
-	            Get_ProjectionsDict(isDilate, out albedo, out ao, out albedo_destroyWhenDone, out ao_destroyWhenDone);
-	            albedo_destroyWhenDone =  forbid_albedoDelete?false : albedo_destroyWhenDone;
+	        StartCoroutine( Save_Mesh_Textures_crtn(onHaveAlbedo, save_to_basePath, isDilate, forbid_albedoDelete, onComplete) );
+	    }
 
-	            if(albedo==null && ao==null){
+	    IEnumerator Save_Mesh_Textures_crtn( Action<Dictionary<Texture2D,UDIM_Sector>> onHaveAlbedo,
+	                                         string save_to_basePath, bool isDilate,
+	                                         bool forbid_albedoDelete, Action onComplete ){
+	        bool albedoCallbackDelivered = false;
+	        bool isFileExport = !string.IsNullOrEmpty(save_to_basePath);
+	        bool showedProgress = false;
+	        Dictionary<Texture2D,UDIM_Sector> albedo = null;
+	        Dictionary<Texture2D,UDIM_Sector> ao = null;
+
+	        // Only try/finally around the yielding body (CS1626: no yield inside try/catch). Risky lookups
+	        // are isolated in non-yielding helpers that never throw, so control flow here stays clean.
+	        try {
+	            RenderUdims albedoUdims = TryGetAlbedoUdims();
+	            if (albedoUdims == null || albedoUdims.texArray == null){
 	                onHaveAlbedo?.Invoke(null);
 	                albedoCallbackDelivered = true;
-	                return;
+	                yield break; // finally still runs onComplete
 	            }
+
+	            if (isFileExport){
+	                Viewport_StatusText.instance?.ShowStatusText("Exporting textures…", false, 9999f, progressVisibility:true);
+	                Viewport_StatusText.instance?.ReportProgress(0f);
+	                showedProgress = true;
+	            }
+
+	            // Stage 1 — dilation, chunked across frames (was isRunInstantly:true = a single frozen frame).
+	            if (isDilate && TextureDilation_MGR.instance != null){
+	                bool dilateDone = false;
+	                int numDilationIters = Mathf.Max(albedoUdims.width, albedoUdims.height) / 16;
+	                var dilationArg = new DilationArg(albedoUdims.texArray, numDilationIters, DilateByChannel.A, _ => dilateDone = true);
+	                dilationArg.bordersWiderBlur = true;
+	                dilationArg.isRunInstantly = false; // spread the hundreds of blits over frames
+	                TextureDilation_MGR.instance.Dillate(dilationArg);
+	                // Watchdog: Dillate completes on TextureDilation_MGR's OWN coroutine, so a throw in its
+	                // preliminaries, or that manager being disabled/destroyed mid-export, leaves the callback
+	                // unfired. Waiting unconditionally would strand the export busy forever (spinner on screen,
+	                // _isSaving never cleared, no further export until restart). Dilation only widens UV-edge
+	                // bleed, so on timeout we log and continue with undilated — but still correct — textures.
+	                float dilateDeadline = Time.realtimeSinceStartup + DilationWatchdogSeconds;
+	                while (!dilateDone){
+	                    if (TextureDilation_MGR.instance == null || Time.realtimeSinceStartup > dilateDeadline){
+	                        UnityEngine.Debug.LogWarning(
+	                            "[Save_MGR] Texture dilation never reported completion; continuing export undilated.");
+	                        break;
+	                    }
+	                    if (showedProgress) Viewport_StatusText.instance?.ReportProgress(0.15f);
+	                    yield return null;
+	                }
+	            }
+	            if (showedProgress) Viewport_StatusText.instance?.ReportProgress(0.30f);
+
+	            // Stage 2 — GPU readback per UDIM slice, budgeted (was one synchronous ReadPixels burst).
+	            var slices = new List<Texture2D>();
+	            yield return StartCoroutine( TextureTools_SPZ.TextureArray_to_Texture2DList_Budgeted(
+	                albedoUdims.texArray, slices, _exportScheduler,
+	                p => { if (showedProgress) Viewport_StatusText.instance?.ReportProgress(0.30f + 0.25f * Mathf.Clamp01(p)); } ) );
+
+	            albedo = new Dictionary<Texture2D, UDIM_Sector>();
+	            int pairCount = Mathf.Min(slices.Count, albedoUdims.udims_sectors != null ? albedoUdims.udims_sectors.Count : slices.Count);
+	            for (int i = 0; i < pairCount; ++i){ albedo.Add(slices[i], albedoUdims.udims_sectors[i]); }
+	            for (int i = pairCount; i < slices.Count; ++i){ if (slices[i] != null) Texture.DestroyImmediate(slices[i]); }
+	            bool albedo_destroyWhenDone = !forbid_albedoDelete;
+
+	            ao = TryGetAO(out bool ao_destroyWhenDone);
+
 	            onHaveAlbedo?.Invoke(albedo);
 	            albedoCallbackDelivered = true;
 
-	            if( save_to_basePath!=""){
+	            // Stage 3 — encode + write to disk off the main thread, per texture, budgeted.
+	            if (isFileExport){
 	                string pathAlbedo = MakeUniquePath(save_to_basePath, "");
 	                string pathAO = MakeUniquePath(save_to_basePath, "_AO");
-	                EncodeAndSaveTextures(albedo, pathAlbedo);
-	                EncodeAndSaveTextures(ao, pathAO);
-	                Viewport_StatusText.instance?.ShowStatusText("Saved to "+ pathAlbedo.Replace("\\", "\\\\"), 
+	                yield return StartCoroutine( EncodeAndSaveTextures_crtn(albedo, pathAlbedo, 0.55f, 0.80f) );
+	                yield return StartCoroutine( EncodeAndSaveTextures_crtn(ao, pathAO, 0.80f, 1.0f) );
+	                Viewport_StatusText.instance?.ShowStatusText("Saved to "+ pathAlbedo.Replace("\\", "\\\\"),
 	                                                             false, 10, progressVisibility:false);
 	            }
-	            if(albedo_destroyWhenDone && albedo != null){ foreach(var kvp in albedo){Texture.DestroyImmediate(kvp.Key);}  }
-	            if(ao_destroyWhenDone && ao != null){     foreach(var kvp in ao){Texture.DestroyImmediate(kvp.Key);}   }
-	        } catch (System.Exception e) {
-	            UnityEngine.Debug.LogError("[Save_MGR] Save_Mesh_Textures failed: " + e.Message);
-	            // MergeIcons and similar callers only pass onHaveAlbedo — without this they hang busy forever.
-	            if (!albedoCallbackDelivered)
-		            onHaveAlbedo?.Invoke(null);
+
+	            if (albedo_destroyWhenDone && albedo != null){ foreach (var kvp in albedo){ if (kvp.Key != null) Texture.DestroyImmediate(kvp.Key); } }
+	            if (ao_destroyWhenDone && ao != null){        foreach (var kvp in ao){ if (kvp.Key != null) Texture.DestroyImmediate(kvp.Key); } }
 	        } finally {
+	            // MergeIcons and similar callers only pass onHaveAlbedo — without this they hang busy forever.
+	            if (!albedoCallbackDelivered) onHaveAlbedo?.Invoke(null);
+	            if (showedProgress){
+	                Viewport_StatusText.instance?.ReportProgress(1f);
+	                Viewport_StatusText.instance?.SetProgressVisible(false);
+	            }
 	            onComplete?.Invoke();
 	        }
 	    }
 
 
-
-	    void Get_ProjectionsDict( bool isDilate, out Dictionary<Texture2D,UDIM_Sector> albedo_,  
-	                                             out Dictionary<Texture2D,UDIM_Sector> ambientOcclusion_,
-	                                             out bool albedo_destroyWhenDone_,  out bool ao_destroyWhenDone_){
-
-	        albedo_ = null;
-	        ambientOcclusion_ = null;
-	        albedo_destroyWhenDone_ = false;
-	        ao_destroyWhenDone_ = false;
-
-	        if (Objects_Renderer_MGR.instance == null) {
-	            UnityEngine.Debug.LogWarning("[Save_MGR] Get_ProjectionsDict: Objects_Renderer_MGR missing.");
-	            return;
+	    // Encode + write each UDIM texture on a worker thread (raw pixels snapshotted on the main thread first),
+	    // spread across frames with progress p0..p1. Falls back to the synchronous encoder if a platform can't
+	    // encode off-thread. Blocks nothing on the main thread except cheap per-texture pixel snapshots.
+	    IEnumerator EncodeAndSaveTextures_crtn( Dictionary<Texture2D,UDIM_Sector> textures, string path,
+	                                            float p0, float p1, bool skipUdimSuffix_if_1_texture = true ){
+	        if (textures == null || textures.Count == 0){
+	            Viewport_StatusText.instance?.ReportProgress(p1);
+	            yield break;
 	        }
-	        RenderUdims albedo = Objects_Renderer_MGR.instance.accumulationTextures_ref();
-	        if (albedo == null || albedo.texArray == null) {
-	            UnityEngine.Debug.LogWarning("[Save_MGR] Get_ProjectionsDict: accumulation textures missing.");
-	            return;
-	        }
+	        string pathBeforeExten = Path.Combine(Path.GetDirectoryName(path), Path.GetFileNameWithoutExtension(path));
+	        string exten = Path.GetExtension(path);
 
-	        if (isDilate){
-	            if (TextureDilation_MGR.instance == null) {
-	                UnityEngine.Debug.LogWarning("[Save_MGR] Get_ProjectionsDict: TextureDilation_MGR missing; skipping dilate.");
+	        bool canUseIx    = textures.Count > 1;
+	        bool canUseUdims = textures.Count > 1 || !skipUdimSuffix_if_1_texture;
+	        int ix = 0;
+	        int total = textures.Count;
+	        var pending = new List<_EncodeInFlight>();
+
+	        foreach (var kvp in textures){
+	            Texture2D tex = kvp.Key;
+	            UDIM_Sector val = kvp.Value;
+	            string suffix = "";
+	            if (val.isNonDefault && canUseUdims){ suffix = "_" + val.ToString(); }
+	            else if (canUseIx){ suffix = " " + ix; }
+	            string fp = pathBeforeExten + suffix + exten;
+
+	            var job = TextureTools_SPZ.CaptureEncodeJob(tex, fp);
+	            if (job != null){
+	                pending.Add(new _EncodeInFlight{ task = Task.Run(() => TextureTools_SPZ.RunEncodeJobToDisk(job)), tex = tex, fp = job.filePath });
 	            } else {
-	                int numDilationIters = Mathf.Max(albedo.width, albedo.height) / 16;
-	                var dilationArg = new DilationArg(albedo.texArray, numDilationIters, DilateByChannel.A, null);
-	                dilationArg.bordersWiderBlur = true;
-	                dilationArg.isRunInstantly = true;
-	                TextureDilation_MGR.instance.Dillate(dilationArg);
+	                TextureTools_SPZ.EncodeAndSaveTexture(tex, fp); // sync fallback (unsupported format / unreadable tex)
+	            }
+	            ++ix;
+	            Viewport_StatusText.instance?.ReportProgress(Mathf.Lerp(p0, p1, ix / (float)total));
+	            yield return null;
+	        }
+
+	        // Wait for the off-thread encodes without blocking the main thread.
+	        bool anyRunning = true;
+	        while (anyRunning){
+	            anyRunning = false;
+	            for (int i = 0; i < pending.Count; ++i){ if (!pending[i].task.IsCompleted){ anyRunning = true; break; } }
+	            if (anyRunning) yield return null;
+	        }
+	        // Rare: off-thread encode unsupported on this platform → retry synchronously so the file still lands.
+	        for (int i = 0; i < pending.Count; ++i){
+	            if (pending[i].task.IsFaulted && pending[i].tex != null){
+	                UnityEngine.Debug.LogWarning("[Save_MGR] Off-thread encode failed, retrying sync: "
+	                    + pending[i].task.Exception?.GetBaseException().Message);
+	                TextureTools_SPZ.EncodeAndSaveTexture(pending[i].tex, pending[i].fp);
 	            }
 	        }
-	        List<Texture2D> tex2D_list = TextureTools_SPZ.TextureArray_to_Texture2DList(albedo.texArray);
-	        albedo_ = new Dictionary<Texture2D, UDIM_Sector>();
-	        for(int i=0; i<tex2D_list.Count; ++i){  albedo_.Add(tex2D_list[i], albedo.udims_sectors[i]);  }
-	        albedo_destroyWhenDone_ = true;
+	        Viewport_StatusText.instance?.ReportProgress(p1);
+	    }
 
-	        GenData2D ao_genData = GenData2D_Archive.instance != null
-	            ? GenData2D_Archive.instance.Find_GenData_ofKind(GenerationData_Kind.AmbientOcclusion, search_lastToFirst:true)
-	            : null;
-	        IconUI ao_iconUI = ao_genData == null || Art2D_IconsUI_List.instance == null
-	            ? null
-	            : Art2D_IconsUI_List.instance.GetIcon_of_GenerationGroup(ao_genData.total_GUID, 0);
-	        if (AmbientOcclusion_Baker.instance != null)
-	            ambientOcclusion_ = AmbientOcclusion_Baker.instance.getDisposable_AO_texture( ao_iconUI, out ao_destroyWhenDone_ );
+
+	    RenderUdims TryGetAlbedoUdims(){
+	        if (Objects_Renderer_MGR.instance == null){
+	            UnityEngine.Debug.LogWarning("[Save_MGR] TryGetAlbedoUdims: Objects_Renderer_MGR missing.");
+	            return null;
+	        }
+	        RenderUdims albedo = Objects_Renderer_MGR.instance.accumulationTextures_ref();
+	        if (albedo == null || albedo.texArray == null){
+	            UnityEngine.Debug.LogWarning("[Save_MGR] TryGetAlbedoUdims: accumulation textures missing.");
+	            return null;
+	        }
+	        return albedo;
+	    }
+
+	    Dictionary<Texture2D,UDIM_Sector> TryGetAO( out bool destroyWhenDone ){
+	        destroyWhenDone = false;
+	        try {
+	            GenData2D ao_genData = GenData2D_Archive.instance != null
+	                ? GenData2D_Archive.instance.Find_GenData_ofKind(GenerationData_Kind.AmbientOcclusion, search_lastToFirst:true)
+	                : null;
+	            IconUI ao_iconUI = ao_genData == null || Art2D_IconsUI_List.instance == null
+	                ? null
+	                : Art2D_IconsUI_List.instance.GetIcon_of_GenerationGroup(ao_genData.total_GUID, 0);
+	            if (AmbientOcclusion_Baker.instance != null)
+	                return AmbientOcclusion_Baker.instance.getDisposable_AO_texture( ao_iconUI, out destroyWhenDone );
+	        } catch (System.Exception e) {
+	            UnityEngine.Debug.LogWarning("[Save_MGR] TryGetAO failed: " + e.Message);
+	        }
+	        return null;
 	    }
 
 
