@@ -24,7 +24,9 @@ namespace spz {
 	    public static bool isSomeUnit_downloadingModels { get; private set; } = false;
 	    public static Action<ControlNetUnit_DownloadHelper> _onSomeUnit_startedDownloadModel { get; set; } = null;
 	    public static Action<ControlNetUnit_DownloadHelper, float> _onSomeUnit_downloadModelPcnt { get; set; } = null;
-	    public static Action<ControlNetUnit_DownloadHelper> _onSomeUnit_stoppedDownloadModel { get; set; } = null;
+	    /// <summary>Second arg is false when the download never started (or failed), so listeners can
+	    /// restore their chrome without claiming the model was installed.</summary>
+	    public static Action<ControlNetUnit_DownloadHelper, bool> _onSomeUnit_stoppedDownloadModel { get; set; } = null;
 
 	    /// <summary>True when <paramref name="t"/> lives under the "download more" slide-out ownership root.</summary>
 	    public bool OwnsTransform(Transform t) {
@@ -72,20 +74,30 @@ namespace spz {
 
 	        _onSomeUnit_startedDownloadModel?.Invoke(this);
 	        if (_downloadModel_ifNotExist == null){
-	            ControlNetUnit_DownloadHelper.isSomeUnit_downloadingModels = false;
-	            if (Viewport_StatusText.instance != null)
-	                Viewport_StatusText.instance.ShowStatusText(
-	                    "ControlNet download helper missing — use Download More instead.", false, 5f, false);
+	            AbortDownloadGate("ControlNet download helper missing — use Download More instead.");
 	            return;
 	        }
-	        _downloadModel_ifNotExist.DownloadFile("", "", onProgress);
+	        if (!_downloadModel_ifNotExist.DownloadFile("", "", onProgress)){
+	            // Nothing is in flight, so no progress callback will ever reach 1.0 to reopen the gate.
+	            // Leaving it shut disables every unit and blocks Gen Art (see StableDiffusion_Hub).
+	            AbortDownloadGate("Couldn't start the ControlNet download — use Download More instead.");
+	            return;
+	        }
 
 	        void onProgress(float pcnt01){
 	            _onSomeUnit_downloadModelPcnt?.Invoke(this, pcnt01);
 	            if(pcnt01<1.0f){ return;}
-	            _onSomeUnit_stoppedDownloadModel?.Invoke(this);
 	            ControlNetUnit_DownloadHelper.isSomeUnit_downloadingModels = false;
+	            _onSomeUnit_stoppedDownloadModel?.Invoke(this, true);
 	        }
+	    }
+
+	    // Reopens the shared gate and hands every unit back its chrome after a download that never began.
+	    void AbortDownloadGate(string userMessage){
+	        ControlNetUnit_DownloadHelper.isSomeUnit_downloadingModels = false;
+	        _onSomeUnit_stoppedDownloadModel?.Invoke(this, false);
+	        if (Viewport_StatusText.instance != null)
+	            Viewport_StatusText.instance.ShowStatusText(userMessage, false, 5f, false);
 	    }
 
 	    void OnSomeUnit_StartDownloadModel(ControlNetUnit_DownloadHelper who){
@@ -94,11 +106,13 @@ namespace spz {
 	        _contentsCanvGroup.interactable = false;
 	    }
 
-	    void OnSomeUnit_StopDownloadModel(ControlNetUnit_DownloadHelper who){
-	        _download_mandatoryDepthModel.gameObject.SetActive(false);
+	    void OnSomeUnit_StopDownloadModel(ControlNetUnit_DownloadHelper who, bool didDownload){
 	        _mandatDepthModel_progress.parent.gameObject.SetActive(false);
 	        _contentsCanvGroup.interactable = true;
-	        _downloaded_mandatDepthModel_go.SetActive(true);//tells user to restart StableProjectorz, to refresh controlnets.
+	        // Failed start: keep the CTA so the user can retry, and don't claim a model was installed.
+	        _download_mandatoryDepthModel.gameObject.SetActive(!didDownload);
+	        if (didDownload)
+	            _downloaded_mandatDepthModel_go.SetActive(true);//tells user to restart StableProjectorz, to refresh controlnets.
 	    }
 
 	    void OnSomeUnit_DownloadModelPcnt(ControlNetUnit_DownloadHelper who, float progress01){
