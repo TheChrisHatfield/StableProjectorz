@@ -390,6 +390,7 @@ namespace spz {
 			}
 			try {
 				if (!File.Exists(path)) {
+					Debug.LogWarning($"[ViewportAxisGizmo_UI] Center icon missing at '{path}' — falling back to a line icon.");
 					return null;
 				}
 				byte[] bytes = File.ReadAllBytes(path);
