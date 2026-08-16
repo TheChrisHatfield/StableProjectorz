@@ -202,9 +202,15 @@ namespace spz {
 				selectable.colors = block;
 		}
 
-		/// <summary>First-call snapshot of Selectable.targetGraphic (may be null) before Nomad wiring.</summary>
+		/// <summary>
+		/// First-call snapshot of Selectable.targetGraphic (may be null) before Nomad wiring.
+		/// Self-silos: capturing while builtin default is active would record a synthetic Nomad
+		/// HitFace as the "authored" graphic, and that baked value then survives Restore SPZ.
+		/// Both call paths already run under Nomad only; this is the hard backstop.
+		/// </summary>
 		public static void SnapshotAuthoredTargetGraphic(Selectable selectable) {
 			if (selectable == null) return;
+			if (!ShouldRecolorBoundChrome) return;
 			int id = selectable.GetInstanceID();
 			if (!AuthoredTargetGraphics.ContainsKey(id))
 				AuthoredTargetGraphics[id] = selectable.targetGraphic;
@@ -658,9 +664,19 @@ namespace spz {
 			}
 		}
 
-		/// <summary>Public first-call LE snapshot for callers that mutate preferred/min sizes under Nomad.</summary>
-		public static void SnapshotLayoutElementForTheme(LayoutElement layout) =>
+		/// <summary>
+		/// Public first-call LE snapshot for callers that mutate preferred/min sizes under Nomad.
+		/// Self-silos: capturing while builtin default is active would record whatever sizes are
+		/// currently on the LE as the "authored" baseline — including Nomad leftovers that have
+		/// not been unwound yet — and that baked baseline then survives Restore SPZ. Existing
+		/// snapshots are left alone so <see cref="RestoreBoundChromeUnder"/> can still unwind them.
+		/// Nomad's own theming pass runs with the gate open and snapshots there.
+		/// </summary>
+		public static void SnapshotLayoutElementForTheme(LayoutElement layout) {
+			if (layout == null) return;
+			if (!ShouldRecolorBoundChrome) return;
 			SnapshotLayoutElementSizes(layout);
+		}
 
 		/// <summary>
 		/// Soft/solid fill stretched edge-to-edge; snapshots RectTransform for Restore SPZ.

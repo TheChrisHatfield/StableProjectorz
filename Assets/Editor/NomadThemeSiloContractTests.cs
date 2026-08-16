@@ -40,7 +40,10 @@ public sealed class NomadThemeSiloContractTests {
 		"ApplyPanelWidth",
 		"SnapshotLayoutElementForTheme",
 		"SnapshotAuthoredTargetGraphic",
-		"RestoreAuthoredTargetGraphic",
+		// NOTE: Restore* helpers deliberately stay out of this list. A restore runs ON the leave
+		// path, when the builtin default is active — gating one on ShouldRecolorBoundChrome would
+		// disable Restore SPZ, which is the regression this contract exists to prevent. Siblings
+		// RestoreAuthoredColorBlock / RestoreAuthoredGraphic are likewise ungated.
 		"ApplyToAddonUiRoot",
 		"ApplyContextMenuChrome",
 	};
