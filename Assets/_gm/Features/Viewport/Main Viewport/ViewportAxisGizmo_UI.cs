@@ -35,9 +35,10 @@ namespace spz {
 	/// camera rotation (+X/+Y/+Z labelled and filled, negatives dim), with the StableProjectorz lantern in the
 	/// middle as an "overview" button that re-frames the selection.
 	///
-	/// Parented to <see cref="MainViewport_UI.innerViewportRect"/> (the aspect-fitted rect the view RT is drawn in),
-	/// so it stays on the rendered image when the viewport letterboxes. The root carries
-	/// <see cref="MainViewport_RaycastBlocker"/> so paint / orbit do not fire under the widget.
+	/// Parented to <see cref="MainViewport_UI.mainViewportRect"/> (drawn above the view RawImage) and pinned to the
+	/// top-right of <see cref="MainViewport_UI.innerViewportRect"/> (the aspect-fitted image). The size-reference
+	/// rect itself is the first sibling under the viewport — parenting there hid the gizmo behind the 3D view.
+	/// The root carries <see cref="MainViewport_RaycastBlocker"/> so paint / orbit do not fire under the widget.
 	///
 	/// Attached from the <c>ViewportAxisGizmoSPZ</c> add-on via JSON-RPC <c>spz.ui.attach_viewport_axis_gizmo</c>
 	/// (see <see cref="ViewportAxisGizmo_AddonBridge"/>); <see cref="Addon_MGR"/> runs the same attach on the main
@@ -129,16 +130,30 @@ namespace spz {
 			return BuildInto(parent, spec) != null;
 		}
 
-		/// <summary>Inner viewport rect (the aspect-fitted 3D image), or null while scenes load.</summary>
+		/// <summary>
+		/// Host for the widget: the main viewport chrome rect. The aspect-fitted
+		/// <see cref="MainViewport_UI.innerViewportRect"/> is only a size reference and is the first sibling under
+		/// the viewport — parenting there draws the gizmo behind the view RawImage (invisible / unclickable).
+		/// Corner placement still tracks the inner rect via <see cref="ApplySpec"/>.
+		/// </summary>
 		public static RectTransform ResolveViewportParent() {
 			var viewport = MainViewport_UI.instance;
 			if (viewport == null) {
 				return null;
 			}
-			if (InnerViewport_SizeReference.instance == null) {
-				return viewport.mainViewportRect;
+			return viewport.mainViewportRect;
+		}
+
+		/// <summary>Aspect-fitted image rect used to place the gizmo on the rendered picture, not the letterbox.</summary>
+		public static RectTransform ResolveDockReference() {
+			var viewport = MainViewport_UI.instance;
+			if (viewport == null) {
+				return null;
 			}
-			return viewport.innerViewportRect != null ? viewport.innerViewportRect : viewport.mainViewportRect;
+			if (InnerViewport_SizeReference.instance != null && viewport.innerViewportRect != null) {
+				return viewport.innerViewportRect;
+			}
+			return viewport.mainViewportRect;
 		}
 
 		public static ViewportAxisGizmo_UI FindUnder(RectTransform parent) {
@@ -184,6 +199,7 @@ namespace spz {
 			}
 			_root.SetParent(parent, false);
 			gameObject.layer = parent.gameObject.layer;
+			_root.SetAsLastSibling();
 			ApplySpec(_spec);
 			return true;
 		}
@@ -277,6 +293,7 @@ namespace spz {
 			rootGo.AddComponent<MainViewport_RaycastBlocker>();
 			gizmo.BuildChildren(spec);
 			gizmo.ApplySpec(spec);
+			rootRt.SetAsLastSibling();
 			gizmo.RefreshFromCamera();
 			return gizmo;
 		}
@@ -445,11 +462,8 @@ namespace spz {
 			if (_root == null) {
 				return;
 			}
-			_root.anchorMin = new Vector2(1f, 1f);
-			_root.anchorMax = new Vector2(1f, 1f);
-			_root.pivot = new Vector2(1f, 1f);
 			_root.sizeDelta = new Vector2(spec.SizePx, spec.SizePx);
-			_root.anchoredPosition = new Vector2(-spec.MarginPx, -spec.MarginPx);
+			ApplyCornerDock(spec.MarginPx);
 
 			float diameter = HandleDiameterPx;
 			for (int i = 0; i < _handleRects.Count; i++) {
@@ -467,6 +481,29 @@ namespace spz {
 			RefreshCenterIconIfNeeded(spec.CenterIconPath);
 			// Radius and handle size just changed, so the cached projection is stale even if the view did not move.
 			_hasAppliedOrientation = false;
+		}
+
+		/// <summary>
+		/// Pin the gizmo to the top-right of the aspect-fitted image (not the letterboxed main viewport). Parent is
+		/// the main viewport chrome so we draw above the view RT; anchors stay top-right of that parent and the
+		/// anchored position is the delta from the parent's top-right corner to the inner rect's.
+		/// </summary>
+		void ApplyCornerDock(float marginPx) {
+			_root.anchorMin = new Vector2(1f, 1f);
+			_root.anchorMax = new Vector2(1f, 1f);
+			_root.pivot = new Vector2(1f, 1f);
+
+			var parent = _root.parent as RectTransform;
+			RectTransform dock = ResolveDockReference();
+			if (parent == null || dock == null || dock == parent) {
+				_root.anchoredPosition = new Vector2(-marginPx, -marginPx);
+				return;
+			}
+			Vector3 innerTopRightWorld = dock.TransformPoint(new Vector3(dock.rect.xMax, dock.rect.yMax, 0f));
+			Vector3 parentLocal = parent.InverseTransformPoint(innerTopRightWorld);
+			Vector2 parentTopRight = new Vector2(parent.rect.xMax, parent.rect.yMax);
+			Vector2 delta = (Vector2)parentLocal - parentTopRight;
+			_root.anchoredPosition = delta + new Vector2(-marginPx, -marginPx);
 		}
 
 		/// <summary>
@@ -500,8 +537,10 @@ namespace spz {
 				return;
 			}
 			RectTransform wantedHost = ResolveViewportParent();
-			if (wantedHost != null && _root.parent != wantedHost) {
+			if (wantedHost != null) {
 				EnsureHostedUnder(wantedHost);
+				// Aspect fit moves the inner rect every early-update; re-pin to its corner even when host is stable.
+				ApplyCornerDock(_spec.MarginPx);
 			}
 			bool usable = ViewportAxisGizmo_CameraOps.IsGizmoUsable();
 			if (_canvasGroup != null) {
