@@ -1449,7 +1449,13 @@ namespace spz {
 				message = "copy failed: " + e.Message;
 				return false;
 			}
-			SpzGoBridgeInstall.MarkInstalled(hostId, dest);
+			// Readiness is read back from the marker, not from this return value. If the marker cannot be
+			// written the copy is useless to the UI — the logo would stay not-ready and activating it
+			// would report "bridge not installed" right after we claimed success.
+			if (!SpzGoBridgeInstall.MarkInstalled(hostId, dest)) {
+				message = "files copied to " + dest + " but the install marker could not be written";
+				return false;
+			}
 			message = "SPZ_GO_INSTALL_OK: " + dest;
 			return true;
 		}
