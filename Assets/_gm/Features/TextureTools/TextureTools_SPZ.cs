@@ -360,27 +360,34 @@ namespace spz {
 	           tempRT.filterMode = SceneResolution_MGR.resultTexFilterMode;
 
 	        RenderTexture.active = tempRT;
-        
-	        Material mat = StaticShaders_MGR.instance.TextureArrayReadSlice_mat;
-	        mat.SetTexture("_MainTex", textureArray);
 
-	        RenderUdims.SetNumUdims(true, textureArray.volumeDepth, mat);
-	        TextureTools_SPZ.SetKeyword_Material(mat, "RRR1", arg==TexArr_toTex2dList_arg.RRR1);
-	        TextureTools_SPZ.SetKeyword_Material(mat, "SAMPLER_POINT", SceneResolution_MGR.resultTexFilterMode==FilterMode.Point);
+	        // Same hazard as the budgeted variant below: a throw inside the readback loop (allocation
+	        // failure at 4K, bad format) would leave RenderTexture.active pointing at a temp RT that is
+	        // never returned to the pool, so later renders and readbacks land on the wrong target and
+	        // export black or garbled textures.
+	        try {
+	            Material mat = StaticShaders_MGR.instance.TextureArrayReadSlice_mat;
+	            mat.SetTexture("_MainTex", textureArray);
 
-	        for (int i=0; i<slices; i++){
-	            mat.SetInteger("_SliceIx", i);
-	            Graphics.Blit(null, tempRT, mat);
-	            Texture2D texture2D = new Texture2D( wh.x,  wh.y,  dest_format, textureArray.mipmapCount, TextureCreationFlags.None);
-	            texture2D.filterMode = SceneResolution_MGR.resultTexFilterMode;
+	            RenderUdims.SetNumUdims(true, textureArray.volumeDepth, mat);
+	            TextureTools_SPZ.SetKeyword_Material(mat, "RRR1", arg==TexArr_toTex2dList_arg.RRR1);
+	            TextureTools_SPZ.SetKeyword_Material(mat, "SAMPLER_POINT", SceneResolution_MGR.resultTexFilterMode==FilterMode.Point);
 
-	            texture2D.ReadPixels(new Rect(0, 0, wh.x, wh.y), 0, 0);
+	            for (int i=0; i<slices; i++){
+	                mat.SetInteger("_SliceIx", i);
+	                Graphics.Blit(null, tempRT, mat);
+	                Texture2D texture2D = new Texture2D( wh.x,  wh.y,  dest_format, textureArray.mipmapCount, TextureCreationFlags.None);
+	                texture2D.filterMode = SceneResolution_MGR.resultTexFilterMode;
 
-	            texture2D.Apply();
-	            texture2DList.Add(texture2D);
+	                texture2D.ReadPixels(new Rect(0, 0, wh.x, wh.y), 0, 0);
+
+	                texture2D.Apply();
+	                texture2DList.Add(texture2D);
+	            }
+	        } finally {
+	            RenderTexture.active = null;
+	            RenderTexture.ReleaseTemporary(tempRT);
 	        }
-	        RenderTexture.active = null;
-	        RenderTexture.ReleaseTemporary(tempRT);
 	        return texture2DList;
 	    }
 
