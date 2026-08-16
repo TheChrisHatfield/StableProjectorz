@@ -541,6 +541,11 @@ namespace spz {
 				EnsureHostedUnder(wantedHost);
 				// Aspect fit moves the inner rect every early-update; re-pin to its corner even when host is stable.
 				ApplyCornerDock(_spec.MarginPx);
+				// MainViewport_UI_EventListener is a fullscreen raycast target that likes to sit last — if it climbs
+				// above us, axis/lantern clicks never reach the buttons.
+				if (_root.GetSiblingIndex() != wantedHost.childCount - 1) {
+					_root.SetAsLastSibling();
+				}
 			}
 			bool usable = ViewportAxisGizmo_CameraOps.IsGizmoUsable();
 			if (_canvasGroup != null) {

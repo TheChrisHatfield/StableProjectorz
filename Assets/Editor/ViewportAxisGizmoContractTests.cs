@@ -388,6 +388,8 @@ public sealed class ViewportAxisGizmoContractTests {
 		Assert.That(body, Does.Contain("Mathf.Approximately(_canvasGroup.alpha, wantedAlpha)"));
 		Assert.That(body, Does.Contain("ApplyCornerDock(_spec.MarginPx)"),
 			"Aspect fit moves the inner rect every frame — the corner dock must be re-applied.");
+		Assert.That(body, Does.Contain("SetAsLastSibling()"),
+			"Stay above MainViewport_UI_EventListener so axis/lantern clicks reach the buttons.");
 	}
 
 	[Test]
