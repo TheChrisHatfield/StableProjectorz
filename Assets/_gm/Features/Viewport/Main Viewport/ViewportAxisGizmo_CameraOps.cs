@@ -4,25 +4,29 @@ namespace spz {
 
 	/// <summary>
 	/// Camera side of the viewport orientation gizmo: read the current view rotation for the axis balls,
-	/// and fly the current <see cref="View_UserCamera"/> to a world axis (front / back / left / right / top / bottom)
-	/// or back to an overview of the selection.
+	/// and fly the resolved <see cref="View_UserCamera"/> (nav-lock → current → first active) to a world axis
+	/// (front / back / left / right / top / bottom) or back to an overview of the whole scene.
 	/// Snapping reuses <see cref="CameraFocus.Restore_CameraPlacement"/> so the move is the same animated
 	/// "selfie stick" lerp as camera-icon restore, instead of teleporting the transform.
 	/// </summary>
 	public static class ViewportAxisGizmo_CameraOps {
 
 		/// <summary>
-		/// Camera the gizmo reflects and drives. Prefer the one under the cursor (same rule as orbit / F-focus) so
-		/// a multiview click on column 4 moves camera 4 instead of whichever view is currently marked "current".
+		/// Camera the gizmo reflects and drives.
+		/// A corner-docked chrome control must NOT use <see cref="UserCameras_MGR.NearestToCursor"/>: the cursor is
+		/// over the top-right of the composite when the user clicks the gizmo, so Voronoi / pin distance always
+		/// resolves to the rightmost multiview column. Prefer the sticky nav lock (mid-orbit/pan), then the
+		/// marked-current camera, then the first active view.
 		/// </summary>
 		public static View_UserCamera ResolveGizmoCamera() {
 			var mgr = UserCameras_MGR.instance;
 			if (mgr == null) {
 				return null;
 			}
-			var underCursor = mgr.NearestToCursor();
-			if (underCursor != null && underCursor.gameObject.activeInHierarchy) {
-				return underCursor;
+			// Mid-gesture: orbit/pan/move lock owns the column even if _curr has not caught up yet.
+			var locked = mgr.TryGetNavigationLockedCamera();
+			if (locked != null) {
+				return locked;
 			}
 			var cam = mgr._curr_viewCamera;
 			if (cam != null && cam.gameObject.activeInHierarchy) {

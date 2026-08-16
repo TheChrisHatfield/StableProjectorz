@@ -275,8 +275,19 @@ public sealed class ViewportAxisGizmoContractTests {
 			"Lantern overview must frame explicit whole-scene bounds, not just the selection.");
 		Assert.That(ops, Does.Contain("GetTotalBounds_ofAllMeshes"),
 			"Overview must frame every loaded mesh (whole scene), not selectedMeshes only.");
-		Assert.That(ops, Does.Contain("NearestToCursor()"),
-			"Multiview: the gizmo must drive the camera under the cursor, not only _curr_viewCamera.");
+		Assert.That(ops, Does.Contain("TryGetNavigationLockedCamera"),
+			"Multiview: mid-orbit the gizmo must ride the nav lock, not the corner under the cursor.");
+		Assert.That(ops, Does.Contain("_curr_viewCamera"),
+			"Corner-docked gizmo must drive the marked-current camera, not NearestToCursor (rightmost-column bias).");
+		Assert.That(ops, Does.Not.Contain("NearestToCursor()"),
+			"Idle gizmo clicks must not Voronoi the cursor — the cursor is always over the top-right chrome.");
+	}
+
+	[Test]
+	public void MultiviewNavLockPromotesCurrentViewCamera() {
+		string mgr = ReadRepo("Assets/_gm/Features/Camera/UserCameras_MGR.cs");
+		Assert.That(mgr, Does.Contain("SetCurrViewCamera(cameraIndex)"),
+			"LockNavigationCamera must promote the locked column to current so the gizmo survives after orbit ends.");
 	}
 
 	[Test]

@@ -181,6 +181,9 @@ namespace spz {
 		    }
 		    _navLockedCameraIx = cameraIndex;
 		    _navLockOwner = owner;
+		    // Orbit / pan / pin drag on a multiview column should promote that column to "current" so corner
+		    // chrome (viewport axis gizmo) and pin highlight keep reflecting the view the user just steered.
+		    SetCurrViewCamera(cameraIndex);
 	    }
 
 	    /// <summary>Clears the sticky nav lock only if <paramref name="owner"/> is the current locker.</summary>
@@ -191,6 +194,22 @@ namespace spz {
 	    }
 
 	    public bool HasNavigationCameraLock => _navLockedCameraIx >= 0;
+
+	    /// <summary>
+	    /// Camera sticky-locked for the current orbit/pan/move/pin gesture, or null when no lock is held.
+	    /// Corner chrome (viewport axis gizmo) uses this instead of <see cref="NearestToCursor"/> so a click on
+	    /// the top-right widget does not Voronoi to the rightmost multiview column.
+	    /// </summary>
+	    public View_UserCamera TryGetNavigationLockedCamera() {
+		    if (_navLockedCameraIx < 0 || _viewCameras == null || _navLockedCameraIx >= _viewCameras.Count) {
+			    return null;
+		    }
+		    var locked = _viewCameras[_navLockedCameraIx];
+		    if (locked != null && locked.gameObject.activeInHierarchy) {
+			    return locked;
+		    }
+		    return null;
+	    }
 
     /// <summary>
     /// Route navigation to the multi-view column under the cursor.
