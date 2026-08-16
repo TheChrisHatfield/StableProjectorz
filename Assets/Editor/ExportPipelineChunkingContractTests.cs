@@ -49,6 +49,47 @@ public sealed class ExportPipelineChunkingContractTests {
 	}
 
 	[Test]
+	public void TexturePaths_DoNotMistakeAModelNameForAnImageFormat() {
+		string src = Read("Assets", "_gm", "Features", "Save Load Import Export", "Save_MGR.cs");
+		int fn = src.IndexOf("static void SplitTexturePath(", StringComparison.Ordinal);
+		Assert.That(fn, Is.GreaterThan(0),
+			"both encoders must share one path split, or they drift apart again");
+		int end = src.IndexOf("IEnumerator EncodeAndSaveTextures_crtn", fn, StringComparison.Ordinal);
+		string body = src.Substring(fn, end - fn);
+
+		// Export passes a base path whose MESH extension is already stripped, so "robot_v1.2.fbx"
+		// arrives as "robot_v1.2". Reading ".2" as the image format makes every encoder refuse, and
+		// the export still reports success and writes its ready stamp — with no textures on disk.
+		Assert.That(body, Does.Contain(".png"));
+		Assert.That(body, Does.Contain(".jpg"));
+		Assert.That(body, Does.Contain(".tga"));
+		Assert.That(body, Does.Contain("GetFileName(path)"),
+			"an unrecognised extension must stay part of the name, not be cut off");
+		Assert.That(body, Does.Contain("exten = \".png\""),
+			"an unrecognised extension must fall back to a format we can actually encode");
+		Assert.That(body, Does.Contain("string.IsNullOrEmpty(dir)"),
+			"Path.Combine throws on a null directory; a bare filename must still work");
+
+		// Neither caller may keep its own copy of the old logic.
+		Assert.That(src, Does.Not.Contain("Path.Combine(Path.GetDirectoryName(path), Path.GetFileNameWithoutExtension(path))"),
+			"callers must go through SplitTexturePath");
+		Assert.That(src, Does.Contain("SplitTexturePath(path, out string pathBeforeExten, out string exten)"));
+	}
+
+	[Test]
+	public void SyncEncoder_DoesNotThrowWhenStatusBarIsAbsent() {
+		string src = Read("Assets", "_gm", "Features", "TextureTools", "TextureTools_SPZ.cs");
+		int fn = src.IndexOf("public static void EncodeAndSaveTexture(", StringComparison.Ordinal);
+		Assert.That(fn, Is.GreaterThan(0));
+		int end = src.IndexOf("public class TextureEncodeJob", fn, StringComparison.Ordinal);
+		string body = src.Substring(fn, end - fn);
+		// Headless / RPC export runs with no viewport status bar.
+		Assert.That(body, Does.Not.Contain("Viewport_StatusText.instance.ShowStatusText"),
+			"the unsupported-format branch must not dereference the status bar singleton");
+		Assert.That(body, Does.Contain("Viewport_StatusText.instance?.ShowStatusText"));
+	}
+
+	[Test]
 	public void SaveMgr_DilatesNonInstantly() {
 		string src = Read("Assets", "_gm", "Features", "Save Load Import Export", "Save_MGR.cs");
 		Assert.That(src, Does.Contain("isRunInstantly = false"),
