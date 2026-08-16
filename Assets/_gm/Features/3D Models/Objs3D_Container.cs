@@ -60,16 +60,17 @@ namespace spz {
 	        isolatedMeshes    = isolateAndEnable;
 	        isolatedRenderers = isolateAndEnable.Select(m=>m._meshRenderer).ToList();
 
-	        doSomething();//do user instruction
+	        // A throw from the user instruction used to skip the restore below, leaving the model
+	        // isolated — every mesh outside the isolated set stays hidden with no way back short of a
+	        // reimport, and isolatedMeshes stays pointing at the caller's list.
+	        try {
+	            doSomething();//do user instruction
+	        } finally {
+	            // NOTICE: new list, NOT clear. (might have been pointing to someone's list)
+	            isolatedMeshes    = new List<SD_3D_Mesh>();
+	            isolatedRenderers = new List<Renderer>();
 
-	        // NOTICE: new list, NOT clear. (might have been pointing to someone's list)
-	        isolatedMeshes    = new List<SD_3D_Mesh>();
-	        isolatedRenderers = new List<Renderer>();
-
-	        //show meshes as was originally:
-	        for(int i=0; i<meshes.Count; ++i){  
-	            wasEnabled.Add(meshes[i]._isVisible);
-	            meshes[i].ToggleRender(wasEnabled[i]); 
+	            RestoreVisibility(wasEnabled);
 	        }
 	    }
 
@@ -79,12 +80,24 @@ namespace spz {
 	            wasEnabled.Add(meshes[i]._isVisible);
 	            meshes[i].ToggleRender(true); 
 	        }
-	        doSomething();//do user instruction
+	        // Without the finally, a throw leaves every hidden mesh forced visible.
+	        try {
+	            doSomething();//do user instruction
+	        } finally {
+	            RestoreVisibility(wasEnabled);
+	        }
+	    }
 
-	        //show meshes as was originally:
-	        for(int i=0; i< meshes.Count; ++i){  
-	            wasEnabled.Add(meshes[i]._isVisible);
-	            meshes[i].ToggleRender(wasEnabled[i]); 
+	    /// <summary>
+	    /// Put visibility back the way <paramref name="wasEnabled"/> recorded it. The restore loops used
+	    /// to Add to that same list while reading it, which doubled its length every call; the reads
+	    /// happened to still land on the saved values, so it went unnoticed. Clamped to both lengths in
+	    /// case the user instruction added or removed meshes.
+	    /// </summary>
+	    void RestoreVisibility( List<bool> wasEnabled ){
+	        int n = Mathf.Min(meshes.Count, wasEnabled.Count);
+	        for(int i=0; i<n; ++i){
+	            meshes[i].ToggleRender(wasEnabled[i]);
 	        }
 	    }
 
@@ -96,6 +109,31 @@ namespace spz {
 	    /// </summary>
 	    public const float SpzFitTargetMaxDimension = 3.0f;
 	    public const float BlenderDefaultCubeEdgeMeters = 2.0f;
+
+	    /// <summary>
+	    /// Facing yaw restored for <b>legacy</b> projects only. Projects saved before we persisted model
+	    /// orientation (<see cref="ModelsHandler_3D_SL.currModelRoot_rotationEuler"/> == null) were
+	    /// authored while import applied this yaw, and the <c>.spz</c> stores no model rotation of its
+	    /// own — so those files load 180° off unless we re-apply it. Fresh imports are <b>not</b> yawed
+	    /// (see <see cref="RescaleModel_fitIntoVolume"/>); their orientation is saved explicitly instead.
+	    /// </summary>
+	    public const float SpzLegacyImportYawDegrees = 180f;
+
+	    /// <summary>
+	    /// Apply the saved model-root orientation after import/fit. <paramref name="localEulerOrNull"/>
+	    /// null means a legacy project (no stored rotation) → restore <see cref="SpzLegacyImportYawDegrees"/>;
+	    /// otherwise apply the stored Euler exactly. Call after <see cref="RescaleModel_fitIntoVolume"/>,
+	    /// which resets rotation to identity.
+	    /// </summary>
+	    public void ApplyLoadedRootRotation( float[] localEulerOrNull ){
+		    if( currModelRootGO == null ){ return; }
+		    if( localEulerOrNull != null && localEulerOrNull.Length == 3 ){
+			    currModelRootGO.transform.localRotation =
+				    Quaternion.Euler( localEulerOrNull[0], localEulerOrNull[1], localEulerOrNull[2] );
+		    }else{
+			    currModelRootGO.transform.localRotation = Quaternion.Euler( 0f, SpzLegacyImportYawDegrees, 0f );
+		    }
+	    }
 
 	    // please don't change to much, to avoid depth-precision issues with projections or painting.
 	    // Remember that we were tyring to fit the model into small volume when  ModelsHandler3D_ImportHelper.AcceptModel()
