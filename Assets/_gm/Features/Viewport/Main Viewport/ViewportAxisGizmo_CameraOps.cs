@@ -101,7 +101,10 @@ namespace spz {
 			return cam.myCamera != null ? cam.myCamera.fieldOfView : 60f;
 		}
 
-		/// <summary>Lantern center button: frame the selection again (same path as pressing F over the viewport).</summary>
+		/// <summary>
+		/// Lantern center button: frame the whole scene (every loaded mesh), not just the current selection — the
+		/// gizmo lantern is an "overview / frame all" control. Flies the current camera the same animated way as F.
+		/// </summary>
 		public static bool TryOverview() {
 			if (!IsGizmoUsable()) {
 				return false;
@@ -111,25 +114,31 @@ namespace spz {
 			if (focus == null) {
 				return false;
 			}
-			// Focus_Selection_maybe quietly returns when nothing is selected, so check first instead of reporting
+			// Frame_Bounds_maybe quietly returns when there is nothing loaded, so check first instead of reporting
 			// success for a button press that cannot move the camera.
 			if (!HasSomethingToFrame()) {
 				Viewport_StatusText.instance?.ShowStatusText(
-					"Nothing selected to frame — select a mesh first.", false, 2f, false);
+					"Nothing loaded to frame — import a mesh first.", false, 2f, false);
 				return false;
 			}
-			focus.Focus_Selection_maybe(forceTheFocus: true);
+			focus.Frame_Bounds_maybe(ResolveSceneBounds(), forceTheFocus: true);
 			return true;
 		}
 
-		/// <summary>Overview needs at least one selected mesh — that is all <see cref="CameraFocus"/> will frame.</summary>
+		/// <summary>World-space bounds of the whole scene (all meshes) the lantern frames.</summary>
+		public static Bounds ResolveSceneBounds() {
+			var models = ModelsHandler_3D.instance;
+			return models != null ? models.GetTotalBounds_ofAllMeshes() : new Bounds();
+		}
+
+		/// <summary>Overview needs at least one loaded mesh — the lantern frames the entire scene, selected or not.</summary>
 		public static bool HasSomethingToFrame() {
 			var models = ModelsHandler_3D.instance;
 			if (models == null) {
 				return false;
 			}
-			var selected = models.selectedMeshes;
-			return selected != null && selected.Count > 0;
+			var all = models.meshes;
+			return all != null && all.Count > 0;
 		}
 	}
 }

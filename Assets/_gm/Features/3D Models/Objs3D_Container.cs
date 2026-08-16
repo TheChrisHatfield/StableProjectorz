@@ -233,6 +233,17 @@ namespace spz {
 	        return bounds;
 	    }
 
+	    //box that encapsulates every loaded mesh (whole scene), regardless of selection.
+	    public Bounds GetTotalBounds_ofAllMeshes(){
+	        if (meshes.Count == 0){ return new Bounds(); }
+
+	        Bounds bounds = meshes[0].bounds;
+	        for (int i=1; i<meshes.Count; ++i){
+	            bounds.Encapsulate(meshes[i].bounds);
+	        }
+	        return bounds;
+	    }
+
 
 	    public bool Init(GameObject newRootGO){
 	        currModelRootGO = newRootGO;
