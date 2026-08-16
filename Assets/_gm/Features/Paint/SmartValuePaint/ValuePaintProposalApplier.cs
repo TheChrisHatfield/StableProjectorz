@@ -87,6 +87,24 @@ namespace spz {
 			return false;
 		}
 
+		// Live can re-arm every frame during a stroke, and FindObjectOfType(true) is a full scene
+		// scan including inactive objects. Cache the ribbon widgets; Unity's fake-null on a
+		// destroyed object makes this self-heal across scene reloads / UI rebuilds.
+		static BrushRibbon_UI_Opacity _opacityUiCache;
+		static BrushRibbon_UI_Hardness _hardnessUiCache;
+
+		static BrushRibbon_UI_Opacity OpacityUi() {
+			if (_opacityUiCache == null)
+				_opacityUiCache = Object.FindObjectOfType<BrushRibbon_UI_Opacity>(true);
+			return _opacityUiCache;
+		}
+
+		static BrushRibbon_UI_Hardness HardnessUi() {
+			if (_hardnessUiCache == null)
+				_hardnessUiCache = Object.FindObjectOfType<BrushRibbon_UI_Hardness>(true);
+			return _hardnessUiCache;
+		}
+
 		/// <summary>Snapshot user brush state before the first Live mutation of this session.</summary>
 		static void CaptureUserBrushSnapshot_IfNeeded(SD_WorkflowOptionsRibbon_UI sd) {
 			if (_haveUserBrushSnapshot) return;
@@ -97,9 +115,9 @@ namespace spz {
 			_snapshotColor.a = 1f;
 			float size = BrushRibbon_UI_Size.GetBrushSize01();
 			_snapshotSize01 = float.IsFinite(size) && BrushRibbon_UI_Size.instance != null ? size : float.NaN;
-			var opacityUi = Object.FindObjectOfType<BrushRibbon_UI_Opacity>(true);
+			var opacityUi = OpacityUi();
 			_snapshotOpacity01 = opacityUi != null && float.IsFinite(opacityUi.Opacity01) ? Mathf.Clamp01(opacityUi.Opacity01) : -1f;
-			var hardnessUi = Object.FindObjectOfType<BrushRibbon_UI_Hardness>(true);
+			var hardnessUi = HardnessUi();
 			if (hardnessUi != null && !hardnessUi.IsUsingCustomAlpha()) {
 				_snapshotHardnessWasBuiltIn = true;
 				_snapshotHardnessIx = hardnessUi.hardnessIx;
@@ -125,12 +143,12 @@ namespace spz {
 			if (float.IsFinite(_snapshotSize01) && BrushRibbon_UI_Size.instance != null)
 				sd.SetBrushSize(_snapshotSize01);
 			if (_snapshotOpacity01 >= 0f) {
-				var opacityUi = Object.FindObjectOfType<BrushRibbon_UI_Opacity>(true);
+				var opacityUi = OpacityUi();
 				if (opacityUi != null)
 					opacityUi.SetOpacity01(_snapshotOpacity01, quiet: true);
 			}
 			if (_snapshotHardnessWasBuiltIn && _snapshotHardnessIx >= 0) {
-				var hardnessUi = Object.FindObjectOfType<BrushRibbon_UI_Hardness>(true);
+				var hardnessUi = HardnessUi();
 				if (hardnessUi != null)
 					hardnessUi.TrySetBuiltInOnly(_snapshotHardnessIx);
 			}
@@ -267,7 +285,7 @@ namespace spz {
 				return false;
 			}
 
-			var opacityUi = Object.FindObjectOfType<BrushRibbon_UI_Opacity>(true);
+			var opacityUi = OpacityUi();
 			if (opacityUi == null) {
 				reason = _lastFailReason = "BrushRibbon_UI_Opacity missing — refuse before mutating brush color/opacity/size";
 				return false;
@@ -278,7 +296,7 @@ namespace spz {
 				return false;
 			}
 			// Resolve hardness before any ribbon mutate (validate-then-commit). Missing UI is noted, not refused.
-			var hardnessUi = Object.FindObjectOfType<BrushRibbon_UI_Hardness>(true);
+			var hardnessUi = HardnessUi();
 
 			Color baseCol = useBrushAsBase ? sd.brushColor : proposeBaseColor;
 			Color tint = ColorAtDesiredValue(baseCol, proposal.DesiredBin);
@@ -495,22 +513,22 @@ namespace spz {
 
 			if (PaintTab_ValueAssistOptions.ApplyHardness && !_liveHardnessUserOverride) {
 				int hardnessIx = Softness01ToHardnessIx(proposal.EdgeSoftness01);
-				if (hardnessIx != _lastLiveHardnessIx) {
-					var hardnessUi = Object.FindObjectOfType<BrushRibbon_UI_Hardness>(true);
-					if (hardnessUi != null && !hardnessUi.IsUsingCustomAlpha()) {
-						// User changed hardness since capture / last assist write — their pick wins.
-						bool changedSinceAssistWrite = _lastLiveHardnessIx != int.MinValue
-							&& hardnessUi.hardnessIx != _lastLiveHardnessIx;
-						bool changedBeforeFirstAssistWrite = _lastLiveHardnessIx == int.MinValue
-							&& _snapshotHardnessWasBuiltIn
-							&& hardnessUi.hardnessIx != _snapshotHardnessIx;
-						if (changedSinceAssistWrite || changedBeforeFirstAssistWrite) {
-							_liveHardnessUserOverride = true;
-							_snapshotHardnessIx = hardnessUi.hardnessIx;
-							_snapshotHardnessWasBuiltIn = true;
-						} else if (hardnessUi.TrySetBuiltInOnly(hardnessIx)) {
-							_lastLiveHardnessIx = hardnessIx;
-						}
+				var hardnessUi = HardnessUi();
+				if (hardnessUi != null && !hardnessUi.IsUsingCustomAlpha()) {
+					// User changed hardness since capture / last assist write — their pick wins.
+					// Checked every tick: nesting this under "assist wants a different index"
+					// missed the override whenever the assist wanted the index it last wrote.
+					bool changedSinceAssistWrite = _lastLiveHardnessIx != int.MinValue
+						&& hardnessUi.hardnessIx != _lastLiveHardnessIx;
+					bool changedBeforeFirstAssistWrite = _lastLiveHardnessIx == int.MinValue
+						&& _snapshotHardnessWasBuiltIn
+						&& hardnessUi.hardnessIx != _snapshotHardnessIx;
+					if (changedSinceAssistWrite || changedBeforeFirstAssistWrite) {
+						_liveHardnessUserOverride = true;
+						_snapshotHardnessIx = hardnessUi.hardnessIx;
+						_snapshotHardnessWasBuiltIn = true;
+					} else if (hardnessIx != _lastLiveHardnessIx && hardnessUi.TrySetBuiltInOnly(hardnessIx)) {
+						_lastLiveHardnessIx = hardnessIx;
 					}
 				}
 			}
@@ -518,7 +536,7 @@ namespace spz {
 			// Live previously skipped opacity — value steps looked like one flat wash.
 			float opInf = PaintTab_ValueAssistOptions.OpacityInfluence01;
 			if (float.IsFinite(opInf) && opInf > 0.02f) {
-				var opacityUi = Object.FindObjectOfType<BrushRibbon_UI_Opacity>(true);
+				var opacityUi = OpacityUi();
 				if (opacityUi != null) {
 					float proposedOpacity = float.IsFinite(proposal.OpacityHint01)
 						? Mathf.Clamp01(proposal.OpacityHint01) : 0.6f;
