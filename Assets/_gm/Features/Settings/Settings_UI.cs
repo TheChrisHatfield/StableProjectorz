@@ -48,12 +48,15 @@ namespace spz {
 	    [SerializeField] Toggle _sdStrictIsolationFlipMask_toggle; // Optional: if null, runtime row is created (next to strict isolation).
 	    [SerializeField] Toggle _sdInpaintingMaskInvert_toggle; // Optional: WebUI inpainting_mask_invert=1 (inpaint outside brush mask).
 	    [SerializeField] Toggle _useVSync_toggle; // Optional: assign in scene; otherwise created at runtime.
+    [Tooltip("Optional: unlocks drag-reorder of CommandRibbon tabs. If null, a runtime row is created (locked by default).")]
+    [SerializeField] Toggle _dynamicTabMovement_toggle;
 	    [Tooltip("button_inactive from button_active_inactive_horiz; wired on Settings_UI.prefab for runtime toggles.")]
 	    [SerializeField] Sprite _settingsToggleFrameSprite;
 	    [Tooltip("button_active from button_active_inactive_horiz; checkmark face.")]
 	    [SerializeField] Sprite _settingsToggleCheckSprite;
-	    bool _paintUndoSettingsRowsCreated;
-	    bool _addonManagerClickRegistered;
+    bool _paintUndoSettingsRowsCreated;
+    bool _dynamicTabMovementRowsCreated;
+    bool _addonManagerClickRegistered;
 
 	    void OnEnable() {
 	        EnsureAddonManagerButtonWired();
@@ -102,6 +105,7 @@ namespace spz {
 	        EnsureSDInpaintingMaskInvertRowExists();
 	        EnsureSDGpuRowExists();
 	        EnsurePaintUndoSettingsRowsExist();
+	        EnsureDynamicTabMovementRowsExist();
 	        ClampSettingsPanelHitRect();
 	        FixSettingsScrollReadability();
 	        ApplyThemeTokens();
@@ -149,6 +153,11 @@ namespace spz {
 	            EventsBinder.Bind_Clickable_to_event("Settings:set_sd_inpaintingMaskInvert", _sdInpaintingMaskInvert_toggle);
 	        if (_useVSync_toggle != null)
 	            EventsBinder.Bind_Clickable_to_event("Settings:set_useVSync", _useVSync_toggle);
+	        if (_dynamicTabMovement_toggle != null) {
+	            EventsBinder.Bind_Clickable_to_event("Settings:set_ui_dynamicTabMovement", _dynamicTabMovement_toggle);
+	            // Locked by default; reflect the stored unlock state (tryLoad may run before this row exists).
+	            _dynamicTabMovement_toggle.SetIsOnWithoutNotify(RibbonTabOrder_Prefs.IsDynamicTabMovementEnabled());
+	        }
 	        // Custom Sliders
 	        EventsBinder.Bind_Clickable_to_event("Settings:set_prompt_textSize", _prompt_textSize_slider);
 	        EventsBinder.Bind_Clickable_to_event("Settings:set_wireframeOpacity", _wireframeOpacity_slider);
@@ -420,11 +429,15 @@ namespace spz {
 	    void EnsureSDGpuRowExists() {
 	        int cudaCount = LaunchWebUIBatFile.GetCudaDeviceCount();
 	        int maxId = cudaCount > 0 ? cudaCount - 1 : Settings_MGR.SD_GPU_ID_MAX;
-	        if (_sdGpuDeviceId_input != null) {
-	            _sdGpuDeviceId_input.SetMin(-1);
-	            _sdGpuDeviceId_input.SetMax(maxId);
-	            return;
-	        }
+		if (_sdGpuDeviceId_input != null) {
+			_sdGpuDeviceId_input.SetMin(-1);
+			_sdGpuDeviceId_input.SetMax(maxId);
+			// The field is [SerializeField]: a prefab-assigned input skips the runtime row below, and
+			// nothing else creates the apply button — the GPU id would be unappliable forever.
+			EnsureSDGpuRestartButton(_sdGpuDeviceId_input.transform != null
+				? _sdGpuDeviceId_input.transform.parent : null);
+			return;
+		}
 	        if (_settingsPanel_go == null) return;
 	        var scrollRect = _settingsPanel_go.GetComponentInChildren<UnityEngine.UI.ScrollRect>(true);
 	        RectTransform content = scrollRect != null ? scrollRect.content : null;
@@ -490,10 +503,26 @@ namespace spz {
 	        intInput.SetMin(-1);
 	        intInput.SetMax(maxId);
 	        intInput.SetValueWithoutNotify(current.ToString());
-	        _sdGpuDeviceId_input = intInput;
 
-	        var restartBtnGo = new GameObject("RestartWebUI_ApplyGPU");
-	        restartBtnGo.transform.SetParent(row.transform, false);
+	        EnsureSDGpuRestartButton(row.transform);
+	        // Assign last: the early-return above keys off this ref, so publishing it before the paired
+	        // button exists would make a half-built row permanent.
+	        _sdGpuDeviceId_input = intInput;
+	    }
+
+	    public const string SDGpuRestartButtonName = "RestartWebUI_ApplyGPU";
+
+	    /// <summary>
+	    /// Creates the "Restart WebUI (apply GPU)" button next to the SD GPU id field when it is absent.
+	    /// Without it the id can be typed but never applied, and no other code path builds it.
+	    /// </summary>
+	    void EnsureSDGpuRestartButton(Transform row) {
+	        if (row == null) return;
+	        foreach (Transform child in row) {
+	            if (child != null && child.name == SDGpuRestartButtonName) return;
+	        }
+	        var restartBtnGo = new GameObject(SDGpuRestartButtonName);
+	        restartBtnGo.transform.SetParent(row, false);
 	        var restartBtnRect = restartBtnGo.AddComponent<RectTransform>();
 	        var restartBtnLE = restartBtnGo.AddComponent<UnityEngine.UI.LayoutElement>();
 	        restartBtnLE.preferredWidth = 180f;
@@ -660,6 +689,120 @@ namespace spz {
 	            if (c.name == "Row_PaintUndo_Enable" || c.name == "Row_PaintUndo_Depth")
 	                UnityEngine.Object.DestroyImmediate(c.gameObject);
 	        }
+	    }
+
+	    /// <summary>
+	    /// Runtime rows for reorderable ribbon tabs: unlock toggle (locked by default) plus Save / Reset of the tab order.
+	    /// </summary>
+	    void EnsureDynamicTabMovementRowsExist() {
+	        if (_settingsPanel_go == null) {
+	            _dynamicTabMovementRowsCreated = false;
+	            return;
+	        }
+	        var scrollRect = _settingsPanel_go.GetComponentInChildren<UnityEngine.UI.ScrollRect>(true);
+	        RectTransform content = scrollRect != null ? scrollRect.content : null;
+	        if (content == null) content = _settingsPanel_go.transform as RectTransform;
+	        if (content == null) {
+	            _dynamicTabMovementRowsCreated = false;
+	            return;
+	        }
+	        if (_dynamicTabMovementRowsCreated && _dynamicTabMovement_toggle != null)
+	            return;
+
+	        bool unlocked = Settings_MGR.instance != null
+		        ? Settings_MGR.instance.get_ui_dynamicTabMovement()
+		        : RibbonTabOrder_Prefs.IsDynamicTabMovementEnabled();
+
+	        var row = new GameObject("Row_DynamicTabMovement");
+	        row.transform.SetParent(content, false);
+	        var rowRect = row.AddComponent<RectTransform>();
+	        rowRect.sizeDelta = new Vector2(0, 40f);
+	        var rowLayout = row.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+	        rowLayout.spacing = 8f;
+	        rowLayout.padding = new RectOffset(4, 4, 2, 2);
+	        rowLayout.childAlignment = TextAnchor.MiddleLeft;
+	        rowLayout.childControlWidth = true;
+	        rowLayout.childControlHeight = true;
+	        rowLayout.childForceExpandWidth = false;
+	        rowLayout.childForceExpandHeight = false;
+
+	        var labelGo = new GameObject("Label");
+	        labelGo.transform.SetParent(row.transform, false);
+	        labelGo.AddComponent<RectTransform>();
+	        var labelLE = labelGo.AddComponent<UnityEngine.UI.LayoutElement>();
+	        labelLE.preferredWidth = 420f;
+	        labelLE.preferredHeight = 36f;
+	        var labelText = labelGo.AddComponent<TMPro.TextMeshProUGUI>();
+	        labelText.text = "Dynamic tab movement (drag ribbon tabs: ControlNet, Art, Mesh, add-ons):";
+	        labelText.fontSize = 14;
+	        labelText.color = new Color(0.9f, 0.9f, 0.9f, 1f);
+	        labelText.raycastTarget = false;
+	        labelText.enableWordWrapping = true;
+
+	        _dynamicTabMovement_toggle = CreateRuntimeSpzStyledToggle(row.transform, "Toggle_DynamicTabMovement",
+		        new Vector2(112f, 28f), unlocked, greenWhenOn: true);
+
+	        var rowButtons = new GameObject("Row_DynamicTabMovement_Order");
+	        rowButtons.transform.SetParent(content, false);
+	        var rowButtonsRect = rowButtons.AddComponent<RectTransform>();
+	        rowButtonsRect.sizeDelta = new Vector2(0, 32f);
+	        var rowButtonsLayout = rowButtons.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+	        rowButtonsLayout.spacing = 8f;
+	        rowButtonsLayout.padding = new RectOffset(4, 4, 2, 2);
+	        rowButtonsLayout.childAlignment = TextAnchor.MiddleLeft;
+	        rowButtonsLayout.childControlWidth = true;
+	        rowButtonsLayout.childControlHeight = true;
+	        rowButtonsLayout.childForceExpandWidth = false;
+	        rowButtonsLayout.childForceExpandHeight = false;
+
+	        var orderLabelGo = new GameObject("Label");
+	        orderLabelGo.transform.SetParent(rowButtons.transform, false);
+	        orderLabelGo.AddComponent<RectTransform>();
+	        var orderLabelLE = orderLabelGo.AddComponent<UnityEngine.UI.LayoutElement>();
+	        orderLabelLE.preferredWidth = 240f;
+	        orderLabelLE.preferredHeight = 26f;
+	        var orderLabelText = orderLabelGo.AddComponent<TMPro.TextMeshProUGUI>();
+	        orderLabelText.text = "Tab order (kept for next launch):";
+	        orderLabelText.fontSize = 14;
+	        orderLabelText.color = new Color(0.9f, 0.9f, 0.9f, 1f);
+	        orderLabelText.raycastTarget = false;
+
+	        CreateRuntimeTextButton(rowButtons.transform, "SaveRibbonTabOrder", "Save Tab Order", 150f,
+		        new Color(0.25f, 0.5f, 0.6f, 1f), "Settings:OnButton_SaveRibbonTabOrder");
+	        CreateRuntimeTextButton(rowButtons.transform, "ResetRibbonTabOrder", "Reset Order", 120f,
+		        new Color(0.42f, 0.32f, 0.32f, 1f), "Settings:OnButton_ResetRibbonTabOrder");
+
+	        _dynamicTabMovementRowsCreated = true;
+	    }
+
+	    /// <summary>Simple settings-panel button (label + flat face) wired to a <see cref="StaticEvents"/> id via <see cref="EventsBinder"/>.</summary>
+	    static Button CreateRuntimeTextButton(Transform rowParent, string rootName, string label, float width, Color face, string eventId) {
+	        var go = new GameObject(rootName);
+	        go.transform.SetParent(rowParent, false);
+	        go.AddComponent<RectTransform>();
+	        var le = go.AddComponent<UnityEngine.UI.LayoutElement>();
+	        le.preferredWidth = width;
+	        le.preferredHeight = 26f;
+	        var img = go.AddComponent<Image>();
+	        img.color = face;
+	        img.raycastTarget = true;
+	        var btn = go.AddComponent<Button>();
+	        btn.targetGraphic = img;
+	        var textGo = new GameObject("Text");
+	        textGo.transform.SetParent(go.transform, false);
+	        var textRect = textGo.AddComponent<RectTransform>();
+	        textRect.anchorMin = Vector2.zero;
+	        textRect.anchorMax = Vector2.one;
+	        textRect.sizeDelta = Vector2.zero;
+	        var tmp = textGo.AddComponent<TMPro.TextMeshProUGUI>();
+	        tmp.text = label;
+	        tmp.fontSize = 12;
+	        tmp.color = new Color(0.95f, 0.95f, 0.95f, 1f);
+	        tmp.alignment = TMPro.TextAlignmentOptions.Center;
+	        tmp.raycastTarget = false;
+	        if (!string.IsNullOrEmpty(eventId))
+	            EventsBinder.Bind_Clickable_to_event(eventId, btn);
+	        return btn;
 	    }
 
 	    void OnRestartWebUI_ApplyGPU() {
