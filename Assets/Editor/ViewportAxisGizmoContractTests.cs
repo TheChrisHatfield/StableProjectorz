@@ -262,6 +262,18 @@ public sealed class ViewportAxisGizmoContractTests {
 	#endregion
 
 	[Test]
+	public void OverviewFailsHonestlyWhenNothingIsSelected() {
+		Assert.That(ViewportAxisGizmo_CameraOps.HasSomethingToFrame(), Is.False,
+			"EditMode has no ModelsHandler_3D, so the lantern must know there is nothing to frame.");
+
+		string ops = ReadRepo("Assets/_gm/Features/Viewport/Main Viewport/ViewportAxisGizmo_CameraOps.cs");
+		Assert.That(ops, Does.Contain("HasSomethingToFrame()"),
+			"TryOverview must check selection before claiming success.");
+		Assert.That(ops, Does.Contain("Nothing selected to frame"),
+			"The lantern click must tell the user why overview did nothing.");
+	}
+
+	[Test]
 	public void IdleViewDoesNoPerFrameWorkButSizeChangesReproject() {
 		RectTransform host = NewHost();
 		try {
