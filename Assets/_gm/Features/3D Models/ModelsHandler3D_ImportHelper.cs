@@ -90,12 +90,20 @@ namespace spz {
 		        return;
 	        }
 
-	        _Act_onStartedImporting?.Invoke();
+	        // _isImportingModel is already true. If a start listener throws, or StartCoroutine refuses
+	        // because this helper's GameObject is inactive, no ImportRoutine ever runs to clear it —
+	        // and every later import, CanImportFile and project TryLoad would refuse "already importing".
+	        try {
+		        _Act_onStartedImporting?.Invoke();
 
-	        // We simulate the progress text here since Assimp is fast/blocking in this implementation
-	        Viewport_StatusText.instance?.ShowStatusText($"Importing {Path.GetFileName(filepath)}...", false, 15, true);
+		        // We simulate the progress text here since Assimp is fast/blocking in this implementation
+		        Viewport_StatusText.instance?.ShowStatusText($"Importing {Path.GetFileName(filepath)}...", false, 15, true);
 
-	        StartCoroutine(ImportRoutine(filepath, applyExportAxisBasis));
+		        StartCoroutine(ImportRoutine(filepath, applyExportAxisBasis));
+	        } catch (Exception e) {
+		        OnError("Could not start the import: " + e.Message);
+		        return;
+	        }
 	    }
 
 	    IEnumerator ImportRoutine(string filepath, bool applyExportAxisBasis)
