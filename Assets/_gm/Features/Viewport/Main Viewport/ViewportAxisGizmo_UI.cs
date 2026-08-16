@@ -88,8 +88,12 @@ namespace spz {
 			if (parent == null) {
 				return false;
 			}
-			var existing = FindUnder(parent);
+			// Look for the widget anywhere, not only under the rect we want it on: an attach that happened before
+			// the inner aspect-fitted rect existed landed on the outer viewport, and searching only the new parent
+			// would build a second gizmo instead of moving the first one.
+			var existing = FindAnyLiveGizmo();
 			if (existing != null) {
+				existing.EnsureHostedUnder(parent);
 				existing.ApplySpec(spec);
 				return true;
 			}
@@ -119,6 +123,38 @@ namespace spz {
 				}
 			}
 			return null;
+		}
+
+		/// <summary>Any live gizmo in the scene, wherever it is parented (registered instances first, then a scene scan).</summary>
+		public static ViewportAxisGizmo_UI FindAnyLiveGizmo() {
+			PruneRegistered();
+			for (int i = 0; i < Registered.Count; i++) {
+				if (Registered[i] != null) {
+					return Registered[i];
+				}
+			}
+			var all = FindObjectsByType<ViewportAxisGizmo_UI>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+			for (int i = 0; i < all.Length; i++) {
+				if (all[i] != null) {
+					return all[i];
+				}
+			}
+			return null;
+		}
+
+		/// <summary>
+		/// Moves the widget onto <paramref name="parent"/> when that is not where it already lives. The inner
+		/// aspect-fitted viewport rect is not always alive when the add-on attaches, and a viewport rebuild can
+		/// replace it, so the host is re-checked instead of being decided once. No-op in the steady state.
+		/// </summary>
+		public bool EnsureHostedUnder(RectTransform parent) {
+			if (parent == null || _root == null || _root.parent == parent) {
+				return false;
+			}
+			_root.SetParent(parent, false);
+			gameObject.layer = parent.gameObject.layer;
+			ApplySpec(_spec);
+			return true;
 		}
 
 		public static bool IsAnyVisibleGizmo() {
@@ -388,6 +424,7 @@ namespace spz {
 			if (_root == null) {
 				return;
 			}
+			EnsureHostedUnder(ResolveViewportParent());
 			bool usable = ViewportAxisGizmo_CameraOps.IsGizmoUsable();
 			if (_canvasGroup != null) {
 				_canvasGroup.alpha = usable ? 1f : 0f;
