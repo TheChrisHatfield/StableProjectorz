@@ -71,14 +71,12 @@ namespace spz {
 	        // Clear prior success so deferred RPC cannot treat a failed new import as OK.
 	        _lastImportSucceeded = false;
 	        _isImportingModel = true;
-	        _Act_onStartedImporting?.Invoke();
-        
-	        // We simulate the progress text here since Assimp is fast/blocking in this implementation
-	        Viewport_StatusText.instance?.ShowStatusText($"Importing {Path.GetFileName(filepath)}...", false, 15, true);
 
-	        // Also, store bytes for later use.
-	        // If we decide to save project, we'll just dump them into needed location,
-	        // without having to convert unity mesh into needed format.
+	        // Read the file BEFORE announcing the start: the start callback removes the model currently
+	        // in the scene, and this is exactly the path where the read is most likely to fail — SPZ
+	        // picks up the exchange FBX as soon as Blender stamps it ready, so the file can still be
+	        // locked or mid-flush. Failing after the removal left the user with an empty scene and only
+	        // an error message. Nothing is destroyed until the bytes are in hand.
 	        try {
 		        _modelBytesCache = File.ReadAllBytes(filepath);
 		        _modelBytesCache_filename = Path.GetFileName(filepath);
@@ -86,6 +84,11 @@ namespace spz {
 		        OnError("Could not read file: " + e.Message);
 		        return;
 	        }
+
+	        _Act_onStartedImporting?.Invoke();
+
+	        // We simulate the progress text here since Assimp is fast/blocking in this implementation
+	        Viewport_StatusText.instance?.ShowStatusText($"Importing {Path.GetFileName(filepath)}...", false, 15, true);
 
 	        StartCoroutine(ImportRoutine(filepath));
 	    }
@@ -275,6 +278,11 @@ namespace spz {
 	                                                     isDeselectOthers:false, preventDeselect_ifLast:true);
 	            if(!isSelect){ o3d.nonSelectedMeshes.Add(o3d.meshes[i]);  }
 	        }
+
+	        // Restore model facing. Import/fit left the root at identity; a legacy project (null euler)
+	        // gets the old 180° import yaw so it faces as authored, newer saves get their exact rotation.
+	        o3d.ApplyLoadedRootRotation( _modelsHandler_SL.currModelRoot_rotationEuler );
+
 	        _modelsHandler_SL = null;
 	    }
 
@@ -426,7 +434,19 @@ namespace spz {
 	            }
 	            fp_relativeToDataDir = o3d.currModelRootGO.name + ".fbx";
 	            string fp = Path.Combine(spz.filepath_dataDir, fp_relativeToDataDir);
-	            if (!_saveFBX_helper.SaveModels(fp, o3d.currModelRootGO)) {
+	            // Orientation is restored from the SL on load (ApplyLoadedRootRotation), so do not bake
+	            // the root rotation into this FBX too — that would double-apply on reload. Write the
+	            // authoring pose (identity) and restore the live rotation afterwards.
+	            Transform rootT = o3d.currModelRootGO.transform;
+	            Quaternion savedRootRot = rootT.localRotation;
+	            rootT.localRotation = Quaternion.identity;
+	            bool wrote;
+	            try {
+		            wrote = _saveFBX_helper.SaveModels(fp, o3d.currModelRootGO);
+	            } finally {
+		            rootT.localRotation = savedRootRot;
+	            }
+	            if (!wrote) {
 		            throw new InvalidOperationException("FBX mesh write failed for project save: " + fp);
 	            }
 	        }
