@@ -15,7 +15,7 @@ namespace spz {
 	/// Manages dynamic UI creation for add-ons.
 	/// Creates panels, buttons, and other UI elements requested by Python add-ons.
 	/// </summary>
-	public class AddonUI_MGR : MonoBehaviour {
+	public partial class AddonUI_MGR : MonoBehaviour {
 		public static AddonUI_MGR instance { get; private set; }
 		
 		[SerializeField] RectTransform _addonPanelsParent; // Where to place add-on panels
@@ -94,6 +94,8 @@ namespace spz {
 			if (instance != null) { DestroyImmediate(gameObject); return; }
 			instance = this;
 			SpzUiThemeOps.ThemeChanged += ApplyThemeToAllAddonUi;
+			// Stub hosts (ZBrush / Painter) light up only once their file-exchange bridge is installed.
+			SpzGoHosts.BridgeInstalledProbe = SpzGoBridgeInstall.IsInstalled;
 		}
 
 		void Start() {
@@ -824,14 +826,14 @@ namespace spz {
 		}
 
 		void EnsureNativeSpzGoPanel() {
-			// Existing Import/Export alone is not full parity — still fill Autofill / Refresh / dialogs / Print.
+			// A panel carrying only some host sections is not parity — complete it rather than bail.
 			if (TryGetLiveAddonPanel(StableProjectorzGoAddonId, out GameObject existingPanel) && existingPanel != null) {
 				string existingId = existingPanel.GetInstanceID().ToString();
 				if (!_addonUIElements.ContainsKey(StableProjectorzGoAddonId))
 					_addonUIElements[StableProjectorzGoAddonId] = new List<GameObject>();
 				if (!_addonUIElements[StableProjectorzGoAddonId].Contains(existingPanel))
 					_addonUIElements[StableProjectorzGoAddonId].Add(existingPanel);
-				EnsureNativeSpzGoMissingWidgets(existingId, existingPanel, seedPathsIfMissing: true);
+				EnsureNativeSpzGoMissingWidgets(existingId, existingPanel);
 				return;
 			}
 
@@ -841,76 +843,36 @@ namespace spz {
 				return;
 			}
 			UnityEngine.Debug.Log("[AddonUI_MGR] Seeding native SPZ GO panel (Python create_panel missing / HTTP :5557 down).");
-			string importDefault = "";
-			string exportDefault = "";
-			var fp = FastPath_API.instance;
-			string dataDir = fp != null ? fp.GetProjectDataDirOrSession() : null;
-			if (!string.IsNullOrEmpty(dataDir)) {
-				string exchange = Path.Combine(dataDir, "StableProjectorzGO_exchange");
-				importDefault = Path.Combine(exchange, "from_blender.fbx");
-				exportDefault = Path.Combine(exchange, "from_spz.fbx");
-			}
-			// Order: primary paths first, optional Blender last (matches Python register()).
-			AddTextInput(StableProjectorzGoAddonId, panelId, "Import path", importDefault);
-			AddTextInput(StableProjectorzGoAddonId, panelId, "Export path", exportDefault);
-			AddTextInput(StableProjectorzGoAddonId, panelId, "Blender.exe (optional)", "");
-			AddDropdown(StableProjectorzGoAddonId, panelId, ExportAxisSettings.AxisOrderLabel,
-				new List<string>(ExportAxisSettings.AxisOrderNames), ExportAxisSettings.AxisOrderIndex);
-			AddDropdown(StableProjectorzGoAddonId, panelId, ExportAxisSettings.FlipLabel,
-				new List<string>(ExportAxisSettings.FlipNames), ExportAxisSettings.FlipIndex);
-			AddButton(StableProjectorzGoAddonId, panelId, "Import", "do_import_from_path");
-			AddButton(StableProjectorzGoAddonId, panelId, "Export", "do_export_to_path");
-			AddButton(StableProjectorzGoAddonId, panelId, "Install into Blender", "do_install_blender_addon_force");
-			AddButton(StableProjectorzGoAddonId, panelId, "Autofill paths", "do_autofill_mesh_paths");
-			AddButton(StableProjectorzGoAddonId, panelId, "Refresh Blender", "do_refresh_blender_path");
-			AddButton(StableProjectorzGoAddonId, panelId, "Export with dialogs…", "do_export_interactive");
-			AddButton(StableProjectorzGoAddonId, panelId, "Print data_dir", "do_show_data_dir");
+			EnsureNativeSpzGoMissingWidgets(panelId, FindUIElement(panelId));
 		}
 
-		void EnsureNativeSpzGoMissingWidgets(string panelId, GameObject panel, bool seedPathsIfMissing) {
+		/// <summary>
+		/// Brings a SPZ GO panel up to the multi-host shell: one section per registered DCC. Python and
+		/// this fallback both land here (via <see cref="AddHostSection"/>), so the two cannot drift.
+		/// </summary>
+		void EnsureNativeSpzGoMissingWidgets(string panelId, GameObject panel) {
 			if (panel == null || string.IsNullOrEmpty(panelId)) return;
-			if (seedPathsIfMissing) {
-				string importDefault = "";
-				string exportDefault = "";
-				var fp = FastPath_API.instance;
-				string dataDir = fp != null ? fp.GetProjectDataDirOrSession() : null;
-				if (!string.IsNullOrEmpty(dataDir)) {
-					string exchange = Path.Combine(dataDir, "StableProjectorzGO_exchange");
-					importDefault = Path.Combine(exchange, "from_blender.fbx");
-					exportDefault = Path.Combine(exchange, "from_spz.fbx");
-				}
-				if (!PanelHasNamedControlPrefix(panel, "TextInput_Import path"))
-					AddTextInput(StableProjectorzGoAddonId, panelId, "Import path", importDefault);
-				if (!PanelHasNamedControlPrefix(panel, "TextInput_Export path"))
-					AddTextInput(StableProjectorzGoAddonId, panelId, "Export path", exportDefault);
-				if (!PanelHasNamedControlPrefix(panel, "TextInput_Blender.exe"))
-					AddTextInput(StableProjectorzGoAddonId, panelId, "Blender.exe (optional)", "");
+			RetireFlatSpzGoLayout(panel);
+			foreach (var host in SpzGoHosts.All) {
+				if (!PanelHasNamedControlPrefix(panel, SpzGoHostSection.SectionName(host.Id)))
+					AddHostSection(StableProjectorzGoAddonId, panelId, host.Id);
 			}
-			if (!PanelHasNamedControlPrefix(panel, "Dropdown_" + ExportAxisSettings.AxisOrderLabel))
-				AddDropdown(StableProjectorzGoAddonId, panelId, ExportAxisSettings.AxisOrderLabel,
-					new List<string>(ExportAxisSettings.AxisOrderNames), ExportAxisSettings.AxisOrderIndex);
-			// Panels outlive a session, so a panel seeded before the flips became one dropdown still
-			// carries the three loose toggles. Drop them, or the user sees both surfaces at once.
+		}
+
+		/// <summary>
+		/// Panels outlive a session, so one seeded before host sections existed still carries the old flat
+		/// stack of paths, axis dropdowns and action buttons. Left in place the user would see both
+		/// surfaces at once, and the loose Import/Export buttons would still transfer without a mode.
+		/// </summary>
+		void RetireFlatSpzGoLayout(GameObject panel) {
+			if (PanelHasNamedControlPrefix(panel, SpzGoHostSection.SectionNamePrefix))
+				return;
 			RemoveNamedControls(StableProjectorzGoAddonId, panel, "Toggle_" + ExportAxisSettings.FlipXLabel);
 			RemoveNamedControls(StableProjectorzGoAddonId, panel, "Toggle_" + ExportAxisSettings.FlipYLabel);
 			RemoveNamedControls(StableProjectorzGoAddonId, panel, "Toggle_" + ExportAxisSettings.FlipZLabel);
-			if (!PanelHasNamedControlPrefix(panel, "Dropdown_" + ExportAxisSettings.FlipLabel))
-				AddDropdown(StableProjectorzGoAddonId, panelId, ExportAxisSettings.FlipLabel,
-					new List<string>(ExportAxisSettings.FlipNames), ExportAxisSettings.FlipIndex);
-			if (!PanelHasNamedControlPrefix(panel, "Button_Import"))
-				AddButton(StableProjectorzGoAddonId, panelId, "Import", "do_import_from_path");
-			if (!PanelHasNamedControlPrefix(panel, "Button_Export"))
-				AddButton(StableProjectorzGoAddonId, panelId, "Export", "do_export_to_path");
-			if (!PanelHasNamedControlPrefix(panel, "Button_Install into Blender"))
-				AddButton(StableProjectorzGoAddonId, panelId, "Install into Blender", "do_install_blender_addon_force");
-			if (!PanelHasNamedControlPrefix(panel, "Button_Autofill paths"))
-				AddButton(StableProjectorzGoAddonId, panelId, "Autofill paths", "do_autofill_mesh_paths");
-			if (!PanelHasNamedControlPrefix(panel, "Button_Refresh Blender"))
-				AddButton(StableProjectorzGoAddonId, panelId, "Refresh Blender", "do_refresh_blender_path");
-			if (!PanelHasNamedControlPrefix(panel, "Button_Export with dialogs"))
-				AddButton(StableProjectorzGoAddonId, panelId, "Export with dialogs…", "do_export_interactive");
-			if (!PanelHasNamedControlPrefix(panel, "Button_Print data_dir"))
-				AddButton(StableProjectorzGoAddonId, panelId, "Print data_dir", "do_show_data_dir");
+			RemoveNamedControls(StableProjectorzGoAddonId, panel, "Dropdown_");
+			RemoveNamedControls(StableProjectorzGoAddonId, panel, "TextInput_");
+			RemoveNamedControls(StableProjectorzGoAddonId, panel, "Button_");
 		}
 
 		bool TryGetLiveAddonPanel(string addonId, out GameObject panel) {
@@ -1259,38 +1221,51 @@ namespace spz {
 		/// SPZ GO Import/Export must work when FastAPI is up but the add-on is registered in-Unity; HTTP /invoke_callback can fail
 		/// (Python module key mismatch) or be unreachable. In-process handlers read the same TMP fields the Python path uses.
 		/// </summary>
-		void RegisterSpzGoNativeButtonCallbackIfNeeded(string addonId, string panelId, string callbackName) {
+		void RegisterSpzGoNativeButtonCallbackIfNeeded(string addonId, string panelId, string qualifiedCallbackName) {
 			if (!string.Equals(addonId, StableProjectorzGoAddonId, StringComparison.Ordinal))
 				return;
+			// Three host sections each own an "Autofill paths" button, so the callback names carry the
+			// host as a suffix — otherwise the last section registered would answer for all of them.
+			// The registry key stays the qualified name; only the dispatch below reads the base action.
+			string callbackName = qualifiedCallbackName;
+			string hostId = SpzGoHostSection.HostIdFromCallback(qualifiedCallbackName);
+			callbackName = SpzGoHostSection.BaseCallbackName(qualifiedCallbackName);
 			if (string.Equals(callbackName, "do_import_from_path", StringComparison.Ordinal)) {
-				RegisterButtonCallback(addonId, callbackName, () => SpzGoRunHeadlessImportOrExportFromPanel(addonId, panelId, callbackName, isImport: true));
+				RegisterButtonCallback(addonId, qualifiedCallbackName, () => SpzGoRunHeadlessImportOrExportFromPanel(addonId, panelId, qualifiedCallbackName, isImport: true));
 			} else if (string.Equals(callbackName, "do_export_to_path", StringComparison.Ordinal)) {
-				RegisterButtonCallback(addonId, callbackName, () => SpzGoRunHeadlessImportOrExportFromPanel(addonId, panelId, callbackName, isImport: false));
+				RegisterButtonCallback(addonId, qualifiedCallbackName, () => SpzGoRunHeadlessImportOrExportFromPanel(addonId, panelId, qualifiedCallbackName, isImport: false));
 			} else if (string.Equals(callbackName, "do_install_blender_addon_force", StringComparison.Ordinal)) {
-				RegisterButtonCallback(addonId, callbackName, () => SpzGoNativeInstallBlenderBridge(panelId));
+				RegisterButtonCallback(addonId, qualifiedCallbackName, () => SpzGoNativeInstallBlenderBridge(panelId));
+			} else if (string.Equals(callbackName, "do_install_zbrush_bridge", StringComparison.Ordinal)) {
+				RegisterButtonCallback(addonId, qualifiedCallbackName, () => SpzGoNativeInstallCopyBridge(SpzGoHosts.ZBrushId, panelId));
+			} else if (string.Equals(callbackName, "do_install_painter_bridge", StringComparison.Ordinal)) {
+				RegisterButtonCallback(addonId, qualifiedCallbackName, () => SpzGoNativeInstallCopyBridge(SpzGoHosts.PainterId, panelId));
 			} else if (string.Equals(callbackName, "do_autofill_mesh_paths", StringComparison.Ordinal)) {
-				RegisterButtonCallback(addonId, callbackName, () => SpzGoNativeAutofillPaths(panelId));
+				RegisterButtonCallback(addonId, qualifiedCallbackName, () => SpzGoNativeAutofillPaths(panelId, hostId));
 			} else if (string.Equals(callbackName, "do_refresh_blender_path", StringComparison.Ordinal)) {
-				RegisterButtonCallback(addonId, callbackName, () => SpzGoNativeRefreshBlenderPath(panelId));
+				RegisterButtonCallback(addonId, qualifiedCallbackName, () => SpzGoNativeRefreshBlenderPath(panelId));
 			} else if (string.Equals(callbackName, "do_export_interactive", StringComparison.Ordinal)) {
-				RegisterButtonCallback(addonId, callbackName, () => SpzGoNativeExportInteractive());
+				RegisterButtonCallback(addonId, qualifiedCallbackName, () => SpzGoNativeExportInteractive());
 			} else if (string.Equals(callbackName, "do_show_data_dir", StringComparison.Ordinal)) {
-				RegisterButtonCallback(addonId, callbackName, () => SpzGoNativeShowDataDir());
+				RegisterButtonCallback(addonId, qualifiedCallbackName, () => SpzGoNativeShowDataDir());
 			}
 		}
 
-		void SpzGoNativeAutofillPaths(string panelId) {
+		void SpzGoNativeAutofillPaths(string panelId, string hostId = null) {
 			var fp = FastPath_API.instance;
 			string dataDir = fp != null ? fp.GetProjectDataDirOrSession() : null;
 			if (string.IsNullOrEmpty(dataDir)) {
 				SpzGoStatusLine("No data_dir yet — save a project or retry", false);
 				return;
 			}
-			string exchange = Path.Combine(dataDir, "StableProjectorzGO_exchange");
-			string importPath = Path.Combine(exchange, "from_blender.fbx");
-			string exportPath = Path.Combine(exchange, "from_spz.fbx");
+			SpzGoDefaultExchangePaths(dataDir, hostId, out string importPath, out string exportPath);
 			bool okImport = SpzGoSetTextInputByNameContains(panelId, "Import path", importPath);
 			bool okExport = SpzGoSetTextInputByNameContains(panelId, "Export path", exportPath);
+			// The fields are filled without notifying, so nothing else writes these back to prefs.
+			if (hostId != null) {
+				if (okImport) SpzGoHostPrefs.SetPath(hostId, import: true, value: importPath);
+				if (okExport) SpzGoHostPrefs.SetPath(hostId, import: false, value: exportPath);
+			}
 			if (okImport || okExport)
 				SpzGoStatusLine("Paths autofilled", true);
 			else
@@ -1397,6 +1372,65 @@ namespace spz {
 			if (string.IsNullOrEmpty(message)) return message;
 			const int max = 120;
 			return message.Length <= max ? message : message.Substring(0, max - 1) + "…";
+		}
+
+		/// <summary>
+		/// Install a copy-based host bridge (ZBrush / Substance Painter): copy the ship files into a
+		/// user-writable DCC folder and record the marker so the logo lights up. No DCC subprocess, so
+		/// this runs inline; a rebuild of the host section reflects the new readiness on next open.
+		/// </summary>
+		void SpzGoNativeInstallCopyBridge(string hostId, string panelId) {
+			var fp = FastPath_API.instance;
+			if (fp == null) {
+				SpzGoStatusLine("3D / API not ready", false);
+				return;
+			}
+			var host = SpzGoHosts.Get(hostId);
+			string display = host != null ? host.DisplayName : hostId;
+			string message;
+			bool ok = string.Equals(hostId, SpzGoHosts.ZBrushId, StringComparison.Ordinal)
+				? fp.TryInstallSpzGoZBrushBridge(out message)
+				: fp.TryInstallSpzGoPainterBridge(out message);
+			UnityEngine.Debug.Log($"[AddonUI_MGR] SPZ GO {display} install: ok={ok} {message}");
+			if (ok) {
+				SpzGoStatusLine($"{display} bridge installed — logo is now active", true);
+				SpzGoRefreshHostReadiness(panelId, hostId);
+			} else {
+				SpzGoStatusLine(string.IsNullOrEmpty(message) ? $"{display} install failed" : TruncateStatus(message), false);
+			}
+		}
+
+		/// <summary>Repaint a host logo after its bridge is installed so it stops reading as not-ready.</summary>
+		void SpzGoRefreshHostReadiness(string panelId, string hostId) {
+			var panel = FindUIElement(panelId);
+			if (panel == null) return;
+			string logoName = SpzGoHostSection.LogoName(hostId);
+			// The Install button lives under the Settings foldout *content*, and the logo is a sibling of
+			// that foldout under the host section — so searching below the button never reaches it. Climb
+			// to the host section (else the topmost ancestor) and search down from there.
+			Transform searchRoot = null;
+			string sectionName = SpzGoHostSection.SectionName(hostId);
+			for (var t = panel.transform; t != null; t = t.parent) {
+				if (string.Equals(t.name, sectionName, StringComparison.Ordinal)) {
+					searchRoot = t;
+					break;
+				}
+				searchRoot = t;
+			}
+			if (searchRoot == null) return;
+			var logoT = searchRoot.Find(logoName);
+			if (logoT == null) {
+				foreach (var t in searchRoot.GetComponentsInChildren<Transform>(true)) {
+					if (t != null && string.Equals(t.name, logoName, StringComparison.Ordinal)) {
+						logoT = t;
+						break;
+					}
+				}
+			}
+			if (logoT == null) return;
+			var img = logoT.GetComponent<Image>();
+			if (img != null && SpzGoHosts.IsBridgeReady(hostId))
+				img.color = new Color(0.30f, 0.34f, 0.40f, 1f);
 		}
 
 		string SpzGoReadBlenderExeFromPanel(string panelId) {
@@ -2033,10 +2067,12 @@ namespace spz {
 			}
 			
 			// Stacked label-above-field (full width) — side-by-side 30/70 clipped long SPZ GO path labels.
-			GameObject inputObj = new GameObject($"TextInput_{label}");
+			// Create with RectTransform already attached. Parenting a plain Transform under a
+			// RectTransform converts it, after which AddComponent returns null and sizeDelta throws.
+			GameObject inputObj = new GameObject($"TextInput_{label}", typeof(RectTransform));
 			inputObj.transform.SetParent(panelObj.transform, false);
 			
-			var inputRect = inputObj.AddComponent<RectTransform>();
+			var inputRect = (RectTransform)inputObj.transform;
 			float rowH = ProjectUiScale.Space(2) + ProjectUiScale.Space(4) + 4f; // label ~16 + field ~36
 			inputRect.sizeDelta = new Vector2(0f, rowH);
 			var rowLe = inputObj.AddComponent<LayoutElement>();
@@ -2054,9 +2090,9 @@ namespace spz {
 			rowLayout.childForceExpandWidth = true;
 			
 			// Label (full width, above field)
-			var labelObj = new GameObject("Label");
+			var labelObj = new GameObject("Label", typeof(RectTransform));
 			labelObj.transform.SetParent(inputObj.transform, false);
-			var labelRt = labelObj.GetComponent<RectTransform>() ?? labelObj.AddComponent<RectTransform>();
+			var labelRt = (RectTransform)labelObj.transform;
 			labelRt.sizeDelta = new Vector2(0f, ProjectUiScale.Space(2));
 			var labelLe = labelObj.AddComponent<LayoutElement>();
 			labelLe.preferredHeight = ProjectUiScale.Space(2);
@@ -2073,10 +2109,10 @@ namespace spz {
 			ApplyRuntimeTmpFont(labelText);
 			
 			// Input field (full width)
-			var fieldObj = new GameObject("InputField");
+			var fieldObj = new GameObject("InputField", typeof(RectTransform));
 			fieldObj.transform.SetParent(inputObj.transform, false);
 			float fieldH = ProjectUiScale.Space(4) + 4f;
-			var fieldRt = fieldObj.GetComponent<RectTransform>() ?? fieldObj.AddComponent<RectTransform>();
+			var fieldRt = (RectTransform)fieldObj.transform;
 			fieldRt.sizeDelta = new Vector2(0f, fieldH);
 			var fieldLe = fieldObj.AddComponent<LayoutElement>();
 			fieldLe.preferredHeight = fieldH;
@@ -2148,6 +2184,7 @@ namespace spz {
 			inputField.onValueChanged.AddListener((value) => {
 				string elementId = inputObj.GetInstanceID().ToString();
 				_uiElementValues[elementId] = value;
+				PersistSpzGoHostPathIfNeeded(addonId, inputObj.transform, label, value);
 				SendValueChangeToPython(addonId, elementId, "text", value);
 			});
 			
@@ -2180,10 +2217,17 @@ namespace spz {
 				return null;
 			}
 			if (string.Equals(addonId, StableProjectorzGoAddonId, StringComparison.Ordinal)) {
+				// Inside a host section the axis controls show that host's stored basis; outside one
+				// (a pre-section panel) they still show the shared export basis.
+				string hostId = SpzGoHostSection.HostIdForWidget(panelObj.transform);
 				if (string.Equals(label, ExportAxisSettings.AxisOrderLabel, StringComparison.Ordinal))
-					defaultIndex = ExportAxisSettings.AxisOrderIndex;
+					defaultIndex = hostId != null
+						? SpzGoHostPrefs.GetAxisOrderIndex(hostId)
+						: ExportAxisSettings.AxisOrderIndex;
 				else if (string.Equals(label, ExportAxisSettings.FlipLabel, StringComparison.Ordinal))
-					defaultIndex = ExportAxisSettings.FlipIndex;
+					defaultIndex = hostId != null
+						? SpzGoHostPrefs.GetFlipIndex(hostId)
+						: ExportAxisSettings.FlipIndex;
 			}
 			
 			// Edge case: Invalid default index - clamp to valid range
@@ -2193,10 +2237,10 @@ namespace spz {
 			}
 			
 			// Create dropdown container
-			GameObject dropdownObj = new GameObject($"Dropdown_{label}");
+			GameObject dropdownObj = new GameObject($"Dropdown_{label}", typeof(RectTransform));
 			dropdownObj.transform.SetParent(panelObj.transform, false);
 			
-			var dropdownRect = dropdownObj.AddComponent<RectTransform>();
+			var dropdownRect = (RectTransform)dropdownObj.transform;
 			dropdownRect.sizeDelta = new Vector2(280, 48);
 			var dropdownLe = dropdownObj.AddComponent<LayoutElement>();
 			dropdownLe.preferredHeight = 48f;
@@ -2212,9 +2256,9 @@ namespace spz {
 			rowBg.raycastTarget = true;
 			
 			// Add label (stacked top band — side 30% clipped long Nomad labels).
-			var labelObj = new GameObject("Label");
+			var labelObj = new GameObject("Label", typeof(RectTransform));
 			labelObj.transform.SetParent(dropdownObj.transform, false);
-			var labelRect = labelObj.AddComponent<RectTransform>();
+			var labelRect = (RectTransform)labelObj.transform;
 			labelRect.anchorMin = new Vector2(0, 0.5f);
 			labelRect.anchorMax = new Vector2(1, 1);
 			labelRect.sizeDelta = Vector2.zero;
@@ -2228,9 +2272,9 @@ namespace spz {
 			ApplyRuntimeTmpFont(labelText);
 			
 			// Add dropdown
-			var fieldObj = new GameObject("Dropdown");
+			var fieldObj = new GameObject("Dropdown", typeof(RectTransform));
 			fieldObj.transform.SetParent(dropdownObj.transform, false);
-			var fieldRect = fieldObj.AddComponent<RectTransform>();
+			var fieldRect = (RectTransform)fieldObj.transform;
 			fieldRect.anchorMin = new Vector2(0, 0);
 			fieldRect.anchorMax = new Vector2(1, 0.5f);
 			fieldRect.sizeDelta = Vector2.zero;
@@ -2241,9 +2285,9 @@ namespace spz {
 			fieldBg.color = new Color(0.15f, 0.15f, 0.15f, 1f);
 			SpzUiThemeOps.ApplyRoundedControlSprite(fieldBg, markEligible: true);
 			
-			var labelObj2 = new GameObject("Label");
+			var labelObj2 = new GameObject("Label", typeof(RectTransform));
 			labelObj2.transform.SetParent(fieldObj.transform, false);
-			var labelRect2 = labelObj2.AddComponent<RectTransform>();
+			var labelRect2 = (RectTransform)labelObj2.transform;
 			labelRect2.anchorMin = Vector2.zero;
 			labelRect2.anchorMax = Vector2.one;
 			labelRect2.sizeDelta = Vector2.zero;
@@ -2256,9 +2300,9 @@ namespace spz {
 			labelText2.raycastTarget = false;
 			ApplyRuntimeTmpFont(labelText2);
 			
-			var arrowObj = new GameObject("Arrow");
+			var arrowObj = new GameObject("Arrow", typeof(RectTransform));
 			arrowObj.transform.SetParent(fieldObj.transform, false);
-			var arrowRect = arrowObj.AddComponent<RectTransform>();
+			var arrowRect = (RectTransform)arrowObj.transform;
 			arrowRect.anchorMin = new Vector2(1, 0);
 			arrowRect.anchorMax = new Vector2(1, 1);
 			arrowRect.sizeDelta = new Vector2(20, 0);
@@ -2296,7 +2340,7 @@ namespace spz {
 				if (index >= 0 && index < dropdown.options.Count) {
 					labelText2.text = dropdown.options[index].text;
 				}
-				PersistSpzGoExportAxisOrderIfNeeded(addonId, label, index);
+				PersistSpzGoExportAxisOrderIfNeeded(addonId, dropdownObj.transform, label, index);
 				SendValueChangeToPython(addonId, elementId, "dropdown", index);
 			});
 			
@@ -2431,12 +2475,21 @@ namespace spz {
 			dropdown.itemImage = null;
 		}
 
-		static void PersistSpzGoExportAxisOrderIfNeeded(string addonId, string label, int index) {
+		/// <summary>
+		/// Axis picks inside a host section belong to that host (spz-go-multi-dcc R15) and are pushed
+		/// into the shared basis only when that host actually runs a transfer. A pick made on a panel
+		/// with no sections is still the shared basis, so older layouts keep working.
+		/// </summary>
+		static void PersistSpzGoExportAxisOrderIfNeeded(string addonId, Transform widget, string label, int index) {
 			if (!string.Equals(addonId, StableProjectorzGoAddonId, StringComparison.Ordinal)) return;
-			if (string.Equals(label, ExportAxisSettings.AxisOrderLabel, StringComparison.Ordinal))
-				ExportAxisSettings.SetAxisOrderIndex(index);
-			else if (string.Equals(label, ExportAxisSettings.FlipLabel, StringComparison.Ordinal))
-				ExportAxisSettings.SetFlipIndex(index);
+			string hostId = SpzGoHostSection.HostIdForWidget(widget);
+			if (string.Equals(label, ExportAxisSettings.AxisOrderLabel, StringComparison.Ordinal)) {
+				if (hostId != null) SpzGoHostPrefs.SetAxisOrderIndex(hostId, index);
+				else ExportAxisSettings.SetAxisOrderIndex(index);
+			} else if (string.Equals(label, ExportAxisSettings.FlipLabel, StringComparison.Ordinal)) {
+				if (hostId != null) SpzGoHostPrefs.SetFlipIndex(hostId, index);
+				else ExportAxisSettings.SetFlipIndex(index);
+			}
 		}
 		
 		/// <summary>
