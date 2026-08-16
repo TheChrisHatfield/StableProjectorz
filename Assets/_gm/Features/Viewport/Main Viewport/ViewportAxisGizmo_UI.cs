@@ -61,6 +61,23 @@ namespace spz {
 		static void ResetStatics() {
 			// Enter Play Mode with domain reload disabled keeps destroyed instances / dead sprites otherwise.
 			Registered.Clear();
+			foreach (var kvp in CenterSpriteCache) {
+				if (kvp.Value == null) {
+					continue;
+				}
+				Texture2D tex = kvp.Value.texture;
+				if (Application.isPlaying) {
+					UnityEngine.Object.Destroy(kvp.Value);
+					if (tex != null) {
+						UnityEngine.Object.Destroy(tex);
+					}
+				} else {
+					UnityEngine.Object.DestroyImmediate(kvp.Value);
+					if (tex != null) {
+						UnityEngine.Object.DestroyImmediate(tex);
+					}
+				}
+			}
 			CenterSpriteCache.Clear();
 			s_commandsRegistered = false;
 		}
