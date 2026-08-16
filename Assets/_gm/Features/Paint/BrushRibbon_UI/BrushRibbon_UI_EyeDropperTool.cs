@@ -56,10 +56,14 @@ namespace spz {
 	                RenderTexture tempScreenRT = RenderTexture.GetTemporary(Screen.width, Screen.height, 0);
 	                _textureFetchHelper.PrepareAndCompositeMagnifiedImage(tempScreenRT, KeyMousePenInput.cursorScreenPos());
 
+	                bool readbackOwnsRT = false;
 	                if(isCan_SampleNow() && !KeyMousePenInput.isLMBpressed()){
+	                    // The readback resolves some frames later. Releasing now would let the next
+	                    // iteration's GetTemporary hand out this same RT and overwrite the pixel we sampled.
 	                    _textureFetchHelper.StartAsyncGPUReadback(tempScreenRT, KeyMousePenInput.cursorScreenPos(), OnCompleteReadback);
+	                    readbackOwnsRT = true;
 	                }
-	                RenderTexture.ReleaseTemporary(tempScreenRT);
+	                if(!readbackOwnsRT){ RenderTexture.ReleaseTemporary(tempScreenRT); }
 	            }
 	            else {
 	                GlobalClickBlocker.Unlock_if_can(who_is_requesting: this);
@@ -286,9 +290,15 @@ namespace spz {
 	            y = Screen.height - 1 - y;// DirectX (UV starts at top)
 	        }
 
+	        // Caller hands us the temp RT; we hold it checked out of the pool until the GPU is done.
 	        AsyncGPUReadback.Request(tempScreenRT, 0, x, 1, y, 1, 0, 1, 
 	                                 TextureFormat.RGBA32, 
-	                                 request => OnCompleteReadback(request, onComplete));
+	                                 request => {
+	                                     try { OnCompleteReadback(request, onComplete); }
+	                                     finally {
+	                                         if (tempScreenRT != null){ RenderTexture.ReleaseTemporary(tempScreenRT); }
+	                                     }
+	                                 });
 	    }
 
 	    void OnCompleteReadback(AsyncGPUReadbackRequest request, Action<Color> onComplete){
