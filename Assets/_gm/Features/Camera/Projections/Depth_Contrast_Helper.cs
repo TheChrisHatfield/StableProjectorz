@@ -254,6 +254,7 @@ namespace spz {
 	    void Blur_Depth_maybe(DepthContrast_arg a){
 
 	        RenderTexture helper = RenderTexture.GetTemporary(a.improveThisRT.descriptor);
+	        try {
         
 	        var bArg = new BlurTextures_MGR.BlurTextureArg( a.improveThisRT,  helper, 
 	                                                        blurBoxHalfSize_1_to_12: 7,//half size 7, 14x14 kernel.
@@ -288,8 +289,9 @@ namespace spz {
 	                BlurTextures_MGR.instance.Blur_texture( bArg );
 	            }
 	        }
-
-	        RenderTexture.ReleaseTemporary(helper);
+	        } finally {
+	            RenderTexture.ReleaseTemporary(helper);
+	        }
 	    }
 
 	    void Awake(){
