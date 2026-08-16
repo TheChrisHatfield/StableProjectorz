@@ -47,13 +47,24 @@ namespace spz {
 			return cam != null ? cam.transform.rotation : Quaternion.identity;
 		}
 
-		/// <summary>Center of the current selection (orbit target). Origin when nothing is loaded / selected.</summary>
+		/// <summary>
+		/// Orbit target for axis snaps. Prefer the current selection (same pivot orbit / F use); when nothing is
+		/// selected, fall back to every loaded mesh so a deselect does not silently snap around world origin.
+		/// </summary>
 		public static Vector3 ResolvePivot() {
 			var models = ModelsHandler_3D.instance;
 			if (models == null) {
 				return Vector3.zero;
 			}
-			return models.GetTotalBounds_ofSelectedMeshes().center;
+			var selected = models.selectedMeshes;
+			if (selected != null && selected.Count > 0) {
+				return models.GetTotalBounds_ofSelectedMeshes().center;
+			}
+			var all = models.meshes;
+			if (all != null && all.Count > 0) {
+				return models.GetTotalBounds_ofAllMeshes().center;
+			}
+			return Vector3.zero;
 		}
 
 		public static bool IsGizmoUsable() {

@@ -291,6 +291,17 @@ public sealed class ViewportAxisGizmoContractTests {
 	}
 
 	[Test]
+	public void AxisSnapPivotFallsBackToWholeSceneWhenNothingSelected() {
+		string ops = ReadRepo("Assets/_gm/Features/Viewport/Main Viewport/ViewportAxisGizmo_CameraOps.cs");
+		Assert.That(ops, Does.Contain("GetTotalBounds_ofSelectedMeshes"),
+			"Axis snap should prefer the selection pivot when something is selected.");
+		Assert.That(ops, Does.Contain("GetTotalBounds_ofAllMeshes"),
+			"With nothing selected, snap must orbit the loaded scene — not silent world origin.");
+		Assert.That(ViewportAxisGizmo_CameraOps.ResolvePivot(), Is.EqualTo(Vector3.zero),
+			"EditMode has no models; pivot stays at origin without inventing a bounds center.");
+	}
+
+	[Test]
 	public void IdleViewDoesNoPerFrameWorkButSizeChangesReproject() {
 		RectTransform host = NewHost();
 		try {
