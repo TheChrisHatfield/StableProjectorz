@@ -24,9 +24,18 @@ namespace spz {
 
 
 
-	    public void Restore_CameraPlacement(CameraPovInfo povInfo, Vector3 selectedModel_pos){
+	/// <summary>True while a focus / restore lerp owns this camera (it is reparented onto the temp pivot).</summary>
+	public bool isFlyingCamera => _lerpFlyCamera_crtn != null;
+
+	// interruptCurrentFly: retarget an in-flight lerp instead of dropping the request. Callers that only
+	// restore a saved POV keep the old behaviour; repeatable controls (viewport axis gizmo) opt in so a
+	// second click is not silently ignored.
+	public void Restore_CameraPlacement(CameraPovInfo povInfo, Vector3 selectedModel_pos, bool interruptCurrentFly=false){
         
-	        if(_lerpFlyCamera_crtn!=null){ return; }//avoids initiating it twice, because might already be reparented, etc.
+	        if(_lerpFlyCamera_crtn!=null){
+	            if(!interruptCurrentFly){ return; }//avoids initiating it twice, because might already be reparented, etc.
+	            StopCurrentLerpAndRestoreParent();
+	        }
         
 	        Vector3 destinPos    = povInfo.camera_pos;
 	        Quaternion destinRot = povInfo.camera_rot;
