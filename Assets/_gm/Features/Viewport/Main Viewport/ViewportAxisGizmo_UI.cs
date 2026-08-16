@@ -65,6 +65,7 @@ namespace spz {
 		}
 
 		ViewportAxisGizmo_Spec _spec = ViewportAxisGizmo_Spec.Default;
+		bool _tornDown;
 		RectTransform _root;
 		CanvasGroup _canvasGroup;
 		RectTransform _centerRt;
@@ -118,7 +119,7 @@ namespace spz {
 			}
 			var found = parent.GetComponentsInChildren<ViewportAxisGizmo_UI>(true);
 			for (int i = 0; i < found.Length; i++) {
-				if (found[i] != null) {
+				if (IsLive(found[i])) {
 					return found[i];
 				}
 			}
@@ -129,18 +130,20 @@ namespace spz {
 		public static ViewportAxisGizmo_UI FindAnyLiveGizmo() {
 			PruneRegistered();
 			for (int i = 0; i < Registered.Count; i++) {
-				if (Registered[i] != null) {
+				if (IsLive(Registered[i])) {
 					return Registered[i];
 				}
 			}
 			var all = FindObjectsByType<ViewportAxisGizmo_UI>(FindObjectsInactive.Include, FindObjectsSortMode.None);
 			for (int i = 0; i < all.Length; i++) {
-				if (all[i] != null) {
+				if (IsLive(all[i])) {
 					return all[i];
 				}
 			}
 			return null;
 		}
+
+		static bool IsLive(ViewportAxisGizmo_UI gizmo) => gizmo != null && !gizmo._tornDown;
 
 		/// <summary>
 		/// Moves the widget onto <paramref name="parent"/> when that is not where it already lives. The inner
@@ -148,7 +151,7 @@ namespace spz {
 		/// replace it, so the host is re-checked instead of being decided once. No-op in the steady state.
 		/// </summary>
 		public bool EnsureHostedUnder(RectTransform parent) {
-			if (parent == null || _root == null || _root.parent == parent) {
+			if (_tornDown || parent == null || _root == null || _root.parent == parent) {
 				return false;
 			}
 			_root.SetParent(parent, false);
@@ -161,7 +164,7 @@ namespace spz {
 			PruneRegistered();
 			for (int i = 0; i < Registered.Count; i++) {
 				var g = Registered[i];
-				if (g != null && g.gameObject.activeInHierarchy) {
+				if (IsLive(g) && g.gameObject.activeInHierarchy) {
 					return true;
 				}
 			}
@@ -175,6 +178,7 @@ namespace spz {
 				if (all[i] == null) {
 					continue;
 				}
+				all[i].MarkTornDown();
 				var go = all[i].gameObject;
 				if (Application.isPlaying) {
 					Destroy(go);
@@ -183,6 +187,21 @@ namespace spz {
 				}
 			}
 			Registered.Clear();
+		}
+
+		/// <summary>
+		/// Retires this widget before <see cref="Object.Destroy"/> runs. In a player build the destroy only lands at
+		/// the end of the frame, so an add-on re-enabled in that same frame would otherwise be handed this dying
+		/// instance (reporting attach success with nothing on screen), and its own refresh pass would parent it back
+		/// onto the viewport for one last frame.
+		/// </summary>
+		public void MarkTornDown() {
+			_tornDown = true;
+			Registered.Remove(this);
+			if (_root != null) {
+				_root.SetParent(null, false);
+			}
+			gameObject.SetActive(false);
 		}
 
 		static void PruneRegistered() {
@@ -421,7 +440,7 @@ namespace spz {
 
 		/// <summary>Re-projects the six axes for the current view rotation and re-sorts them by depth.</summary>
 		public void RefreshFromCamera() {
-			if (_root == null) {
+			if (_tornDown || _root == null) {
 				return;
 			}
 			EnsureHostedUnder(ResolveViewportParent());
