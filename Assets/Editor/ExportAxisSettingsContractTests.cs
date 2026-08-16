@@ -98,7 +98,87 @@ namespace spz.EditorTests {
 			Assert.That(fbx, Does.Contain("ExportAxisSettings.Snapshot()"));
 			Assert.That(stream, Does.Contain("ExportAxisSettings.Snapshot()"));
 			Assert.That(py, Does.Contain("Export axis order"));
-			Assert.That(py, Does.Contain("Export flip Z"));
+			Assert.That(py, Does.Contain(ExportAxisSettings.FlipLabel));
+			Assert.That(py, Does.Not.Contain("add_toggle(\"Export flip"),
+				"Flips are one dropdown now; loose per-axis toggles must not reappear beside it.");
+		}
+
+		[Test]
+		public void FlipDropdownOptions_MatchAcrossPythonAndNativePanel() {
+			// Unity persists the flip by INDEX, so a python list in a different order would silently
+			// apply the wrong axis — picking "Y" would flip something else.
+			string py = File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(),
+				"Assets", "StreamingAssets", "Addons", "StableProjectorzGO", "__init__.py"));
+			int start = py.IndexOf("\"" + ExportAxisSettings.FlipLabel + "\"", System.StringComparison.Ordinal);
+			Assert.That(start, Is.GreaterThan(0), "python panel must declare the flip dropdown");
+			int open = py.IndexOf('[', start);
+			int close = py.IndexOf(']', open);
+			Assert.That(open, Is.GreaterThan(0));
+			Assert.That(close, Is.GreaterThan(open));
+			string list = py.Substring(open + 1, close - open - 1);
+			foreach (string name in ExportAxisSettings.FlipNames) {
+				Assert.That(list, Does.Contain("\"" + name + "\""), "missing option " + name);
+			}
+			// Same count, same order.
+			int cursor = -1;
+			foreach (string name in ExportAxisSettings.FlipNames) {
+				int at = list.IndexOf("\"" + name + "\"", System.StringComparison.Ordinal);
+				Assert.That(at, Is.GreaterThan(cursor), "option order diverged at " + name);
+				cursor = at;
+			}
+			Assert.That(list.Split('"').Length - 1, Is.EqualTo(ExportAxisSettings.FlipNames.Length * 2),
+				"python flip list must hold exactly the shared options");
+		}
+
+		[Test]
+		public void FlipIndex_RoundTripsEveryCombination() {
+			for (int i = 0; i < ExportAxisSettings.FlipNames.Length; i++) {
+				ExportAxisSettings.SetFlipIndex(i);
+				Assert.That(ExportAxisSettings.FlipIndex, Is.EqualTo(i),
+					"selection " + ExportAxisSettings.FlipNames[i] + " must survive a round trip");
+			}
+			// Every distinct flag combination must be reachable, or a basis becomes unselectable.
+			var seen = new System.Collections.Generic.HashSet<int>();
+			for (int i = 0; i < ExportAxisSettings.FlipNames.Length; i++) {
+				ExportAxisSettings.SetFlipIndex(i);
+				int mask = (ExportAxisSettings.FlipX ? 1 : 0)
+					| (ExportAxisSettings.FlipY ? 2 : 0)
+					| (ExportAxisSettings.FlipZ ? 4 : 0);
+				Assert.That(seen.Add(mask), Is.True, "duplicate flip combination at index " + i);
+			}
+			Assert.That(seen.Count, Is.EqualTo(8));
+		}
+
+		[Test]
+		public void FlipIndex_LabelsMatchTheFlagsTheySet() {
+			for (int i = 0; i < ExportAxisSettings.FlipNames.Length; i++) {
+				ExportAxisSettings.SetFlipIndex(i);
+				string label = ExportAxisSettings.FlipNames[i];
+				Assert.That(ExportAxisSettings.FlipX, Is.EqualTo(label.Contains("X")), label + " / X");
+				Assert.That(ExportAxisSettings.FlipY, Is.EqualTo(label.Contains("Y")), label + " / Y");
+				Assert.That(ExportAxisSettings.FlipZ, Is.EqualTo(label.Contains("Z")), label + " / Z");
+			}
+		}
+
+		[Test]
+		public void FlipIndex_ClampsOutOfRangeSelection() {
+			ExportAxisSettings.SetFlipIndex(-5);
+			Assert.That(ExportAxisSettings.FlipIndex, Is.EqualTo(0));
+			ExportAxisSettings.SetFlipIndex(999);
+			Assert.That(ExportAxisSettings.FlipIndex, Is.EqualTo(ExportAxisSettings.FlipNames.Length - 1));
+		}
+
+		[Test]
+		public void NativePanel_ShowsFlipsAsDropdownAndRetiresOldToggles() {
+			string ui = File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(),
+				"Assets", "_gm", "Features", "AddonSystem", "AddonUI_MGR.cs"));
+			Assert.That(ui, Does.Contain("ExportAxisSettings.FlipLabel"));
+			Assert.That(ui, Does.Contain("ExportAxisSettings.FlipNames"));
+			Assert.That(ui, Does.Contain("ExportAxisSettings.SetFlipIndex"));
+			Assert.That(ui, Does.Not.Contain("AddToggle(StableProjectorzGoAddonId, panelId, ExportAxisSettings.FlipXLabel"),
+				"the native panel must not seed loose flip toggles any more");
+			// A panel seeded by an older session keeps its toggles unless they are explicitly pruned.
+			Assert.That(ui, Does.Contain("RemoveNamedControls(StableProjectorzGoAddonId, panel, \"Toggle_\" + ExportAxisSettings.FlipXLabel"));
 		}
 
 		[Test]

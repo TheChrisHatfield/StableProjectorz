@@ -455,9 +455,12 @@ def register():
     # Unity overrides these defaults from shared PlayerPrefs when constructing the widgets.
     # The same persisted basis drives FBX and direct mesh streaming.
     _panel.add_dropdown("Export axis order", ["XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX"], 0)
-    _panel.add_toggle("Export flip X", False)
-    _panel.add_toggle("Export flip Y", False)
-    _panel.add_toggle("Export flip Z", False)
+    # One list instead of three loose toggles; Unity seeds the current selection from PlayerPrefs.
+    _panel.add_dropdown(
+        "Export flip",
+        ["None", "X", "Y", "Z", "X + Y", "X + Z", "Y + Z", "X + Y + Z"],
+        0,
+    )
 
     _panel.add_button("Import", "do_import_from_path")
     _panel.add_button("Export", "do_export_to_path")
