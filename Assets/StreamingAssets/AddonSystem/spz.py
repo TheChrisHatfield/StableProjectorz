@@ -1192,6 +1192,27 @@ class UIAPI:
         r = self._client._send_request("spz.ui.attach_viewport_fullview_toggle", params)
         return r.get("success", False)
 
+    def attach_viewport_axis_gizmo(self, size=None, margin=None, center_icon=None, center_command=None):
+        """
+        Dock the XYZ orientation gizmo in the top-right of the main 3D viewport. One-shot; safe to retry until Unity returns success.
+
+        JSON-RPC: ``spz.ui.attach_viewport_axis_gizmo`` with optional params:
+        ``size`` (px, gizmo square), ``margin`` (px from the viewport corner),
+        ``center_icon`` (png path; relative names resolve inside the add-on folder),
+        ``center_command`` (default ``viewport_axis_gizmo_overview`` → frames the scene).
+        """
+        params = {}
+        if size is not None:
+            params["size"] = float(size)
+        if margin is not None:
+            params["margin"] = float(margin)
+        if center_icon is not None:
+            params["center_icon"] = str(center_icon)
+        if center_command is not None:
+            params["center_command"] = str(center_command)
+        r = self._client._send_request("spz.ui.attach_viewport_axis_gizmo", params)
+        return r.get("success", False)
+
     def get_theme(self):
         """Return the active theme, typed token_schema (color|float), bound surfaces, and composition metadata (rpc 1.13+)."""
         return self._client._send_request("spz.ui.get_theme", {})
@@ -1299,6 +1320,40 @@ class Panel:
             return result.get("element_id", None)
         return None
     
+    def add_foldout(self, label, start_open=False):
+        """Add a collapsible drop-tab to this panel (rpc 1.16+).
+
+        Returns the element id of the drop-tab's CONTENT, so widgets added with that
+        id as ``panel_id`` land inside the fold rather than beside it.
+        """
+        result = self._client._send_request("spz.ui.add_foldout", {
+            "addon_id": self._addon_id,
+            "panel_id": self._panel_id,
+            "label": str(label),
+            "open": bool(start_open),
+        })
+        if result.get("success", False):
+            return result.get("element_id", None)
+        return None
+
+    def add_host_sections(self, host_id=None):
+        """Build the SPZ GO DCC host sections in this panel (rpc 1.16+).
+
+        Each section is a host logo activate button, mutually exclusive Import/Export
+        mode toggles, and a collapsed Settings drop-tab. Unity owns the layout and the
+        host registry, so add-ons do not restate option lists or callbacks. Pass
+        ``host_id`` to build a single host. Returns True only when every requested
+        section was created.
+        """
+        params = {
+            "addon_id": self._addon_id,
+            "panel_id": self._panel_id,
+        }
+        if host_id is not None:
+            params["host_id"] = str(host_id)
+        result = self._client._send_request("spz.ui.add_host_sections", params)
+        return bool(result.get("success", False))
+
     def add_slider(self, label, min_val, max_val, default_val):
         """Add a slider to this panel
         

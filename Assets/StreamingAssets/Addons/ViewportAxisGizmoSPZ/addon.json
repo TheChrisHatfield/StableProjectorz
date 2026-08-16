@@ -1,0 +1,4 @@
+{
+  "version": "1.0.0",
+  "description": "Viewport only: XYZ orientation gizmo in the top-right of the 3D view. Click an axis to snap the camera; the lantern in the center frames the whole scene. No command-ribbon tab."
+}
