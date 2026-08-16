@@ -90,6 +90,43 @@ public sealed class ExportPipelineChunkingContractTests {
 	}
 
 	[Test]
+	public void MeshExport_OverwritesItsTexturesInsteadOfStackingCopies() {
+		string src = Read("Assets", "_gm", "Features", "Save Load Import Export", "Save_MGR.cs");
+
+		// The mesh write always overwrites its path. Uniquing the maps beside it desynchronises the
+		// pair: a second export leaves a fresh from_spz.fbx next to the previous run's from_spz.png
+		// plus a new "from_spz 2.png", and Blender then picks up whichever it likes.
+		Assert.That(src, Does.Contain("string ComposeTexturePath(string basePath, string suffix)"),
+			"there must be a non-uniquing destination for maps that accompany an overwritten mesh");
+		Assert.That(src, Does.Contain("overwriteExisting ? ComposeTexturePath(save_to_basePath, \"\")"),
+			"albedo must be able to overwrite");
+		Assert.That(src, Does.Contain("overwriteExisting ? ComposeTexturePath(save_to_basePath, \"_AO\")"),
+			"AO must be able to overwrite");
+
+		// Both mesh-export flows opt in; the "save textures as…" dialog must not.
+		int optIns = 0, idx = 0;
+		while ((idx = src.IndexOf("overwriteExisting:true", idx, StringComparison.Ordinal)) >= 0) { optIns++; idx += 3; }
+		Assert.That(optIns, Is.EqualTo(2),
+			"exactly the dialog export and the exchange export write maps beside a rewritten mesh");
+		Assert.That(src, Does.Contain("bool overwriteExisting = false"),
+			"overwriting must be opt-in so dialog saves never clobber the user's own files");
+	}
+
+	[Test]
+	public void UniquePathStillGuardsDialogSaves() {
+		string src = Read("Assets", "_gm", "Features", "Save Load Import Export", "Save_MGR.cs");
+		// Regression guard: the shared composer must not have swallowed the uniquing behaviour.
+		int fn = src.IndexOf("string MakeUniquePath(string basePath, string suffix)", StringComparison.Ordinal);
+		Assert.That(fn, Is.GreaterThan(0));
+		int end = src.IndexOf("IEnumerator WaitForRenderAll_crtn", fn, StringComparison.Ordinal);
+		string body = src.Substring(fn, end - fn);
+		Assert.That(body, Does.Contain("File.Exists(candidate)"));
+		Assert.That(body, Does.Contain("for (int n = 2"));
+		Assert.That(src, Does.Contain("MakeUniquePath(basePath, \"_Content\")"),
+			"view-texture dialog saves must keep uniquing");
+	}
+
+	[Test]
 	public void SaveMgr_DilatesNonInstantly() {
 		string src = Read("Assets", "_gm", "Features", "Save Load Import Export", "Save_MGR.cs");
 		Assert.That(src, Does.Contain("isRunInstantly = false"),
