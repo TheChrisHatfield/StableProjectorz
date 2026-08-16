@@ -1207,7 +1207,12 @@ namespace spz {
 			if (existingRow != null)
 			{
 				var existingBtn = existingRow.Find("AddLayerBtn")?.GetComponent<Button>();
-				if (existingBtn != null) return existingBtn;
+				if (existingBtn != null)
+				{
+					// Row may predate Collapse — ensure the paired button exists (connectivity: not just Add).
+					EnsureLayersCollapseButton(existingRow);
+					return existingBtn;
+				}
 			}
 			var buttonsRowGo = new GameObject("LayerButtonsRow");
 			buttonsRowGo.transform.SetParent(scrollContent, false);
@@ -1251,9 +1256,18 @@ namespace spz {
 			addTxt.alignment = TextAlignmentOptions.Center;
 			addTxt.raycastTarget = false;
 
-			// Collapse visible layers into one (same row)
+			EnsureLayersCollapseButton(buttonsRowGo.transform);
+			return addBtn;
+		}
+
+		/// <summary>Paired with AddLayerBtn on LayerButtonsRow. Idempotent so half-built rows can heal.</summary>
+		static void EnsureLayersCollapseButton(Transform buttonsRow)
+		{
+			if (buttonsRow == null) return;
+			if (buttonsRow.Find("CollapseBtn") != null) return;
+
 			var collapseBtnGo = new GameObject("CollapseBtn");
-			collapseBtnGo.transform.SetParent(buttonsRowGo.transform, false);
+			collapseBtnGo.transform.SetParent(buttonsRow, false);
 			var collapseLE = collapseBtnGo.AddComponent<LayoutElement>();
 			collapseLE.preferredWidth = 90;
 			collapseLE.preferredHeight = 24;
@@ -1276,8 +1290,6 @@ namespace spz {
 			collapseTxt.color = Color.white;
 			collapseTxt.alignment = TextAlignmentOptions.Center;
 			collapseTxt.raycastTarget = false;
-
-			return addBtn;
 		}
 
 		static PaintTab_LayersPanel_UI CreateLayersPanelRuntime(RectTransform scrollContent, Transform sectionRoot)
@@ -1426,29 +1438,43 @@ namespace spz {
 
 		static void EnsurePaletteLoadButtonExists(RectTransform section)
 		{
+			if (section == null) return;
+			Transform existingRow = null;
 			for (int i = 0; i < section.childCount; i++)
 			{
 				if (section.GetChild(i).name == "PaletteLoadButtonRow")
-					return;
+				{
+					existingRow = section.GetChild(i);
+					break;
+				}
 			}
-			var row = new GameObject("PaletteLoadButtonRow");
-			row.transform.SetParent(section, false);
-			row.transform.SetAsFirstSibling();
-			var rowRect = row.AddComponent<RectTransform>();
-			rowRect.sizeDelta = new Vector2(0, 28);
-			var rowLE = row.AddComponent<LayoutElement>();
-			rowLE.preferredHeight = 28;
-			rowLE.flexibleWidth = 1;
-			rowLE.flexibleHeight = 0;
-			var hlg = row.AddComponent<HorizontalLayoutGroup>();
-			hlg.spacing = 4;
-			hlg.childAlignment = TextAnchor.MiddleLeft;
-			hlg.childControlWidth = true;
-			hlg.childControlHeight = true;
-			hlg.childForceExpandWidth = false;
-			hlg.childForceExpandHeight = true;
-			hlg.padding = new RectOffset(0, 0, 0, 0);
-		AddPaletteButton(row.transform, "Refresh", new Color(0.3f, 0.4f, 0.35f, 1f), () =>
+			// Empty shell (interrupted create) used to early-return here and leave Refresh/Load ASE unreachable.
+			if (existingRow != null && existingRow.GetComponentInChildren<Button>(true) != null)
+				return;
+
+			Transform rowTransform = existingRow;
+			if (rowTransform == null)
+			{
+				var row = new GameObject("PaletteLoadButtonRow");
+				row.transform.SetParent(section, false);
+				row.transform.SetAsFirstSibling();
+				var rowRect = row.AddComponent<RectTransform>();
+				rowRect.sizeDelta = new Vector2(0, 28);
+				var rowLE = row.AddComponent<LayoutElement>();
+				rowLE.preferredHeight = 28;
+				rowLE.flexibleWidth = 1;
+				rowLE.flexibleHeight = 0;
+				var hlg = row.AddComponent<HorizontalLayoutGroup>();
+				hlg.spacing = 4;
+				hlg.childAlignment = TextAnchor.MiddleLeft;
+				hlg.childControlWidth = true;
+				hlg.childControlHeight = true;
+				hlg.childForceExpandWidth = false;
+				hlg.childForceExpandHeight = true;
+				hlg.padding = new RectOffset(0, 0, 0, 0);
+				rowTransform = row.transform;
+			}
+		AddPaletteButton(rowTransform, "Refresh", new Color(0.3f, 0.4f, 0.35f, 1f), () =>
 		{
 			if (ColorPalette_MGR.instance == null) return;
 			if (ColorPalette_MGR.instance.ReloadCurrentPalette() && Viewport_StatusText.instance != null)
@@ -1456,7 +1482,7 @@ namespace spz {
 			else if (Viewport_StatusText.instance != null)
 				Viewport_StatusText.instance.ShowStatusText(ColorPalette_MGR.instance.HasPalette ? "Reload failed (file missing or invalid?)" : "No palette loaded to refresh", false, 2f, false);
 		});
-		AddPaletteButton(row.transform, "Load ASE/ACO/GPL…", new Color(0.35f, 0.45f, 0.5f, 1f), () =>
+		AddPaletteButton(rowTransform, "Load ASE/ACO/GPL…", new Color(0.35f, 0.45f, 0.5f, 1f), () =>
 		{
 			if (ColorPalette_MGR.instance == null)
 			{
@@ -1465,7 +1491,7 @@ namespace spz {
 			}
 			ColorPalette_MGR.instance?.OpenLoadPaletteDialog();
 		});
-		AddPaletteButton(row.transform, "Add to current palette…", new Color(0.4f, 0.38f, 0.5f, 1f), () =>
+		AddPaletteButton(rowTransform, "Add to current palette…", new Color(0.4f, 0.38f, 0.5f, 1f), () =>
 		{
 			if (ColorPalette_MGR.instance == null)
 			{
@@ -1475,7 +1501,7 @@ namespace spz {
 			ColorPalette_MGR.instance?.OpenAddPaletteDialog();
 		});
 			// Square +/- buttons: add swatch (current brush color) or remove selected swatch
-			AddPaletteSquareButton(row.transform, "+", new Color(0.25f, 0.45f, 0.3f, 1f), () =>
+			AddPaletteSquareButton(rowTransform, "+", new Color(0.25f, 0.45f, 0.3f, 1f), () =>
 			{
 				if (ColorPalette_MGR.instance == null) return;
 				// Seed defaults first so AddSwatch does not replace the 16 UI-only defaults with one color.
@@ -1486,7 +1512,7 @@ namespace spz {
 				if (Viewport_StatusText.instance != null)
 					Viewport_StatusText.instance.ShowStatusText("Swatch added", false, 1.5f, false);
 			});
-			AddPaletteSquareButton(row.transform, "−", new Color(0.5f, 0.25f, 0.25f, 1f), () =>
+			AddPaletteSquareButton(rowTransform, "−", new Color(0.5f, 0.25f, 0.25f, 1f), () =>
 			{
 				var swatches = FindObjectOfType<PaletteSwatches_UI>(true);
 				if (swatches != null && swatches.SelectedSwatchIndex >= 0)
