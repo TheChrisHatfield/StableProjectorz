@@ -108,6 +108,9 @@ namespace spz {
 	    //box that encapsulates all mesh renderers.
 	    public Bounds GetTotalBounds_ofSelectedMeshes() => o3d.GetTotalBounds_ofSelectedMeshes();
 
+	    /// <summary>Bounds of every loaded mesh (whole scene) — used to frame the full model, not just the selection.</summary>
+	    public Bounds GetTotalBounds_ofAllMeshes() => o3d.GetTotalBounds_ofAllMeshes();
+
     /// <summary>
     /// Orbit/pan/zoom reference world point under the cursor.
     /// Priority:
@@ -380,6 +383,13 @@ namespace spz {
 	        spz.modelsHandler3D = new ModelsHandler_3D_SL();
         
 	        spz.modelsHandler3D.currModelRoot_scaleAfterImport = o3d.currModelRoot_scaleAfterImport;
+
+	        // Persist model orientation so load does not depend on the current import convention.
+	        // (mesh files carry no Unity rotation; leaving this null marks a legacy project.)
+	        if( o3d.currModelRootGO != null ){
+		        Vector3 e = o3d.currModelRootGO.transform.localEulerAngles;
+		        spz.modelsHandler3D.currModelRoot_rotationEuler = new float[]{ e.x, e.y, e.z };
+	        }
 
 	        spz.modelsHandler3D.selectedMeshes = new List<ushort>();
 	        foreach (SD_3D_Mesh m in o3d.selectedMeshes){

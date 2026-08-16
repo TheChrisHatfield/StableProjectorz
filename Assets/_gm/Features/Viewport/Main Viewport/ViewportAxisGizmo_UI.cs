@@ -33,7 +33,7 @@ namespace spz {
 	/// <summary>
 	/// Blender / 3ds Max style orientation gizmo in the top-right of the 3D view: six axis balls that follow the
 	/// camera rotation (+X/+Y/+Z labelled and filled, negatives dim), with the StableProjectorz lantern in the
-	/// middle as an "overview" button that re-frames the selection.
+	/// middle as an "overview" button that frames the whole scene (every loaded mesh).
 	///
 	/// Parented to <see cref="MainViewport_UI.mainViewportRect"/> (drawn above the view RawImage) and pinned to the
 	/// top-right of <see cref="MainViewport_UI.innerViewportRect"/> (the aspect-fitted image). The size-reference
@@ -51,7 +51,7 @@ namespace spz {
 		public const string CenterName = "GizmoCenterOverview";
 		public const string HandlePrefix = "AxisHandle_";
 		public const string LinePrefix = "AxisLine_";
-		/// <summary>Command id the lantern button invokes by default (re-frame the selection).</summary>
+		/// <summary>Command id the lantern button invokes by default (frame the whole scene).</summary>
 		public const string OverviewCommandId = "viewport_axis_gizmo_overview";
 
 		static readonly List<ViewportAxisGizmo_UI> Registered = new List<ViewportAxisGizmo_UI>();

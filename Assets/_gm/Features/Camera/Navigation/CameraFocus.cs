@@ -83,11 +83,41 @@ namespace spz {
 	        if (!haveBounds) {
 	            totalBounds = ModelsHandler_3D.instance.GetTotalBounds_ofSelectedMeshes();
 	        }
+	        FlyToFrameBounds(totalBounds, dontFly_onlyDoEvent);
+	    }
+
+	    /// <summary>
+	    /// Frame an explicit world-space <paramref name="totalBounds"/> (e.g. the whole scene from the viewport
+	    /// gizmo lantern, not just the selection). Same gating and animated selfie-stick lerp as
+	    /// <see cref="Focus_Selection_maybe"/>, but the caller supplies the bounds so callers can frame all meshes.
+	    /// </summary>
+	    public void Frame_Bounds_maybe(Bounds totalBounds, bool forceTheFocus=false,  bool dontFly_onlyDoEvent=false){
+	        if(_lerpFlyCamera_crtn!=null){
+	            if(forceTheFocus){
+	                StopCurrentLerpAndRestoreParent();
+	            }else{
+	                return;
+	            }
+	        }
+
+	        if(!forceTheFocus  &&  (Keyboard.current == null || Keyboard.current.fKey.wasPressedThisFrame==false)){ return; }
+	        if(!forceTheFocus  &&  KeyMousePenInput.isSomeInputFieldActive()){ return; }
+	        if(KeyMousePenInput.isKey_CtrlOrCommand_pressed()){ return; }
+	        if(KeyMousePenInput.isKey_Shift_pressed()){ return; }
+	        if(DimensionMode_MGR.instance.is_3d_navigation_allowed == false){  return; }
+
+	        FlyToFrameBounds(totalBounds, dontFly_onlyDoEvent);
+	    }
+
+	    void FlyToFrameBounds(Bounds totalBounds, bool dontFly_onlyDoEvent){
 	        Vector3 boundsCenter  = totalBounds.center;
 
 	        float distanceToModel = CalcDistanceToModel(totalBounds);
 
 	        Vector3 pivotToCamera_dir = (transform.position - boundsCenter).normalized;
+	        // If the camera sits exactly on the bounds center, the direction collapses to zero (NaN rotation) — back off
+	        // along -forward so the frame still produces a valid placement.
+	        if (pivotToCamera_dir.sqrMagnitude < 1e-8f) { pivotToCamera_dir = -transform.forward; }
 	        Vector3 destinationPosition = boundsCenter + pivotToCamera_dir*distanceToModel;
 
 	        Quaternion destinRot = Quaternion.LookRotation( -pivotToCamera_dir ); //Important! NEGATIVE, towards the center

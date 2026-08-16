@@ -262,15 +262,19 @@ public sealed class ViewportAxisGizmoContractTests {
 	#endregion
 
 	[Test]
-	public void OverviewFailsHonestlyWhenNothingIsSelected() {
+	public void OverviewFramesTheWholeSceneAndFailsHonestlyWhenEmpty() {
 		Assert.That(ViewportAxisGizmo_CameraOps.HasSomethingToFrame(), Is.False,
 			"EditMode has no ModelsHandler_3D, so the lantern must know there is nothing to frame.");
 
 		string ops = ReadRepo("Assets/_gm/Features/Viewport/Main Viewport/ViewportAxisGizmo_CameraOps.cs");
 		Assert.That(ops, Does.Contain("HasSomethingToFrame()"),
-			"TryOverview must check selection before claiming success.");
-		Assert.That(ops, Does.Contain("Nothing selected to frame"),
+			"TryOverview must check the scene before claiming success.");
+		Assert.That(ops, Does.Contain("Nothing loaded to frame"),
 			"The lantern click must tell the user why overview did nothing.");
+		Assert.That(ops, Does.Contain("Frame_Bounds_maybe"),
+			"Lantern overview must frame explicit whole-scene bounds, not just the selection.");
+		Assert.That(ops, Does.Contain("GetTotalBounds_ofAllMeshes"),
+			"Overview must frame every loaded mesh (whole scene), not selectedMeshes only.");
 		Assert.That(ops, Does.Contain("NearestToCursor()"),
 			"Multiview: the gizmo must drive the camera under the cursor, not only _curr_viewCamera.");
 	}
