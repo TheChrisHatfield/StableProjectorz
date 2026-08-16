@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Experimental.Rendering;
 using System.Text.RegularExpressions;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO;
@@ -384,6 +385,94 @@ namespace spz {
 	    }
 
 
+	    /// <summary>
+	    /// Same output as <see cref="TextureArray_to_Texture2DList"/> (identical blit/keywords/min-2048 upscale) but the
+	    /// per-slice GPU readback stall is spread across frames under an <see cref="ExportFrameScheduler"/> budget, so a
+	    /// many-UDIM export no longer freezes the app on a single frame. Slices are appended to <paramref name="outList"/>.
+	    /// Drive it with <c>StartCoroutine</c>. <paramref name="onProgress01"/> reports 0..1 completion of this stage.
+	    /// </summary>
+	    public static IEnumerator TextureArray_to_Texture2DList_Budgeted(
+	        RenderTexture textureArray, List<Texture2D> outList, ExportFrameScheduler sched,
+	        Action<float> onProgress01 = null, TexArr_toTex2dList_arg arg = TexArr_toTex2dList_arg.Usual)
+	    {
+	        if (outList == null){ yield break; }
+	        if (textureArray == null || textureArray.dimension != TextureDimension.Tex2DArray){
+	            onProgress01?.Invoke(1f);
+	            yield break;
+	        }
+	        // Resolve the blit material BEFORE allocating the temp RT: dereferencing a missing
+	        // StaticShaders_MGR after the allocation would leak a full-size render target.
+	        Material mat = StaticShaders_MGR.instance != null
+	            ? StaticShaders_MGR.instance.TextureArrayReadSlice_mat : null;
+	        if (mat == null){
+	            Debug.LogWarning("[TextureTools_SPZ] Budgeted readback: TextureArrayReadSlice_mat unavailable.");
+	            onProgress01?.Invoke(1f);
+	            yield break;
+	        }
+
+	        GraphicsFormat dest_format = GraphicsFormat.R8G8B8A8_UNorm;
+	        int slices = textureArray.volumeDepth;
+
+	        var wh = new Vector2Int(textureArray.width, textureArray.height);
+	        if(SceneResolution_MGR.resultTexFilterMode == FilterMode.Point){
+	            wh = wh.x < 2048 ? new Vector2Int(2048, 2048) : wh;
+	        }
+
+	        RenderTexture tempRT = RenderTexture.GetTemporary(wh.x, wh.y, 0, dest_format);
+	        tempRT.filterMode = SceneResolution_MGR.resultTexFilterMode;
+	        RenderTexture.active = tempRT;
+
+	        mat.SetTexture("_MainTex", textureArray);
+	        RenderUdims.SetNumUdims(true, textureArray.volumeDepth, mat);
+	        SetKeyword_Material(mat, "RRR1", arg==TexArr_toTex2dList_arg.RRR1);
+	        SetKeyword_Material(mat, "SAMPLER_POINT", SceneResolution_MGR.resultTexFilterMode==FilterMode.Point);
+
+	        sched?.BeginSession(wh.x, wh.y, slices);
+
+	        // Unlike the single-frame variant this spans many frames, so it can be stopped midway
+	        // (owner disabled, project load, throw during readback). Without try/finally the temp RT
+	        // — up to 64MB at 4K — would never return to the pool and RenderTexture.active would stay
+	        // pointing at it, once per abandoned export.
+	        try {
+	            int i = 0;
+	            while (i < slices){
+	                if (sched != null){
+	                    sched.BeginTick(Time.deltaTime);
+	                    sched.GetFrameBudget(slices - i, out float budgetMs, out int maxUnits);
+	                    float start = Time.realtimeSinceStartup;
+	                    int did = 0;
+	                    while (did < maxUnits && i < slices){
+	                        if (did > 0 && (Time.realtimeSinceStartup - start) * 1000f >= budgetMs) break;
+	                        ReadBackSlice(i);
+	                        ++i; ++did;
+	                    }
+	                    float hitchMs = Mathf.Max(0f, (Time.deltaTime - (1f / 60f)) * 1000f);
+	                    sched.RegisterObservation(hitchMs, did);
+	                } else {
+	                    ReadBackSlice(i);
+	                    ++i;
+	                }
+	                onProgress01?.Invoke(slices <= 0 ? 1f : i / (float)slices);
+	                yield return null;
+	            }
+	        } finally {
+	            RenderTexture.active = null;
+	            RenderTexture.ReleaseTemporary(tempRT);
+	        }
+	        onProgress01?.Invoke(1f);
+
+	        void ReadBackSlice(int sliceIx){
+	            mat.SetInteger("_SliceIx", sliceIx);
+	            Graphics.Blit(null, tempRT, mat);
+	            Texture2D texture2D = new Texture2D(wh.x, wh.y, dest_format, textureArray.mipmapCount, TextureCreationFlags.None);
+	            texture2D.filterMode = SceneResolution_MGR.resultTexFilterMode;
+	            texture2D.ReadPixels(new Rect(0, 0, wh.x, wh.y), 0, 0);
+	            texture2D.Apply();
+	            outList.Add(texture2D);
+	        }
+	    }
+
+
 	    public static void Texture2DList_to_TextureArray( ref RenderTexture texArr_refillOrRecreateMe, 
 	                                                      IReadOnlyList<Texture2D> texture2DList,  int depth_numBits = 0, 
 	                                                      GraphicsFormat format = GraphicsFormat.R8G8B8A8_UNorm){
@@ -650,6 +739,66 @@ namespace spz {
 	            return;
 	        }
 	        if(bytes != null){ File.WriteAllBytes(filePath, bytes); }
+	    }
+
+
+	    /// <summary>
+	    /// Raw-pixel snapshot of a texture plus its destination, so the expensive PNG/JPG encode and
+	    /// <see cref="File.WriteAllBytes"/> can run on a worker thread instead of freezing the app during export.
+	    /// Build it on the main thread via <see cref="CaptureEncodeJob"/>, run it anywhere via <see cref="RunEncodeJobToDisk"/>.
+	    /// </summary>
+	    public class TextureEncodeJob{
+	        public byte[] rawPixels;
+	        public GraphicsFormat format;
+	        public int width;
+	        public int height;
+	        public string filePath;
+	        public string extension;
+	    }
+
+	    /// <summary>Main-thread: copy the texture's raw pixels + metadata so it can be encoded off-thread. Returns null if unusable.</summary>
+	    public static TextureEncodeJob CaptureEncodeJob(Texture2D texture, string filePath){
+	        if(texture == null || string.IsNullOrEmpty(filePath)){ return null; }
+	        string exten = Path.GetExtension(filePath).ToLower();
+	        if(exten == ""){ // Windows FileBrowser can drop the extension; default to png (keeps transparency).
+	            filePath += ".png";
+	            exten = ".png";
+	        }
+	        if(exten != ".png" && exten != ".jpg" && exten != ".tga"){
+	            return null; // Unsupported off-thread format; caller should fall back to the sync encoder.
+	        }
+	        byte[] raw;
+	        try {
+	            raw = texture.GetRawTextureData<byte>().ToArray();
+	        } catch (Exception e) {
+	            Debug.LogWarning("[TextureTools_SPZ] CaptureEncodeJob: GetRawTextureData failed, caller should fall back: " + e.Message);
+	            return null;
+	        }
+	        if(raw == null || raw.Length == 0){ return null; }
+	        return new TextureEncodeJob{
+	            rawPixels = raw,
+	            format = texture.graphicsFormat,
+	            width = texture.width,
+	            height = texture.height,
+	            filePath = filePath,
+	            extension = exten,
+	        };
+	    }
+
+	    /// <summary>Thread-safe: encode the captured raw pixels and write to disk. Safe to call from a background thread.</summary>
+	    public static void RunEncodeJobToDisk(TextureEncodeJob job){
+	        if(job == null || job.rawPixels == null || string.IsNullOrEmpty(job.filePath)){ return; }
+	        byte[] bytes;
+	        if(job.extension == ".jpg"){
+	            bytes = ImageConversion.EncodeArrayToJPG(job.rawPixels, job.format, (uint)job.width, (uint)job.height);
+	        }
+	        else if(job.extension == ".tga"){
+	            bytes = ImageConversion.EncodeArrayToTGA(job.rawPixels, job.format, (uint)job.width, (uint)job.height);
+	        }
+	        else {
+	            bytes = ImageConversion.EncodeArrayToPNG(job.rawPixels, job.format, (uint)job.width, (uint)job.height);
+	        }
+	        if(bytes != null){ File.WriteAllBytes(job.filePath, bytes); }
 	    }
 
 
