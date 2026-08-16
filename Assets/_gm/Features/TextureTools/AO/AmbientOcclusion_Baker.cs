@@ -349,6 +349,8 @@ namespace spz {
 	        _helper_uvTex?.Dispose();
 	        _preview_AO_texture1?.Dispose();
 	        _preview_AO_texture2?.Dispose();
+	        // GetTemporary — must ReleaseTemporary or mid-bake teardown leaves it checked out of the pool.
+	        TextureTools_SPZ.Dispose_RT(ref _depth_tempTargTexture, isTemporary:true);
 
 	        DestroyImmediate(_screenSpaceAO_bake_matCopy);
 	        DestroyImmediate(_AO_blend_AO_matCopy);
