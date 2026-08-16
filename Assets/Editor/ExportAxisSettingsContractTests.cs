@@ -136,6 +136,53 @@ namespace spz.EditorTests {
 		}
 
 		[Test]
+		public void MapInput_InvertsMapOutputForEveryBasis() {
+			var probe = new Vector3(1.5f, -2.25f, 4f);
+			foreach (ExportAxisSettings.AxisOrder order in System.Enum.GetValues(typeof(ExportAxisSettings.AxisOrder))) {
+				for (int mask = 0; mask < 8; mask++) {
+					var basis = new ExportAxisSettings.Basis(order,
+						(mask & 1) != 0, (mask & 2) != 0, (mask & 4) != 0);
+					Vector3 roundTripped = basis.MapInput(basis.MapOutput(probe));
+					Assert.That(roundTripped, Is.EqualTo(probe),
+						$"MapInput must invert MapOutput for {order} flips={mask}");
+				}
+			}
+		}
+
+		[Test]
+		public void ImportCorrection_MakesExportImportIdentityForEveryBasis() {
+			var unityVertex = new Vector3(3f, -1f, 0.5f);
+			foreach (ExportAxisSettings.AxisOrder order in System.Enum.GetValues(typeof(ExportAxisSettings.AxisOrder))) {
+				for (int mask = 0; mask < 8; mask++) {
+					var basis = new ExportAxisSettings.Basis(order,
+						(mask & 1) != 0, (mask & 2) != 0, (mask & 4) != 0);
+
+					// Export: Unity -> standard output space (swap y/z) -> user basis.
+					Vector3 exported = basis.MapOutput(new Vector3(unityVertex.x, unityVertex.z, unityVertex.y));
+					// Assimp's fixed conversion undoes only the y/z swap.
+					Vector3 afterAssimp = new Vector3(exported.x, exported.z, exported.y);
+					// Import correction must recover the original Unity vertex.
+					Assert.That(basis.MapImportedUnityVertex(afterAssimp), Is.EqualTo(unityVertex),
+						$"round trip must be identity for {order} flips={mask}");
+				}
+			}
+		}
+
+		[Test]
+		public void ImportPath_AppliesTheInverseBasis() {
+			string root = Directory.GetCurrentDirectory();
+			string loader = File.ReadAllText(Path.Combine(root, "Assets", "_gm", "Features", "3D Models", "AssimpLoader.cs"));
+			// Export and import are documented as exact inverses; a one-way basis would silently break
+			// the SPZ GO round trip for any non-default setting.
+			Assert.That(loader, Does.Contain("ExportAxisSettings.Snapshot()"),
+				"import must read the shared basis once per load");
+			Assert.That(loader, Does.Contain("MapImportedUnityVertex"),
+				"imported vertices must be mapped back out of the user's external basis");
+			Assert.That(loader, Does.Contain("_axisBasis.FlipsHandedness"),
+				"a mirroring basis must flip imported winding back");
+		}
+
+		[Test]
 		public void GeometryLoops_DoNotReadPlayerPrefsPerElement() {
 			string root = Directory.GetCurrentDirectory();
 			string stream = File.ReadAllText(Path.Combine(root, "Assets", "_gm", "Features", "AddonSystem", "SpzGoMeshStream.cs"));

@@ -25,10 +25,18 @@ namespace spz {
 	    private Dictionary<string, Texture2D> _loadedTextures;
 	    private string _baseDirectory;
 
+	    // The user's axis basis describes their external tool's convention, so it applies in BOTH
+	    // directions: the writers map outgoing geometry into it, and import maps incoming geometry back
+	    // out of it. Without this the documented export/import inverse pair only holds for the default
+	    // basis, and an SPZ GO round-trip would return the mesh permuted (and inside-out whenever the
+	    // basis flips handedness). Snapshotted once per load, never read per vertex.
+	    private ExportAxisSettings.Basis _axisBasis;
+
 	    public GameObject Load(string filePath)
 	    {
 	        if (!File.Exists(filePath)) return null;
 
+	        _axisBasis = ExportAxisSettings.Snapshot();
 	        _baseDirectory = Path.GetDirectoryName(filePath);
 	        _loadedMaterials = new Dictionary<string, UnityMat>();
 	        _loadedTextures = new Dictionary<string, Texture2D>();
@@ -124,18 +132,25 @@ namespace spz {
 	        if (aMesh.VertexCount > 65000) 
 	            uMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
 
+	        bool remapAxes = !_axisBasis.IsDefault;
+
 	        List<UnityVec3> verts = new List<UnityVec3>();
 	        // AssimpNetter Vertices are likely System.Numerics.Vector3 or similar struct with XYZ
 	        foreach (var v in aMesh.Vertices) 
-	            verts.Add(new UnityVec3(v.X, v.Y, v.Z));
+	            verts.Add(remapAxes
+	                ? _axisBasis.MapImportedUnityVertex(new UnityVec3(v.X, v.Y, v.Z))
+	                : new UnityVec3(v.X, v.Y, v.Z));
         
 	        uMesh.SetVertices(verts);
 
 	        if (aMesh.HasNormals)
 	        {
 	            List<UnityVec3> norms = new List<UnityVec3>();
+	            // Signed axis permutations are orthogonal, so directions remap exactly like positions.
 	            foreach (var n in aMesh.Normals) 
-	                norms.Add(new UnityVec3(n.X, n.Y, n.Z));
+	                norms.Add(remapAxes
+	                    ? _axisBasis.MapImportedUnityVertex(new UnityVec3(n.X, n.Y, n.Z))
+	                    : new UnityVec3(n.X, n.Y, n.Z));
             
 	            uMesh.SetNormals(norms);
 	        }
@@ -149,14 +164,17 @@ namespace spz {
 	            uMesh.SetUVs(0, uvs);
 	        }
 
+	        // A handedness-flipping basis mirrors the geometry, so winding must flip back or every
+	        // imported face ends up inside-out. Mirrors the same parity rule the writers apply.
+	        bool reverseWinding = remapAxes && _axisBasis.FlipsHandedness;
 	        List<int> indices = new List<int>();
 	        foreach (var face in aMesh.Faces)
 	        {
 	            if (face.IndexCount == 3)
 	            {
-	                indices.Add(face.Indices[0]);
+	                indices.Add(face.Indices[reverseWinding ? 2 : 0]);
 	                indices.Add(face.Indices[1]);
-	                indices.Add(face.Indices[2]);
+	                indices.Add(face.Indices[reverseWinding ? 0 : 2]);
 	            }
 	        }
 	        uMesh.SetTriangles(indices, 0);
