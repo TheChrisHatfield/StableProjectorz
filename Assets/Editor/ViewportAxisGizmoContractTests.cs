@@ -236,7 +236,7 @@ public sealed class ViewportAxisGizmoContractTests {
 			Assert.That(ViewportAxisGizmo_UI.FindAnyLiveGizmo(), Is.Null,
 				"A re-enable in the same frame must build a fresh widget, not refresh the dying one.");
 			Assert.That(ViewportAxisGizmo_UI.FindUnder(host), Is.Null);
-			Assert.That(ViewportAxisGizmo_UI.IsAnyVisibleGizmo(), Is.False);
+			Assert.That(ViewportAxisGizmo_UI.IsAnyMountedGizmo(), Is.False);
 			Assert.That(gizmo.gameObject.activeSelf, Is.False);
 
 			gizmo.RefreshFromCamera();
@@ -364,6 +364,16 @@ public sealed class ViewportAxisGizmoContractTests {
 		string resolved = ViewportAxisGizmo_AddonBridge.ResolveIconPath("lantern.png");
 		Assert.That(resolved, Is.EqualTo(ViewportAxisGizmo_AddonBridge.DefaultCenterIconPath));
 		Assert.That(File.Exists(resolved), Is.True);
+	}
+
+	[Test]
+	public void AttachRpcReportsMountedAndVisibleSeparately() {
+		string bridge = ReadRepo("Assets/_gm/Features/AddonSystem/ViewportAxisGizmo_AddonBridge.cs");
+		Assert.That(bridge, Does.Contain("r[\"mounted\"] = mounted"));
+		Assert.That(bridge, Does.Contain("r[\"visible\"] = visible"));
+		Assert.That(bridge, Does.Contain("IsGizmoUsable()"),
+			"visible must mean the canvas is shown (3D nav on), not merely that the GameObject is active.");
+		Assert.That(bridge, Does.Contain("IsAnyMountedGizmo()"));
 	}
 
 	[Test]

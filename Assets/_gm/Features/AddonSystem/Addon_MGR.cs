@@ -155,6 +155,8 @@ namespace spz {
 		readonly Dictionary<string, Coroutine> _ribbonShellEnsureById = new Dictionary<string, Coroutine>();
 		/// <summary>Single FULL/SRN dock ensure — Gen Art finish / enable / load-fail must not run parallel attach loops.</summary>
 		Coroutine _ribbonOnlyDockEnsureCrtn;
+		/// <summary>Single orientation-gizmo attach loop (enable / prefs restore / Python soft-fail all share it).</summary>
+		Coroutine _axisGizmoEnsureCrtn;
 		/// <summary>Python unregister skipped while :5557 was down — retry so watchers/routes do not stay live after dial-off.</summary>
 		readonly HashSet<string> _pendingPythonUnloadIds = new HashSet<string>();
 		/// <summary>Python load failed but dial stayed on (native/dock fallback) — Load Now soft-fail honesty.</summary>
@@ -337,9 +339,9 @@ namespace spz {
 				return;
 			if (!_registeredAddons.TryGetValue(addonId, out var info) || info == null)
 				return;
-			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal)
+			if (IsViewportOnlyAddon(addonId)
 			    && string.Equals(key, PrefKeyShowInCommandRibbon, StringComparison.Ordinal)) {
-				// Viewport-dock add-on never owns a command-ribbon tab.
+				// Viewport-only add-ons never own a command-ribbon tab.
 				value = false;
 			}
 			JObject bag = EnsurePrefsBag(info);
@@ -356,7 +358,7 @@ namespace spz {
 		public bool ShouldShowInCommandRibbon(string addonId) {
 			if (string.IsNullOrEmpty(addonId))
 				return false;
-			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal))
+			if (IsViewportOnlyAddon(addonId))
 				return false;
 			return GetAddonPrefBool(addonId, PrefKeyShowInCommandRibbon, true);
 		}
@@ -364,7 +366,7 @@ namespace spz {
 		public static bool ShouldShowInCommandRibbonStatic(string addonId) {
 			if (string.IsNullOrEmpty(addonId))
 				return false;
-			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal))
+			if (IsViewportOnlyAddon(addonId))
 				return false;
 			if (instance == null)
 				return true; // default show when manager not ready
@@ -401,7 +403,7 @@ namespace spz {
 						continue;
 					bag[p.Name] = p.Value.DeepClone();
 				}
-				if (string.Equals(prop.Name, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal))
+				if (IsViewportOnlyAddon(prop.Name))
 					bag[PrefKeyShowInCommandRibbon] = false;
 				applied++;
 			}
@@ -462,6 +464,8 @@ namespace spz {
 				instance.EnsureRibbonShellsForAllEnabledAddons();
 				if (instance.IsAddonEnabled(RibbonOnlyFullscreenAddonId))
 					instance.StartEnsureRibbonOnlyFullscreenViewportDock();
+				if (instance.IsAddonEnabled(ViewportAxisGizmoAddonId))
+					instance.StartEnsureViewportAxisGizmo();
 			}
 		}
 
@@ -739,6 +743,8 @@ namespace spz {
 				SeedNativeFallbacksForEnabledAddonsWhenHttpOff();
 				if (IsAddonEnabled(RibbonOnlyFullscreenAddonId))
 					StartEnsureRibbonOnlyFullscreenViewportDock();
+				if (IsAddonEnabled(ViewportAxisGizmoAddonId))
+					StartEnsureViewportAxisGizmo();
 			}
 			
 			// Start legacy C# HTTP server if enabled (deprecated - use FastAPI instead)
@@ -1253,6 +1259,8 @@ namespace spz {
 			EnsureRibbonShellsForAllEnabledAddons();
 			if (IsAddonEnabled(RibbonOnlyFullscreenAddonId))
 				StartEnsureRibbonOnlyFullscreenViewportDock();
+			if (IsAddonEnabled(ViewportAxisGizmoAddonId))
+				StartEnsureViewportAxisGizmo();
 			int count = 0;
 			foreach (var kvp in _registeredAddons) {
 				if (kvp.Value != null && kvp.Value.isEnabled) {
@@ -1280,6 +1288,8 @@ namespace spz {
 			EnsureRibbonShellsForAllEnabledAddons();
 			if (IsAddonEnabled(RibbonOnlyFullscreenAddonId))
 				StartEnsureRibbonOnlyFullscreenViewportDock();
+			if (IsAddonEnabled(ViewportAxisGizmoAddonId))
+				StartEnsureViewportAxisGizmo();
 			int count = 0;
 			int hardFail = 0;
 			int softFail = 0;
@@ -1761,6 +1771,16 @@ namespace spz {
 				OnAddonEnabledStateChanged?.Invoke(addonId);
 				return;
 			}
+			// Orientation gizmo is Unity-driven too: Python register() only forwards the attach RPC.
+			if (string.Equals(addonId, ViewportAxisGizmoAddonId, StringComparison.Ordinal)) {
+				_pythonLoadSoftFailedIds.Add(addonId);
+				UnityEngine.Debug.LogWarning(
+					$"[Addon_MGR] Python load failed for {addonId}, but keeping add-on enabled — the viewport gizmo does not require Python.");
+				if (!ViewportAxisGizmo_UI.IsAnyMountedGizmo())
+					StartEnsureViewportAxisGizmo();
+				OnAddonEnabledStateChanged?.Invoke(addonId);
+				return;
+			}
 			// SPZ GO / Nomad Theme already work in-process when HTTP :5557 is down. Do not disable or remove the tab —
 			// that erased native fallback and left users with a vanished SPZ GO after a blank wait.
 			if (SupportsNativeUiWithoutPython(addonId)) {
@@ -1820,8 +1840,21 @@ namespace spz {
 
 		/// <summary>StreamingAssets add-on id for on-screen full view ribbon dock (matches folder name and Python <c>ADDON_ID</c>).</summary>
 		public const string RibbonOnlyFullscreenAddonId = "RibbonOnlyFullscreen";
+		/// <summary>StreamingAssets add-on id for the top-right viewport orientation gizmo (axis balls + lantern overview).</summary>
+		public const string ViewportAxisGizmoAddonId = ViewportAxisGizmo_AddonBridge.AddonId;
 		public const string StableProjectorzGoAddonId = "StableProjectorzGO";
 		public const string NomadThemeAddonId = "NomadThemeSPZ";
+
+		/// <summary>
+		/// Add-ons whose entire UI lives on the main viewport, never on the right command-ribbon strip
+		/// (FULL/SRN dock, orientation gizmo). They must never get a tab or a parked panel shell.
+		/// </summary>
+		public static bool IsViewportOnlyAddon(string addonId) {
+			if (string.IsNullOrEmpty(addonId))
+				return false;
+			return string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal)
+			       || string.Equals(addonId, ViewportAxisGizmoAddonId, StringComparison.Ordinal);
+		}
 
 		/// <summary>True when the add-on is enabled in the manager (ribbon/Python load allowed).</summary>
 		public bool IsAddonEnabled(string addonId) {
@@ -1845,6 +1878,45 @@ namespace spz {
 			if (_ribbonOnlyDockEnsureCrtn != null)
 				StopCoroutine(_ribbonOnlyDockEnsureCrtn);
 			_ribbonOnlyDockEnsureCrtn = StartCoroutine(CoEnsureRibbonOnlyFullscreenViewportDock());
+		}
+
+		/// <summary>
+		/// <see cref="ViewportAxisGizmoAddonId"/>: run <c>spz.ui.attach_viewport_axis_gizmo</c> from Unity on the main
+		/// thread until the gizmo is mounted on the viewport. Python <c>register()</c> is optional (it may never run
+		/// when HTTP is off), so this path owns attach; no command-ribbon tab is involved.
+		/// </summary>
+		void StartEnsureViewportAxisGizmo() {
+			if (_axisGizmoEnsureCrtn != null)
+				StopCoroutine(_axisGizmoEnsureCrtn);
+			_axisGizmoEnsureCrtn = StartCoroutine(CoEnsureViewportAxisGizmo());
+		}
+
+		IEnumerator CoEnsureViewportAxisGizmo() {
+			try {
+				yield return null;
+				const int maxFrames = 600;
+				for (int f = 0; f < maxFrames; f++) {
+					if (this == null) {
+						yield break;
+					}
+					if (!IsAddonEnabled(ViewportAxisGizmoAddonId)) {
+						yield break;
+					}
+					if (ViewportAxisGizmo_UI.IsAnyMountedGizmo()) {
+						UnityEngine.Debug.Log(
+							"[Addon_MGR] ViewportAxisGizmoSPZ: orientation gizmo is mounted on the main viewport.");
+						yield break;
+					}
+					ViewportAxisGizmo_AddonBridge.TryAttachFromCore(null);
+					yield return null;
+				}
+				UnityEngine.Debug.LogWarning(
+					"[Addon_MGR] ViewportAxisGizmoSPZ: no visible orientation gizmo after "
+					+ maxFrames
+					+ " frames. The main viewport (MainViewport_UI) must be loaded; check the Console for attach errors.");
+			} finally {
+				_axisGizmoEnsureCrtn = null;
+			}
 		}
 
 		IEnumerator CoEnsureRibbonOnlyFullscreenViewportDock() {
@@ -1916,9 +1988,7 @@ namespace spz {
 			var addon = _registeredAddons[addonId];
 			addon.isEnabled = false;
 
-			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal)) {
-				RibbonViewportFullViewOnScreen_Toggle_UI.TeardownAllDocksForAddonDisabled();
-			}
+			TeardownViewportOnlyWidgets(addonId);
 
 			// Notify listeners as soon as the dial is off (Agent bridge / manager draft dirty), not after
 			// the multi-second HTTP unregister + UI destroy window.
@@ -1938,6 +2008,19 @@ namespace spz {
 			DestroyAddonUiShell(addonId);
 			UnityEngine.Debug.Log($"[Addon_MGR] Unloaded add-on: {addonId}");
 			onComplete?.Invoke();
+		}
+
+		/// <summary>
+		/// Viewport-only add-ons own uGUI that lives on the 3D view instead of a ribbon tab, so disabling them
+		/// must remove that widget explicitly — destroying the (non-existent) panel shell is not enough.
+		/// </summary>
+		void TeardownViewportOnlyWidgets(string addonId) {
+			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal)) {
+				RibbonViewportFullViewOnScreen_Toggle_UI.TeardownAllDocksForAddonDisabled();
+			}
+			if (string.Equals(addonId, ViewportAxisGizmoAddonId, StringComparison.Ordinal)) {
+				ViewportAxisGizmo_UI.TeardownAllForAddonDisabled();
+			}
 		}
 
 		IEnumerator CoPythonUnloadThenDestroyUi(string addonId, Action onComplete = null) {
@@ -2015,11 +2098,19 @@ namespace spz {
 		public void SyncRibbonTabWithEnabledState(string addonId) {
 			if (string.IsNullOrEmpty(addonId) || !_registeredAddons.ContainsKey(addonId))
 				return;
-			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal)) {
+			if (IsViewportOnlyAddon(addonId)) {
 				var ribbonOnly = AddonRibbonIntegration.ResolveCommandRibbon();
 				if (ribbonOnly != null)
 					ribbonOnly.RemoveAddonPanel(addonId);
-				if (IsAddonEnabled(addonId))
+				bool on = IsAddonEnabled(addonId);
+				if (string.Equals(addonId, ViewportAxisGizmoAddonId, StringComparison.Ordinal)) {
+					if (on)
+						StartEnsureViewportAxisGizmo();
+					else
+						ViewportAxisGizmo_UI.TeardownAllForAddonDisabled();
+					return;
+				}
+				if (on)
 					StartEnsureRibbonOnlyFullscreenViewportDock();
 				else
 					RibbonViewportFullViewOnScreen_Toggle_UI.TeardownAllDocksForAddonDisabled();
@@ -2079,13 +2170,16 @@ namespace spz {
 				if (SupportsNativeUiWithoutPython(addonId) && AddonUI_MGR.instance != null)
 					AddonUI_MGR.instance.EnsureNativeFallbackUiWhenPythonMissing(addonId, force: true);
 			}
-			// On-screen full view: must run from Unity (Python register may never run, or may race). No command-ribbon tab.
-			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal)) {
+			// Viewport-only add-ons must attach from Unity (Python register may never run, or may race). No command-ribbon tab.
+			if (IsViewportOnlyAddon(addonId)) {
 				var ribbon = AddonRibbonIntegration.ResolveCommandRibbon();
 				if (ribbon != null) {
 					ribbon.RemoveAddonPanel(addonId);
 				}
-				StartEnsureRibbonOnlyFullscreenViewportDock();
+				if (string.Equals(addonId, ViewportAxisGizmoAddonId, StringComparison.Ordinal))
+					StartEnsureViewportAxisGizmo();
+				else
+					StartEnsureRibbonOnlyFullscreenViewportDock();
 			}
 			OnAddonEnabledStateChanged?.Invoke(addonId);
 			// Persistence is owned by Add-on Manager "Save settings" (not every dial click).
@@ -2097,7 +2191,7 @@ namespace spz {
 		/// </summary>
 		void EnsureRibbonShellForEnabledAddon(string addonId) {
 			if (string.IsNullOrEmpty(addonId)) return;
-			if (string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal))
+			if (IsViewportOnlyAddon(addonId))
 				return;
 			if (!IsAddonEnabled(addonId) || !ShouldShowInCommandRibbon(addonId)) return;
 			if (TryCreateRibbonShellNow(addonId))
@@ -2167,7 +2261,7 @@ namespace spz {
 					yield break;
 				if (!IsAddonEnabled(addonId)
 				    || !ShouldShowInCommandRibbon(addonId)
-				    || string.Equals(addonId, RibbonOnlyFullscreenAddonId, StringComparison.Ordinal)) {
+				    || IsViewportOnlyAddon(addonId)) {
 					_ribbonShellEnsureById.Remove(addonId);
 					yield break;
 				}

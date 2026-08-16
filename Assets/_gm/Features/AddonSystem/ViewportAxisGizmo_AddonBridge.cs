@@ -76,8 +76,12 @@ namespace spz {
 			try {
 				ViewportAxisGizmo_Spec spec = SpecFromRpc(@params);
 				bool attached = ViewportAxisGizmo_UI.TryAttach(spec);
-				bool visible = ViewportAxisGizmo_UI.IsAnyVisibleGizmo();
+				// "Mounted" means the widget exists; "visible" means 3D navigation is on and the canvas is shown.
+				// Collapsing those two made UV-mode attaches look successful-and-on when the gizmo was alpha 0.
+				bool mounted = ViewportAxisGizmo_UI.IsAnyMountedGizmo();
+				bool visible = mounted && ViewportAxisGizmo_CameraOps.IsGizmoUsable();
 				r["success"] = attached;
+				r["mounted"] = mounted;
 				r["visible"] = visible;
 				r["host"] = "MainViewport_UI.innerViewportRect";
 				if (!attached) {
