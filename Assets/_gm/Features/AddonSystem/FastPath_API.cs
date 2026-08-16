@@ -1348,7 +1348,124 @@ namespace spz {
 			}
 #endif
 		}
-		
+
+		const string SpzGoZBrushBridgeShipSubpath = "Addons/StableProjectorzGO/ZBrushBridge";
+		const string SpzGoPainterBridgeShipSubpath = "Addons/StableProjectorzGO/PainterBridge";
+
+		public static string GetSpzGoZBrushBridgeShipDir() => GetSpzGoShipDir(SpzGoZBrushBridgeShipSubpath);
+		public static string GetSpzGoPainterBridgeShipDir() => GetSpzGoShipDir(SpzGoPainterBridgeShipSubpath);
+
+		static string GetSpzGoShipDir(string subpath) {
+			try {
+				return Path.GetFullPath(Path.Combine(Application.streamingAssetsPath, subpath));
+			} catch {
+				return null;
+			}
+		}
+
+		/// <summary>
+		/// User-writable ZBrush data folder (never Program Files). ZBrush 2026 keeps user data under
+		/// Public Documents (e.g. <c>C:\Users\Public\Documents\ZBrushData2026</c>), not the personal
+		/// Documents folder, so search there first, then personal Documents / home. Returns the newest
+		/// matching ZBrushData* root; empty when none is found.
+		/// </summary>
+		public static string FindZBrushUserScriptsDir() {
+			try {
+				string publicRoot = Environment.GetEnvironmentVariable("PUBLIC");
+				if (string.IsNullOrEmpty(publicRoot)) publicRoot = @"C:\Users\Public";
+				string publicDocs = Path.Combine(publicRoot, "Documents");
+				string docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+				string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+				var matches = new List<string>();
+				foreach (var root in new[] { publicDocs, docs, home }) {
+					if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) continue;
+					foreach (var dir in Directory.GetDirectories(root)) {
+						string name = Path.GetFileName(dir);
+						if (name.StartsWith("ZBrushData", StringComparison.OrdinalIgnoreCase)
+						    || name.IndexOf("zbrush", StringComparison.OrdinalIgnoreCase) >= 0)
+							matches.Add(dir);
+					}
+				}
+				return matches
+					.OrderByDescending(p => { try { return Directory.GetLastWriteTimeUtc(p); } catch { return DateTime.MinValue; } })
+					.FirstOrDefault() ?? "";
+			} catch (Exception ex) {
+				UnityEngine.Debug.LogWarning("[FastPath_API] FindZBrushUserScriptsDir: " + ex.Message);
+				return "";
+			}
+		}
+
+		/// <summary>User Substance Painter python/plugins folder (Documents; never Program Files).</summary>
+		public static string FindPainterPluginsDir() {
+			try {
+				string docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+				if (string.IsNullOrEmpty(docs)) return "";
+				var candidates = new[] {
+					Path.Combine(docs, "Adobe", "Adobe Substance 3D Painter", "python", "plugins"),
+					Path.Combine(docs, "Allegorithmic", "Substance Painter", "python", "plugins"),
+					Path.Combine(docs, "Substance 3D Painter", "python", "plugins"),
+				};
+				foreach (var c in candidates) {
+					// The two-levels-up ("...Painter") existing means Painter created its user tree.
+					string painterRoot = Path.GetDirectoryName(Path.GetDirectoryName(c));
+					if (!string.IsNullOrEmpty(painterRoot) && Directory.Exists(painterRoot))
+						return c;
+				}
+				return candidates[0];
+			} catch (Exception ex) {
+				UnityEngine.Debug.LogWarning("[FastPath_API] FindPainterPluginsDir: " + ex.Message);
+				return "";
+			}
+		}
+
+		/// <summary>
+		/// Copy a host bridge's ship files into a user-writable target and record the install marker.
+		/// Pure file copy (no DCC subprocess): ZBrush/Painter both expose per-user script/plugin folders,
+		/// so the logo lights up only after a real copy the probe can later re-verify (R13).
+		/// </summary>
+		public static bool TryInstallSpzGoBridgeByCopy(string hostId, string shipDir, string destDir,
+			string[] shipFiles, string destSubdir, out string message) {
+			message = null;
+			if (string.IsNullOrEmpty(shipDir) || !Directory.Exists(shipDir)) {
+				message = "bridge ship folder missing under StreamingAssets";
+				return false;
+			}
+			if (string.IsNullOrEmpty(destDir)) {
+				message = "could not resolve a user install folder for this host";
+				return false;
+			}
+			string dest = string.IsNullOrEmpty(destSubdir) ? destDir : Path.Combine(destDir, destSubdir);
+			try {
+				Directory.CreateDirectory(dest);
+				foreach (var name in shipFiles) {
+					string s = Path.Combine(shipDir, name);
+					if (!File.Exists(s)) {
+						message = "missing ship file " + name;
+						return false;
+					}
+					File.Copy(s, Path.Combine(dest, name), overwrite: true);
+				}
+			} catch (Exception e) {
+				message = "copy failed: " + e.Message;
+				return false;
+			}
+			SpzGoBridgeInstall.MarkInstalled(hostId, dest);
+			message = "SPZ_GO_INSTALL_OK: " + dest;
+			return true;
+		}
+
+		public bool TryInstallSpzGoZBrushBridge(out string message) {
+			return TryInstallSpzGoBridgeByCopy(
+				SpzGoHosts.ZBrushId, GetSpzGoZBrushBridgeShipDir(), FindZBrushUserScriptsDir(),
+				new[] { "spz_zbrush_bridge.py", "spz_http.py" }, "SpzGoBridge", out message);
+		}
+
+		public bool TryInstallSpzGoPainterBridge(out string message) {
+			return TryInstallSpzGoBridgeByCopy(
+				SpzGoHosts.PainterId, GetSpzGoPainterBridgeShipDir(), FindPainterPluginsDir(),
+				new[] { "spz_painter_plugin.py", "spz_http.py" }, null, out message);
+		}
+
 		/// <summary>
 		/// Export projection textures
 		/// </summary>
