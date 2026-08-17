@@ -56,7 +56,7 @@ namespace spz {
 	                               myGenData.kind == GenerationData_Kind.SD_Backgrounds;
 
 	        bool full_visibility = myGenData.kind == GenerationData_Kind.UvTextures_FromFile ||
-	                               myGenData.kind == GenerationData_Kind.UvNormals_FromFile ||
+	                               myGenData.kind == GenerationData_Kind.UvPaintedBrush ||
 	                               myGenData.kind == GenerationData_Kind.UvNormals_FromFile ||
 	                               myGenData.kind == GenerationData_Kind.SD_Backgrounds;
         
