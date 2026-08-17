@@ -51,16 +51,25 @@ public sealed class SpzGoHostSectionContractTests {
 
 		_panel = new GameObject("AddonPanel_StableProjectorzGO_SPZ GO");
 		_panel.transform.SetParent(_host.transform, false);
-		_panel.AddComponent<RectTransform>();
+		var panelRt = _panel.AddComponent<RectTransform>();
+		panelRt.sizeDelta = new Vector2(320f, 0f);
 		var panelLayout = _panel.AddComponent<VerticalLayoutGroup>();
+		panelLayout.spacing = 6f;
 		panelLayout.childControlHeight = false;
 		panelLayout.childControlWidth = true;
+		panelLayout.childForceExpandHeight = false;
+		panelLayout.childForceExpandWidth = true;
+		var panelFitter = _panel.AddComponent<ContentSizeFitter>();
+		panelFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+		panelFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 		((List<GameObject>)dict[AddonId]).Add(_panel);
 
 		foreach (var host in SpzGoHosts.All) {
 			string sectionId = _mgr.AddHostSection(AddonId, _panel.GetInstanceID().ToString(), host.Id);
 			Assert.That(sectionId, Is.Not.Null.And.Not.Empty, "section must build for " + host.Id);
 		}
+		LayoutRebuilder.ForceRebuildLayoutImmediate(panelRt);
+		Canvas.ForceUpdateCanvases();
 	}
 
 	[TearDown]
@@ -190,6 +199,53 @@ public sealed class SpzGoHostSectionContractTests {
 		Assert.That(SettingsContent(SpzGoHosts.BlenderId).gameObject.activeSelf, Is.False);
 		Assert.That(SpzGoHostPrefs.GetSettingsOpen(SpzGoHosts.ZBrushId), Is.True);
 		Assert.That(SpzGoHostPrefs.GetSettingsOpen(SpzGoHosts.BlenderId), Is.False);
+	}
+
+	[Test]
+	public void SettingsHeader_UsesAddonManagerStyleChevronNotUnicodeOrCheckbox() {
+		foreach (var host in SpzGoHosts.All) {
+			var header = FindDescendant(Section(host.Id),
+				"FoldoutHeader_" + SpzGoHostSection.SettingsLabel);
+			Assert.That(header, Is.Not.Null, host.Id);
+			var chevron = header.Find("ExpandChevron");
+			Assert.That(chevron, Is.Not.Null, host.Id + " needs the Addon Manager expand chevron");
+			var arrow = chevron.Find("Arrow");
+			Assert.That(arrow, Is.Not.Null, host.Id + " chevron must carry the image arrow");
+			var arrowImg = arrow.GetComponent<Image>();
+			Assert.That(arrowImg, Is.Not.Null);
+			Assert.That(arrowImg.sprite, Is.Not.Null, host.Id + " arrow needs a real sprite, not a TMP glyph");
+			var title = header.Find("Text").GetComponent<TMPro.TextMeshProUGUI>();
+			Assert.That(title.text, Is.EqualTo(SpzGoHostSection.SettingsLabel),
+				"label must be plain text — unicode ▸/▾ render as missing boxes on this TMP font");
+			Assert.That(title.text, Does.Not.Contain("▾").And.Not.Contain("▸"));
+		}
+	}
+
+	[Test]
+	public void OpeningSettings_PushesTheNextHostSectionDownInsteadOfStacking() {
+		// Nested ContentSizeFitters used to leave the open Settings body at zero claimed height, so the
+		// next host's logo drew through the dropdowns. After open, Blender's section must own enough
+		// vertical space that ZBrush starts below it.
+		var blender = Section(SpzGoHosts.BlenderId) as RectTransform;
+		var zbrush = Section(SpzGoHosts.ZBrushId) as RectTransform;
+		Assert.That(blender, Is.Not.Null);
+		Assert.That(zbrush, Is.Not.Null);
+
+		float closedPreferred = LayoutUtility.GetPreferredHeight(blender);
+		var header = FindDescendant(blender, "FoldoutHeader_" + SpzGoHostSection.SettingsLabel);
+		header.GetComponent<Button>().onClick.Invoke();
+
+		float openPreferred = LayoutUtility.GetPreferredHeight(blender);
+		Assert.That(openPreferred, Is.GreaterThan(closedPreferred + 40f),
+			"open Settings must grow the host section past logo+modes+header alone");
+
+		var corners = new Vector3[4];
+		blender.GetWorldCorners(corners);
+		float blenderBottom = corners[0].y;
+		zbrush.GetWorldCorners(corners);
+		float zbrushTop = corners[1].y;
+		Assert.That(zbrushTop, Is.LessThanOrEqualTo(blenderBottom + 0.5f),
+			"ZBrush must start at or below Blender's open bottom — not overlap its Settings body");
 	}
 
 	[Test]
