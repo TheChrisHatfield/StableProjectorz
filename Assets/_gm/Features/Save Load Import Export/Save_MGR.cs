@@ -375,6 +375,29 @@ namespace spz {
 	    /// Sidecar next to exchange FBX so Blender's SPZ GO watcher can auto-import after Export.
 	    /// Name: <c>{basename}.spz_go_ready</c> (e.g. from_spz.spz_go_ready).
 	    /// </summary>
+	    public static string ResolveSpzGoExchangeReadyStampPath( string meshFilePath ){
+		    if( string.IsNullOrEmpty( meshFilePath ) ) return null;
+		    try {
+			    // Prefer the FBX path actually written (export may normalize extension).
+			    string stampMeshPath = meshFilePath;
+			    var mh = ModelsHandler_3D.instance;
+			    if( mh != null && !string.IsNullOrEmpty( mh._path_recentlyExported ) )
+				    stampMeshPath = mh._path_recentlyExported;
+			    string dir = Path.GetDirectoryName( stampMeshPath );
+			    string baseName = Path.GetFileNameWithoutExtension( stampMeshPath );
+			    if( string.IsNullOrEmpty( dir ) || string.IsNullOrEmpty( baseName ) ) return null;
+			    return Path.Combine( dir, baseName + ".spz_go_ready" );
+		    } catch( Exception ex ) {
+			    UnityEngine.Debug.LogWarning( "[Save_MGR] SPZ GO ready stamp path: " + ex.Message );
+			    return null;
+		    }
+	    }
+
+	    public static bool SpzGoExchangeReadyStampExists( string meshFilePath ){
+		    string stamp = ResolveSpzGoExchangeReadyStampPath( meshFilePath );
+		    return !string.IsNullOrEmpty( stamp ) && File.Exists( stamp );
+	    }
+
 	    public static void TryDeleteSpzGoExchangeReadyStamp( string meshFilePath ){
 		    if( string.IsNullOrEmpty( meshFilePath ) ) return;
 		    try {

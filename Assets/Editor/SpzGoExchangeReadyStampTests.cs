@@ -22,14 +22,23 @@ public sealed class SpzGoExchangeReadyStampTests {
 		int stampCall = src.IndexOf("TryWriteSpzGoExchangeReadyStamp( meshPathForStamp )",
 			System.StringComparison.Ordinal);
 		Assert.That(stampCall, Is.GreaterThan(0));
-		int owningOnComplete = src.LastIndexOf("void OnComplete()", stampCall, System.StringComparison.Ordinal);
+		int owningOnComplete = src.LastIndexOf("void OnComplete( bool texturesWritten )", stampCall,
+			System.StringComparison.Ordinal);
 		Assert.That(owningOnComplete, Is.GreaterThan(0),
 			"Ready stamp must be written from texture OnComplete, not before maps finish.");
+		Assert.That(src.Substring(owningOnComplete, stampCall - owningOnComplete),
+			Does.Contain("if( texturesWritten )"),
+			"Stamp must only land when the texture stage actually ran");
 		int clearSaving = src.IndexOf("_isSaving = false;", stampCall, System.StringComparison.Ordinal);
 		Assert.That(clearSaving, Is.GreaterThan(stampCall),
 			"Ready stamp must be written before _isSaving clears, or waiters race a missing sidecar.");
-		Assert.That(src.Substring(stampCall, clearSaving - stampCall), Does.Not.Contain("}"),
-			"The busy-clear must sit in the same OnComplete body as the stamp write.");
+		int methodEnd = src.IndexOf("return true;", clearSaving, System.StringComparison.Ordinal);
+		Assert.That(methodEnd, Is.GreaterThan(clearSaving));
+		Assert.That(src.Substring(owningOnComplete, methodEnd - owningOnComplete),
+			Does.Contain("_isSaving = false;"),
+			"busy-clear must live in the same OnComplete as the stamp");
+		Assert.That(src, Does.Contain("SpzGoExchangeReadyStampExists"),
+			"HTTP/TCP waiters must share one stamp-exists check");
 		Assert.That(src, Does.Contain("TryDeleteSpzGoExchangeReadyStamp"),
 			"Export must clear a stale ready stamp before rewriting the exchange FBX.");
 		int deleteAt = src.IndexOf("TryDeleteSpzGoExchangeReadyStamp( meshFilePath )");
