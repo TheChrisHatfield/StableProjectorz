@@ -199,6 +199,11 @@ namespace spz {
 		/// <summary> Same value as <see cref="CreatePanelIfNeeded"/> overlay canvas. File browser must sort above this while open. </summary>
 		const int AddonManagerCanvasSortOrder = 32767;
 
+		const string ListScrollbarName = "ScrollbarVertical";
+		const float ListScrollbarWidth = 12f;
+		/// <summary>Vertical bar for the add-on list (see <see cref="EnsureListScrollbar"/>).</summary>
+		Scrollbar _listScrollbar;
+
 		static readonly Color RefBgModalDim = new Color(0f, 0f, 0f, 0.9f);
 		Color _statusOk = new Color(34f / 255f, 197f / 255f, 94f / 255f, 1f);
 		Color _statusFail = new Color(239f / 255f, 68f / 255f, 68f / 255f, 1f);
@@ -956,6 +961,10 @@ namespace spz {
 		contentSizeFitter.horizontalFit = UnityEngine.UI.ContentSizeFitter.FitMode.Unconstrained;
 		scrollView.viewport = viewportRect;
 		scrollView.content = contentRect;
+		// ScrollRect alone gives wheel scrolling only — no draggable bar, and no hint that the list
+		// continues below the clip edge. Build + wire the vertical bar here (and in OpenPanel for
+		// panels created before this existed).
+		EnsureListScrollbar(scrollView);
 		_addonsListParent = contentRect;
 		
 		_filterAllToggle.SetIsOnWithoutNotify(true);
@@ -1199,6 +1208,9 @@ namespace spz {
 				_hidViewportStatusForModal = true;
 			}
 			
+			// Panels built before the scrollbar existed (or authored ones) still need the bar wired.
+			EnsureListScrollbarFromPanel();
+
 			try {
 				Canvas.ForceUpdateCanvases();
 				FitStichPanelToViewport();
@@ -1298,7 +1310,7 @@ namespace spz {
 					else
 						ShowStatus($"Load finished for {requested} add-on(s).", true);
 					string loadStatus = _statusText != null ? _statusText.text : null;
-					bool loadOk = _lastStatusIsSuccess;
+					bool loadOk = _lastStatusIsSuccess ?? false;
 					RefreshAddonsList();
 					if (!string.IsNullOrEmpty(loadStatus))
 						ShowStatus(loadStatus, loadOk);
@@ -1891,6 +1903,14 @@ namespace spz {
 					listVlg.childForceExpandHeight = false;
 				}
 			}
+			if (_listScrollbar != null) {
+				// ApplyBoundChromeGraphic self-silos (restores authored on builtin default).
+				var track = _listScrollbar.GetComponent<Image>();
+				if (track != null)
+					SpzUiThemeOps.ApplyBoundChromeGraphic(track, new Color(t.fieldBg.r, t.fieldBg.g, t.fieldBg.b, 0.85f));
+				if (_listScrollbar.targetGraphic is Image handleImg)
+					SpzUiThemeOps.ApplyBoundChromeGraphic(handleImg, t.controlBg);
+			}
 			foreach (var item in _addonUIItems.Values) {
 				if (item == null) continue;
 				ThemeAddonListItem(item, t);
@@ -2454,7 +2474,7 @@ namespace spz {
 			ApplyStatusDialVisual(toggle, showOn);
 			var ribbonToggle = FindChildRecursive(item.transform, "ShowInRibbonToggle")?.GetComponent<Toggle>();
 			if (ribbonToggle != null) {
-				bool ribbonOnly = string.Equals(addonId, Addon_MGR.RibbonOnlyFullscreenAddonId, StringComparison.Ordinal);
+				bool ribbonOnly = Addon_MGR.IsViewportOnlyAddon(addonId);
 				bool showRibbon = !ribbonOnly && Addon_MGR.instance.ShouldShowInCommandRibbon(addonId);
 				ribbonToggle.SetIsOnWithoutNotify(showRibbon);
 				if (ribbonToggle.gameObject.activeSelf)
@@ -3026,7 +3046,8 @@ namespace spz {
 			
 			const float statusSize = 14f;
 			const float statusHitPad = 28f;
-			bool ribbonOnly = string.Equals(addonId, Addon_MGR.RibbonOnlyFullscreenAddonId, StringComparison.Ordinal);
+			bool ribbonOnly = Addon_MGR.IsViewportOnlyAddon(addonId);
+			bool isAxisGizmoAddon = string.Equals(addonId, Addon_MGR.ViewportAxisGizmoAddonId, StringComparison.Ordinal);
 			bool showInRibbon = !ribbonOnly
 				&& (Addon_MGR.instance == null || Addon_MGR.instance.ShouldShowInCommandRibbon(addonId));
 
@@ -3341,10 +3362,11 @@ namespace spz {
 			ribbonLabelLE.minWidth = 140f;
 			ribbonLabelLE.preferredHeight = 28f;
 			ribbonLabelLE.flexibleHeight = 0f;
+			string viewportOnlyCopy = isAxisGizmoAddon
+				? "Viewport orientation gizmo only — no Command Ribbon tab"
+				: "Viewport Gen Art dock only — no Command Ribbon tab";
 			var ribbonLabel = ribbonLabelObj.AddComponent<TextMeshProUGUI>();
-			ribbonLabel.text = ribbonOnly
-				? "Viewport Gen Art dock only — no Command Ribbon tab"
-				: "Show in Command Ribbon";
+			ribbonLabel.text = ribbonOnly ? viewportOnlyCopy : "Show in Command Ribbon";
 			ribbonLabel.fontSize = 13f;
 			ribbonLabel.color = new Color(0.78f, 0.78f, 0.82f, 1f);
 			ribbonLabel.alignment = TextAlignmentOptions.MidlineLeft;
@@ -3355,7 +3377,9 @@ namespace spz {
 				ribbonToggleObj.SetActive(false);
 				ribbonLabel.raycastTarget = true;
 				AttachTooltip(ribbonLabelObj,
-					"RibbonOnlyFullscreen uses the viewport Gen Art dock — it never appears as a Command Ribbon tab.");
+					isAxisGizmoAddon
+						? "ViewportAxisGizmoSPZ draws the orientation gizmo on the 3D view — it never appears as a Command Ribbon tab."
+						: "RibbonOnlyFullscreen uses the viewport Gen Art dock — it never appears as a Command Ribbon tab.");
 			} else {
 				AttachTooltip(ribbonToggleObj,
 					"When on, an enabled add-on shows a Command Ribbon tab. When off, it stays active but the tab is hidden.");
@@ -3463,12 +3487,16 @@ namespace spz {
 					bool showRibbon = Addon_MGR.instance.ShouldShowInCommandRibbon(id);
 					ShowStatus(isOn
 						? (ribbonOnly
-							? $"Enabled '{id}' — viewport dock on. {KeepNextLaunchHint()}"
+							? (isAxisGizmoAddon
+								? $"Enabled '{id}' — viewport orientation gizmo on. {KeepNextLaunchHint()}"
+								: $"Enabled '{id}' — viewport dock on. {KeepNextLaunchHint()}")
 							: showRibbon
 								? $"Enabled '{id}' — ribbon tab on. {KeepNextLaunchHint()}"
 								: $"Enabled '{id}' — active, ribbon hidden. {KeepNextLaunchHint()}")
 						: (ribbonOnly
-							? $"Disabled '{id}' — viewport dock off. {KeepNextLaunchHint()}"
+							? (isAxisGizmoAddon
+								? $"Disabled '{id}' — viewport orientation gizmo off. {KeepNextLaunchHint()}"
+								: $"Disabled '{id}' — viewport dock off. {KeepNextLaunchHint()}")
 							: $"Disabled '{id}' — unloaded. {KeepNextLaunchHint()}"), true);
 				} finally {
 					_suppressEnabledListRefresh = false;
@@ -3587,6 +3615,92 @@ namespace spz {
 			UnityEngine.Debug.Log($"[AddonManager_UI] {message}");
 		}
 		
+		/// <summary>
+		/// Add-on list had a <see cref="ScrollRect"/> but no scrollbar was ever built or assigned, so the
+		/// only way to reach add-ons below the clip edge was the mouse wheel (and nothing showed that the
+		/// list continued). Creates the bar when missing and wires it to <paramref name="scroll"/>.
+		/// Connectivity: never assign one half — the bar is only kept when handle wiring also succeeds.
+		/// </summary>
+		/// <summary>Resolve the list ScrollRect from the live panel and make sure its scrollbar is wired.</summary>
+		void EnsureListScrollbarFromPanel() {
+			if (_listScrollbar != null && _listScrollbar.handleRect != null) return;
+			ScrollRect scroll = _addonsListParent != null
+				? _addonsListParent.GetComponentInParent<ScrollRect>()
+				: null;
+			if (scroll == null && _panel != null)
+				scroll = _panel.GetComponentInChildren<ScrollRect>(true);
+			if (scroll != null)
+				EnsureListScrollbar(scroll);
+		}
+
+		Scrollbar EnsureListScrollbar(ScrollRect scroll) {
+			if (scroll == null) return null;
+			Scrollbar bar = scroll.verticalScrollbar;
+			if (bar == null) {
+				Transform existing = scroll.transform.Find(ListScrollbarName);
+				bar = existing != null ? existing.GetComponent<Scrollbar>() : null;
+			}
+			if (bar == null)
+				bar = BuildVerticalScrollbar(scroll.transform);
+			if (bar == null || bar.handleRect == null) {
+				Debug.LogWarning("[AddonManager_UI] Could not build the add-on list scrollbar — wheel scrolling still works.");
+				return null;
+			}
+			scroll.verticalScrollbar = bar;
+			// Expand viewport when hidden so a short list does not keep a dead gutter.
+			scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHideAndExpandViewport;
+			scroll.verticalScrollbarSpacing = 0f;
+			_listScrollbar = bar;
+			return bar;
+		}
+
+		/// <summary>Standard Unity scrollbar hierarchy (bar → Sliding Area → Handle), authored dark chrome.</summary>
+		static Scrollbar BuildVerticalScrollbar(Transform parent) {
+			if (parent == null) return null;
+			var barObj = new GameObject(ListScrollbarName);
+			barObj.layer = parent.gameObject.layer;
+			barObj.transform.SetParent(parent, false);
+			var barRect = barObj.AddComponent<RectTransform>();
+			barRect.anchorMin = new Vector2(1f, 0f);
+			barRect.anchorMax = new Vector2(1f, 1f);
+			barRect.pivot = new Vector2(1f, 1f);
+			barRect.sizeDelta = new Vector2(ListScrollbarWidth, 0f);
+			barRect.anchoredPosition = Vector2.zero;
+			var trackImg = barObj.AddComponent<Image>();
+			AssignSolidFaceThenMarkRounded(trackImg);
+			trackImg.color = new Color(30f / 255f, 30f / 255f, 33f / 255f, 0.85f);
+			trackImg.raycastTarget = true;
+
+			var areaObj = new GameObject("Sliding Area");
+			areaObj.layer = barObj.layer;
+			areaObj.transform.SetParent(barObj.transform, false);
+			var areaRect = areaObj.AddComponent<RectTransform>();
+			areaRect.anchorMin = Vector2.zero;
+			areaRect.anchorMax = Vector2.one;
+			areaRect.sizeDelta = Vector2.zero;
+			areaRect.anchoredPosition = Vector2.zero;
+
+			var handleObj = new GameObject("Handle");
+			handleObj.layer = barObj.layer;
+			handleObj.transform.SetParent(areaObj.transform, false);
+			var handleRect = handleObj.AddComponent<RectTransform>();
+			handleRect.anchorMin = Vector2.zero;
+			handleRect.anchorMax = Vector2.one;
+			handleRect.sizeDelta = Vector2.zero;
+			handleRect.anchoredPosition = Vector2.zero;
+			var handleImg = handleObj.AddComponent<Image>();
+			AssignSolidFaceThenMarkRounded(handleImg);
+			handleImg.color = new Color(88f / 255f, 88f / 255f, 96f / 255f, 0.95f);
+			handleImg.raycastTarget = true;
+
+			var bar = barObj.AddComponent<Scrollbar>();
+			bar.direction = Scrollbar.Direction.BottomToTop;
+			bar.handleRect = handleRect;
+			bar.targetGraphic = handleImg;
+			bar.transition = Selectable.Transition.ColorTint;
+			return bar;
+		}
+
 		/// <summary>
 		/// Cleanup when object is destroyed
 		/// </summary>
