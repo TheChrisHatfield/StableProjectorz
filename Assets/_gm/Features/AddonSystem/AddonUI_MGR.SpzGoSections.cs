@@ -422,9 +422,17 @@ namespace spz {
 				SpzGoStatusLine("Could not write import request for " + host.DisplayName, false);
 				return;
 			}
-			SpzGoStatusLine(
-				$"Requested current model from {host.DisplayName} — it pushes when {host.DisplayName} is open with SPZ GO",
-				true);
+			if (host.AnswersPullAutomatically) {
+				SpzGoStatusLine(
+					$"Requested current model from {host.DisplayName} — it pushes when {host.DisplayName} is open with SPZ GO",
+					true);
+			} else {
+				// ZBrush has no exchange watcher: the pull sits until the user presses Answer SPZ in
+				// ZPlugin:SPZ GO. Claiming "it pushes when open" here was a false success.
+				SpzGoStatusLine(
+					$"Requested from {host.DisplayName} — press Answer SPZ request in ZPlugin:SPZ GO",
+					true);
+			}
 		}
 
 		static string ResolveDataDirOrNull() {
