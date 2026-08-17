@@ -715,8 +715,9 @@ namespace spz {
 					if (body?["mesh_filepath"] == null) {
 						return new JObject { ["error"] = "JSON body {\"mesh_filepath\": ...} required" };
 					}
+					string meshFilePath = body["mesh_filepath"].ToString();
 					var started = ExecuteJsonRpcSync("spz.cmd.export_3d_with_textures_to_path", new JObject {
-						["mesh_filepath"] = body["mesh_filepath"]
+						["mesh_filepath"] = meshFilePath
 					});
 					bool ok = started?["success"]?.ToObject<bool>() ?? false;
 					if (!ok) {
@@ -726,6 +727,15 @@ namespace spz {
 					// match, or Blender imports the FBX before texture encode finishes.
 					if (!WaitForProjectSaveIdle_offMainThread(timeoutSec: 300f)) {
 						return new JObject { ["success"] = false, ["error"] = "export to path timed out waiting for texture write" };
+					}
+					// TCP fails closed when .spz_go_ready is missing after idle (textures bailed). HTTP used
+					// to return the original "started" success anyway — DCC bridges then auto-imported a
+					// mesh SPZ deliberately did not mark ready.
+					if (!Save_MGR.SpzGoExchangeReadyStampExists(meshFilePath)) {
+						return new JObject {
+							["success"] = false,
+							["error"] = "export to path failed (ready stamp missing for DCC auto-import)"
+						};
 					}
 					return ConvertToRestResponse(started);
 				}

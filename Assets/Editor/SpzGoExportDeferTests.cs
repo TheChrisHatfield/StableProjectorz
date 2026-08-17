@@ -91,4 +91,25 @@ public sealed class SpzGoExportDeferTests {
 			"Projection/view exports must not reuse the dialog mesh-written check.");
 		Assert.That(meshRequireAt, Is.GreaterThan(texOnlyAt));
 	}
+
+	[Test]
+	public void HttpExportToPath_FailsClosedWhenReadyStampMissing() {
+		// TCP already fails closed on a missing .spz_go_ready after save idle. HTTP must match, or
+		// ZBrush/Painter/Blender bridges get success:true and load a mesh SPZ refused to mark ready.
+		string path = System.IO.Path.Combine(
+			System.IO.Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "Addon_HttpServer.cs");
+		string src = System.IO.File.ReadAllText(path);
+		int i = src.IndexOf("case \"3d_to_path\"", System.StringComparison.Ordinal);
+		Assert.That(i, Is.GreaterThanOrEqualTo(0));
+		int j = src.IndexOf("case \"projection_textures\"", i, System.StringComparison.Ordinal);
+		Assert.That(j, Is.GreaterThan(i));
+		string body = src.Substring(i, j - i);
+		Assert.That(body, Does.Contain("WaitForProjectSaveIdle_offMainThread"),
+			"HTTP must wait for texture write like TCP");
+		Assert.That(body, Does.Contain("SpzGoExchangeReadyStampExists"),
+			"HTTP must require the ready stamp after idle — not return the original started success");
+		Assert.That(body, Does.Contain("ready stamp missing"),
+			"failure must say why auto-import must not run");
+	}
 }
