@@ -1409,7 +1409,11 @@ namespace spz {
 				.FirstOrDefault() ?? "";
 		}
 
-		/// <summary>User Substance Painter python/plugins folder (Documents; never Program Files).</summary>
+		/// <summary>
+		/// User Substance Painter python/plugins folder (Documents; never Program Files). Empty when
+		/// Painter has never created its user tree — inventing Documents/Adobe/... and marking
+		/// installed would light the logo for a folder Painter never scans.
+		/// </summary>
 		public static string FindPainterPluginsDir() {
 			try {
 				string docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
@@ -1425,7 +1429,7 @@ namespace spz {
 					if (!string.IsNullOrEmpty(painterRoot) && Directory.Exists(painterRoot))
 						return c;
 				}
-				return candidates[0];
+				return "";
 			} catch (Exception ex) {
 				UnityEngine.Debug.LogWarning("[FastPath_API] FindPainterPluginsDir: " + ex.Message);
 				return "";

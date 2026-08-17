@@ -118,6 +118,14 @@ class ZBrushPainterBridgeContractTests(unittest.TestCase):
         self.assertIn("PUBLIC", body)
         self.assertIn("ZBrushData", body)
 
+    def test_painter_resolver_does_not_invent_plugins_dir(self):
+        py = (EXT / "Painter_SpzBridge" / "install_into_painter.py").read_text(encoding="utf-8")
+        self.assertNotIn("return roots[0]", py)
+        self.assertIn('return ""', py)
+        cs = FASTPATH_CS.read_text(encoding="utf-8")
+        body = cs.split("FindPainterPluginsDir")[1].split("TryInstallSpzGoBridgeByCopy")[0]
+        self.assertNotIn("return candidates[0]", body)
+
     def test_spz_side_installers_and_readiness_wired(self):
         fp = FASTPATH_CS.read_text(encoding="utf-8")
         self.assertIn("TryInstallSpzGoZBrushBridge", fp)

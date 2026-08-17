@@ -119,6 +119,21 @@ namespace spz.EditorTests {
 		}
 
 		[Test]
+		public void PainterPluginsResolver_DoesNotInventAFolderWhenPainterIsMissing() {
+			string path = Path.Combine(Directory.GetCurrentDirectory(),
+				"Assets", "_gm", "Features", "AddonSystem", "FastPath_API.cs");
+			string src = File.ReadAllText(path);
+			int i = src.IndexOf("public static string FindPainterPluginsDir()", System.StringComparison.Ordinal);
+			Assert.That(i, Is.GreaterThan(0));
+			int j = src.IndexOf("public static bool TryInstallSpzGoBridgeByCopy", i, System.StringComparison.Ordinal);
+			string body = src.Substring(i, j - i);
+			Assert.That(body, Does.Not.Contain("return candidates[0]"),
+				"must not invent Documents/Adobe/... when Painter never created its user tree");
+			Assert.That(body, Does.Contain("return \"\";"),
+				"empty string fails install closed so the logo stays not-ready");
+		}
+
+		[Test]
 		public void UnsetProbe_LeavesStubsNotReady() {
 			SpzGoHosts.BridgeInstalledProbe = null;
 			Assert.That(SpzGoHosts.IsBridgeReady(SpzGoHosts.ZBrushId), Is.False,
