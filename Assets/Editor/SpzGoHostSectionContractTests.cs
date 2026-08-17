@@ -366,6 +366,20 @@ public sealed class SpzGoHostSectionContractTests {
 	}
 
 	[Test]
+	public void ZBrushImportRequest_DoesNotClaimAutoPush() {
+		string path = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "AddonUI_MGR.SpzGoSections.cs");
+		string src = System.IO.File.ReadAllText(path);
+		Assert.That(SpzGoHosts.ZBrush.AnswersPullAutomatically, Is.False,
+			"ZBrush answers only via the Answer SPZ button — no exchange watcher");
+		Assert.That(SpzGoHosts.Blender.AnswersPullAutomatically, Is.True);
+		Assert.That(src, Does.Contain("AnswersPullAutomatically"),
+			"Import status must branch on whether the host auto-answers");
+		Assert.That(src, Does.Contain("Answer SPZ request"),
+			"ZBrush Import must tell the user which in-DCC button to press");
+	}
+
+	[Test]
 	public void SettingsStateSurvivesARebuiltPanel() {
 		SpzGoHostPrefs.SetSettingsOpen(SpzGoHosts.PainterId, true);
 		SpzGoHostPrefs.SetMode(SpzGoHosts.PainterId, SpzGoMode.Import);
