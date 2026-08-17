@@ -1727,7 +1727,9 @@ namespace spz {
 
 		/// <summary>Path fields are resolved by name (Import / Export); Blender.exe is optional and demoted.</summary>
 		void SpzGoRunHeadlessImportOrExportFromPanel(string addonId, string panelId, string callbackName, bool isImport) {
-			bool okNative = TrySpzGoRunHeadlessImportOrExportFromPanel(panelId, isImport);
+			string hostId = SpzGoHostSection.HostIdFromCallback(callbackName)
+			                ?? SpzGoHostSection.HostIdForWidget(FindUIElement(panelId)?.transform);
+			bool okNative = TrySpzGoRunHeadlessImportOrExportFromPanel(panelId, isImport, hostId);
 			if (okNative) {
 				return;
 			}
@@ -1743,7 +1745,7 @@ namespace spz {
 			SendCallbackToPython(addonId, callbackName);
 		}
 
-		bool TrySpzGoRunHeadlessImportOrExportFromPanel(string panelId, bool isImport) {
+		bool TrySpzGoRunHeadlessImportOrExportFromPanel(string panelId, bool isImport, string hostId = null) {
 			var panel = FindUIElement(panelId);
 			if (panel == null) {
 				UnityEngine.Debug.LogWarning($"[AddonUI_MGR] SPZ GO: panel {panelId} not found for headless {(isImport ? "import" : "export")}.");
@@ -1813,7 +1815,7 @@ namespace spz {
 				SpzGoStatusLine("Export failed (valid path / API ready?)", false);
 				return false;
 			}
-			StartCoroutine(CoSpzGoFinishExportWhenSaveIdle(path));
+			StartCoroutine(CoSpzGoFinishExportWhenSaveIdle(path, hostId));
 			return true;
 		}
 
@@ -1821,7 +1823,7 @@ namespace spz {
 		/// After native headless export starts, wait for texture pipeline before claiming success
 		/// (same contract as deferred TCP <c>export_3d_with_textures_to_path</c>).
 		/// </summary>
-		IEnumerator CoSpzGoFinishExportWhenSaveIdle(string exportMeshPath) {
+		IEnumerator CoSpzGoFinishExportWhenSaveIdle(string exportMeshPath, string hostId = null) {
 			SpzGoStatusLine("Export: writing textures…", true);
 			const float timeoutSec = 300f;
 			float elapsed = 0f;
@@ -1840,30 +1842,19 @@ namespace spz {
 
 			bool stampOk = false;
 			if (saveIdle) {
-				string stampMeshPath = exportMeshPath;
-				var mhExport = ModelsHandler_3D.instance;
-				if (mhExport != null && !string.IsNullOrEmpty(mhExport._path_recentlyExported))
-					stampMeshPath = mhExport._path_recentlyExported;
-				if (!string.IsNullOrEmpty(stampMeshPath)) {
-					try {
-						string stamp = Path.Combine(
-							Path.GetDirectoryName(stampMeshPath) ?? "",
-							Path.GetFileNameWithoutExtension(stampMeshPath) + ".spz_go_ready");
-						stampOk = File.Exists(stamp);
-						if (!stampOk)
-							UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO native export: ready stamp missing — Blender auto-import will not fire: " + stamp);
-					} catch (Exception ex) {
-						UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO native export: stamp check failed: " + ex.Message);
-					}
-				}
+				stampOk = Save_MGR.SpzGoExchangeReadyStampExists(exportMeshPath);
+				if (!stampOk)
+					UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO native export: ready stamp missing — DCC auto-import will not fire.");
 			}
 
+			var host = SpzGoHosts.Get(hostId);
+			string hostName = host != null ? host.DisplayName : "the DCC";
 			bool ok = saveIdle && stampOk;
 			string status;
 			if (ok)
-				status = "Export OK — Blender can auto-import";
+				status = $"Export OK — {hostName} can auto-import";
 			else if (saveIdle && !stampOk)
-				status = "Export wrote mesh/textures; ready stamp missing (Blender auto-import may not run)";
+				status = $"Export wrote mesh/textures; ready stamp missing ({hostName} auto-import may not run)";
 			else
 				status = "Export failed (texture write timeout)";
 			SpzGoStatusLine(status, ok);
