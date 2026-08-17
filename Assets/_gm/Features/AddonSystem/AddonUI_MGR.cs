@@ -863,16 +863,45 @@ namespace spz {
 		/// Panels outlive a session, so one seeded before host sections existed still carries the old flat
 		/// stack of paths, axis dropdowns and action buttons. Left in place the user would see both
 		/// surfaces at once, and the loose Import/Export buttons would still transfer without a mode.
+		/// Always strip panel-root flat rows — even after HostSection_* exists — so a half-upgraded panel
+		/// does not keep stacking the old Dropdown_/TextInput_/Button_ on top of the new sections.
 		/// </summary>
 		void RetireFlatSpzGoLayout(GameObject panel) {
-			if (PanelHasNamedControlPrefix(panel, SpzGoHostSection.SectionNamePrefix))
-				return;
-			RemoveNamedControls(StableProjectorzGoAddonId, panel, "Toggle_" + ExportAxisSettings.FlipXLabel);
-			RemoveNamedControls(StableProjectorzGoAddonId, panel, "Toggle_" + ExportAxisSettings.FlipYLabel);
-			RemoveNamedControls(StableProjectorzGoAddonId, panel, "Toggle_" + ExportAxisSettings.FlipZLabel);
-			RemoveNamedControls(StableProjectorzGoAddonId, panel, "Dropdown_");
-			RemoveNamedControls(StableProjectorzGoAddonId, panel, "TextInput_");
-			RemoveNamedControls(StableProjectorzGoAddonId, panel, "Button_");
+			if (panel == null) return;
+			RemovePanelRootNamedControls(StableProjectorzGoAddonId, panel, "Toggle_" + ExportAxisSettings.FlipXLabel);
+			RemovePanelRootNamedControls(StableProjectorzGoAddonId, panel, "Toggle_" + ExportAxisSettings.FlipYLabel);
+			RemovePanelRootNamedControls(StableProjectorzGoAddonId, panel, "Toggle_" + ExportAxisSettings.FlipZLabel);
+			RemovePanelRootNamedControls(StableProjectorzGoAddonId, panel, "Dropdown_");
+			RemovePanelRootNamedControls(StableProjectorzGoAddonId, panel, "TextInput_");
+			RemovePanelRootNamedControls(StableProjectorzGoAddonId, panel, "Button_");
+		}
+
+		/// <summary>
+		/// Like <see cref="RemoveNamedControls"/> but only destroys direct children of the panel. Host
+		/// sections nest their own Dropdown_/TextInput_/Button_ under HostSection_*; walking the whole
+		/// tree would delete those too.
+		/// </summary>
+		int RemovePanelRootNamedControls(string addonId, GameObject panel, string namePrefix) {
+			if (panel == null || string.IsNullOrEmpty(namePrefix)) return 0;
+			var doomed = new List<GameObject>();
+			var root = panel.transform;
+			for (int i = 0; i < root.childCount; i++) {
+				var ch = root.GetChild(i);
+				if (ch == null) continue;
+				if (ch.name.StartsWith(namePrefix, StringComparison.Ordinal))
+					doomed.Add(ch.gameObject);
+			}
+			for (int i = 0; i < doomed.Count; i++) {
+				GameObject go = doomed[i];
+				if (go == null) continue;
+				string elementId = go.GetInstanceID().ToString();
+				_uiElementValues.Remove(elementId);
+				_uiElementComponents.Remove(elementId);
+				if (_addonUIElements.TryGetValue(addonId, out var owned))
+					owned.Remove(go);
+				Destroy(go);
+			}
+			return doomed.Count;
 		}
 
 		bool TryGetLiveAddonPanel(string addonId, out GameObject panel) {
