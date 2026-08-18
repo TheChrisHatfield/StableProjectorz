@@ -446,8 +446,10 @@ public sealed class ViewportAxisGizmoContractTests {
 			"Leave / Restore SPZ must unwind BoundChrome under the gizmo root.");
 		Assert.That(src, Does.Contain("ApplyBoundChromeIconTint"),
 			"Lantern glyph must use IconTint (no SolidSquare flatten).");
-		Assert.That(src, Does.Contain("ApplyBoundChromeCompactToolLabelTmp"),
-			"Axis letter labels get Nomad compact typography behind the gate.");
+		Assert.That(src, Does.Contain("ApplyBoundChromeTmp"),
+			"Axis letter labels get Nomad Roboto/color behind the gate without strip tracking.");
+		Assert.That(src, Does.Not.Contain("ApplyBoundChromeCompactToolLabelTmp"),
+			"CompactToolLabel replaces Bold with UpperCase — wrong for single-letter axis discs.");
 		Assert.That(src, Does.Contain("ViewportAxisGizmo_Palette.SpzDefault"),
 			"Builtin leave must reassert the authored SPZ cool-grey palette.");
 		Assert.That(src, Does.Not.Contain("ApplyBoundChromeSelectable"),
