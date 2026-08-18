@@ -50,6 +50,16 @@ namespace spz {
 			LastRefusalReason = "";
 		}
 
+		/// <summary>
+		/// B2.2b — sampler skipped before <see cref="TryPredictFromSurface"/> (empty texel,
+		/// missing target, GPU error). Publishes a status reason without dropping a last-good arm.
+		/// </summary>
+		public static void NoteSamplerSkip(string reason) {
+			if (string.IsNullOrEmpty(reason)) return;
+			if (!IsLiveActive) return;
+			LastRefusalReason = reason;
+		}
+
 		/// <param name="strokeActive">True while the user is mid-stroke — enables the self-read hold (B2.2a).</param>
 		public static bool TryPredictFromSurface(Color surfaceSample, out string reason, bool strokeActive = false) {
 			bool ok = PredictCore(surfaceSample, strokeActive, out reason, out bool holding);

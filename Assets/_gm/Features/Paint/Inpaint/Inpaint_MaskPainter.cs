@@ -1106,8 +1106,10 @@ namespace spz {
 		    if (orm != null) sampleSrc = orm.accumulationTextures_ref();
 		    if (sampleSrc == null || sampleSrc.texArray == null || sampleSrc.udims_sectors == null || sampleSrc.udims_sectors.Count == 0)
 			    sampleSrc = GetPaintTarget();
-		    if (sampleSrc == null || sampleSrc.texArray == null || sampleSrc.udims_sectors == null || sampleSrc.udims_sectors.Count == 0)
+		    if (sampleSrc == null || sampleSrc.texArray == null || sampleSrc.udims_sectors == null || sampleSrc.udims_sectors.Count == 0) {
+			    ValuePaintLivePredictor.NoteSamplerSkip("no paint target");
 			    return;
+		    }
 
 		    if (!TryViewportToAccumTexel(vp, sampleSrc, out int slice, out int px, out int py))
 			    return;
@@ -1125,7 +1127,10 @@ namespace spz {
 	    {
 		    if (this == null) return;
 		    _valueAssistLiveReadInFlight = false;
-		    if (req.hasError) return;
+		    if (req.hasError) {
+			    ValuePaintLivePredictor.NoteSamplerSkip("gpu read error");
+			    return;
+		    }
 		    if (!ValuePaintLivePredictor.IsLiveActive) return;
 		    // Tool may have switched while the GPU readback was in flight.
 		    if (!ValuePaintProposalApplier.IsLiveToolAndModeEligible()) {
@@ -1133,12 +1138,17 @@ namespace spz {
 			    RestoreValueAssistCursorTint_IfHeld();
 			    return;
 		    }
-		    if (!TryDecodeSmudgeCursorReadback(req, _valueAssistLivePendingFormat, out Color c))
+		    if (!TryDecodeSmudgeCursorReadback(req, _valueAssistLivePendingFormat, out Color c)) {
+			    ValuePaintLivePredictor.NoteSamplerSkip("gpu decode failed");
 			    return;
+		    }
 		    // Empty paint texel: do NOT fall back to brush color (feeds the model its own output → feedback loop).
 		    // Skip this sample; next ticks may hit filled Content or accum (when Content source unavailable).
-		    if (c.a < 0.04f)
+		    // B2.2b — still publish why Live did nothing, or first hover on unpainted mesh reads as silent Idle.
+		    if (c.a < 0.04f) {
+			    ValuePaintLivePredictor.NoteSamplerSkip("empty texel");
 			    return;
+		    }
 		    // Mid-stroke the accumulation already holds this frame's paint — let the predictor
 		    // hold its arm instead of stepping off its own output (B2.2a).
 		    if (!ValuePaintLivePredictor.TryPredictFromSurface(c, out _, strokeActive: _isPainting))

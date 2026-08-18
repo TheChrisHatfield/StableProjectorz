@@ -191,6 +191,40 @@ public sealed class ValueAssistLiveStepContractTests {
 		Assert.That(applier, Does.Contain("changedBeforeFirstAssistWrite"));
 	}
 
+	// B2.2b — empty-texel / missing-target skips never reached TryPredictFromSurface, so Live ON
+	// over unpainted mesh looked like silent Idle.
+	[Test]
+	public void SamplerSkip_PublishesRefusalWithoutClearingAssist() {
+		bool prevEnabled = PaintTab_ValueAssistOptions.Enabled;
+		bool prevLive = PaintTab_ValueAssistOptions.LivePredict;
+		try {
+			PaintTab_ValueAssistOptions.SetEnabled(true);
+			PaintTab_ValueAssistOptions.SetLivePredict(true);
+			ValuePaintLivePredictor.InvalidateAssist();
+
+			ValuePaintLivePredictor.NoteSamplerSkip("empty texel");
+			Assert.That(ValuePaintLivePredictor.LastRefusalReason, Is.EqualTo("empty texel"));
+			Assert.That(ValuePaintLivePredictor.HasLastProposal, Is.False,
+				"a skip must not invent a proposal");
+			Assert.That(ValuePaintLivePredictor.LastAssistWhich, Is.Empty,
+				"a skip must not drop / recreate the assist cache");
+		} finally {
+			PaintTab_ValueAssistOptions.SetLivePredict(prevLive);
+			PaintTab_ValueAssistOptions.SetEnabled(prevEnabled);
+			ValuePaintLivePredictor.InvalidateAssist();
+		}
+	}
+
+	[Test]
+	public void SamplerSkip_WiringFromMaskPainter_Source() {
+		string painter = System.IO.File.ReadAllText(System.IO.Path.Combine(
+			Application.dataPath, "_gm", "Features", "Paint", "Inpaint",
+			"Inpaint_MaskPainter.cs"));
+		Assert.That(painter, Does.Contain("NoteSamplerSkip(\"empty texel\")"));
+		Assert.That(painter, Does.Contain("NoteSamplerSkip(\"no paint target\")"));
+		Assert.That(painter, Does.Contain("NoteSamplerSkip(\"gpu read error\")"));
+	}
+
 	// B2.2f — default OpacityInfluence is 1.0; adopt-then-lerp fully overwrote 1–0 key opacity.
 	[Test]
 	public void LiveOpacitySoftArm_StopsAfterUserEdit_Source() {
