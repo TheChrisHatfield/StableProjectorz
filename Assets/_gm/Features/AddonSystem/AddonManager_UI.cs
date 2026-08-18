@@ -1928,8 +1928,12 @@ namespace spz {
 				}
 			}
 
-			// Drop expand memory for add-ons no longer listed (uninstalled / filtered out of registry).
-			_expandedAddonIds.RemoveWhere(id => !_addonUIItems.ContainsKey(id));
+			// Drop expand memory only for add-ons no longer installed — not when search/filter
+			// temporarily hides a row (clearing search must reopen Preferences that were open).
+			if (Addon_MGR.instance != null) {
+				var registry = Addon_MGR.instance.GetAddons();
+				_expandedAddonIds.RemoveWhere(id => !registry.ContainsKey(id));
+			}
 			
 			if (_addonsListParent != null) {
 				RebuildAddonListScrollLayout(null);

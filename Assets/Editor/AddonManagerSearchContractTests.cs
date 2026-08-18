@@ -87,5 +87,7 @@ public class AddonManagerSearchContractTests {
 			"Search caret/focus must be restored after list rebuild.");
 		Assert.That(src, Does.Contain("ThemeAddonListItemsOnly"),
 			"Soft refresh themes rows only — not the active search chrome.");
+		Assert.That(src, Does.Contain("registry.ContainsKey(id)"),
+			"Expand memory must survive search filter hide — only clear when uninstalled.");
 	}
 }
