@@ -222,6 +222,7 @@ namespace spz {
 	    void Update(){
 	        FadeWholePanel();
 
+	        if (DimensionMode_MGR.instance == null) return;
 	        if(DimensionMode_MGR.instance._dimensionMode == DimensionMode.dim_sd) { 
 	            ToggleControls_based_on_mode();
 	            UpdateSliderTextsIfSdDim();
