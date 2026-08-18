@@ -814,6 +814,16 @@ namespace spz {
 	                return;
 	            }
 	            object result = envelope["result"];
+	            // Nested FastPath results use success:false without a JSON-RPC error — do not report ok.
+	            if (result is JObject jo && jo["success"] != null && jo["success"].Type != JTokenType.Null
+	                && jo["success"].Type != JTokenType.None) {
+	                try {
+	                    if (!jo["success"].ToObject<bool>()) {
+	                        fail(jo["error"]?.ToString() ?? "spz_cmd reported success:false");
+	                        return;
+	                    }
+	                } catch { /* non-bool success token — fall through */ }
+	            }
 	            ok(result != null ? result : new Dictionary<string, object>{ { "success", true } });
 	        } catch (Exception ex){
 	            fail($"{ex.GetType().Name}: {ex.Message}");
