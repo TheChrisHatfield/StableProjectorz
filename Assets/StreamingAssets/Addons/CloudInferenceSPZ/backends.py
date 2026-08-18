@@ -184,5 +184,9 @@ def build_backend(mode: str, credential: str) -> CloudBackend:
     if mode_n in ("remote_forge", "remote", "colab", "runpod", "tunnel"):
         return RemoteForgeBackend(cred)
     if mode_n in ("fal", "fal.ai"):
-        return FalBackend(cred)
+        # Fail at Connect, not after SPZ already shows a green connection icon.
+        raise BackendError(
+            "fal backend is not wired yet. Use Demo to validate SPZ, or paste a Colab/RunPod Forge URL.",
+            status=501,
+        )
     raise BackendError(f"Unknown backend mode: {mode}", status=400)

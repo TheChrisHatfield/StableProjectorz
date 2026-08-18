@@ -151,6 +151,11 @@ def main() -> int:
         check(b.name == "demo", "build demo")
         b = be.build_backend("colab", "https://example.trycloudflare.com")
         check(b.name == "remote_forge", "build colab as remote_forge")
+        try:
+            be.build_backend("fal", "key")
+            check(False, "build fal fails at connect")
+        except be.BackendError as e:
+            check(e.status == 501, "build fal fails at connect")
 
         # Reconnect / already listening
         ok2, msg2 = shim.start_shim(host, port)
