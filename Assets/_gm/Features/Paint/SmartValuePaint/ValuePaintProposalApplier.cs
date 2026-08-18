@@ -82,6 +82,17 @@ namespace spz {
 		}
 
 		/// <summary>
+		/// User assigned size (`[` `]` / traditional API that is not a Live write).
+		/// A single bracket tap steps 0.01, which the last-write delta gate used to miss.
+		/// </summary>
+		public static void NotifyUserSizeChanged(float size01) {
+			if (!_haveUserBrushSnapshot && !_armedViaLive) return;
+			if (!float.IsFinite(size01)) return;
+			_liveSizeUserOverride = true;
+			_snapshotSize01 = Mathf.Clamp01(size01);
+		}
+
+		/// <summary>
 		/// User chroma for Propose/Accept while Live is soft-arming the ribbon.
 		/// Prefer this over reading <c>sd.brushColor</c>, which is already value-remapped and would
 		/// make Propose→Accept double-shift hue/value away from the artist's pick.
@@ -406,7 +417,12 @@ namespace spz {
 			if (BrushRibbon_UI_Size.instance != null && BrushRibbon_UI_Size.instance.IsSizeSliderDragging)
 				return true;
 			// Viewport Shift+RMB size drag (MaskPainter.CursorPreviewUI_Reposition).
-			return KeyMousePenInput.isKey_Shift_pressed() && KeyMousePenInput.isRMBpressed();
+			if (KeyMousePenInput.isKey_Shift_pressed() && KeyMousePenInput.isRMBpressed())
+				return true;
+			// `[` `]` hold — skip Live writes until NotifyUserSizeChanged sticks the override.
+			if (Input.GetKey(KeyCode.LeftBracket) || Input.GetKey(KeyCode.RightBracket))
+				return true;
+			return false;
 		}
 
 		static void SoftArmBrushWidthIntoSpzSize(SD_WorkflowOptionsRibbon_UI sd, ValuePaintProposal proposal) {
@@ -420,10 +436,10 @@ namespace spz {
 
 			// User moved traditional size since our last write (or since capture, before first write)?
 			bool changedSinceAssistWrite = float.IsFinite(_lastLiveAppliedSize01)
-				&& Mathf.Abs(liveWidth - _lastLiveAppliedSize01) > 0.01f;
+				&& Mathf.Abs(liveWidth - _lastLiveAppliedSize01) > 0.005f;
 			bool changedBeforeFirstAssistWrite = !float.IsFinite(_lastLiveAppliedSize01)
 				&& float.IsFinite(_snapshotSize01)
-				&& Mathf.Abs(liveWidth - _snapshotSize01) > 0.01f;
+				&& Mathf.Abs(liveWidth - _snapshotSize01) > 0.005f;
 			if (changedSinceAssistWrite || changedBeforeFirstAssistWrite) {
 				_liveSizeUserOverride = true;
 				_snapshotSize01 = liveWidth;

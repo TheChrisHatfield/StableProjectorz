@@ -189,6 +189,14 @@ public sealed class ValueAssistLiveStepContractTests {
 		Assert.That(applier, Does.Contain("if (_liveSizeUserOverride) return;"));
 		Assert.That(applier, Does.Contain("IsUserResizingBrushNow"));
 		Assert.That(applier, Does.Contain("changedBeforeFirstAssistWrite"));
+		Assert.That(applier, Does.Contain("NotifyUserSizeChanged"));
+		Assert.That(applier, Does.Contain("KeyCode.LeftBracket"));
+
+		string size = System.IO.File.ReadAllText(System.IO.Path.Combine(
+			Application.dataPath, "_gm", "Features", "Paint", "BrushRibbon_UI",
+			"BrushRibbon_UI_Size.cs"));
+		Assert.That(size, Does.Contain("NotifyUserSizeChanged"),
+			"[ ] steps 0.01 and must notify Live; a > 0.01 delta gate misses a single tap");
 	}
 
 	// B2.2b — empty-texel / missing-target skips never reached TryPredictFromSurface, so Live ON

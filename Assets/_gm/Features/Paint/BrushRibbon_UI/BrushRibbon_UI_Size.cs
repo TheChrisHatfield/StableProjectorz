@@ -245,18 +245,22 @@ namespace spz {
 	        if(Input.GetKeyDown(KeyCode.LeftBracket)){
 	            _maskBrushSize_slider.SetSliderValue( currVal-brushIncrement, invokeCallback:true);
 	            _bracket_BrushSize_nextTime = Time.time + 0.2f;
+	            ValuePaintProposalApplier.NotifyUserSizeChanged(_maskBrushSize_slider.value);
 	        }
 	        if(Input.GetKeyDown(KeyCode.RightBracket)){ 
 	            _maskBrushSize_slider.SetSliderValue( currVal+brushIncrement, invokeCallback:true);
 	            _bracket_BrushSize_nextTime = Time.time + 0.2f;
+	            ValuePaintProposalApplier.NotifyUserSizeChanged(_maskBrushSize_slider.value);
 	        }
 	        if(Input.GetKey(KeyCode.LeftBracket) && Time.time>=_bracket_BrushSize_nextTime){
 	            _maskBrushSize_slider.SetSliderValue( currVal-brushIncrement*3, invokeCallback:true);
 	            _bracket_BrushSize_nextTime = Time.time+0.03f;
+	            ValuePaintProposalApplier.NotifyUserSizeChanged(_maskBrushSize_slider.value);
 	        }
 	        if(Input.GetKey(KeyCode.RightBracket) && Time.time>=_bracket_BrushSize_nextTime){
 	            _maskBrushSize_slider.SetSliderValue( currVal+brushIncrement*3, invokeCallback:true);
 	            _bracket_BrushSize_nextTime = Time.time+0.03f;
+	            ValuePaintProposalApplier.NotifyUserSizeChanged(_maskBrushSize_slider.value);
 	        }
 	    }
 
