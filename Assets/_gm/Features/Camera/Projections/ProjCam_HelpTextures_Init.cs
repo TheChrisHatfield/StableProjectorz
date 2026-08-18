@@ -34,9 +34,16 @@ namespace spz {
 	        GenData2D genData = _projectionCamera._myGenData;
 	        List<Renderer> myRenderers = myMeshes.Select(m=>m._meshRenderer).ToList();
 
+	        // Masks store null for disabled POVs, so index 0 is not always a valid size source when
+	        // camera 0 is off and 1..N are on (sparse multi-view).
+	        RenderUdims sizeSource = FindFirstEnabledPovUdims(genData, onWillRenderPov);
+	        if (sizeSource == null){
+	            UnityEngine.Debug.LogWarning("[ProjCam_HelpTextures_Init] No enabled POV visibility masks — skipping visibilities.");
+	            return;
+	        }
+
 	        var prevParams = new ParamsBeforeRender(_cam);
 	            int numPovs = genData.povInfos.numEnabled;
-	            RenderUdims rendUdims0 = onWillRenderPov(0);
 	            CameraTools.TempEnable_POVs_Keywords_GLOBAL( numPovs, DoStuff );
 	        prevParams.RestoreCam(_cam);
 
@@ -45,11 +52,15 @@ namespace spz {
 
 	            Objects_Renderer_MGR.instance.EquipMaterial_on_Specific(myMeshes, visMat);
 
-	            //Could be null. If so, shader will use white texture, by default:
-	            visMat.SetTexture("_ScreenMaskTexture", genData._byproductsOfRequest.screenSpaceMask_WE_disposableTex);
+	            // Screen mask may be absent (shader defaults to white); byproducts itself can also be null
+	            // on clones / loads — do not NRE through the container.
+	            Texture screenMask = genData._byproductsOfRequest != null
+	                ? genData._byproductsOfRequest.screenSpaceMask_WE_disposableTex
+	                : null;
+	            visMat.SetTexture("_ScreenMaskTexture", screenMask);
 
 	            _helps?.Dispose();
-	            _helps = new HelperTextures(genData, rendUdims0.widthHeight.x, rendUdims0.widthHeight.y);
+	            _helps = new HelperTextures(genData, sizeSource.widthHeight.x, sizeSource.widthHeight.y);
 
 	            PrepareDepth(genData, blendParams);
 
@@ -59,6 +70,16 @@ namespace spz {
 	            _helps.Dispose();
 	            _helps = null; 
 	        }
+	    }
+
+	    static RenderUdims FindFirstEnabledPovUdims(GenData2D genData, Func<int, RenderUdims> onWillRenderPov){
+	        if (genData?.povInfos?.povs == null || onWillRenderPov == null) return null;
+	        for (int i = 0; i < genData.povInfos.numAll; ++i){
+	            if (!genData.povInfos.povs[i].wasEnabled) continue;
+	            RenderUdims u = onWillRenderPov(i);
+	            if (u != null) return u;
+	        }
+	        return null;
 	    }
 
 
@@ -138,6 +159,7 @@ namespace spz {
 	            if (!pov.wasEnabled){ continue; }
 
 	            RenderUdims renderHere_square = onWillRenderPov?.Invoke(i);
+	            if (renderHere_square == null) continue;
 	            renderHere_square.ClearTheTextures(clearingColor);
 	            Debug.Assert(renderHere_square.graphicsFormat == GraphicsFormat.R8G8_UNorm);
 	            RenderUdims.SetNumUdims(renderHere_square, mat);
