@@ -573,6 +573,10 @@ namespace spz {
 				reason = _lastFailReason = "color picker open";
 				return false;
 			}
+			if (sd.IsEyeDropperMagnified) {
+				reason = _lastFailReason = "eyedropper open";
+				return false;
+			}
 
 			if (ResolveColorPaintTarget(out string targetReason) == null) {
 				reason = _lastFailReason = targetReason;
