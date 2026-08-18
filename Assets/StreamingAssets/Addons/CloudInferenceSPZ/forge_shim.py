@@ -623,7 +623,14 @@ def start_shim(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> Tuple[bool
         _LISTEN_HOST = host
         _LISTEN_PORT = port
         thread.start()
-        return True, f"listening on http://{host}:{port}"
+
+    deadline = time.time() + 1.5
+    while time.time() < deadline:
+        if _shim_ping_ok(host, port, timeout_s=0.3):
+            return True, f"listening on http://{host}:{port}"
+        time.sleep(0.05)
+    stop_shim()
+    return False, f"bound {host}:{port} but ping did not become ready"
 
 
 def stop_shim() -> Tuple[bool, str]:
