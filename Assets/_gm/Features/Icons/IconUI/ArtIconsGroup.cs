@@ -91,6 +91,11 @@ namespace spz {
         
 	        //select the first icon from the batch, to immediately have some kind of preview:
 	        int first = Array.FindIndex(icons, icn=>icn!=null);
+	        if (first < 0){
+		        // Batch can be all-null (failed spawn / already destroyed). Do not index -1.
+		        chosenIcon = null;
+		        return;
+	        }
 	        IconUI.Act_OnSomeIconClicked(icons[first], genData.kind);
 	    }//end ctor
 
@@ -195,7 +200,12 @@ namespace spz {
 	        showMyIcons_as_solo = grpSL.showMyIcons_as_solo;
 	        hideMyIcons_please  = grpSL.hideMyIcons_please;
 
-	        chosenIcon = grpSL.chosenIconIx==-1?  icons[0]  :  icons[grpSL.chosenIconIx];
+	        int pick = grpSL.chosenIconIx;
+	        if (pick < 0 || pick >= icons.Length || icons[pick] == null){
+		        // chosenIconIx==-1 used to mean slot 0, which throws when the batch is empty/null.
+		        pick = Array.FindIndex(icons, icn => icn != null);
+	        }
+	        chosenIcon = pick >= 0 ? icons[pick] : null;
 
 	        for(int i=0; i<grpSL.icons.Count; ++i) {
 	            IconUI_SL iconSL = grpSL.icons[i];
