@@ -3963,12 +3963,21 @@ namespace spz {
 		/// </summary>
 		/// <summary>Resolve the list ScrollRect from the live panel and make sure its scrollbar is wired.</summary>
 		void EnsureListScrollbarFromPanel() {
-			if (_listScrollbar != null && _listScrollbar.handleRect != null) return;
 			ScrollRect scroll = _addonsListParent != null
 				? _addonsListParent.GetComponentInParent<ScrollRect>()
 				: null;
 			if (scroll == null && _panel != null)
 				scroll = _panel.GetComponentInChildren<ScrollRect>(true);
+			// Stale early-return left ScrollRect.verticalScrollbar null after a shell rebuild —
+			// always re-wire when the live bar exists.
+			if (_listScrollbar != null && _listScrollbar.handleRect != null) {
+				if (scroll != null && !ReferenceEquals(scroll.verticalScrollbar, _listScrollbar)) {
+					scroll.verticalScrollbar = _listScrollbar;
+					scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHideAndExpandViewport;
+					scroll.verticalScrollbarSpacing = 0f;
+				}
+				return;
+			}
 			if (scroll != null)
 				EnsureListScrollbar(scroll);
 		}
