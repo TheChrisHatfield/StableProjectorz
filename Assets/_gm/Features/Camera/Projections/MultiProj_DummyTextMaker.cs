@@ -26,14 +26,18 @@ namespace spz {
 
 	    void Update(){
 	        var oRib = SD_WorkflowOptionsRibbon_UI.instance;
-	        _cam.enabled = MainViewport_UI.instance.showing == MainViewport_UI.Showing.UsualView;
+	        var mvRib = MultiView_Ribbon_UI.instance;
+	        var vp = MainViewport_UI.instance;
+	        if (oRib == null || mvRib == null || vp == null || _cam == null) return;
+
+	        _cam.enabled = vp.showing == MainViewport_UI.Showing.UsualView;
 	        _cam.backgroundColor =  oRib.isPositive?  _positiveBrush_bgCol : _negativeBrush_bgCol;
 	        Color textCol    = oRib.isPositive?  _positiveBrush_txtCol : _negativeBrush_txtCol;
 	        Color numTextCol = oRib.isPositive? _positiveBrush_num_txtCol : _negativeBrush_num_txtCol;
 	        _text.ForEach(t=>t.color=textCol);
 	        _camPovIx_text.ForEach(t=>t.color= numTextCol);
 
-	        string curPovIx = (MultiView_Ribbon_UI.instance.currentPovIx + 1).ToString();
+	        string curPovIx = (mvRib.currentPovIx + 1).ToString();
 	        _camPovIx_text.ForEach( t=>t.text=curPovIx );
 	    }
 

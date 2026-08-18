@@ -43,7 +43,9 @@ namespace spz {
 	        if (!Set_ScreenArt_and_Mask(pMat, pcam, isHighlight)) return;
 	        Set_HSVC_vars(pMat, pcam, pcamIx, isHighlight);
 
-	        Objects_Renderer_MGR.instance.EquipMaterial_on_ALL( pMat );
+	        var orm = Objects_Renderer_MGR.instance;
+	        if (orm == null) return;
+	        orm.EquipMaterial_on_ALL( pMat );
 
 	        var renderArg = new ProjectorCamera.RenderProj_arg(intoHereRT);
 	            renderArg.materialOnGeometry = pMat;
@@ -96,7 +98,13 @@ namespace spz {
 	    //For for previewing some POV through cursor-texture on screen.
 	    void MultiPOV_Set_CursorMask(Material putHere, ProjectorCamera pCam)
 	    {
-	        View_UserCamera currViewCam = UserCameras_MGR.instance._curr_viewCamera;
+	        var camsMgr = UserCameras_MGR.instance;
+	        View_UserCamera currViewCam = camsMgr != null ? camsMgr._curr_viewCamera : null;
+	        if (currViewCam == null || currViewCam.myCamera == null){
+		        putHere.SetTexture("_BrushStamp", Texture2D.blackTexture);
+		        putHere.SetInteger("_Cursor_for_POV_ix", -1);
+		        return;
+	        }
 	        Matrix4x4 currViewport_P_Matrix =  currViewCam.ExpandFov_Match_ContentCamFov( with_ShiftPerspectiveCenter:true );
 	        Matrix4x4 currViewport_V_Matrix =  currViewCam.myCamera.worldToCameraMatrix;
 	                  currViewport_P_Matrix =  GL.GetGPUProjectionMatrix(currViewport_P_Matrix, true);
@@ -105,6 +113,15 @@ namespace spz {
 	        var oRib  = SD_WorkflowOptionsRibbon_UI.instance;
 	        var mvRib = MultiView_Ribbon_UI.instance;
 	        var p = Projections_MaskPainter.instance;
+	        var save = Save_MGR.instance;
+	        var workflow = WorkflowRibbon_UI.instance;
+	        // Multi-POV render can run while a ribbon/painter/save singleton is still wiring up
+	        // (headless, scene reload). Unguarded .instance calls crashed the projection path.
+	        if (oRib == null || mvRib == null || p == null || save == null || workflow == null){
+		        putHere.SetTexture("_BrushStamp", Texture2D.blackTexture);
+		        putHere.SetInteger("_Cursor_for_POV_ix", -1);
+		        return;
+	        }
 
 	        Vector2 pointInViewport01 = p.getViewportCursorPos01();
 	        putHere.SetVector("_PrevNewBrushScreenCoord", new Vector4(pointInViewport01.x, pointInViewport01.y, 
@@ -118,8 +135,8 @@ namespace spz {
 
 	        bool isPaintingMyIcon = p.isPainting_in_Generation(pCam._myGenData);
 	            bool showPreview  = mvRib._isEditingMode  &&  isPaintingMyIcon;  
-	                 showPreview &= !Save_MGR.instance._isSaving;//<--to avoid baking-in the brush-peek-preview.
-	                 showPreview &= WorkflowRibbon_UI.instance.isMode_using_img2img()==false;
+	                 showPreview &= !save._isSaving;//<--to avoid baking-in the brush-peek-preview.
+	                 showPreview &= workflow.isMode_using_img2img()==false;
         
 	        Texture brushStamp = showPreview ? BrushAlphas_MGR.GetCurrentBrushStampTexOrFallback() : Texture2D.blackTexture;
 	        if (brushStamp == null) brushStamp = Texture2D.blackTexture;
@@ -207,8 +224,12 @@ namespace spz {
 	    void ShowSpecificPov_if_multipov_maybe( Material pMat,  ProjectorCamera pcam, 
 	                                            ProjectorCamera.RenderProj_arg renderArg ){
 
-	        bool isPaiting_in_myGeneration = Projections_MaskPainter.instance.isPainting_in_Generation(pcam._myGenData);
-	        int hoveredPovIx = MultiView_Ribbon_UI.instance.hoveredPovIx;
+	        var painter = Projections_MaskPainter.instance;
+	        var mvRib = MultiView_Ribbon_UI.instance;
+	        if (painter == null || mvRib == null) return;
+
+	        bool isPaiting_in_myGeneration = painter.isPainting_in_Generation(pcam._myGenData);
+	        int hoveredPovIx = mvRib.hoveredPovIx;
 
 	        if(isPaiting_in_myGeneration && hoveredPovIx>=0){
 	            Texture2D art2D = pcam.myIconUI?.texture0()?.tex2D ?? pcam._myGenData?.GetTexture_ref0()?.tex2D;
