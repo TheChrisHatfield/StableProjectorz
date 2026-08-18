@@ -139,6 +139,24 @@ public sealed class ValueAssistLiveStepContractTests {
 			"per-frame leave must cover SetIsOnWithoutNotify (no direction event)");
 	}
 
+	// B2.2d — ForcePaintMode on every color write yanked Smudge/Erase back to Paint when
+	// Live restored the pre-Live color. User picks still force Paint; assist quiet must not.
+	[Test]
+	public void AssistColorWrite_DoesNotSubscribeForcePaintMode_Source() {
+		string dir = System.IO.File.ReadAllText(System.IO.Path.Combine(
+			Application.dataPath, "_gm", "Features", "Paint", "BrushRibbon_UI",
+			"SD_BrushRibbon_UI_Direction.cs"));
+		Assert.That(dir, Does.Contain("_onUserAuthoredBrushColor += OnBrushColorUpdated_ForcePaintMode"));
+		Assert.That(dir, Does.Not.Contain("_onBrushColorUpdated += OnBrushColorUpdated_ForcePaintMode"));
+
+		string colors = System.IO.File.ReadAllText(System.IO.Path.Combine(
+			Application.dataPath, "_gm", "Features", "Paint", "BrushRibbon_UI",
+			"BrushRibbon_UI_Colors.cs"));
+		Assert.That(colors, Does.Contain("fromAssist: true"));
+		Assert.That(colors, Does.Contain("_onUserAuthoredBrushColor?.Invoke"));
+		Assert.That(colors, Does.Contain("if (!fromAssist)"));
+	}
+
 	// B2.2c — leaving the tool must be able to wipe Live status without killing the assist cache.
 	[Test]
 	public void ClearLiveUiState_DropsProposalKeepsAssistReady() {

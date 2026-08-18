@@ -38,6 +38,8 @@ namespace spz {
 	    }
 
 	    void OnBrushColorUpdated_ForcePaintMode(Color _){
+	        // User color pick only. Assist Live/restore also write color; forcing Paint there
+	        // yanked Smudge/Erase back to Paint (vice-versa tool bleed).
 	        SetToolMode(BrushToolMode.Paint);
 	    }
 
@@ -66,7 +68,7 @@ namespace spz {
 	        MultiView_Ribbon_UI.OnStartEditMode += OnStartedEditMode_MultiView;
         
 	        if(_colors != null){ 
-	            _colors._onBrushColorUpdated += OnBrushColorUpdated_ForcePaintMode;
+	            _colors._onUserAuthoredBrushColor += OnBrushColorUpdated_ForcePaintMode;
 	        }
 	        if(_rib!=null){
 	            WorkflowRibbon_UI._Act_OnModeChanged += OnUpdateDirection_Mode;
@@ -86,7 +88,7 @@ namespace spz {
 	            WorkflowRibbon_UI._Act_OnModeChanged -= OnUpdateDirection_Mode;
 	        }
 	        if (_colors != null){
-	            _colors._onBrushColorUpdated -= OnBrushColorUpdated_ForcePaintMode;
+	            _colors._onUserAuthoredBrushColor -= OnBrushColorUpdated_ForcePaintMode;
 	        }
 	        Projections_MaskPainter.Act_OnPaintStrokeEnd -= OnBrushStrokeEnd;
 	        Inpaint_MaskPainter.Act_OnPaintStrokeEnd -= OnBrushStrokeEnd;

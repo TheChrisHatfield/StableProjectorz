@@ -22,11 +22,18 @@ namespace spz {
 
 	    public Color _brushColor { get; private set; } = Color.black;
 	    public Action<Color> _onBrushColorUpdated { get; set; } = null;
+	    /// <summary>
+	    /// User-authored picks only (picker / swatch / eyedropper / load / color button).
+	    /// Assist quiet writes fire <see cref="_onBrushColorUpdated"/> but MUST NOT this — Direction
+	    /// uses it to force Paint mode, and Live/restore would yank Smudge/Erase back to Paint.
+	    /// </summary>
+	    public Action<Color> _onUserAuthoredBrushColor { get; set; } = null;
 	    public bool IsEyeDropperMagnified => EventsBinder.FindComponent<BrushRibbon_UI_EyeDropperTool>("BrushRibbon_UI_EyeDropperTool")?
 	                                                     .IsMagnificationActive ?? false;
 
 	    void OnBrushColorButton(){
 	        _onBrushColorUpdated?.Invoke(_brushColor);//invoke callback for others.
+	        _onUserAuthoredBrushColor?.Invoke(_brushColor); // opening the picker is a user color intent
 	        ShowColorPicker();
 	    }
 
@@ -55,7 +62,12 @@ namespace spz {
 	        // Assist's own quiet writes must not, or live would chase its own output.
 	        if (!fromAssist){ ValuePaintProposalApplier.NotifyUserBrushColorChanged(wantedColor); }
 
-	        if(invokeCallback){  _onBrushColorUpdated?.Invoke(wantedColor); }
+	        if(invokeCallback){
+	            _onBrushColorUpdated?.Invoke(wantedColor);
+	            // Direction ForcePaintMode listens here — assist quiet/restore must not yank Smudge/Erase.
+	            if (!fromAssist)
+	                _onUserAuthoredBrushColor?.Invoke(wantedColor);
+	        }
 	    }
 
 	    /// <summary> Set brush color from palette swatch or external source (switches to Inpaint Color and notifies).
