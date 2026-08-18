@@ -37,6 +37,8 @@ namespace spz {
 	        for(int i=0; i<_thumbs.Count; ++i){
 	            ControlNetUnit_Thumb_UI thumb = _thumbs[i];
 	            if(thumb._myUnit != null){ continue; }
+	            if (ReferenceEquals(_clickedThumb, thumb))
+		            _clickedThumb = null;
 	            Destroy(thumb.gameObject);
 	            _thumbs.RemoveAt(i);
 	            i--;
@@ -63,7 +65,7 @@ namespace spz {
 	    void Refresh_the_real_ControlUnit(){
 	        //copy the data from the preview panel into the actual true Controlnet Unit.
 	        //For example, if we chagned some value in the preview panel, we nede to change it in the actual unit too.
-	        if(_clickedThumb==null){ return; }
+	        if(_clickedThumb==null || _clickedThumb._myUnit == null){ return; }
 	        _clickedThumb._myUnit.CopyFromAnother(_unit_previewPanel);
 	    }
 
