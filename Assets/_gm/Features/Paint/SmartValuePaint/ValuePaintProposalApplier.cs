@@ -124,6 +124,8 @@ namespace spz {
 			if (_haveUserBrushSnapshot) return;
 			_lastLiveAppliedSize01 = float.NaN;
 			_lastLiveAppliedOpacity01 = -1f;
+			// New session — do not treat a prior Live/Accept hardness write as a user override.
+			_lastLiveHardnessIx = int.MinValue;
 			_liveHardnessUserOverride = false;
 			_liveSizeUserOverride = false;
 			_liveOpacityUserOverride = false;
@@ -372,6 +374,8 @@ namespace spz {
 			_haveUserBrushSnapshot = false;
 			_lastLiveAppliedSize01 = float.NaN;
 			_lastLiveAppliedOpacity01 = -1f;
+			_lastLiveHardnessIx = int.MinValue;
+			_liveHardnessUserOverride = false;
 			_liveSizeUserOverride = false;
 			_liveOpacityUserOverride = false;
 			reason = "Armed on target=" + DescribeTarget(target) + " desiredBin=" + proposal.DesiredBin
