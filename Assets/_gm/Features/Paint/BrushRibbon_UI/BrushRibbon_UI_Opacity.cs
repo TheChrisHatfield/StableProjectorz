@@ -70,6 +70,8 @@ namespace spz {
 
 	        int opacityInt = Mathf.RoundToInt(brushOpacity * 100);
 	        _brushOpacityText.text = opacityInt == 100 ? $"<size=85%>{opacityInt}</size>" : opacityInt.ToString();
+	        if (!quiet)
+		        ValuePaintProposalApplier.NotifyUserOpacityChanged(brushOpacity);
 	    }
 
 
