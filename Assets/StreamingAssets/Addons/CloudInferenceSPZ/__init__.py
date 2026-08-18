@@ -16,7 +16,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-import urllib.request
 from typing import Dict, Optional, Tuple
 
 _root = os.path.dirname(os.path.abspath(__file__))
@@ -168,24 +167,8 @@ def refresh_status() -> bool:
 
 
 def _ping_local_shim() -> Tuple[bool, str]:
-    """Confirm the listener is CloudInferenceSPZ, not an unrelated Forge on :7860."""
-    try:
-        with urllib.request.urlopen("http://127.0.0.1:7860/internal/ping", timeout=2.0) as resp:
-            raw = resp.read().decode("utf-8", errors="replace")
-            if int(resp.status) != 200:
-                return False, raw or f"HTTP {resp.status}"
-            try:
-                data = json.loads(raw) if raw else {}
-            except Exception:
-                return False, f"non-JSON ping body: {raw[:120]}"
-            if not (isinstance(data, dict) and data.get("cloud_inference") is True):
-                return False, (
-                    "port 7860 answered but is not Cloud Inference shim "
-                    "(stop local Forge/WebUI, then Connect again)"
-                )
-            return True, raw
-    except Exception as exc:
-        return False, str(exc)
+    """Confirm the listener is CloudInferenceSPZ on the actual bind, not an unrelated Forge."""
+    return shim.ping_listen()
 
 
 def connect_cloud() -> bool:
