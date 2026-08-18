@@ -122,6 +122,13 @@ def main() -> int:
         check(st == 200 and body.get("images"), "img2img")
         st, body = http("POST", base, "/sdapi/v1/extra-batch-images", {"resize_width": 48, "resize_height": 48})
         check(st == 200 and body.get("images"), "extra-batch-images")
+        st, body = http(
+            "POST",
+            base,
+            "/sdapi/v1/extra-batch-images",
+            {"resize_width": 32.0, "resize_height": "32", "rslt_imageWidths": 96, "rslt_imageHeights": 96},
+        )
+        check(st == 200 and body.get("images"), "extra-batch float/string/SPZ rslt dims")
         st, body = http("GET", base, "/sdapi/v1/progress")
         check(st == 200 and "progress" in body, "progress")
         check("eta_relative" in body and "state" in body, "progress eta/state fields")
