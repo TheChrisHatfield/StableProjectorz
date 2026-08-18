@@ -64,9 +64,11 @@ namespace spz {
 
 
 	    void SinglePOV_Set_UvMasks( Material mat,  GenData_Masks masks ){
-	        RenderUdims.SetNumUdims(masks._ObjectUV_visibilityR8G8[0], intoHere:mat);
-	        mat.SetTexture("_uvMask", masks._ObjectUV_brushedMaskR8[0].texArray );
-	        mat.SetTexture("_ProjVisibility", masks._ObjectUV_visibilityR8G8[0].texArray );
+	        if (mat == null || masks == null) return;
+	        if (!masks.TryGetFirstEnabledPovMasks(out var brush, out var vis, out _)) return;
+	        RenderUdims.SetNumUdims(vis, intoHere:mat);
+	        mat.SetTexture("_uvMask", brush.texArray );
+	        mat.SetTexture("_ProjVisibility", vis.texArray );
 	    }
 
 	    void MultiPOV_Set_UvMasks( Material mat,  GenData_Masks masks ){

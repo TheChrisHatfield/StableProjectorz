@@ -102,8 +102,19 @@ namespace spz {
 	    //keep applying the brush stroke to uv_mask (only applies difference between prev and curr brushstroke)
 	    void Apply_intoMask_singleView( RenderTexture prevBrushStroke_R8,  RenderTexture currBrushStroke_R8,  
 	                                    float sign,  GenData_Masks utils, int povIx ){
-	        RenderUdims uvMask = utils._ObjectUV_brushedMaskR8[0];//NOTICE, single-view, so using 0 for POV.
-	        RenderUdims visibil = utils._ObjectUV_visibilityR8G8[0];
+	        if (utils == null) return;
+	        RenderUdims uvMask = null;
+	        RenderUdims visibil = null;
+	        // Prefer the caller's POV when that slot is live; otherwise first enabled (cam0 may be null).
+	        if (povIx >= 0
+	            && utils._ObjectUV_brushedMaskR8 != null && povIx < utils._ObjectUV_brushedMaskR8.Count
+	            && utils._ObjectUV_visibilityR8G8 != null && povIx < utils._ObjectUV_visibilityR8G8.Count){
+	            uvMask = utils._ObjectUV_brushedMaskR8[povIx];
+	            visibil = utils._ObjectUV_visibilityR8G8[povIx];
+	        }
+	        if (uvMask == null || visibil == null){
+	            if (!utils.TryGetFirstEnabledPovMasks(out uvMask, out visibil, out _)) return;
+	        }
 	        Assert_TexturesSameSize( new List<RenderTexture>(){prevBrushStroke_R8, currBrushStroke_R8, 
 	                                                           uvMask.texArray, visibil.texArray} );
 

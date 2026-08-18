@@ -80,6 +80,29 @@ namespace spz {
 	        this.numPOV = _ObjectUV_brushedMaskR8.Count(m => m != null);
 	    }
 
+	    /// <summary>
+	    /// First non-null brush+visibility pair. Disabled cam 0 leaves a null at [0] while numPOV==1
+	    /// for a later enabled camera — callers must not hardcode index 0.
+	    /// </summary>
+	    public bool TryGetFirstEnabledPovMasks(out RenderUdims brushedMask, out RenderUdims visibility, out int povIx){
+	        brushedMask = null;
+	        visibility = null;
+	        povIx = -1;
+	        int n = _ObjectUV_brushedMaskR8 != null ? _ObjectUV_brushedMaskR8.Count : 0;
+	        for (int i = 0; i < n; ++i){
+	            var brush = _ObjectUV_brushedMaskR8[i];
+	            var vis = _ObjectUV_visibilityR8G8 != null && i < _ObjectUV_visibilityR8G8.Count
+		            ? _ObjectUV_visibilityR8G8[i]
+		            : null;
+	            if (brush == null || vis == null) continue;
+	            brushedMask = brush;
+	            visibility = vis;
+	            povIx = i;
+	            return true;
+	        }
+	        return false;
+	    }
+
 
 	    void CreateUdims_maybe( int i,  List<RenderUdims> list,  Color clearColor, GraphicsFormat format,  FilterMode filter,
 	                            Vector2Int resolution,  bool onlyDefaultUDIM=false){
