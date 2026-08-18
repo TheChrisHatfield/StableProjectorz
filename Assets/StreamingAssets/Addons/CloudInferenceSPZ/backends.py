@@ -9,9 +9,12 @@ Modes:
 from __future__ import annotations
 
 import base64
+import http.client
 import json
 import struct
+import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 import zlib
 from typing import Any, Dict, Optional, Tuple
@@ -48,6 +51,10 @@ class CloudBackend:
 
     def generate(self, path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         raise NotImplementedError
+
+    def abort(self) -> None:
+        """Cancel an in-flight generate/proxy if the backend supports it."""
+        return
 
     def proxy(self, method: str, path: str, body: Optional[bytes], headers: Dict[str, str]) -> Tuple[int, bytes, str]:
         """Optional raw proxy. Return (status, body, content_type)."""
@@ -108,11 +115,56 @@ class RemoteForgeBackend(CloudBackend):
             )
         self.base_url = base
         self.timeout_s = float(timeout_s)
+        self._io_lock = threading.Lock()
+        self._active_conn: Any = None
+        self._gen_epoch = 0
+        self._aborted = False
 
     def describe(self) -> str:
         return f"remote_forge → {self.base_url}"
 
+    def begin_job(self) -> None:
+        with self._io_lock:
+            self._aborted = False
+            self._gen_epoch += 1
+            conn = self._active_conn
+            self._active_conn = None
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    def abort(self) -> None:
+        """Close the live HTTP connection so a long generate does not outlive Unity Interrupt."""
+        with self._io_lock:
+            self._aborted = True
+            self._gen_epoch += 1
+            conn = self._active_conn
+            self._active_conn = None
+        if conn is None:
+            return
+        try:
+            conn.close()
+        except Exception:
+            pass
+        sock = getattr(conn, "sock", None)
+        if sock is not None:
+            try:
+                import socket as _socket
+
+                sock.shutdown(_socket.SHUT_RDWR)
+            except Exception:
+                pass
+            try:
+                sock.close()
+            except Exception:
+                pass
+
     def generate(self, path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        with self._io_lock:
+            if self._aborted:
+                raise BackendError("interrupted", status=499)
         status, body, _ct = self.proxy("POST", path, json.dumps(payload).encode("utf-8"), {"Content-Type": "application/json"})
         if status >= 400:
             raise BackendError(body.decode("utf-8", errors="replace")[:500] or f"upstream {status}", status=status)
@@ -128,6 +180,12 @@ class RemoteForgeBackend(CloudBackend):
         if not path.startswith("/"):
             path = "/" + path
         url = self.base_url + path
+        parsed = urllib.parse.urlparse(url)
+        host = parsed.hostname or "127.0.0.1"
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        req_path = parsed.path or "/"
+        if parsed.query:
+            req_path = req_path + "?" + parsed.query
         req_headers = {
             k: v
             for k, v in headers.items()
@@ -145,17 +203,54 @@ class RemoteForgeBackend(CloudBackend):
                 "expect",
             )
         }
-        req = urllib.request.Request(url, data=body, headers=req_headers, method=method.upper())
+        req_headers.setdefault("Connection", "close")
+        if body is not None:
+            req_headers["Content-Length"] = str(len(body))
+
+        with self._io_lock:
+            gen_path = any(x in path for x in ("txt2img", "img2img", "extra-batch-images"))
+            if self._aborted and gen_path:
+                raise BackendError("interrupted", status=499)
+            epoch = self._gen_epoch
+
+        conn: Any = None
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
-                raw = resp.read()
-                ct = resp.headers.get("Content-Type") or "application/json"
-                return int(resp.status), raw, ct
-        except urllib.error.HTTPError as exc:
-            raw = exc.read() if hasattr(exc, "read") else b""
-            return int(exc.code), raw or str(exc).encode("utf-8"), "application/json"
+            if parsed.scheme == "https":
+                conn = http.client.HTTPSConnection(host, port, timeout=self.timeout_s)
+            else:
+                conn = http.client.HTTPConnection(host, port, timeout=self.timeout_s)
+            with self._io_lock:
+                if self._gen_epoch != epoch:
+                    raise BackendError("interrupted", status=499)
+                self._active_conn = conn
+            conn.request(method.upper(), req_path, body=body, headers=req_headers)
+            resp = conn.getresponse()
+            with self._io_lock:
+                if self._gen_epoch != epoch:
+                    raise BackendError("interrupted", status=499)
+            raw = resp.read()
+            with self._io_lock:
+                if self._gen_epoch != epoch:
+                    raise BackendError("interrupted", status=499)
+            ct = resp.getheader("Content-Type") or "application/json"
+            return int(resp.status), raw, ct
+        except BackendError:
+            raise
         except Exception as exc:
+            with self._io_lock:
+                aborted = bool(self._aborted) or self._gen_epoch != epoch
+            if aborted:
+                raise BackendError("interrupted", status=499) from exc
             raise BackendError(f"proxy failed: {exc}", status=502) from exc
+        finally:
+            with self._io_lock:
+                if self._active_conn is conn:
+                    self._active_conn = None
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
 
 class FalBackend(CloudBackend):
