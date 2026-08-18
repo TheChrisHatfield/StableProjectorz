@@ -74,4 +74,18 @@ public class AddonManagerSearchContractTests {
 		Assert.That(closeBody, Does.Not.Contain("_searchQuery = null"),
 			"Close must not wipe the search query.");
 	}
+
+	[Test]
+	public void SearchKeystrokes_UseSoftRefreshPreservingExpandAndFocus() {
+		string path = Path.Combine(Application.dataPath, "_gm", "Features", "AddonSystem", "AddonManager_UI.cs");
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("RefreshAddonsList(listFilterOnly: true)"),
+			"Search/filter must soft-refresh so typing does not restyle the search field.");
+		Assert.That(src, Does.Contain("_expandedAddonIds"),
+			"Expanded Preferences must be remembered across search rebuilds.");
+		Assert.That(src, Does.Contain("restoreSearchFocus"),
+			"Search caret/focus must be restored after list rebuild.");
+		Assert.That(src, Does.Contain("ThemeAddonListItemsOnly"),
+			"Soft refresh themes rows only — not the active search chrome.");
+	}
 }
