@@ -246,7 +246,7 @@ namespace spz {
 		private Toggle _filterAllToggle;
 		private Toggle _filterEnabledToggle;
 		private Toggle _filterDisabledToggle;
-		/// <summary>Live search query (name / id). Kept while the manager stays open; not cleared on Close.</summary>
+		/// <summary>Live search query (associative text). Kept while the manager stays open; not cleared on Close.</summary>
 		string _searchQuery = "";
 		TMP_InputField _searchInput;
 		Toggle _rememberEnabledAddonToggle; // assigned in Create / TryAddRememberPreferenceRowIfMissing
@@ -852,9 +852,10 @@ namespace spz {
 		GameObject filterBarObj = new GameObject("FilterBar");
 		filterBarObj.transform.SetParent(panelObj.transform, false);
 		var filterBarLE = filterBarObj.AddComponent<LayoutElement>();
-		// Label + pills + search field (+ VLG spacing).
-		filterBarLE.preferredHeight = 110f;
-		filterBarLE.minHeight = 110f;
+		// Label + pills only — search is its own full-width row below.
+		filterBarLE.preferredHeight = 66f;
+		filterBarLE.minHeight = 66f;
+		filterBarLE.flexibleWidth = 1f;
 		var filterBarLayout = filterBarObj.AddComponent<UnityEngine.UI.VerticalLayoutGroup>();
 		filterBarLayout.spacing = 4f;
 		filterBarLayout.childControlWidth = true;
@@ -903,7 +904,8 @@ namespace spz {
 		_filterAllToggle = CreateFilterToggle("All", filterPillsObj.transform, toggleGroup, 0).GetComponent<Toggle>();
 		_filterEnabledToggle = CreateFilterToggle("Enabled", filterPillsObj.transform, toggleGroup, 1).GetComponent<Toggle>();
 		_filterDisabledToggle = CreateFilterToggle("Disabled", filterPillsObj.transform, toggleGroup, 2).GetComponent<Toggle>();
-		BuildAddonSearchField(filterBarObj.transform);
+		// Full-bleed search row under FilterBar (sibling of FilterBar, not nested under pills).
+		BuildAddonSearchField(panelObj.transform);
 		
 		GameObject scrollViewObj = new GameObject("ScrollView");
 		scrollViewObj.layer = UILayer;
@@ -1631,51 +1633,86 @@ namespace spz {
 
 		/// <summary>
 		/// Connectivity: older panels have Filter pills but no search — create/wire here so OpenPanel
-		/// never leaves "filter works, search missing."
+		/// never leaves "filter works, search missing." Search is a full-width sibling of FilterBar.
 		/// </summary>
 		void EnsureSearchFieldFromPanel() {
 			if (_panel == null) return;
-			Transform filterBar = _panel.transform.Find("FilterBar");
-			if (filterBar == null) return;
-			if (_searchInput != null && _searchInput.transform.IsChildOf(filterBar)) {
+			if (_searchInput != null && _searchInput.transform.IsChildOf(_panel.transform)) {
+				StretchSearchFieldFullWidth(_searchInput.transform as RectTransform);
 				WireSearchInputListeners(_searchInput);
 				return;
 			}
-			Transform existing = filterBar.Find(SearchFieldName);
+			// Prefer panel-level SearchField (full bleed). Fall back to FilterBar/SearchField from older builds.
+			Transform existing = _panel.transform.Find(SearchFieldName);
+			if (existing == null) {
+				var underFilter = _panel.transform.Find("FilterBar/" + SearchFieldName);
+				if (underFilter != null) {
+					// Promote nested search to a full-width panel sibling so the bar spans the shell.
+					underFilter.SetParent(_panel.transform, false);
+					existing = underFilter;
+					int filterIdx = _panel.transform.Find("FilterBar") != null
+						? _panel.transform.Find("FilterBar").GetSiblingIndex()
+						: 0;
+					existing.SetSiblingIndex(filterIdx + 1);
+				}
+			}
 			if (existing != null) {
 				_searchInput = existing.GetComponent<TMP_InputField>();
 				if (_searchInput != null) {
+					StretchSearchFieldFullWidth(existing as RectTransform);
 					WireSearchInputListeners(_searchInput);
+					UpdateSearchPlaceholder(_searchInput);
 					return;
 				}
 			}
-			BuildAddonSearchField(filterBar);
-			var barLe = filterBar.GetComponent<LayoutElement>();
+			Transform filterBar = _panel.transform.Find("FilterBar");
+			int insertAt = filterBar != null ? filterBar.GetSiblingIndex() + 1 : _panel.transform.childCount;
+			BuildAddonSearchField(_panel.transform);
+			if (_searchInput != null)
+				_searchInput.transform.SetSiblingIndex(insertAt);
+			var barLe = filterBar != null ? filterBar.GetComponent<LayoutElement>() : null;
 			if (barLe != null) {
-				barLe.preferredHeight = Mathf.Max(barLe.preferredHeight, 110f);
-				barLe.minHeight = Mathf.Max(barLe.minHeight, 110f);
-			}
-			var vlg = filterBar.GetComponent<VerticalLayoutGroup>();
-			if (vlg != null) {
-				vlg.childControlWidth = true;
-				vlg.childForceExpandWidth = true;
+				// Search moved out — FilterBar no longer needs the taller slot.
+				barLe.preferredHeight = Mathf.Min(barLe.preferredHeight, 66f);
+				barLe.minHeight = Mathf.Min(barLe.minHeight, 66f);
 			}
 		}
 
-		void BuildAddonSearchField(Transform filterBar) {
-			if (filterBar == null) return;
+		static void StretchSearchFieldFullWidth(RectTransform rt) {
+			if (rt == null) return;
+			rt.anchorMin = new Vector2(0f, 1f);
+			rt.anchorMax = new Vector2(1f, 1f);
+			rt.pivot = new Vector2(0.5f, 1f);
+			rt.offsetMin = new Vector2(0f, rt.offsetMin.y);
+			rt.offsetMax = new Vector2(0f, rt.offsetMax.y);
+			var le = rt.GetComponent<LayoutElement>();
+			if (le == null) le = rt.gameObject.AddComponent<LayoutElement>();
+			le.flexibleWidth = 1f;
+			le.preferredWidth = -1f;
+			le.minWidth = 0f;
+			le.minHeight = 36f;
+			le.preferredHeight = 36f;
+			le.flexibleHeight = 0f;
+		}
+
+		void BuildAddonSearchField(Transform parent) {
+			if (parent == null) return;
 			var searchFieldGo = new GameObject(SearchFieldName);
-			searchFieldGo.layer = filterBar.gameObject.layer;
-			searchFieldGo.transform.SetParent(filterBar, false);
-			searchFieldGo.AddComponent<RectTransform>();
+			searchFieldGo.layer = parent.gameObject.layer;
+			searchFieldGo.transform.SetParent(parent, false);
+			var sRt = searchFieldGo.AddComponent<RectTransform>();
 			var sBg = searchFieldGo.AddComponent<Image>();
 			AssignSolidFaceThenMarkRounded(sBg);
 			sBg.color = new Color(30f / 255f, 30f / 255f, 33f / 255f, 0.95f);
 			sBg.raycastTarget = true;
 			var sLE = searchFieldGo.AddComponent<LayoutElement>();
 			sLE.flexibleWidth = 1f;
+			sLE.preferredWidth = -1f;
+			sLE.minWidth = 0f;
 			sLE.minHeight = 36f;
 			sLE.preferredHeight = 36f;
+			sLE.flexibleHeight = 0f;
+			StretchSearchFieldFullWidth(sRt);
 
 			var textAreaObj = new GameObject("Text Area");
 			textAreaObj.layer = searchFieldGo.layer;
@@ -1696,7 +1733,7 @@ namespace spz {
 			phRt.offsetMin = Vector2.zero;
 			phRt.offsetMax = Vector2.zero;
 			var phTmp = phGo.AddComponent<TextMeshProUGUI>();
-			phTmp.text = "Search by name or id…";
+			phTmp.text = "Search add-ons…";
 			phTmp.fontSize = 14;
 			phTmp.color = new Color(0.55f, 0.55f, 0.58f, 1f);
 			phTmp.alignment = TextAlignmentOptions.MidlineLeft;
@@ -1726,7 +1763,12 @@ namespace spz {
 			_searchInput.caretWidth = 2;
 			_searchInput.text = _searchQuery ?? "";
 			WireSearchInputListeners(_searchInput);
-			AttachTooltip(searchFieldGo, "Filter the list by add-on name or id.");
+			AttachTooltip(searchFieldGo, "Type to filter add-ons by any associated text (name, id, description, author…).");
+		}
+
+		static void UpdateSearchPlaceholder(TMP_InputField input) {
+			if (input?.placeholder is TextMeshProUGUI ph)
+				ph.text = "Search add-ons…";
 		}
 
 		void WireSearchInputListeners(TMP_InputField input) {
@@ -1784,7 +1826,7 @@ namespace spz {
 			if (_filterDisabledToggle != null)
 				AttachTooltip(_filterDisabledToggle.gameObject, "Show only disabled add-ons.");
 			if (_searchInput != null)
-				AttachTooltip(_searchInput.gameObject, "Filter the list by add-on name or id.");
+				AttachTooltip(_searchInput.gameObject, "Type to filter add-ons by any associated text (name, id, description, author…).");
 		}
 		
 		/// <summary>
@@ -1876,20 +1918,80 @@ namespace spz {
 		}
 
 		/// <summary>
-		/// Case-insensitive substring match on add-on folder id and optional <c>displayName</c>.
+		/// Typing-association search: every whitespace-separated query token must associate with the
+		/// add-on's text bag (id tokens, displayName, subtitle, description, author, version).
+		/// CamelCase / underscore ids contribute split tokens so "camera tools" matches CameraTools.
 		/// Empty query matches everything.
 		/// </summary>
 		public static bool AddonMatchesSearch(string addonId, Addon_MGR.AddonInfo info, string query) {
 			if (string.IsNullOrWhiteSpace(query))
 				return true;
-			string q = query.Trim();
-			if (!string.IsNullOrEmpty(addonId)
-			    && addonId.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0)
-				return true;
-			if (info != null && !string.IsNullOrWhiteSpace(info.displayName)
-			    && info.displayName.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0)
-				return true;
-			return false;
+			string haystack = BuildAddonSearchHaystack(addonId, info);
+			if (string.IsNullOrEmpty(haystack))
+				return false;
+			string[] tokens = query.Trim().Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+			for (int i = 0; i < tokens.Length; i++) {
+				string t = tokens[i];
+				if (t.Length == 0) continue;
+				if (haystack.IndexOf(t, StringComparison.OrdinalIgnoreCase) < 0)
+					return false;
+			}
+			return true;
+		}
+
+		/// <summary>Concatenated searchable text + split id tokens for associative matching.</summary>
+		public static string BuildAddonSearchHaystack(string addonId, Addon_MGR.AddonInfo info) {
+			var sb = new System.Text.StringBuilder(128);
+			void Append(string s) {
+				if (string.IsNullOrWhiteSpace(s)) return;
+				if (sb.Length > 0) sb.Append(' ');
+				sb.Append(s.Trim());
+			}
+			Append(addonId);
+			Append(SplitIdentifierTokens(addonId));
+			if (info != null) {
+				Append(info.displayName);
+				Append(SplitIdentifierTokens(info.displayName));
+				Append(info.listSubtitle);
+				Append(info.description);
+				Append(info.author);
+				Append(info.version);
+				Append(info.id);
+			}
+			return sb.ToString();
+		}
+
+		/// <summary>
+		/// Split CamelCase / snake / kebab identifiers into space-separated tokens
+		/// (e.g. StableProjectorzGO → Stable Projectorz G O → usable as "stable projector").
+		/// </summary>
+		public static string SplitIdentifierTokens(string id) {
+			if (string.IsNullOrWhiteSpace(id)) return "";
+			var sb = new System.Text.StringBuilder(id.Length + 8);
+			char prev = '\0';
+			for (int i = 0; i < id.Length; i++) {
+				char c = id[i];
+				if (c == '_' || c == '-' || c == '.' || c == '/') {
+					if (sb.Length > 0 && sb[sb.Length - 1] != ' ')
+						sb.Append(' ');
+					prev = c;
+					continue;
+				}
+				bool boundary = false;
+				if (i > 0 && char.IsLetterOrDigit(prev)) {
+					if (char.IsUpper(c) && (char.IsLower(prev) || (i + 1 < id.Length && char.IsLower(id[i + 1]))))
+						boundary = true;
+					else if (char.IsLetter(c) && char.IsDigit(prev))
+						boundary = true;
+					else if (char.IsDigit(c) && char.IsLetter(prev))
+						boundary = true;
+				}
+				if (boundary && sb.Length > 0 && sb[sb.Length - 1] != ' ')
+					sb.Append(' ');
+				sb.Append(c);
+				prev = c;
+			}
+			return sb.ToString();
 		}
 
 		/// <summary>
