@@ -66,8 +66,10 @@ namespace spz {
     
     
 	    void Select_Specific_ProjCamera(ProjectorCamera projCam, bool notify_IconsListUI){
+	        if(projCam == null){ return; }
 	        if(notify_IconsListUI){
 	            IconUI icon =  projCam.myIconUI;
+	            if (icon == null || icon._genData == null){ return; }
 	            GenerationData_Kind kind =  icon._genData.kind;
 	            IconUI.Act_OnSomeIconClicked?.Invoke(icon, kind);
 	        }
