@@ -77,11 +77,9 @@ namespace spz {
 	        _lastImportSucceeded = false;
 	        _isImportingModel = true;
 
-	        // Read the file BEFORE announcing the start: the start callback removes the model currently
-	        // in the scene, and this is exactly the path where the read is most likely to fail — SPZ
-	        // picks up the exchange FBX as soon as Blender stamps it ready, so the file can still be
-	        // locked or mid-flush. Failing after the removal left the user with an empty scene and only
-	        // an error message. Nothing is destroyed until the bytes are in hand.
+	        // Read the file BEFORE announcing the start / parking the model: the start callback used
+	        // to remove the scene model, and a locked exchange FBX is common. Bytes must be in hand
+	        // first; Assimp runs in the coroutine before any destructive replace.
 	        try {
 		        _modelBytesCache = File.ReadAllBytes(filepath);
 		        _modelBytesCache_filename = Path.GetFileName(filepath);
@@ -90,15 +88,10 @@ namespace spz {
 		        return;
 	        }
 
-	        // _isImportingModel is already true. If a start listener throws, or StartCoroutine refuses
-	        // because this helper's GameObject is inactive, no ImportRoutine ever runs to clear it —
-	        // and every later import, CanImportFile and project TryLoad would refuse "already importing".
+	        // _isImportingModel is already true. If StartCoroutine refuses because this helper's
+	        // GameObject is inactive, no ImportRoutine ever runs to clear it.
 	        try {
-		        _Act_onStartedImporting?.Invoke();
-
-		        // We simulate the progress text here since Assimp is fast/blocking in this implementation
 		        Viewport_StatusText.instance?.ShowStatusText($"Importing {Path.GetFileName(filepath)}...", false, 15, true);
-
 		        StartCoroutine(ImportRoutine(filepath, applyExportAxisBasis));
 	        } catch (Exception e) {
 		        OnError("Could not start the import: " + e.Message);
@@ -122,11 +115,22 @@ namespace spz {
 	            error = e.Message;
 	        }
 
-	        if(loadedGo != null){
-	            OnSuccess_AcceptModel(loadedGo);
-	        } else {
-	            OnError(error);
+	        if(loadedGo == null){
+	            // Current model was never parked/removed — fail closed with the scene intact.
+	            OnError(string.IsNullOrEmpty(error) ? "Assimp returned no mesh root" : error);
+	            yield break;
 	        }
+
+	        // Announce start only after Assimp succeeded (icon clear / WillLoadModel). Park+Init follows.
+	        try {
+		        _Act_onStartedImporting?.Invoke();
+	        } catch (Exception e) {
+		        Destroy(loadedGo);
+		        OnError("Could not start the import: " + e.Message);
+		        yield break;
+	        }
+
+	        OnSuccess_AcceptModel(loadedGo);
 	    }
 
 
@@ -158,21 +162,31 @@ namespace spz {
 	        _isImportingModel = true;
 	        _latestSuccessRoot = loadedRoot;
 
+	        var mh = ModelsHandler_3D.instance;
+	        mh?.ParkCurrentModelForImportReplace();
+
 	        bool success;
 	        try {
 		        success = o3d.Init(loadedRoot);
 	        } catch (Exception ex) {
 		        Debug.LogError("[ModelsHandler3D_ImportHelper] Init failed: " + ex.Message);
+		        mh?.RestoreParkedModelAfterFailedImport();
+		        Destroy(loadedRoot);
 		        OnError("Model Init failed: " + ex.Message);
 		        return;
 	        }
 	        if(!success){
+		        mh?.RestoreParkedModelAfterFailedImport();
+		        Destroy(loadedRoot);
 		        _modelsHandler_SL = null;
 		        _lastImportSucceeded = false;
 		        _isImportingModel = false;
-		        _Act_onImportComplete?.Invoke(false, _latestSuccessRoot);
+		        _Act_onImportComplete?.Invoke(false, null);
+		        Viewport_StatusText.instance?.ShowStatusText("Importing failed.\nError: Model Init returned false", false, 15, true);
 		        return;
 	        }
+
+	        mh?.CommitParkedModelDiscard();
 
 	        try {
 		        _udims_helper.Init_FindAll_UDIMs( o3d.meshes, (pcnt01)=>OnUDIMsProgress01(pcnt01, loadedRoot) );
