@@ -1801,7 +1801,20 @@ namespace spz {
 						break;
 						
 					case "spz.cmd.set_skybox_color":
-						bool isTop = @params["is_top"]?.ToObject<bool>() ?? true;
+						JToken isTopTok = @params?["is_top"];
+						if (isTopTok == null) {
+							result["success"] = false;
+							result["error"] = "is_top bool required (omitting it used to fail-open as true)";
+							break;
+						}
+						bool isTop;
+						try {
+							isTop = isTopTok.ToObject<bool>();
+						} catch {
+							result["success"] = false;
+							result["error"] = "invalid is_top (boolean)";
+							break;
+						}
 						float r = @params["r"]?.ToObject<float>() ?? 0f;
 						float g = @params["g"]?.ToObject<float>() ?? 0f;
 						float b = @params["b"]?.ToObject<float>() ?? 0f;
