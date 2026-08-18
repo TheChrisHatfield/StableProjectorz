@@ -534,6 +534,12 @@ public sealed class ViewportAxisGizmoContractTests {
 			"Aspect fit moves the inner rect every frame — the corner dock must be re-applied.");
 		Assert.That(body, Does.Contain("SetAsLastSibling()"),
 			"Stay above MainViewport_UI_EventListener so axis/lantern clicks reach the buttons.");
+
+		int dock = src.IndexOf("void ApplyCornerDock(float marginPx)", StringComparison.Ordinal);
+		Assert.That(dock, Is.GreaterThan(0));
+		string dockBody = src.Substring(dock, Math.Min(1200, src.Length - dock));
+		Assert.That(dockBody, Does.Contain("if (_root.anchoredPosition != wanted)"),
+			"Idle aspect-fit must not rewrite anchoredPosition every frame when the corner did not move.");
 	}
 
 	[Test]

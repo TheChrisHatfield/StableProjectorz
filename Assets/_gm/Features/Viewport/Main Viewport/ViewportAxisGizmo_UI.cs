@@ -430,11 +430,19 @@ namespace spz {
 			if (img == null) {
 				return;
 			}
-			img.color = _palette.CenterTint;
-			img.raycastTarget = true;
+			Color tint = _palette.CenterTint;
+			if (img.color != tint) {
+				img.color = tint;
+			}
+			if (!img.raycastTarget) {
+				img.raycastTarget = true;
+			}
 			// Unity only alpha-tests when the sprite texture is readable (our lantern PNG load keeps it so).
 			Texture2D tex = img.sprite != null ? img.sprite.texture : null;
-			img.alphaHitTestMinimumThreshold = tex != null && tex.isReadable ? 0.1f : 0f;
+			float hit = tex != null && tex.isReadable ? 0.1f : 0f;
+			if (!Mathf.Approximately(img.alphaHitTestMinimumThreshold, hit)) {
+				img.alphaHitTestMinimumThreshold = hit;
+			}
 		}
 
 		static RectTransform CreateChild(string name, RectTransform parent) {
@@ -579,21 +587,32 @@ namespace spz {
 		/// anchored position is the delta from the parent's top-right corner to the inner rect's.
 		/// </summary>
 		void ApplyCornerDock(float marginPx) {
-			_root.anchorMin = new Vector2(1f, 1f);
-			_root.anchorMax = new Vector2(1f, 1f);
-			_root.pivot = new Vector2(1f, 1f);
+			Vector2 topRight = new Vector2(1f, 1f);
+			if (_root.anchorMin != topRight) {
+				_root.anchorMin = topRight;
+			}
+			if (_root.anchorMax != topRight) {
+				_root.anchorMax = topRight;
+			}
+			if (_root.pivot != topRight) {
+				_root.pivot = topRight;
+			}
 
 			var parent = _root.parent as RectTransform;
 			RectTransform dock = ResolveDockReference();
+			Vector2 wanted;
 			if (parent == null || dock == null || dock == parent) {
-				_root.anchoredPosition = new Vector2(-marginPx, -marginPx);
-				return;
+				wanted = new Vector2(-marginPx, -marginPx);
+			} else {
+				Vector3 innerTopRightWorld = dock.TransformPoint(new Vector3(dock.rect.xMax, dock.rect.yMax, 0f));
+				Vector3 parentLocal = parent.InverseTransformPoint(innerTopRightWorld);
+				Vector2 parentTopRight = new Vector2(parent.rect.xMax, parent.rect.yMax);
+				Vector2 delta = (Vector2)parentLocal - parentTopRight;
+				wanted = delta + new Vector2(-marginPx, -marginPx);
 			}
-			Vector3 innerTopRightWorld = dock.TransformPoint(new Vector3(dock.rect.xMax, dock.rect.yMax, 0f));
-			Vector3 parentLocal = parent.InverseTransformPoint(innerTopRightWorld);
-			Vector2 parentTopRight = new Vector2(parent.rect.xMax, parent.rect.yMax);
-			Vector2 delta = (Vector2)parentLocal - parentTopRight;
-			_root.anchoredPosition = delta + new Vector2(-marginPx, -marginPx);
+			if (_root.anchoredPosition != wanted) {
+				_root.anchoredPosition = wanted;
+			}
 		}
 
 		/// <summary>
