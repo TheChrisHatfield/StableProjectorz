@@ -130,6 +130,9 @@ namespace spz {
 						"Cancel");
 					return;
 				}
+				// No confirm UI — refuse overwrite rather than silently clobber an existing weight.
+				Status("File already exists in WebUI folder (confirm UI unavailable): " + fileName, false);
+				return;
 			}
 
 			StartCopy(kind, absolutePath, destPath, fileName);
