@@ -140,6 +140,17 @@ def _painter_open_project_from_mesh(mesh_path: str) -> Tuple[bool, str]:
             if callable(reload_fn):
                 reload_fn(mesh_path)
                 return True, mesh_path
+            # Without reload_mesh, create() while a project is still open is undefined (often a no-op
+            # or a failed second project). Close first when the API allows it.
+            close_fn = getattr(project, "close", None)
+            if callable(close_fn):
+                close_fn()
+            else:
+                return (
+                    False,
+                    "Painter already has a project open and exposes no reload_mesh/close — "
+                    "close the project in Painter, then Import again.",
+                )
         create = getattr(project, "create", None)
         if callable(create):
             settings = getattr(project, "Settings", None)

@@ -135,6 +135,13 @@ class ZBrushPainterBridgeContractTests(unittest.TestCase):
         bl = (EXT / "Blender_SpzBridge" / "__init__.py").read_text(encoding="utf-8")
         self.assertIn('host_id="blender"', bl)
 
+    def test_painter_open_closes_before_create_when_reload_missing(self):
+        src = (EXT / "Painter_SpzBridge" / "spz_painter_plugin.py").read_text(encoding="utf-8")
+        body = src.split("def _painter_open_project_from_mesh")[1].split("def _painter_export")[0]
+        self.assertIn("reload_mesh", body)
+        self.assertIn('getattr(project, "close"', body)
+        self.assertIn("already has a project open", body)
+
     def test_installers_target_user_dirs_not_program_files(self):
         for name in ("ZBrush_SpzBridge/install_into_zbrush.py", "Painter_SpzBridge/install_into_painter.py"):
             src = (EXT / name).read_text(encoding="utf-8")
