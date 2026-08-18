@@ -16,6 +16,8 @@ namespace spz {
 		static float _lastLiveArmTime = -999f;
 		/// <summary>Band Live last armed as DesiredBin — a mid-stroke sample matching it is our own paint (B2.2a).</summary>
 		static ValuePaintBand _lastArmedDesired = (ValuePaintBand)(-1);
+		/// <summary>Rec.709 band of the color actually written — chroma-keep may undershoot DesiredBin.</summary>
+		static ValuePaintBand _lastArmedAppliedBand = (ValuePaintBand)(-1);
 
 		public static string LastAssistWhich => _assistWhich;
 		public static ValuePaintProposal LastProposal { get; private set; }
@@ -47,6 +49,7 @@ namespace spz {
 			_lastDesired = (ValuePaintBand)(-1);
 			_lastLiveArmTime = -999f;
 			_lastArmedDesired = (ValuePaintBand)(-1);
+			_lastArmedAppliedBand = (ValuePaintBand)(-1);
 			LastRefusalReason = "";
 		}
 
@@ -84,7 +87,8 @@ namespace spz {
 			// B2.2a — mid-stroke the accumulation already holds the paint laid earlier this frame.
 			// A sample landing on the band we armed is the brush reading itself; stepping again
 			// ratchets value away run-away. Hold the arm until the tip reaches different form.
-			if (strokeActive && HasLastProposal && plane == _lastArmedDesired) {
+			if (strokeActive && HasLastProposal
+			    && (plane == _lastArmedDesired || plane == _lastArmedAppliedBand)) {
 				holding = true;
 				reason = "hold: self-read";
 				return false;
@@ -125,6 +129,13 @@ namespace spz {
 			LastProposal = proposal;
 			HasLastProposal = true;
 			_lastArmedDesired = proposal.DesiredBin;
+			// Chroma-keep may undershoot DesiredBin — hold on what was actually written.
+			var sd = SD_WorkflowOptionsRibbon_UI.instance;
+			Color written = sd != null
+				? sd.brushColor
+				: ValuePaintProposalApplier.ColorAtDesiredValue(surfaceSample, proposal.DesiredBin);
+			_lastArmedAppliedBand = DeterministicValuePaintAssist.BandFromLuminance(
+				DeterministicValuePaintAssist.Luminance01(written));
 			return true;
 		}
 

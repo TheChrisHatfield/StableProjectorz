@@ -119,6 +119,27 @@ public sealed class ValueAssistLiveStepContractTests {
 		}
 	}
 
+	// B2.2a — chroma-keep can undershoot a bright DesiredBin, so hold must also match the
+	// Rec.709 band of the color actually written or saturated mid-stroke paint ratchets.
+	[Test]
+	public void SaturatedRedHighlight_AppliedBandUndershootsDesired() {
+		Color written = ValuePaintProposalApplier.ColorAtDesiredValue(
+			new Color(1f, 0f, 0f, 1f), ValuePaintBand.Highlight);
+		var applied = DeterministicValuePaintAssist.BandFromLuminance(
+			DeterministicValuePaintAssist.Luminance01(written));
+		Assert.That(applied, Is.Not.EqualTo(ValuePaintBand.Highlight),
+			"if chroma-keep starts hitting Highlight, the applied-band hold is redundant — update B2.2a");
+	}
+
+	[Test]
+	public void SelfReadHold_AlsoMatchesAppliedBand_Source() {
+		string pred = System.IO.File.ReadAllText(System.IO.Path.Combine(
+			Application.dataPath, "_gm", "Features", "Paint", "SmartValuePaint",
+			"ValuePaintLivePredictor.cs"));
+		Assert.That(pred, Does.Contain("_lastArmedAppliedBand"));
+		Assert.That(pred, Does.Contain("plane == _lastArmedDesired || plane == _lastArmedAppliedBand"));
+	}
+
 	// B2.2c — tool leave must restore Live soft-arm; refusing the next TryLiveArm alone left
 	// opacity/hardness/color on the ribbon so Smudge/Erase felt VA-driven.
 	[Test]
