@@ -330,6 +330,29 @@ def main() -> int:
                 box["body"].get("interrupted") is True or not box["body"].get("images"),
                 "interrupt generate does not return a full image as success",
             )
+        box2 = {"st": None, "body": None, "err": None}
+
+        def _extra():
+            try:
+                box2["st"], box2["body"] = http(
+                    "POST", base, "/sdapi/v1/extra-batch-images", {"upscaling_resize": 2}, timeout=12
+                )
+            except Exception as exc:
+                box2["err"] = exc
+
+        t2 = threading.Thread(target=_extra, daemon=True)
+        t2.start()
+        time.sleep(0.35)
+        http("POST", base, "/sdapi/v1/interrupt", {})
+        t2.join(timeout=4.0)
+        check(not t2.is_alive(), "interrupt unblocks extra-batch handler")
+        if box2["body"] is not None:
+            check(
+                box2["body"].get("interrupted") is True or not box2["body"].get("images"),
+                "interrupt extra-batch does not return a full image as success",
+            )
+        else:
+            check(box2["err"] is None, "interrupt extra-batch no exception")
         shim.stop_shim()
         up.shutdown()
     except Exception as exc:
