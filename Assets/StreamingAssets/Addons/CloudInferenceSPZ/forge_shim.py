@@ -414,7 +414,8 @@ class _Handler(BaseHTTPRequestHandler):
                     st.job_active = False
                     st.progress = 0.0
                     st.last_error = ""
-                self._send_json(200, {"images": [], "interrupted": True})
+                # 500 so Unity Finish_if_ResultError treats this as cancel, not a successful empty bake.
+                self._send_json(500, {"images": [], "interrupted": True, "error": "interrupted"})
                 return
 
         ticker.join(timeout=1.0)
@@ -426,7 +427,7 @@ class _Handler(BaseHTTPRequestHandler):
                 st.progress = 0.0
                 st.last_error = "" if interrupted else str(exc)
             if interrupted:
-                self._send_json(200, {"images": [], "interrupted": True, "info": str(exc)})
+                self._send_json(500, {"images": [], "interrupted": True, "info": str(exc), "error": "interrupted"})
                 return
             if isinstance(exc, BackendError):
                 self._send_json(exc.status, {"detail": str(exc), "error": str(exc)})
@@ -439,7 +440,7 @@ class _Handler(BaseHTTPRequestHandler):
             st.progress = 0.0 if interrupted else 1.0
             st.last_error = ""
         if interrupted:
-            self._send_json(200, {"images": [], "interrupted": True})
+            self._send_json(500, {"images": [], "interrupted": True, "error": "interrupted"})
             return
         self._send_json(200, result)
 

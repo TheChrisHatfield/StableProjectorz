@@ -335,7 +335,9 @@ def main() -> int:
             check(True, "interrupt generate response dropped (Unity-style abort)")
         else:
             check(
-                box["body"].get("interrupted") is True or not box["body"].get("images"),
+                (box.get("st") or 0) >= 400
+                or box["body"].get("interrupted") is True
+                or not box["body"].get("images"),
                 "interrupt generate does not return a full image as success",
             )
         box2 = {"st": None, "body": None, "err": None}
@@ -356,7 +358,7 @@ def main() -> int:
         check(not t2.is_alive(), "interrupt unblocks extra-batch handler")
         if box2["body"] is not None:
             check(
-                box2["body"].get("interrupted") is True or not box2["body"].get("images"),
+                box2["st"] >= 400 or box2["body"].get("interrupted") is True or not box2["body"].get("images"),
                 "interrupt extra-batch does not return a full image as success",
             )
         else:
