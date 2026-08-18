@@ -24,6 +24,8 @@ namespace spz {
 
 	    public bool _isSaving { get; private set; } = false;
 	    public bool _isLoading { get; private set; } = false;
+	    /// <summary>True when the last projection/view texture dialog export chose a path and finished (not cancel).</summary>
+	    public bool LastTextureDialogExportSucceeded { get; private set; } = false;
 	    public ProjectSaveLoad_Helper SaveLoadHelper => _saveLoad_helper;
 
 	    // Thompson frame-budget scheduler (mirrors PaintUndo_Scheduler): spreads the export's blocking
@@ -494,10 +496,12 @@ namespace spz {
 			        "Can't export view textures while a save/export is still writing.", false, 5f, false );
 		        return;
 	        }
+	        LastTextureDialogExportSucceeded = false;
 	        _isSaving = true;
 	        string defaultName = "Tex_StableProjectorz";
-	        GetBasePathForTextures(defaultName, onComplete:(path) => OnSaveViewTextures_PathChosen(path,OnReady));
-	        void OnReady() =>_isSaving=false;
+	        GetBasePathForTextures(defaultName, onComplete:(path) => OnSaveViewTextures_PathChosen(path, () => {
+		        _isSaving = false;
+	        }));
 	    }
 
 
@@ -508,11 +512,12 @@ namespace spz {
 			        "Can't export projection textures while a save/export is still writing.", false, 5f, false );
 		        return;
 	        }
+	        LastTextureDialogExportSucceeded = false;
 	        _isSaving = true;
 	        string defaultName = "Tex_StableProjectorz";
-	        GetBasePathForTextures( defaultName, onComplete:(path)=>OnSaveProjTextures_PathChosen(path,isDilate,OnReady) );
-        
-	        void OnReady()=> _isSaving = false;
+	        GetBasePathForTextures( defaultName, onComplete:(path)=>OnSaveProjTextures_PathChosen(path,isDilate, () => {
+		        _isSaving = false;
+	        }));
 	    }
 
     
@@ -539,6 +544,7 @@ namespace spz {
 
 	    void OnSaveViewTextures_PathChosen( string basePath, Action onComplete ){
 	        if(string.IsNullOrEmpty(basePath)){
+		        LastTextureDialogExportSucceeded = false;
 		        onComplete?.Invoke();
 		        return;
 	        }
@@ -546,11 +552,14 @@ namespace spz {
 	        StartCoroutine( WaitForRenderAll_crtn(skipAO_blit:false, onReady) );
 
 	        void onReady(){
+	            bool ok = false;
 	            try {
 		            Save_ViewTextures(basePath);
+		            ok = true;
 	            } catch (System.Exception e) {
 		            UnityEngine.Debug.LogError("[Save_MGR] Save_ViewTextures failed: " + e.Message);
 	            } finally {
+		            LastTextureDialogExportSucceeded = ok;
 		            onComplete?.Invoke();
 	            }
 	        }
@@ -559,6 +568,7 @@ namespace spz {
 
 	    void OnSaveProjTextures_PathChosen( string basePath, bool isDilate, Action onComplete ){
 	        if(string.IsNullOrEmpty(basePath)){
+		        LastTextureDialogExportSucceeded = false;
 		        onComplete?.Invoke();
 		        return;
 	        }
@@ -566,7 +576,11 @@ namespace spz {
 	        StartCoroutine( WaitForRenderAll_crtn(skipAO_blit:true, onReady) );
         
 	        void onReady() => Save_Mesh_Textures(null, basePath, isDilate, forbid_albedoDelete:false,
-		        onComplete: _ => onComplete?.Invoke());
+		        onComplete: _ => {
+			        // Path was chosen and encode finished; cancel already returned above with success false.
+			        LastTextureDialogExportSucceeded = true;
+			        onComplete?.Invoke();
+		        });
 	    }
 
     

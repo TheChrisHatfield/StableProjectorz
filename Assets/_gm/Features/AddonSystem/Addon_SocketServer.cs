@@ -579,9 +579,11 @@ namespace spz {
 				}
 			} else if (string.Equals(method, "spz.cmd.export_projection_textures", StringComparison.Ordinal)
 			           || string.Equals(method, "spz.cmd.export_view_textures", StringComparison.Ordinal)) {
-				// Texture-only exports never write an FBX. Idle Save_MGR means the encode finished.
-				// Do not require _path_recentlyExported (that stamps a prior mesh export and causes
-				// false failures on a fresh session, or false success after a cancelled mesh dialog).
+				// Idle after cancel also clears _isSaving — use the dedicated success flag so cancel
+				// does not leave the deferred TCP result at the initial success:true.
+				bool ok = sm.LastTextureDialogExportSucceeded;
+				result["success"] = ok;
+				if (!ok) result["error"] = "texture export cancelled or failed";
 			} else {
 				// Dialog mesh+texture export: no .spz_go_ready. Succeed only if this op wrote a mesh.
 				var mh = ModelsHandler_3D.instance;
