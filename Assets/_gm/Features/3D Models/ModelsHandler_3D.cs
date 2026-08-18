@@ -220,7 +220,9 @@ namespace spz {
 	    void OnStartedImporting(){
 	        _importingInfo = _importingInfo??new ModelsHandler_ImporingInfo();//could be null if Loading a project
 	        Act_onWillLoadModel?.Invoke(_importingInfo);                      //In that case, just default stuff.
-	        Remove_CurrentModel();
+	        // Do NOT Remove_CurrentModel here. Assimp / Init can still fail; wiping the scene first left
+	        // users with an empty viewport and only an error toast. The import helper parks the live
+	        // model, Init's the new root, then commits (destroys) or restores the park.
 	    }
 
 	    void OnImportModel_Done(bool isSuccess, GameObject loadedRoot){
@@ -230,18 +232,108 @@ namespace spz {
          
 	        o3d.meshes.ForEach(sm => sm.TryChange_SelectionStatus(true, out bool isSuccessOut, isDeselectOthers:false));
 
-	        //MODIF don't have a black texture array...
-	        //int numUdims = _allObservedUdims.Count;
-	        //var blackList = new List<Texture>(numUdims);
-	        //for(int i=0; i<numUdims; ++i){  blackList.Add(Texture2DArray..blackTexture);  }
-	        //var ru = new RenderUdims(0, blackList, _allObservedUdims, texturesBelongToMe:false);
-	        //ShowFinalMat_on_ALL( ru );
-
 	        Act_onImported?.Invoke(o3d.currModelRootGO);
 	    }
 
+	    GameObject _parkedModelRoot;
+	    List<SD_3D_Mesh> _parkedMeshes;
+	    List<Renderer> _parkedRenderers;
+
+	    /// <summary>
+	    /// Hide and unregister the live model without destroying it, so a failed Init can put it back.
+	    /// </summary>
+	    public void ParkCurrentModelForImportReplace() {
+		    DiscardParkedModelForImportReplace();
+		    if (o3d.currModelRootGO == null && o3d.meshes.Count == 0) return;
+
+		    _parkedModelRoot = o3d.currModelRootGO;
+		    _parkedMeshes = o3d.meshes.ToList();
+		    _parkedRenderers = o3d.renderers.ToList();
+
+		    o3d.meshes.Clear();
+		    o3d.meshID_to_mesh.Clear();
+		    o3d.renderers.Clear();
+		    o3d.selectedMeshes.Clear();
+		    o3d.nonSelectedMeshes.Clear();
+		    o3d.selectedRenderers.Clear();
+		    o3d.currModelRootGO = null;
+		    _manipulationFocusMesh = null;
+		    _udims_helper.Recalc_selected_UDIMS();
+
+		    if (_parkedModelRoot != null)
+			    _parkedModelRoot.SetActive(false);
+	    }
+
+	    /// <summary>Destroy the parked prior model after the replacement Init succeeded.</summary>
+	    public void CommitParkedModelDiscard() {
+		    DiscardParkedModelForImportReplace();
+	    }
+
+	    /// <summary>Put the parked model back after Assimp succeeded but Init failed.</summary>
+	    public void RestoreParkedModelAfterFailedImport() {
+		    if (_parkedModelRoot == null && (_parkedMeshes == null || _parkedMeshes.Count == 0))
+			    return;
+
+		    // Drop any partial new root Init may have attached before failing.
+		    if (o3d.currModelRootGO != null && !ReferenceEquals(o3d.currModelRootGO, _parkedModelRoot)) {
+			    var partialMeshes = o3d.meshes.ToList();
+			    o3d.meshes.Clear();
+			    o3d.meshID_to_mesh.Clear();
+			    o3d.renderers.Clear();
+			    o3d.selectedMeshes.Clear();
+			    o3d.nonSelectedMeshes.Clear();
+			    o3d.selectedRenderers.Clear();
+			    foreach (SD_3D_Mesh m in partialMeshes) { m?.DestroySelf(); }
+			    Destroy(o3d.currModelRootGO);
+			    o3d.currModelRootGO = null;
+		    }
+
+		    o3d.currModelRootGO = _parkedModelRoot;
+		    if (_parkedModelRoot != null)
+			    _parkedModelRoot.SetActive(true);
+
+		    o3d.meshes.Clear();
+		    o3d.meshID_to_mesh.Clear();
+		    o3d.renderers.Clear();
+		    o3d.selectedMeshes.Clear();
+		    o3d.nonSelectedMeshes.Clear();
+		    o3d.selectedRenderers.Clear();
+
+		    if (_parkedMeshes != null) {
+			    foreach (SD_3D_Mesh m in _parkedMeshes) {
+				    if (m == null) continue;
+				    o3d.meshes.Add(m);
+				    o3d.meshID_to_mesh[m.unique_id] = m;
+				    o3d.nonSelectedMeshes.Add(m);
+			    }
+		    }
+		    if (_parkedRenderers != null) {
+			    foreach (Renderer r in _parkedRenderers) {
+				    if (r != null) o3d.renderers.Add(r);
+			    }
+		    }
+
+		    _parkedModelRoot = null;
+		    _parkedMeshes = null;
+		    _parkedRenderers = null;
+		    _manipulationFocusMesh = null;
+		    _udims_helper.Recalc_selected_UDIMS();
+	    }
+
+	    void DiscardParkedModelForImportReplace() {
+		    if (_parkedMeshes != null) {
+			    foreach (SD_3D_Mesh m in _parkedMeshes) { m?.DestroySelf(); }
+			    _parkedMeshes = null;
+		    }
+		    if (_parkedModelRoot != null) {
+			    Destroy(_parkedModelRoot);
+			    _parkedModelRoot = null;
+		    }
+		    _parkedRenderers = null;
+	    }
 
 	    void Remove_CurrentModel(){ //the model along with all of its meshes.
+	        DiscardParkedModelForImportReplace();
 	        if(o3d.currModelRootGO == null){ return; }
 
 	        var meshesCopy = o3d.meshes.ToList(); //.ToList() makes copy

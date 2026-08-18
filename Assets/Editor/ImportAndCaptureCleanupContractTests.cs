@@ -32,25 +32,24 @@ public sealed class ImportAndCaptureCleanupContractTests {
 		int end = src.IndexOf("IEnumerator ImportRoutine(", StringComparison.Ordinal);
 		Assert.That(i, Is.GreaterThan(0));
 		Assert.That(end, Is.GreaterThan(i));
-		string body = src.Substring(i, end - i);
+		string entry = src.Substring(i, end - i);
 
-		int flag = body.IndexOf("_isImportingModel = true;", StringComparison.Ordinal);
-		int start = body.IndexOf("StartCoroutine(ImportRoutine(", StringComparison.Ordinal);
+		int flag = entry.IndexOf("_isImportingModel = true;", StringComparison.Ordinal);
+		int startCo = entry.IndexOf("StartCoroutine(ImportRoutine(", StringComparison.Ordinal);
 		Assert.That(flag, Is.GreaterThan(0));
-		Assert.That(start, Is.GreaterThan(flag), "the flag is taken before the coroutine starts");
+		Assert.That(startCo, Is.GreaterThan(flag), "the flag is taken before the coroutine starts");
+		Assert.That(entry, Does.Contain("catch (Exception e)"),
+			"StartCoroutine on an inactive helper must not strand _isImportingModel");
+		Assert.That(entry, Does.Contain("OnError(\"Could not start the import: \" + e.Message);"));
 
-		// Everything between taking the flag and starting the coroutine must be recoverable.
-		string risky = body.Substring(flag);
-		Assert.That(risky, Does.Contain("_Act_onStartedImporting?.Invoke();"));
-		Assert.That(risky, Does.Contain("catch (Exception e)"),
-			"a throwing start listener must not strand _isImportingModel");
-		Assert.That(risky, Does.Contain("OnError(\"Could not start the import: \" + e.Message);"),
-			"the failure must route through OnError, which clears the flag and reports completion");
-
-		int guard = risky.IndexOf("try {", StringComparison.Ordinal);
-		Assert.That(guard, Is.GreaterThanOrEqualTo(0).And.LessThan(
-			risky.IndexOf("StartCoroutine(ImportRoutine(", StringComparison.Ordinal)),
-			"the guard must wrap the announce AND the coroutine launch");
+		// Assimp runs inside the coroutine; a throwing start listener there must also clear the flag.
+		int routine = src.IndexOf("IEnumerator ImportRoutine(", StringComparison.Ordinal);
+		int onError = src.IndexOf("void OnError(", routine, StringComparison.Ordinal);
+		string body = src.Substring(routine, onError - routine);
+		Assert.That(body, Does.Contain("_Act_onStartedImporting?.Invoke();"));
+		Assert.That(body, Does.Contain("catch (Exception e)"),
+			"a throwing start listener after Assimp must not strand _isImportingModel");
+		Assert.That(body, Does.Contain("OnError(\"Could not start the import: \" + e.Message);"));
 	}
 
 	[Test]
