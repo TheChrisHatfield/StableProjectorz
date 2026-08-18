@@ -1499,8 +1499,18 @@ namespace spz {
 						
 					case "spz.cmd.set_mesh_visibility":
 						meshId = @params["mesh_id"]?.ToObject<ushort>() ?? 0;
-						bool visible = @params["visible"]?.ToObject<bool>() ?? true;
-						result["success"] = fastPath.SetMeshVisibility(meshId, visible);
+						JToken visTok = @params?["visible"];
+						if (visTok == null) {
+							result["success"] = false;
+							result["error"] = "visible bool required (omitting it used to fail-open as true)";
+							break;
+						}
+						try {
+							result["success"] = fastPath.SetMeshVisibility(meshId, visTok.ToObject<bool>());
+						} catch {
+							result["success"] = false;
+							result["error"] = "invalid visible (boolean)";
+						}
 						break;
 						
 					case "spz.cmd.get_mesh_pos":
