@@ -355,7 +355,22 @@ def main() -> int:
             )
         else:
             check(box2["err"] is None, "interrupt extra-batch no exception")
-        shim.stop_shim()
+
+        def _gen_for_stop():
+            try:
+                http("POST", base, "/sdapi/v1/txt2img", {"width": 16, "height": 16}, timeout=12)
+            except Exception:
+                pass
+
+        t_stop = threading.Thread(target=_gen_for_stop, daemon=True)
+        t_stop.start()
+        time.sleep(0.35)
+        t0_stop = time.time()
+        ok_stop, stop_msg = shim.stop_shim()
+        elapsed_stop = time.time() - t0_stop
+        check(ok_stop, f"stop_shim during generate: {stop_msg}")
+        check(elapsed_stop < 4.0, f"Disconnect during generate does not wait 300s ({elapsed_stop:.2f}s)")
+        t_stop.join(timeout=4.0)
         up.shutdown()
     except Exception as exc:
         check(False, f"interrupt abort wiring: {exc}")
