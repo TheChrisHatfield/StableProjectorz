@@ -36,6 +36,7 @@ namespace spz {
 	            if(!interruptCurrentFly){ return; }//avoids initiating it twice, because might already be reparented, etc.
 	            StopCurrentLerpAndRestoreParent();
 	        }
+	        if(Coroutines_MGR.instance == null){ return; }
         
 	        Vector3 destinPos    = povInfo.camera_pos;
 	        Quaternion destinRot = povInfo.camera_rot;
@@ -216,7 +217,9 @@ namespace spz {
 
 	    void StopCurrentLerpAndRestoreParent(){
 	        if(_lerpFlyCamera_crtn != null){
-	            Coroutines_MGR.instance.StopCoroutine(_lerpFlyCamera_crtn);
+	            if(Coroutines_MGR.instance != null){
+	                Coroutines_MGR.instance.StopCoroutine(_lerpFlyCamera_crtn);
+	            }
 	            _lerpFlyCamera_crtn = null;
 	        }
 	        _corotineCode_run_durUpdate = null;

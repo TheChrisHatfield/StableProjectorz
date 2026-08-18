@@ -309,6 +309,12 @@ public sealed class ViewportAxisGizmoContractTests {
 			"IsGizmoUsable treats a missing DimensionMode as usable — Frame_Bounds must not NRE on instance.");
 		Assert.That(body, Does.Contain("Coroutines_MGR.instance == null"),
 			"Overview must not NRE if the coroutine host is not in the scene yet.");
+
+		int restore = focus.IndexOf("public void Restore_CameraPlacement(", StringComparison.Ordinal);
+		Assert.That(restore, Is.GreaterThan(0));
+		string restoreBody = focus.Substring(restore, Math.Min(900, focus.Length - restore));
+		Assert.That(restoreBody, Does.Contain("Coroutines_MGR.instance == null"),
+			"Axis snap uses Restore_CameraPlacement — a missing coroutine host must no-op, not NRE.");
 	}
 
 	[Test]
