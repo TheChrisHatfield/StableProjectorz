@@ -190,4 +190,27 @@ public sealed class AddonManagerEditorSocketAndUninstallContractTests {
 		Assert.That(body, Does.Contain("\"ADDON_ID\""));
 		Assert.That(body, Does.Contain("\"addon_id\""));
 	}
+
+	[Test]
+	public void InstallFromFile_GuardsInstallInFlight_BeforeDialogAndInstall() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "AddonManager_UI.cs");
+		string src = File.ReadAllText(path);
+		Assert.That(src, Does.Contain("HasInstallInFlight"),
+			"UI must read installer install-busy flag.");
+		Assert.That(src, Does.Contain("Installation already in progress"),
+			"Second Install must fail fast in UI — not open another dialog mid-install.");
+		int onInstall = src.IndexOf("void OnInstallFromFile()", System.StringComparison.Ordinal);
+		Assert.That(onInstall, Is.GreaterThan(0));
+		int next = src.IndexOf("IEnumerator CoInstallFromFilePick", onInstall, System.StringComparison.Ordinal);
+		string onBody = next > onInstall ? src.Substring(onInstall, next - onInstall) : src.Substring(onInstall);
+		Assert.That(onBody, Does.Contain("HasInstallInFlight"),
+			"OnInstallFromFile must block before opening the file dialog.");
+		int installAddon = src.IndexOf("void InstallAddon(string path)", System.StringComparison.Ordinal);
+		Assert.That(installAddon, Is.GreaterThan(0));
+		int after = src.IndexOf("GameObject CreateFilterToggle", installAddon, System.StringComparison.Ordinal);
+		string installBody = after > installAddon ? src.Substring(installAddon, after - installAddon) : src.Substring(installAddon);
+		Assert.That(installBody, Does.Contain("HasInstallInFlight"),
+			"InstallAddon must refuse while another install is busy.");
+	}
 }
