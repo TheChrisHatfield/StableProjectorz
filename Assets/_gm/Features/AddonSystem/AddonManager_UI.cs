@@ -246,6 +246,9 @@ namespace spz {
 		private Toggle _filterAllToggle;
 		private Toggle _filterEnabledToggle;
 		private Toggle _filterDisabledToggle;
+		/// <summary>Live search query (name / id). Kept while the manager stays open; not cleared on Close.</summary>
+		string _searchQuery = "";
+		TMP_InputField _searchInput;
 		Toggle _rememberEnabledAddonToggle; // assigned in Create / TryAddRememberPreferenceRowIfMissing
 		private GameObject _blocker; // full-screen click blocker, shown/hidden with panel
 		Image _blockerDimImage; // dimmer on blocker root
@@ -849,13 +852,14 @@ namespace spz {
 		GameObject filterBarObj = new GameObject("FilterBar");
 		filterBarObj.transform.SetParent(panelObj.transform, false);
 		var filterBarLE = filterBarObj.AddComponent<LayoutElement>();
-		filterBarLE.preferredHeight = 66f;
-		filterBarLE.minHeight = 66f;
+		// Label + pills + search field (+ VLG spacing).
+		filterBarLE.preferredHeight = 110f;
+		filterBarLE.minHeight = 110f;
 		var filterBarLayout = filterBarObj.AddComponent<UnityEngine.UI.VerticalLayoutGroup>();
 		filterBarLayout.spacing = 4f;
-		filterBarLayout.childControlWidth = false;
+		filterBarLayout.childControlWidth = true;
 		filterBarLayout.childControlHeight = true;
-		filterBarLayout.childForceExpandWidth = false;
+		filterBarLayout.childForceExpandWidth = true;
 		filterBarLayout.childForceExpandHeight = false;
 		filterBarLayout.childAlignment = TextAnchor.UpperLeft;
 		filterBarLayout.padding = new RectOffset(0, 0, 0, 0);
@@ -866,6 +870,7 @@ namespace spz {
 		filterLabelLE.preferredWidth = 200f;
 		filterLabelLE.preferredHeight = 20f;
 		filterLabelLE.minHeight = 20f;
+		filterLabelLE.flexibleWidth = 0f;
 		var filterLabelText = filterLabelObj.AddComponent<TextMeshProUGUI>();
 		filterLabelText.text = "Filter";
 		filterLabelText.fontSize = 14;
@@ -881,6 +886,7 @@ namespace spz {
 		pillsLE.preferredWidth = 230f;
 		pillsLE.preferredHeight = 34f;
 		pillsLE.minHeight = 34f;
+		pillsLE.flexibleWidth = 0f;
 		var pillsBg = filterPillsObj.AddComponent<Image>();
 		AssignSolidFaceThenMarkRounded(pillsBg);
 		pillsBg.color = new Color(39f / 255f, 39f / 255f, 42f / 255f, 0.55f);
@@ -897,6 +903,7 @@ namespace spz {
 		_filterAllToggle = CreateFilterToggle("All", filterPillsObj.transform, toggleGroup, 0).GetComponent<Toggle>();
 		_filterEnabledToggle = CreateFilterToggle("Enabled", filterPillsObj.transform, toggleGroup, 1).GetComponent<Toggle>();
 		_filterDisabledToggle = CreateFilterToggle("Disabled", filterPillsObj.transform, toggleGroup, 2).GetComponent<Toggle>();
+		BuildAddonSearchField(filterBarObj.transform);
 		
 		GameObject scrollViewObj = new GameObject("ScrollView");
 		scrollViewObj.layer = UILayer;
@@ -1049,7 +1056,9 @@ namespace spz {
 			_filterAllToggle = null;
 			_filterEnabledToggle = null;
 			_filterDisabledToggle = null;
+			_searchInput = null;
 			_rememberEnabledAddonToggle = null;
+			_listScrollbar = null;
 			_addonUIItems.Clear();
 		}
 
@@ -1210,6 +1219,8 @@ namespace spz {
 			
 			// Panels built before the scrollbar existed (or authored ones) still need the bar wired.
 			EnsureListScrollbarFromPanel();
+			// Same for search — older shells had Filter pills only.
+			EnsureSearchFieldFromPanel();
 
 			try {
 				Canvas.ForceUpdateCanvases();
@@ -1616,6 +1627,122 @@ namespace spz {
 			return toggleObj;
 		}
 
+		const string SearchFieldName = "SearchField";
+
+		/// <summary>
+		/// Connectivity: older panels have Filter pills but no search — create/wire here so OpenPanel
+		/// never leaves "filter works, search missing."
+		/// </summary>
+		void EnsureSearchFieldFromPanel() {
+			if (_panel == null) return;
+			Transform filterBar = _panel.transform.Find("FilterBar");
+			if (filterBar == null) return;
+			if (_searchInput != null && _searchInput.transform.IsChildOf(filterBar)) {
+				WireSearchInputListeners(_searchInput);
+				return;
+			}
+			Transform existing = filterBar.Find(SearchFieldName);
+			if (existing != null) {
+				_searchInput = existing.GetComponent<TMP_InputField>();
+				if (_searchInput != null) {
+					WireSearchInputListeners(_searchInput);
+					return;
+				}
+			}
+			BuildAddonSearchField(filterBar);
+			var barLe = filterBar.GetComponent<LayoutElement>();
+			if (barLe != null) {
+				barLe.preferredHeight = Mathf.Max(barLe.preferredHeight, 110f);
+				barLe.minHeight = Mathf.Max(barLe.minHeight, 110f);
+			}
+			var vlg = filterBar.GetComponent<VerticalLayoutGroup>();
+			if (vlg != null) {
+				vlg.childControlWidth = true;
+				vlg.childForceExpandWidth = true;
+			}
+		}
+
+		void BuildAddonSearchField(Transform filterBar) {
+			if (filterBar == null) return;
+			var searchFieldGo = new GameObject(SearchFieldName);
+			searchFieldGo.layer = filterBar.gameObject.layer;
+			searchFieldGo.transform.SetParent(filterBar, false);
+			searchFieldGo.AddComponent<RectTransform>();
+			var sBg = searchFieldGo.AddComponent<Image>();
+			AssignSolidFaceThenMarkRounded(sBg);
+			sBg.color = new Color(30f / 255f, 30f / 255f, 33f / 255f, 0.95f);
+			sBg.raycastTarget = true;
+			var sLE = searchFieldGo.AddComponent<LayoutElement>();
+			sLE.flexibleWidth = 1f;
+			sLE.minHeight = 36f;
+			sLE.preferredHeight = 36f;
+
+			var textAreaObj = new GameObject("Text Area");
+			textAreaObj.layer = searchFieldGo.layer;
+			textAreaObj.transform.SetParent(searchFieldGo.transform, false);
+			var textAreaRect = textAreaObj.AddComponent<RectTransform>();
+			textAreaRect.anchorMin = Vector2.zero;
+			textAreaRect.anchorMax = Vector2.one;
+			textAreaRect.offsetMin = new Vector2(12f, 4f);
+			textAreaRect.offsetMax = new Vector2(-12f, -4f);
+			textAreaObj.AddComponent<RectMask2D>();
+
+			var phGo = new GameObject("Placeholder");
+			phGo.layer = searchFieldGo.layer;
+			phGo.transform.SetParent(textAreaObj.transform, false);
+			var phRt = phGo.AddComponent<RectTransform>();
+			phRt.anchorMin = Vector2.zero;
+			phRt.anchorMax = Vector2.one;
+			phRt.offsetMin = Vector2.zero;
+			phRt.offsetMax = Vector2.zero;
+			var phTmp = phGo.AddComponent<TextMeshProUGUI>();
+			phTmp.text = "Search by name or id…";
+			phTmp.fontSize = 14;
+			phTmp.color = new Color(0.55f, 0.55f, 0.58f, 1f);
+			phTmp.alignment = TextAlignmentOptions.MidlineLeft;
+			phTmp.raycastTarget = false;
+
+			var txtGo = new GameObject("Text");
+			txtGo.layer = searchFieldGo.layer;
+			txtGo.transform.SetParent(textAreaObj.transform, false);
+			var txtRt = txtGo.AddComponent<RectTransform>();
+			txtRt.anchorMin = Vector2.zero;
+			txtRt.anchorMax = Vector2.one;
+			txtRt.offsetMin = Vector2.zero;
+			txtRt.offsetMax = Vector2.zero;
+			var txtTmp = txtGo.AddComponent<TextMeshProUGUI>();
+			txtTmp.fontSize = 14;
+			txtTmp.color = new Color(0.92f, 0.92f, 0.94f, 1f);
+			txtTmp.alignment = TextAlignmentOptions.MidlineLeft;
+			txtTmp.raycastTarget = false;
+			txtTmp.enableWordWrapping = false;
+			txtTmp.overflowMode = TextOverflowModes.Overflow;
+
+			_searchInput = searchFieldGo.AddComponent<TMP_InputField>();
+			_searchInput.textViewport = textAreaRect;
+			_searchInput.textComponent = txtTmp;
+			_searchInput.placeholder = phTmp;
+			_searchInput.lineType = TMP_InputField.LineType.SingleLine;
+			_searchInput.caretWidth = 2;
+			_searchInput.text = _searchQuery ?? "";
+			WireSearchInputListeners(_searchInput);
+			AttachTooltip(searchFieldGo, "Filter the list by add-on name or id.");
+		}
+
+		void WireSearchInputListeners(TMP_InputField input) {
+			if (input == null) return;
+			input.onValueChanged.RemoveAllListeners();
+			if (!string.IsNullOrEmpty(_searchQuery) && input.text != _searchQuery)
+				input.SetTextWithoutNotify(_searchQuery);
+			input.onValueChanged.AddListener(OnSearchQueryChanged);
+		}
+
+		void OnSearchQueryChanged(string value) {
+			_searchQuery = value ?? "";
+			if (Addon_MGR.instance != null && _addonsListParent != null)
+				RefreshAddonsList();
+		}
+
 		/// <summary>Hover tip via shared <see cref="CanShowTooltip_UI"/> (respects Settings → Allow tooltips).</summary>
 		static void AttachTooltip(GameObject go, string tip) {
 			if (go == null || string.IsNullOrEmpty(tip))
@@ -1656,11 +1783,10 @@ namespace spz {
 				AttachTooltip(_filterEnabledToggle.gameObject, "Show only enabled (loaded) add-ons.");
 			if (_filterDisabledToggle != null)
 				AttachTooltip(_filterDisabledToggle.gameObject, "Show only disabled add-ons.");
+			if (_searchInput != null)
+				AttachTooltip(_searchInput.gameObject, "Filter the list by add-on name or id.");
 		}
 		
-		/// <summary>
-		/// Refreshes the list of add-ons with current filter applied (main-branch behavior — no search).
-		/// </summary>
 		/// <summary>
 		/// Header Refresh: disk rescan then rebuild list. Filter/search/enable events use <see cref="RefreshAddonsList"/> only.
 		/// </summary>
@@ -1715,7 +1841,7 @@ namespace spz {
 				bool shouldShow = _filterState == 0
 					|| (_filterState == 1 && draftOn)
 					|| (_filterState == 2 && !draftOn);
-				if (shouldShow)
+				if (shouldShow && AddonMatchesSearch(kvp.Key, kvp.Value, _searchQuery))
 					filteredAddons.Add(kvp);
 			}
 			
@@ -1738,14 +1864,32 @@ namespace spz {
 			}
 			
 			string filterText = _filterState == 0 ? "All" : (_filterState == 1 ? "Enabled" : "Disabled");
+			string searchBit = string.IsNullOrWhiteSpace(_searchQuery) ? "" : $", search: \"{_searchQuery.Trim()}\"";
 			if (addons.Count > 0) {
 				if (filteredAddons.Count == 0)
-					ShowStatus("No add-ons match the current filter.", false);
+					ShowStatus($"No add-ons match the current filter{searchBit}.", false);
 				else
-					ShowStatus($"Showing {filteredAddons.Count} of {addons.Count} add-on(s) ({enabledCount} enabled, {disabledCount} disabled) — Filter: {filterText}", true);
+					ShowStatus($"Showing {filteredAddons.Count} of {addons.Count} add-on(s) ({enabledCount} enabled, {disabledCount} disabled) — Filter: {filterText}{searchBit}", true);
 			}
 			ApplyThemeTokens();
 			ScheduleFlushAddonManagerShellLayout();
+		}
+
+		/// <summary>
+		/// Case-insensitive substring match on add-on folder id and optional <c>displayName</c>.
+		/// Empty query matches everything.
+		/// </summary>
+		public static bool AddonMatchesSearch(string addonId, Addon_MGR.AddonInfo info, string query) {
+			if (string.IsNullOrWhiteSpace(query))
+				return true;
+			string q = query.Trim();
+			if (!string.IsNullOrEmpty(addonId)
+			    && addonId.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0)
+				return true;
+			if (info != null && !string.IsNullOrWhiteSpace(info.displayName)
+			    && info.displayName.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0)
+				return true;
+			return false;
 		}
 
 		/// <summary>
@@ -1839,6 +1983,19 @@ namespace spz {
 				var pills = _panel.transform.Find("FilterBar/FilterPills")?.GetComponent<Image>();
 				if (pills != null)
 					SpzUiThemeOps.ApplyBoundChromeGraphic(pills, new Color(t.controlBg.r, t.controlBg.g, t.controlBg.b, 0.55f));
+				if (_searchInput != null) {
+					var searchBg = _searchInput.GetComponent<Image>();
+					if (searchBg != null)
+						SpzUiThemeOps.ApplyBoundChromeGraphic(searchBg, t.fieldBg);
+					if (_searchInput.textComponent != null) {
+						float basePt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(_searchInput.textComponent, 14f);
+						SpzUiThemeOps.ApplyBoundChromeTmp(_searchInput.textComponent, t.textPrimary, basePt);
+					}
+					if (_searchInput.placeholder is TextMeshProUGUI ph) {
+						float phPt = SpzUiThemeOps.ResolveOrCaptureDesignFontPt(ph, 14f);
+						SpzUiThemeOps.ApplyBoundChromeTmp(ph, t.textMuted, phPt);
+					}
+				}
 				var rememberLabel = _panel.transform.Find("RememberEnabledRow/ToggleWrap/Label")?.GetComponent<TextMeshProUGUI>();
 				if (rememberLabel == null)
 					rememberLabel = _panel.transform.Find("RememberEnabledRow/Label")?.GetComponent<TextMeshProUGUI>();
