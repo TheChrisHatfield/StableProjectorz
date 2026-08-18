@@ -118,4 +118,45 @@ public sealed class ValueAssistLiveStepContractTests {
 			ValuePaintLivePredictor.InvalidateAssist();
 		}
 	}
+
+	// B2.2c — tool leave must restore Live soft-arm; refusing the next TryLiveArm alone left
+	// opacity/hardness/color on the ribbon so Smudge/Erase felt VA-driven.
+	[Test]
+	public void ToolLeave_WiringRestoresLiveSoftArm_Source() {
+		string applier = System.IO.File.ReadAllText(System.IO.Path.Combine(
+			Application.dataPath, "_gm", "Features", "Paint", "SmartValuePaint",
+			"ValuePaintProposalApplier.cs"));
+		Assert.That(applier, Does.Contain("LeaveLiveSoftArmIfToolIneligible"));
+		Assert.That(applier, Does.Contain("IsLiveToolAndModeEligible"));
+		Assert.That(applier, Does.Contain("EnsureLiveLeaveHooks"));
+		Assert.That(applier, Does.Contain("OnDirectionToggleChanged += LeaveLiveSoftArmIfToolIneligible"));
+		Assert.That(applier, Does.Contain("_Act_OnModeChanged += OnWorkflowModeMaybeLeftLive"));
+
+		string painter = System.IO.File.ReadAllText(System.IO.Path.Combine(
+			Application.dataPath, "_gm", "Features", "Paint", "Inpaint",
+			"Inpaint_MaskPainter.cs"));
+		Assert.That(painter, Does.Contain("LeaveLiveSoftArmIfToolIneligible()"),
+			"per-frame leave must cover SetIsOnWithoutNotify (no direction event)");
+	}
+
+	// B2.2c — leaving the tool must be able to wipe Live status without killing the assist cache.
+	[Test]
+	public void ClearLiveUiState_DropsProposalKeepsAssistReady() {
+		bool prevEnabled = PaintTab_ValueAssistOptions.Enabled;
+		bool prevLive = PaintTab_ValueAssistOptions.LivePredict;
+		try {
+			PaintTab_ValueAssistOptions.SetEnabled(true);
+			PaintTab_ValueAssistOptions.SetLivePredict(false);
+			ValuePaintLivePredictor.TryPredictFromSurface(new Color(0.5f, 0.5f, 0.5f, 1f), out _);
+			Assert.That(ValuePaintLivePredictor.LastRefusalReason, Is.Not.Empty);
+
+			ValuePaintLivePredictor.ClearLiveUiState();
+			Assert.That(ValuePaintLivePredictor.HasLastProposal, Is.False);
+			Assert.That(ValuePaintLivePredictor.LastRefusalReason, Is.Empty);
+		} finally {
+			PaintTab_ValueAssistOptions.SetLivePredict(prevLive);
+			PaintTab_ValueAssistOptions.SetEnabled(prevEnabled);
+			ValuePaintLivePredictor.InvalidateAssist();
+		}
+	}
 }

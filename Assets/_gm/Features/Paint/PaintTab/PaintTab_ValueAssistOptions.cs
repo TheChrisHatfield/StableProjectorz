@@ -40,6 +40,8 @@ namespace spz {
 		public static void SetEnabled(bool v) {
 			if (v == _enabled) return;
 			_enabled = v;
+			if (_enabled && _livePredict)
+				ValuePaintProposalApplier.EnsureLiveLeaveHooks();
 			if (!_enabled)
 				ValuePaintProposalApplier.ClearArmed();
 			RaiseChanged();
@@ -61,8 +63,12 @@ namespace spz {
 		public static void SetLivePredict(bool v) {
 			if (v == _livePredict) return;
 			_livePredict = v;
-			if (_livePredict)
+			if (_livePredict) {
 				ValuePaintProposalApplier.ClearLiveSoftArmSuppress();
+				// Wire tool/mode leave hooks before the first hover sample so a fast switch
+				// to Smudge/Erase still restores the pre-Live brush (B2.2c).
+				ValuePaintProposalApplier.EnsureLiveLeaveHooks();
+			}
 			if (!_livePredict) {
 				ValuePaintLivePredictor.InvalidateAssist();
 				// Soft live-arm is not Accept — drop it when Live turns off; keep user Accept arms.
