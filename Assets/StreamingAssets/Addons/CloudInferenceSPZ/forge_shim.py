@@ -365,6 +365,84 @@ class _Handler(BaseHTTPRequestHandler):
             print(f"[CloudInferenceSPZ] GET {path} failed: {exc}\n{traceback.format_exc()}")
             self._send_json(500, {"detail": str(exc)})
 
+    def _dispatch_generate(self, st: ForgeShimState, backend: CloudBackend, path: str, payload: Dict[str, Any]) -> None:
+        with st.lock:
+            st.job_active = True
+            st.interrupt = False
+            st.progress = 0.05
+            st.started_at = time.time()
+            backend = st.backend
+        begin = getattr(backend, "begin_job", None)
+        if callable(begin):
+            begin()
+        done_ev = threading.Event()
+        box: Dict[str, Any] = {}
+
+        def _tick() -> None:
+            p = 0.05
+            while not done_ev.wait(0.4):
+                with st.lock:
+                    if st.interrupt:
+                        return
+                    p = min(0.95, p + 0.03)
+                    st.progress = p
+
+        def _worker() -> None:
+            try:
+                box["result"] = backend.generate(path, payload)
+            except Exception as exc:
+                box["exc"] = exc
+            finally:
+                done_ev.set()
+
+        ticker = threading.Thread(target=_tick, daemon=True)
+        worker = threading.Thread(target=_worker, daemon=True)
+        ticker.start()
+        worker.start()
+        while not done_ev.wait(0.1):
+            with st.lock:
+                interrupted = bool(st.interrupt)
+            if interrupted:
+                abort = getattr(backend, "abort", None)
+                if callable(abort):
+                    try:
+                        abort()
+                    except Exception:
+                        pass
+                done_ev.wait(1.0)
+                with st.lock:
+                    st.job_active = False
+                    st.progress = 0.0
+                    st.last_error = ""
+                self._send_json(200, {"images": [], "interrupted": True})
+                return
+
+        ticker.join(timeout=1.0)
+        if "exc" in box:
+            exc = box["exc"]
+            with st.lock:
+                interrupted = bool(st.interrupt)
+                st.job_active = False
+                st.progress = 0.0
+                st.last_error = "" if interrupted else str(exc)
+            if interrupted:
+                self._send_json(200, {"images": [], "interrupted": True, "info": str(exc)})
+                return
+            if isinstance(exc, BackendError):
+                self._send_json(exc.status, {"detail": str(exc), "error": str(exc)})
+                return
+            raise exc
+        result = box.get("result") or {}
+        with st.lock:
+            interrupted = bool(st.interrupt)
+            st.job_active = False
+            st.progress = 0.0 if interrupted else 1.0
+            st.last_error = ""
+        if interrupted:
+            self._send_json(200, {"images": [], "interrupted": True})
+            return
+        self._send_json(200, result)
+
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
         full_path = self.path
@@ -423,96 +501,14 @@ class _Handler(BaseHTTPRequestHandler):
 
             if path in ("/sdapi/v1/txt2img", "/sdapi/v1/img2img"):
                 payload = self._read_json()
-                with st.lock:
-                    st.job_active = True
-                    st.interrupt = False
-                    st.progress = 0.05
-                    st.started_at = time.time()
-                    backend = st.backend
-                begin = getattr(backend, "begin_job", None)
-                if callable(begin):
-                    begin()
-                # Progress pulse for SPZ ETA while backend runs (remote jobs can take minutes).
-                done_ev = threading.Event()
-                box: Dict[str, Any] = {}
-
-                def _tick() -> None:
-                    p = 0.05
-                    while not done_ev.wait(0.4):
-                        with st.lock:
-                            if st.interrupt:
-                                return
-                            p = min(0.95, p + 0.03)
-                            st.progress = p
-
-                def _worker() -> None:
-                    try:
-                        box["result"] = backend.generate(path, payload)
-                    except Exception as exc:
-                        box["exc"] = exc
-                    finally:
-                        done_ev.set()
-
-                ticker = threading.Thread(target=_tick, daemon=True)
-                worker = threading.Thread(target=_worker, daemon=True)
-                ticker.start()
-                worker.start()
-                # Poll interrupt so Unity Cancel can finish without waiting on a 300s upstream.
-                while not done_ev.wait(0.1):
-                    with st.lock:
-                        interrupted = bool(st.interrupt)
-                    if interrupted:
-                        abort = getattr(backend, "abort", None)
-                        if callable(abort):
-                            try:
-                                abort()
-                            except Exception:
-                                pass
-                        done_ev.wait(1.0)
-                        with st.lock:
-                            st.job_active = False
-                            st.progress = 0.0
-                            st.last_error = ""
-                        self._send_json(200, {"images": [], "interrupted": True})
-                        return
-
-                ticker.join(timeout=1.0)
-                if "exc" in box:
-                    exc = box["exc"]
-                    with st.lock:
-                        interrupted = bool(st.interrupt)
-                        st.job_active = False
-                        st.progress = 0.0
-                        st.last_error = "" if interrupted else str(exc)
-                    if interrupted:
-                        self._send_json(200, {"images": [], "interrupted": True, "info": str(exc)})
-                        return
-                    if isinstance(exc, BackendError):
-                        self._send_json(exc.status, {"detail": str(exc), "error": str(exc)})
-                        return
-                    raise exc
-                result = box.get("result") or {}
-                with st.lock:
-                    interrupted = bool(st.interrupt)
-                    st.job_active = False
-                    st.progress = 0.0 if interrupted else 1.0
-                    st.last_error = ""
-                if interrupted:
-                    self._send_json(200, {"images": [], "interrupted": True})
-                    return
-                self._send_json(200, result)
+                self._dispatch_generate(st, backend, path, payload)
                 return
 
             if path == "/sdapi/v1/extra-batch-images":
-                # Upscale path: Demo returns a solid PNG; remote proxies.
+                # Upscale path: Demo returns a solid PNG; remote proxies (interruptible).
                 payload = self._read_json()
                 if is_remote:
-                    try:
-                        result = backend.generate(path, payload)
-                    except BackendError as exc:
-                        self._send_json(exc.status, {"detail": str(exc), "error": str(exc)})
-                        return
-                    self._send_json(200, result)
+                    self._dispatch_generate(st, backend, path, payload)
                     return
                 w = _safe_int_dim(
                     payload.get("rslt_imageWidths")
