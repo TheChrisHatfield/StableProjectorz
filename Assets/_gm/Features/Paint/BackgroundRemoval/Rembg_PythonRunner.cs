@@ -66,44 +66,52 @@ namespace spz {
 	            StableDiffusion_Hub.instance?.MarkCustomWorkflow_Done();
 	        }
 
-	        // try/finally only — C# forbids yield inside try/catch.
+	        // C# forbids yield inside try/catch/finally. Keep setup in try/catch; yield lives outside.
+	        string rembgPath;
+	        string fullCommand;
+	        string outputDir;
+	        int numFilesNeeded;
 	        try {
-	        string exeDirectory = Directory.GetParent(Application.dataPath).FullName;
-	        string rembgPath = Path.Combine(exeDirectory, "rembg-stable-projectorz");
+	            string exeDirectory = Directory.GetParent(Application.dataPath).FullName;
+	            rembgPath = Path.Combine(exeDirectory, "rembg-stable-projectorz");
 
-	        string runPath   = Path.Combine(rembgPath, "run.bat");
-	        string inputDir  = Path.Combine(rembgPath, "code", "input");
-	        string outputDir = Path.Combine(rembgPath, "code", "output");
+	            string runPath   = Path.Combine(rembgPath, "run.bat");
+	            string inputDir  = Path.Combine(rembgPath, "code", "input");
+	            outputDir = Path.Combine(rembgPath, "code", "output");
 
-	        string extraArgs = $"--alpha_matting --foreground_thresh {arg.foregroundThresh_0_255} --background_thresh {arg.backgroundThresh_0_255}";
-	        string runCommand = $"\"{runPath}\" {extraArgs}";
+	            string extraArgs = $"--alpha_matting --foreground_thresh {arg.foregroundThresh_0_255} --background_thresh {arg.backgroundThresh_0_255}";
+	            string runCommand = $"\"{runPath}\" {extraArgs}";
 
-	        string fullCommand = 
-	              "echo Launching Rembg process... "
-	            + "&& echo. && echo If stuck, close other windows."
-	            + $"&& call {runCommand}";
+	            fullCommand =
+	                  "echo Launching Rembg process... "
+	                + "&& echo. && echo If stuck, close other windows."
+	                + $"&& call {runCommand}";
 
-	        // Clean input/output directories, then save the input images
-	        SD_FileUtils.CleanDirectory(inputDir);
-	        SD_FileUtils.CleanDirectory(outputDir);
-	        int numFilesNeeded = Prepare_InputTextures_into_Dir(arg.input, inputDir);
+	            SD_FileUtils.CleanDirectory(inputDir);
+	            SD_FileUtils.CleanDirectory(outputDir);
+	            numFilesNeeded = Prepare_InputTextures_into_Dir(arg.input, inputDir);
 
-	        if (arg.destroyInputTextures_whenDone){
-	            arg.input.ForEach( t=>DestroyImmediate(t) );
-	            arg.input.Clear();
+	            if (arg.destroyInputTextures_whenDone){
+	                arg.input.ForEach( t=>DestroyImmediate(t) );
+	                arg.input.Clear();
+	            }
+	        } catch (System.Exception e) {
+	            Debug.LogException(e);
+	            Viewport_StatusText.instance?.ShowStatusText(
+	                "Background Removal failed to start (see log).", false, 6, true);
+	            FinishRembgUi(canceled: true);
+	            yield break;
 	        }
 
 	        string message = "Background Removal started. A black window may appear for background removal.";
 	        Viewport_StatusText.instance.ShowStatusText(message, false, 10, false);
 
-	        // Run the external process, and wait until output is ready
 	        bool ranOk = false;
 	        yield return StartCoroutine(RunCommand_crtn(rembgPath, fullCommand, isCanFinish, ok => ranOk = ok));
 
 	        bool isCanFinish(){
 	            int fileCount = SD_FileUtils.CountFiles_withExtensions(outputDir, ".png", ".jpg", ".tga");
 	            if (fileCount != numFilesNeeded){ return false; }
-	            // Additionally confirm the files are not still being written
 	            return SD_FileUtils.IsAllFilesReady(outputDir, ".png", ".jpg", ".tga");
 	        }
 	        if (!ranOk){
@@ -116,10 +124,6 @@ namespace spz {
 
 	        List<Texture2D> generatedTextures = TextureTools_SPZ.LoadTextures_FromDir(outputDir).ToList();
 	        arg.onReady?.Invoke( generatedTextures );
-	        } finally {
-	            // Throw / early exit after StartedGenerate must not leave Gen Art stuck on Cancel.
-	            FinishRembgUi(canceled: true);
-	        }
 	    }
 
 
