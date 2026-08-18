@@ -38,7 +38,8 @@ namespace spz {
 	                           genData_from.kind == GenerationData_Kind.SD_Backgrounds;
 	        if (!correctKind){
 	            string msg = "Can only work with individual Projection or Background textures.";
-	            Viewport_StatusText.instance.ShowStatusText(msg, false, 4, false);
+	            Viewport_StatusText.instance?.ShowStatusText(msg, false, 4, false);
+	            return;
 	        }
 	        StartCoroutine(Generate_PanoramicHDR_crtn(genData_from, guid_originalTex) );
 	    }
@@ -96,6 +97,12 @@ namespace spz {
 	        }
 	        while(response==null && !isError){
 	            yield return null; 
+	        }
+
+	        if (isError || response?.images == null || response.images.Length == 0){
+	            Viewport_StatusText.instance?.ShowStatusText(
+	                "HDR sphere: depth detect failed — aborting.", false, 5f, false);
+	            yield break;
 	        }
 
 	        if(_guessedDepth != null){ Texture.DestroyImmediate(_guessedDepth);  }
