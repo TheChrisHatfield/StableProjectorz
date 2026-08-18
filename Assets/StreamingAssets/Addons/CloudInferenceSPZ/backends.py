@@ -41,6 +41,25 @@ class BackendError(RuntimeError):
         self.status = int(status)
 
 
+def _looks_like_lan_host(hostport: str) -> bool:
+    """True for localhost / IPv4 / IPv6 literals (use http). Hostnames like trycloudflare.com need https."""
+    host = (hostport or "").split("/")[0].strip().lower()
+    if not host:
+        return False
+    if host.startswith("["):
+        return True
+    hostname = host.rsplit(":", 1)[0] if host.count(":") == 1 else host
+    if hostname in ("localhost", "127.0.0.1", "0.0.0.0", "::1"):
+        return True
+    parts = hostname.split(".")
+    if len(parts) == 4:
+        try:
+            return all(0 <= int(p) <= 255 for p in parts)
+        except ValueError:
+            return False
+    return False
+
+
 class CloudBackend:
     """Interface used by forge_shim."""
 
@@ -107,8 +126,9 @@ class RemoteForgeBackend(CloudBackend):
         if not base:
             raise BackendError("Remote Forge URL / session code is empty", status=400)
         if "://" not in base:
-            # Allow host:port paste without scheme.
-            base = "http://" + base
+            # LAN IP:port stays HTTP; Colab/trycloudflare/runpod hostnames are HTTPS.
+            scheme = "http" if _looks_like_lan_host(base) else "https"
+            base = scheme + "://" + base
         # Users often paste the API root from docs (…/sdapi/v1). Proxy already appends those paths.
         base = base.rstrip("/")
         for suffix in ("/sdapi/v1", "/sdapi", "/internal", "/controlnet"):
