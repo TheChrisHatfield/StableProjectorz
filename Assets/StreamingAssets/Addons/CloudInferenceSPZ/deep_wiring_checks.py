@@ -162,6 +162,8 @@ def main() -> int:
         check(ok2 and "already listening" in msg2, f"second start: {msg2}")
         check(shim.is_running(), "is_running")
         check(shim.listen_endpoint() == f"{host}:{port}", "listen_endpoint")
+        ping_ok, ping_raw = shim.ping_listen()
+        check(ping_ok and "cloud_inference" in ping_raw, "ping_listen uses listen_endpoint (not hardcoded :7860)")
 
         st, body = http("GET", base, "/does-not-exist")
         check(st == 404, "unknown GET 404")

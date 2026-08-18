@@ -83,6 +83,28 @@ def is_running() -> bool:
         return _SERVER is not None
 
 
+def ping_listen(timeout_s: float = 2.0) -> Tuple[bool, str]:
+    """Confirm OUR shim answers on listen_endpoint (not an unrelated Forge on :7860)."""
+    hostport = listen_endpoint()
+    try:
+        with urllib.request.urlopen(f"http://{hostport}/internal/ping", timeout=timeout_s) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+            if int(resp.status) != 200:
+                return False, raw or f"HTTP {resp.status}"
+            try:
+                data = json.loads(raw) if raw else {}
+            except Exception:
+                return False, f"non-JSON ping body: {raw[:120]}"
+            if not (isinstance(data, dict) and data.get("cloud_inference") is True):
+                return False, (
+                    f"{hostport} answered but is not Cloud Inference shim "
+                    "(stop local Forge/WebUI, then Connect again)"
+                )
+            return True, raw
+    except Exception as exc:
+        return False, str(exc)
+
+
 def _shim_ping_ok(host: str, port: int, timeout_s: float = 1.0) -> bool:
     """True only if OUR shim answers (body includes cloud_inference), not a real Forge."""
     try:
