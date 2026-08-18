@@ -522,6 +522,19 @@ namespace spz {
 
 	    void OnDestroy() {
 	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	        WorkflowRibbon_UI._Act_OnModeChanged -= OnModeChanged;
+	        SD_Options_Fetcher.Act_onWillSendOptions_AmmendPlz -= OnWillSendOptions_AmmendPlz;
+	        StableDiffusion_Hub._Act_img2img_requested -= On_img2img_requested;
+	        if (_tileableInpaint != null)
+	            _tileableInpaint.onValueChanged.RemoveListener(OnTileableToggle);
+	        if (_reThink_slider != null)
+	            _reThink_slider.onValueChanged.RemoveListener(OnReThinkSlider);
+	        if (_reThink_slider_mini != null)
+	            _reThink_slider_mini.onValueChanged.RemoveListener(OnReThinkSliderMini);
+	        if (_blur_slider != null)
+	            _blur_slider.onValueChanged.RemoveListener(OnBlurSlider);
+	        if (_edgeThresh_slider != null)
+	            _edgeThresh_slider.onValueChanged.RemoveListener(OnEdgeThreshSlider);
 	        if (_softInpaint != null)
 	            _softInpaint.onValueChanged.RemoveListener(OnOptionToggleChromeChanged);
 	        if (_tileableInpaint != null)
