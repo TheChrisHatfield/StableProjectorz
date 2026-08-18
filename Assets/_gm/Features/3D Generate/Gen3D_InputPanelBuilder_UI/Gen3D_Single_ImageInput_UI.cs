@@ -126,12 +126,15 @@ namespace spz {
 	    }
 
 	    protected virtual void Start(){
-	        Gen3D_WorkflowOptionsRibbon_UI.instance.Act_AllowTakeScreenshots += OnAllowTakeScreenshots;
+	        var ribbon = Gen3D_WorkflowOptionsRibbon_UI.instance;
+	        if (ribbon != null)
+		        ribbon.Act_AllowTakeScreenshots += OnAllowTakeScreenshots;
 
 	        if(Screenshot_MGR.instance != null){ 
 	            Screenshot_MGR.instance._Act_OnTakeScreenshotTexture -= OnTakeScreenshotTexture;//UNSUB first!
 	            Screenshot_MGR.instance._Act_OnTakeScreenshotTexture += OnTakeScreenshotTexture;
-	            OnAllowTakeScreenshots( Gen3D_WorkflowOptionsRibbon_UI.instance._is_can_take_screenshots );
+	            if (ribbon != null)
+		            OnAllowTakeScreenshots( ribbon._is_can_take_screenshots );
 	        }
 	    }
 
@@ -148,14 +151,18 @@ namespace spz {
 	        if(Screenshot_MGR.instance != null){ 
 	            Screenshot_MGR.instance._Act_OnTakeScreenshotTexture -= OnTakeScreenshotTexture;
 	            Screenshot_MGR.instance._Act_OnTakeScreenshotTexture += OnTakeScreenshotTexture;
-	            OnAllowTakeScreenshots( Gen3D_WorkflowOptionsRibbon_UI.instance._is_can_take_screenshots );
+	            var ribbon = Gen3D_WorkflowOptionsRibbon_UI.instance;
+	            if (ribbon != null)
+		            OnAllowTakeScreenshots( ribbon._is_can_take_screenshots );
 	        }
 	    }
     
 	    protected virtual void OnDisable(){
 	        // unsubscribe as soon as inactive, to avoid receiving a personal texture2D copy when a screenshot is done:
-	        Screenshot_MGR.instance._Act_OnTakeScreenshotTexture -= OnTakeScreenshotTexture;
-	        Screenshot_MGR.instance.PrefferAvoidSnippets(originalRequestor:this);
+	        if (Screenshot_MGR.instance != null) {
+	            Screenshot_MGR.instance._Act_OnTakeScreenshotTexture -= OnTakeScreenshotTexture;
+	            Screenshot_MGR.instance.PrefferAvoidSnippets(originalRequestor:this);
+	        }
 	    }
 
 	    void OnDestroy(){
@@ -163,8 +170,13 @@ namespace spz {
 	        Trellis_ImageSlot._Act_onCloseButton -= OnImportedImage_Closed;
 	        Trellis_ImageSlot._Act_onMirrorButton -= OnImage_Mirrored;
 
+	        var ribbon = Gen3D_WorkflowOptionsRibbon_UI.instance;
+	        if (ribbon != null)
+		        ribbon.Act_AllowTakeScreenshots -= OnAllowTakeScreenshots;
+
 	        if (Screenshot_MGR.instance != null){ 
 	            Screenshot_MGR.instance._Act_OnTakeScreenshotTexture -= OnTakeScreenshotTexture;
+	            Screenshot_MGR.instance.PrefferAvoidSnippets(originalRequestor:this);
 	        }
 	        DestroyImmediate(_mirrorImage_mat);
 	    }
