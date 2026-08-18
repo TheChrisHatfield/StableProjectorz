@@ -255,6 +255,7 @@ namespace spz {
 	    // request would silently kill the first one's callback and leave that command
 	    // hanging until it times out. Serialise here instead.
 	    static bool _screenshotInFlight = false;
+	    static int _screenshotFlightGen = 0;
 
 	    static void Tool_Screenshot(JObject prms, Action<object> ok, Action<string> fail){
 	        var mgr = Screenshot_MGR.instance;
@@ -267,11 +268,22 @@ namespace spz {
 	        float maxY = Mathf.Clamp01(ReadFloat(prms, "max_y", 1f));
 	        if (maxX <= minX || maxY <= minY){ fail("Empty region: max_x/max_y must be greater than min_x/min_y."); return; }
 
+	        int flight = ++_screenshotFlightGen;
 	        _screenshotInFlight = true;
+	        bool answered = false;
+	        void FinishFlight() {
+	            if (flight != _screenshotFlightGen) return;
+	            _screenshotInFlight = false;
+	        }
 	        try{
 	            mgr.ScreenshotViewport_viaScript(new Vector2(minX, minY), new Vector2(maxX, maxY),
 	                (min, max, tex) => {
-	                    _screenshotInFlight = false;
+	                    if (answered) {
+	                        if (tex != null) UnityEngine.Object.Destroy(tex);
+	                        return;
+	                    }
+	                    answered = true;
+	                    FinishFlight();
 	                    if (tex == null){ fail("Capture returned no texture."); return; }
 	                    try{
 	                        byte[] png = tex.EncodeToPNG();
@@ -288,10 +300,32 @@ namespace spz {
 	                        UnityEngine.Object.Destroy(tex);
 	                    }
 	                });
+	            var host = Coroutines_MGR.instance;
+	            if (host != null)
+	                host.StartCoroutine(ScreenshotWatchdog_crtn(flight, () => {
+	                    if (answered) return;
+	                    answered = true;
+	                    FinishFlight();
+	                    fail("Screenshot timed out (capture callback never fired).");
+	                }));
 	        }catch (Exception ex){
-	            _screenshotInFlight = false;
+	            answered = true;
+	            FinishFlight();
 	            fail($"{ex.GetType().Name}: {ex.Message}");
 	        }
+	    }
+
+
+	    static IEnumerator ScreenshotWatchdog_crtn(int flight, Action onTimeout){
+	        const float timeoutSec = 15f;
+	        float elapsed = 0f;
+	        while (elapsed < timeoutSec){
+	            if (flight != _screenshotFlightGen || !_screenshotInFlight)
+	                yield break;
+	            elapsed += Time.unscaledDeltaTime;
+	            yield return null;
+	        }
+	        onTimeout?.Invoke();
 	    }
 
 
