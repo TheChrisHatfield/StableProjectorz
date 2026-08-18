@@ -1089,6 +1089,11 @@ namespace spz {
 			    RestoreValueAssistCursorTint_IfHeld();
 			    return;
 		    }
+		    var sdPicker = SD_WorkflowOptionsRibbon_UI.instance;
+		    if (sdPicker != null && sdPicker.IsEyeDropperMagnified) {
+			    ValuePaintLivePredictor.NoteSamplerSkip("eyedropper open");
+			    return;
+		    }
 		    if (_valueAssistLiveReadInFlight) return;
 		    if (!isAllowedToShow_BrushCursorNow()) return;
 		    var mv = MainViewport_UI.instance;

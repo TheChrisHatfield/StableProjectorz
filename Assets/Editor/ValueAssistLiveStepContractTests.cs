@@ -258,6 +258,13 @@ public sealed class ValueAssistLiveStepContractTests {
 		Assert.That(painter, Does.Contain("NoteSamplerSkip(\"empty texel\")"));
 		Assert.That(painter, Does.Contain("NoteSamplerSkip(\"no paint target\")"));
 		Assert.That(painter, Does.Contain("NoteSamplerSkip(\"gpu read error\")"));
+		Assert.That(painter, Does.Contain("NoteSamplerSkip(\"eyedropper open\")"));
+
+		string applier = System.IO.File.ReadAllText(System.IO.Path.Combine(
+			Application.dataPath, "_gm", "Features", "Paint", "SmartValuePaint",
+			"ValuePaintProposalApplier.cs"));
+		Assert.That(applier, Does.Contain("IsEyeDropperMagnified"),
+			"viewport eyedropper is a picker; Live must not rewrite the sample (B2.2)");
 	}
 
 	// B3.4 — Accept drops the Live snapshot then demotes after the first stroke. Capture must
