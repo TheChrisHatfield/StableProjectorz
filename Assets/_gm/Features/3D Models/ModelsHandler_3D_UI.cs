@@ -284,7 +284,8 @@ namespace spz {
 	    void OnDestroy(){
 	        SpzUiThemeOps.ThemeChanged -= ApplyMeshListChromeThemeTokens;
 	        SD_subMesh_IconUI.Act_OnWillDestroy_Icon -= OnWillDestroy_Icon;
-	        ModelsHandler_3D.Act_onImported -= OnModelsHandler_ImportDone; 
+	        ModelsHandler_3D.Act_onImported -= OnModelsHandler_ImportDone;
+	        SD_3D_Mesh.Act_OnWillDestroyMesh -= OnWillDestroyMesh;
 	    }
 
 	    public void Save(StableProjectorz_SL spz){
