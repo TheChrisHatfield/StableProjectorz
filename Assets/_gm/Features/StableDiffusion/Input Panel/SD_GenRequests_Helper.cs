@@ -87,6 +87,9 @@ namespace spz {
 	                                      SD_img2img_payload payload, Action<UnityWebRequest> onProgress, 
 	                                      Action<UnityWebRequest> onCompleted ){
 	        if(_isGeneratingWhat != Generate_RequestingWhat.nothing){ return false; }//already busy
+	        // A prior custom interrupt can leave cancel armed if Done never ran; do not inherit it.
+	        _cancelRequested = false;
+	        ClearStuckInterruptTimer();
 	        _isGeneratingWhat = what;
 	        if (sendPayload && payload!=null){
 	            _generate_sender.Send_GenerateRequest(payload, onProgress, onCompleted);

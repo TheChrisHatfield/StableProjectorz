@@ -33,4 +33,17 @@ public sealed class CustomInterruptCancelFlagContractTests {
 		string body = src.Substring(i, Math.Min(350, src.Length - i));
 		Assert.That(body, Does.Contain("_cancelRequested = false"));
 	}
+
+	[Test]
+	public void SubmitCustomWorkflow_ClearsCancelFlagBeforeArmingBusy() {
+		string path = Path.Combine(Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_GenRequests_Helper.cs");
+		string src = File.ReadAllText(path);
+		int i = src.IndexOf("public bool SubmitCustomWorkflow(", StringComparison.Ordinal);
+		int end = src.IndexOf("public void MarkCustomWorkflow_Done()", i, StringComparison.Ordinal);
+		string body = src.Substring(i, end - i);
+		Assert.That(body, Does.Contain("_cancelRequested = false"));
+		Assert.That(body.IndexOf("_cancelRequested = false", StringComparison.Ordinal),
+			Is.LessThan(body.IndexOf("_isGeneratingWhat = what", StringComparison.Ordinal)));
+	}
 }
