@@ -1080,11 +1080,16 @@ namespace spz {
 			    RestoreValueAssistCursorTint_IfHeld();
 			    return;
 		    }
+		    // B2.2c — Smudge / Erase / non-Inpaint_Color must not keep Live-written opacity /
+		    // hardness / color. Programmatic SetIsOnWithoutNotify may skip direction events, so
+		    // this per-frame leave is the hard backstop (hooks cover the event path).
+		    ValuePaintProposalApplier.EnsureLiveLeaveHooks();
+		    if (!ValuePaintProposalApplier.IsLiveToolAndModeEligible()) {
+			    ValuePaintProposalApplier.LeaveLiveSoftArmIfToolIneligible();
+			    RestoreValueAssistCursorTint_IfHeld();
+			    return;
+		    }
 		    if (_valueAssistLiveReadInFlight) return;
-		    var sd = SD_WorkflowOptionsRibbon_UI.instance;
-		    if (sd == null || sd.isSmudge || !sd.isPositive) return;
-		    var workflow = WorkflowRibbon_UI.instance;
-		    if (workflow == null || workflow.currentMode() != WorkflowRibbon_CurrMode.Inpaint_Color) return;
 		    if (!isAllowedToShow_BrushCursorNow()) return;
 		    var mv = MainViewport_UI.instance;
 		    if (mv == null || !mv.isCursorHoveringMe()) return;
@@ -1122,6 +1127,12 @@ namespace spz {
 		    _valueAssistLiveReadInFlight = false;
 		    if (req.hasError) return;
 		    if (!ValuePaintLivePredictor.IsLiveActive) return;
+		    // Tool may have switched while the GPU readback was in flight.
+		    if (!ValuePaintProposalApplier.IsLiveToolAndModeEligible()) {
+			    ValuePaintProposalApplier.LeaveLiveSoftArmIfToolIneligible();
+			    RestoreValueAssistCursorTint_IfHeld();
+			    return;
+		    }
 		    if (!TryDecodeSmudgeCursorReadback(req, _valueAssistLivePendingFormat, out Color c))
 			    return;
 		    // Empty paint texel: do NOT fall back to brush color (feeds the model its own output → feedback loop).

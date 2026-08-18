@@ -429,11 +429,56 @@ namespace spz {
 		}
 
 		/// <summary>
+		/// Live soft-arm is only legal on Add-paint in Inpaint_Color. Smudge / Erase / other
+		/// workflows must not keep the last Live-written opacity / hardness / color / size.
+		/// </summary>
+		public static bool IsLiveToolAndModeEligible() {
+			var workflow = WorkflowRibbon_UI.instance;
+			if (workflow == null || !workflow.isMode_using_img2img()
+			    || workflow.currentMode() != WorkflowRibbon_CurrMode.Inpaint_Color)
+				return false;
+			var sd = SD_WorkflowOptionsRibbon_UI.instance;
+			return sd != null && !sd.isSmudge && sd.isPositive;
+		}
+
+		static bool _leaveHooksWired;
+
+		/// <summary>
+		/// Subscribe once to direction + workflow changes so a tool switch restores the
+		/// pre-Live brush even when the sampler is not ticking (e.g. cursor off viewport).
+		/// Safe to call repeatedly.
+		/// </summary>
+		public static void EnsureLiveLeaveHooks() {
+			if (_leaveHooksWired) return;
+			_leaveHooksWired = true;
+			BrushRibbon_UI_Direction.OnDirectionToggleChanged += LeaveLiveSoftArmIfToolIneligible;
+			WorkflowRibbon_UI._Act_OnModeChanged += OnWorkflowModeMaybeLeftLive;
+		}
+
+		static void OnWorkflowModeMaybeLeftLive(WorkflowRibbon_CurrMode _) =>
+			LeaveLiveSoftArmIfToolIneligible();
+
+		/// <summary>
+		/// B2.2c — when the active tool/mode leaves Live-eligible, restore the pre-Live brush
+		/// snapshot and clear Live UI state. A user Accept arm is preserved. Idempotent.
+		/// </summary>
+		public static void LeaveLiveSoftArmIfToolIneligible() {
+			if (IsLiveToolAndModeEligible()) return;
+			bool hadLiveUi = ValuePaintLivePredictor.HasLastProposal
+				|| !string.IsNullOrEmpty(ValuePaintLivePredictor.LastRefusalReason);
+			bool hadSoftArm = _armedViaLive || _haveUserBrushSnapshot;
+			if (!hadSoftArm && !hadLiveUi) return;
+			ClearArmedIfLiveSoftArm();
+			ValuePaintLivePredictor.ClearLiveUiState();
+		}
+
+		/// <summary>
 		/// Soft-arm from live under-cursor prediction: quiet color update (no mode spam),
 		/// optional size when influence &amp; delta warrant it. Skips opacity UI (status spam).
 		/// </summary>
 		public static bool TryLiveArm(ValuePaintProposal proposal, out string reason) {
 			_lastFailReason = "";
+			EnsureLiveLeaveHooks();
 			if (!PaintTab_ValueAssistOptions.Enabled || !PaintTab_ValueAssistOptions.LivePredict) {
 				reason = _lastFailReason = "Value Assist live predict off";
 				return false;

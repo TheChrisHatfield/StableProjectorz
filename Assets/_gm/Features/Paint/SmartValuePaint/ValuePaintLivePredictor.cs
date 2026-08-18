@@ -33,6 +33,15 @@ namespace spz {
 		public static void InvalidateAssist() {
 			_assist = null;
 			_assistWhich = "";
+			ClearLiveUiState();
+		}
+
+		/// <summary>
+		/// Drop the last Live proposal / refusal so status cannot keep saying "Live A→B" after
+		/// the tool left Paint (B2.2c). Keeps the assist instance so returning to Paint does not
+		/// pay another factory resolve.
+		/// </summary>
+		public static void ClearLiveUiState() {
 			HasLastProposal = false;
 			LastProposal = default;
 			_lastDesired = (ValuePaintBand)(-1);
