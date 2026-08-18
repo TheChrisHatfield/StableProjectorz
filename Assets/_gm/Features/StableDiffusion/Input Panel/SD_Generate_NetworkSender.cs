@@ -12,6 +12,8 @@ namespace spz {
 
 	    Action<UnityWebRequest> _onProgress = null;
 	    Action<UnityWebRequest> _onCompleted = null;
+	    /// <summary>In-flight generate/detect POST. Cancel must Abort this — StopAllCoroutines alone leaves the HTTP body running.</summary>
+	    UnityWebRequest _activeRequest = null;
 
 	    // Other serialized fields to capture input from the UI
 	    public void Send_GenerateRequest( SD_txt2img_payload req,  Action<UnityWebRequest> onProgress,  Action<UnityWebRequest> onCompleted ){
@@ -46,10 +48,43 @@ namespace spz {
 	    }
 
 
-	    public void Send_StopGenerateRequest(){
-	        StopAllCoroutines();//stops any progress-tracking coroutines, etc.
+	    public void Send_StopGenerateRequest(Action onInterruptSettled = null){
+	        // Abort the live /txt2img|/img2img POST first. Stopping the coroutine alone leaves that
+	        // request on the wire, so a second Gen Art can race the abandoned job.
+	        AbortActiveRequest();
+	        StopAllCoroutines();
+	        // Interrupt must not invoke the generate OnCompleted handler — that would parse /interrupt
+	        // JSON as a txt2img result (or double-finish the cancelled job).
+	        _onProgress = null;
+	        _onCompleted = null;
 	        string url = Connection_MGR.A1111_SD_API_URL + "/interrupt";
-	        StartCoroutine( Send_GenerateRequest_crtn<object>(url, null, width:-1, height:-1, withProgress:false, paceGpuFlow:false) );
+	        StartCoroutine( SendInterruptRequest_crtn(url, onInterruptSettled) );
+	    }
+
+	    IEnumerator SendInterruptRequest_crtn(string url, Action onInterruptSettled){
+	        using (UnityWebRequest request = new UnityWebRequest(url, "POST")){
+	            request.downloadHandler = new DownloadHandlerBuffer();
+	            _activeRequest = request;
+	            try {
+	                yield return request.SendWebRequest();
+	            } finally {
+	                if (ReferenceEquals(_activeRequest, request))
+	                    _activeRequest = null;
+	            }
+	        }
+	        onInterruptSettled?.Invoke();
+	    }
+
+	    void AbortActiveRequest(){
+	        var req = _activeRequest;
+	        _activeRequest = null;
+	        if (req == null) return;
+	        try {
+	            if (!req.isDone)
+	                req.Abort();
+	        } catch (Exception e) {
+	            UnityEngine.Debug.LogWarning("[SD_Generate_NetworkSender] Abort failed: " + e.Message);
+	        }
 	    }
 
 
@@ -66,9 +101,11 @@ namespace spz {
 
 	        using (UnityWebRequest request = new UnityWebRequest(urlSuffix, "POST")){
 	            if (payloadStruct != null){
+	                // TypeNameHandling.Auto injects $type on polymorphic AlwaysOn_Value — Neo Gradio API rejects/ignores that.
+	                // Outbound generate bodies must not put $type under alwayson_scripts (forge-neo-swap R4.3).
 	                var settings = new JsonSerializerSettings{
 	                    Formatting = Formatting.Indented,
-	                    TypeNameHandling = TypeNameHandling.Auto //automatically resolve inheritance/abstract classes
+	                    TypeNameHandling = TypeNameHandling.None
 	                };
 	                string json = JsonConvert.SerializeObject(payloadStruct, settings);
 	                byte[] jsonToSend = new UTF8Encoding().GetBytes(json);
@@ -77,10 +114,21 @@ namespace spz {
 	            }
 	            request.downloadHandler = new DownloadHandlerBuffer();
 
-	            yield return request.SendWebRequest();
+	            _activeRequest = request;
+	            try {
+	                yield return request.SendWebRequest();
+	            } finally {
+	                if (ReferenceEquals(_activeRequest, request))
+	                    _activeRequest = null;
+	            }
 
 	            if (progressRoutine != null){
 	                StopCoroutine(progressRoutine);
+	            }
+	            // Aborted / cancelled requests must not finish the generate UI as a success.
+	            if (request.result == UnityWebRequest.Result.ConnectionError
+	                && (request.error ?? "").IndexOf("Abort", StringComparison.OrdinalIgnoreCase) >= 0) {
+	                yield break;
 	            }
 	            if (paceGpuFlow && request.result == UnityWebRequest.Result.Success) {
 	                yield return GpuFlowUnityHooks.PaceFromAddonHttpCoroutine(source: "sd_sender", phase: "post_request");

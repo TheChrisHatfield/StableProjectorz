@@ -277,7 +277,7 @@ public sealed class KleinStructureChannelContractTests {
 		string helper = Read("Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_GenRequests_Helper.cs");
 		int onGen = helper.IndexOf("void OnGeneratedResult(", StringComparison.Ordinal);
 		Assert.That(onGen, Is.GreaterThan(0));
-		string body = helper.Substring(onGen, Math.Min(1800, helper.Length - onGen));
+		string body = helper.Substring(onGen, Math.Min(3200, helper.Length - onGen));
 		int reject = body.IndexOf("RejectKleinDepthLikeResult", StringComparison.Ordinal);
 		int successFinish = body.IndexOf("OnConfirmed_FinishedGenerate(canceled:false)", StringComparison.Ordinal);
 		Assert.That(reject, Is.GreaterThan(0));

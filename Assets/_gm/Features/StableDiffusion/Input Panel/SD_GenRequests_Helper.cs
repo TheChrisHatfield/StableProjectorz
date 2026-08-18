@@ -638,10 +638,15 @@ namespace spz {
 	            Viewport_StatusText.instance.ShowStatusText("Cancelled before request was sent.", false, 3, progressVisibility: false);
 	            return;
 	        }
-	        _generate_sender.Send_StopGenerateRequest();
+	        _generate_sender.Send_StopGenerateRequest(() => {
+	            // Interrupt settled (or failed) — finish UI now so Gen Art stays blocked until then.
+	            if (_cancelRequested)
+	                OnFinishTheInterrupt();
+	        });
 	        float gracePeriod = 10;//wait at least 10 sec from server. If no response, then our coroutine will perform clean-up.
 	        _finishTheInterrupt_ifStuck_crtn = StartCoroutine( FinishTheInterrupt_ifStuck(gracePeriod) );
-	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:true);
+	        // Do not call OnConfirmed_FinishedGenerate here: that re-enabled Gen Art while the old
+	        // job could still be finishing. UI stays busy until OnFinishTheInterrupt.
 	        Viewport_StatusText.instance.ShowStatusText("Cancelling the generation...", false, gracePeriod, progressVisibility: false);
 	    }
 
@@ -680,7 +685,9 @@ namespace spz {
 
 
 	    void OnFinishTheInterrupt(){
-	        if (!_cancelRequested && _isGeneratingWhat != Generate_RequestingWhat.nothing)
+	        // Interrupt settled callback and the stuck timer can both fire; only the first cancel
+	        // in-flight may finish. Also: never tear down a live gen that cleared _cancelRequested.
+	        if (!_cancelRequested)
 	            return;
 	        if (Objects_Renderer_MGR.instance != null)
 	            Objects_Renderer_MGR.instance?.ReRenderAll_soon();
@@ -696,6 +703,7 @@ namespace spz {
 	        _isGeneratingWhat = Generate_RequestingWhat.nothing;
 	        _cancelRequested = false;
 	        _generationCooldownUntil = Time.unscaledTime + _generationCooldown;
+	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:true);
 	        Viewport_StatusText.instance.ShowStatusText("Interrupted the generation.", false, 3, progressVisibility: false);
 	    }
 
