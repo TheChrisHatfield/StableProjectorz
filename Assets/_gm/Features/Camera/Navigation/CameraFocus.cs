@@ -100,16 +100,24 @@ namespace spz {
 	            }
 	        }
 
-	        if(!forceTheFocus  &&  (Keyboard.current == null || Keyboard.current.fKey.wasPressedThisFrame==false)){ return; }
-	        if(!forceTheFocus  &&  KeyMousePenInput.isSomeInputFieldActive()){ return; }
-	        if(KeyMousePenInput.isKey_CtrlOrCommand_pressed()){ return; }
-	        if(KeyMousePenInput.isKey_Shift_pressed()){ return; }
-	        if(DimensionMode_MGR.instance.is_3d_navigation_allowed == false){  return; }
+	        // forceTheFocus is the lantern / import path — do not require F, and do not drop the request
+	        // because the user is holding Ctrl/Shift from a paint or orbit modifier.
+	        if(!forceTheFocus){
+	            if(Keyboard.current == null || Keyboard.current.fKey.wasPressedThisFrame==false){ return; }
+	            if(KeyMousePenInput.isSomeInputFieldActive()){ return; }
+	            if(KeyMousePenInput.isKey_CtrlOrCommand_pressed()){ return; }
+	            if(KeyMousePenInput.isKey_Shift_pressed()){ return; }
+	        }
+	        var dim = DimensionMode_MGR.instance;
+	        if(dim != null && dim.is_3d_navigation_allowed == false){  return; }
 
 	        FlyToFrameBounds(totalBounds, dontFly_onlyDoEvent);
 	    }
 
 	    void FlyToFrameBounds(Bounds totalBounds, bool dontFly_onlyDoEvent){
+	        if(Coroutines_MGR.instance == null || _view_camera_inParent == null || _view_camera_inParent.myCamera == null){
+	            return;
+	        }
 	        Vector3 boundsCenter  = totalBounds.center;
 
 	        float distanceToModel = CalcDistanceToModel(totalBounds);

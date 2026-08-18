@@ -298,6 +298,20 @@ public sealed class ViewportAxisGizmoContractTests {
 	}
 
 	[Test]
+	public void ForcedOverviewDoesNotDropOnModifiersOrNullDimensionMode() {
+		string focus = ReadRepo("Assets/_gm/Features/Camera/Navigation/CameraFocus.cs");
+		int method = focus.IndexOf("public void Frame_Bounds_maybe(", StringComparison.Ordinal);
+		Assert.That(method, Is.GreaterThan(0));
+		string body = focus.Substring(method, Math.Min(1800, focus.Length - method));
+		Assert.That(body, Does.Contain("if(!forceTheFocus){"),
+			"Lantern forceTheFocus must skip F-key / Ctrl / Shift gates that are meant for the keyboard shortcut.");
+		Assert.That(body, Does.Contain("dim != null"),
+			"IsGizmoUsable treats a missing DimensionMode as usable — Frame_Bounds must not NRE on instance.");
+		Assert.That(body, Does.Contain("Coroutines_MGR.instance == null"),
+			"Overview must not NRE if the coroutine host is not in the scene yet.");
+	}
+
+	[Test]
 	public void AxisSnapPivotFallsBackToWholeSceneWhenNothingSelected() {
 		string ops = ReadRepo("Assets/_gm/Features/Viewport/Main Viewport/ViewportAxisGizmo_CameraOps.cs");
 		Assert.That(ops, Does.Contain("GetTotalBounds_ofSelectedMeshes"),
