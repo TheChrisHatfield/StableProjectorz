@@ -628,6 +628,18 @@ def start_shim(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> Tuple[bool
 
 def stop_shim() -> Tuple[bool, str]:
     global _SERVER, _THREAD
+    st = get_state()
+    with st.lock:
+        st.interrupt = True
+        st.job_active = False
+        st.progress = 0.0
+        backend = st.backend
+    abort = getattr(backend, "abort", None)
+    if callable(abort):
+        try:
+            abort()
+        except Exception:
+            pass
     with _SERVER_LOCK:
         server = _SERVER
         _SERVER = None
@@ -642,8 +654,4 @@ def stop_shim() -> Tuple[bool, str]:
         server.server_close()
     except Exception:
         pass
-    st = get_state()
-    with st.lock:
-        st.job_active = False
-        st.progress = 0.0
     return True, "shim stopped"
