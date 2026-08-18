@@ -304,7 +304,7 @@ class FalBackend(CloudBackend):
 
 def build_backend(mode: str, credential: str) -> CloudBackend:
     mode_n = (mode or "demo").strip().lower()
-    cred = (credential or "").strip()
+    cred = (credential or "").strip().strip("\"'").strip()
     if mode_n in ("demo", "local_demo"):
         return DemoBackend()
     if mode_n in ("remote_forge", "remote", "colab", "runpod", "tunnel"):
