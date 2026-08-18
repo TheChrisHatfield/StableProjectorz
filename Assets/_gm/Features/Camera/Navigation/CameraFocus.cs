@@ -91,33 +91,34 @@ namespace spz {
 	    /// Frame an explicit world-space <paramref name="totalBounds"/> (e.g. the whole scene from the viewport
 	    /// gizmo lantern, not just the selection). Same gating and animated selfie-stick lerp as
 	    /// <see cref="Focus_Selection_maybe"/>, but the caller supplies the bounds so callers can frame all meshes.
+	    /// Returns false when the fly did not start (gates, missing hosts).
 	    /// </summary>
-	    public void Frame_Bounds_maybe(Bounds totalBounds, bool forceTheFocus=false,  bool dontFly_onlyDoEvent=false){
+	    public bool Frame_Bounds_maybe(Bounds totalBounds, bool forceTheFocus=false,  bool dontFly_onlyDoEvent=false){
 	        if(_lerpFlyCamera_crtn!=null){
 	            if(forceTheFocus){
 	                StopCurrentLerpAndRestoreParent();
 	            }else{
-	                return;
+	                return false;
 	            }
 	        }
 
 	        // forceTheFocus is the lantern / import path — do not require F, and do not drop the request
 	        // because the user is holding Ctrl/Shift from a paint or orbit modifier.
 	        if(!forceTheFocus){
-	            if(Keyboard.current == null || Keyboard.current.fKey.wasPressedThisFrame==false){ return; }
-	            if(KeyMousePenInput.isSomeInputFieldActive()){ return; }
-	            if(KeyMousePenInput.isKey_CtrlOrCommand_pressed()){ return; }
-	            if(KeyMousePenInput.isKey_Shift_pressed()){ return; }
+	            if(Keyboard.current == null || Keyboard.current.fKey.wasPressedThisFrame==false){ return false; }
+	            if(KeyMousePenInput.isSomeInputFieldActive()){ return false; }
+	            if(KeyMousePenInput.isKey_CtrlOrCommand_pressed()){ return false; }
+	            if(KeyMousePenInput.isKey_Shift_pressed()){ return false; }
 	        }
 	        var dim = DimensionMode_MGR.instance;
-	        if(dim != null && dim.is_3d_navigation_allowed == false){  return; }
+	        if(dim != null && dim.is_3d_navigation_allowed == false){  return false; }
 
-	        FlyToFrameBounds(totalBounds, dontFly_onlyDoEvent);
+	        return FlyToFrameBounds(totalBounds, dontFly_onlyDoEvent);
 	    }
 
-	    void FlyToFrameBounds(Bounds totalBounds, bool dontFly_onlyDoEvent){
+	    bool FlyToFrameBounds(Bounds totalBounds, bool dontFly_onlyDoEvent){
 	        if(Coroutines_MGR.instance == null || _view_camera_inParent == null || _view_camera_inParent.myCamera == null){
-	            return;
+	            return false;
 	        }
 	        Vector3 boundsCenter  = totalBounds.center;
 
@@ -133,6 +134,7 @@ namespace spz {
 
 	        _lerpFlyCamera_crtn = Coroutines_MGR.instance.StartCoroutine(  LerpFlyCamera_crtn( destin:destinationPosition,  boundsCenter:boundsCenter,
 	                                                                                           destinRot,  dur:0.35f,  dontFly_onlyDoEvent));
+	        return true;
 	    }
 
 

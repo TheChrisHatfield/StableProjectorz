@@ -129,15 +129,13 @@ namespace spz {
 			if (focus == null) {
 				return false;
 			}
-			// Frame_Bounds_maybe quietly returns when there is nothing loaded, so check first instead of reporting
-			// success for a button press that cannot move the camera.
+			// Frame_Bounds_maybe returns false when the fly cannot start (missing camera / coroutine host).
 			if (!HasSomethingToFrame()) {
 				Viewport_StatusText.instance?.ShowStatusText(
 					"Nothing loaded to frame — import a mesh first.", false, 2f, false);
 				return false;
 			}
-			focus.Frame_Bounds_maybe(ResolveSceneBounds(), forceTheFocus: true);
-			return true;
+			return focus.Frame_Bounds_maybe(ResolveSceneBounds(), forceTheFocus: true);
 		}
 
 		/// <summary>World-space bounds of the whole scene (all meshes) the lantern frames.</summary>
