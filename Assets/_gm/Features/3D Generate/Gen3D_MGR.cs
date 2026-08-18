@@ -343,7 +343,9 @@ namespace spz {
 	            if(Connection_MGR.is_3d_connected){
 	                Gen3D_API.instance?.GetSupportedOperations( onSuccess:OnSupportedOperations_Ready,  onError:(error)=>{} );
 	            }
-	            float secToWait = Settings_MGR.instance.get_layout_askServerOften() ? 0.1f : 3;
+	            float secToWait = 3f;
+	            if (Settings_MGR.instance != null)
+		            secToWait = Settings_MGR.instance.get_layout_askServerOften() ? 0.1f : 3;
 	            yield return new WaitForSeconds(secToWait);
 	        }
 	    }
