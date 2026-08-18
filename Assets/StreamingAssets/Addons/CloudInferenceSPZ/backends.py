@@ -105,6 +105,12 @@ class RemoteForgeBackend(CloudBackend):
         if "://" not in base:
             # Allow host:port paste without scheme.
             base = "http://" + base
+        # Users often paste the API root from docs (…/sdapi/v1). Proxy already appends those paths.
+        base = base.rstrip("/")
+        for suffix in ("/sdapi/v1", "/sdapi", "/internal", "/controlnet"):
+            if base.lower().endswith(suffix):
+                base = base[: -len(suffix)].rstrip("/")
+                break
         # Refuse loopback :7860 — that is the local shim itself (proxy would recurse).
         lowered = base.lower()
         if "127.0.0.1:7860" in lowered or "localhost:7860" in lowered or "[::1]:7860" in lowered:
