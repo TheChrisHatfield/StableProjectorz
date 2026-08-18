@@ -125,6 +125,15 @@ def _json_bytes(obj: Any) -> bytes:
     return json.dumps(obj).encode("utf-8")
 
 
+def _safe_int_dim(val: Any, default: int = 64) -> int:
+    try:
+        if val is None or val == "":
+            return default
+        return max(8, min(2048, int(float(val))))
+    except (TypeError, ValueError):
+        return default
+
+
 def _demo_catalog_get(path: str) -> Optional[Tuple[bytes, str]]:
     """Return (body, content_type) for Forge list endpoints used by SPZ dropdowns."""
     if path == "/sdapi/v1/sd-models":
@@ -505,8 +514,24 @@ class _Handler(BaseHTTPRequestHandler):
                         return
                     self._send_json(200, result)
                     return
-                w = int(payload.get("resize_width") or payload.get("width") or 64)
-                h = int(payload.get("resize_height") or payload.get("height") or 64)
+                w = _safe_int_dim(
+                    payload.get("rslt_imageWidths")
+                    or payload.get("resize_width")
+                    or payload.get("upscaling_resize_w")
+                    or payload.get("width"),
+                    64,
+                )
+                h = _safe_int_dim(
+                    payload.get("rslt_imageHeights")
+                    or payload.get("resize_height")
+                    or payload.get("upscaling_resize_h")
+                    or payload.get("height"),
+                    64,
+                )
+                if w == 64 and h == 64:
+                    scale = _safe_int_dim(payload.get("upscaling_resize"), 1)
+                    if scale > 1:
+                        w = h = min(2048, 64 * scale)
                 result = DemoBackend().generate("/sdapi/v1/txt2img", {"width": w, "height": h})
                 self._send_json(200, result)
                 return
