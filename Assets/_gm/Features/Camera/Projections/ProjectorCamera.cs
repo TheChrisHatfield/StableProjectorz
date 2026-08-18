@@ -57,20 +57,29 @@ namespace spz {
 
 	    public void Init(GenData2D genData){
 	        _myGenData = genData;
-	        _myMeshes  = ModelsHandler_3D.instance.selectedMeshes.ToList();//ToList makes copy
-	        _myRenderers = ModelsHandler_3D.instance.selectedMeshes.Select( m=>m._meshRenderer ).ToList();
+	        var mh = ModelsHandler_3D.instance;
+	        if (mh == null) return;
+	        _myMeshes  = mh.selectedMeshes.ToList();//ToList makes copy
+	        _myRenderers = mh.selectedMeshes.Select( m=>m._meshRenderer ).ToList();
 
 	        _projectionCamera.enabled = false;//Important. Keep disabled.  Render() will work + avoids automatic renders.
 	        _projectionCamera.depthTextureMode = DepthTextureMode.Depth;
 
-	        ModelsHandler_3D.instance.DoForIsolatedMeshes(_myMeshes, doSomething:Render_the_Visibilities);
-	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	        if (myIconUI == null){
+		        // Gen can Init projectors before an icon is bound (e.g. empty ArtIconsGroup).
+		        // Skip visibility bake rather than NRE on projBends().
+		        return;
+	        }
+	        mh.DoForIsolatedMeshes(_myMeshes, doSomething:Render_the_Visibilities);
+	        Objects_Renderer_MGR.instance?.ReRenderAll_soon();
 	    }
 
 
 	    //produces image that tells if POV is visible to the camera, or is obstructed by some depth.
 	    void Render_the_Visibilities(){
+	        if (myIconUI == null || _myGenData == null || _init_helper == null) return;
 	        GenData_Masks utils = _myGenData._masking_utils;
+	        if (utils == null) return;
 
 	        _init_helper.Make_Visibilities_and_Alignments( _myMeshes.ToList(),  myIconUI.projBends(),  OnWillRenderPOV );
 
