@@ -59,9 +59,13 @@ namespace spz {
 	    }
 
 	    public void DestroySelf(){
-	        Destroy(this.gameObject);
+	        // Capture refs first: _genData is derived from the BG icon, so clearing the icon first
+	        // made unsubscribe a no-op and left OnTextureUpdated on a destroyed GO.
+	        var gen = _genData;
+	        var guids = _bgIcon_ref != null ? _bgIcon_ref.texture_guids : null;
+	        gen?.Unsubscribe_from_textureUpdates(guids, OnTextureUpdated);
 	        _bgIcon_ref = null;
-	        _genData?.Unsubscribe_from_textureUpdates(_bgIcon_ref.texture_guids, OnTextureUpdated);
+	        Destroy(this.gameObject);
 	    }
 	}
 }//end namespace
