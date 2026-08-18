@@ -41,6 +41,21 @@ class BackendError(RuntimeError):
         self.status = int(status)
 
 
+def _coerce_forge_images(data: Dict[str, Any]) -> Dict[str, Any]:
+    """SPZ Complete_PendingImages reads images[]. Some extras routes only set image."""
+    if not isinstance(data, dict):
+        return data
+    images = data.get("images")
+    if isinstance(images, list) and any(isinstance(x, str) and x for x in images):
+        return data
+    single = data.get("image")
+    if isinstance(single, str) and single:
+        out = dict(data)
+        out["images"] = [single]
+        return out
+    return data
+
+
 def _looks_like_lan_host(hostport: str) -> bool:
     """True for localhost / IPv4 / IPv6 literals (use http). Hostnames like trycloudflare.com need https."""
     host = (hostport or "").split("/")[0].strip().lower()
@@ -225,7 +240,7 @@ class RemoteForgeBackend(CloudBackend):
             raise BackendError(f"upstream returned non-JSON: {exc}", status=502) from exc
         if not isinstance(data, dict):
             raise BackendError("upstream JSON was not an object", status=502)
-        return data
+        return _coerce_forge_images(data)
 
     def proxy(self, method: str, path: str, body: Optional[bytes], headers: Dict[str, str]) -> Tuple[int, bytes, str]:
         if not path.startswith("/"):
