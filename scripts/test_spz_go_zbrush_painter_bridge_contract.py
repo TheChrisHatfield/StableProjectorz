@@ -97,6 +97,27 @@ class ZBrushPainterBridgeContractTests(unittest.TestCase):
         ok, _ = p._painter_export_textures_and_mesh("X")
         self.assertFalse(ok)
 
+    def test_painter_pull_keeps_marker_when_export_fails(self):
+        # Delete-before-push burned every SPZ Import on the first watcher tick while Painter export
+        # still fails closed (spike). Keep the marker on failure; only clear it after a successful push.
+        import tempfile
+        p = _load(EXT / "Painter_SpzBridge" / "spz_painter_plugin.py", "spz_painter_plugin_pull")
+        with tempfile.TemporaryDirectory() as td:
+            req = os.path.join(td, PULL_MARKER)
+            with open(req, "w", encoding="utf-8") as f:
+                f.write('{"host":"painter"}')
+            p.spz_export = lambda: (False, "spike not ready")  # type: ignore
+            self.assertFalse(p._consume_pull_request(td))
+            self.assertTrue(os.path.isfile(req), "failed push must leave the marker for a later retry")
+            # Same fingerprint must not re-spam every poll.
+            self.assertFalse(p._consume_pull_request(td))
+            p.spz_export = lambda: (True, "ok")  # type: ignore
+            # Touch the request so the debounce sees a fresh Import click.
+            with open(req, "w", encoding="utf-8") as f:
+                f.write('{"host":"painter","retry":1}')
+            self.assertTrue(p._consume_pull_request(td))
+            self.assertFalse(os.path.isfile(req), "successful push must clear the marker")
+
     def test_installers_target_user_dirs_not_program_files(self):
         for name in ("ZBrush_SpzBridge/install_into_zbrush.py", "Painter_SpzBridge/install_into_painter.py"):
             src = (EXT / name).read_text(encoding="utf-8")
