@@ -91,5 +91,7 @@ public class AddonListScrollbarContractTests {
 			"Panel creation must wire the scrollbar.");
 		Assert.That(src, Does.Contain("EnsureListScrollbarFromPanel()"),
 			"OpenPanel must wire the bar for panels built before it existed.");
+		Assert.That(src, Does.Contain("ReferenceEquals(scroll.verticalScrollbar, _listScrollbar)"),
+			"Ensure must re-assign ScrollRect.verticalScrollbar if the live bar ref was dropped.");
 	}
 }
