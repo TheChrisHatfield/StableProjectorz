@@ -886,7 +886,10 @@ namespace spz {
 				if (label == null) {
 					continue;
 				}
-				SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, _palette.LabelInk, label.fontSize);
+				// Color + Roboto only. The compact-tool helper is for multi-letter radios and would
+				// drop Bold plus add tracking that does not belong on single-letter axis discs.
+				SpzUiThemeOps.ApplyBoundChromeTmp(label, _palette.LabelInk, label.fontSize);
+				label.fontStyle = FontStyles.Bold;
 				label.raycastTarget = false;
 			}
 			if (_centerImage != null) {
