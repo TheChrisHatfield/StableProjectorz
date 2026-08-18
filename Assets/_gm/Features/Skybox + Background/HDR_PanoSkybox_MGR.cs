@@ -206,6 +206,7 @@ namespace spz {
 	            = JsonConvert.DeserializeObject<SD_Generate_ProgressResponse>(request.downloadHandler.text, settings);
         
 	        if(progressResponse==null){ return; }//ComfyUI doesn't return progress (Forge and A1111 would).
+	        if (progressResponse.state == null){ return; }
 
 	        //using ? in case SD had exception
 	        _latestGenData?.Update_PendingImages( progressResponse.state.job_no,  progressResponse.current_image ); 
@@ -229,14 +230,14 @@ namespace spz {
         
 	        string json = result.downloadHandler != null ? result.downloadHandler.text : "";
 
+	        try {
 	        if(err || json==""){
 	            GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:true);
 	            var jsonLow = json.ToLower();
 	            json += jsonLow.Contains("cannot be multiplied") || jsonLow.Contains("server error") ?  
 	                        " ..Maybe you are mixing SDXL model with SD 1.5 Controlnet?"  : "";
-	            Viewport_StatusText.instance.ShowStatusText("Error: " + json, false, 15, progressVisibility:false);
+	            Viewport_StatusText.instance?.ShowStatusText("Error: " + json, false, 15, progressVisibility:false);
 	            _latestGenData?.Complete_PendingImages( null ); //using ? in case SD had exception
-	            StableDiffusion_Hub.instance.MarkCustomWorkflow_Done();
 	            _sphereGenIterCompleted = true;
 	            _sphereGen_error = true;
 	            return; 
@@ -244,21 +245,29 @@ namespace spz {
 
 	        // Use class-type information, to support inheritance of objects:
 	        var settings = new JsonSerializerSettings{ TypeNameHandling = TypeNameHandling.Auto, };
-	        SD_txt2imgResponse response = JsonConvert.DeserializeObject<SD_txt2imgResponse>(json, settings);
+	        SD_txt2imgResponse response = null;
+	        try {
+	            response = JsonConvert.DeserializeObject<SD_txt2imgResponse>(json, settings);
+	        } catch (System.Exception ex) {
+	            Debug.LogWarning("[HDR_PanoSkybox_MGR] sphere result parse failed: " + ex.Message);
+	            response = null;
+	        }
         
-	        if(json == "{}"){
+	        if(response == null || json == "{}" || response.images == null){
 	            GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:true);
 	            _latestGenData?.Complete_PendingImages(null); //using ? in case SD had exception
-	            StableDiffusion_Hub.instance.MarkCustomWorkflow_Done();
 	            _sphereGenIterCompleted = true;
 	            _sphereGen_error = true; 
 	            return;
 	        }
 	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:false);
 	        _latestGenData?.Complete_PendingImages( response.images ); //using ? in case SD had exception
-	        StableDiffusion_Hub.instance.MarkCustomWorkflow_Done();
 	        _sphereGenIterCompleted = true;
 	        _sphereGen_error = false;
+	        } finally {
+	            // Always clear somethingCustom — a throw after FinishedGenerate left SD stuck busy.
+	            StableDiffusion_Hub.instance?.MarkCustomWorkflow_Done();
+	        }
 	    }
 
 
