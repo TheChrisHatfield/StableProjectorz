@@ -157,6 +157,9 @@ namespace spz {
 		public static void RestartWithAddons() {
 			if (s_restartInProgress) {
 				Debug.LogWarning("[Launch_Addons] Restart with addons already in progress — ignoring duplicate click.");
+				// OnRestartWithAddons disables the button before calling here — re-enable or it stays dead.
+				if (AddonManager_UI.instance != null)
+					AddonManager_UI.instance.ShowRestartStatus("Restart already in progress…", false);
 				return;
 			}
 
