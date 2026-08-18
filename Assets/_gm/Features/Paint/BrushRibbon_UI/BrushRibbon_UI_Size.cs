@@ -36,6 +36,8 @@ namespace spz {
 
 	    float _bracket_BrushSize_nextTime = -99999;
 	    public float brushSize01 => _maskBrushSize_slider != null ? _maskBrushSize_slider.value : 0f;
+	    /// <summary>True while the size dial is being dragged — Value Assist Live must not overwrite it.</summary>
+	    public bool IsSizeSliderDragging => _maskBrushSize_slider != null && _maskBrushSize_slider.IsDragging;
 
 	    /// <summary> App-wide read: current brush size 0–1. Use this instead of any ribbon reference so state is universal. </summary>
 	    public static float GetBrushSize01() => instance != null ? instance.brushSize01 : 0f;

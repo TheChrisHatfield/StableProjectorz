@@ -36,6 +36,8 @@ namespace spz {
 		static float _lastLiveAppliedOpacity01 = -1f;
 		// User manually changed hardness mid-session — stop driving hardness until the next session.
 		static bool _liveHardnessUserOverride;
+		// User moved traditional size (dial / [ ] / Shift+RMB) mid-session — stop driving size.
+		static bool _liveSizeUserOverride;
 
 		public static bool IsArmed => _armed;
 		public static ValuePaintProposal ArmedProposal => _armedProposal;
@@ -111,6 +113,7 @@ namespace spz {
 			_lastLiveAppliedSize01 = float.NaN;
 			_lastLiveAppliedOpacity01 = -1f;
 			_liveHardnessUserOverride = false;
+			_liveSizeUserOverride = false;
 			_snapshotColor = sd.brushColor;
 			_snapshotColor.a = 1f;
 			float size = BrushRibbon_UI_Size.GetBrushSize01();
@@ -136,6 +139,7 @@ namespace spz {
 			_lastLiveAppliedSize01 = float.NaN;
 			_lastLiveAppliedOpacity01 = -1f;
 			_liveHardnessUserOverride = false;
+			_liveSizeUserOverride = false;
 			var sd = SD_WorkflowOptionsRibbon_UI.instance;
 			if (sd == null) return;
 			sd.SetBrushColorQuietFromApi(_snapshotColor.r, _snapshotColor.g, _snapshotColor.b, 1f);
@@ -354,6 +358,7 @@ namespace spz {
 			_haveUserBrushSnapshot = false;
 			_lastLiveAppliedSize01 = float.NaN;
 			_lastLiveAppliedOpacity01 = -1f;
+			_liveSizeUserOverride = false;
 			reason = "Armed on target=" + DescribeTarget(target) + " desiredBin=" + proposal.DesiredBin
 			         + " color=" + tint + " size01=" + width01.ToString("F2")
 			         + " opacity01=" + effectiveOpacity.ToString("F2")
@@ -371,26 +376,48 @@ namespace spz {
 		}
 
 		/// <summary>
-		/// Soft-arm Live: push width hint into <see cref="BrushRibbon_UI_Size"/> while respecting
-		/// traditional size edits ([ ] / Shift+RMB / size slider) as the new session anchor.
-		/// Accept applies the hint at full strength; Live uses a fixed soft factor (no Size dial).
+		/// Soft-arm Live: push width hint into <see cref="BrushRibbon_UI_Size"/> until the user
+		/// assigns a size themselves. After a traditional size edit ([ ] / Shift+RMB / size slider)
+		/// Live must not lerp back toward the model's width hint — that snapped the dial to a
+		/// number the user never set.
 		/// </summary>
 		const float LiveSizeSoftArm01 = 0.35f;
 
+		static bool IsUserResizingBrushNow() {
+			if (BrushRibbon_UI_Size.instance != null && BrushRibbon_UI_Size.instance.IsSizeSliderDragging)
+				return true;
+			// Viewport Shift+RMB size drag (MaskPainter.CursorPreviewUI_Reposition).
+			return KeyMousePenInput.isKey_Shift_pressed() && KeyMousePenInput.isRMBpressed();
+		}
+
 		static void SoftArmBrushWidthIntoSpzSize(SD_WorkflowOptionsRibbon_UI sd, ValuePaintProposal proposal) {
 			if (sd == null || BrushRibbon_UI_Size.instance == null) return;
+			if (_liveSizeUserOverride) return;
+			if (IsUserResizingBrushNow()) return;
+
 			float proposedWidth = SanitizeBrushWidthHint01(proposal.BrushWidthHint01);
 			float liveWidth = BrushRibbon_UI_Size.GetBrushSize01();
 			if (!float.IsFinite(liveWidth)) liveWidth = proposedWidth;
-			// User moved traditional size since our last write? Adopt it as the new session anchor
-			// (and restore target) instead of yanking the slider every tick.
-			if (float.IsFinite(_lastLiveAppliedSize01) && Mathf.Abs(liveWidth - _lastLiveAppliedSize01) > 0.01f)
+
+			// User moved traditional size since our last write (or since capture, before first write)?
+			bool changedSinceAssistWrite = float.IsFinite(_lastLiveAppliedSize01)
+				&& Mathf.Abs(liveWidth - _lastLiveAppliedSize01) > 0.01f;
+			bool changedBeforeFirstAssistWrite = !float.IsFinite(_lastLiveAppliedSize01)
+				&& float.IsFinite(_snapshotSize01)
+				&& Mathf.Abs(liveWidth - _snapshotSize01) > 0.01f;
+			if (changedSinceAssistWrite || changedBeforeFirstAssistWrite) {
+				_liveSizeUserOverride = true;
 				_snapshotSize01 = liveWidth;
+				return;
+			}
+
 			float anchor = float.IsFinite(_snapshotSize01) ? _snapshotSize01 : liveWidth;
 			float width01 = Mathf.Lerp(anchor, proposedWidth, LiveSizeSoftArm01);
 			if (float.IsFinite(width01) && Mathf.Abs(width01 - liveWidth) > 0.015f) {
 				sd.SetBrushSize(width01);
-				_lastLiveAppliedSize01 = width01;
+				// Read back after snap so the next tick does not treat CircleSlider rounding as a user edit.
+				float actual = BrushRibbon_UI_Size.GetBrushSize01();
+				_lastLiveAppliedSize01 = float.IsFinite(actual) ? actual : width01;
 			} else {
 				_lastLiveAppliedSize01 = liveWidth;
 			}
@@ -548,6 +575,7 @@ namespace spz {
 					_lastLiveAppliedSize01 = float.NaN;
 					_lastLiveAppliedOpacity01 = -1f;
 					_liveHardnessUserOverride = false;
+					_liveSizeUserOverride = false;
 				}
 				reason = _lastFailReason = "SetBrushColorQuietFromApi failed";
 				return false;

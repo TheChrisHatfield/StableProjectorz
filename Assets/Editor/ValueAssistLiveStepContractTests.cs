@@ -177,4 +177,17 @@ public sealed class ValueAssistLiveStepContractTests {
 			ValuePaintLivePredictor.InvalidateAssist();
 		}
 	}
+
+	// B2.2e — Live must stop driving size after a traditional size edit; lerp-after-adopt
+	// snapped the dial toward the model hint (a number the user never assigned).
+	[Test]
+	public void LiveSizeSoftArm_StopsAfterUserEdit_Source() {
+		string applier = System.IO.File.ReadAllText(System.IO.Path.Combine(
+			Application.dataPath, "_gm", "Features", "Paint", "SmartValuePaint",
+			"ValuePaintProposalApplier.cs"));
+		Assert.That(applier, Does.Contain("_liveSizeUserOverride"));
+		Assert.That(applier, Does.Contain("if (_liveSizeUserOverride) return;"));
+		Assert.That(applier, Does.Contain("IsUserResizingBrushNow"));
+		Assert.That(applier, Does.Contain("changedBeforeFirstAssistWrite"));
+	}
 }
