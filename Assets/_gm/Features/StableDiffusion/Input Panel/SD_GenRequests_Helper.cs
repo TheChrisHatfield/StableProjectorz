@@ -96,13 +96,28 @@ namespace spz {
 
 	    public void MarkCustomWorkflow_Done(){
 	        _isGeneratingWhat = Generate_RequestingWhat.nothing;
+	        // HDR / rembg cancel arms RequestHttpInterruptOnly which sets this true; leave it sticky
+	        // and the next prep coroutine can abort before Generate_* clears the flag.
+	        _cancelRequested = false;
 	    }
 
-	    /// <summary>POST /interrupt without arming the 10s FinishTheInterrupt timer (custom workflows clear busy themselves).</summary>
+	    /// <summary>POST /interrupt without full Gen-Art FinishTheInterrupt UI (custom workflows clear busy themselves).</summary>
 	    public void RequestHttpInterruptOnly(){
 	        _cancelRequested = true;
 	        ClearStuckInterruptTimer();
-	        _generate_sender.Send_StopGenerateRequest();
+	        _generate_sender.Send_StopGenerateRequest(() => {
+	            // Do not call OnFinishTheInterrupt — custom owners already finished their UI.
+	            // Only drop the sticky cancel so a later txt2img prep is not born cancelled.
+	            _cancelRequested = false;
+	        });
+	        // If /interrupt never settles, still clear the flag (custom path has no OnFinish timer).
+	        _finishTheInterrupt_ifStuck_crtn = StartCoroutine(ClearCancelFlagIfStuck(10f));
+	    }
+
+	    IEnumerator ClearCancelFlagIfStuck(float graceDelay){
+	        yield return new WaitForSeconds(graceDelay);
+	        _finishTheInterrupt_ifStuck_crtn = null;
+	        _cancelRequested = false;
 	    }
 
 
