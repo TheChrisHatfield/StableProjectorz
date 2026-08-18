@@ -38,6 +38,8 @@ public class RestartWithAddonsContractTests {
 			"Hidden restart must not block forever on pause.");
 		Assert.That(bat, Does.Contain("start \"\" \"%EXE%\""),
 			"Bat must actually launch the player exe.");
+		Assert.That(launch, Does.Contain("Restart already in progress"),
+			"Duplicate Restart click must ShowRestartStatus so the disabled button is re-enabled.");
 	}
 
 	/// <summary>
