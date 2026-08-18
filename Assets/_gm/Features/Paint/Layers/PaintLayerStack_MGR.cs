@@ -267,7 +267,7 @@ namespace spz {
 			if (_resolution.x <= 0 || _udimsCount <= 0)
 				EnsureResolution(new Vector3Int(w, h, udims.Count));
 			PaintLayer layer = AddLayer(layerName);
-			if (layer.Content == null)
+			if (layer == null || layer.Content == null)
 			{
 				if (destroyWhenDone) foreach (var t in orderedTexList) if (t != null) Texture.DestroyImmediate(t);
 				return false;
