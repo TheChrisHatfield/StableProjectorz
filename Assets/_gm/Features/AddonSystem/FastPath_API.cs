@@ -1132,8 +1132,11 @@ namespace spz {
 		
 		/// <summary>
 		/// Export 3D + associated textures to a known full mesh path (no file dialog; textures share base name).
+		/// Optional <paramref name="hostId"/> (or exchange-path inference) pushes that host's axis/flip into
+		/// the shared writer basis before the mesh is encoded — DCC HTTP pulls must not reuse another
+		/// host's orientation from the last logo Export.
 		/// </summary>
-		public bool Export3DWithTexturesToPath(string meshFilePath) {
+		public bool Export3DWithTexturesToPath(string meshFilePath, string hostId = null) {
 			if (!_isInitialized) {
 				UnityEngine.Debug.LogWarning("[FastPath_API] Export3DWithTexturesToPath: API not initialized yet.");
 				return false;
@@ -1167,6 +1170,7 @@ namespace spz {
 				UnityEngine.Debug.LogWarning("[FastPath_API] Export3DWithTexturesToPath: cannot create directory for: " + norm);
 				return false;
 			}
+			SpzGoHostPrefs.TryApplyExportBasisForPath(norm, hostId);
 			return sm.Export3D_with_textures_ToPath(norm);
 		}
 

@@ -174,7 +174,7 @@ def spz_import() -> Tuple[bool, str]:
         return False, err
     fbx = spz_pull_fbx(exdir)
     try:
-        r = spz_http.post_export_3d_to_path(url, fbx)
+        r = spz_http.post_export_3d_to_path(url, fbx, host_id=HOST_ID)
     except spz_http.SpzHttpError as e:
         return False, str(e)
     if not (isinstance(r, dict) and r.get("success") is True):

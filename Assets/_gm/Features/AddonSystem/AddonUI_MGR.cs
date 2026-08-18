@@ -1810,7 +1810,7 @@ namespace spz {
 			}
 			// Mesh write is sync; albedo/AO encode continues under Save_MGR._isSaving.
 			// Returning true here only means "started" — do not fall back to Python mid-write.
-			bool exportStarted = fp.Export3DWithTexturesToPath(path);
+			bool exportStarted = fp.Export3DWithTexturesToPath(path, hostId);
 			if (!exportStarted) {
 				SpzGoStatusLine("Export failed (valid path / API ready?)", false);
 				return false;

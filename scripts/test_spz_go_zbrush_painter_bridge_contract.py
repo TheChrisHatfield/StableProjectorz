@@ -118,6 +118,23 @@ class ZBrushPainterBridgeContractTests(unittest.TestCase):
             self.assertTrue(p._consume_pull_request(td))
             self.assertFalse(os.path.isfile(req), "successful push must clear the marker")
 
+    def test_export_http_passes_host_id_for_axis_basis(self):
+        # Without host_id, Unity reused whichever host last applied the shared ExportAxisSettings.
+        for sub, host in (
+            ("ZBrush_SpzBridge/spz_http.py", "zbrush"),
+            ("Painter_SpzBridge/spz_http.py", "painter"),
+            ("Blender_SpzBridge/spz_http.py", "blender"),
+        ):
+            src = (EXT / sub).read_text(encoding="utf-8")
+            self.assertIn('body["host_id"]', src, sub)
+            self.assertIn("host_id: Optional[str]", src, sub)
+        zb = (EXT / "ZBrush_SpzBridge" / "spz_zbrush_bridge.py").read_text(encoding="utf-8")
+        self.assertIn("host_id=HOST_ID", zb)
+        pn = (EXT / "Painter_SpzBridge" / "spz_painter_plugin.py").read_text(encoding="utf-8")
+        self.assertIn("host_id=HOST_ID", pn)
+        bl = (EXT / "Blender_SpzBridge" / "__init__.py").read_text(encoding="utf-8")
+        self.assertIn('host_id="blender"', bl)
+
     def test_installers_target_user_dirs_not_program_files(self):
         for name in ("ZBrush_SpzBridge/install_into_zbrush.py", "Painter_SpzBridge/install_into_painter.py"):
             src = (EXT / name).read_text(encoding="utf-8")
