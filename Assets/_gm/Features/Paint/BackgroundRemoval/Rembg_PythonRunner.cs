@@ -58,6 +58,16 @@ namespace spz {
 
 	        GenerateButtons_UI.OnConfirmed_StartedGenerate();
 
+	        bool finishedUi = false;
+	        void FinishRembgUi(bool canceled) {
+	            if (finishedUi) return;
+	            finishedUi = true;
+	            GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled: canceled);
+	            StableDiffusion_Hub.instance?.MarkCustomWorkflow_Done();
+	        }
+
+	        // try/finally only — C# forbids yield inside try/catch.
+	        try {
 	        string exeDirectory = Directory.GetParent(Application.dataPath).FullName;
 	        string rembgPath = Path.Combine(exeDirectory, "rembg-stable-projectorz");
 
@@ -99,15 +109,17 @@ namespace spz {
 	        if (!ranOk){
 	            Viewport_StatusText.instance?.ShowStatusText(
 	                "Background Removal failed to start (see log).", false, 6, true);
-	            GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled: true);
-	            StableDiffusion_Hub.instance.MarkCustomWorkflow_Done();
+	            FinishRembgUi(canceled: true);
 	            yield break;
 	        }
-	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled: false);
-	        StableDiffusion_Hub.instance.MarkCustomWorkflow_Done();
+	        FinishRembgUi(canceled: false);
 
 	        List<Texture2D> generatedTextures = TextureTools_SPZ.LoadTextures_FromDir(outputDir).ToList();
 	        arg.onReady?.Invoke( generatedTextures );
+	        } finally {
+	            // Throw / early exit after StartedGenerate must not leave Gen Art stuck on Cancel.
+	            FinishRembgUi(canceled: true);
+	        }
 	    }
 
 
