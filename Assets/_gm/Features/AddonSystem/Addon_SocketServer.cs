@@ -1744,7 +1744,9 @@ namespace spz {
 					
 					case "spz.cmd.export_3d_with_textures_to_path": {
 						string exPath = @params["mesh_filepath"]?.ToString() ?? "";
-						bool exOk = fastPath.Export3DWithTexturesToPath(exPath);
+						string hostId = @params["host_id"]?.ToString()
+							?? @params["hostId"]?.ToString();
+						bool exOk = fastPath.Export3DWithTexturesToPath(exPath, hostId);
 						result["success"] = exOk;
 						if (!exOk) {
 							result["error"] = "export to path failed (invalid path, Save_MGR not ready, or could not create directory)";

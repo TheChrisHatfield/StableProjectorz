@@ -115,13 +115,17 @@ def post_import_3d_model(base_url: str, filepath: str) -> dict:
     )
 
 
-def post_export_3d_to_path(base_url: str, mesh_filepath: str) -> dict:
+def post_export_3d_to_path(base_url: str, mesh_filepath: str, host_id: Optional[str] = None) -> dict:
     # Texture dilate/encode can exceed the default 120s; must match Unity long-op budget (~300s).
+    # host_id pushes that host's axis/flip into the shared FBX basis before encode (multi-DCC).
+    body = {"mesh_filepath": str(mesh_filepath)}
+    if host_id:
+        body["host_id"] = str(host_id)
     return request_json(
         base_url,
         "POST",
         "/api/v1/export/3d_to_path",
-        {"mesh_filepath": str(mesh_filepath)},
+        body,
         timeout_s=300.0,
     )
 

@@ -1,9 +1,8 @@
 """
 REST client for StableProjectorz HTTP API (default http://127.0.0.1:5557).
-Stdlib only (urllib + json) — no pip dependencies, so it imports inside ZBrush's Python 3.
+Stdlib only (urllib + json) — imports inside Substance Painter's bundled Python.
 
-Shared shape with the Blender bridge (External/Blender_SpzBridge/spz_http.py): the transport is the
-same SPZ REST surface, only the host that drives it differs.
+Same shape as External/Blender_SpzBridge/spz_http.py; only the host driving it differs.
 """
 
 import json
@@ -71,11 +70,7 @@ def get_project_info(base_url: str) -> dict:
 
 def post_import_3d_model(base_url: str, filepath: str) -> dict:
     return request_json(
-        base_url,
-        "POST",
-        "/api/v1/meshes/import",
-        {"filepath": str(filepath)},
-        timeout_s=300.0,
+        base_url, "POST", "/api/v1/meshes/import", {"filepath": str(filepath)}, timeout_s=300.0
     )
 
 
@@ -84,9 +79,5 @@ def post_export_3d_to_path(base_url: str, mesh_filepath: str, host_id: Optional[
     if host_id:
         body["host_id"] = str(host_id)
     return request_json(
-        base_url,
-        "POST",
-        "/api/v1/export/3d_to_path",
-        body,
-        timeout_s=300.0,
+        base_url, "POST", "/api/v1/export/3d_to_path", body, timeout_s=300.0
     )

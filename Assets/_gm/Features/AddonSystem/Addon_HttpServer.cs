@@ -716,8 +716,11 @@ namespace spz {
 						return new JObject { ["error"] = "JSON body {\"mesh_filepath\": ...} required" };
 					}
 					string meshFilePath = body["mesh_filepath"].ToString();
+					string hostId = body["host_id"]?.ToString()
+						?? body["hostId"]?.ToString();
 					var started = ExecuteJsonRpcSync("spz.cmd.export_3d_with_textures_to_path", new JObject {
-						["mesh_filepath"] = meshFilePath
+						["mesh_filepath"] = meshFilePath,
+						["host_id"] = hostId ?? ""
 					});
 					bool ok = started?["success"]?.ToObject<bool>() ?? false;
 					if (!ok) {

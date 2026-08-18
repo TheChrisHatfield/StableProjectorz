@@ -10,7 +10,7 @@
 bl_info = {
     "name": "SPZ GO (HTTP)",
     "author": "StableProjectorz / community",
-    "version": (0, 6, 0),
+    "version": (0, 7, 0),
     "blender": (4, 0, 0),
     "location": "3D Viewport: N (toggle sidebar) → top tab 'SPZ GO' (not auto-open; scroll tab row if needed)",
     "description": "Link with StableProjectorz: pull/push 3D via REST; shared exchange folder; FBX and UV (SVG) helpers",
@@ -27,6 +27,10 @@ from typing import Optional, Tuple
 
 # Default names for exchange; Unity autofill uses the same (StableProjectorzGO/__init__.py).
 EXCHANGE_FBX_FROM_BLENDER = "from_blender.fbx"
+# SPZ writes this marker when the user presses Import for the Blender host: it means "push your
+# current selection to me now". Import is host → SPZ, so the pull is driven from Blender's side.
+# Same literal as AddonUI_MGR.SpzGoPullRequestFileName; both sides are pinned by contract tests.
+EXCHANGE_PULL_REQUEST = "spz_go_pull_request.json"
 
 import bpy
 from bpy.props import StringProperty, BoolProperty, IntProperty
@@ -126,6 +130,11 @@ class StableProjectorzGOPreferences(AddonPreferences):
         default=True,
         description="Watch the exchange folder; when StableProjectorz finishes Export, import into Blender automatically",
     )
+    respond_to_spz_pull: BoolProperty(
+        name="Push selection when SPZ requests it",
+        default=True,
+        description="Watch the exchange folder; when StableProjectorz presses Import for Blender, export the current selection to SPZ automatically",
+    )
     prefer_mesh_stream: BoolProperty(
         name="Prefer direct mesh stream",
         default=True,
@@ -151,6 +160,7 @@ class StableProjectorzGOPreferences(AddonPreferences):
         self.layout.prop(self, "uv_svg_name")
         self.layout.prop(self, "spz_pull_basename")
         self.layout.prop(self, "auto_import_from_spz")
+        self.layout.prop(self, "respond_to_spz_pull")
         self.layout.prop(self, "prefer_mesh_stream")
         self.layout.prop(self, "mesh_stream_port")
         self.layout.separator()
@@ -445,6 +455,38 @@ def _export_fbx_for_spz(context, filepath: str) -> set:
             print("SPZ GO: could not fully restore selection after export:", e)
 
 
+def _push_selection_to_spz(context) -> Tuple[bool, str]:
+    """Export the current selection to the exchange FBX and ask SPZ to import it (Blender → SPZ).
+
+    Shared by the manual Export operator and the SPZ-driven pull request, so both paths write the
+    same file and hit the same import endpoint. Returns (ok, human message).
+    """
+    p = prefs()
+    try:
+        info = spz_http.get_project_info(p.base_url)
+    except spz_http.SpzHttpError as e:
+        return False, str(e)
+    if not info.get("data_dir_available") or not info.get("data_dir"):
+        return False, "No project data_dir. Save a StableProjectorz project first."
+    exdir = os.path.join(info["data_dir"], p.exchange_subdir)
+    if not _ensure_dir(exdir):
+        return False, f"Could not create: {exdir}"
+    out = str(Path(exdir) / EXCHANGE_FBX_FROM_BLENDER)
+    if bpy.ops.export_scene.fbx.poll() is False:
+        return False, "SPZ GO: FBX export is not available in this context (3D Viewport object mode)."
+    ret = _export_fbx_for_spz(context, out)
+    if not (ret and ("FINISHED" in ret)):
+        return False, f"Blender FBX export did not finish: {ret!r}"
+    try:
+        r = spz_http.post_import_3d_model(p.base_url, out)
+    except spz_http.SpzHttpError as e:
+        return False, str(e)
+    ok = (r.get("success") is True) if isinstance(r, dict) else False
+    if ok:
+        return True, f"Export → SPZ: {out}"
+    return False, f"File written; SPZ import failed: {r!r}"
+
+
 # --- SPZ → Blender: wait for exported FBX, then import ---
 
 _go_timer_state = None
@@ -511,7 +553,7 @@ def _mesh_stream_drain_timer():
 def _request_stream_texture_completion(base_url: str, fbx_path: str) -> None:
     """Worker-only HTTP wait; bpy work is handed back to _mesh_stream_drain_timer."""
     try:
-        result = spz_http.post_export_3d_to_path(base_url, fbx_path)
+        result = spz_http.post_export_3d_to_path(base_url, fbx_path, host_id="blender")
         ok = isinstance(result, dict) and result.get("success") is True
         _stream_texture_results.put((ok, fbx_path, result))
     except Exception as exc:
@@ -732,6 +774,43 @@ def _resolve_exchange_dir_cached() -> str:
     return _watch_cached_exchange_dir or ""
 
 
+def _consume_spz_pull_request(exdir: str) -> bool:
+    """If SPZ asked Blender to push, delete the marker and export the current selection.
+
+    Delete first, then push: a repeat Import press in SPZ writes a fresh marker, so consuming the
+    request up front lets the user retry after a bad-context failure instead of the timer looping
+    on a stale file. The push runs on Blender's main thread inside the timer, where FBX export and
+    selection are valid.
+    """
+    req = os.path.join(exdir, EXCHANGE_PULL_REQUEST)
+    if not os.path.isfile(req):
+        return False
+    try:
+        os.remove(req)
+    except OSError as e:
+        print("SPZ GO: could not consume pull request:", e)
+        return False
+    try:
+        ok, msg = _push_selection_to_spz(bpy.context)
+    except Exception as e:  # never let a push error kill the persistent timer
+        print("SPZ GO: pull request push failed:", e)
+        return False
+    print("SPZ GO: pull request →", "OK" if ok else "FAILED", "-", msg)
+    return ok
+
+
+def _clear_stale_pull_request(exdir: str) -> None:
+    """Drop a leftover request at enable so a stale marker cannot fire an unrequested push."""
+    if not exdir:
+        return
+    req = os.path.join(exdir, EXCHANGE_PULL_REQUEST)
+    try:
+        if os.path.isfile(req):
+            os.remove(req)
+    except OSError:
+        pass
+
+
 def _exchange_watch_timer():
     """Persistent timer: when SPZ writes from_spz.spz_go_ready, auto-import the FBX."""
     global _watch_last_ready_fp, _watch_needs_seed, _stream_skip_next_ready_fbx
@@ -744,6 +823,10 @@ def _exchange_watch_timer():
     exdir = _resolve_exchange_dir_cached()
     if not exdir or not os.path.isdir(exdir):
         return 2.0
+    # SPZ Import (host → SPZ) drops a pull request here. Consume it and push the current selection.
+    # Handled before the ready-stamp check so a pending request is never starved by SPZ→Blender traffic.
+    if getattr(p, "respond_to_spz_pull", True):
+        _consume_spz_pull_request(exdir)
     base = (bpy.path.clean_name(p.spz_pull_basename) or "from_spz").strip()
     stamp = os.path.join(exdir, base + ".spz_go_ready")
     fbx = os.path.join(exdir, base + ".fbx")
@@ -936,43 +1019,12 @@ class SPZ_OT_go_export(Operator):
     )
 
     def execute(self, context):
-        p = prefs()
-        try:
-            info = spz_http.get_project_info(p.base_url)
-        except spz_http.SpzHttpError as e:
-            self.report({"ERROR"}, str(e))
-            return {"CANCELLED"}
-        if not info.get("data_dir_available") or not info.get("data_dir"):
-            self.report(
-                {"ERROR"},
-                "No project data_dir. Save a StableProjectorz project first.",
-            )
-            return {"CANCELLED"}
-        exdir = os.path.join(info["data_dir"], p.exchange_subdir)
-        if not _ensure_dir(exdir):
-            self.report({"ERROR"}, f"Could not create: {exdir}")
-            return {"CANCELLED"}
-        out = str(Path(exdir) / EXCHANGE_FBX_FROM_BLENDER)
-        if bpy.ops.export_scene.fbx.poll() is False:
-            self.report(
-                {"ERROR"},
-                "SPZ GO: FBX export is not available in this context (3D Viewport object mode).",
-            )
-            return {"CANCELLED"}
-        ret = _export_fbx_for_spz(context, out)
-        if not (ret and ("FINISHED" in ret)):
-            self.report({"ERROR"}, f"Blender FBX export did not finish: {ret!r}")
-            return {"CANCELLED"}
-        try:
-            r = spz_http.post_import_3d_model(p.base_url, out)
-        except spz_http.SpzHttpError as e:
-            self.report({"ERROR"}, str(e))
-            return {"CANCELLED"}
-        ok = (r.get("success") is True) if isinstance(r, dict) else False
+        ok, msg = _push_selection_to_spz(context)
         if ok:
-            self.report({"INFO"}, f"Export → SPZ: {out}")
+            self.report({"INFO"}, msg)
             return {"FINISHED"}
-        self.report({"WARNING"}, f"File written; SPZ import failed: {r!r}")
+        # A missing data_dir / bad context is user-facing; a written-but-not-imported file is a warning.
+        self.report({"WARNING"} if msg.startswith("File written") else {"ERROR"}, msg)
         return {"CANCELLED"}
 
 
@@ -1030,7 +1082,7 @@ class SPZ_OT_go_import(Operator):
         # Snapshot before SPZ rewrite so the wait timer does not import a stale exchange FBX.
         prior = _file_fingerprint(fbx)
         try:
-            r = spz_http.post_export_3d_to_path(p.base_url, fbx)
+            r = spz_http.post_export_3d_to_path(p.base_url, fbx, host_id="blender")
         except spz_http.SpzHttpError as e:
             self.report({"ERROR"}, str(e))
             return {"CANCELLED"}
@@ -1084,7 +1136,7 @@ class SPZ_OT_go_apply_maps_only(Operator):
             self.report({"ERROR"}, f"Could not create: {d}")
             return {"CANCELLED"}
         try:
-            r = spz_http.post_export_3d_to_path(p.base_url, fbx)
+            r = spz_http.post_export_3d_to_path(p.base_url, fbx, host_id="blender")
         except spz_http.SpzHttpError as e:
             self.report({"ERROR"}, str(e))
             return {"CANCELLED"}
@@ -1220,7 +1272,7 @@ class SPZ_OT_request_spz_export_to_path(Operator):
             self.report({"ERROR"}, f"Could not create: {d}")
             return {"CANCELLED"}
         try:
-            r = spz_http.post_export_3d_to_path(p.base_url, fbx)
+            r = spz_http.post_export_3d_to_path(p.base_url, fbx, host_id="blender")
         except spz_http.SpzHttpError as e:
             self.report({"ERROR"}, str(e))
             return {"CANCELLED"}
@@ -1383,6 +1435,8 @@ def _seed_watch_fingerprint():
         _watch_last_ready_fp = fp
         # Seeded (even if stamp missing): only future stamp changes should auto-import.
         _watch_needs_seed = False
+        # A pull request only means "push now"; a leftover one at enable is not a live request.
+        _clear_stale_pull_request(exdir)
     except Exception:
         _watch_last_ready_fp = None
         _watch_needs_seed = True
