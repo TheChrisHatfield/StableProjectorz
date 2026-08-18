@@ -249,6 +249,8 @@ namespace spz {
 		/// <summary>Live search query (associative text). Kept while the manager stays open; not cleared on Close.</summary>
 		string _searchQuery = "";
 		TMP_InputField _searchInput;
+		/// <summary>Preferences rows left open — search/filter rebuild must not collapse them.</summary>
+		readonly HashSet<string> _expandedAddonIds = new HashSet<string>(StringComparer.Ordinal);
 		Toggle _rememberEnabledAddonToggle; // assigned in Create / TryAddRememberPreferenceRowIfMissing
 		private GameObject _blocker; // full-screen click blocker, shown/hidden with panel
 		Image _blockerDimImage; // dimmer on blocker root
@@ -1061,6 +1063,7 @@ namespace spz {
 			_searchInput = null;
 			_rememberEnabledAddonToggle = null;
 			_listScrollbar = null;
+			_expandedAddonIds.Clear();
 			_addonUIItems.Clear();
 		}
 
@@ -1616,7 +1619,7 @@ namespace spz {
 				if (isOn) {
 					_filterState = filterValue;
 					if (Addon_MGR.instance != null && _addonsListParent != null)
-						RefreshAddonsList();
+						RefreshAddonsList(listFilterOnly: true);
 				}
 				ApplyThemeTokens();
 			});
@@ -1782,7 +1785,9 @@ namespace spz {
 		void OnSearchQueryChanged(string value) {
 			_searchQuery = value ?? "";
 			if (Addon_MGR.instance != null && _addonsListParent != null)
-				RefreshAddonsList();
+				// Soft refresh: do not ApplyThemeTokens on the search field mid-keystroke (caret/focus thrash),
+				// and keep Preferences expanded across the rebuild.
+				RefreshAddonsList(listFilterOnly: true);
 		}
 
 		/// <summary>Hover tip via shared <see cref="CanShowTooltip_UI"/> (respects Settings → Allow tooltips).</summary>
@@ -1844,10 +1849,32 @@ namespace spz {
 		}
 
 		public void RefreshAddonsList() {
+			RefreshAddonsList(listFilterOnly: false);
+		}
+
+		/// <param name="listFilterOnly">
+		/// True for search/filter typing: rebuild rows without restyling the search field (caret thrash),
+		/// and restore Preferences expansion from <see cref="_expandedAddonIds"/>.
+		/// </param>
+		void RefreshAddonsList(bool listFilterOnly) {
 			if (_addonsListParent == null) {
 				Debug.LogError("[AddonManager_UI] RefreshAddonsList: _addonsListParent is null! Cannot create items.");
 				ShowStatus("Error: List parent not initialized", false);
 				return;
+			}
+
+			// Capture search focus before Destroy — rebuild must not leave the caret stranded.
+			bool restoreSearchFocus = false;
+			int restoreCaret = 0;
+			int restoreSelAnchor = 0;
+			int restoreSelFocus = 0;
+			var es = EventSystem.current;
+			if (listFilterOnly && _searchInput != null && es != null
+			    && es.currentSelectedGameObject == _searchInput.gameObject) {
+				restoreSearchFocus = true;
+				restoreCaret = _searchInput.caretPosition;
+				restoreSelAnchor = _searchInput.selectionAnchorPosition;
+				restoreSelFocus = _searchInput.selectionFocusPosition;
 			}
 			
 			foreach (var item in _addonUIItems.Values) {
@@ -1900,6 +1927,9 @@ namespace spz {
 					Debug.LogError($"[AddonManager_UI] CreateAddonListItem failed for '{kvp.Key}': {e.Message}\n{e.StackTrace}");
 				}
 			}
+
+			// Drop expand memory for add-ons no longer listed (uninstalled / filtered out of registry).
+			_expandedAddonIds.RemoveWhere(id => !_addonUIItems.ContainsKey(id));
 			
 			if (_addonsListParent != null) {
 				RebuildAddonListScrollLayout(null);
@@ -1913,8 +1943,31 @@ namespace spz {
 				else
 					ShowStatus($"Showing {filteredAddons.Count} of {addons.Count} add-on(s) ({enabledCount} enabled, {disabledCount} disabled) — Filter: {filterText}{searchBit}", true);
 			}
-			ApplyThemeTokens();
+			if (listFilterOnly) {
+				// Theme new rows only — do not ApplyBoundChromeTmp on the active search field.
+				ThemeAddonListItemsOnly();
+				ProtectListViewportMaskGraphic();
+			} else {
+				ApplyThemeTokens();
+			}
 			ScheduleFlushAddonManagerShellLayout();
+
+			if (restoreSearchFocus && _searchInput != null && EventSystem.current != null) {
+				EventSystem.current.SetSelectedGameObject(_searchInput.gameObject);
+				_searchInput.caretPosition = restoreCaret;
+				_searchInput.selectionAnchorPosition = restoreSelAnchor;
+				_searchInput.selectionFocusPosition = restoreSelFocus;
+			}
+		}
+
+		/// <summary>Theme list rows without touching Filter/Search chrome (used while typing in search).</summary>
+		void ThemeAddonListItemsOnly() {
+			if (!SpzUiThemeOps.ShouldRecolorBoundChrome) return;
+			var t = SpzUiThemeOps.Active;
+			foreach (var item in _addonUIItems.Values) {
+				if (item == null) continue;
+				ThemeAddonListItem(item, t);
+			}
 		}
 
 		/// <summary>
@@ -3696,15 +3749,27 @@ namespace spz {
 				// Allow multiple add-ons expanded — do not collapse siblings.
 				prefsBody.SetActive(next);
 				if (next) {
+					_expandedAddonIds.Add(addonId);
 					ApplyResponsivePrefsDropdownLayout(prefsBody.transform);
 					LockPreferencesBodyLayout(prefsBody.transform);
 					ThemeShowInRibbonDial(ribbonToggle, ribbonToggle.isOn, _statusOk, _statusMuted, _statusOk);
 					LockStatusDialLayout(rowToggle);
+				} else {
+					_expandedAddonIds.Remove(addonId);
 				}
 				SetExpandChevron(next);
 				SetItemExpandedHeight(next);
 				RebuildAddonListScrollLayout(next ? itemObj.transform as RectTransform : null);
 			});
+
+			// Search/filter rebuild recreates rows — reopen Preferences that were open.
+			if (_expandedAddonIds.Contains(addonId)) {
+				prefsBody.SetActive(true);
+				ApplyResponsivePrefsDropdownLayout(prefsBody.transform);
+				LockPreferencesBodyLayout(prefsBody.transform);
+				SetExpandChevron(true);
+				SetItemExpandedHeight(true);
+			}
 
 			ribbonToggle.onValueChanged.AddListener((isOn) => {
 				if (Addon_MGR.instance == null || ribbonOnly)
