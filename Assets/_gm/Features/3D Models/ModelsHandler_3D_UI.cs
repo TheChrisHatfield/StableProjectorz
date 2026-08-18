@@ -33,7 +33,8 @@ namespace spz {
 	    //We can keep this as false, and then do ResizeGroup at the end, not to waste performance.
 	    bool _invoke_resizeGroupEvent = true;
     
-	    public bool _useWireframe_onSelected => LeftRibbon_UI.instance.isShowWireframe_onSelected;
+	    public bool _useWireframe_onSelected => LeftRibbon_UI.instance != null
+	        && LeftRibbon_UI.instance.isShowWireframe_onSelected;
 	    public bool _showVertexColors_on3d => _showVertexColors_toggle.isPressed;
 
 	    bool _is_importAndKeepIcons = false;//can be manually temporarily set to true while importing a model.
