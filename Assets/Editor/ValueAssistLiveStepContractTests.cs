@@ -225,6 +225,30 @@ public sealed class ValueAssistLiveStepContractTests {
 		Assert.That(painter, Does.Contain("NoteSamplerSkip(\"gpu read error\")"));
 	}
 
+	// B3.4 — Accept drops the Live snapshot then demotes after the first stroke. Capture must
+	// reset _lastLiveHardnessIx or the next Live tick treats Accept's hardness as a user override.
+	[Test]
+	public void LiveHardnessTracker_ResetsOnNewSnapshot_Source() {
+		string applier = System.IO.File.ReadAllText(System.IO.Path.Combine(
+			Application.dataPath, "_gm", "Features", "Paint", "SmartValuePaint",
+			"ValuePaintProposalApplier.cs"));
+		Assert.That(applier, Does.Contain("_lastLiveHardnessIx = int.MinValue"));
+		int capture = applier.IndexOf("static void CaptureUserBrushSnapshot_IfNeeded", System.StringComparison.Ordinal);
+		int restore = applier.IndexOf("static void RestoreUserBrushSnapshot_IfHeld", System.StringComparison.Ordinal);
+		Assert.That(capture, Is.GreaterThanOrEqualTo(0));
+		Assert.That(restore, Is.GreaterThan(capture));
+		string captureBody = applier.Substring(capture, restore - capture);
+		Assert.That(captureBody, Does.Contain("_lastLiveHardnessIx = int.MinValue"),
+			"new Live session must not inherit the previous session's hardness write");
+		int tryAccept = applier.IndexOf("static bool TryAccept(ValuePaintProposal proposal, Color proposeBaseColor, bool useBrushAsBase", System.StringComparison.Ordinal);
+		int afterAccept = applier.IndexOf("public static float SanitizeBrushWidthHint01", System.StringComparison.Ordinal);
+		Assert.That(tryAccept, Is.GreaterThanOrEqualTo(0));
+		Assert.That(afterAccept, Is.GreaterThan(tryAccept));
+		string acceptBody = applier.Substring(tryAccept, afterAccept - tryAccept);
+		Assert.That(acceptBody, Does.Contain("_lastLiveHardnessIx = int.MinValue"),
+			"Accept must drop the pre-Accept Live hardness tracker before demote/resume");
+	}
+
 	// B2.2f — default OpacityInfluence is 1.0; adopt-then-lerp fully overwrote 1–0 key opacity.
 	[Test]
 	public void LiveOpacitySoftArm_StopsAfterUserEdit_Source() {
