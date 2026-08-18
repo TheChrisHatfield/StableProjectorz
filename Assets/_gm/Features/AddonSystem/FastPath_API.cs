@@ -2266,10 +2266,12 @@ namespace spz {
 			if (!IsValidFloat(size01) || size01 < 0f || size01 > 1f) return false;
 			if (BrushRibbon_UI.instance != null) {
 				BrushRibbon_UI.instance.SetBrushSize(size01);
+				ValuePaintProposalApplier.NotifyUserSizeChanged(size01);
 				return true;
 			}
 			if (BrushRibbon_UI_Size.instance != null) {
 				BrushRibbon_UI_Size.instance.SetBrushSize(size01);
+				ValuePaintProposalApplier.NotifyUserSizeChanged(size01);
 				return true;
 			}
 			return false;
