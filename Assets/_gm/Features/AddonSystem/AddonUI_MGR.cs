@@ -1417,9 +1417,17 @@ namespace spz {
 			var host = SpzGoHosts.Get(hostId);
 			string display = host != null ? host.DisplayName : hostId;
 			string message;
-			bool ok = string.Equals(hostId, SpzGoHosts.ZBrushId, StringComparison.Ordinal)
-				? fp.TryInstallSpzGoZBrushBridge(out message)
-				: fp.TryInstallSpzGoPainterBridge(out message);
+			bool ok;
+			if (string.Equals(hostId, SpzGoHosts.ZBrushId, StringComparison.Ordinal)) {
+				ok = fp.TryInstallSpzGoZBrushBridge(out message);
+			} else if (string.Equals(hostId, SpzGoHosts.PainterId, StringComparison.Ordinal)) {
+				ok = fp.TryInstallSpzGoPainterBridge(out message);
+			} else {
+				// A mistyped / future host id used to fall through to the Painter installer and could
+				// mark Painter ready while the user thought they installed something else.
+				ok = false;
+				message = "no copy-install path for host '" + hostId + "'";
+			}
 			UnityEngine.Debug.Log($"[AddonUI_MGR] SPZ GO {display} install: ok={ok} {message}");
 			if (ok) {
 				SpzGoStatusLine($"{display} bridge installed — logo is now active", true);
