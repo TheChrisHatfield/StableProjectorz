@@ -82,13 +82,15 @@ namespace spz {
 
 
 	    void Set_FinalVisibility(){
+	        if (ModelsHandler_3D.instance == null) return;
 	        IReadOnlyList<SD_3D_Mesh> sel    = ModelsHandler_3D.instance.selectedMeshes;
 	        IReadOnlyList<SD_3D_Mesh> nonSel = ModelsHandler_3D.instance.nonSelectedMeshes;
 
 	        bool nonSelected_asWire =  isCanShow_NonSelected_asWireframe() ||
 	                                   _selectMode_wireOpacity01 > 0;//still fading them out, so keep showing.
 
-	        bool wireOnSelected =  ModelsHandler_3D_UI.instance._useWireframe_onSelected;
+	        bool wireOnSelected =  ModelsHandler_3D_UI.instance != null
+	            && ModelsHandler_3D_UI.instance._useWireframe_onSelected;
 	        Material mat =  wireOnSelected? _finalMat_wireframe : _finalMat;
 
 	        if (nonSelected_asWire){
@@ -115,9 +117,11 @@ namespace spz {
 	    // Usually we keep the non-selected objects as hidden from user.
 	    // But we might decide to show them as transparent + wireframe geometry.
 	    bool isCanShow_NonSelected_asWireframe(){
-	        bool canShow = ClickSelect_Meshes_MGR.instance._isSelectMode;//User activated regime to click on hidden surfaces, show them in wire.
+	        bool canShow = ClickSelect_Meshes_MGR.instance != null
+		        && ClickSelect_Meshes_MGR.instance._isSelectMode;//User activated regime to click on hidden surfaces, show them in wire.
 	            canShow |= CameraPanning._haveBeenPanningFor > 0.25;//Panning the camera, keep showing. 0.25 to skip when setting a Click-orbit.
-	            canShow &= StableDiffusion_Hub.instance._finalPreparations_beforeGen==false;//Avoid messing up the view image, if GenArt was just used.
+	            canShow &= StableDiffusion_Hub.instance == null
+		            || StableDiffusion_Hub.instance._finalPreparations_beforeGen==false;//Avoid messing up the view image, if GenArt was just used.
 	        return canShow;
 	    }
     
