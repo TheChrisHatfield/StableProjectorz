@@ -158,11 +158,23 @@ class ZBrushPainterBridgeContractTests(unittest.TestCase):
 
     def test_painter_resolver_does_not_invent_plugins_dir(self):
         py = (EXT / "Painter_SpzBridge" / "install_into_painter.py").read_text(encoding="utf-8")
-        self.assertNotIn("return roots[0]", py)
+        self.assertIn("pick_painter_plugins_dir", py)
         self.assertIn('return ""', py)
         cs = FASTPATH_CS.read_text(encoding="utf-8")
-        body = cs.split("FindPainterPluginsDir")[1].split("TryInstallSpzGoBridgeByCopy")[0]
-        self.assertNotIn("return candidates[0]", body)
+        self.assertIn("PickPainterPluginsDir", cs)
+        self.assertIn("ParsePainterVersionFromPath", cs)
+
+    def test_host_install_resolvers_rank_by_version(self):
+        # Blender: highest Blender X.Y in the path. ZBrush: ZBrushData year. Painter: after "Painter".
+        cs = FASTPATH_CS.read_text(encoding="utf-8")
+        self.assertIn("PickBlenderExecutable", cs)
+        self.assertIn("ParseBlenderVersionFromPath", cs)
+        self.assertIn("ParseZBrushDataYear", cs)
+        zb = (EXT / "ZBrush_SpzBridge" / "install_into_zbrush.py").read_text(encoding="utf-8")
+        self.assertIn(r"zbrushdata(\d{4})", zb)
+        self.assertIn("year", zb)
+        pn = (EXT / "Painter_SpzBridge" / "install_into_painter.py").read_text(encoding="utf-8")
+        self.assertIn(r"Painter\s+(\d+", pn)
 
     def test_spz_side_installers_and_readiness_wired(self):
         fp = FASTPATH_CS.read_text(encoding="utf-8")

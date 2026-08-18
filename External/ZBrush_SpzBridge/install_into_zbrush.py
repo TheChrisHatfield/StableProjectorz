@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import sys
 
@@ -54,10 +55,21 @@ def find_zbrush_user_scripts() -> str:
     # "ZBrushData<year>" is what ZBrush actually creates; a folder that merely says "zbrush" (a
     # scratch/projects folder) is a last resort. Ranking them together lets a recently touched
     # scratch folder win and the bridge lands somewhere ZBrush never reads.
-    ranked = canonical or loose
-    # Newest wins within a tier (handles multiple installed years).
-    ranked.sort(key=lambda p: os.path.getmtime(p) if os.path.exists(p) else 0, reverse=True)
-    return ranked[0] if ranked else ""
+    if canonical:
+        # Highest year wins (2026 before 2025); mtime breaks ties within the same year.
+        def year_key(p: str):
+            m = re.search(r"zbrushdata(\d{4})", os.path.basename(p), re.I)
+            year = int(m.group(1)) if m else 0
+            try:
+                mtime = os.path.getmtime(p)
+            except OSError:
+                mtime = 0.0
+            return (year, mtime)
+
+        canonical.sort(key=year_key, reverse=True)
+        return canonical[0]
+    loose.sort(key=lambda p: os.path.getmtime(p) if os.path.exists(p) else 0, reverse=True)
+    return loose[0] if loose else ""
 
 
 def main(argv=None) -> int:

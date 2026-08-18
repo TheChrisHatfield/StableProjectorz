@@ -110,6 +110,20 @@ namespace spz.EditorTests {
 		}
 
 		[Test]
+		public void ZBrushData_HigherYearBeatsNewerButOlderYearFolder() {
+			string root = Path.Combine(_tmpRoot, "docs_years");
+			string y2025 = Path.Combine(root, "ZBrushData2025");
+			string y2026 = Path.Combine(root, "ZBrushData2026");
+			Directory.CreateDirectory(y2025);
+			Directory.CreateDirectory(y2026);
+			Directory.SetLastWriteTimeUtc(y2025, System.DateTime.UtcNow);
+			Directory.SetLastWriteTimeUtc(y2026, new System.DateTime(2020, 1, 1));
+			Assert.That(FastPath_API.PickZBrushDataDir(new[] { root }), Is.EqualTo(y2026),
+				"install into the newest ZBrush year, not whichever data folder was touched last");
+			Assert.That(FastPath_API.ParseZBrushDataYear(y2026), Is.EqualTo(2026));
+		}
+
+		[Test]
 		public void WithNoZBrushDataFolder_AZBrushishFolderIsStillBetterThanNothing() {
 			string root = Path.Combine(_tmpRoot, "docs2");
 			string scratch = Path.Combine(root, "zbrush_stuff");
@@ -120,17 +134,36 @@ namespace spz.EditorTests {
 
 		[Test]
 		public void PainterPluginsResolver_DoesNotInventAFolderWhenPainterIsMissing() {
-			string path = Path.Combine(Directory.GetCurrentDirectory(),
-				"Assets", "_gm", "Features", "AddonSystem", "FastPath_API.cs");
-			string src = File.ReadAllText(path);
-			int i = src.IndexOf("public static string FindPainterPluginsDir()", System.StringComparison.Ordinal);
-			Assert.That(i, Is.GreaterThan(0));
-			int j = src.IndexOf("public static bool TryInstallSpzGoBridgeByCopy", i, System.StringComparison.Ordinal);
-			string body = src.Substring(i, j - i);
-			Assert.That(body, Does.Not.Contain("return candidates[0]"),
+			string emptyDocs = Path.Combine(_tmpRoot, "empty_docs");
+			Directory.CreateDirectory(emptyDocs);
+			Assert.That(FastPath_API.PickPainterPluginsDir(new[] { emptyDocs }), Is.Empty,
 				"must not invent Documents/Adobe/... when Painter never created its user tree");
-			Assert.That(body, Does.Contain("return \"\";"),
-				"empty string fails install closed so the logo stays not-ready");
+		}
+
+		[Test]
+		public void PainterPluginsResolver_PicksHighestVersionAmongExistingTrees() {
+			string docs = Path.Combine(_tmpRoot, "painter_docs");
+			string legacy = Path.Combine(docs, "Adobe", "Adobe Substance 3D Painter");
+			string v10 = Path.Combine(docs, "Adobe", "Adobe Substance 3D Painter 10.1");
+			Directory.CreateDirectory(legacy);
+			Directory.CreateDirectory(v10);
+			Directory.SetLastWriteTimeUtc(legacy, System.DateTime.UtcNow);
+			Directory.SetLastWriteTimeUtc(v10, new System.DateTime(2020, 1, 1));
+
+			string picked = FastPath_API.PickPainterPluginsDir(new[] { docs });
+			Assert.That(picked, Is.EqualTo(Path.Combine(v10, "python", "plugins")),
+				"versioned Painter user tree must beat an unversioned sibling even if older on disk");
+			Assert.That(FastPath_API.ParsePainterVersionFromPath(v10).Major, Is.EqualTo(10));
+			Assert.That(FastPath_API.ParsePainterVersionFromPath(v10).Minor, Is.EqualTo(1));
+		}
+
+		[Test]
+		public void BlenderExecutable_PicksHighestMajorMinorInPath() {
+			string low = @"C:\Program Files\Blender Foundation\Blender 3.6\blender.exe";
+			string high = @"C:\Program Files\Blender Foundation\Blender 4.2\blender.exe";
+			Assert.That(FastPath_API.PickBlenderExecutable(new[] { low, high }), Is.EqualTo(high));
+			Assert.That(FastPath_API.ParseBlenderVersionFromPath(high), Is.EqualTo((4, 2)));
+			Assert.That(FastPath_API.ParseBlenderVersionFromPath(low), Is.EqualTo((3, 6)));
 		}
 
 		[Test]
