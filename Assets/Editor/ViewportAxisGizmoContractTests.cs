@@ -278,8 +278,8 @@ public sealed class ViewportAxisGizmoContractTests {
 			"TryOverview must check the scene before claiming success.");
 		Assert.That(ops, Does.Contain("Nothing loaded to frame"),
 			"The lantern click must tell the user why overview did nothing.");
-		Assert.That(ops, Does.Contain("Frame_Bounds_maybe"),
-			"Lantern overview must frame explicit whole-scene bounds, not just the selection.");
+		Assert.That(ops, Does.Contain("return focus.Frame_Bounds_maybe"),
+			"TryOverview success must be the fly actually starting, not a leftover true after a silent no-op.");
 		Assert.That(ops, Does.Contain("GetTotalBounds_ofAllMeshes"),
 			"Overview must frame every loaded mesh (whole scene), not selectedMeshes only.");
 		Assert.That(ops, Does.Contain("TryGetNavigationLockedCamera"),
@@ -300,7 +300,7 @@ public sealed class ViewportAxisGizmoContractTests {
 	[Test]
 	public void ForcedOverviewDoesNotDropOnModifiersOrNullDimensionMode() {
 		string focus = ReadRepo("Assets/_gm/Features/Camera/Navigation/CameraFocus.cs");
-		int method = focus.IndexOf("public void Frame_Bounds_maybe(", StringComparison.Ordinal);
+		int method = focus.IndexOf("public bool Frame_Bounds_maybe(", StringComparison.Ordinal);
 		Assert.That(method, Is.GreaterThan(0));
 		string body = focus.Substring(method, Math.Min(1800, focus.Length - method));
 		Assert.That(body, Does.Contain("if(!forceTheFocus){"),
