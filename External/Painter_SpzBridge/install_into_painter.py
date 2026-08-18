@@ -11,33 +11,98 @@ Stdout markers:
   SPZ_GO_INSTALL_FAIL: <reason>
 
 Targets user Documents only — never Program Files.
+When several Painter user trees exist, the highest version in the folder name wins
+(then newest mtime). Never invents a Documents/Adobe/... path Painter never created.
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import sys
+from typing import Iterable, List, Tuple
 
 SHIP_FILES = ("spz_painter_plugin.py", "spz_http.py")
 
 
+def _is_painter_user_root_name(folder_name: str) -> bool:
+    low = (folder_name or "").lower()
+    return "painter" in low and ("substance" in low or "allegorithmic" in low)
+
+
+def _parse_painter_version(path_or_name: str) -> Tuple[int, ...]:
+    # Only the number after "Painter" — ignore the "3" in "3D".
+    name = os.path.basename(path_or_name.rstrip("\\/"))
+    m = re.search(r"Painter\s+(\d+(?:\.\d+)*)", name, re.I)
+    if not m:
+        return (0,)
+    parts = [int(x) for x in m.group(1).split(".") if x.isdigit()]
+    return tuple(parts[:4]) if parts else (0,)
+
+
+def _collect_painter_user_roots(docs: str) -> List[str]:
+    roots: List[str] = []
+    fixed = (
+        os.path.join(docs, "Adobe", "Adobe Substance 3D Painter"),
+        os.path.join(docs, "Allegorithmic", "Substance Painter"),
+        os.path.join(docs, "Substance 3D Painter"),
+    )
+    for r in fixed:
+        if os.path.isdir(r):
+            roots.append(r)
+
+    def scan_vendor(vendor: str) -> None:
+        if not os.path.isdir(vendor):
+            return
+        try:
+            for name in os.listdir(vendor):
+                full = os.path.join(vendor, name)
+                if os.path.isdir(full) and _is_painter_user_root_name(name):
+                    roots.append(full)
+        except OSError:
+            pass
+
+    scan_vendor(os.path.join(docs, "Adobe"))
+    scan_vendor(os.path.join(docs, "Allegorithmic"))
+    return roots
+
+
+def pick_painter_plugins_dir(documents_roots: Iterable[str]) -> str:
+    """Return python/plugins under the newest existing Painter user tree, or ''."""
+    painter_roots: List[str] = []
+    for docs in documents_roots:
+        if docs and os.path.isdir(docs):
+            painter_roots.extend(_collect_painter_user_roots(docs))
+    # De-dupe while preserving paths
+    seen = set()
+    uniq: List[str] = []
+    for r in painter_roots:
+        key = os.path.normcase(os.path.normpath(r))
+        if key in seen:
+            continue
+        seen.add(key)
+        uniq.append(r)
+    if not uniq:
+        return ""
+
+    def sort_key(p: str):
+        try:
+            mtime = os.path.getmtime(p)
+        except OSError:
+            mtime = 0.0
+        return (_parse_painter_version(p), mtime)
+
+    best = max(uniq, key=sort_key)
+    return os.path.join(best, "python", "plugins")
+
+
 def find_painter_plugins_dir() -> str:
-    """User-writable Substance Painter python/plugins folder (Windows/macOS/Linux). '' when unknown."""
+    """User-writable Substance Painter python/plugins folder. '' when unknown."""
     home = os.path.expanduser("~")
     docs = os.path.join(home, "Documents")
-    roots = [
-        os.path.join(docs, "Adobe", "Adobe Substance 3D Painter", "python", "plugins"),
-        os.path.join(docs, "Allegorithmic", "Substance Painter", "python", "plugins"),
-        os.path.join(docs, "Substance 3D Painter", "python", "plugins"),
-    ]
-    for r in roots:
-        if os.path.isdir(os.path.dirname(os.path.dirname(r))):
-            return r
-    # Do not invent Documents/Adobe/... — Painter never created that tree, so a copy there would
-    # light SPZ's logo for a folder Painter never loads. Caller must pass --dest instead.
-    return ""
+    return pick_painter_plugins_dir([docs])
 
 
 def main(argv=None) -> int:
@@ -53,7 +118,10 @@ def main(argv=None) -> int:
 
     dest = args.dest or find_painter_plugins_dir()
     if not dest:
-        print("SPZ_GO_INSTALL_FAIL: could not resolve Painter python/plugins — pass --dest")
+        print(
+            "SPZ_GO_INSTALL_FAIL: could not resolve a Painter plugins folder — "
+            "open Substance Painter once (to create its Documents tree) or pass --dest"
+        )
         return 1
     try:
         os.makedirs(dest, exist_ok=True)
@@ -72,4 +140,4 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

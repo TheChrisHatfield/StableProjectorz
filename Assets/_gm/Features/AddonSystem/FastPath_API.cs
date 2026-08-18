@@ -1190,6 +1190,7 @@ namespace spz {
 
 		/// <summary>
 		/// Best-effort locate blender.exe (Windows Program Files / LocalAppData / Steam; else PATH "blender").
+		/// When several installs exist, the highest <c>Blender major.minor</c> in the path wins.
 		/// </summary>
 		public static string FindBlenderExecutable() {
 			try {
@@ -1226,16 +1227,7 @@ namespace spz {
 							if (File.Exists(ex)) candidates.Add(ex);
 						}
 					}
-					if (candidates.Count == 0) return null;
-					return candidates
-						.Distinct(StringComparer.OrdinalIgnoreCase)
-						.OrderByDescending(p => {
-							var m = System.Text.RegularExpressions.Regex.Match(p, @"Blender (\d+)\.(\d+)",
-								System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-							if (!m.Success) return (0, 0);
-							return (int.Parse(m.Groups[1].Value), int.Parse(m.Groups[2].Value));
-						})
-						.First();
+					return PickBlenderExecutable(candidates);
 				}
 				// Non-Windows: PATH
 				string pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
@@ -1248,6 +1240,27 @@ namespace spz {
 				UnityEngine.Debug.LogWarning("[FastPath_API] FindBlenderExecutable: " + ex.Message);
 			}
 			return null;
+		}
+
+		/// <summary>
+		/// Among discovered <c>blender.exe</c> paths, pick the highest Blender major.minor embedded in the
+		/// path (e.g. <c>Blender 4.2</c> beats <c>Blender 3.6</c>). Unversioned paths rank last.
+		/// </summary>
+		public static string PickBlenderExecutable(IEnumerable<string> candidates) {
+			if (candidates == null) return null;
+			return candidates
+				.Where(p => !string.IsNullOrEmpty(p))
+				.Distinct(StringComparer.OrdinalIgnoreCase)
+				.OrderByDescending(ParseBlenderVersionFromPath)
+				.FirstOrDefault();
+		}
+
+		public static (int major, int minor) ParseBlenderVersionFromPath(string path) {
+			if (string.IsNullOrEmpty(path)) return (0, 0);
+			var m = System.Text.RegularExpressions.Regex.Match(path, @"Blender (\d+)\.(\d+)",
+				System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			if (!m.Success) return (0, 0);
+			return (int.Parse(m.Groups[1].Value), int.Parse(m.Groups[2].Value));
 		}
 
 		/// <summary>
@@ -1391,8 +1404,8 @@ namespace spz {
 		/// <summary>
 		/// Rank ZBrush data folders found under <paramref name="roots"/>. "ZBrushData&lt;year&gt;" is the
 		/// folder ZBrush actually creates; anything that merely contains "zbrush" (a user's "ZBrush
-		/// Projects" scratch folder, a backup) is a last resort. Without that split a recently touched
-		/// scratch folder outranks the real one and the bridge lands somewhere ZBrush never reads.
+		/// Projects" scratch folder, a backup) is a last resort. Canonical folders rank by year
+		/// (2026 before 2025), then newest mtime; loose folders stay mtime-only.
 		/// </summary>
 		public static string PickZBrushDataDir(IEnumerable<string> roots) {
 			var canonical = new List<string>();
@@ -1407,36 +1420,112 @@ namespace spz {
 						loose.Add(dir);
 				}
 			}
-			var ranked = canonical.Count > 0 ? canonical : loose;
-			return ranked
+			if (canonical.Count > 0) {
+				return canonical
+					.OrderByDescending(ParseZBrushDataYear)
+					.ThenByDescending(p => { try { return Directory.GetLastWriteTimeUtc(p); } catch { return DateTime.MinValue; } })
+					.FirstOrDefault() ?? "";
+			}
+			return loose
 				.OrderByDescending(p => { try { return Directory.GetLastWriteTimeUtc(p); } catch { return DateTime.MinValue; } })
 				.FirstOrDefault() ?? "";
+		}
+
+		/// <summary>Year from <c>ZBrushData2026</c>; 0 when the name has no trailing year.</summary>
+		public static int ParseZBrushDataYear(string pathOrName) {
+			if (string.IsNullOrEmpty(pathOrName)) return 0;
+			string name = Path.GetFileName(pathOrName.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+			var m = System.Text.RegularExpressions.Regex.Match(name, @"ZBrushData(\d{4})",
+				System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			return m.Success && int.TryParse(m.Groups[1].Value, out int year) ? year : 0;
 		}
 
 		/// <summary>
 		/// User Substance Painter python/plugins folder (Documents; never Program Files). Empty when
 		/// Painter has never created its user tree — inventing Documents/Adobe/... and marking
-		/// installed would light the logo for a folder Painter never scans.
+		/// installed would light the logo for a folder Painter never scans. When several Painter
+		/// user trees exist, the highest parsed version (then newest mtime) wins.
 		/// </summary>
 		public static string FindPainterPluginsDir() {
 			try {
 				string docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
 				if (string.IsNullOrEmpty(docs)) return "";
-				var candidates = new[] {
-					Path.Combine(docs, "Adobe", "Adobe Substance 3D Painter", "python", "plugins"),
-					Path.Combine(docs, "Allegorithmic", "Substance Painter", "python", "plugins"),
-					Path.Combine(docs, "Substance 3D Painter", "python", "plugins"),
-				};
-				foreach (var c in candidates) {
-					// The two-levels-up ("...Painter") existing means Painter created its user tree.
-					string painterRoot = Path.GetDirectoryName(Path.GetDirectoryName(c));
-					if (!string.IsNullOrEmpty(painterRoot) && Directory.Exists(painterRoot))
-						return c;
-				}
-				return "";
+				return PickPainterPluginsDir(new[] { docs });
 			} catch (Exception ex) {
 				UnityEngine.Debug.LogWarning("[FastPath_API] FindPainterPluginsDir: " + ex.Message);
 				return "";
+			}
+		}
+
+		/// <summary>
+		/// Discover existing Painter user roots under Documents-style folders and return
+		/// <c>python/plugins</c> for the newest. Never invents a path when none exist.
+		/// </summary>
+		public static string PickPainterPluginsDir(IEnumerable<string> documentsRoots) {
+			if (documentsRoots == null) return "";
+			var painterRoots = new List<string>();
+			foreach (var docs in documentsRoots) {
+				if (string.IsNullOrEmpty(docs) || !Directory.Exists(docs)) continue;
+				CollectPainterUserRoots(docs, painterRoots);
+			}
+			if (painterRoots.Count == 0) return "";
+			string bestRoot = painterRoots
+				.Distinct(StringComparer.OrdinalIgnoreCase)
+				.OrderByDescending(ParsePainterVersionFromPath)
+				.ThenByDescending(p => { try { return Directory.GetLastWriteTimeUtc(p); } catch { return DateTime.MinValue; } })
+				.First();
+			return Path.Combine(bestRoot, "python", "plugins");
+		}
+
+		static void CollectPainterUserRoots(string docs, List<string> into) {
+			// Fixed legacy / current layouts (must already exist — fail closed).
+			string[] fixedRoots = {
+				Path.Combine(docs, "Adobe", "Adobe Substance 3D Painter"),
+				Path.Combine(docs, "Allegorithmic", "Substance Painter"),
+				Path.Combine(docs, "Substance 3D Painter"),
+			};
+			foreach (var r in fixedRoots) {
+				if (Directory.Exists(r)) into.Add(r);
+			}
+			// Versioned siblings under Adobe / Allegorithmic (e.g. "...Painter 10.1").
+			void ScanVendor(string vendorDir) {
+				if (!Directory.Exists(vendorDir)) return;
+				foreach (var dir in Directory.GetDirectories(vendorDir)) {
+					if (IsPainterUserRootName(Path.GetFileName(dir)))
+						into.Add(dir);
+				}
+			}
+			ScanVendor(Path.Combine(docs, "Adobe"));
+			ScanVendor(Path.Combine(docs, "Allegorithmic"));
+		}
+
+		public static bool IsPainterUserRootName(string folderName) {
+			if (string.IsNullOrEmpty(folderName)) return false;
+			string low = folderName.ToLowerInvariant();
+			return low.IndexOf("painter", StringComparison.Ordinal) >= 0
+				&& (low.IndexOf("substance", StringComparison.Ordinal) >= 0
+				    || low.IndexOf("allegorithmic", StringComparison.Ordinal) >= 0);
+		}
+
+		/// <summary>
+		/// Version after <c>Painter</c> in the folder name (e.g. <c>...Painter 10.1</c>).
+		/// Ignores the <c>3</c> in <c>3D</c> so an unversioned Adobe tree does not look like v3.
+		/// </summary>
+		public static Version ParsePainterVersionFromPath(string pathOrName) {
+			if (string.IsNullOrEmpty(pathOrName)) return new Version(0, 0, 0, 0);
+			string name = Path.GetFileName(pathOrName.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+			var m = System.Text.RegularExpressions.Regex.Match(name, @"Painter\s+(\d+(?:\.\d+)*)",
+				System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			if (!m.Success) return new Version(0, 0, 0, 0);
+			string[] parts = m.Groups[1].Value.Split('.');
+			int a = parts.Length > 0 && int.TryParse(parts[0], out int a0) ? a0 : 0;
+			int b = parts.Length > 1 && int.TryParse(parts[1], out int b0) ? b0 : 0;
+			int c = parts.Length > 2 && int.TryParse(parts[2], out int c0) ? c0 : 0;
+			int d = parts.Length > 3 && int.TryParse(parts[3], out int d0) ? d0 : 0;
+			try {
+				return new Version(a, b, c, d);
+			} catch {
+				return new Version(0, 0, 0, 0);
 			}
 		}
 
