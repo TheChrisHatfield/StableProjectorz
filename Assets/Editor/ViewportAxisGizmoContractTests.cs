@@ -105,7 +105,14 @@ public sealed class ViewportAxisGizmoContractTests {
 			var center = root.Find(ViewportAxisGizmo_UI.CenterName);
 			Assert.That(center, Is.Not.Null, "The lantern overview button lives in the middle of the gizmo.");
 			Assert.That(center.GetComponent<Button>(), Is.Not.Null);
-			Assert.That(center.GetComponent<Image>().sprite, Is.Not.Null);
+			var centerImg = center.GetComponent<Image>();
+			Assert.That(centerImg.sprite, Is.Not.Null);
+			Assert.That(centerImg.color, Is.EqualTo(ViewportAxisGizmo_UI.CenterGlyphTint),
+				"Lantern must draw as a soft grey translucent glyph, not an opaque white badge.");
+			Assert.That(centerImg.color.a, Is.LessThan(1f),
+				"Center lantern alpha must stay below 1 so axis handles remain readable through it.");
+			Assert.That(centerImg.alphaHitTestMinimumThreshold, Is.GreaterThan(0f),
+				"Transparent lantern pixels must pass clicks through to the axis handle underneath.");
 
 			int handles = 0;
 			foreach (Transform child in root) {
@@ -417,12 +424,89 @@ public sealed class ViewportAxisGizmoContractTests {
 	}
 
 	[Test]
-	public void ThemeSilo_GizmoNeverCallsBoundChromeAndReassertsAuthoredColorsWhenIdle() {
+	public void ThemeSilo_GizmoGatesNomadAndRestoresSpzPalette() {
 		string src = ReadRepo("Assets/_gm/Features/Viewport/Main Viewport/ViewportAxisGizmo_UI.cs");
-		Assert.That(src, Does.Not.Contain("ApplyBoundChrome"),
-			"Gizmo keeps Blender-style authored RGB; it must not opt into Nomad BoundChrome mutators.");
+		Assert.That(src, Does.Contain("ShouldRecolorBoundChrome"),
+			"Nomad restyle must gate on ShouldRecolorBoundChrome.");
+		Assert.That(src, Does.Contain("RestoreBoundChromeUnder(_root)"),
+			"Leave / Restore SPZ must unwind BoundChrome under the gizmo root.");
+		Assert.That(src, Does.Contain("ApplyBoundChromeIconTint"),
+			"Lantern glyph must use IconTint (no SolidSquare flatten).");
+		Assert.That(src, Does.Contain("ApplyBoundChromeCompactToolLabelTmp"),
+			"Axis letter labels get Nomad compact typography behind the gate.");
+		Assert.That(src, Does.Contain("ViewportAxisGizmo_Palette.SpzDefault"),
+			"Builtin leave must reassert the authored SPZ cool-grey palette.");
+		Assert.That(src, Does.Not.Contain("ApplyBoundChromeSelectable"),
+			"Circular handles must not go through SolidSquare selectable chrome.");
 		Assert.That(src, Does.Contain("ReassertAuthoredAxisColors"),
 			"Idle ApplyOrientation must scrub spilled tints without hierarchy/TMP churn.");
+	}
+
+	[Test]
+	public void SpzDefaultPaletteIsCoolGreyNotBlenderPrimaryRgb() {
+		var p = ViewportAxisGizmo_Palette.SpzDefault;
+		Assert.That(p.FacingAccent.b, Is.GreaterThan(p.FacingAccent.r),
+			"SPZ facing cue is sky-blue accent, not a red Blender +X ball.");
+		Assert.That(Vector3.Distance(
+				new Vector3(p.PositiveIdle.r, p.PositiveIdle.g, p.PositiveIdle.b),
+				new Vector3(p.NegativeIdle.r, p.NegativeIdle.g, p.NegativeIdle.b)),
+			Is.LessThan(0.35f),
+			"Axis identity is letter labels — fills stay in one cool-grey family.");
+		Color near = p.HandleColor(true, 1f);
+		Color far = p.HandleColor(true, 0f);
+		Assert.That(near.b, Is.GreaterThan(far.b),
+			"Handles nearer the viewer pick up the sky accent.");
+	}
+
+	[Test]
+	public void NomadPaletteUsesGoldAccentAndWarmLantern() {
+		var tokens = new SpzUiThemeOps.ThemeTokens {
+			panelBg = new Color(0.12f, 0.12f, 0.14f, 0.95f),
+			controlBg = new Color(0.16f, 0.16f, 0.18f, 1f),
+			fieldBg = new Color(0.07f, 0.07f, 0.09f, 1f),
+			accent = new Color(0.95f, 0.79f, 0.31f, 1f), // #F2CA50
+			textPrimary = new Color(0.89f, 0.89f, 0.91f, 1f),
+			textMuted = new Color(0.82f, 0.77f, 0.69f, 1f),
+			border = new Color(0.6f, 0.56f, 0.49f, 0.4f),
+			iconTint = new Color(0.82f, 0.77f, 0.69f, 1f),
+		};
+		var p = ViewportAxisGizmo_Palette.FromThemeTokens(tokens);
+		Assert.That(p.FacingAccent.r, Is.GreaterThan(p.FacingAccent.b),
+			"Nomad facing cue is gold, not SPZ sky blue.");
+		Assert.That(p.CenterTint.r, Is.GreaterThan(0.5f),
+			"Nomad lantern picks up warm sand/gold from iconTint×accent.");
+	}
+
+	[Test]
+	public void LanternLoadConvertsOpaqueBadgeToTintableMonoGlyph() {
+		string src = ReadRepo("Assets/_gm/Features/Viewport/Main Viewport/ViewportAxisGizmo_UI.cs");
+		Assert.That(src, Does.Contain("ConvertToTintableMonoGlyph"),
+			"Shipped lantern.png is a full-color opaque square — load must strip it to a white+alpha silhouette.");
+		Assert.That(src, Does.Contain("CenterGlyphTint"),
+			"Center image must multiply a soft grey translucent tint.");
+
+		var tex = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+		try {
+			// Navy background with a bright “lantern” blob in the middle.
+			Color navy = new Color(0.05f, 0.08f, 0.20f, 1f);
+			Color ink = new Color(0.95f, 0.70f, 0.20f, 1f);
+			for (int y = 0; y < 4; y++) {
+				for (int x = 0; x < 4; x++) {
+					bool mid = x >= 1 && x <= 2 && y >= 1 && y <= 2;
+					tex.SetPixel(x, y, mid ? ink : navy);
+				}
+			}
+			tex.Apply();
+			ViewportAxisGizmo_UI.ConvertToTintableMonoGlyph(tex);
+			Color corner = tex.GetPixel(0, 0);
+			Color midPx = tex.GetPixel(1, 1);
+			Assert.That(corner.a, Is.LessThan(0.15f), "Background must become transparent.");
+			Assert.That(midPx.a, Is.GreaterThan(0.5f), "Lantern shape must keep ink alpha.");
+			Assert.That(midPx.r, Is.EqualTo(1f).Within(0.01f), "RGB must be white so grey Image tint multiplies cleanly.");
+		}
+		finally {
+			UnityEngine.Object.DestroyImmediate(tex);
+		}
 	}
 
 	[Test]

@@ -3,7 +3,7 @@ using UnityEngine;
 namespace spz {
 
 	/// <summary>
-	/// Camera side of the viewport orientation gizmo: read the current view rotation for the axis balls,
+	/// Camera side of the viewport orientation gizmo: read the current view rotation for the axis discs,
 	/// and fly the resolved <see cref="View_UserCamera"/> (nav-lock → current → first active) to a world axis
 	/// (front / back / left / right / top / bottom) or back to an overview of the whole scene.
 	/// Snapping reuses <see cref="CameraFocus.Restore_CameraPlacement"/> so the move is the same animated

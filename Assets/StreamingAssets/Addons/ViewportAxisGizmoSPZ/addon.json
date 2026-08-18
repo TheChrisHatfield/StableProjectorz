@@ -1,4 +1,4 @@
 {
-  "version": "1.0.0",
-  "description": "Viewport only: XYZ orientation gizmo in the top-right of the 3D view. Click an axis to snap the camera; the lantern in the center frames the whole scene. No command-ribbon tab."
+  "version": "1.1.0",
+  "description": "Viewport only: StableProjectorz orientation gizmo (cool-grey discs + sky accent; Nomad charcoal + gold). Click an axis to snap the camera; the lantern frames the whole scene. No command-ribbon tab."
 }

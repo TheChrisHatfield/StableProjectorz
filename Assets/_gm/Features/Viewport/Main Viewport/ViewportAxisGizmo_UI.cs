@@ -31,9 +31,10 @@ namespace spz {
 	}
 
 	/// <summary>
-	/// Blender / 3ds Max style orientation gizmo in the top-right of the 3D view: six axis balls that follow the
-	/// camera rotation (+X/+Y/+Z labelled and filled, negatives dim), with the StableProjectorz lantern in the
+	/// StableProjectorz orientation gizmo in the top-right of the 3D view: six axis discs that follow the
+	/// camera rotation (+X/+Y/+Z labelled and filled, negatives as rings), with the SPZ lantern in the
 	/// middle as an "overview" button that frames the whole scene (every loaded mesh).
+	/// Chrome is cool-grey + sky accent by default; Nomad restyles via gated BoundChrome (charcoal + gold).
 	///
 	/// Parented to <see cref="MainViewport_UI.mainViewportRect"/> (drawn above the view RawImage) and pinned to the
 	/// top-right of <see cref="MainViewport_UI.innerViewportRect"/> (the aspect-fitted image). The size-reference
@@ -53,6 +54,9 @@ namespace spz {
 		public const string LinePrefix = "AxisLine_";
 		/// <summary>Command id the lantern button invokes by default (frame the whole scene).</summary>
 		public const string OverviewCommandId = "viewport_axis_gizmo_overview";
+
+		/// <summary>Default SPZ lantern tint (grey translucent silhouette). Nomad overrides via theme tokens.</summary>
+		public static Color CenterGlyphTint => ViewportAxisGizmo_Palette.SpzDefault.CenterTint;
 
 		static readonly List<ViewportAxisGizmo_UI> Registered = new List<ViewportAxisGizmo_UI>();
 		static readonly Dictionary<string, Sprite> CenterSpriteCache = new Dictionary<string, Sprite>();
@@ -84,9 +88,12 @@ namespace spz {
 		}
 
 		ViewportAxisGizmo_Spec _spec = ViewportAxisGizmo_Spec.Default;
+		ViewportAxisGizmo_Palette _palette = ViewportAxisGizmo_Palette.SpzDefault;
 		bool _tornDown;
+		bool _themeHooked;
 		RectTransform _root;
 		CanvasGroup _canvasGroup;
+		Image _backdropImage;
 		RectTransform _centerRt;
 		Image _centerImage;
 		string _loadedCenterIconPath = string.Empty;
@@ -106,6 +113,7 @@ namespace spz {
 
 		public ViewportAxisGizmo_Spec Spec => _spec;
 		public RectTransform RootRect => _root;
+		public ViewportAxisGizmo_Palette ActivePalette => _palette;
 
 		#region attach / teardown
 
@@ -293,6 +301,7 @@ namespace spz {
 			rootGo.AddComponent<MainViewport_RaycastBlocker>();
 			gizmo.BuildChildren(spec);
 			gizmo.ApplySpec(spec);
+			gizmo.ApplyThemeTokens();
 			rootRt.SetAsLastSibling();
 			gizmo.RefreshFromCamera();
 			return gizmo;
@@ -300,16 +309,17 @@ namespace spz {
 
 		void BuildChildren(ViewportAxisGizmo_Spec spec) {
 			_spec = spec;
+			_palette = ViewportAxisGizmo_Palette.SpzDefault;
 
 			var backdrop = CreateChild(BackdropName, _root);
 			backdrop.anchorMin = Vector2.zero;
 			backdrop.anchorMax = Vector2.one;
 			backdrop.offsetMin = Vector2.zero;
 			backdrop.offsetMax = Vector2.zero;
-			var backdropImg = backdrop.gameObject.AddComponent<Image>();
-			backdropImg.sprite = UiRuntimeSprites.CircleFilled;
-			backdropImg.color = new Color(0.06f, 0.07f, 0.09f, 0.34f);
-			backdropImg.raycastTarget = true;
+			_backdropImage = backdrop.gameObject.AddComponent<Image>();
+			_backdropImage.sprite = UiRuntimeSprites.CircleFilled;
+			_backdropImage.color = _palette.Backdrop;
+			_backdropImage.raycastTarget = true;
 
 			var axes = ViewportAxisGizmo_Math.AxisDirections;
 			for (int i = 0; i < axes.Length; i++) {
@@ -325,7 +335,7 @@ namespace spz {
 				lineRt.anchoredPosition = Vector2.zero;
 				var lineImg = lineRt.gameObject.AddComponent<Image>();
 				lineImg.sprite = UiRuntimeSprites.SolidRect;
-				lineImg.color = ViewportAxisGizmo_Math.AxisColor(axes[i]);
+				lineImg.color = _palette.StemColor(0.5f);
 				lineImg.raycastTarget = false;
 				_lineRects.Add(lineRt);
 				_lineImages.Add(lineImg);
@@ -344,7 +354,7 @@ namespace spz {
 
 				var img = handleRt.gameObject.AddComponent<Image>();
 				img.sprite = positive ? UiRuntimeSprites.CircleFilled : UiRuntimeSprites.CircleRing;
-				img.color = ViewportAxisGizmo_Math.AxisColor(axis);
+				img.color = _palette.HandleColor(positive, 0.5f);
 				img.raycastTarget = true;
 
 				var button = handleRt.gameObject.AddComponent<Button>();
@@ -352,8 +362,8 @@ namespace spz {
 				button.transition = Selectable.Transition.ColorTint;
 				var colors = button.colors;
 				colors.normalColor = Color.white;
-				colors.highlightedColor = new Color(1.25f, 1.25f, 1.25f, 1f);
-				colors.pressedColor = new Color(0.8f, 0.8f, 0.8f, 1f);
+				colors.highlightedColor = new Color(1.18f, 1.18f, 1.18f, 1f);
+				colors.pressedColor = new Color(0.82f, 0.82f, 0.82f, 1f);
 				colors.selectedColor = colors.normalColor;
 				colors.fadeDuration = 0.08f;
 				button.colors = colors;
@@ -372,7 +382,7 @@ namespace spz {
 					label.alignment = TextAlignmentOptions.Center;
 					label.fontStyle = FontStyles.Bold;
 					label.raycastTarget = false;
-					label.color = new Color(0.06f, 0.07f, 0.09f, 1f);
+					label.color = _palette.LabelInk;
 				}
 
 				_handleRects.Add(handleRt);
@@ -392,15 +402,14 @@ namespace spz {
 			Sprite lantern = LoadCenterSprite(spec.CenterIconPath);
 			img.sprite = lantern != null ? lantern : UiRuntimeSprites.GetLineIcon(StudioLineIcon.Bullseye);
 			img.preserveAspect = true;
-			img.color = Color.white;
-			img.raycastTarget = true;
+			ApplyCenterGlyphAppearance(img);
 
 			var button = centerRt.gameObject.AddComponent<Button>();
 			button.targetGraphic = img;
 			button.transition = Selectable.Transition.ColorTint;
 			var colors = button.colors;
 			colors.normalColor = Color.white;
-			colors.highlightedColor = new Color(1.2f, 1.2f, 1.2f, 1f);
+			colors.highlightedColor = new Color(1.18f, 1.18f, 1.18f, 1f);
 			colors.pressedColor = new Color(0.82f, 0.82f, 0.82f, 1f);
 			colors.selectedColor = colors.normalColor;
 			colors.fadeDuration = 0.08f;
@@ -412,6 +421,22 @@ namespace spz {
 			_loadedCenterIconPath = spec.CenterIconPath ?? string.Empty;
 		}
 
+		/// <summary>
+		/// Grey translucent multiply tint. Transparent pixels must not eat axis-handle clicks — the lantern
+		/// sits last-sibling on top of the collapsed handle, and a full-rect raycast made the "see-through"
+		/// glyph still block the view.
+		/// </summary>
+		void ApplyCenterGlyphAppearance(Image img) {
+			if (img == null) {
+				return;
+			}
+			img.color = _palette.CenterTint;
+			img.raycastTarget = true;
+			// Unity only alpha-tests when the sprite texture is readable (our lantern PNG load keeps it so).
+			Texture2D tex = img.sprite != null ? img.sprite.texture : null;
+			img.alphaHitTestMinimumThreshold = tex != null && tex.isReadable ? 0.1f : 0f;
+		}
+
 		static RectTransform CreateChild(string name, RectTransform parent) {
 			var go = new GameObject(name, typeof(RectTransform));
 			go.layer = parent.gameObject.layer;
@@ -420,7 +445,10 @@ namespace spz {
 			return rt;
 		}
 
-		/// <summary>Loads the add-on's lantern PNG from StreamingAssets (no Resources / built-in resource lookup — IL2CPP safe).</summary>
+		/// <summary>
+		/// Loads the add-on's lantern PNG from StreamingAssets (no Resources / built-in resource lookup — IL2CPP safe)
+		/// and converts it to a white RGB + alpha silhouette so UI tinting can draw a grey monochrome transparent glyph.
+		/// </summary>
 		public static Sprite LoadCenterSprite(string absolutePath) {
 			string path = string.IsNullOrWhiteSpace(absolutePath)
 				? ViewportAxisGizmo_AddonBridge.DefaultCenterIconPath
@@ -443,6 +471,7 @@ namespace spz {
 					return null;
 				}
 				tex.wrapMode = TextureWrapMode.Clamp;
+				ConvertToTintableMonoGlyph(tex);
 				var sprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f));
 				CenterSpriteCache[path] = sprite;
 				return sprite;
@@ -451,6 +480,67 @@ namespace spz {
 				Debug.LogWarning($"[ViewportAxisGizmo_UI] Could not read center icon '{path}': {e.Message}");
 				return null;
 			}
+		}
+
+		/// <summary>
+		/// Turns an opaque full-color badge (navy grid + bronze lantern) into a tintable silhouette:
+		/// pixels near the corner background become transparent; the lantern shape keeps alpha; RGB becomes white
+		/// so <see cref="CenterGlyphTint"/> multiplies to soft grey.
+		/// </summary>
+		public static void ConvertToTintableMonoGlyph(Texture2D tex) {
+			if (tex == null) {
+				return;
+			}
+			Color[] pixels = tex.GetPixels();
+			if (pixels == null || pixels.Length == 0) {
+				return;
+			}
+			int w = tex.width;
+			int h = tex.height;
+			Color bg = SampleCornerBackground(pixels, w, h);
+
+			float maxDist = 0.001f;
+			for (int i = 0; i < pixels.Length; i++) {
+				maxDist = Mathf.Max(maxDist, ColorDistanceRgb(pixels[i], bg));
+			}
+
+			for (int i = 0; i < pixels.Length; i++) {
+				Color c = pixels[i];
+				float dist01 = Mathf.Clamp01(ColorDistanceRgb(c, bg) / maxDist);
+				// Soft threshold: kill the navy grid, keep lantern / glow / brackets as ink.
+				float alpha = Mathf.SmoothStep(0.10f, 0.42f, dist01);
+				// Existing PNG alpha (if any) still gates the result.
+				alpha *= c.a;
+				pixels[i] = new Color(1f, 1f, 1f, alpha);
+			}
+			tex.SetPixels(pixels);
+			// Keep CPU-readable: Image.alphaHitTestMinimumThreshold needs it so empty lantern pixels
+			// do not steal clicks from the axis handle that collapses onto the center.
+			tex.Apply(updateMipmaps: false, makeNoLongerReadable: false);
+		}
+
+		static Color SampleCornerBackground(Color[] pixels, int w, int h) {
+			// Average a few corner samples so a single bright pixel cannot poison the key.
+			Color sum = Color.black;
+			int n = 0;
+			void Acc(int x, int y) {
+				x = Mathf.Clamp(x, 0, w - 1);
+				y = Mathf.Clamp(y, 0, h - 1);
+				sum += pixels[y * w + x];
+				n++;
+			}
+			Acc(0, 0); Acc(1, 0); Acc(0, 1);
+			Acc(w - 1, 0); Acc(w - 2, 0); Acc(w - 1, 1);
+			Acc(0, h - 1); Acc(1, h - 1); Acc(0, h - 2);
+			Acc(w - 1, h - 1); Acc(w - 2, h - 1); Acc(w - 1, h - 2);
+			return n > 0 ? sum / n : new Color(0.05f, 0.08f, 0.18f, 1f);
+		}
+
+		static float ColorDistanceRgb(Color a, Color b) {
+			float dr = a.r - b.r;
+			float dg = a.g - b.g;
+			float db = a.b - b.b;
+			return Mathf.Sqrt(dr * dr + dg * dg + db * db);
 		}
 
 		#endregion
@@ -475,7 +565,7 @@ namespace spz {
 				}
 			}
 			if (_centerRt != null) {
-				float centerSize = spec.SizePx * 0.42f;
+				float centerSize = spec.SizePx * 0.34f;
 				_centerRt.sizeDelta = new Vector2(centerSize, centerSize);
 			}
 			RefreshCenterIconIfNeeded(spec.CenterIconPath);
@@ -516,10 +606,12 @@ namespace spz {
 			}
 			string path = centerIconPath ?? string.Empty;
 			if (string.Equals(path, _loadedCenterIconPath, StringComparison.Ordinal)) {
+				ApplyCenterGlyphAppearance(_centerImage);
 				return;
 			}
 			Sprite lantern = LoadCenterSprite(path);
 			_centerImage.sprite = lantern != null ? lantern : UiRuntimeSprites.GetLineIcon(StudioLineIcon.Bullseye);
+			ApplyCenterGlyphAppearance(_centerImage);
 			_loadedCenterIconPath = path;
 		}
 
@@ -637,8 +729,8 @@ namespace spz {
 		}
 
 		/// <summary>
-		/// Re-write axis RGB/alpha from <see cref="ViewportAxisGizmo_Math"/> without touching layout, sibling order,
-		/// or TMP fontSize — safe to call every idle frame for theme-silo honesty.
+		/// Re-write axis chrome from the active <see cref="ViewportAxisGizmo_Palette"/> without touching layout,
+		/// sibling order, or TMP fontSize — safe to call every idle frame for theme-silo honesty.
 		/// </summary>
 		void ReassertAuthoredAxisColors(Quaternion cameraRotation) {
 			var axes = ViewportAxisGizmo_Math.AxisDirections;
@@ -648,29 +740,29 @@ namespace spz {
 				float towards = ViewportAxisGizmo_Math.TowardsViewer01(cameraRotation, axis);
 				ApplyAuthoredHandleColors(i, axis, positive, towards);
 				if (i < _lineImages.Count && _lineImages[i] != null) {
-					Color c = ViewportAxisGizmo_Math.AxisColor(axis);
-					c.a = ViewportAxisGizmo_Math.HandleAlpha(towards, true) * 0.8f;
+					Color c = _palette.StemColor(towards);
 					if (_lineImages[i].color != c) {
 						_lineImages[i].color = c;
 					}
 				}
 			}
+			if (_backdropImage != null && _backdropImage.color != _palette.Backdrop) {
+				_backdropImage.color = _palette.Backdrop;
+			}
+			ApplyCenterGlyphAppearance(_centerImage);
 		}
 
 		void ApplyAuthoredHandleColors(int i, Vector3 axis, bool positive, float towards) {
 			var img = i < _handleImages.Count ? _handleImages[i] : null;
 			if (img != null) {
-				Color c = ViewportAxisGizmo_Math.AxisColor(axis);
-				c.a = ViewportAxisGizmo_Math.HandleAlpha(towards, positive);
+				Color c = _palette.HandleColor(positive, towards);
 				if (img.color != c) {
 					img.color = c;
 				}
 			}
 			var label = i < _handleLabels.Count ? _handleLabels[i] : null;
 			if (label != null) {
-				Color lc = label.color;
-				lc.a = ViewportAxisGizmo_Math.HandleAlpha(towards, true);
-				// Keep the dark ink RGB the build authored; only depth-fade the alpha.
+				Color lc = _palette.LabelColor(towards);
 				if (label.color != lc) {
 					label.color = lc;
 				}
@@ -705,11 +797,112 @@ namespace spz {
 			if (img == null) {
 				return;
 			}
-			Color c = ViewportAxisGizmo_Math.AxisColor(ViewportAxisGizmo_Math.AxisDirections[axisIndex]);
-			c.a = ViewportAxisGizmo_Math.HandleAlpha(towardsViewer01, true) * 0.8f;
+			Color c = _palette.StemColor(towardsViewer01);
 			if (img.color != c) {
 				img.color = c;
 			}
+		}
+
+		#endregion
+
+		#region theme (SPZ default authored + Nomad BoundChrome)
+
+		void EnsureThemeHooked() {
+			if (_themeHooked) {
+				return;
+			}
+			_themeHooked = true;
+			SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+			ApplyThemeTokens();
+		}
+
+		/// <summary>
+		/// Nomad parity: restyle under <see cref="SpzUiThemeOps.ShouldRecolorBoundChrome"/>; leave restores BoundChrome
+		/// under this root then reasserts the authored SPZ palette (cool grey + sky). Circles stay CircleFilled/Ring —
+		/// colors via snapshot + tint / IconTint only (no SolidSquare flatten).
+		/// </summary>
+		public void ApplyThemeTokens() {
+			if (_tornDown || _root == null) {
+				return;
+			}
+			if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
+				SpzUiThemeOps.RestoreBoundChromeUnder(_root);
+				_palette = ViewportAxisGizmo_Palette.SpzDefault;
+				ApplyStaticPaletteChrome();
+				_hasAppliedOrientation = false;
+				return;
+			}
+			var t = SpzUiThemeOps.Active;
+			_palette = ViewportAxisGizmo_Palette.FromThemeTokens(t);
+
+			if (_backdropImage != null) {
+				// Color-only: ApplyBoundChromeGraphic would FlattenSlicedChromeFace and crush the disc.
+				SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(_backdropImage);
+				_backdropImage.color = _palette.Backdrop;
+				if (_backdropImage.sprite != UiRuntimeSprites.CircleFilled) {
+					_backdropImage.sprite = UiRuntimeSprites.CircleFilled;
+				}
+			}
+			for (int i = 0; i < _handleImages.Count; i++) {
+				var img = _handleImages[i];
+				if (img == null) {
+					continue;
+				}
+				SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(img);
+				bool positive = i < ViewportAxisGizmo_Math.AxisDirections.Length
+					&& ViewportAxisGizmo_Math.IsPositiveAxis(ViewportAxisGizmo_Math.AxisDirections[i]);
+				img.sprite = positive ? UiRuntimeSprites.CircleFilled : UiRuntimeSprites.CircleRing;
+				img.color = _palette.HandleColor(positive, 0.5f);
+			}
+			for (int i = 0; i < _lineImages.Count; i++) {
+				var img = _lineImages[i];
+				if (img == null) {
+					continue;
+				}
+				SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(img);
+				img.color = _palette.StemColor(0.5f);
+			}
+			for (int i = 0; i < _handleLabels.Count; i++) {
+				var label = _handleLabels[i];
+				if (label == null) {
+					continue;
+				}
+				SpzUiThemeOps.ApplyBoundChromeCompactToolLabelTmp(label, _palette.LabelInk, label.fontSize);
+				label.raycastTarget = false;
+			}
+			if (_centerImage != null) {
+				SpzUiThemeOps.ApplyBoundChromeIconTint(_centerImage, _palette.CenterTint);
+			}
+			_hasAppliedOrientation = false;
+		}
+
+		/// <summary>Writes palette colors without BoundChrome helpers (builtin leave + initial build).</summary>
+		void ApplyStaticPaletteChrome() {
+			if (_backdropImage != null) {
+				_backdropImage.sprite = UiRuntimeSprites.CircleFilled;
+				_backdropImage.color = _palette.Backdrop;
+			}
+			for (int i = 0; i < _handleImages.Count; i++) {
+				var img = _handleImages[i];
+				if (img == null) {
+					continue;
+				}
+				bool positive = i < ViewportAxisGizmo_Math.AxisDirections.Length
+					&& ViewportAxisGizmo_Math.IsPositiveAxis(ViewportAxisGizmo_Math.AxisDirections[i]);
+				img.sprite = positive ? UiRuntimeSprites.CircleFilled : UiRuntimeSprites.CircleRing;
+				img.color = _palette.HandleColor(positive, 0.5f);
+			}
+			for (int i = 0; i < _lineImages.Count; i++) {
+				if (_lineImages[i] != null) {
+					_lineImages[i].color = _palette.StemColor(0.5f);
+				}
+			}
+			for (int i = 0; i < _handleLabels.Count; i++) {
+				if (_handleLabels[i] != null) {
+					_handleLabels[i].color = _palette.LabelInk;
+				}
+			}
+			ApplyCenterGlyphAppearance(_centerImage);
 		}
 
 		#endregion
@@ -736,9 +929,14 @@ namespace spz {
 				_canvasGroup = GetComponent<CanvasGroup>();
 			}
 			Registered.Add(this);
+			EnsureThemeHooked();
 		}
 
 		void OnDestroy() {
+			if (_themeHooked) {
+				SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+				_themeHooked = false;
+			}
 			Registered.Remove(this);
 		}
 	}
