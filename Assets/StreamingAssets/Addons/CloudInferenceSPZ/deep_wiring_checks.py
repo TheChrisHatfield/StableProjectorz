@@ -244,6 +244,80 @@ def main() -> int:
     except Exception as exc:
         check(False, f"remote catalog wiring: {exc}")
 
+    # Interrupt must abort in-flight remote generate (Unity Abort + /interrupt).
+    try:
+        from http.server import ThreadingHTTPServer
+
+        up_port, shim_port = 17921, 17922
+
+        class _Slow(BaseHTTPRequestHandler):
+            hits = {"txt2img": 0, "interrupt": 0}
+
+            def log_message(self, *a):
+                return
+
+            def _ok(self, body: bytes):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_GET(self):
+                self._ok(b"{}")
+
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                if length:
+                    self.rfile.read(length)
+                if "interrupt" in self.path:
+                    _Slow.hits["interrupt"] += 1
+                    self._ok(b'{"interrupted": true}')
+                    return
+                _Slow.hits["txt2img"] += 1
+                time.sleep(8.0)
+                self._ok(b'{"images":["d2FzdGVk"]}')
+
+        up = ThreadingHTTPServer(("127.0.0.1", up_port), _Slow)
+        up.daemon_threads = True
+        threading.Thread(target=up.serve_forever, daemon=True).start()
+        shim.get_state().set_backend(be.RemoteForgeBackend(f"http://127.0.0.1:{up_port}"))
+        ok, msg = shim.start_shim("127.0.0.1", shim_port)
+        check(ok, f"interrupt-abort shim start: {msg}")
+        time.sleep(0.1)
+        base = f"http://127.0.0.1:{shim_port}"
+        box = {"st": None, "body": None, "err": None}
+
+        def _gen():
+            try:
+                box["st"], box["body"] = http("POST", base, "/sdapi/v1/txt2img", {"width": 16, "height": 16}, timeout=12)
+            except Exception as exc:
+                box["err"] = exc
+
+        t = threading.Thread(target=_gen, daemon=True)
+        t0 = time.time()
+        t.start()
+        time.sleep(0.35)
+        st_i, body_i = http("POST", base, "/sdapi/v1/interrupt", {})
+        check(st_i == 200 and body_i.get("interrupted") is True, "interrupt during remote generate")
+        t.join(timeout=4.0)
+        elapsed = time.time() - t0
+        check(not t.is_alive(), "interrupt unblocks generate handler (did not wait full upstream 8s)")
+        check(elapsed < 4.0, f"interrupt abort elapsed {elapsed:.2f}s < 4s")
+        check(box["err"] is None, "interrupt generate thread no exception")
+        if box["body"] is None:
+            check(True, "interrupt generate response dropped (Unity-style abort)")
+        else:
+            check(
+                box["body"].get("interrupted") is True or not box["body"].get("images"),
+                "interrupt generate does not return a full image as success",
+            )
+        shim.stop_shim()
+        up.shutdown()
+    except Exception as exc:
+        check(False, f"interrupt abort wiring: {exc}")
+
     print(f"\nDeep checks: {CHECKS}  fails: {FAILS}")
     return 0 if FAILS == 0 else 1
 

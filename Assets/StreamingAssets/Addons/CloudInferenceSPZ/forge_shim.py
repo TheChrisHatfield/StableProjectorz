@@ -370,6 +370,14 @@ class _Handler(BaseHTTPRequestHandler):
                     st.interrupt = True
                     st.job_active = False
                     st.progress = 0.0
+                    backend = st.backend
+                    is_remote = backend.name == "remote_forge"
+                abort = getattr(backend, "abort", None)
+                if callable(abort):
+                    try:
+                        abort()
+                    except Exception:
+                        pass
                 if is_remote:
                     try:
                         length = int(self.headers.get("Content-Length") or 0)
@@ -412,8 +420,12 @@ class _Handler(BaseHTTPRequestHandler):
                     st.progress = 0.05
                     st.started_at = time.time()
                     backend = st.backend
+                begin = getattr(backend, "begin_job", None)
+                if callable(begin):
+                    begin()
                 # Progress pulse for SPZ ETA while backend runs (remote jobs can take minutes).
                 done_ev = threading.Event()
+                box: Dict[str, Any] = {}
 
                 def _tick() -> None:
                     p = 0.05
@@ -424,31 +436,61 @@ class _Handler(BaseHTTPRequestHandler):
                             p = min(0.95, p + 0.03)
                             st.progress = p
 
+                def _worker() -> None:
+                    try:
+                        box["result"] = backend.generate(path, payload)
+                    except Exception as exc:
+                        box["exc"] = exc
+                    finally:
+                        done_ev.set()
+
                 ticker = threading.Thread(target=_tick, daemon=True)
+                worker = threading.Thread(target=_worker, daemon=True)
                 ticker.start()
-                try:
-                    result = backend.generate(path, payload)
-                except BackendError as exc:
-                    done_ev.set()
+                worker.start()
+                # Poll interrupt so Unity Cancel can finish without waiting on a 300s upstream.
+                while not done_ev.wait(0.1):
                     with st.lock:
-                        st.job_active = False
-                        st.progress = 0.0
-                        st.last_error = str(exc)
-                    self._send_json(exc.status, {"detail": str(exc), "error": str(exc)})
-                    return
-                except Exception as exc:
-                    done_ev.set()
-                    with st.lock:
-                        st.job_active = False
-                        st.progress = 0.0
-                        st.last_error = str(exc)
-                    raise
-                done_ev.set()
+                        interrupted = bool(st.interrupt)
+                    if interrupted:
+                        abort = getattr(backend, "abort", None)
+                        if callable(abort):
+                            try:
+                                abort()
+                            except Exception:
+                                pass
+                        done_ev.wait(1.0)
+                        with st.lock:
+                            st.job_active = False
+                            st.progress = 0.0
+                            st.last_error = ""
+                        self._send_json(200, {"images": [], "interrupted": True})
+                        return
+
                 ticker.join(timeout=1.0)
+                if "exc" in box:
+                    exc = box["exc"]
+                    with st.lock:
+                        interrupted = bool(st.interrupt)
+                        st.job_active = False
+                        st.progress = 0.0
+                        st.last_error = "" if interrupted else str(exc)
+                    if interrupted:
+                        self._send_json(200, {"images": [], "interrupted": True, "info": str(exc)})
+                        return
+                    if isinstance(exc, BackendError):
+                        self._send_json(exc.status, {"detail": str(exc), "error": str(exc)})
+                        return
+                    raise exc
+                result = box.get("result") or {}
                 with st.lock:
+                    interrupted = bool(st.interrupt)
                     st.job_active = False
-                    st.progress = 1.0
+                    st.progress = 0.0 if interrupted else 1.0
                     st.last_error = ""
+                if interrupted:
+                    self._send_json(200, {"images": [], "interrupted": True})
+                    return
                 self._send_json(200, result)
                 return
 
