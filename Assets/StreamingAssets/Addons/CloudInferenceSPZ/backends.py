@@ -56,6 +56,10 @@ class CloudBackend:
         """Cancel an in-flight generate/proxy if the backend supports it."""
         return
 
+    def probe(self, timeout_s: float = 8.0) -> Tuple[bool, str]:
+        """Reachability check used at Connect. Demo is always reachable."""
+        return True, self.name
+
     def proxy(self, method: str, path: str, body: Optional[bytes], headers: Dict[str, str]) -> Tuple[int, bytes, str]:
         """Optional raw proxy. Return (status, body, content_type)."""
         raise BackendError(f"{self.name} does not proxy {method} {path}", status=501)
@@ -128,6 +132,27 @@ class RemoteForgeBackend(CloudBackend):
 
     def describe(self) -> str:
         return f"remote_forge → {self.base_url}"
+
+    def probe(self, timeout_s: float = 8.0) -> Tuple[bool, str]:
+        """GET /internal/ping on the pasted Forge so Connect cannot go green on a dead URL."""
+        old = self.timeout_s
+        self.timeout_s = float(timeout_s)
+        try:
+            status, body, _ct = self.proxy("GET", "/internal/ping", None, {})
+            snippet = body.decode("utf-8", errors="replace")[:180] if body else ""
+            if status != 200:
+                return False, f"remote ping HTTP {status}: {snippet or 'empty body'}"
+            try:
+                data = json.loads(body.decode("utf-8")) if body else {}
+            except Exception:
+                return False, f"remote ping was not JSON (need a Forge/WebUI URL): {snippet}"
+            if not isinstance(data, dict):
+                return False, "remote ping JSON was not an object"
+            return True, snippet or "ok"
+        except BackendError as exc:
+            return False, str(exc)
+        finally:
+            self.timeout_s = old
 
     def begin_job(self) -> None:
         with self._io_lock:

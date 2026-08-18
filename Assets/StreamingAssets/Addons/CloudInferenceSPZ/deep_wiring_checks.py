@@ -173,6 +173,9 @@ def main() -> int:
         check(b.base_url == "https://example.trycloudflare.com", "strip pasted /sdapi/v1 suffix")
         b = be.RemoteForgeBackend("https://example.trycloudflare.com/controlnet/")
         check(b.base_url == "https://example.trycloudflare.com", "strip pasted /controlnet suffix")
+        dead = be.RemoteForgeBackend("http://127.0.0.1:9")
+        ok_p, msg_p = dead.probe(timeout_s=0.4)
+        check(not ok_p, f"probe dead remote fails ({msg_p[:80]})")
         try:
             be.build_backend("fal", "key")
             check(False, "build fal fails at connect")
@@ -250,6 +253,9 @@ def main() -> int:
             not (isinstance(body, list) and body and body[0].get("model_name") == "cloud-inference-demo"),
             "remote sd-models is not demo stub",
         )
+        live = shim.get_state().backend
+        ok_p, msg_p = live.probe(timeout_s=2.0)
+        check(ok_p, f"probe live remote ping ({msg_p[:60]})")
         shim.stop_shim()
         up.shutdown()
     except Exception as exc:

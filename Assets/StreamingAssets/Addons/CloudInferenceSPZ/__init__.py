@@ -199,6 +199,14 @@ def connect_cloud() -> bool:
         _show(str(exc), duration=3.5)
         return False
 
+    if mode == "remote_forge":
+        ok_p, msg_p = backend.probe()
+        if not ok_p:
+            detail = f"Remote Forge unreachable: {msg_p}"
+            _set_status(f"Connect failed: {detail}")
+            _show(detail, duration=4.5)
+            return False
+
     shim.get_state().set_backend(backend)
     ok, msg = shim.start_shim()
     if not ok:
