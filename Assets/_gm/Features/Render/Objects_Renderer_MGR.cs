@@ -218,10 +218,13 @@ namespace spz {
 	    void ApplyUvTexture( GenData2D genData, Material blit_mat ){
 	        GenData_TextureRef texRef = genData.GetTexture_ref0();
 	        GenData_Masks genMasks    = genData._masking_utils;
+	        if (genMasks == null || texRef == null) return;
+	        if (!genMasks.TryGetFirstEnabledPovMasks(out var brush, out _, out _)) return;
+	        if (brush?.texArray == null) return;
 
 	        Debug.Assert( texRef.texArray != null  &&  texRef.texArray.dimension == TextureDimension.Tex2DArray,
 	                     "expected array for UV texture, (for udim support)");
-	        blit_mat.SetTexture("_uvMask", genMasks._ObjectUV_brushedMaskR8[0].texArray );
+	        blit_mat.SetTexture("_uvMask", brush.texArray );
 
 	        RenderUdims.SetNumUdims(true, _accumulation_uv_RT.texArray.volumeDepth,  blit_mat,  sh:null);
 	        TextureTools_SPZ.Blit(texRef.texArray, _accumulation_uv_RT.texArray, blit_mat);
