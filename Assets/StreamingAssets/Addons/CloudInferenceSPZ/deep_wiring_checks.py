@@ -169,6 +169,10 @@ def main() -> int:
         check(b.name == "demo", "build demo")
         b = be.build_backend("colab", "https://example.trycloudflare.com")
         check(b.name == "remote_forge", "build colab as remote_forge")
+        b = be.RemoteForgeBackend("https://example.trycloudflare.com/sdapi/v1")
+        check(b.base_url == "https://example.trycloudflare.com", "strip pasted /sdapi/v1 suffix")
+        b = be.RemoteForgeBackend("https://example.trycloudflare.com/controlnet/")
+        check(b.base_url == "https://example.trycloudflare.com", "strip pasted /controlnet suffix")
         try:
             be.build_backend("fal", "key")
             check(False, "build fal fails at connect")
