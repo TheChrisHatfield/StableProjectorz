@@ -52,4 +52,13 @@ public sealed class MultiPovSingletonGuardContractTests {
 		Assert.That(body, Does.Contain("oRib == null || mvRib == null || vp == null"));
 		Assert.That(body, Does.Not.Contain("MultiView_Ribbon_UI.instance.currentPovIx"));
 	}
+
+	[Test]
+	public void HsvcSetup_GuardsArt2DIconsList() {
+		string src = Read("Assets", "_gm", "Features", "Camera", "Projections",
+			"ProjectorCameras_RenderHelper.cs");
+		Assert.That(src, Does.Not.Contain("Art2D_IconsUI_List.instance._mainSelectedIcon"),
+			"Art2D list must be null-checked before _mainSelectedIcon");
+		Assert.That(src, Does.Contain("artList != null"));
+	}
 }
