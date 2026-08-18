@@ -1501,6 +1501,14 @@ namespace spz {
 		/// </summary>
 		void OnInstallFromFile() {
 			EnsureHeaderActionButtonsWired();
+			if (AddonInstaller_MGR.instance != null && AddonInstaller_MGR.instance.HasInstallInFlight) {
+				ShowStatus("Installation already in progress. Wait for it to finish.", false);
+				return;
+			}
+			if (AddonInstaller_MGR.instance != null && AddonInstaller_MGR.instance.HasRemoveInFlight) {
+				ShowStatus("Cannot install while an Uninstall is still running. Wait for removal to finish.", false);
+				return;
+			}
 			ShowStatus("Opening install file dialog…", true);
 			Debug.Log("[AddonManager_UI] Install from File clicked.");
 			if (!isActiveAndEnabled || !gameObject.activeInHierarchy) {
@@ -1546,6 +1554,10 @@ namespace spz {
 		void InstallAddon(string path) {
 			if (string.IsNullOrEmpty(path)) {
 				ShowStatus("Invalid file path", false);
+				return;
+			}
+			if (AddonInstaller_MGR.instance != null && AddonInstaller_MGR.instance.HasInstallInFlight) {
+				ShowStatus("Installation already in progress. Wait for it to finish.", false);
 				return;
 			}
 			if (AddonInstaller_MGR.instance != null && AddonInstaller_MGR.instance.HasRemoveInFlight) {
