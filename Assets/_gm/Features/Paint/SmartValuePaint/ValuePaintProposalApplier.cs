@@ -38,6 +38,8 @@ namespace spz {
 		static bool _liveHardnessUserOverride;
 		// User moved traditional size (dial / [ ] / Shift+RMB) mid-session — stop driving size.
 		static bool _liveSizeUserOverride;
+		// User assigned opacity (1–0 keys / API) mid-session — stop driving opacity.
+		static bool _liveOpacityUserOverride;
 
 		public static bool IsArmed => _armed;
 		public static ValuePaintProposal ArmedProposal => _armedProposal;
@@ -67,6 +69,16 @@ namespace spz {
 				_liveChromaBase = c;
 			if (_haveUserBrushSnapshot)
 				_snapshotColor = c;
+		}
+
+		/// <summary>
+		/// User assigned opacity (1–0 keys / non-quiet API). Live must not lerp it back to the plane hint.
+		/// </summary>
+		public static void NotifyUserOpacityChanged(float opacity01) {
+			if (!_haveUserBrushSnapshot && !_armedViaLive) return;
+			if (!float.IsFinite(opacity01)) return;
+			_liveOpacityUserOverride = true;
+			_snapshotOpacity01 = Mathf.Clamp01(opacity01);
 		}
 
 		/// <summary>
@@ -114,6 +126,7 @@ namespace spz {
 			_lastLiveAppliedOpacity01 = -1f;
 			_liveHardnessUserOverride = false;
 			_liveSizeUserOverride = false;
+			_liveOpacityUserOverride = false;
 			_snapshotColor = sd.brushColor;
 			_snapshotColor.a = 1f;
 			float size = BrushRibbon_UI_Size.GetBrushSize01();
@@ -140,6 +153,7 @@ namespace spz {
 			_lastLiveAppliedOpacity01 = -1f;
 			_liveHardnessUserOverride = false;
 			_liveSizeUserOverride = false;
+			_liveOpacityUserOverride = false;
 			var sd = SD_WorkflowOptionsRibbon_UI.instance;
 			if (sd == null) return;
 			sd.SetBrushColorQuietFromApi(_snapshotColor.r, _snapshotColor.g, _snapshotColor.b, 1f);
@@ -359,6 +373,7 @@ namespace spz {
 			_lastLiveAppliedSize01 = float.NaN;
 			_lastLiveAppliedOpacity01 = -1f;
 			_liveSizeUserOverride = false;
+			_liveOpacityUserOverride = false;
 			reason = "Armed on target=" + DescribeTarget(target) + " desiredBin=" + proposal.DesiredBin
 			         + " color=" + tint + " size01=" + width01.ToString("F2")
 			         + " opacity01=" + effectiveOpacity.ToString("F2")
@@ -576,6 +591,7 @@ namespace spz {
 					_lastLiveAppliedOpacity01 = -1f;
 					_liveHardnessUserOverride = false;
 					_liveSizeUserOverride = false;
+					_liveOpacityUserOverride = false;
 				}
 				reason = _lastFailReason = "SetBrushColorQuietFromApi failed";
 				return false;
@@ -607,24 +623,35 @@ namespace spz {
 			}
 
 			// Live previously skipped opacity — value steps looked like one flat wash.
-			float opInf = PaintTab_ValueAssistOptions.OpacityInfluence01;
-			if (float.IsFinite(opInf) && opInf > 0.02f) {
-				var opacityUi = OpacityUi();
-				if (opacityUi != null) {
-					float proposedOpacity = float.IsFinite(proposal.OpacityHint01)
-						? Mathf.Clamp01(proposal.OpacityHint01) : 0.6f;
-					float liveOpacity = opacityUi.Opacity01;
-					if (!float.IsFinite(liveOpacity)) liveOpacity = proposedOpacity;
-					// Same anchor rule as size: user opacity is the base; adopt manual changes.
-					if (_lastLiveAppliedOpacity01 >= 0f && Mathf.Abs(liveOpacity - _lastLiveAppliedOpacity01) > 0.01f)
-						_snapshotOpacity01 = liveOpacity;
-					float anchor = _snapshotOpacity01 >= 0f ? _snapshotOpacity01 : liveOpacity;
-					float effective = Mathf.Lerp(anchor, proposedOpacity, Mathf.Clamp01(opInf));
-					if (float.IsFinite(effective) && Mathf.Abs(effective - liveOpacity) > 0.02f) {
-						opacityUi.SetOpacity01(effective, quiet: true); // no per-tick "Brush Opacity NN" status spam
-						_lastLiveAppliedOpacity01 = Mathf.Clamp01(effective);
-					} else {
-						_lastLiveAppliedOpacity01 = Mathf.Clamp01(liveOpacity);
+			// Same sticky-override as size (B2.2e): default OpacityInfluence is 1.0, so adopt-then-lerp
+			// fully overwrote a user 1–0 key / API opacity with the model's hint.
+			if (!_liveOpacityUserOverride) {
+				float opInf = PaintTab_ValueAssistOptions.OpacityInfluence01;
+				if (float.IsFinite(opInf) && opInf > 0.02f) {
+					var opacityUi = OpacityUi();
+					if (opacityUi != null) {
+						float proposedOpacity = float.IsFinite(proposal.OpacityHint01)
+							? Mathf.Clamp01(proposal.OpacityHint01) : 0.6f;
+						float liveOpacity = opacityUi.Opacity01;
+						if (!float.IsFinite(liveOpacity)) liveOpacity = proposedOpacity;
+						bool changedSinceAssistWrite = _lastLiveAppliedOpacity01 >= 0f
+							&& Mathf.Abs(liveOpacity - _lastLiveAppliedOpacity01) > 0.01f;
+						bool changedBeforeFirstAssistWrite = _lastLiveAppliedOpacity01 < 0f
+							&& _snapshotOpacity01 >= 0f
+							&& Mathf.Abs(liveOpacity - _snapshotOpacity01) > 0.01f;
+						if (changedSinceAssistWrite || changedBeforeFirstAssistWrite) {
+							_liveOpacityUserOverride = true;
+							_snapshotOpacity01 = Mathf.Clamp01(liveOpacity);
+						} else {
+							float anchor = _snapshotOpacity01 >= 0f ? _snapshotOpacity01 : liveOpacity;
+							float effective = Mathf.Lerp(anchor, proposedOpacity, Mathf.Clamp01(opInf));
+							if (float.IsFinite(effective) && Mathf.Abs(effective - liveOpacity) > 0.02f) {
+								opacityUi.SetOpacity01(effective, quiet: true);
+								_lastLiveAppliedOpacity01 = Mathf.Clamp01(opacityUi.Opacity01);
+							} else {
+								_lastLiveAppliedOpacity01 = Mathf.Clamp01(liveOpacity);
+							}
+						}
 					}
 				}
 			}

@@ -190,4 +190,21 @@ public sealed class ValueAssistLiveStepContractTests {
 		Assert.That(applier, Does.Contain("IsUserResizingBrushNow"));
 		Assert.That(applier, Does.Contain("changedBeforeFirstAssistWrite"));
 	}
+
+	// B2.2f — default OpacityInfluence is 1.0; adopt-then-lerp fully overwrote 1–0 key opacity.
+	[Test]
+	public void LiveOpacitySoftArm_StopsAfterUserEdit_Source() {
+		string applier = System.IO.File.ReadAllText(System.IO.Path.Combine(
+			Application.dataPath, "_gm", "Features", "Paint", "SmartValuePaint",
+			"ValuePaintProposalApplier.cs"));
+		Assert.That(applier, Does.Contain("_liveOpacityUserOverride"));
+		Assert.That(applier, Does.Contain("if (!_liveOpacityUserOverride)"));
+		Assert.That(applier, Does.Contain("NotifyUserOpacityChanged"));
+
+		string opacity = System.IO.File.ReadAllText(System.IO.Path.Combine(
+			Application.dataPath, "_gm", "Features", "Paint", "BrushRibbon_UI",
+			"BrushRibbon_UI_Opacity.cs"));
+		Assert.That(opacity, Does.Contain("NotifyUserOpacityChanged"),
+			"1–0 keys must notify Live so a same-frame Live write cannot swallow the edit");
+	}
 }
