@@ -476,8 +476,18 @@ class _Handler(BaseHTTPRequestHandler):
                     status, raw, ct = backend.proxy("POST", full_path, body, dict(self.headers.items()))
                     self._send(status, raw, ct)
                     return
-                # Echo-friendly stub: return empty images so callers fail soft.
-                self._send_json(200, {"images": [], "info": "cloud shim detect stub (T5 pending)"})
+                payload = self._read_json()
+                images = payload.get("controlnet_input_images") or payload.get("images") or []
+                if not isinstance(images, list):
+                    images = []
+                # Echo inputs so SPZ detect callers (empty images[] = hard fail) stay wired.
+                self._send_json(
+                    200,
+                    {
+                        "images": images,
+                        "info": "cloud shim detect echo (preprocessor T5 pending)",
+                    },
+                )
                 return
 
             if is_remote:

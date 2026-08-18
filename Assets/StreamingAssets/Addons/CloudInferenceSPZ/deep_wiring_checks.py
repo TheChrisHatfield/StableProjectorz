@@ -108,6 +108,13 @@ def main() -> int:
         check(st == 200 and "module_list" in body, "controlnet module_list")
         st, body = http("POST", base, "/controlnet/detect", {"controlnet_module": "none", "controlnet_input_images": []})
         check(st == 200 and "images" in body, "controlnet detect stub")
+        st, body = http(
+            "POST",
+            base,
+            "/controlnet/detect",
+            {"controlnet_module": "none", "controlnet_input_images": ["QUJD"]},
+        )
+        check(st == 200 and body.get("images") == ["QUJD"], "controlnet detect echoes input images")
 
         st, body = http("POST", base, "/sdapi/v1/txt2img", {"width": 32, "height": 32, "prompt": "a"})
         check(st == 200 and body.get("images") and len(body["images"][0]) > 16, "txt2img")
