@@ -71,6 +71,10 @@ def main() -> int:
     try:
         st, body = http("GET", base, "/internal/ping")
         check(st == 200 and isinstance(body, dict) and body.get("status") == "ok", "ping")
+        ping_req = urllib.request.Request(f"{base}/internal/ping", method="GET")
+        with urllib.request.urlopen(ping_req, timeout=5) as ping_resp:
+            conn_hdr = (ping_resp.headers.get("Connection") or "").lower()
+            check("close" in conn_hdr, "ping Connection: close (no keep-alive stall)")
 
         st, body = http("GET", base, "/internal/sysinfo")
         check(st == 200 and isinstance(body, dict), "sysinfo 200")
