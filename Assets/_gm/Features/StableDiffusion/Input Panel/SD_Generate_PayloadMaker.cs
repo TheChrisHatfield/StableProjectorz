@@ -54,10 +54,31 @@ namespace spz {
 	            alwayson_scripts = new Dictionary<string,AlwaysOn_Value>(),
 	        };
 
-	        // Projection bake needs a screen mask; txt2img had null WE/NE and relied on shader default white.
+	        // Projection bake needs a screen mask; unconstrained txt2img uses solid white (full plate).
+	        // Klein Gen Art stays txt2img (RefControl order) but every Inpaint workflow mode must keep the
+	        // real screen mask so bake / Soft Inpaint / redo / isolation do not overwrite finished regions.
 	        int tw = payload_.width;
 	        int th = payload_.height;
-	        if (tw > 0 && th > 0){
+	        bool kleinGenArt = !isMakingBackgrounds && StableDiffusion_Hub.IsActiveCheckpointKlein();
+	        var workflow = WorkflowRibbon_UI.instance;
+	        bool captureInpaintBakeMask = SD_KleinStructureChannel.ShouldCaptureInpaintBakeMaskForTxt2img(
+	            isMakingBackgrounds,
+	            kleinGenArt,
+	            workflow != null && workflow.isMode_using_img2img(),
+	            workflow != null ? workflow.currentMode() : WorkflowRibbon_CurrMode.ProjectionsMasking);
+
+	        if (captureInpaintBakeMask){
+	            CaptureKleinTxt2imgInpaintBakeMask(intermediates_);
+	            // Required capture that failed used to continue as unconstrained txt2img — bake then
+	            // overwrote finished regions with solid-white projection. Abort like structure attach.
+	            if (!intermediates_.kleinTxt2imgInpaintBakeMask){
+	                intermediates_.kleinStructureAttachFailed = true;
+	                if (Viewport_StatusText.instance != null){
+	                    Viewport_StatusText.instance.ShowStatusText(
+	                        "Klein Gen Art aborted: inpaint bake mask unavailable.", false, 5f, false);
+	                }
+	            }
+	        } else if (tw > 0 && th > 0){
 	            intermediates_.screenSpaceMask_NE_disposableTex =
 	                TextureTools_SPZ.CreateSolidColorRGBA32(tw, th, Color.white);
 	            intermediates_.screenSpaceMask_WE_disposableTex =
@@ -66,7 +87,6 @@ namespace spz {
        
 	        // Flux.2 Klein Gen Art: mesh depth → ImageStitch structure (not Fun-Union CN).
 	        // Skip controlnet alwayson when Klein — CN models are None / family-mismatched.
-	        bool kleinGenArt = !isMakingBackgrounds && StableDiffusion_Hub.IsActiveCheckpointKlein();
 	        if (!kleinGenArt){
 	            ControlNet_NetworkArgs ctrlNets_args = SD_ControlNetsList_UI.instance != null
 	                ? SD_ControlNetsList_UI.instance.GetArgs_forGenerationRequest(intermediates_) : null;
@@ -478,6 +498,87 @@ namespace spz {
 	    }
 
 
+
+	    /// <summary>
+	    /// Klein txt2img cannot send a Neo inpaint mask, but projection + local Soft Inpaint / redo /
+	    /// isolation still need the workflow screen mask and ContentCam init so prior albedo survives.
+	    /// Covers Color / NoColor / TotalObject / WhereEmpty (all img2img-mode workflows).
+	    /// </summary>
+	    void CaptureKleinTxt2imgInpaintBakeMask(SD_GenRequestArgs_byproducts intermediates_){
+	        if (intermediates_ == null) return;
+	        var painter = Inpaint_MaskPainter.instance;
+	        var cams = UserCameras_MGR.instance != null ? UserCameras_MGR.instance.camTextures : null;
+	        if (painter == null || cams == null){
+	            KleinStructureTrace.Set("inpaint_bake_mask", false);
+	            KleinStructureTrace.Set("inpaint_bake_mask_fail", "painter_or_cams");
+	            return;
+	        }
+
+	        if (Objects_Renderer_MGR.instance != null)
+	            Objects_Renderer_MGR.instance.EnsureInpaintColorLayerAppliedForCapture();
+
+	        Texture2D viewTex = cams.GetDisposable_ContentCamTexture();
+	        painter.GetDisposable_ScreenMask(forceFullWhite: false,
+	            out Texture2D screenMask_skipAntiEdge, out Texture2D screenMask_withAntiEdge);
+
+	        if (screenMask_skipAntiEdge == null || screenMask_withAntiEdge == null){
+	            if (viewTex != null) UnityEngine.Object.Destroy(viewTex);
+	            if (screenMask_skipAntiEdge != null) UnityEngine.Object.Destroy(screenMask_skipAntiEdge);
+	            if (screenMask_withAntiEdge != null) UnityEngine.Object.Destroy(screenMask_withAntiEdge);
+	            KleinStructureTrace.Set("inpaint_bake_mask", false);
+	            KleinStructureTrace.Set("inpaint_bake_mask_fail", "mask_null");
+	            return;
+	        }
+
+	        intermediates_.usualView_disposableTexture = viewTex;
+	        intermediates_.screenSpaceMask_NE_disposableTex = screenMask_skipAntiEdge;
+	        intermediates_.screenSpaceMask_WE_disposableTex = screenMask_withAntiEdge;
+	        intermediates_.kleinTxt2imgInpaintBakeMask = true;
+	        intermediates_.inpainting_mask_invert =
+	            Settings_MGR.instance != null && Settings_MGR.instance.get_sd_inpaintingMaskInvert() ? 1 : 0;
+
+	        var workflow = WorkflowRibbon_UI.instance;
+	        var opts = SD_WorkflowOptionsRibbon_UI.instance;
+	        InpaintingFill fill = workflow != null ? workflow.Get_InpaintFill() : InpaintingFill.LatentNothing;
+	        bool softAllowed = workflow != null && workflow.is_allow_SoftInpaint()
+	            && opts != null && opts.isSoftInpaint;
+	        float strength = 1f;
+	        if (fill == InpaintingFill.Original){
+	            float redo = opts != null ? opts.denoisingStrength : 0.5f;
+	            strength = Mathf.Clamp01(Mathf.Max(redo, 0.01f));
+	        }
+	        intermediates_.kleinSoftInpaintBlend = softAllowed;
+	        intermediates_.kleinInpaintBlendStrength = strength;
+
+	        // Projection samples WE as "bake here". When invert=1 edit is *outside* the brush,
+	        // so WE must be the complement (soft edges preserved on the complement).
+	        if (intermediates_.inpainting_mask_invert != 0)
+	            InvertScreenMaskRgbInPlace(screenMask_withAntiEdge);
+
+	        KleinStructureTrace.Set("inpaint_bake_mask", true);
+	        KleinStructureTrace.Set("inpaint_bake_mask_invert", intermediates_.inpainting_mask_invert);
+	        KleinStructureTrace.Set("inpaint_soft_blend", softAllowed);
+	        KleinStructureTrace.Set("inpaint_blend_strength", strength);
+	        KleinStructureTrace.Set("inpaint_fill", fill.ToString());
+
+	        if (Viewport_StatusText.instance != null){
+	            string softLabel = softAllowed ? "soft" : "hard";
+	            Viewport_StatusText.instance.ShowStatusText(
+	                $"Klein inpaint: local {softLabel} mask composite @ {strength:0.00} (Neo stays txt2img).",
+	                false, 3.5f, false);
+	        }
+	    }
+
+	    static void InvertScreenMaskRgbInPlace(Texture2D mask){
+	        if (mask == null) return;
+	        Color32[] px = mask.GetPixels32();
+	        for (int i = 0; i < px.Length; i++){
+	            byte r = (byte)(255 - px[i].r);
+	            px[i] = new Color32(r, r, r, px[i].a);
+	        }
+	        mask.SetPixels32(px);
+	        mask.Apply(updateMipmaps: false, makeNoLongerReadable: false);
+	    }
 
 	    void PostProcess_Prompt(ref string positive, ref string negative){
 	        if (Settings_MGR.instance == null) return;
