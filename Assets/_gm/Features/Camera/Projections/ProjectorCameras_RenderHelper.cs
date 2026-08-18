@@ -189,7 +189,9 @@ namespace spz {
 	        float contrast = 1;
 	        pMat.SetVector("_HSV_and_Contrast", new Vector4(hueShift, saturation, value, contrast));
 
-	        bool isMainSelected = pcam.myIconUI != null && pcam.myIconUI == Art2D_IconsUI_List.instance._mainSelectedIcon;
+	        var artList = Art2D_IconsUI_List.instance;
+	        bool isMainSelected = pcam.myIconUI != null && artList != null
+	            && pcam.myIconUI == artList._mainSelectedIcon;
 	        Color whiteColor =  Color.white;
 	        Color tintCol    =  isMainSelected ? _mainSelected_color : whiteColor;
 	              tintCol.a  = _checkTexture_opacity;
@@ -204,7 +206,9 @@ namespace spz {
 	        float contrast = 1;
 	        mat.SetVector("_HSV_and_Contrast", new Vector4(hueShift, saturation, value, contrast));
 
-	        bool isMainSelected =  pcam.myIconUI!=null  &&  pcam.myIconUI == Art2D_IconsUI_List.instance._mainSelectedIcon;
+	        var artList = Art2D_IconsUI_List.instance;
+	        bool isMainSelected =  pcam.myIconUI!=null && artList != null
+	            && pcam.myIconUI == artList._mainSelectedIcon;
 	        mat.SetColor("_TintColorCurrProjection", isMainSelected?_mainSelected_color : Color.white);
 	    }
 
