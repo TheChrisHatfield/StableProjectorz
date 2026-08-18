@@ -173,6 +173,8 @@ def main() -> int:
         check(b.base_url.startswith("https://"), "hostname paste defaults to https")
         b = be.build_backend("colab", "10.9.8.7:8188")
         check(b.base_url.startswith("http://"), "LAN IP:port paste stays http")
+        coerced = be._coerce_forge_images({"image": "QUJD", "html_info": ""})
+        check(coerced.get("images") == ["QUJD"], "extras image coerced to images[]")
         b = be.build_backend("colab", '"https://example.trycloudflare.com/"')
         check(b.base_url == "https://example.trycloudflare.com", "strip quoted pasted URL")
         b = be.RemoteForgeBackend("https://example.trycloudflare.com/sdapi/v1")
