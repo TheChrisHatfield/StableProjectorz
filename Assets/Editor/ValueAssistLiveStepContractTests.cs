@@ -218,6 +218,12 @@ public sealed class ValueAssistLiveStepContractTests {
 			"BrushRibbon_UI_Size.cs"));
 		Assert.That(size, Does.Contain("NotifyUserSizeChanged"),
 			"[ ] steps 0.01 and must notify Live; a > 0.01 delta gate misses a single tap");
+
+		string fastPath = System.IO.File.ReadAllText(System.IO.Path.Combine(
+			Application.dataPath, "_gm", "Features", "AddonSystem",
+			"FastPath_API.cs"));
+		Assert.That(fastPath, Does.Contain("NotifyUserSizeChanged"),
+			"JSON-RPC / FastPath size writes are user assignments and must stick under Live");
 	}
 
 	// B2.2b — empty-texel / missing-target skips never reached TryPredictFromSurface, so Live ON
