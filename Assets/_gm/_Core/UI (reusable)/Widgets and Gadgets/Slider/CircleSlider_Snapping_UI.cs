@@ -32,6 +32,8 @@ namespace spz {
 	    public UnityEvent onPressedDown { get; } = new UnityEvent();
 	    public UnityEvent<float> onValueChanged { get; } = new UnityEvent<float>();
 	    public bool isInteractable { get; set; } = true;
+	    /// <summary>True while the pointer/pen is dragging this dial (Live must not fight a size edit).</summary>
+	    public bool IsDragging => _isDragging;
 
 	    bool _isDragging = false;
 	    float _value;
