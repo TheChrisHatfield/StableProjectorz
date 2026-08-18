@@ -69,11 +69,13 @@ namespace spz {
 	    }
 
 	    void ForgetCurrentIconUI_ifCan( IReadOnlyList<Guid> icon_guidsToUnsubscribe=null ){
-	        if (_currentIcon==null){return;} 
+	        if (_currentIcon==null){return;}
+	        // Always drop slider handlers even when genData is already gone — otherwise OnDestroy
+	        // and re-assign leak Act_OnSomeBgBlends_sliders onto a destroyed MGR.
+	        _currentIcon.Act_OnSomeBgBlends_sliders -= OnSomeBgBlends_sliders;
 	        if (_currentIcon._genData == null){ return; }
 	        icon_guidsToUnsubscribe = icon_guidsToUnsubscribe?? _currentIcon.texture_guids;
 	        _currentIcon._genData.Unsubscribe_from_textureUpdates( icon_guidsToUnsubscribe,  OnTextureUpdated );
-	        _currentIcon.Act_OnSomeBgBlends_sliders -= OnSomeBgBlends_sliders;
 	    }
 
 	    public void Assign_Skybox_Background(IconUI icon, bool forceRefresh=false){
@@ -321,12 +323,9 @@ namespace spz {
 	        if(_skyboxMaterial_ui_copy !=null){  DestroyImmediate(_skyboxMaterial_ui_copy); }
 	        if(_skyboxMat_copy_override!=null){  DestroyImmediate(_skyboxMat_copy_override); }
 
-	        IconUI i = _currentIcon;//for readability.
-	        if (i!=null && i._genData != null){
-	            i._genData.Unsubscribe_from_textureUpdates( i.texture_guids, OnTextureUpdated );
-	        }
-
+	        ForgetCurrentIconUI_ifCan();
 	        IconUI.Act_OnSomeIconClicked -= OnSomeIconUI_selected;
+	        IconUI.Act_OnSomeIcon_TextureGuidsChanged -= OnSomeIcon_TextureGuidsChanged;
 	    }
 	}
 }//end namespace
