@@ -20,6 +20,13 @@ namespace spz {
 
 
 	    void Update(){
+	        if (_cam == null
+	            || MainViewport_UI.instance == null
+	            || WorkflowRibbon_UI.instance == null
+	            || SD_WorkflowOptionsRibbon_UI.instance == null) {
+	            if (_cam != null) _cam.enabled = false;
+	            return;
+	        }
 	        _cam.enabled = MainViewport_UI.instance.showing == MainViewport_UI.Showing.UsualView
 	                       && WorkflowRibbon_UI.instance.isMode_using_img2img();
         
