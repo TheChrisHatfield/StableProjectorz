@@ -83,7 +83,7 @@ namespace spz {
 
 
 	    void Update(){
-	        if(MainViewport_UI.instance.isCursorHoveringMe() == false){ return; }
+	        if((MainViewport_UI.instance?.isCursorHoveringMe() ?? false) == false){ return; }
 	        bool hasCTRL = KeyMousePenInput.isKey_CtrlOrCommand_pressed();
 	        bool hasShift = KeyMousePenInput.isKey_Shift_pressed();
 	        if (!hasCTRL && !hasShift){
@@ -104,6 +104,12 @@ namespace spz {
 	    void Awake(){
 	        _colors._onBrushColorUpdated += OnUpdateTextColor;
 	        WorkflowRibbon_UI._Act_OnModeChanged += OnWorkflowModeChanged;
+	    }
+
+	    void OnDestroy(){
+	        if (_colors != null)
+	            _colors._onBrushColorUpdated -= OnUpdateTextColor;
+	        WorkflowRibbon_UI._Act_OnModeChanged -= OnWorkflowModeChanged;
 	    }
 
 	    void Start(){
