@@ -5,7 +5,7 @@ using spz;
 
 /// <summary>
 /// Add-on Manager search is typing-association across all add-on text (not name/id only),
-/// and the search bar is a left-aligned ~1/3-width row (not full bleed).
+/// and the search bar is a full-width row across the panel.
 /// </summary>
 public class AddonManagerSearchContractTests {
 
@@ -42,19 +42,17 @@ public class AddonManagerSearchContractTests {
 	}
 
 	[Test]
-	public void CreatePanel_And_OpenPanel_WireNarrowAssociativeSearch() {
+	public void CreatePanel_And_OpenPanel_WireFullWidthAssociativeSearch() {
 		string path = Path.Combine(Application.dataPath, "_gm", "Features", "AddonSystem", "AddonManager_UI.cs");
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("BuildAddonSearchField"),
 			"Panel creation must build the search field.");
 		Assert.That(src, Does.Contain("EnsureSearchFieldFromPanel()"),
 			"OpenPanel must ensure search on older shells (connectivity).");
-		Assert.That(src, Does.Contain("ApplySearchFieldNarrowLayout"),
-			"Search rectangle must be ~1/3 panel width, not full bleed.");
-		Assert.That(src, Does.Contain("SearchRow"),
-			"Search must sit in SearchRow so panel VLG force-expand cannot stretch it full width.");
-		Assert.That(src, Does.Contain("SearchWidthPanelFraction"),
-			"Width fraction must be explicit (~1/3).");
+		Assert.That(src, Does.Contain("StretchSearchFieldFullWidth"),
+			"Search rectangle must stretch full panel width.");
+		Assert.That(src, Does.Contain("PromoteSearchOutOfLegacyNarrowRow"),
+			"OpenPanel must promote any prior ~1/3 SearchRow field back to full bleed.");
 		Assert.That(src, Does.Contain("BuildAddonSearchHaystack"),
 			"Search must build an association haystack, not id/name only.");
 		Assert.That(src, Does.Contain("onValueChanged.AddListener(OnSearchQueryChanged)"),
@@ -62,9 +60,11 @@ public class AddonManagerSearchContractTests {
 		Assert.That(src, Does.Contain("Search add-ons"),
 			"Placeholder must be general, not hardcoded to name/id.");
 		Assert.That(src, Does.Contain("BuildAddonSearchField(panelObj.transform)"),
-			"Search must be built from the panel (via SearchRow), not nested under narrow FilterPills.");
-		Assert.That(src, Does.Not.Contain("StretchSearchFieldFullWidth"),
-			"Full-bleed stretch helper must be gone — it forced the bar across the panel.");
+			"Search must be a panel sibling (full-bleed), not nested under narrow FilterPills.");
+		Assert.That(src, Does.Not.Contain("ApplySearchFieldNarrowLayout"),
+			"Narrow ~1/3 layout must be gone — that was mistaken for the ribbon tab bug.");
+		Assert.That(src, Does.Not.Contain("SearchWidthPanelFraction"),
+			"1/3 fraction must be gone.");
 	}
 
 	[Test]
@@ -97,7 +97,6 @@ public class AddonManagerSearchContractTests {
 			"Soft refresh themes rows only — not the active search chrome.");
 		Assert.That(src, Does.Contain("registry.ContainsKey(id)"),
 			"Expand memory must survive search filter hide — only clear when uninstalled.");
-		// Soft path must not schedule full shell flush (that resets caret to start).
 		int softTheme = src.IndexOf("ThemeAddonListItemsOnly();", System.StringComparison.Ordinal);
 		Assert.That(softTheme, Is.GreaterThan(0));
 		int softElse = src.IndexOf("} else {", softTheme, System.StringComparison.Ordinal);
