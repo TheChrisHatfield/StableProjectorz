@@ -7,20 +7,25 @@ using UnityEngine.UI;
 
 namespace spz {
 
-	/// <summary>
-	/// SPZ GO's multi-host shell (spz-go-multi-dcc phase 1): one collapsible section per DCC, each with a
-	/// logo that runs the section's selected Import/Export mode.
-	///
-	/// The section is built here once and called from both the native fallback and the Python
-	/// <c>create_panel</c> path, so R6 parity is structural rather than two builders kept in step by hand.
-	/// </summary>
-	public partial class AddonUI_MGR {
+		/// <summary>
+		/// SPZ GO's multi-host shell (spz-go-multi-dcc phase 1): one collapsible section per DCC. The
+		/// logo/name runs the highlighted Import/Export mode; Import/Export buttons both select that
+		/// mode and run the same activate path (R3 / R3c).
+		///
+		/// The section is built here once and called from both the native fallback and the Python
+		/// <c>create_panel</c> path, so R6 parity is structural rather than two builders kept in step by hand.
+		/// </summary>
+		public partial class AddonUI_MGR {
 
 		const float SpzGoRowHeight = 32f;
 		const float SpzGoLogoHeight = 46f;
 		/// <summary>Same hit target as Addon Manager prefs expand — keeps the chevron readable.</summary>
 		const float SpzGoExpandChevronHit = 18f;
 		static readonly Color SpzGoExpandChevronArrowColor = new Color(0.88f, 0.88f, 0.92f, 1f);
+		const string SpzGoScrollViewName = "SpzGoScrollView";
+		const string SpzGoScrollContentName = "Content";
+		const string SpzGoScrollbarName = "SpzGoScrollbar";
+		const float SpzGoScrollbarWidth = 10f;
 
 		/// <summary>
 		/// Collapsible container (spz-go-multi-dcc R7). Returns the element id of the CONTENT object, so
@@ -200,6 +205,203 @@ namespace spz {
 		}
 
 		/// <summary>
+		/// Host sections live under the scroll content (R3e). Title stays a direct panel child so it
+		/// remains visible while Blender / ZBrush / Painter + open Settings overflow the ribbon body.
+		/// </summary>
+		Transform ResolveSpzGoSectionParent(GameObject panel) {
+			EnsureSpzGoPanelScroll(panel);
+			Transform content = panel != null
+				? panel.transform.Find(SpzGoScrollViewName + "/Viewport/" + SpzGoScrollContentName)
+				: null;
+			return content != null ? content : panel.transform;
+		}
+
+		/// <summary>
+		/// Connectivity: wheel scrolling alone is not enough — build ScrollRect + vertical scrollbar and
+		/// reparent any HostSection_* that still sit on the panel root (older shells / half-upgrades).
+		///
+		/// Critical: the ribbon AddonPanel uses a VerticalLayoutGroup. A child with stretch anchors
+		/// (0,0)–(1,1) under that VLG collapses to zero height, so every host button vanishes. The
+		/// scroll view must be a normal VLG child driven by LayoutElement height.
+		/// </summary>
+		void EnsureSpzGoPanelScroll(GameObject panel) {
+			if (panel == null) return;
+
+			// Title stays fixed; scroll body takes remaining ribbon height (R3e).
+			var panelVlg = panel.GetComponent<VerticalLayoutGroup>();
+			if (panelVlg != null) {
+				panelVlg.childControlWidth = true;
+				panelVlg.childControlHeight = true;
+				panelVlg.childForceExpandWidth = true;
+				panelVlg.childForceExpandHeight = false;
+			}
+			for (int i = 0; i < panel.transform.childCount; i++) {
+				var ch = panel.transform.GetChild(i);
+				if (ch == null || !string.Equals(ch.name, "Title", StringComparison.Ordinal)) continue;
+				var titleLe = ch.GetComponent<LayoutElement>();
+				if (titleLe == null) titleLe = ch.gameObject.AddComponent<LayoutElement>();
+				if (titleLe.preferredHeight < 1f)
+					titleLe.preferredHeight = ProjectUiScale.Space(3);
+				titleLe.flexibleHeight = 0f;
+				titleLe.flexibleWidth = 1f;
+			}
+
+			Transform scrollT = panel.transform.Find(SpzGoScrollViewName);
+			ScrollRect scroll;
+			RectTransform contentRt;
+			if (scrollT == null) {
+				var scrollGo = new GameObject(SpzGoScrollViewName, typeof(RectTransform));
+				scrollGo.layer = panel.layer;
+				scrollGo.transform.SetParent(panel.transform, false);
+				scrollGo.transform.SetAsLastSibling();
+				scrollT = scrollGo.transform;
+
+				var viewportGo = new GameObject("Viewport", typeof(RectTransform), typeof(RectMask2D), typeof(Image));
+				viewportGo.layer = panel.layer;
+				viewportGo.transform.SetParent(scrollGo.transform, false);
+				var viewportRt = (RectTransform)viewportGo.transform;
+				viewportRt.anchorMin = Vector2.zero;
+				viewportRt.anchorMax = Vector2.one;
+				viewportRt.sizeDelta = Vector2.zero;
+				viewportRt.offsetMin = Vector2.zero;
+				viewportRt.offsetMax = new Vector2(-SpzGoScrollbarWidth, 0f);
+				var viewportImg = viewportGo.GetComponent<Image>();
+				viewportImg.color = new Color(1f, 1f, 1f, 0.02f);
+				viewportImg.raycastTarget = true;
+
+				var contentGo = NewStackContainer(SpzGoScrollContentName, viewportGo.transform, spacing: 6f);
+				contentRt = contentGo.GetComponent<RectTransform>();
+				contentRt.anchorMin = new Vector2(0f, 1f);
+				contentRt.anchorMax = new Vector2(1f, 1f);
+				contentRt.pivot = new Vector2(0.5f, 1f);
+				contentRt.anchoredPosition = Vector2.zero;
+				contentRt.sizeDelta = new Vector2(0f, 0f);
+				var contentLe = contentGo.GetComponent<LayoutElement>();
+				if (contentLe == null) contentLe = contentGo.AddComponent<LayoutElement>();
+				contentLe.flexibleWidth = 1f;
+
+				scroll = scrollGo.AddComponent<ScrollRect>();
+				scroll.content = contentRt;
+				scroll.viewport = viewportRt;
+				scroll.horizontal = false;
+				scroll.vertical = true;
+				scroll.movementType = ScrollRect.MovementType.Clamped;
+				scroll.scrollSensitivity = 24f;
+			} else {
+				scroll = scrollT.GetComponent<ScrollRect>();
+				contentRt = scrollT.Find("Viewport/" + SpzGoScrollContentName) as RectTransform;
+				if (contentRt == null && scroll != null)
+					contentRt = scroll.content;
+			}
+
+			// VLG child — never stretch-fill the panel (that reads as height 0 and hides every section).
+			var scrollRt = scrollT as RectTransform;
+			if (scrollRt != null) {
+				scrollRt.anchorMin = new Vector2(0f, 1f);
+				scrollRt.anchorMax = new Vector2(1f, 1f);
+				scrollRt.pivot = new Vector2(0.5f, 1f);
+				scrollRt.anchoredPosition = Vector2.zero;
+				scrollRt.sizeDelta = new Vector2(0f, 320f);
+			}
+			var scrollLe = scrollT.GetComponent<LayoutElement>();
+			if (scrollLe == null)
+				scrollLe = scrollT.gameObject.AddComponent<LayoutElement>();
+			scrollLe.flexibleHeight = 1f;
+			scrollLe.flexibleWidth = 1f;
+			scrollLe.minHeight = 120f;
+			scrollLe.preferredHeight = 320f;
+
+			if (contentRt != null) {
+				var toMove = new List<Transform>();
+				for (int i = 0; i < panel.transform.childCount; i++) {
+					var ch = panel.transform.GetChild(i);
+					if (ch == null) continue;
+					if (ch.name.StartsWith(SpzGoHostSection.SectionNamePrefix, StringComparison.Ordinal))
+						toMove.Add(ch);
+				}
+				for (int i = 0; i < toMove.Count; i++)
+					toMove[i].SetParent(contentRt, false);
+			}
+
+			EnsureSpzGoScrollbar(scroll);
+			if (scroll != null && scroll.content != null)
+				RebuildLayoutChain(scroll.content);
+			RebuildLayoutChain(panel.transform);
+		}
+
+		void EnsureSpzGoScrollbar(ScrollRect scroll) {
+			if (scroll == null) return;
+			Scrollbar bar = scroll.verticalScrollbar;
+			if (bar == null) {
+				Transform existing = scroll.transform.Find(SpzGoScrollbarName);
+				bar = existing != null ? existing.GetComponent<Scrollbar>() : null;
+			}
+			if (bar == null)
+				bar = BuildSpzGoVerticalScrollbar(scroll.transform);
+			if (bar == null || bar.handleRect == null) {
+				UnityEngine.Debug.LogWarning("[AddonUI_MGR] SPZ GO scrollbar missing handle — wheel scrolling still works.");
+				return;
+			}
+			scroll.verticalScrollbar = bar;
+			scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHideAndExpandViewport;
+			scroll.verticalScrollbarSpacing = 0f;
+			if (scroll.viewport != null) {
+				var vrt = scroll.viewport;
+				vrt.offsetMax = new Vector2(-SpzGoScrollbarWidth, vrt.offsetMax.y);
+			}
+		}
+
+		static Scrollbar BuildSpzGoVerticalScrollbar(Transform parent) {
+			if (parent == null) return null;
+			var barObj = new GameObject(SpzGoScrollbarName);
+			barObj.layer = parent.gameObject.layer;
+			barObj.transform.SetParent(parent, false);
+			var barRect = barObj.AddComponent<RectTransform>();
+			barRect.anchorMin = new Vector2(1f, 0f);
+			barRect.anchorMax = new Vector2(1f, 1f);
+			barRect.pivot = new Vector2(1f, 1f);
+			barRect.sizeDelta = new Vector2(SpzGoScrollbarWidth, 0f);
+			barRect.anchoredPosition = Vector2.zero;
+			var trackImg = barObj.AddComponent<Image>();
+			trackImg.sprite = UiRuntimeSprites.SolidRect;
+			trackImg.type = Image.Type.Simple;
+			SpzUiThemeOps.ApplyRoundedControlSprite(trackImg, markEligible: true);
+			trackImg.color = new Color(30f / 255f, 30f / 255f, 33f / 255f, 0.85f);
+			trackImg.raycastTarget = true;
+
+			var areaObj = new GameObject("Sliding Area");
+			areaObj.layer = barObj.layer;
+			areaObj.transform.SetParent(barObj.transform, false);
+			var areaRect = areaObj.AddComponent<RectTransform>();
+			areaRect.anchorMin = Vector2.zero;
+			areaRect.anchorMax = Vector2.one;
+			areaRect.sizeDelta = Vector2.zero;
+			areaRect.anchoredPosition = Vector2.zero;
+
+			var handleObj = new GameObject("Handle");
+			handleObj.layer = barObj.layer;
+			handleObj.transform.SetParent(areaObj.transform, false);
+			var handleRect = handleObj.AddComponent<RectTransform>();
+			handleRect.anchorMin = Vector2.zero;
+			handleRect.anchorMax = Vector2.one;
+			handleRect.sizeDelta = Vector2.zero;
+			handleRect.anchoredPosition = Vector2.zero;
+			var handleImg = handleObj.AddComponent<Image>();
+			handleImg.sprite = UiRuntimeSprites.SolidRect;
+			handleImg.type = Image.Type.Simple;
+			SpzUiThemeOps.ApplyRoundedControlSprite(handleImg, markEligible: true);
+			handleImg.color = new Color(88f / 255f, 88f / 255f, 96f / 255f, 0.95f);
+			handleImg.raycastTarget = true;
+
+			var bar = barObj.AddComponent<Scrollbar>();
+			bar.direction = Scrollbar.Direction.BottomToTop;
+			bar.handleRect = handleRect;
+			bar.targetGraphic = handleImg;
+			bar.transition = Selectable.Transition.ColorTint;
+			return bar;
+		}
+
+		/// <summary>
 		/// One DCC's whole section: logo activate, Import/Export mode toggles, and a collapsed Settings
 		/// drop-tab holding the mandatory agnostic controls plus that host's extras (R3b, R15, R16).
 		/// </summary>
@@ -215,12 +417,13 @@ namespace spz {
 				return null;
 			}
 
-			var section = NewStackContainer(SpzGoHostSection.SectionName(host.Id), panelObj.transform, spacing: 6f);
+			Transform sectionParent = ResolveSpzGoSectionParent(panelObj);
+			var section = NewStackContainer(SpzGoHostSection.SectionName(host.Id), sectionParent, spacing: 6f);
 			RegisterAddonElement(addonId, section);
 			string sectionId = section.GetInstanceID().ToString();
 
 			BuildHostLogo(addonId, section.transform, host, sectionId);
-			BuildHostModeToggles(section.transform, host);
+			BuildHostModeToggles(section.transform, host, sectionId);
 
 			// Build Settings while the drop-tab is open. Adding TMP / RectTransform widgets under an
 			// inactive hierarchy leaves Labels without a usable rect, and the section never finishes.
@@ -271,7 +474,7 @@ namespace spz {
 			RegisterAddonElement(addonId, logo);
 		}
 
-		void BuildHostModeToggles(Transform parent, SpzGoHost host) {
+		void BuildHostModeToggles(Transform parent, SpzGoHost host, string sectionId) {
 			var rowRt = CreateUiChild("ModeRow_" + host.Id, parent);
 			rowRt.sizeDelta = new Vector2(0f, SpzGoRowHeight);
 			var row = rowRt.gameObject;
@@ -286,12 +489,12 @@ namespace spz {
 			layout.childForceExpandWidth = true;
 			layout.childForceExpandHeight = true;
 
-			BuildHostModeToggle(row.transform, host, SpzGoMode.Import, SpzGoHostSection.ImportModeLabel);
-			BuildHostModeToggle(row.transform, host, SpzGoMode.Export, SpzGoHostSection.ExportModeLabel);
+			BuildHostModeToggle(row.transform, host, SpzGoMode.Import, SpzGoHostSection.ImportModeLabel, sectionId);
+			BuildHostModeToggle(row.transform, host, SpzGoMode.Export, SpzGoHostSection.ExportModeLabel, sectionId);
 			RefreshHostModeToggles(row.transform, host.Id);
 		}
 
-		void BuildHostModeToggle(Transform row, SpzGoHost host, SpzGoMode mode, string label) {
+		void BuildHostModeToggle(Transform row, SpzGoHost host, SpzGoMode mode, string label, string sectionId) {
 			var go = CreateUiChild(SpzGoHostSection.ModeToggleName(host.Id, mode), row).gameObject;
 			var bg = go.AddComponent<Image>();
 			bg.sprite = UiRuntimeSprites.SolidRect;
@@ -304,9 +507,10 @@ namespace spz {
 			button.targetGraphic = bg;
 			button.onClick.AddListener(() => {
 				// Pressing the mode that is already on re-selects it rather than clearing: a section with
-				// no mode would leave the logo with nothing to run (R3d).
+				// no mode would leave the logo with nothing to run (R3d). Then run the transfer (R3).
 				SpzGoHostPrefs.SetMode(host.Id, mode);
 				RefreshHostModeToggles(row, host.Id);
+				SpzGoActivateHost(host.Id, sectionId);
 			});
 		}
 
@@ -364,7 +568,8 @@ namespace spz {
 		}
 
 		/// <summary>
-		/// The logo press: run this host's selected mode once (R3c). Nothing else on the face transfers.
+		/// The logo / display-name press: run this host's selected mode once (R3c). Import/Export face
+		/// buttons share this path after they update the highlight (R3).
 		/// </summary>
 		void SpzGoActivateHost(string hostId, string sectionId) {
 			var host = SpzGoHosts.Get(hostId);

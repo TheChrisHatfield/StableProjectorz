@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
@@ -8,8 +9,9 @@ using UnityEngine.UI;
 
 /// <summary>
 /// spz-go-multi-dcc phase 1: the SPZ GO panel is one section per DCC, and at rest a section shows
-/// exactly three things — the logo that runs the selected mode, the Import/Export mode toggles, and a
-/// collapsed Settings drop-tab. These build the real widgets and press them.
+/// exactly three things — the logo that runs the selected mode, Import/Export (select + run), and a
+/// collapsed Settings drop-tab. Host sections sit in a scroll view with a scrollbar. These build the
+/// real widgets and press them.
 /// </summary>
 public sealed class SpzGoHostSectionContractTests {
 
@@ -68,13 +70,17 @@ public sealed class SpzGoHostSectionContractTests {
 			string sectionId = _mgr.AddHostSection(AddonId, _panel.GetInstanceID().ToString(), host.Id);
 			Assert.That(sectionId, Is.Not.Null.And.Not.Empty, "section must build for " + host.Id);
 		}
+		// Same path as EnsureNativeSpzGoMissingWidgets — reparent into scroll + wire scrollbar.
+		typeof(AddonUI_MGR).GetMethod("EnsureSpzGoPanelScroll",
+				BindingFlags.Instance | BindingFlags.NonPublic)
+			?.Invoke(_mgr, new object[] { _panel });
 		LayoutRebuilder.ForceRebuildLayoutImmediate(panelRt);
 		Canvas.ForceUpdateCanvases();
 	}
 
 	[TearDown]
 	public void TearDown() {
-		if (_host != null) Object.DestroyImmediate(_host);
+		if (_host != null) UnityEngine.Object.DestroyImmediate(_host);
 		foreach (var kv in _savedInts) PlayerPrefs.SetInt(kv.Key, kv.Value);
 		foreach (var kv in _savedStrings) PlayerPrefs.SetString(kv.Key, kv.Value);
 		foreach (string key in _absent) PlayerPrefs.DeleteKey(key);
@@ -98,7 +104,7 @@ public sealed class SpzGoHostSectionContractTests {
 	}
 
 	Transform Section(string hostId) {
-		var t = _panel.transform.Find(SpzGoHostSection.SectionName(hostId));
+		var t = FindDescendant(_panel.transform, SpzGoHostSection.SectionName(hostId));
 		Assert.That(t, Is.Not.Null, "missing section for " + hostId);
 		return t;
 	}
@@ -120,7 +126,94 @@ public sealed class SpzGoHostSectionContractTests {
 	[Test]
 	public void EveryRegisteredHost_GetsItsOwnSection() {
 		foreach (var host in SpzGoHosts.All)
-			Assert.That(_panel.transform.Find(SpzGoHostSection.SectionName(host.Id)), Is.Not.Null, host.Id);
+			Assert.That(FindDescendant(_panel.transform, SpzGoHostSection.SectionName(host.Id)),
+				Is.Not.Null, host.Id);
+	}
+
+	[Test]
+	public void Panel_HasScrollViewAndWiredScrollbar() {
+		var scrollT = _panel.transform.Find("SpzGoScrollView");
+		Assert.That(scrollT, Is.Not.Null, "SPZ GO body must scroll when hosts overflow (R3e)");
+		var scroll = scrollT.GetComponent<ScrollRect>();
+		Assert.That(scroll, Is.Not.Null);
+		Assert.That(scroll.vertical, Is.True);
+		Assert.That(scroll.content, Is.Not.Null);
+		Assert.That(scroll.verticalScrollbar, Is.Not.Null, "scrollbar must be assigned, not wheel-only");
+		Assert.That(scroll.verticalScrollbar.handleRect, Is.Not.Null);
+		Assert.That(_panel.transform.Find(SpzGoHostSection.SectionName(SpzGoHosts.BlenderId)), Is.Null,
+			"host sections must live under scroll content, not the panel root");
+		Assert.That(scroll.content.Find(SpzGoHostSection.SectionName(SpzGoHosts.BlenderId)), Is.Not.Null);
+
+		var scrollLe = scrollT.GetComponent<LayoutElement>();
+		Assert.That(scrollLe, Is.Not.Null);
+		Assert.That(scrollLe.minHeight, Is.GreaterThanOrEqualTo(100f),
+			"scroll body needs a real LayoutElement height — stretch anchors under VLG collapse to 0");
+		Assert.That(scrollLe.flexibleHeight, Is.GreaterThan(0f));
+		var scrollRt = scrollT as RectTransform;
+		Assert.That(scrollRt, Is.Not.Null);
+		Assert.That(scrollRt.anchorMin.y, Is.EqualTo(1f).Within(0.01f),
+			"must not stretch-fill the AddonPanel VLG (that hid every host button)");
+		Assert.That(scrollRt.anchorMax.y, Is.EqualTo(1f).Within(0.01f));
+	}
+
+	[Test]
+	public void ScrollBody_KeepsPositiveHeightUnderRibbonStylePanel() {
+		// Mirror the live ribbon: panel stretches inside a fixed shell; VLG must still give the
+		// scroll view a non-zero height or RectMask2D clips every HostSection.
+		var shell = new GameObject("RibbonShellStub", typeof(RectTransform));
+		shell.transform.SetParent(_host.transform, false);
+		var shellRt = shell.GetComponent<RectTransform>();
+		shellRt.anchorMin = shellRt.anchorMax = new Vector2(0.5f, 0.5f);
+		shellRt.sizeDelta = new Vector2(320f, 480f);
+
+		_panel.transform.SetParent(shell.transform, false);
+		var panelRt = _panel.GetComponent<RectTransform>();
+		panelRt.anchorMin = Vector2.zero;
+		panelRt.anchorMax = Vector2.one;
+		panelRt.sizeDelta = Vector2.zero;
+		panelRt.anchoredPosition = Vector2.zero;
+		var fitter = _panel.GetComponent<ContentSizeFitter>();
+		if (fitter != null)
+			UnityEngine.Object.DestroyImmediate(fitter);
+
+		typeof(AddonUI_MGR).GetMethod("EnsureSpzGoPanelScroll",
+				BindingFlags.Instance | BindingFlags.NonPublic)
+			?.Invoke(_mgr, new object[] { _panel });
+		LayoutRebuilder.ForceRebuildLayoutImmediate(shellRt);
+		LayoutRebuilder.ForceRebuildLayoutImmediate(panelRt);
+		Canvas.ForceUpdateCanvases();
+
+		var scrollRt = _panel.transform.Find("SpzGoScrollView") as RectTransform;
+		Assert.That(scrollRt, Is.Not.Null);
+		Assert.That(scrollRt.rect.height, Is.GreaterThan(80f),
+			"scroll viewport must be tall enough to show host logos/Import/Export");
+		var blender = FindDescendant(_panel.transform, SpzGoHostSection.SectionName(SpzGoHosts.BlenderId))
+			as RectTransform;
+		Assert.That(blender, Is.Not.Null);
+		Assert.That(LayoutUtility.GetPreferredHeight(blender), Is.GreaterThan(40f));
+	}
+
+	[Test]
+	public void ModeToggle_SelectsAndSharesActivatePathWithLogo() {
+		var blender = Section(SpzGoHosts.BlenderId);
+		var importToggle = blender.Find("ModeRow_" + SpzGoHosts.BlenderId)
+			.Find(SpzGoHostSection.ModeToggleName(SpzGoHosts.BlenderId, SpzGoMode.Import));
+		Assert.That(importToggle, Is.Not.Null);
+
+		// Import click selects Import (and runs activate; not-ready honesty is covered elsewhere).
+		importToggle.GetComponent<Button>().onClick.Invoke();
+		Assert.That(SpzGoHostPrefs.GetMode(SpzGoHosts.BlenderId), Is.EqualTo(SpzGoMode.Import));
+		AssertExactlyOneModeSelected(SpzGoHosts.BlenderId);
+
+		// Source wiring: mode buttons must call SpzGoActivateHost after SetMode (dual path).
+		string src = System.IO.File.ReadAllText(System.IO.Path.Combine(
+			System.IO.Directory.GetCurrentDirectory(),
+			"Assets", "_gm", "Features", "AddonSystem", "AddonUI_MGR.SpzGoSections.cs"));
+		int toggle = src.IndexOf("void BuildHostModeToggle(", System.StringComparison.Ordinal);
+		Assert.That(toggle, Is.GreaterThanOrEqualTo(0));
+		string body = src.Substring(toggle, Math.Min(1100, src.Length - toggle));
+		Assert.That(body, Does.Contain("SpzGoHostPrefs.SetMode"));
+		Assert.That(body, Does.Contain("SpzGoActivateHost(host.Id, sectionId)"));
 	}
 
 	[Test]
@@ -386,11 +479,11 @@ public sealed class SpzGoHostSectionContractTests {
 
 		string rebuiltId = _mgr.AddHostSection(AddonId, _panel.GetInstanceID().ToString(), SpzGoHosts.PainterId);
 		Assert.That(rebuiltId, Is.Not.Null);
-		// AddHostSection appends, so the newest section is the last child with that name.
+		// AddHostSection appends under scroll content; the newest section is the last match.
 		Transform rebuilt = null;
-		foreach (Transform child in _panel.transform) {
-			if (child.name == SpzGoHostSection.SectionName(SpzGoHosts.PainterId))
-				rebuilt = child;
+		foreach (var t in _panel.GetComponentsInChildren<Transform>(true)) {
+			if (t != null && t.name == SpzGoHostSection.SectionName(SpzGoHosts.PainterId))
+				rebuilt = t;
 		}
 		Assert.That(rebuilt, Is.Not.Null);
 

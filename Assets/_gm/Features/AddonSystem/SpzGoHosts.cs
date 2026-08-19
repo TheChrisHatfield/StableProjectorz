@@ -5,7 +5,7 @@ namespace spz {
 
 	/// <summary>
 	/// Direction of the next handoff, chosen per host. Import is host → SPZ, Export is SPZ → host
-	/// (spz-go-multi-dcc R8). The mode only selects a direction; the host logo runs it.
+	/// (spz-go-multi-dcc R8). Mode buttons select a direction and run it; the host logo also runs it.
 	/// </summary>
 	public enum SpzGoMode {
 		Import = 0,
