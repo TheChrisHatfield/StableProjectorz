@@ -489,6 +489,8 @@ namespace spz {
 
 		IEnumerator UndoOrRedoCoroutine(PaintUndo_SnapshotRecord snap, bool pushCurrentToRedo) {
 			// _isRestoring is set by <see cref="StartDeferredRestoreCoroutine"/> before this enumerator is scheduled.
+			// ProcessDeferredUndoRedo may arm a follow-up restore; finally must not wipe that slot.
+			bool armedFollowUp = false;
 			try {
 				var stack = PaintLayerStack_MGR.instance;
 				RenderUdims target = null;
@@ -506,6 +508,7 @@ namespace spz {
 					else _storage.PushRedo(snap);
 					_isRestoring = false;
 					ProcessDeferredUndoRedo();
+					armedFollowUp = _isRestoring;
 					TryStartCaptureProcessorIfNeeded();
 					yield break;
 				}
@@ -561,6 +564,7 @@ namespace spz {
 					else _storage.PushRedo(snap);
 					_isRestoring = false;
 					ProcessDeferredUndoRedo();
+					armedFollowUp = _isRestoring;
 					TryStartCaptureProcessorIfNeeded();
 					yield break;
 				}
@@ -580,10 +584,14 @@ namespace spz {
 				_isRestoring = false;
 				if (_logVerbose) Debug.Log("[PaintUndo] Restore complete.");
 				ProcessDeferredUndoRedo();
+				armedFollowUp = _isRestoring;
 				TryStartCaptureProcessorIfNeeded();
 			} finally {
-				_isRestoring = false;
-				_restoreCrt = null;
+				// Follow-up StartDeferredRestoreCoroutine already owns _isRestoring / _restoreCrt.
+				if (!armedFollowUp) {
+					_isRestoring = false;
+					_restoreCrt = null;
+				}
 			}
 		}
 
