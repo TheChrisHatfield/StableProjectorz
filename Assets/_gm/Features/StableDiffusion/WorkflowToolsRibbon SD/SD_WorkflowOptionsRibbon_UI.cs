@@ -436,7 +436,7 @@ namespace spz {
 	    void OnTileableToggle(bool isOn)  => SD_Options_Fetcher.instance.SubmitOptions_Asap();
 
 	    void On_img2img_requested(GenData2D data)
-	        => WorkflowRibbon_UI.instance.Set_CurrentMode(WorkflowRibbon_CurrMode.ProjectionsMasking, playAttentionAnim:true);
+	        => WorkflowRibbon_UI.instance?.Set_CurrentMode(WorkflowRibbon_CurrMode.ProjectionsMasking, playAttentionAnim:true);
        
 
 	    public void Save(StableProjectorz_SL spz){
