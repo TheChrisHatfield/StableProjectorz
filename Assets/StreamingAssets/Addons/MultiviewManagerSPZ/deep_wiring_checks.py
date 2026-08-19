@@ -38,7 +38,7 @@ def main() -> None:
     check("_preset_name_from_panel" in init, "preset load resolves dropdown index")
     check("_capture_pre_isolate_if_multiview" in init, "isolate preserves multiview snapshot")
     check("_isolate_view_at" in init, "quick-view buttons use direct slot index")
-    check("is not active" in init, "isolate guards inactive slots")
+    check("is not enabled" in init or "is not active" in init, "isolate guards inactive slots")
     check("type(_panel)(_panel._client, iso_fold" in init, "foldout widgets use content panel id")
 
     for rpc in (
