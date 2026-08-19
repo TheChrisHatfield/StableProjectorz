@@ -412,7 +412,8 @@ namespace spz {
 	        isAllowClicks_ = true;
 
 	        // maybe disallow ctrl, but only if not pressing Ctrl+A or Ctrl+D, which we need to take care of.
-	        bool allow_ctrl  = Settings_MGR.instance.get_ignoreCtrl_if_clickSelectingMeshes()==false
+	        var settings = Settings_MGR.instance;
+	        bool allow_ctrl  = (settings == null || settings.get_ignoreCtrl_if_clickSelectingMeshes()==false)
 	                            || Input.GetKeyDown(KeyCode.A) || Input.GetKeyDown(KeyCode.D);
 	        // Inpaint color workflows: Ctrl alone used to force mesh-select mode and blocked LMB painting + made eyedropper
 	        // ignore the viewport (see MaskPainter / BrushRibbon_UI_EyeDropperTool). Swatch picks had no Ctrl, so they "worked".
@@ -435,6 +436,7 @@ namespace spz {
 
 	    void Click_maybe(){
 	        if(KeyMousePenInput.isLMBpressedThisFrame()){ 
+	            if (MainViewport_UI.instance == null || ModelsHandler_3D.instance == null) return;
 	            Vector2 viewportPos = MainViewport_UI.instance.cursorMainViewportPos01;
 	            bool isMultiView = UserCameras_MGR.instance != null
 	                               && UserCameras_MGR.instance.numActiveViewCameras() > 1;
