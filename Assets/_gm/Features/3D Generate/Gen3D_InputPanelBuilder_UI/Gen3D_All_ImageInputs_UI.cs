@@ -35,21 +35,27 @@ namespace spz {
 	        bool single_on = _singleImage.gameObject.activeSelf;
 	        if (!multi_on &&  !single_on){ return false; }
 
-	        var textures = new List<Texture2D>();
-
 	        Debug.Log("Gen3D_All_ImageInputs_UI checking if can consume");
 
-	        if (multi_on && RectTransformUtility.RectangleContainsScreenPoint(_multiImage.transform as RectTransform, screenCoord)){
+	        Camera cam = UiCameraFor(transform);
+	        if (multi_on && RectTransformUtility.RectangleContainsScreenPoint(_multiImage.transform as RectTransform, screenCoord, cam)){
 	            Debug.Log("multi can consume");
 	            _multiImage.OnDragAndDroppedTextures(files);
 	            return true;
 	        }
-	        else if (single_on && RectTransformUtility.RectangleContainsScreenPoint(_singleImage.transform as RectTransform, screenCoord)){
+	        else if (single_on && RectTransformUtility.RectangleContainsScreenPoint(_singleImage.transform as RectTransform, screenCoord, cam)){
 	            Debug.Log("single can consume");
 	            _singleImage.OnDragAndDroppedTextures(files);
 	            return true;
 	        }
 	        return false;
+	    }
+
+	    static Camera UiCameraFor(Transform t){
+	        var canvas = t != null ? t.GetComponentInParent<Canvas>() : null;
+	        if (canvas == null) return null;
+	        if (canvas.renderMode == RenderMode.ScreenSpaceOverlay) return null;
+	        return canvas.worldCamera;
 	    }
 
 	    void OnTab_SingleImage(bool isOn){
