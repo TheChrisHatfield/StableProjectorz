@@ -566,17 +566,39 @@ namespace spz {
 			if (action == "save") {
 				if (method == "POST") {
 					string filepath = body?["filepath"]?.ToString();
-					return ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.save_project", new JObject {
+					var started = ExecuteJsonRpcSync("spz.cmd.save_project", new JObject {
 						["filepath"] = filepath
-					}));
+					});
+					bool armed = started?["success"]?.ToObject<bool>() ?? false;
+					if (!armed)
+						return ConvertToRestResponse(started ?? new JObject());
+					if (!WaitForProjectSaveIdle_offMainThread(timeoutSec: 300f))
+						return new JObject { ["success"] = false, ["error"] = "save_project timed out" };
+					var helper = Save_MGR.instance?.SaveLoadHelper;
+					bool ok = helper != null && helper.LastProjectSaveSucceeded;
+					return new JObject {
+						["success"] = ok,
+						["error"] = ok ? null : "save cancelled or failed"
+					};
 				}
 			}
 			else if (action == "load") {
 				if (method == "POST") {
 					string filepath = body?["filepath"]?.ToString();
-					return ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.load_project", new JObject {
+					var started = ExecuteJsonRpcSync("spz.cmd.load_project", new JObject {
 						["filepath"] = filepath
-					}));
+					});
+					bool armed = started?["success"]?.ToObject<bool>() ?? false;
+					if (!armed)
+						return ConvertToRestResponse(started ?? new JObject());
+					if (!WaitForProjectLoadIdle_offMainThread(timeoutSec: 300f))
+						return new JObject { ["success"] = false, ["error"] = "load_project timed out" };
+					var helper = Save_MGR.instance?.SaveLoadHelper;
+					bool ok = helper != null && helper.LastProjectLoadSucceeded;
+					return new JObject {
+						["success"] = ok,
+						["error"] = ok ? null : "load cancelled or failed"
+					};
 				}
 			}
 			else if (action == "info") {
@@ -663,12 +685,24 @@ namespace spz {
 					return color;
 				}
 				if (method == "POST" && body != null) {
+					if (body["is_top"] == null || body["is_top"].Type == JTokenType.Null) {
+						return new JObject {
+							["success"] = false,
+							["error"] = "is_top bool required (omitting it used to fail-open as true)"
+						};
+					}
+					bool isTop;
+					try {
+						isTop = body["is_top"].ToObject<bool>();
+					} catch {
+						return new JObject { ["success"] = false, ["error"] = "invalid is_top (boolean)" };
+					}
 					return ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.set_skybox_color", new JObject {
 						["r"] = body["r"]?.ToObject<float>() ?? 0f,
 						["g"] = body["g"]?.ToObject<float>() ?? 0f,
 						["b"] = body["b"]?.ToObject<float>() ?? 0f,
 						["a"] = body["a"]?.ToObject<float>() ?? 1f,
-						["is_top"] = body["is_top"]?.ToObject<bool>() ?? true
+						["is_top"] = isTop
 					}));
 				}
 			}
@@ -747,31 +781,69 @@ namespace spz {
 					string q = request.QueryString["is_dilate"];
 					if (q != null && bool.TryParse(q, out bool qVal)) isDilate = qVal;
 					if (body?["is_dilate"] != null) isDilate = body["is_dilate"].ToObject<bool>();
-					return ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.export_projection_textures", new JObject {
+					var started = ExecuteJsonRpcSync("spz.cmd.export_projection_textures", new JObject {
 						["is_dilate"] = isDilate
-					}));
+					});
+					bool armed = started?["success"]?.ToObject<bool>() ?? false;
+					if (!armed)
+						return ConvertToRestResponse(started ?? new JObject());
+					if (!WaitForProjectSaveIdle_offMainThread(timeoutSec: 300f))
+						return new JObject { ["success"] = false, ["error"] = "projection texture export timed out" };
+					bool ok = Save_MGR.instance != null && Save_MGR.instance.LastTextureDialogExportSucceeded;
+					return new JObject {
+						["success"] = ok,
+						["error"] = ok ? null : "texture export cancelled or failed"
+					};
 				}
-				case "view_textures":
-					return ConvertToRestResponse(ExecuteJsonRpcSync("spz.cmd.export_view_textures", new JObject()));
+				case "view_textures": {
+					var started = ExecuteJsonRpcSync("spz.cmd.export_view_textures", new JObject());
+					bool armed = started?["success"]?.ToObject<bool>() ?? false;
+					if (!armed)
+						return ConvertToRestResponse(started ?? new JObject());
+					if (!WaitForProjectSaveIdle_offMainThread(timeoutSec: 300f))
+						return new JObject { ["success"] = false, ["error"] = "view texture export timed out" };
+					bool ok = Save_MGR.instance != null && Save_MGR.instance.LastTextureDialogExportSucceeded;
+					return new JObject {
+						["success"] = ok,
+						["error"] = ok ? null : "texture export cancelled or failed"
+					};
+				}
 			}
 			return new JObject { ["error"] = "Invalid action" };
 		}
 		
 		/// <summary>
-		/// Blocks the HTTP listener thread until <see cref="Save_MGR._isSaving"/> clears.
-		/// Plain bool field read — safe off the main thread. Returns false on timeout.
+		/// Blocks the HTTP listener thread until project save/export dialog+write is idle
+		/// (<see cref="Save_MGR._isSaving"/> or <see cref="ProjectSaveLoad_Helper.IsProjectSaveInFlight"/>).
+		/// Plain field reads — safe off the main thread. Returns false on timeout.
 		/// </summary>
 		static bool WaitForProjectSaveIdle_offMainThread(float timeoutSec) {
 			var sm = Save_MGR.instance;
 			float elapsed = 0f;
 			const float step = 0.05f;
-			while (sm != null && sm._isSaving && elapsed < timeoutSec) {
+			while (sm != null && elapsed < timeoutSec) {
+				bool busy = sm._isSaving
+					|| (sm.SaveLoadHelper != null && sm.SaveLoadHelper.IsProjectSaveInFlight);
+				if (!busy)
+					return true;
 				Thread.Sleep((int)(step * 1000));
 				elapsed += step;
 				sm = Save_MGR.instance;
 			}
 			// sm == null is not idle success (native UI path already learned this).
-			return sm != null && !sm._isSaving;
+			return false;
+		}
+
+		static bool WaitForProjectLoadIdle_offMainThread(float timeoutSec) {
+			var sm = Save_MGR.instance;
+			float elapsed = 0f;
+			const float step = 0.05f;
+			while (sm != null && sm._isLoading && elapsed < timeoutSec) {
+				Thread.Sleep((int)(step * 1000));
+				elapsed += step;
+				sm = Save_MGR.instance;
+			}
+			return sm != null && !sm._isLoading;
 		}
 		
 		/// <summary>
