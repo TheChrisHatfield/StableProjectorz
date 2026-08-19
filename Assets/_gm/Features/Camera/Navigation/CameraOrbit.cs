@@ -31,6 +31,7 @@ namespace spz {
 
 
 	    void OnUpdate(){
+	        if (UserCameras_MGR.instance == null) return;
 	        View_UserCamera nearestCam = UserCameras_MGR.instance.NearestToCursor();
         
 	        if(nearestCam==_myViewCam){  StartOrbit_maybe(); }
@@ -42,6 +43,7 @@ namespace spz {
 	    void StartOrbit_maybe(){
 	        bool pressedThisFrame  =  KeyMousePenInput.isLMBpressedThisFrame();
 	        bool hovering_mainView =  (MainViewport_UI.instance?.isCursorHoveringMe() ?? false);
+	        if (DimensionMode_MGR.instance == null) return;
 	        bool navAllowed = DimensionMode_MGR.instance.is_3d_navigation_allowed;
 
 	        if(!pressedThisFrame || !hovering_mainView || !navAllowed) { return; }
@@ -142,15 +144,30 @@ namespace spz {
 
 	    void UsualOrbit(ref Bounds bounds){
 	        Vector2 inputDelta = KeyMousePenInput.delta_while_LMBpressed(normalizeByScreenDiagonal: true);
-	        float speed = 2.5f * _orbitSpeed;
-
-	        float inputX = inputDelta.x * speed;
-	        float inputY = -inputDelta.y * speed;
-
-	        // Use the pivot LOCKED at orbit start (so a moving cursor mid-drag can't switch the target character).
 	        Vector3 coord = _havePivotLock ? _lockedPivotWorld : ResolveOrbitPivotWorld(bounds);
-	        transform.RotateAround(coord, Vector3.up, inputX);
-	        transform.RotateAround(coord, transform.right, inputY);
+	        ApplyTurntableDeltaNormalized(transform, coord, inputDelta, _orbitSpeed);
+	    }
+
+	    /// <summary>
+	    /// Turntable orbit used by Alt+LMB and the viewport axis gizmo. <paramref name="normalizedDelta"/> is
+	    /// already divided by the screen diagonal (same units as <see cref="KeyMousePenInput.delta_while_LMBpressed"/>).
+	    /// </summary>
+	    public static void ApplyTurntableDeltaNormalized(Transform camXf, Vector3 pivot, Vector2 normalizedDelta, float orbitSpeed = 300f) {
+		    if (camXf == null) {
+			    return;
+		    }
+		    float speed = 2.5f * orbitSpeed;
+		    camXf.RotateAround(pivot, Vector3.up, normalizedDelta.x * speed);
+		    camXf.RotateAround(pivot, camXf.right, -normalizedDelta.y * speed);
+	    }
+
+	    /// <summary>UI / gizmo path: <paramref name="pixelDelta"/> is EventSystem <c>PointerEventData.delta</c>.</summary>
+	    public static void ApplyTurntableDeltaPixels(Transform camXf, Vector3 pivot, Vector2 pixelDelta, float orbitSpeed = 300f) {
+		    float diag = Mathf.Sqrt(Screen.width * (float)Screen.width + Screen.height * (float)Screen.height);
+		    if (diag < 1f) {
+			    diag = 1f;
+		    }
+		    ApplyTurntableDeltaNormalized(camXf, pivot, pixelDelta / diag, orbitSpeed);
 	    }
 
 	    Vector3 ResolveOrbitPivotWorld(Bounds boundsFallback) {
