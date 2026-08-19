@@ -37,6 +37,11 @@ _SLOT_PATH = os.path.join(_root, "slot_bookmarks.json")
 _PRESETS_PATH = os.path.join(_root, "presets.json")
 
 
+def _clear_pre_isolate() -> None:
+    global _pre_isolate_snapshot
+    _pre_isolate_snapshot = None
+
+
 def _api():
     return spz.get_api()
 
@@ -90,7 +95,10 @@ def _view_state() -> dict:
 
 def _pov_snapshot() -> dict:
     try:
-        return _api().view_cameras.get_povs() or {}
+        snap = _api().view_cameras.get_povs() or {}
+        if snap.get("success") is False and not snap.get("povs"):
+            return {}
+        return snap
     except Exception:
         return {}
 
@@ -470,8 +478,4 @@ def register() -> None:
 
 
 def unregister() -> None:
-    global _panel, _el, _pre_isolate_snapshot
-    _panel = None
-    _el = {}
-    _pre_isolate_snapshot = None
-    print(f"[{ADDON_ID}] unregistered")
+    global _panel, _el, _pre_isolate_snapsho
