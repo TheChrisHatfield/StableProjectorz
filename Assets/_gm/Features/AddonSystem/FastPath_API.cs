@@ -382,6 +382,7 @@ namespace spz {
 			else if (vc.myCamera != null)
 				vc.myCamera.fieldOfView = fov;
 			vc.Set_ProjMat_center(pc);
+			CamerasMGR_PinsZone_UI.instance?.RepositionPinUIFromPovData(index);
 			if (pov.TryGetValue("was_enabled", out JToken enTok) && enTok != null && enTok.Type != JTokenType.Null) {
 				mgr.TrySetViewCameraActive(index, enTok.ToObject<bool>());
 			}
@@ -833,7 +834,7 @@ namespace spz {
 		/// Validates a float value (NaN and Infinity check)
 		/// Uses epsilon-based validation for edge cases
 		/// </summary>
-		private bool IsValidFloat(float value) {
+		private static bool IsValidFloat(float value) {
 			// Check for NaN and Infinity
 			if (float.IsNaN(value) || float.IsInfinity(value)) {
 				return false;
