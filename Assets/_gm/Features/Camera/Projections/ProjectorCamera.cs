@@ -27,7 +27,7 @@ namespace spz {
 	    // Stable diffusion doesn't know about such GUID, it's only used inside unity so we can 
 	    // distinguish between different generation requests.
 	    public GenData2D _myGenData { get; private set; } = null;
-	    public int numPOV => _myGenData._masking_utils.numPOV;
+	    public int numPOV => _myGenData?._masking_utils != null ? _myGenData._masking_utils.numPOV : 1;
 
 
 	    // One of 2d-screen-space images (from a batch, which will be "projected" from camera
@@ -128,7 +128,7 @@ namespace spz {
 	    // This makes it ready to render from all 6 custom sides (POVs) at once, via single camera.Render() invocation.
 	    void Set_POV_vars_into_material_maybe( RenderProj_arg a ){
 	        Material mat = a.materialOnGeometry;
-	        if(mat == null){ return; }
+	        if(mat == null || _myGenData == null){ return; }
 
 	        if(numPOV==1){  
 	            CameraPovInfo pov = _myGenData.povInfos.get_Nth_active_pov(0);
@@ -147,6 +147,7 @@ namespace spz {
 
 	#region Save / Load
 	    public void Save(ProjectorCamera_SL projCamSL){
+	        if (_myGenData == null || projCamSL == null) return;
 	        projCamSL.genGUID = _myGenData.total_GUID.ToString();
 	        projCamSL.myMeshes_uniqueIds = new List<ushort>();
 	        _myMeshes.ForEach( m => projCamSL.myMeshes_uniqueIds.Add(m.unique_id) );
@@ -158,9 +159,16 @@ namespace spz {
 	    }
 
 	    public void Init_AfterLoadedAll(){
+	        if (_projectionCamera == null || _loadedSL == null) return;
 	        _projectionCamera.enabled = false;//Important. Keep disabled.  Render() will work + avoids automatic renders.
 	        _projectionCamera.depthTextureMode = DepthTextureMode.Depth;
-	        _myGenData = GenData2D_Archive.instance.GenerationGUID_toData( new Guid(_loadedSL.genGUID) );
+	        var archive = GenData2D_Archive.instance;
+	        if (archive == null || string.IsNullOrEmpty(_loadedSL.genGUID)) return;
+	        _myGenData = archive.GenerationGUID_toData( new Guid(_loadedSL.genGUID) );
+	        if (_myGenData == null) {
+	            Debug.LogWarning("[ProjectorCamera] Init_AfterLoadedAll: GenData missing for GUID " + _loadedSL.genGUID);
+	            return;
+	        }
 	        _projectionCamera.aspect = _myGenData.camera_aspect();
 	    }
 
