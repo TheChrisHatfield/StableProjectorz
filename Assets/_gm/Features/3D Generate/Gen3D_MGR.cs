@@ -457,6 +457,7 @@ namespace spz {
 	        // Mesh download→import registers Act_onImportComplete with suppressAutoComplete. Destroying
 	        // mid-flight leaves Cancel chrome up and a callback aimed at a dead Gen3D_MGR.
 	        ClearPendingMeshImportFinish();
+	        _retexturePrepInFlight = false;
 	        if (Gen3D_API.instance != null && Gen3D_API.instance.isBusy) {
 	            try { Gen3D_API.instance.CancelGeneration(); } catch { /* best-effort */ }
 	            GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled: true);
