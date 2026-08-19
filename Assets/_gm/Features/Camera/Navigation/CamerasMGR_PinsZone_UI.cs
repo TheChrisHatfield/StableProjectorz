@@ -352,6 +352,7 @@ namespace spz {
 	        for(int i=0; i<povInfos.Count; ++i){
 	            if (i == panningCamIx) { continue; }
 	            if (IsPinLockedToMesh(i)) { continue; } // ApplyPinLocksToSelectedMeshCenters owns this digit
+	            if (_cameraPins == null || i >= _cameraPins.Count || _cameraPins[i] == null) { continue; }
 	            CameraPovInfo inf = povInfos[i];
 	            RectTransform pinRectTr =  _cameraPins[i].transform as RectTransform;
 	            Vector2 center01    = inf.perspectiveCenter01;
