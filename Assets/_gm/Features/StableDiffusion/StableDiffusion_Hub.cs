@@ -326,6 +326,7 @@ namespace spz {
 	    void Update(){
 	        if(KeyMousePenInput.isSomeInputFieldActive()){ return; }//typing in text field, etc
 
+	        if (DimensionMode_MGR.instance == null) return;
 	        bool isSD = DimensionMode_MGR.instance._dimensionMode == DimensionMode.dim_sd;
 
 	        if (isSD){ 
@@ -359,9 +360,9 @@ namespace spz {
 	        SD_Upscalers.OnGenUpscaleVisible_ButtonX2 += ()=>ManuallyUpscale_View(2);
 	        SD_Upscalers.OnGenUpscaleVisible_ButtonX4 += ()=>ManuallyUpscale_View(4);
 
-	        ExportSave_UI_MGR.OnExportFinalTex_Button += ()=>OnExportFinalTex_Button(isDilate:true);
-	        ExportSave_UI_MGR.OnExportFinalTex_NoDilate_Button += ()=>OnExportFinalTex_Button(isDilate:false);
-	        ExportSave_UI_MGR.OnExportViews_Button += ()=>OnExportViewTextures_Button();
+	        ExportSave_UI_MGR.OnExportFinalTex_Button += OnExportFinalTex_DilateTrue;
+	        ExportSave_UI_MGR.OnExportFinalTex_NoDilate_Button += OnExportFinalTex_DilateFalse;
+	        ExportSave_UI_MGR.OnExportViews_Button += OnExportViewTextures_Button;
 	    }
 
 	    void OnDestroy(){
@@ -371,7 +372,13 @@ namespace spz {
 	        SD_Upscalers.OnGenUpscaleVisible_ButtonX4 = null;
 	        GenerateButtons_UI.OnGenerateArtButton = null;
 	        GenerateButtons_UI.OnGenerateBG_Button = null;
+	        ExportSave_UI_MGR.OnExportFinalTex_Button -= OnExportFinalTex_DilateTrue;
+	        ExportSave_UI_MGR.OnExportFinalTex_NoDilate_Button -= OnExportFinalTex_DilateFalse;
+	        ExportSave_UI_MGR.OnExportViews_Button -= OnExportViewTextures_Button;
 	    }
+
+	    void OnExportFinalTex_DilateTrue() => OnExportFinalTex_Button(isDilate: true);
+	    void OnExportFinalTex_DilateFalse() => OnExportFinalTex_Button(isDilate: false);
 	}
 
 }//end namespace
