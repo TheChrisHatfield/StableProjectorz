@@ -217,6 +217,11 @@ namespace spz {
 	        _lerpFlyCamera_crtn = null;
 	    }
 
+	    /// <summary>Abort an in-flight focus/restore lerp so orbit / a retargeted snap can own the transform.</summary>
+	    public void InterruptCurrentFly() {
+		    StopCurrentLerpAndRestoreParent();
+	    }
+
 	    void StopCurrentLerpAndRestoreParent(){
 	        if(_lerpFlyCamera_crtn != null){
 	            if(Coroutines_MGR.instance != null){
@@ -254,6 +259,7 @@ namespace spz {
     
 	    void OnUpdate(){
 	        _corotineCode_run_durUpdate?.Invoke();//do whatever our Focus-coroutine wants to do. Needed for order of execution.
+	        if (UserCameras_MGR.instance == null) return;
 	        View_UserCamera nearestCam = UserCameras_MGR.instance.NearestToCursor();
 	        if(nearestCam != _view_camera_inParent){ return; }
 	        if((MainViewport_UI.instance?.isCursorHoveringMe() ?? false) == false){ return; }
