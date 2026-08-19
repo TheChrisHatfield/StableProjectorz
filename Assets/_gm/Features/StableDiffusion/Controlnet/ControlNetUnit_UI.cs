@@ -221,6 +221,7 @@ namespace spz {
 
 	        if (isForInpaint()){
 	            var trib = WorkflowRibbon_UI.instance;
+	            if (trib == null) return null;
 	            bool isImg2Img = trib.isMode_using_img2img();
 
 	            if(!isImg2Img || !trib.has_brushed_mask() ){ return null; }//indicate that we won't participate.
@@ -228,7 +229,9 @@ namespace spz {
 	            if(intermediates.screenSpaceMask_NE_disposableTex==null){
 	                Texture2D skipAntiEdge_;
 	                Texture2D withAntiEdge_;
-	                Inpaint_MaskPainter.instance.GetDisposable_ScreenMask( forceFullWhite:false, out skipAntiEdge_, out withAntiEdge_ );
+	                var painter = Inpaint_MaskPainter.instance;
+	                if (painter == null) return null;
+	                painter.GetDisposable_ScreenMask( forceFullWhite:false, out skipAntiEdge_, out withAntiEdge_ );
 	                intermediates.screenSpaceMask_NE_disposableTex = skipAntiEdge_;
 	                intermediates.screenSpaceMask_WE_disposableTex = withAntiEdge_;
 	            }
@@ -281,6 +284,7 @@ namespace spz {
 
 
 	    Texture2D getDisposableTexture_toSend(SD_GenRequestArgs_byproducts intermediates){
+	        var cams = UserCameras_MGR.instance != null ? UserCameras_MGR.instance.camTextures : null;
 	        switch (_imgsDisplay._whatImageToSend){
 	            case WhatImageToSend_CTRLNET.None:
 	                return null;
@@ -290,7 +294,8 @@ namespace spz {
 	                //then just use it instead of creating one more:
 	                Texture2D depth =  intermediates.depth_disposableTex;
 	                if(depth == null){
-	                    depth = UserCameras_MGR.instance.camTextures.GetDisposable_DepthTexture();
+	                    if (cams == null) return null;
+	                    depth = cams.GetDisposable_DepthTexture();
 	                    intermediates.depth_disposableTex = depth;
 	                }
 	                return depth;
@@ -300,7 +305,8 @@ namespace spz {
 	                //then just use it instead of creating one more:
 	                Texture2D normals =  intermediates.viewNormals_disposableTex;
 	                if(normals == null){
-	                    normals = UserCameras_MGR.instance.camTextures.GetDisposable_NormalsTexture();
+	                    if (cams == null) return null;
+	                    normals = cams.GetDisposable_NormalsTexture();
 	                    intermediates.viewNormals_disposableTex = normals;
 	                }
 	                return normals;
@@ -310,7 +316,8 @@ namespace spz {
 	                //then just use it instead of creating one more:
 	                Texture2D tex =  intermediates.vertexColors_disposableTex;
 	                if(tex == null){
-	                    tex = UserCameras_MGR.instance.camTextures.GetDisposable_VertexColorsTexture();
+	                    if (cams == null) return null;
+	                    tex = cams.GetDisposable_VertexColorsTexture();
 	                    intermediates.vertexColors_disposableTex = tex;
 	                }
 	                return tex;
@@ -320,7 +327,8 @@ namespace spz {
 	                //then just use it instead of creating one more:
 	                Texture2D viewTex =  intermediates.usualView_disposableTexture;
 	                if(viewTex == null){
-	                    viewTex = UserCameras_MGR.instance.camTextures.GetDisposable_ContentCamTexture();
+	                    if (cams == null) return null;
+	                    viewTex = cams.GetDisposable_ContentCamTexture();
 	                    intermediates.usualView_disposableTexture = viewTex;
 	                }
 	                return viewTex;
