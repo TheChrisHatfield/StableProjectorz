@@ -42,7 +42,9 @@ namespace spz {
 	        }
 	        // Leave: unwind Nomad DialValue typography before polarity ink.
 	        SpzUiThemeOps.RestoreAuthoredGraphic(_brushOpacityText);
-	        _brushOpacityText.color = SD_WorkflowOptionsRibbon_UI.instance.isPositive?
+	        bool isPositive = SD_WorkflowOptionsRibbon_UI.instance == null
+	            || SD_WorkflowOptionsRibbon_UI.instance.isPositive;
+	        _brushOpacityText.color = isPositive?
 	            new Color(0.2f, 0.2f, 0.2f, 1) : new Color(0.8f, 0.8f, 0.8f, 1);
 	    }
 
@@ -51,18 +53,19 @@ namespace spz {
 
 	        float printMsgDur = 1;
 
-	        if (WorkflowRibbon_UI.instance.currentMode() == WorkflowRibbon_CurrMode.Inpaint_NoColor){ 
+	        var workflow = WorkflowRibbon_UI.instance;
+	        if (workflow != null && workflow.currentMode() == WorkflowRibbon_CurrMode.Inpaint_NoColor){ 
 	            brushOpacity = 1.0f;//important, to avoid bugs. User can instead control denoising strength + blur.
 
 	            //maybe skip showing our message, because thiers is more rare and important:
 	            if (!quiet && WorkflowRibbon_NoColor_UI.didShowHint_thisFrame()==false){
 	                string msg = "Brush Opacity kept as 100 (colorless-mask)";
-	                Viewport_StatusText.instance.ShowStatusText(msg, false, printMsgDur, false);
+	                Viewport_StatusText.instance?.ShowStatusText(msg, false, printMsgDur, false);
 	            }
 	        }else { 
 	            if (!quiet){
 	                string msg = "Brush Opacity " + Mathf.RoundToInt(brushOpacity * 100);
-	                Viewport_StatusText.instance.ShowStatusText(msg, false, printMsgDur, false);
+	                Viewport_StatusText.instance?.ShowStatusText(msg, false, printMsgDur, false);
 	            }
 	            _nonOverridenOpacity = brushOpacity;
 	        }
