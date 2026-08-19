@@ -21,17 +21,24 @@ namespace spz {
 
 
 	    void Update(){
+	        var cams = UserCameras_MGR.instance;
+	        var view = cams != null ? cams._curr_viewCamera : null;
+	        var cam = view != null ? view.myCamera : null;
+	        var settings = Settings_MGR.instance;
+	        var dims = DimensionMode_MGR.instance;
+	        if (cam == null || settings == null || dims == null) return;
+
 	        float wanted_warp = _warp_into_uv01;
 
-	        float fov         = UserCameras_MGR.instance._curr_viewCamera.myCamera.fieldOfView;
+	        float fov         = cam.fieldOfView;
 	        float isHighFov01 = Mathf.InverseLerp(1,90,fov);
 
 	        float speed       = Mathf.Lerp( _warpSpeed,  _warpSpeed*_highFovSpeedCurve.Evaluate(_warp_into_uv01),  isHighFov01);
-	              speed      *= Settings_MGR.instance.get_uvWarpSpeed();
+	              speed      *= settings.get_uvWarpSpeed();
 
 	        float dt = Time.deltaTime*speed;
 
-	        switch (DimensionMode_MGR.instance._dimensionMode){
+	        switch (dims._dimensionMode){
 	            case DimensionMode.dim_uv:
 	                float t = Mathf.Clamp(_warp_into_uv01, 0.0001f, 0.9999f);
 	                // For 0 --> 1: slow down as we approach 1
