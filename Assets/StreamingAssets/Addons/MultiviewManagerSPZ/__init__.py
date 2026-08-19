@@ -204,6 +204,11 @@ def _isolate_index() -> int:
 def _isolate_view_at(index: int) -> None:
     global _pre_isolate_snapshot
     index = max(0, min(MAX_SLOTS - 1, int(index)))
+    state = _view_state()
+    num_active = int(state.get("num_active", 0) or 0)
+    if num_active > 0 and index >= num_active:
+        _show(f"{_slot_label(index)} is not active (only {num_active} view(s) enabled)")
+        return
     _capture_pre_isolate_if_multiview()
     ok = _api().view_cameras.isolate(index)
     if ok:
