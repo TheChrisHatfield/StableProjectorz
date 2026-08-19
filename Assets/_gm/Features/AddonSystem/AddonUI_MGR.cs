@@ -853,10 +853,12 @@ namespace spz {
 		void EnsureNativeSpzGoMissingWidgets(string panelId, GameObject panel) {
 			if (panel == null || string.IsNullOrEmpty(panelId)) return;
 			RetireFlatSpzGoLayout(panel);
+			EnsureSpzGoPanelScroll(panel);
 			foreach (var host in SpzGoHosts.All) {
 				if (!PanelHasNamedControlPrefix(panel, SpzGoHostSection.SectionName(host.Id)))
 					AddHostSection(StableProjectorzGoAddonId, panelId, host.Id);
 			}
+			EnsureSpzGoPanelScroll(panel);
 		}
 
 		/// <summary>
@@ -2092,6 +2094,13 @@ namespace spz {
 			return elementId;
 		}
 		
+		static bool LooksLikeUrlField(string label) {
+			if (string.IsNullOrEmpty(label))
+				return false;
+			return label.IndexOf("URL", StringComparison.OrdinalIgnoreCase) >= 0
+				|| label.IndexOf("http", StringComparison.OrdinalIgnoreCase) >= 0;
+		}
+
 		/// <summary>
 		/// Adds a text input field to a panel
 		/// </summary>
@@ -2202,7 +2211,7 @@ namespace spz {
 			placeholderRect.offsetMin = Vector2.zero;
 			placeholderRect.offsetMax = Vector2.zero;
 			var placeholder = placeholderObj.AddComponent<TextMeshProUGUI>();
-			placeholder.text = "Path…";
+			placeholder.text = LooksLikeUrlField(label) ? "https://\u2026" : "Path\u2026";
 			placeholder.fontSize = 12;
 			placeholder.color = new Color(0.5f, 0.5f, 0.5f, 1f);
 			placeholder.maskable = true;
