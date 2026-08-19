@@ -209,36 +209,39 @@ namespace spz {
 	    int _fetched_num_times = 0;
 	    IEnumerator GetVAEs_crtn(){
 	        //Don't send network request to webui if rendering, else it seems to stuck it sometimes.
-	        if(StableDiffusion_Hub.instance._generating){ yield break; }
+	        var hub = StableDiffusion_Hub.instance;
+	        if(hub == null || hub._generating){ yield break; }
 
 	        _isFetchingVAEs = true;
+	        try {
+	            // Forge/Neo-family: prefer /sd-vae then fall back to /sd-modules (some Forge builds only expose modules).
+	            // Legacy A1111: alternate between endpoints across polls.
+	            _fetched_num_times++;
+	            string url_vae = Connection_MGR.A1111_SD_API_URL + "/sd-vae";
+	            string url_modules = Connection_MGR.A1111_SD_API_URL + "/sd-modules";
+	            bool forgeFamily = SD_SysInfo_MGR.instance != null && SD_SysInfo_MGR.instance.isForgeFamilyWebui_detected();
+	            string urlPrimary = forgeFamily || (_fetched_num_times % 2 == 0) ? url_vae : url_modules;
+	            string urlFallback = urlPrimary == url_vae ? url_modules : url_vae;
 
-	        // Forge/Neo-family: prefer /sd-vae then fall back to /sd-modules (some Forge builds only expose modules).
-	        // Legacy A1111: alternate between endpoints across polls.
-	        _fetched_num_times++;
-	        string url_vae = Connection_MGR.A1111_SD_API_URL + "/sd-vae";
-	        string url_modules = Connection_MGR.A1111_SD_API_URL + "/sd-modules";
-	        bool forgeFamily = SD_SysInfo_MGR.instance != null && SD_SysInfo_MGR.instance.isForgeFamilyWebui_detected();
-	        string urlPrimary = forgeFamily || (_fetched_num_times % 2 == 0) ? url_vae : url_modules;
-	        string urlFallback = urlPrimary == url_vae ? url_modules : url_vae;
-
-	        UnityWebRequest request = UnityWebRequest.Get(urlPrimary);
-	        yield return request.SendWebRequest();
-
-	        bool isBad = request.result == UnityWebRequest.Result.ConnectionError;
-	            isBad |= request.result == UnityWebRequest.Result.ProtocolError;
-	        if (isBad) {
-	            request.Dispose();
-	            request = UnityWebRequest.Get(urlFallback);
+	            UnityWebRequest request = UnityWebRequest.Get(urlPrimary);
 	            yield return request.SendWebRequest();
-	            isBad = request.result == UnityWebRequest.Result.ConnectionError;
-	            isBad |= request.result == UnityWebRequest.Result.ProtocolError;
+
+	            bool isBad = request.result == UnityWebRequest.Result.ConnectionError;
+	                isBad |= request.result == UnityWebRequest.Result.ProtocolError;
+	            if (isBad) {
+	                request.Dispose();
+	                request = UnityWebRequest.Get(urlFallback);
+	                yield return request.SendWebRequest();
+	                isBad = request.result == UnityWebRequest.Result.ConnectionError;
+	                isBad |= request.result == UnityWebRequest.Result.ProtocolError;
+	            }
+	            if (!isBad){
+	                SD_VAEList list_of_VAE = SD_VAEList.CreateFromJSON(request.downloadHandler.text);
+	                Populate_Dropdown(list_of_VAE);
+	            }
+	        } finally {
+	            _isFetchingVAEs = false;
 	        }
-	        if (!isBad){
-	            SD_VAEList list_of_VAE = SD_VAEList.CreateFromJSON(request.downloadHandler.text);
-	            Populate_Dropdown(list_of_VAE);
-	        }
-	        _isFetchingVAEs = false;
 	    }
 
 
