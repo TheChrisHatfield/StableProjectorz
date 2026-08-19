@@ -135,7 +135,9 @@ namespace spz {
 
 	    void Refresh_ScreenshotToggle(){
 	         //always force as off unless we are in 3D.  Helps to untoggle it when we are no longer in the 3d.
-	        _makeScreenshots_toggle.isOn &=  DimensionMode_MGR.instance._dimensionMode == DimensionMode.dim_gen_3d; ;
+	        var dims = DimensionMode_MGR.instance;
+	        if (_makeScreenshots_toggle != null && dims != null)
+	            _makeScreenshots_toggle.isOn &= dims._dimensionMode == DimensionMode.dim_gen_3d;
 
 	        // doing it here, without callback from the 'Act_OnPaintStrokeEnd' callback of the 'Background_Painter'.
 	        // That's because must animate even if background doesn't exist (and we can't brush it):
@@ -144,9 +146,10 @@ namespace spz {
 	                                  KeyMousePenInput.isKey_alt_pressed() == false &&
 	                                  KeyMousePenInput.isKey_CtrlOrCommand_pressed() == false &&
 	                                  (MainViewport_UI.instance?.isCursorHoveringMe() ?? false);
-	        if(wantScreenshot && Screenshot_MGR.instance.isPrefferCaptureSnippets()==false){
+	        var shot = Screenshot_MGR.instance;
+	        if(wantScreenshot && shot != null && shot.isPrefferCaptureSnippets()==false){
 	            string msg = "Screenshots are possible only if a 3D generator is connected.";
-	            Viewport_StatusText.instance.ShowStatusText(msg, false, 3, false);
+	            Viewport_StatusText.instance?.ShowStatusText(msg, false, 3, false);
 	        }
 	    }
 
