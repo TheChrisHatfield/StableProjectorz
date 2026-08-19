@@ -155,25 +155,29 @@ namespace spz {
 	    IEnumerator GetUpscalers_crtn()
 	    {
 	        //Don't send network request to webui if rendering, else it seems to stuck it sometimes.
-	        if (StableDiffusion_Hub.instance._generating) { yield break; }
+	        var hub = StableDiffusion_Hub.instance;
+	        if (hub == null || hub._generating) { yield break; }
 
 	        _isFetchingUpscalers = true;
-	        UnityWebRequest request = UnityWebRequest.Get(Connection_MGR.A1111_SD_API_URL + "/upscalers");
-	        yield return request.SendWebRequest();
+	        try {
+	            UnityWebRequest request = UnityWebRequest.Get(Connection_MGR.A1111_SD_API_URL + "/upscalers");
+	            yield return request.SendWebRequest();
 
-	        bool isBad = request.result == UnityWebRequest.Result.ConnectionError;
-	        isBad |= request.result == UnityWebRequest.Result.ProtocolError;
-	        if (isBad)
-	        {
-	            Debug.LogError("Error: " + request.error);
+	            bool isBad = request.result == UnityWebRequest.Result.ConnectionError;
+	            isBad |= request.result == UnityWebRequest.Result.ProtocolError;
+	            if (isBad)
+	            {
+	                Debug.LogError("Error: " + request.error);
+	            }
+	            else
+	            {
+	                _upscalersListObtained = true;
+	                SDUpscalerList listOfUpscalers = SDUpscalerList.CreateFromJSON(request.downloadHandler.text);
+	                Populate_List_And_InformUI(listOfUpscalers);
+	            }
+	        } finally {
+	            _isFetchingUpscalers = false;
 	        }
-	        else
-	        {
-	            _upscalersListObtained = true;
-	            SDUpscalerList listOfUpscalers = SDUpscalerList.CreateFromJSON(request.downloadHandler.text);
-	            Populate_List_And_InformUI(listOfUpscalers);
-	        }
-	        _isFetchingUpscalers = false;
 	    }
 
 
