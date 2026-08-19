@@ -26,6 +26,10 @@ namespace spz {
 
 	    public void OnAfterInstantiated(IconUI bgIcon_ref){
 	        _bgIcon_ref = bgIcon_ref;
+	        if (_genData == null) {
+	            Viewport_StatusText.instance?.ShowStatusText("3D icon has no generation data — skipped.", false, 4f, false);
+	            return;
+	        }
 	        _wholeIcon_button._onMouseClick += OnMouseClick;
 	        _contextMenu.onGenerateButton += OnGenerateButton;
 	        _genData.Subscribe_for_TextureUpdates(_bgIcon_ref.texture_guids, OnTextureUpdated);
