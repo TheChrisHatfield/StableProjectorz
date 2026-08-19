@@ -108,7 +108,7 @@ namespace spz {
 
     
 	    void OnUpdateComplete(){
-	        ProjectorCameras_MGR.instance.HighlightProjCamera(null);
+	        ProjectorCameras_MGR.instance?.HighlightProjCamera(null);
 	        _finalMat_Helper.ShowFinalMat_on_ALL(_accumulation_uv_RT);
 	    }
 
@@ -129,7 +129,9 @@ namespace spz {
 
 	        // it's important NOT to frustum cull: even if camera is looking at the object, remember that we are going to render into UVs.
 	        // This would likely cause the camera to ignore the object.
-	        UserCameras_MGR.instance._curr_viewCamera.RenderImmediate_Arr( _uvChunks_RT.texArray, ignore_nonSelected_meshes:false,
+	        var view = UserCameras_MGR.instance != null ? UserCameras_MGR.instance._curr_viewCamera : null;
+	        if (view == null) return;
+	        view.RenderImmediate_Arr( _uvChunks_RT.texArray, ignore_nonSelected_meshes:false,
 	                                                                       _colorUVchunks_mat,  useClearingColor:false,  Color.clear,  
 	                                                                       dontFrustumCull: true);
 	    }
