@@ -45,12 +45,14 @@ public sealed class Gen3DBusyIncludesDownloadContractTests {
 		string src = File.ReadAllText(path);
 		int i = src.IndexOf("public bool Trigger3DGeneration()", System.StringComparison.Ordinal);
 		Assert.That(i, Is.GreaterThanOrEqualTo(0));
-		string body = src.Substring(i, System.Math.Min(900, src.Length - i));
+		int end = src.IndexOf("\n\t    void OnButton_GenRetexture", i, System.StringComparison.Ordinal);
+		Assert.That(end, Is.GreaterThan(i));
+		string body = src.Substring(i, end - i);
 		Assert.That(body, Does.Contain("GenerateButtons_UI.isGenerating"));
 		Assert.That(body, Does.Contain("return false"));
 		Assert.That(body, Does.Contain("Gen3D_API.instance == null"),
 			"Must refuse before StartedGenerate when API is missing.");
-		Assert.That(body, Does.Contain("isBusy"),
+		Assert.That(body, Does.Contain("Gen3D_API.instance.isBusy"),
 			"Must return isBusy honesty — not always true after StartGeneration.");
 	}
 }
