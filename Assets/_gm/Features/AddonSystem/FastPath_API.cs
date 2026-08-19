@@ -1915,7 +1915,8 @@ namespace spz {
 			
 			// Null/empty filepath keeps the file dialog; HTTP/RPC may pass an explicit path.
 			saveMGR.DoSaveProject(filepath);
-			return true;
+			// DoSaveProject may early-return without arming — only report success when the helper is in flight.
+			return saveMGR.SaveLoadHelper != null && saveMGR.SaveLoadHelper.IsProjectSaveInFlight;
 		}
 		
 		/// <summary>
@@ -1944,7 +1945,8 @@ namespace spz {
 			}
 			
 			saveMGR.DoLoadProject(filepath);
-			return true;
+			// DoLoadProject may early-return before arming _isLoading — do not claim success then.
+			return saveMGR._isLoading;
 		}
 		
 		/// <summary>
