@@ -26,8 +26,15 @@ namespace spz {
 
 
 	    void OnUpdate(){
-	        View_UserCamera nearestCam = UserCameras_MGR.instance.NearestToCursor();
-	        bool navAllowed = DimensionMode_MGR.instance.is_3d_navigation_allowed;
+	        var cams = UserCameras_MGR.instance;
+	        var dims = DimensionMode_MGR.instance;
+	        if (cams == null || dims == null) {
+	            _allowZoom = false;
+	            _isZooming = false;
+	            return;
+	        }
+	        View_UserCamera nearestCam = cams.NearestToCursor();
+	        bool navAllowed = dims.is_3d_navigation_allowed;
 
 	        if (nearestCam != _myViewCam || !navAllowed){
 	            _allowZoom = false;
