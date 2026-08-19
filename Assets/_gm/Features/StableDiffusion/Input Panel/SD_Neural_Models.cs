@@ -321,20 +321,24 @@ namespace spz {
     
 	    IEnumerator GetModels_crtn(){
 	        //Don't send network request to webui if rendering, else it seems to stuck it sometimes.
-	        if(StableDiffusion_Hub.instance._generating){ yield break; }
+	        var hub = StableDiffusion_Hub.instance;
+	        if(hub == null || hub._generating){ yield break; }
 
 	        _isFetchingModels = true;
-	        UnityWebRequest request = UnityWebRequest.Get(Connection_MGR.A1111_SD_API_URL + "/sd-models");
-	        yield return request.SendWebRequest();
+	        try {
+	            UnityWebRequest request = UnityWebRequest.Get(Connection_MGR.A1111_SD_API_URL + "/sd-models");
+	            yield return request.SendWebRequest();
 
-	        bool isBad = request.result == UnityWebRequest.Result.ConnectionError;
-	            isBad |= request.result == UnityWebRequest.Result.ProtocolError;
-	        if (!isBad){
-	            SDModelsList listOfModels = SDModelsList.CreateFromJSON(request.downloadHandler.text);
-	            Act_ListOfModelsReceived?.Invoke(listOfModels);
-	            Populate_Dropdown(listOfModels);
+	            bool isBad = request.result == UnityWebRequest.Result.ConnectionError;
+	                isBad |= request.result == UnityWebRequest.Result.ProtocolError;
+	            if (!isBad){
+	                SDModelsList listOfModels = SDModelsList.CreateFromJSON(request.downloadHandler.text);
+	                Act_ListOfModelsReceived?.Invoke(listOfModels);
+	                Populate_Dropdown(listOfModels);
+	            }
+	        } finally {
+	            _isFetchingModels = false;
 	        }
-	        _isFetchingModels = false;
 	    }
 
     
