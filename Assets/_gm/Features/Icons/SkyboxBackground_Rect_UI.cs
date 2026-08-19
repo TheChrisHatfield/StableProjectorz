@@ -24,7 +24,13 @@ namespace spz {
 	    }
 
 	    void Update(){
-	        _uiImage_cullingParent.aspectRatio = UserCameras_MGR.instance?._curr_viewCamera.contentCam.cameraAspect ?? 1.0f;
+	        if (_uiImage_cullingParent == null) return;
+	        float aspect = 1.0f;
+	        var cams = UserCameras_MGR.instance;
+	        var view = cams != null ? cams._curr_viewCamera : null;
+	        var content = view != null ? view.contentCam : null;
+	        if (content != null) aspect = content.cameraAspect;
+	        _uiImage_cullingParent.aspectRatio = aspect;
 	    }
 	}
 }//end namespace
