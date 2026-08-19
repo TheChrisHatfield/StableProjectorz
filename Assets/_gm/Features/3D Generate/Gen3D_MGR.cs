@@ -129,9 +129,9 @@ namespace spz {
 	            Art2D_IconsUI_List.instance.GetTextures_FromAllIcons( 
 	                (List<Texture2D> textures) => {
 	                    _retexturePrepInFlight = false;
-	                    if (textures == null){
+	                    if (textures == null || textures.Count == 0){
 	                        Viewport_StatusText.instance?.ShowStatusText(
-	                            "Can't retexture: icon merge was refused (save/export busy).", false, 5f, false);
+	                            "Can't retexture: no Art icons available (or merge refused).", false, 5f, false);
 	                        return;
 	                    }
 	                    GenerateButtons_UI.OnConfirmed_StartedGenerate();
