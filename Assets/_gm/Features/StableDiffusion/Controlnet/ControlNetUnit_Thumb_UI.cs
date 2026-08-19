@@ -66,8 +66,11 @@ namespace spz {
 	        _depthBrightness_slider.transform.parent.gameObject.SetActive( showSliders );
         
 	        if(showSliders){
-	            _depthContrast_slider.SetSliderValue(LeftRibbon_UI.instance.depthContrast, false);
-	            _depthBrightness_slider.SetSliderValue(LeftRibbon_UI.instance.depthBrightness, false);
+	            var left = LeftRibbon_UI.instance;
+	            if (left != null) {
+	                _depthContrast_slider.SetSliderValue(left.depthContrast, false);
+	                _depthBrightness_slider.SetSliderValue(left.depthBrightness, false);
+	            }
 	        }
 	    }
 
@@ -114,11 +117,11 @@ namespace spz {
 	    }
 
 	    void OnDepthContrast_Slider(float value01){
-	        LeftRibbon_UI.instance.SetDepthContrast01_fromCode(value01);
+	        LeftRibbon_UI.instance?.SetDepthContrast01_fromCode(value01);
 	    }
 
 	    void OnDepthBrightness_Slider(float value01){
-	        LeftRibbon_UI.instance.SetDepthBrightness01_fromCode(value01);
+	        LeftRibbon_UI.instance?.SetDepthBrightness01_fromCode(value01);
 	    }
 
 
@@ -202,7 +205,9 @@ namespace spz {
 	        _clickSensor._onMouseClick += OnThumbPressed;
 	        _closeButton.onClick.AddListener(()=>OnCloseButton(notifyTheUnit:true));
 
-	        _depthContrast_slider.SetSliderValue(LeftRibbon_UI.instance.depthContrast, invokeCallback:false);
+	        var left = LeftRibbon_UI.instance;
+	        if (left != null)
+	            _depthContrast_slider.SetSliderValue(left.depthContrast, invokeCallback:false);
 	        _depthContrast_slider.onValueChanged.AddListener( OnDepthContrast_Slider );
 	        _depthBrightness_slider.onValueChanged.AddListener( OnDepthBrightness_Slider );
 	    }
