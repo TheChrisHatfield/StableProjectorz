@@ -167,6 +167,10 @@ namespace spz {
 	            yield return null;
 	        }
 
+	        if (_interruptBake_asap) {
+	            // Interrupt must not still blur/dilate/commit AO and report success.
+	            ok = false;
+	        } else {
 	        int blurIterss  = args.withBlur? 8 : 5;//at least 3 iter to remove the noisy look.
 	        float blurStep = args.withBlur? 0.15f : 0.2f;
 	        Blur(_ao_accumulation_uvTex, _helper_uvTex, blurIterss, blurStep);
@@ -177,6 +181,7 @@ namespace spz {
 	        //DON'T Destroy 'clone_takeOwnershipPlz', because it was already "adopted" by the GenData2D.
 
 	        ok = true;
+	        }
 	        } finally {
 	            // Sticky isGeneratingAO blocked SD Deny forever if bake NRE'd mid-flight.
 	            CompleteBake_and_Cleanup();
