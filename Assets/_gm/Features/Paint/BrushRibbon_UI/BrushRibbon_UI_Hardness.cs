@@ -130,9 +130,22 @@ namespace spz {
 	        if (_brushAlphasMGR != null)
 	            _brushAlphasMGR.CurrentIndex = hardnessIx;
 	        UpdateHardnessIcon();
-	        _hardnessButton.GetComponentInChildren<MouseHoverSensor_UI>().onSurfaceEnter += OnHardnessButtonHover;
+	        var hover = _hardnessButton != null
+	            ? _hardnessButton.GetComponentInChildren<MouseHoverSensor_UI>()
+	            : null;
+	        if (hover != null)
+	            hover.onSurfaceEnter += OnHardnessButtonHover;
 
 	        MultiView_Ribbon_UI.OnStartEditMode += OnStartEditMode;
+	    }
+
+	    void OnDestroy(){
+	        var hover = _hardnessButton != null
+	            ? _hardnessButton.GetComponentInChildren<MouseHoverSensor_UI>()
+	            : null;
+	        if (hover != null)
+	            hover.onSurfaceEnter -= OnHardnessButtonHover;
+	        MultiView_Ribbon_UI.OnStartEditMode -= OnStartEditMode;
 	    }
 
 	    void Start(){
