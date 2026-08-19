@@ -24,6 +24,14 @@ public sealed class SpzGoNativePanelSeedContractTests {
 		return src.Substring(method, next - method);
 	}
 
+	static string ReadFallbackMethod(string src) {
+		int method = src.IndexOf("public void EnsureNativeFallbackUiWhenPythonMissing(", System.StringComparison.Ordinal);
+		Assert.That(method, Is.GreaterThan(0));
+		int next = src.IndexOf("void EnsureNativeSpzGoPanel()", method, System.StringComparison.Ordinal);
+		Assert.That(next, Is.GreaterThan(method));
+		return src.Substring(method, next - method);
+	}
+
 	[Test]
 	public void EnsureNativeSpzGoPanel_SeedsEveryRegisteredHostSection() {
 		string body = ReadSeedBody(ReadAddonUiSource());
@@ -36,6 +44,20 @@ public sealed class SpzGoNativePanelSeedContractTests {
 			"each host must be seeded only when its own section is missing.");
 		Assert.That(body, Does.Contain("EnsureNativeSpzGoMissingWidgets"),
 			"incomplete panels must complete via EnsureNativeSpzGoMissingWidgets.");
+	}
+
+	[Test]
+	public void TabActivate_CompletesMissingHostsEvenWhenHttpIsUp() {
+		string body = ReadFallbackMethod(ReadAddonUiSource());
+		Assert.That(body, Does.Contain("EnsureSpzGoHostSectionsComplete()"),
+			"half-built Blender-only panels must gain ZBrush/Painter while :5557 is healthy");
+		Assert.That(body, Does.Contain("StableProjectorzGoAddonId"),
+			"completion is SPZ GO specific, not a generic HTTP-off seed");
+		int complete = body.IndexOf("EnsureSpzGoHostSectionsComplete()", System.StringComparison.Ordinal);
+		int gate = body.IndexOf("ShouldSeedNativeAddonFallbackStatic()", System.StringComparison.Ordinal);
+		Assert.That(complete, Is.GreaterThan(0));
+		Assert.That(gate, Is.GreaterThan(complete),
+			"host completion must run before the HTTP-off gate returns");
 	}
 
 	[Test]

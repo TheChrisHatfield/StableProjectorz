@@ -2556,10 +2556,18 @@ namespace spz {
 						panelIdParam = @params["panel_id"]?.ToString() ?? "";
 						string onlyHost = @params["host_id"]?.ToString();
 						var built = new JArray();
+						GameObject panelGo = uiMgr.FindUIElementPublic(panelIdParam);
 						foreach (var host in SpzGoHosts.All) {
 							if (!string.IsNullOrEmpty(onlyHost)
 							    && !string.Equals(host.Id, onlyHost, StringComparison.OrdinalIgnoreCase))
 								continue;
+							// Idempotent: a half-built panel (Blender only) must gain the rest without
+							// stacking duplicate HostSection_blender on reload.
+							if (panelGo != null
+							    && uiMgr.PanelHasSpzGoHostSection(panelGo, host.Id)) {
+								built.Add(host.Id);
+								continue;
+							}
 							string sectionId = uiMgr.AddHostSection(addonId, panelIdParam, host.Id);
 							if (sectionId != null)
 								built.Add(host.Id);
@@ -2571,6 +2579,8 @@ namespace spz {
 						result["host_ids"] = built;
 						if (built.Count != wanted)
 							result["error"] = $"Built {built.Count} of {wanted} host sections";
+						else if (string.IsNullOrEmpty(onlyHost))
+							uiMgr.EnsureSpzGoHostSectionsComplete();
 						break;
 					}
 
