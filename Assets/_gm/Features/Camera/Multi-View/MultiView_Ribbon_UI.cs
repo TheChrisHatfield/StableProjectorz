@@ -180,10 +180,10 @@ namespace spz {
 	        if(_prevSliderValue == 1  && _wantedNumCams == 2){//incremented from 1 to 2, so, show tooltip.
 	            string msg = "Arrange numbers to cover more pixels.   Zoom, drag, rotate to capture different sides.  Avoid overlap."
 	                    +"\nPut 'variants, strong shadows' into Negative Prompt.   Increase resolution.   Press 'Blend Cams' to adjust.";
-	            Viewport_StatusText.instance.ShowStatusText(msg, false, 13, false);
+	            Viewport_StatusText.instance?.ShowStatusText(msg, false, 13, false);
 	        }else if(_wantedNumCams > 2){
 	            string msg = "Orbit/Zoom/Pan while hovering numbers.  Or press BlendCams to enter Editing/Painting mode.";
-	            Viewport_StatusText.instance.ShowStatusText(msg, false, 4, false);
+	            Viewport_StatusText.instance?.ShowStatusText(msg, false, 4, false);
 	        }
 	    }
 
@@ -228,7 +228,7 @@ namespace spz {
 	        if(currIcon_numPovs() > 1){ 
 	            string msg = "Blending the Cameras:  help each camera know better where to project."+
 	                         "\nUse the white brush.  Change between cameras via F1, F2, etc.";
-	            Viewport_StatusText.instance.ShowStatusText(msg, false, 10, false);
+	            Viewport_StatusText.instance?.ShowStatusText(msg, false, 10, false);
 	        }
 	        _isEditingMode = true;
 	        OnStartEditMode?.Invoke(arg);
