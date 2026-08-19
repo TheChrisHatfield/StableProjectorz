@@ -370,7 +370,7 @@ def save_global_preset() -> None:
         except Exception:
             pass
     _refresh_preset_dropdown()
-    _show(f"Saved preset '{name}'")
+    _show(f"Saved preset '{name}' (type name to load; reload addon to refresh dropdown list)")
 
 
 def load_global_preset() -> None:
