@@ -206,7 +206,9 @@ namespace spz {
 
 	        if(isFirstFrameOfStroke){ _prevStrength = suggested_brushStrength; }
         
-	        int povIx =  MultiView_Ribbon_UI.instance.currentPovIx;
+	        var mv = MultiView_Ribbon_UI.instance;
+	        if (mv == null) return;
+	        int povIx = mv.currentPovIx;
 	        if (povIx < 0 || povIx >= genData._masking_utils._ObjectUV_visibilityR8G8.Count) return;
         
 	        RenderUdims visibil =  genData._masking_utils._ObjectUV_visibilityR8G8[povIx];
