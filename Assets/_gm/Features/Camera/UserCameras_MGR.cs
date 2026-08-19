@@ -118,6 +118,18 @@ namespace spz {
 		    return true;
 	    }
 
+	    /// <summary>Enable only one view camera slot; disables all others and sets it current.</summary>
+	    public bool TryIsolateViewCamera(int index) {
+		    if (index < 0 || index >= _viewCameras.Count || _viewCameras[index] == null) {
+			    return false;
+		    }
+		    for (int i = 0; i < _viewCameras.Count; i++) {
+			    ToggleViewCamera(i, i == index);
+		    }
+		    SetCurrViewCamera(index);
+		    return true;
+	    }
+
 	    /// <summary>Turn a single view camera on or off (add-on / automation). Bounds-checked.</summary>
 	    public bool TrySetViewCameraActive(int index, bool active) {
 		    if (index < 0 || index >= _viewCameras.Count || _viewCameras[index] == null) {

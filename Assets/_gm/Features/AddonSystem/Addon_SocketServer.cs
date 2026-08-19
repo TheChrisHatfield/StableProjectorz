@@ -710,7 +710,7 @@ namespace spz {
 				"spz.cmd.get_sd_workflow_options", "spz.cmd.get_selected_mesh_count", "spz.cmd.get_selected_meshes",
 				"spz.cmd.get_selected_meshes_bounds", "spz.cmd.get_skybox_bottom_color", "spz.cmd.get_skybox_top_color",
 				"spz.cmd.get_total_mesh_count", 				"spz.cmd.get_ui_scale", "spz.cmd.get_ui_target_active",
-				"spz.cmd.get_view_camera_projection", "spz.cmd.get_view_cameras",
+				"spz.cmd.get_view_camera_projection", "spz.cmd.get_view_cameras", "spz.cmd.get_view_camera_povs",
 				"spz.cmd.get_workflow_mode", "spz.cmd.is_3d_connected",
 				"spz.cmd.is_3d_generation_in_progress", "spz.cmd.is_3d_generation_ready", "spz.cmd.is_generating",
 				"spz.cmd.is_project_operation_in_progress", "spz.cmd.is_sd_connected",
@@ -734,6 +734,7 @@ namespace spz {
 				"spz.cmd.set_sd_strict_isolation_flip", "spz.cmd.set_sd_tileable_inpaint",
 				"spz.cmd.set_skybox_color", 				"spz.cmd.set_ui_scale", "spz.cmd.set_ui_target_active",
 				"spz.cmd.set_view_camera_active", "spz.cmd.set_view_camera_projection", "spz.cmd.set_view_cameras_enabled_count",
+				"spz.cmd.isolate_view_camera", "spz.cmd.restore_view_camera_povs", "spz.cmd.apply_view_camera_slot_pov",
 				"spz.cmd.set_workflow_mode", "spz.cmd.show_status_text", "spz.cmd.stop_generation",
 				"spz.cmd.trigger_3d_generation", "spz.cmd.trigger_texture_generation",
 			};
@@ -1401,6 +1402,58 @@ namespace spz {
 						}
 						catch {
 							result["error"] = "Invalid camera_index";
+						}
+						break;
+
+					case "spz.cmd.get_view_camera_povs": {
+						var povState = fastPath.GetViewCameraPovsJson();
+						if (povState == null) {
+							return new JObject { ["success"] = false, ["error"] = "View cameras not available (FastPath or UserCameras_MGR)" };
+						}
+						povState["success"] = true;
+						return povState;
+					}
+
+					case "spz.cmd.isolate_view_camera":
+						try {
+							int isoIx = @params["camera_index"]?.ToObject<int>() ?? -1;
+							bool okIso = fastPath.IsolateViewCameraRpc(isoIx);
+							result["success"] = okIso;
+							if (!okIso) {
+								result["error"] = "Invalid camera_index or FastPath not ready";
+							}
+						}
+						catch {
+							result["error"] = "Invalid camera_index";
+						}
+						break;
+
+					case "spz.cmd.restore_view_camera_povs":
+						try {
+							var povArr = @params["povs"] as JArray;
+							bool okRestore = fastPath.RestoreViewCameraPovsFromJson(povArr);
+							result["success"] = okRestore;
+							if (!okRestore) {
+								result["error"] = "Invalid povs array or FastPath not ready";
+							}
+						}
+						catch {
+							result["error"] = "Invalid povs (array of POV objects)";
+						}
+						break;
+
+					case "spz.cmd.apply_view_camera_slot_pov":
+						try {
+							int slotIx = @params["camera_index"]?.ToObject<int>() ?? -1;
+							var slotPov = @params["pov"] as JObject;
+							bool okSlot = fastPath.ApplyViewCameraSlotPovRpc(slotIx, slotPov);
+							result["success"] = okSlot;
+							if (!okSlot) {
+								result["error"] = "Invalid camera_index, pov object, or FastPath not ready";
+							}
+						}
+						catch {
+							result["error"] = "Invalid camera_index or pov";
 						}
 						break;
 

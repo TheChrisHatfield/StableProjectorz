@@ -290,6 +290,30 @@ class ViewCamerasAPI:
         r = self._client._send_request("spz.cmd.set_view_camera_projection", p)
         return r.get("success", False)
 
+    def get_povs(self):
+        """Full multiview snapshot: pos/rot/FOV/pin per slot plus active flags."""
+        return self._client._send_request("spz.cmd.get_view_camera_povs", {})
+
+    def isolate(self, camera_index):
+        """Show only one view camera; disables all other slots."""
+        r = self._client._send_request(
+            "spz.cmd.isolate_view_camera", {"camera_index": int(camera_index)})
+        return r.get("success", False)
+
+    def restore_povs(self, povs):
+        """Restore a full multiview layout from a list of POV dicts (see get_povs)."""
+        r = self._client._send_request(
+            "spz.cmd.restore_view_camera_povs", {"povs": povs})
+        return r.get("success", False)
+
+    def apply_slot_pov(self, camera_index, pov):
+        """Apply pose/FOV/pin to one slot (works when inactive)."""
+        r = self._client._send_request("spz.cmd.apply_view_camera_slot_pov", {
+            "camera_index": int(camera_index),
+            "pov": pov,
+        })
+        return r.get("success", False)
+
 
 # ============================================
 # Models API
