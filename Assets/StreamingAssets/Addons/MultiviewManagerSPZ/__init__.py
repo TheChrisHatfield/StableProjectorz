@@ -176,59 +176,65 @@ def apply_camera_count() -> None:
         _show("Failed to set camera count")
 
 
+def _capture_pre_isolate_if_multiview() -> None:
+    """Keep the first multiview snapshot so Show all can restore after multiple solos."""
+    global _pre_isolate_snapshot
+    if _pre_isolate_snapshot is not None:
+        return
+    snap = _pov_snapshot()
+    num = int(snap.get("num_enabled", 0) or 0)
+    if num > 1 and snap.get("povs"):
+        _pre_isolate_snapshot = snap
+
+
 def _isolate_index() -> int:
     raw = int(_panel_value("isolate_pick", 1) or 1)
     return max(0, min(MAX_SLOTS - 1, raw - 1))
 
 
-def isolate_selected_view() -> None:
+def _isolate_view_at(index: int) -> None:
     global _pre_isolate_snapshot
-    snap = _pov_snapshot()
-    if snap.get("povs"):
-        _pre_isolate_snapshot = snap
-    idx = _isolate_index()
-    ok = _api().view_cameras.isolate(idx)
+    index = max(0, min(MAX_SLOTS - 1, int(index)))
+    _capture_pre_isolate_if_multiview()
+    ok = _api().view_cameras.isolate(index)
     if ok:
-        _api().view_cameras.set_current(idx)
-        _show(f"Solo {_slot_label(idx)}")
+        _api().view_cameras.set_current(index)
+        if _panel is not None and _el.get("isolate_pick"):
+            try:
+                _panel.set_value(_el["isolate_pick"], float(index + 1))
+            except Exception:
+                pass
+        _show(f"Solo {_slot_label(index)}")
     else:
-        _show(f"Could not isolate {_slot_label(idx)}")
+        _show(f"Could not isolate {_slot_label(index)}")
+
+
+def isolate_selected_view() -> None:
+    _isolate_view_at(_isolate_index())
 
 
 def isolate_view_1() -> None:
-    if _panel is not None and _el.get("isolate_pick"):
-        _panel.set_value(_el["isolate_pick"], 1.0)
-    isolate_selected_view()
+    _isolate_view_at(0)
 
 
 def isolate_view_2() -> None:
-    if _panel is not None and _el.get("isolate_pick"):
-        _panel.set_value(_el["isolate_pick"], 2.0)
-    isolate_selected_view()
+    _isolate_view_at(1)
 
 
 def isolate_view_3() -> None:
-    if _panel is not None and _el.get("isolate_pick"):
-        _panel.set_value(_el["isolate_pick"], 3.0)
-    isolate_selected_view()
+    _isolate_view_at(2)
 
 
 def isolate_view_4() -> None:
-    if _panel is not None and _el.get("isolate_pick"):
-        _panel.set_value(_el["isolate_pick"], 4.0)
-    isolate_selected_view()
+    _isolate_view_at(3)
 
 
 def isolate_view_5() -> None:
-    if _panel is not None and _el.get("isolate_pick"):
-        _panel.set_value(_el["isolate_pick"], 5.0)
-    isolate_selected_view()
+    _isolate_view_at(4)
 
 
 def isolate_view_6() -> None:
-    if _panel is not None and _el.get("isolate_pick"):
-        _panel.set_value(_el["isolate_pick"], 6.0)
-    isolate_selected_view()
+    _isolate_view_at(5)
 
 
 def show_all_views() -> None:
@@ -236,15 +242,8 @@ def show_all_views() -> None:
     povs = None
     if _pre_isolate_snapshot and _pre_isolate_snapshot.get("povs"):
         povs = _pre_isolate_snapshot["povs"]
-    else:
-        snap = _pov_snapshot()
-        povs = snap.get("povs")
     if not povs:
-        state = _view_state()
-        num = int(state.get("num_active", 4) or 4)
-        ok = _api().view_cameras.set_enabled_count(num)
-        _show("Restored camera count" if ok else "Nothing to restore")
-        refresh_status()
+        _show("No multiview layout to restore — set up views first, then isolate")
         return
     ok = _api().view_cameras.restore_povs(povs)
     _pre_isolate_snapshot = None
