@@ -807,22 +807,39 @@ namespace spz {
 		/// <summary>
 		/// When Python HTTP never runs create_panel, seed a minimal in-process panel for known add-ons so the ribbon tab is not blank.
 		/// </summary>
-		/// <summary>
-		/// When Python HTTP never runs create_panel, seed a minimal in-process panel for known add-ons so the ribbon tab is not blank.
-		/// </summary>
 		/// <param name="force">True from MarkAddonLoadFailed — seed even while the launcher PID is still alive.</param>
 		public void EnsureNativeFallbackUiWhenPythonMissing(string addonId, bool force = false) {
 			if (string.IsNullOrEmpty(addonId) || !Addon_MGR.IsAddonEnabledStatic(addonId))
 				return;
-			if (!force && !Addon_MGR.ShouldSeedNativeAddonFallbackStatic())
-				return;
+			// SPZ GO multi-host shell integrity is not an HTTP-down fallback: a half-built panel that only
+			// got Blender must still gain ZBrush/Painter while Python :5557 is healthy (tab activate path).
 			if (string.Equals(addonId, StableProjectorzGoAddonId, StringComparison.Ordinal)) {
+				EnsureSpzGoHostSectionsComplete();
+				if (!force && !Addon_MGR.ShouldSeedNativeAddonFallbackStatic())
+					return;
 				EnsureNativeSpzGoPanel();
 				return;
 			}
+			if (!force && !Addon_MGR.ShouldSeedNativeAddonFallbackStatic())
+				return;
 			if (string.Equals(addonId, NomadThemeAddonId, StringComparison.Ordinal)) {
 				EnsureNativeNomadThemePanel();
 			}
+		}
+
+		/// <summary>
+		/// Ensures every registered DCC has a <c>HostSection_*</c> under the live SPZ GO panel. Safe to call
+		/// when HTTP is up — does not invent a panel, only completes missing hosts (R6 / connectivity).
+		/// </summary>
+		public void EnsureSpzGoHostSectionsComplete() {
+			if (!TryGetLiveAddonPanel(StableProjectorzGoAddonId, out GameObject panel) || panel == null)
+				return;
+			string panelId = panel.GetInstanceID().ToString();
+			if (!_addonUIElements.ContainsKey(StableProjectorzGoAddonId))
+				_addonUIElements[StableProjectorzGoAddonId] = new List<GameObject>();
+			if (!_addonUIElements[StableProjectorzGoAddonId].Contains(panel))
+				_addonUIElements[StableProjectorzGoAddonId].Add(panel);
+			EnsureNativeSpzGoMissingWidgets(panelId, panel);
 		}
 
 		void EnsureNativeSpzGoPanel() {
@@ -930,6 +947,15 @@ namespace spz {
 					return true;
 			}
 			return false;
+		}
+
+		/// <summary>RPC / tests: resolve a live UI element by instance-id string.</summary>
+		public GameObject FindUIElementPublic(string elementId) => FindUIElement(elementId);
+
+		/// <summary>True when this panel already owns <c>HostSection_&lt;hostId&gt;</c> (any depth).</summary>
+		public bool PanelHasSpzGoHostSection(GameObject panel, string hostId) {
+			if (panel == null || string.IsNullOrEmpty(hostId)) return false;
+			return PanelHasNamedControlPrefix(panel, SpzGoHostSection.SectionName(hostId));
 		}
 
 		/// <summary>

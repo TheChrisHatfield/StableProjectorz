@@ -103,7 +103,8 @@ namespace spz {
 		    tabText.verticalAlignment = TMPro.VerticalAlignmentOptions.Middle;
 	    }
 
-	    /// <summary>Leftmost prefab/runtime strip tab label (direct children of <paramref name="strip"/>), excluding one cell if needed.</summary>
+	    /// <summary>Leftmost prefab/runtime strip tab label (direct children of <paramref name="strip"/>), excluding one cell if needed.
+	    /// Skip enabled-add-on icon cells — their labels are maxVisibleCharacters=0 and must not drive Art/Mesh/Paint measure.</summary>
 	    static TextMeshProUGUI GetRibbonStripTypographyReferenceTMP(Transform strip, Transform excludeTabCellRoot)
 	    {
 		    if (strip == null) return null;
@@ -113,6 +114,7 @@ namespace spz {
 		    {
 			    if (elem == null || elem.transform.parent != strip) continue;
 			    if (excludeTabCellRoot != null && elem.transform == excludeTabCellRoot) continue;
+			    if (IsAddonStripTabCell(elem.transform)) continue;
 			    int ix = elem.transform.GetSiblingIndex();
 			    if (ix >= bestIx) continue;
 			    bestIx = ix;
@@ -451,6 +453,13 @@ namespace spz {
 			    if (w == null || w == panel) continue;
 			    string wn = w.name ?? "";
 			    if (string.Equals(wn, "Title", StringComparison.Ordinal)) continue;
+			    // Multi-host SPZ GO shell: logos/sections are real content even when Settings are collapsed.
+			    if (wn.StartsWith("HostSection_", StringComparison.Ordinal)
+			        || wn.StartsWith("HostLogo_", StringComparison.Ordinal)
+			        || wn.StartsWith("ModeToggle_", StringComparison.Ordinal)
+			        || wn.StartsWith("SpzGoScrollView", StringComparison.Ordinal)
+			        || wn.StartsWith("Foldout_", StringComparison.Ordinal))
+				    return true;
 			    if (wn.StartsWith("Button_", StringComparison.Ordinal)
 			        || wn.StartsWith("TextInput_", StringComparison.Ordinal)
 			        || wn.StartsWith("Slider_", StringComparison.Ordinal)
@@ -543,7 +552,11 @@ namespace spz {
 			    EnsureTabGroupResolved();
 			    Transform stripPoll = ResolveEffectiveTabStripTransform();
 			    var stripRtPoll = stripPoll as RectTransform;
-			    if (stripRtPoll != null) {
+			    if (stripRtPoll == null) {
+				    _lastRibbonStripWidth = -1f;
+			    }
+			    // While a tab is being dragged, swaps change cell widths every frame — reflowing here fought the drag.
+			    else if (!RibbonTabDragReorder_UI.IsDraggingAnyTab) {
 				    float wPoll = stripRtPoll.rect.width;
 				    if (_lastRibbonStripWidth < 0f)
 					    _lastRibbonStripWidth = wPoll;
@@ -551,10 +564,9 @@ namespace spz {
 					    _lastRibbonStripWidth = wPoll;
 					    RefreshTabStripLayout();
 				    }
-			    } else {
-				    _lastRibbonStripWidth = -1f;
+				    // Sibling order is part of the Nomad selection key — re-theming every swap was the flicker.
+				    SyncStripTabSelectionChromeIfChanged();
 			    }
-			    SyncStripTabSelectionChromeIfChanged();
 		    }
 	        if(KeyMousePenInput.isSomeInputFieldActive()){ return;} //maybe typing some exclamation mark etc.
 	        if (KeyMousePenInput.isKey_Shift_pressed() == false){ return; }
@@ -614,10 +626,15 @@ namespace spz {
 	            if (collector != null) StartCoroutine(PaintCollect_WaitForSingletons_crtn(collector));
 	        }
 
-	        HarmonizeStripTabTypography();
-	        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
-	        ApplyThemeTokens();
-	    }
+        HarmonizeStripTabTypography();
+        SpzUiThemeOps.ThemeChanged += ApplyThemeTokens;
+        ApplyThemeTokens();
+
+        // Capture authored order before restoring the user's saved one, so Settings "Reset tab order" has a target.
+        CaptureAuthoredTabOrderIfNeeded();
+        ApplySavedTabOrder();
+        RefreshTabReorderHandles();
+    }
 
 	    void OnDestroy() {
 	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
@@ -2036,7 +2053,7 @@ namespace spz {
 	        }
 	    }
 
-	    /// <summary>Prefab tab used to copy fonts/slice (skips the tab being styled and any tab named like the Paint strip cell).</summary>
+	    /// <summary>Prefab tab used to copy fonts/slice (skips the tab being styled, Paint, and add-on icon cells).</summary>
 	    static TabsGroupElem_UI FindFirstOtherStripTabForStyleReference(Transform tabStrip, Transform skipTabRoot)
 	    {
 	        if (tabStrip == null) return null;
@@ -2045,6 +2062,7 @@ namespace spz {
 	            if (elem == null || skipTabRoot != null && elem.transform == skipTabRoot) continue;
 	            if (elem.transform.parent != tabStrip) continue;
 	            if (elem.gameObject.name.IndexOf("paint", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+	            if (IsAddonStripTabCell(elem.transform)) continue;
 	            return elem;
 	        }
 	        return null;
@@ -2227,13 +2245,246 @@ namespace spz {
 	        }
 	    }
 
+	    // ===== Dynamic tab movement: user-reorderable strip tabs (opt-in; see RibbonTabOrder_Prefs) =====
+
+	    /// <summary>Authored strip order, captured before any saved order is applied, so Settings "Reset tab order" can restore it.</summary>
+	    List<string> _authoredTabOrderKeys = new List<string>();
+
+	    public static bool IsStripDividerChild(Transform child) {
+		    if (child == null) return false;
+		    string n = child.name ?? "";
+		    return n.StartsWith("StripDivider_", StringComparison.Ordinal)
+		           || n.StartsWith("AddonDivider_", StringComparison.Ordinal);
+	    }
+
+	    /// <summary>Tab cells in slot order (sibling order; dividers and non-tab children skipped).</summary>
+	    public static List<Transform> CollectStripTabCells(Transform strip) {
+		    var cells = new List<Transform>();
+		    if (strip == null) return cells;
+		    for (int i = 0; i < strip.childCount; i++) {
+			    Transform c = strip.GetChild(i);
+			    if (c == null || IsStripDividerChild(c)) continue;
+			    if (c.name == RibbonTabDragReorder_UI.PLACEHOLDER_NAME) continue;
+			    if (c.GetComponent<TabsGroupElem_UI>() == null) continue;
+			    cells.Add(c);
+		    }
+		    return cells;
+	    }
+
+	    public static List<RectTransform> CollectStripTabCellRects(Transform strip) {
+		    var rects = new List<RectTransform>();
+		    CollectStripTabCellRects(strip, rects);
+		    return rects;
+	    }
+
+	    /// <summary>Buffer variant for the drag loop — reuses the caller's list instead of allocating each pointer event.</summary>
+	    public static void CollectStripTabCellRects(Transform strip, List<RectTransform> buffer, Transform except = null) {
+		    if (buffer == null) return;
+		    buffer.Clear();
+		    if (strip == null) return;
+		    for (int i = 0; i < strip.childCount; i++) {
+			    Transform c = strip.GetChild(i);
+			    if (c == null || c == except || IsStripDividerChild(c)) continue;
+			    if (c.name == RibbonTabDragReorder_UI.PLACEHOLDER_NAME) continue;
+			    if (c.GetComponent<TabsGroupElem_UI>() == null) continue;
+			    if (c is RectTransform rt)
+				    buffer.Add(rt);
+		    }
+	    }
+
+	    /// <summary>Persistence key for one strip tab: its <see cref="TabsGroupElem_UI.title"/> (add-ons: <c>addon_&lt;id&gt;</c>).</summary>
+	    public static string StripTabOrderKey(Transform cell) {
+		    var elem = cell != null ? cell.GetComponent<TabsGroupElem_UI>() : null;
+		    return elem != null ? RibbonTabOrder_Prefs.NormalizeKey(elem.title) : "";
+	    }
+
+	    /// <summary>Moves one tab cell to a slot (index among tab cells). Dividers are re-paired by <see cref="NormalizeAddonStripDividers"/>.</summary>
+	    public static bool MoveStripTabToSlot(Transform strip, Transform cell, int targetSlot) {
+		    if (strip == null || cell == null || cell.parent != strip) return false;
+		    var cells = CollectStripTabCells(strip);
+		    if (targetSlot < 0 || targetSlot >= cells.Count) return false;
+		    if (cells[targetSlot] == cell) return false;
+		    cell.SetSiblingIndex(cells[targetSlot].GetSiblingIndex());
+		    return true;
+	    }
+
+	    /// <summary>Slot move using cells the caller already collected (drag loop path — no extra hierarchy scan).</summary>
+	    public static bool MoveStripTabToSlot(Transform cell, IList<RectTransform> tabCellsInSlotOrder, int targetSlot) {
+		    if (cell == null || tabCellsInSlotOrder == null) return false;
+		    if (targetSlot < 0 || targetSlot >= tabCellsInSlotOrder.Count) return false;
+		    RectTransform target = tabCellsInSlotOrder[targetSlot];
+		    if (target == null || target.transform == cell) return false;
+		    cell.SetSiblingIndex(target.GetSiblingIndex());
+		    return true;
+	    }
+
+	    /// <summary>Places tab cells in <paramref name="desiredOrder"/> using the slots tab cells already occupy, so dividers / spacers keep their positions.</summary>
+	    public static void ApplyStripTabCellOrder(Transform strip, IList<Transform> desiredOrder) {
+		    if (strip == null || desiredOrder == null) return;
+		    for (int slot = 0; slot < desiredOrder.Count; slot++) {
+			    var cells = CollectStripTabCells(strip);
+			    if (slot >= cells.Count) break;
+			    Transform want = desiredOrder[slot];
+			    if (want == null || want.parent != strip) continue;
+			    if (cells[slot] == want) continue;
+			    want.SetSiblingIndex(cells[slot].GetSiblingIndex());
+		    }
+	    }
+
+	    void CaptureAuthoredTabOrderIfNeeded() {
+		    if (_authoredTabOrderKeys != null && _authoredTabOrderKeys.Count > 0) return;
+		    var keys = new List<string>();
+		    foreach (var cell in CollectStripTabCells(ResolveEffectiveTabStripTransform())) {
+			    string k = StripTabOrderKey(cell);
+			    if (k.Length > 0 && !keys.Contains(k))
+				    keys.Add(k);
+		    }
+		    _authoredTabOrderKeys = keys;
+	    }
+
+	    /// <summary>Applies the user's saved tab order. Tabs missing from the save (new built-in, freshly enabled add-on) stay at the end.</summary>
+	    public bool ApplySavedTabOrder() {
+		    Transform strip = ResolveEffectiveTabStripTransform();
+		    if (strip == null) return false;
+		    CaptureAuthoredTabOrderIfNeeded();
+		    var saved = RibbonTabOrder_Prefs.LoadOrder();
+		    if (saved.Count == 0) return false;
+		    var cells = CollectStripTabCells(strip);
+		    if (cells.Count <= 1) return false;
+		    var desired = RibbonTabOrder_Prefs.MergeWithSavedOrder(cells, StripTabOrderKey, saved);
+		    ApplyStripTabCellOrder(strip, desired);
+		    NormalizeAddonStripDividers();
+		    if (_tabGroup != null)
+			    _tabGroup.SyncTabOrderFromStrip();
+		    return true;
+	    }
+
+	    /// <summary>Stores the strip order in settings (Settings "Save tab order" and every drop commit).</summary>
+	    public bool PersistCurrentTabOrder() {
+		    Transform strip = ResolveEffectiveTabStripTransform();
+		    if (strip == null) return false;
+		    var keys = new List<string>();
+		    foreach (var cell in CollectStripTabCells(strip)) {
+			    string k = StripTabOrderKey(cell);
+			    if (k.Length > 0 && !keys.Contains(k))
+				    keys.Add(k);
+		    }
+		    if (keys.Count == 0) return false;
+		    RibbonTabOrder_Prefs.SaveOrder(keys);
+		    return true;
+	    }
+
+	    /// <summary>Settings "Reset tab order": forget the saved order and put the authored tabs back in place.</summary>
+	    public void RestoreDefaultTabOrder() {
+		    RibbonTabOrder_Prefs.ClearOrder();
+		    Transform strip = ResolveEffectiveTabStripTransform();
+		    if (strip == null) return;
+		    var cells = CollectStripTabCells(strip);
+		    if (cells.Count > 1 && _authoredTabOrderKeys != null && _authoredTabOrderKeys.Count > 0) {
+			    var desired = RibbonTabOrder_Prefs.MergeWithSavedOrder(cells, StripTabOrderKey, _authoredTabOrderKeys);
+			    ApplyStripTabCellOrder(strip, desired);
+		    }
+		    NormalizeAddonStripDividers();
+		    if (_tabGroup != null)
+			    _tabGroup.SyncTabOrderFromStrip();
+		    RefreshTabStripLayout();
+	    }
+
+	    /// <summary>
+	    /// Adds drag handles only while dynamic tab movement is unlocked; removes them when locked,
+	    /// so the default strip keeps authored pointer behavior (tab click / ScrollRect pan).
+	    /// Also strips any leftover TabDragGrip chrome from older unlock sessions.
+	    /// </summary>
+	    public void RefreshTabReorderHandles() {
+		    Transform strip = ResolveEffectiveTabStripTransform();
+		    if (strip == null) return;
+		    bool unlocked = RibbonTabOrder_Prefs.IsDynamicTabMovementEnabled();
+		    foreach (var cell in CollectStripTabCells(strip)) {
+			    var handle = cell.GetComponent<RibbonTabDragReorder_UI>();
+			    if (unlocked) {
+				    if (handle == null)
+					    handle = cell.gameObject.AddComponent<RibbonTabDragReorder_UI>();
+				    handle.Bind(this, strip);
+				    RibbonTabDragReorder_UI.EnsureGripVisual(cell);
+				    continue;
+			    }
+			    if (handle != null) {
+				    if (Application.isPlaying)
+					    Destroy(handle);
+				    else
+					    DestroyImmediate(handle);
+			    }
+			    RibbonTabDragReorder_UI.RemoveGripVisual(cell);
+		    }
+	    }
+
+	    /// <summary>Drop commit from <see cref="RibbonTabDragReorder_UI"/>: snap the strip in this frame.
+	    /// Do not run the full add-tab refresh (theme + next-frame Canvas.ForceUpdateCanvases) — that
+	    /// flashes the ribbon window instead of seating the tab in the gap.</summary>
+	    public void OnStripTabDropped() {
+		    NormalizeAddonStripDividers();
+		    if (_tabGroup != null)
+			    _tabGroup.SyncTabOrderFromStrip();
+		    PersistCurrentTabOrder();
+		    RebuildStripLayoutImmediate(ResolveEffectiveTabStripTransform());
+		    SnapshotStripTabSelectionChrome();
+	    }
+
+	    /// <summary>Same-frame strip-only layout rebuild. Used while sliding a tab (placeholder gap) and on drop snap.
+	    /// Preserves a parent horizontal ScrollRect position — rebuilding used to jump the row and leave the
+	    /// dragged tab stranded over the viewport.</summary>
+	    public static void RebuildStripLayoutImmediate(Transform strip) {
+		    var rt = strip as RectTransform;
+		    if (rt == null) return;
+		    var scroll = strip.GetComponentInParent<ScrollRect>();
+		    bool keepScroll = scroll != null && scroll.horizontal;
+		    float keepH = keepScroll ? scroll.horizontalNormalizedPosition : 0f;
+		    LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
+		    if (keepScroll && scroll != null)
+			    scroll.horizontalNormalizedPosition = keepH;
+	    }
+
+	    /// <summary>Keeps every add-on divider directly before its own tab, and hides the divider of whichever tab is now leftmost.</summary>
+	    public void NormalizeAddonStripDividers() {
+		    Transform strip = ResolveEffectiveTabStripTransform();
+		    if (strip == null || _addonStripDividerById == null || _addonTabById == null) return;
+		    var cells = CollectStripTabCells(strip);
+		    Transform leadingCell = cells.Count > 0 ? cells[0] : null;
+		    foreach (var kvp in _addonStripDividerById) {
+			    GameObject div = kvp.Value;
+			    if (div == null) continue;
+			    if (!_addonTabById.TryGetValue(kvp.Key, out var tabGo) || tabGo == null) continue;
+			    if (div.transform.parent != strip || tabGo.transform.parent != strip) continue;
+			    int tabIx = tabGo.transform.GetSiblingIndex();
+			    int divIx = div.transform.GetSiblingIndex();
+			    if (divIx != tabIx - 1)
+				    div.transform.SetSiblingIndex(divIx < tabIx ? tabIx - 1 : tabIx);
+			    // A divider as the first strip child reads as a stray bar — only separate tabs that have a left neighbor.
+			    bool leading = leadingCell != null && leadingCell == tabGo.transform;
+			    if (div.activeSelf == leading)
+				    div.SetActive(!leading);
+		    }
+	    }
+
+	    /// <summary>Settings hook: apply the "dynamic tab movement" toggle to the live ribbon strip.</summary>
+	    public static void ApplyDynamicTabMovementSetting() {
+		    if (instance == null) return;
+		    instance.RefreshTabReorderHandles();
+	    }
+
 	    /// <summary>Re-apply strip HLG rules, label auto-size, layout rebuild, and optional ScrollRect (call after add/remove runtime tabs).</summary>
 	    void RefreshRibbonTabStripLayout(Transform tabStrip) {
 		    if (tabStrip == null) return;
+		    // Mid-drag: skip even a queued layout rebuild — that still snaps the floating cell and neighbors.
+		    // The drop commit does the full pass once the cell is back in the layout.
+		    if (RibbonTabDragReorder_UI.IsDraggingAnyTab)
+			    return;
 		    PatchTabStripResponsiveLayout();
 		    // ApplyThemeTokens first: restores label glyphs / clears icon locks, then Harmonize when labels are visible.
 		    // Harmonize-before-theme measured maxVisibleCharacters=0 labels and locked wrong minWidths on leave.
 		    ApplyThemeTokens();
+		    ApplySavedTabOrder();
+		    RefreshTabReorderHandles();
 		    QueueTabStripRebuildNextFrame(tabStrip);
 	    }
 
