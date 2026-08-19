@@ -349,6 +349,7 @@ namespace spz {
 				else if (vc.myCamera != null)
 					vc.myCamera.fieldOfView = povs[i].camera_fov;
 				vc.Set_ProjMat_center(povs[i].perspectiveCenter01);
+				CamerasMGR_PinsZone_UI.instance?.RepositionPinUIFromPovData(i);
 			}
 			dummy.Dispose_internal();
 			return true;
