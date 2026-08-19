@@ -84,7 +84,10 @@ namespace spz {
 
 
 	    void innerViewport_to_screenPixels(Vector2 minView01, Vector2 maxView01, out Vector2 minScreen_, out Vector2 maxScreen_ ){
+	        minScreen_ = default;
+	        maxScreen_ = default;
 	        // Get the viewport rect
+	        if (MainViewport_UI.instance == null || MainViewport_UI.instance.innerViewportRect == null) return;
 	        RectTransform viewportRect = MainViewport_UI.instance.innerViewportRect;
 	         // Convert normalized coordinates (0-1) to local viewport coordinates
 	        Vector2 minLocal = new Vector2(
@@ -116,7 +119,7 @@ namespace spz {
 	        // Start dragging if LMB pressed this frame
 	        if (KeyMousePenInput.isLMBpressedThisFrame()){
 	            // Ensure user is clicking in the viewport
-	            if (!MainViewport_UI.instance.isCursorHoveringMe()){
+	            if (MainViewport_UI.instance == null || !MainViewport_UI.instance.isCursorHoveringMe()){
 	                return;
 	            }
 	            _viewportClickScreenPos = screenPos_clampedInsideViewport();
