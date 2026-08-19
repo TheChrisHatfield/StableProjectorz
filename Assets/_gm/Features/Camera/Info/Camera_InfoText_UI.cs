@@ -18,6 +18,7 @@ namespace spz {
 	    }
 
 	    void Update(){
+	        if (Settings_MGR.instance == null || _cam_infoText_pos == null) return;
 	        bool isShowInfoText = Settings_MGR.instance.get_isShow_CameraInfoText();
 	        _cam_infoText_pos.transform.parent.gameObject.SetActive( isShowInfoText );
 	        if(!isShowInfoText){ return; }
@@ -27,7 +28,9 @@ namespace spz {
 
 	        // 3d models get scaled down and shifted during import, so that they fit into predefined volume.
 	        // Therefore, we need to compensate for it, in our position, but not rotation:
-	        Vector3 pos = ModelsHandler_3D.instance.currModel_InverseTransformPoint(myContentCam.transform.position );
+	        var mh = ModelsHandler_3D.instance;
+	        if (mh == null) return;
+	        Vector3 pos = mh.currModel_InverseTransformPoint(myContentCam.transform.position );
 	        Vector3 rot = myContentCam.transform.eulerAngles;
 	        float fov = myContentCam.myCamera.fieldOfView;
 
