@@ -233,6 +233,147 @@ namespace spz {
 			}
 			return any;
 		}
+
+		static JObject Vec3Json(Vector3 v) => new JObject { ["x"] = v.x, ["y"] = v.y, ["z"] = v.z };
+		static JObject QuatJson(Quaternion q) => new JObject { ["x"] = q.x, ["y"] = q.y, ["z"] = q.z, ["w"] = q.w };
+		static JObject Vec2Json(Vector2 v) => new JObject { ["x"] = v.x, ["y"] = v.y };
+
+		static bool TryParseVec3(JObject o, out Vector3 v) {
+			v = default;
+			if (o == null) return false;
+			try {
+				v = new Vector3(o["x"]?.ToObject<float>() ?? 0f, o["y"]?.ToObject<float>() ?? 0f, o["z"]?.ToObject<float>() ?? 0f);
+				return IsValidFloat(v.x) && IsValidFloat(v.y) && IsValidFloat(v.z);
+			} catch { return false; }
+		}
+
+		static bool TryParseQuat(JObject o, out Quaternion q) {
+			q = Quaternion.identity;
+			if (o == null) return false;
+			try {
+				q = new Quaternion(o["x"]?.ToObject<float>() ?? 0f, o["y"]?.ToObject<float>() ?? 0f,
+					o["z"]?.ToObject<float>() ?? 0f, o["w"]?.ToObject<float>() ?? 1f);
+				return IsValidFloat(q.x) && IsValidFloat(q.y) && IsValidFloat(q.z) && IsValidFloat(q.w);
+			} catch { return false; }
+		}
+
+		static bool TryParseVec2(JObject o, out Vector2 v) {
+			v = default;
+			if (o == null) return false;
+			try {
+				v = new Vector2(o["x"]?.ToObject<float>() ?? 0.5f, o["y"]?.ToObject<float>() ?? 0.5f);
+				return IsValidFloat(v.x) && IsValidFloat(v.y);
+			} catch { return false; }
+		}
+
+		static JObject CameraPovInfoJson(int index, CameraPovInfo inf) => new JObject {
+			["index"] = index,
+			["was_enabled"] = inf.wasEnabled,
+			["position"] = Vec3Json(inf.camera_pos),
+			["rotation"] = QuatJson(inf.camera_rot),
+			["fov"] = inf.camera_fov,
+			["perspective_center"] = Vec2Json(inf.perspectiveCenter01),
+		};
+
+		/// <summary>Full multiview POV snapshot (all slots, including inactive).</summary>
+		public JObject GetViewCameraPovsJson() {
+			if (!_isInitialized) return null;
+			var mgr = UserCameras_MGR.instance;
+			if (mgr == null) return null;
+			var infos = mgr.get_viewCams_PovInfos();
+			var arr = new JArray();
+			for (int i = 0; i < infos.Count; i++) {
+				arr.Add(CameraPovInfoJson(i, infos[i]));
+			}
+			return new JObject {
+				["count"] = infos.Count,
+				["max_count"] = UserCameras_MGR.MAX_NUM_VIEW_CAMERAS,
+				["num_enabled"] = infos.Count(p => p.wasEnabled),
+				["current_index"] = mgr.CurrentViewCameraIndex,
+				["povs"] = arr,
+			};
+		}
+
+		/// <summary>Restore multiview placements from addon preset JSON (same shape as get_view_camera_povs).</summary>
+		public bool RestoreViewCameraPovsFromJson(JArray povsArray) {
+			if (!_isInitialized || povsArray == null) return false;
+			var mgr = UserCameras_MGR.instance;
+			if (mgr == null) return false;
+			int slotCount = mgr.GetViewCameraCount();
+			if (slotCount <= 0 || povsArray.Count == 0) return false;
+			var byIndex = new CameraPovInfo[slotCount];
+			bool anyParsed = false;
+			int seqFallback = 0;
+			foreach (var tok in povsArray) {
+				if (tok is not JObject item) continue;
+				int ix = item["index"]?.ToObject<int>() ?? seqFallback;
+				seqFallback = ix + 1;
+				if (ix < 0 || ix >= slotCount) continue;
+				bool wasEnabled = item["was_enabled"]?.ToObject<bool>() ?? false;
+				if (!TryParseVec3(item["position"] as JObject, out Vector3 pos)) continue;
+				if (!TryParseQuat(item["rotation"] as JObject, out Quaternion rot)) continue;
+				float fov = item["fov"]?.ToObject<float>() ?? 60f;
+				if (!IsValidFloat(fov)) fov = 60f;
+				TryParseVec2(item["perspective_center"] as JObject, out Vector2 pc);
+				byIndex[ix] = new CameraPovInfo(wasEnabled, pos, rot, fov, pc);
+				anyParsed = true;
+			}
+			if (!anyParsed) return false;
+			var povs = new List<CameraPovInfo>(slotCount);
+			for (int i = 0; i < slotCount; i++) {
+				if (byIndex[i] != null) {
+					povs.Add(byIndex[i]);
+				} else {
+					var vc = mgr.GetViewCamera(i);
+					if (vc != null) {
+						povs.Add(new CameraPovInfo(false, vc.transform.position, vc.transform.rotation,
+							vc.fovMgr != null ? vc.fovMgr._trueCameraFov : 60f, vc._projectionMat_center));
+					} else {
+						povs.Add(new CameraPovInfo(false, Vector3.zero, Quaternion.identity, 60f, new Vector2(0.5f, 0.5f)));
+					}
+				}
+			}
+			Vector3 center = ModelsHandler_3D.instance != null
+				? ModelsHandler_3D.instance.GetTotalBounds_ofSelectedMeshes().center
+				: Vector3.zero;
+			var dummy = new GenData2D(GenerationData_Kind.TemporaryDummyNoPics, use_many_icons: true, center, povs);
+			mgr.Restore_CamerasPlacements(dummy);
+			dummy.Dispose_internal();
+			return true;
+		}
+
+		/// <summary>Enable only the given view camera index.</summary>
+		public bool IsolateViewCameraRpc(int index) {
+			if (!_isInitialized) return false;
+			var mgr = UserCameras_MGR.instance;
+			if (mgr == null) return false;
+			return mgr.TryIsolateViewCamera(index);
+		}
+
+		/// <summary>Apply pose/FOV/pin to one slot (works when inactive).</summary>
+		public bool ApplyViewCameraSlotPovRpc(int index, JObject pov) {
+			if (!_isInitialized || pov == null) return false;
+			var mgr = UserCameras_MGR.instance;
+			var vc = mgr?.GetViewCamera(index);
+			if (vc == null) return false;
+			if (!TryParseVec3(pov["position"] as JObject, out Vector3 pos)) return false;
+			if (!TryParseQuat(pov["rotation"] as JObject, out Quaternion rot)) return false;
+			float fov = pov["fov"]?.ToObject<float>() ?? 60f;
+			if (vc.fovMgr != null && pov["fov"] == null)
+				fov = vc.fovMgr._trueCameraFov;
+			if (!IsValidFloat(fov) || fov < 1f || fov > 179f) return false;
+			TryParseVec2(pov["perspective_center"] as JObject, out Vector2 pc);
+			vc.transform.SetPositionAndRotation(pos, rot);
+			if (vc.fovMgr != null)
+				vc.fovMgr.SetFieldOfView(fov, compensateByDistanceOffset: true);
+			else if (vc.myCamera != null)
+				vc.myCamera.fieldOfView = fov;
+			vc.Set_ProjMat_center(pc);
+			if (pov.TryGetValue("was_enabled", out JToken enTok) && enTok != null && enTok.Type != JTokenType.Null) {
+				mgr.TrySetViewCameraActive(index, enTok.ToObject<bool>());
+			}
+			return true;
+		}
 		
 		// ============================================
 		// SELECTION OPERATIONS (Real-time)
