@@ -249,6 +249,7 @@ namespace spz {
 		/// <summary>Live search query (associative text). Kept while the manager stays open; not cleared on Close.</summary>
 		string _searchQuery = "";
 		TMP_InputField _searchInput;
+		Coroutine _restoreSearchCaretCo;
 		/// <summary>Preferences rows left open — search/filter rebuild must not collapse them.</summary>
 		readonly HashSet<string> _expandedAddonIds = new HashSet<string>(StringComparer.Ordinal);
 		Toggle _rememberEnabledAddonToggle; // assigned in Create / TryAddRememberPreferenceRowIfMissing
@@ -854,7 +855,7 @@ namespace spz {
 		GameObject filterBarObj = new GameObject("FilterBar");
 		filterBarObj.transform.SetParent(panelObj.transform, false);
 		var filterBarLE = filterBarObj.AddComponent<LayoutElement>();
-		// Label + pills only — search is its own full-width row below.
+		// Label + pills only — search is its own ~⅓-width row below.
 		filterBarLE.preferredHeight = 66f;
 		filterBarLE.minHeight = 66f;
 		filterBarLE.flexibleWidth = 1f;
@@ -906,7 +907,7 @@ namespace spz {
 		_filterAllToggle = CreateFilterToggle("All", filterPillsObj.transform, toggleGroup, 0).GetComponent<Toggle>();
 		_filterEnabledToggle = CreateFilterToggle("Enabled", filterPillsObj.transform, toggleGroup, 1).GetComponent<Toggle>();
 		_filterDisabledToggle = CreateFilterToggle("Disabled", filterPillsObj.transform, toggleGroup, 2).GetComponent<Toggle>();
-		// Full-bleed search row under FilterBar (sibling of FilterBar, not nested under pills).
+		// Narrow (~⅓ panel) search row under FilterBar — left-aligned sibling, not under pills.
 		BuildAddonSearchField(panelObj.transform);
 		
 		GameObject scrollViewObj = new GameObject("ScrollView");
@@ -1645,36 +1646,33 @@ namespace spz {
 		}
 
 		const string SearchFieldName = "SearchField";
+		const string SearchRowName = "SearchRow";
+		/// <summary>~1/3 of panel content width — less than half spanning, left-aligned under Filter.</summary>
+		const float SearchWidthPanelFraction = 1f / 3f;
 
 		/// <summary>
 		/// Connectivity: older panels have Filter pills but no search — create/wire here so OpenPanel
-		/// never leaves "filter works, search missing." Search is a full-width sibling of FilterBar.
+		/// never leaves "filter works, search missing." Search sits in a left-aligned ~1/3-width row.
 		/// </summary>
 		void EnsureSearchFieldFromPanel() {
 			if (_panel == null) return;
 			if (_searchInput != null && _searchInput.transform.IsChildOf(_panel.transform)) {
-				StretchSearchFieldFullWidth(_searchInput.transform as RectTransform);
+				EnsureSearchInsideNarrowRow(_searchInput.transform);
+				ApplySearchFieldNarrowLayout(_searchInput.transform as RectTransform);
 				WireSearchInputListeners(_searchInput);
 				return;
 			}
-			// Prefer panel-level SearchField (full bleed). Fall back to FilterBar/SearchField from older builds.
-			Transform existing = _panel.transform.Find(SearchFieldName);
+			Transform existing = FindSearchFieldTransform();
 			if (existing == null) {
 				var underFilter = _panel.transform.Find("FilterBar/" + SearchFieldName);
-				if (underFilter != null) {
-					// Promote nested search to a full-width panel sibling so the bar spans the shell.
-					underFilter.SetParent(_panel.transform, false);
+				if (underFilter != null)
 					existing = underFilter;
-					int filterIdx = _panel.transform.Find("FilterBar") != null
-						? _panel.transform.Find("FilterBar").GetSiblingIndex()
-						: 0;
-					existing.SetSiblingIndex(filterIdx + 1);
-				}
 			}
 			if (existing != null) {
 				_searchInput = existing.GetComponent<TMP_InputField>();
 				if (_searchInput != null) {
-					StretchSearchFieldFullWidth(existing as RectTransform);
+					EnsureSearchInsideNarrowRow(existing);
+					ApplySearchFieldNarrowLayout(_searchInput.transform as RectTransform);
 					WireSearchInputListeners(_searchInput);
 					UpdateSearchPlaceholder(_searchInput);
 					return;
@@ -1683,8 +1681,9 @@ namespace spz {
 			Transform filterBar = _panel.transform.Find("FilterBar");
 			int insertAt = filterBar != null ? filterBar.GetSiblingIndex() + 1 : _panel.transform.childCount;
 			BuildAddonSearchField(_panel.transform);
-			if (_searchInput != null)
-				_searchInput.transform.SetSiblingIndex(insertAt);
+			Transform row = _panel.transform.Find(SearchRowName);
+			if (row != null)
+				row.SetSiblingIndex(insertAt);
 			var barLe = filterBar != null ? filterBar.GetComponent<LayoutElement>() : null;
 			if (barLe != null) {
 				// Search moved out — FilterBar no longer needs the taller slot.
@@ -1693,18 +1692,84 @@ namespace spz {
 			}
 		}
 
-		static void StretchSearchFieldFullWidth(RectTransform rt) {
+		Transform FindSearchFieldTransform() {
+			if (_panel == null) return null;
+			Transform inRow = _panel.transform.Find(SearchRowName + "/" + SearchFieldName);
+			if (inRow != null) return inRow;
+			return _panel.transform.Find(SearchFieldName);
+		}
+
+		/// <summary>
+		/// Panel VLG force-expands children to full width — wrap the field in SearchRow (HLG, no force-expand)
+		/// so preferredWidth ~1/3 actually sticks and stays left-aligned.
+		/// </summary>
+		Transform EnsureSearchRow(Transform panelParent) {
+			if (panelParent == null) return null;
+			Transform existing = panelParent.Find(SearchRowName);
+			if (existing != null) {
+				ConfigureSearchRow(existing.gameObject);
+				return existing;
+			}
+			var rowGo = new GameObject(SearchRowName);
+			rowGo.layer = panelParent.gameObject.layer;
+			rowGo.transform.SetParent(panelParent, false);
+			rowGo.AddComponent<RectTransform>();
+			ConfigureSearchRow(rowGo);
+			return rowGo.transform;
+		}
+
+		static void ConfigureSearchRow(GameObject rowGo) {
+			if (rowGo == null) return;
+			var le = rowGo.GetComponent<LayoutElement>() ?? rowGo.AddComponent<LayoutElement>();
+			le.minHeight = 36f;
+			le.preferredHeight = 36f;
+			le.flexibleHeight = 0f;
+			le.flexibleWidth = 1f;
+			le.minWidth = 0f;
+			le.preferredWidth = -1f;
+			var hlg = rowGo.GetComponent<HorizontalLayoutGroup>() ?? rowGo.AddComponent<HorizontalLayoutGroup>();
+			hlg.spacing = 0f;
+			hlg.padding = new RectOffset(0, 0, 0, 0);
+			hlg.childAlignment = TextAnchor.MiddleLeft;
+			hlg.childControlWidth = true;
+			hlg.childControlHeight = true;
+			hlg.childForceExpandWidth = false;
+			hlg.childForceExpandHeight = false;
+		}
+
+		void EnsureSearchInsideNarrowRow(Transform searchTf) {
+			if (searchTf == null || _panel == null) return;
+			Transform row = EnsureSearchRow(_panel.transform);
+			if (row == null) return;
+			if (searchTf.parent != row) {
+				int filterIdx = _panel.transform.Find("FilterBar") != null
+					? _panel.transform.Find("FilterBar").GetSiblingIndex()
+					: 0;
+				row.SetSiblingIndex(filterIdx + 1);
+				searchTf.SetParent(row, false);
+			}
+		}
+
+		void ApplySearchFieldNarrowLayout(RectTransform rt) {
 			if (rt == null) return;
 			rt.anchorMin = new Vector2(0f, 1f);
-			rt.anchorMax = new Vector2(1f, 1f);
-			rt.pivot = new Vector2(0.5f, 1f);
-			rt.offsetMin = new Vector2(0f, rt.offsetMin.y);
-			rt.offsetMax = new Vector2(0f, rt.offsetMax.y);
+			rt.anchorMax = new Vector2(0f, 1f);
+			rt.pivot = new Vector2(0f, 1f);
+			rt.anchoredPosition = Vector2.zero;
 			var le = rt.GetComponent<LayoutElement>();
 			if (le == null) le = rt.gameObject.AddComponent<LayoutElement>();
-			le.flexibleWidth = 1f;
-			le.preferredWidth = -1f;
-			le.minWidth = 0f;
+			float panelW = 360f;
+			if (_panel != null) {
+				var panelRt = _panel.transform as RectTransform;
+				if (panelRt != null && panelRt.rect.width > 8f)
+					panelW = panelRt.rect.width;
+			}
+			float third = Mathf.Max(140f, panelW * SearchWidthPanelFraction);
+			// Hard cap under half so force-expand leftovers never read as a full-bleed bar.
+			third = Mathf.Min(third, panelW * 0.45f);
+			le.flexibleWidth = 0f;
+			le.preferredWidth = third;
+			le.minWidth = 120f;
 			le.minHeight = 36f;
 			le.preferredHeight = 36f;
 			le.flexibleHeight = 0f;
@@ -1712,22 +1777,26 @@ namespace spz {
 
 		void BuildAddonSearchField(Transform parent) {
 			if (parent == null) return;
+			Transform row = EnsureSearchRow(parent);
+			if (row == null) return;
+			Transform existingField = row.Find(SearchFieldName);
+			if (existingField != null) {
+				_searchInput = existingField.GetComponent<TMP_InputField>();
+				ApplySearchFieldNarrowLayout(existingField as RectTransform);
+				if (_searchInput != null)
+					WireSearchInputListeners(_searchInput);
+				return;
+			}
 			var searchFieldGo = new GameObject(SearchFieldName);
 			searchFieldGo.layer = parent.gameObject.layer;
-			searchFieldGo.transform.SetParent(parent, false);
+			searchFieldGo.transform.SetParent(row, false);
 			var sRt = searchFieldGo.AddComponent<RectTransform>();
 			var sBg = searchFieldGo.AddComponent<Image>();
 			AssignSolidFaceThenMarkRounded(sBg);
 			sBg.color = new Color(30f / 255f, 30f / 255f, 33f / 255f, 0.95f);
 			sBg.raycastTarget = true;
-			var sLE = searchFieldGo.AddComponent<LayoutElement>();
-			sLE.flexibleWidth = 1f;
-			sLE.preferredWidth = -1f;
-			sLE.minWidth = 0f;
-			sLE.minHeight = 36f;
-			sLE.preferredHeight = 36f;
-			sLE.flexibleHeight = 0f;
-			StretchSearchFieldFullWidth(sRt);
+			searchFieldGo.AddComponent<LayoutElement>();
+			ApplySearchFieldNarrowLayout(sRt);
 
 			var textAreaObj = new GameObject("Text Area");
 			textAreaObj.layer = searchFieldGo.layer;
@@ -1776,6 +1845,8 @@ namespace spz {
 			_searchInput.placeholder = phTmp;
 			_searchInput.lineType = TMP_InputField.LineType.SingleLine;
 			_searchInput.caretWidth = 2;
+			_searchInput.customCaretColor = true;
+			_searchInput.caretColor = new Color(0.92f, 0.92f, 0.94f, 1f);
 			_searchInput.text = _searchQuery ?? "";
 			WireSearchInputListeners(_searchInput);
 			AttachTooltip(searchFieldGo, "Type to filter add-ons by any associated text (name, id, description, author…).");
@@ -1963,17 +2034,58 @@ namespace spz {
 				// Theme new rows only — do not ApplyBoundChromeTmp on the active search field.
 				ThemeAddonListItemsOnly();
 				ProtectListViewportMaskGraphic();
+				// Soft path: skip ScheduleFlushAddonManagerShellLayout — shell reflow mid-keystroke
+				// resets TMP caret to the start so typing no longer trails at the end of the text.
 			} else {
 				ApplyThemeTokens();
+				ScheduleFlushAddonManagerShellLayout();
 			}
-			ScheduleFlushAddonManagerShellLayout();
 
-			if (restoreSearchFocus && _searchInput != null && EventSystem.current != null) {
-				EventSystem.current.SetSelectedGameObject(_searchInput.gameObject);
-				_searchInput.caretPosition = restoreCaret;
-				_searchInput.selectionAnchorPosition = restoreSelAnchor;
-				_searchInput.selectionFocusPosition = restoreSelFocus;
+			if (restoreSearchFocus)
+				ScheduleRestoreSearchCaret(restoreCaret, restoreSelAnchor, restoreSelFocus);
+		}
+
+		void ScheduleRestoreSearchCaret(int caret, int selAnchor, int selFocus) {
+			if (_searchInput == null) return;
+			if (!isActiveAndEnabled || !gameObject.activeInHierarchy) {
+				ApplySearchCaretNow(caret, selAnchor, selFocus);
+				return;
 			}
+			if (_restoreSearchCaretCo != null)
+				StopCoroutine(_restoreSearchCaretCo);
+			_restoreSearchCaretCo = StartCoroutine(CoRestoreSearchCaret(caret, selAnchor, selFocus));
+		}
+
+		IEnumerator CoRestoreSearchCaret(int caret, int selAnchor, int selFocus) {
+			// After Destroy + list layout this frame, then once more in case another flush raced.
+			yield return null;
+			ApplySearchCaretNow(caret, selAnchor, selFocus);
+			yield return null;
+			ApplySearchCaretNow(caret, selAnchor, selFocus);
+			_restoreSearchCaretCo = null;
+		}
+
+		void ApplySearchCaretNow(int caret, int selAnchor, int selFocus) {
+			if (_searchInput == null || EventSystem.current == null) return;
+			int len = _searchInput.text != null ? _searchInput.text.Length : 0;
+			bool collapsed = selAnchor == selFocus;
+			int c = Mathf.Clamp(caret, 0, len);
+			if (collapsed) {
+				// Soft rebuild can report a stale caret one behind while the user types at the end.
+				if (caret >= len - 1)
+					c = len;
+				selAnchor = c;
+				selFocus = c;
+			} else {
+				selAnchor = Mathf.Clamp(selAnchor, 0, len);
+				selFocus = Mathf.Clamp(selFocus, 0, len);
+			}
+			EventSystem.current.SetSelectedGameObject(_searchInput.gameObject);
+			_searchInput.ActivateInputField();
+			_searchInput.caretPosition = c;
+			_searchInput.selectionAnchorPosition = selAnchor;
+			_searchInput.selectionFocusPosition = selFocus;
+			_searchInput.ForceLabelUpdate();
 		}
 
 		/// <summary>Theme list rows without touching Filter/Search chrome (used while typing in search).</summary>
