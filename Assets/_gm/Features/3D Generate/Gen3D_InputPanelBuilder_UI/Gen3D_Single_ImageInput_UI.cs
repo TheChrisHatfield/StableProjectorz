@@ -56,6 +56,12 @@ namespace spz {
 	        }
 	    }
 
+	    public bool TryAssignImageForGenerate(Texture2D tex_takeOwnership) {
+	        if (_mySlot == null || tex_takeOwnership == null) return false;
+	        _mySlot.SwapWithNewImage(tex_takeOwnership);
+	        return true;
+	    }
+
 	    protected override void Awake(){
 	        base.Awake();
 	    }
