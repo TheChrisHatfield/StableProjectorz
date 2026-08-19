@@ -37,7 +37,8 @@ namespace spz {
 
 
 	    bool restoreDefaults_maybe(){
-	        if(DimensionMode_MGR.instance._dimensionMode == DimensionMode.dim_uv){ return false; }
+	        var dims = DimensionMode_MGR.instance;
+	        if(dims != null && dims._dimensionMode == DimensionMode.dim_uv){ return false; }
 	        _move     = Vector2.Lerp(_move,  Vector2.zero,  Time.deltaTime*_restoreSpeed);
 	        _zoom_out = Mathf.Lerp(_zoom_out,  _defaultZoom,  Time.deltaTime*_restoreSpeed);
 	        return true; 
@@ -117,7 +118,11 @@ namespace spz {
 
 
 	    void Pan(){
-	        float aspectRatio = UserCameras_MGR.instance._curr_viewCamera.myCamera.aspect;
+	        var cams = UserCameras_MGR.instance;
+	        var view = cams != null ? cams._curr_viewCamera : null;
+	        var cam = view != null ? view.myCamera : null;
+	        if (cam == null) return;
+	        float aspectRatio = cam.aspect;
 	        Vector2 delta = KeyMousePenInput.delta_while_MMBpressed();
 
 	        // Balance both axes based on aspect ratio
