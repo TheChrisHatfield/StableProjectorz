@@ -34,7 +34,8 @@ namespace spz {
 
 	        // Important frames before we send of the render.
 	        // So, we must maintain the quality high, to prevent sending low-res image to controlnets:
-	        if(StableDiffusion_Hub.instance._finalPreparations_beforeGen){ return; }
+	        var hub = StableDiffusion_Hub.instance;
+	        if(hub == null || hub._finalPreparations_beforeGen){ return; }
 
 	        if(sceneResUI.HasMemorizeRes()){ return; }//already captured the tex quality
 	        sceneResUI.OnAdd_texResolutionQuality( increase:false, force_pickThisRes:256, memorize_before:true);
