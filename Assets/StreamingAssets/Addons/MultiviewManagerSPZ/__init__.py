@@ -264,8 +264,8 @@ def show_all_views() -> None:
         _show("No multiview layout to restore — set up views first, then isolate")
         return
     ok = _api().view_cameras.restore_povs(povs)
-    _pre_isolate_snapshot = None
     if ok:
+        _pre_isolate_snapshot = None
         _show("Restored all views")
         refresh_status()
     else:
