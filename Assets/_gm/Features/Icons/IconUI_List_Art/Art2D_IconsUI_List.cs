@@ -132,10 +132,19 @@ namespace spz {
 	    // Works with all udims.
 	    void OnBakeColorsButton(){
 	        var kind = GenerationData_Kind.UvPaintedBrush;
+	        var painter = Inpaint_MaskPainter.instance;
+	        if (painter == null) {
+	            Viewport_StatusText.instance?.ShowStatusText("Paint system not ready — can't bake colors.", false, 4f, false);
+	            return;
+	        }
 	        List<UDIM_Sector> u_sectors;
-	        List<Texture2D> textures = Inpaint_MaskPainter.instance.ExtractColorLayer_as_UV_texture2D(out u_sectors);
+	        List<Texture2D> textures = painter.ExtractColorLayer_as_UV_texture2D(out u_sectors);
+	        if (textures == null || textures.Count == 0) {
+	            Viewport_StatusText.instance?.ShowStatusText("No painted colors to bake.", false, 4f, false);
+	            return;
+	        }
 	        //we'll be showing colors via extracted texture, now, clear the buffers to avoid showing two at once:
-	        Inpaint_MaskPainter.instance.ResetPaintMask();
+	        painter.ResetPaintMask();
 
 	        var textures_without_owner = new Dictionary<Texture2D, UDIM_Sector>();
 	        for(int i=0; i<textures.Count;i++){
@@ -144,7 +153,7 @@ namespace spz {
 	            textures_without_owner.Add(t,u);
 	        }
 	        base.OnImportCustomImage_OK(kind, textures_without_owner);
-	        Inpaint_MaskPainter.instance?.NotifyBakedColorsEvictedToArtIcon();
+	        painter.NotifyBakedColorsEvictedToArtIcon();
 	    }
 
 
@@ -357,6 +366,8 @@ namespace spz {
 	        if (_header != null) _header.onImportToLayerButton -= OnImportToLayerButton;
 	        ModelsHandler_3D.Act_onWillLoadModel -= On_will_import_3d_model;
 	        CallbackEveryFrame_MGR.onUpdate -= OnUpdate_evenIfDisabled;
+	        WorkflowRibbon_UI.Act_onBakeColors_button -= OnBakeColorsButton;
+	        ExportSave_UI_MGR.OnExportAllArt_Icons_Button -= OnExportAllIcons_Button;
 	        base.OnDestroy();
 	    }
 
