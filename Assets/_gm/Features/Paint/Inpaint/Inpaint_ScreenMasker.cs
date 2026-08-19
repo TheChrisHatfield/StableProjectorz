@@ -15,6 +15,8 @@ namespace spz {
 
 	    public RenderTexture ScreenMask_ContentRT_ref(bool withAntiEdge)
 	    {
+	        if (WorkflowRibbon_UI.instance == null || _masker_emptyNothing == null || _masker_original == null)
+	            return null;
 	        if (WorkflowRibbon_UI.instance.currentMode()==WorkflowRibbon_CurrMode.WhereEmpty){
 	            return withAntiEdge ? _masker_emptyNothing._screenMaskRT_fixedRes_antiEdge
 	                                : _masker_emptyNothing._screenMaskRT_skipAntiEdge; 
@@ -26,6 +28,7 @@ namespace spz {
     
 	    bool canSkipRenderingMask(){
 	        var tRib = WorkflowRibbon_UI.instance;
+	        if (tRib == null || MainViewport_UI.instance == null) return true;
 
 	        if(tRib.isMode_using_img2img()==false){ return true; }
 	        if(MainViewport_UI.instance.showing != MainViewport_UI.Showing.UsualView){ return true; }
