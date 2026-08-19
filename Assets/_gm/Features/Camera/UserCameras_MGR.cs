@@ -311,7 +311,10 @@ namespace spz {
 	    // But this allows you to shift it around the viewport.
 	    // That's important because we want each camera to focus on specific area of viewport.
 	    public void Set_ProjMatrixCenter_ofCamera(int cameraIx, Vector2 viewportCoord01){
-	        _viewCameras[cameraIx].Set_ProjMat_center(viewportCoord01);
+	        if (_viewCameras == null || cameraIx < 0 || cameraIx >= _viewCameras.Count) return;
+	        var cam = _viewCameras[cameraIx];
+	        if (cam == null) return;
+	        cam.Set_ProjMat_center(viewportCoord01);
 	    }
 
 	    // Gives you information about all view-cameras (even if they are inactive).
