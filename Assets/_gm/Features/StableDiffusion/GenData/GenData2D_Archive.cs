@@ -115,7 +115,7 @@ namespace spz {
 	        _GUIDs_ordered.Remove(data.total_GUID);
 	        _internalGUID_to_genData.Remove(guid_of_generation);
         
-	        Objects_Renderer_MGR.instance.ReRenderAll_soon();
+	        Objects_Renderer_MGR.instance?.ReRenderAll_soon();
 	    }
 
 	    public void Dispose_ALL_genData(){
@@ -308,7 +308,9 @@ namespace spz {
 	        //Don't copy the GUID, we'll make a new one.
 
 	        ProjectorCamera projCam = null;
-	        if (other._projCamera != null){  projCam =  ProjectorCameras_MGR.instance.Spawn_ProjCamera(); }
+	        if (other._projCamera != null && ProjectorCameras_MGR.instance != null){
+	            projCam = ProjectorCameras_MGR.instance.Spawn_ProjCamera();
+	        }
 	        //don't init the ProjCamera yet. The Art List 2D needs to create an icon, assigned to the ProjCamera.
 
 	        var byproducts = other._byproductsOfRequest?.Clone();
@@ -528,7 +530,9 @@ namespace spz {
 	        genData.kind = kind.ToString();
 	        genData.selected3dModel_pos = _selected3dModel_pos;
 	        genData.camerasPOVs = povInfos.povs.ToList();
-	        genData._projCamera_ix = ProjectorCameras_MGR.instance.projCameraIx(_projCamera);
+	        genData._projCamera_ix = ProjectorCameras_MGR.instance != null
+	            ? ProjectorCameras_MGR.instance.projCameraIx(_projCamera)
+	            : -1;
 	        genData.byproductsOfRequest = _byproductsOfRequest?.Save(spz, total_GUID);
 	        genData.txt2img_req = txt2img_req;
 	        genData.img2img_req = img2img_req;
@@ -550,7 +554,9 @@ namespace spz {
 	    }
 
 	    public void OnAfter_AllLoaded( StableProjectorz_SL spz ){
-	        _projCamera = ProjectorCameras_MGR.instance.ix_toProjCam( _genSL._projCamera_ix );
+	        _projCamera = ProjectorCameras_MGR.instance != null
+	            ? ProjectorCameras_MGR.instance.ix_toProjCam( _genSL._projCamera_ix )
+	            : null;
 	        _genSL = null;
 	    }
 	}
