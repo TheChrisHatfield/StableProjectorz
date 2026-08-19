@@ -93,13 +93,17 @@ namespace spz {
 	    public override void GetTextures_FromAllIcons( Action<List<Texture2D>> onReady_TexturesWithoutOwner ){
         
 	        var sd = StableDiffusion_Hub.instance;
+	        if (sd == null || Save_MGR.instance == null) {
+	            onReady_TexturesWithoutOwner?.Invoke(null);
+	            return;
+	        }
 	        bool cantProceed = _genGUID_to_iconGroup.Count == 0 ||
 	                           sd._finalPreparations_beforeGen || //avoid collapsing with in-progress textures.
 	                           sd._generating;
 
-	        var textureList = new List<Texture2D>();
 	        if(cantProceed){ 
-	            onReady_TexturesWithoutOwner?.Invoke(textureList);
+	            // Empty list was treated as merge OK — retexture then started without albedos.
+	            onReady_TexturesWithoutOwner?.Invoke(null);
 	            return;
 	        }
         
@@ -111,9 +115,13 @@ namespace spz {
 	                onReady_TexturesWithoutOwner?.Invoke(null);
 	                return;
 	            }
-	            textureList = albedoDict_withoutOwner.OrderBy(kvp => kvp.Value.ToInt())//ensure textures are sorted by their sector.
+	            var textureList = albedoDict_withoutOwner.OrderBy(kvp => kvp.Value.ToInt())//ensure textures are sorted by their sector.
 	                                                 .Select(kvp => kvp.Key)//only care about textures.
 	                                                 .ToList();
+	            if (textureList.Count == 0) {
+	                onReady_TexturesWithoutOwner?.Invoke(null);
+	                return;
+	            }
 	            onReady_TexturesWithoutOwner?.Invoke(textureList);
 	        }
 	    }
