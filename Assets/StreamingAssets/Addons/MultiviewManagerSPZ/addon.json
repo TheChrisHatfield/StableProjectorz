@@ -1,0 +1,6 @@
+{
+  "version": "0.1.0",
+  "displayName": "Multiview Manager",
+  "description": "Isolate multiview slots, per-view bookmarks, and local multiview presets for SPZ projection.",
+  "author": "StableProjectorz"
+}
