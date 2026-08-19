@@ -39,18 +39,26 @@ public class FileDragAndDrop : MonoBehaviour
 
         if (AllFiles3D(aFiles))
         {
-            // Handle 3D files
+            if (ModelsHandler_3D_UI.instance == null) {
+                ShowDropStatus("3D model import is not ready.", false);
+                return;
+            }
             ModelsHandler_3D_UI.instance.OnDragAndDrop_3D_File(aFiles[0]);
             return; // Only import the first model.
         }
 
         if (AllFilesImages(aFiles)){// Handle image files
-            bool consumed = Gen3D_MGR.instance.OnImportedImages_DragAndDrop(aFiles, screenCoord);
+            bool consumed = false;
+            if (Gen3D_MGR.instance != null)
+                consumed = Gen3D_MGR.instance.OnImportedImages_DragAndDrop(aFiles, screenCoord);
 
             Debug.Log("Drag and Drop isConsumed after OnImportedImages_DragAndDrop: " + consumed);
 
-            if (!consumed){ 
-                consumed = Art2D_IconsUI_List.instance.OnImport_DragAndDrop(aFiles);
+            if (!consumed){
+                if (Art2D_IconsUI_List.instance != null)
+                    consumed = Art2D_IconsUI_List.instance.OnImport_DragAndDrop(aFiles);
+                else
+                    ShowDropStatus("Image import is not ready.", false);
             }
             return; // Imported all the files, now return.
         }
@@ -59,13 +67,13 @@ public class FileDragAndDrop : MonoBehaviour
             if (AddonInstaller_MGR.instance != null) {
                 AddonInstaller_MGR.instance.InstallAddonFromZip(aFiles[0], (success, message, addonId) => {
                     if (success) {
-                        Viewport_StatusText.instance.ShowStatusText($"Add-on '{addonId}' installed successfully!", true, 3, false);
+                        ShowDropStatus($"Add-on '{addonId}' installed successfully!", true);
                     } else {
-                        Viewport_StatusText.instance.ShowStatusText($"Installation failed: {message}", false, 4, false);
+                        ShowDropStatus($"Installation failed: {message}", false);
                     }
                 });
             } else {
-                Viewport_StatusText.instance.ShowStatusText("Add-on installer not available", false, 3, false);
+                ShowDropStatus("Add-on installer not available", false);
             }
             return;
         }
@@ -78,9 +86,7 @@ public class FileDragAndDrop : MonoBehaviour
             bool onVae = SD_VAE.instance != null
                 && SD_VAE.instance.ScreenPointHitsOwnership(screen);
             if (aFiles.Count > 1) {
-                if (Viewport_StatusText.instance != null)
-                    Viewport_StatusText.instance.ShowStatusText(
-                        "Loading first weight only (" + aFiles.Count + " dropped).", false, 3, false);
+                ShowDropStatus("Loading first weight only (" + aFiles.Count + " dropped).", false, 3);
             }
             if (onModel && !onVae) {
                 SD_WeightFileImport.ImportFromPath(SD_WeightFileImport.Kind.Checkpoint, aFiles[0]);
@@ -102,17 +108,16 @@ public class FileDragAndDrop : MonoBehaviour
                     SD_WeightFileImport.ImportFromPath(SD_WeightFileImport.Kind.Checkpoint, aFiles[0]);
                 return;
             }
-            if (Viewport_StatusText.instance != null)
-                Viewport_StatusText.instance.ShowStatusText(
-                    "Drop onto Model or SD-VAE to load this weight.", false, 4, false);
-            else
-                Debug.Log("Drop onto Model or SD-VAE to load this weight.");
+            ShowDropStatus("Drop onto Model or SD-VAE to load this weight.", false);
             return;
         }
 
-        string msg = "Drag-and-drop contains unsupported file types.";
+        ShowDropStatus("Drag-and-drop contains unsupported file types.", false);
+    }
+
+    static void ShowDropStatus(string msg, bool success, int durationSec = 4) {
         if (Viewport_StatusText.instance != null)
-            Viewport_StatusText.instance.ShowStatusText(msg, false, 4, false);
+            Viewport_StatusText.instance.ShowStatusText(msg, success, durationSec, false);
         else
             Debug.Log(msg);
     }

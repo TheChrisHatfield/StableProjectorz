@@ -88,6 +88,9 @@ public sealed class SdWeightLocalLoadContractTests {
 		Assert.That(src, Does.Contain("Kind.Vae"));
 		Assert.That(src, Does.Contain("Drop onto Model or SD-VAE"));
 		Assert.That(src, Does.Contain("OwnershipCenterDistance"));
-		Assert.That(src, Does.Contain("Viewport_StatusText.instance != null"));
+		Assert.That(src, Does.Contain("ShowDropStatus"));
+		Assert.That(src, Does.Contain("ModelsHandler_3D_UI.instance == null"));
+		Assert.That(src, Does.Contain("Gen3D_MGR.instance != null"));
+		Assert.That(src, Does.Contain("Art2D_IconsUI_List.instance != null"));
 	}
 }
