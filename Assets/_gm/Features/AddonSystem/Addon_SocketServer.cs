@@ -1430,7 +1430,12 @@ namespace spz {
 
 					case "spz.cmd.restore_view_camera_povs":
 						try {
-							var povArr = @params["povs"] as JArray;
+							JArray povArr = null;
+							if (@params["povs"] is JArray directArr) {
+								povArr = directArr;
+							} else if (@params["povs"] != null) {
+								povArr = JArray.FromObject(@params["povs"]);
+							}
 							bool okRestore = fastPath.RestoreViewCameraPovsFromJson(povArr);
 							result["success"] = okRestore;
 							if (!okRestore) {
