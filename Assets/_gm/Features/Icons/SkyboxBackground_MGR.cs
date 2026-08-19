@@ -212,8 +212,13 @@ namespace spz {
 	        bool isNot3D =  dims != null && dims._dimensionMode != DimensionMode.dim_gen_3d;
 	        bool isForceMaskAlpha1 =  isNot3D || maskTex == null || _fullAlpha_lock.isLocked();
 
-	        Color noiseColor = Settings_MGR.instance.get_noiseColor();
-	        float noiseSpeed = Settings_MGR.instance.get_noiseSpeed() * 0.05f;
+	        Color noiseColor = Color.black;
+	        float noiseSpeed = 0f;
+	        var settings = Settings_MGR.instance;
+	        if (settings != null) {
+	            noiseColor = settings.get_noiseColor();
+	            noiseSpeed = settings.get_noiseSpeed() * 0.05f;
+	        }
 	              noiseSpeed = Application.isFocused?noiseSpeed : 0;//to avoid distracting user who Alt+Tabbed
 
 	        Rect viewRect = MainViewport_UI.instance?.innerViewportRect.rect ?? new Rect(0,0,1024,1024);
