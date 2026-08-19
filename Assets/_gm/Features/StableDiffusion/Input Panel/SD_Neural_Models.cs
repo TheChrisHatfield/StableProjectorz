@@ -399,10 +399,10 @@ namespace spz {
 	            error = "SD model dropdown is empty (not connected?)";
 	            return false;
 	        }
-	        string want = StripExtensions(name.Trim());
+	        string want = NormalizeCheckpointPrefer(name.Trim());
 	        int ix = _modelsDropdown.options.FindIndex(opt =>
-	            string.Equals(StripExtensions(opt.text), want, StringComparison.OrdinalIgnoreCase)
-	            || (opt.text != null && opt.text.IndexOf(want, StringComparison.OrdinalIgnoreCase) >= 0));
+	            opt.text != null
+	            && string.Equals(NormalizeCheckpointPrefer(opt.text), want, StringComparison.OrdinalIgnoreCase));
 	        if (ix < 0){
 	            error = "checkpoint not in dropdown: " + want;
 	            return false;
