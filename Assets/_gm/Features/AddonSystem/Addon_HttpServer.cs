@@ -777,6 +777,14 @@ namespace spz {
 					return ConvertToRestResponse(started);
 				}
 				case "projection_textures": {
+					bool hasQ = request.QueryString["is_dilate"] != null;
+					bool hasB = body?["is_dilate"] != null;
+					if (!hasQ && !hasB) {
+						return new JObject {
+							["success"] = false,
+							["error"] = "is_dilate bool required (omitting it used to fail-open as true)"
+						};
+					}
 					bool isDilate = true;
 					string q = request.QueryString["is_dilate"];
 					if (q != null && bool.TryParse(q, out bool qVal)) isDilate = qVal;
