@@ -68,11 +68,11 @@ namespace spz {
 
 
 	    protected override void OnMergeAllIcons_Button(){
-	        if(Gen3D_API.instance.isBusy){ return; }
+	        if(Gen3D_API.instance != null && Gen3D_API.instance.isBusy){ return; }
 
 	        if(_genGUID_to_iconGroup.Count==0){ return; }
 	        var sd = StableDiffusion_Hub.instance;
-	        if(sd._finalPreparations_beforeGen || sd._generating){ return; }//avoid collapsing with progress textures.
+	        if(sd == null || sd._finalPreparations_beforeGen || sd._generating){ return; }//avoid collapsing with progress textures.
 
 	        string msg = $"Merge <b>ALL ICONS</b>\nCareful, there is no CTRL+Z!";
 	        ConfirmPopup_UI.instance.Show(msg, onYes, onNo:null);
@@ -84,7 +84,7 @@ namespace spz {
 	            base.OnImportCustomImage_OK( GenerationData_Kind.UvTextures_FromFile, albedoDict_withoutOwner );
 	            Debug.Assert(albedoDict_withoutOwner.All( kvp=>kvp.Key==null) );//alls hould have been destroyed by now
 	            string msg = $"Images Merged. GPU memory reduced :)";
-	            Viewport_StatusText.instance.ShowStatusText(msg, false, 8, false);
+	            Viewport_StatusText.instance?.ShowStatusText(msg, false, 8, false);
 	        }
 	    }
 
