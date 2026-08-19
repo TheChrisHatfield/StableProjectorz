@@ -82,13 +82,16 @@ namespace spz {
 
 	    void Update(){
 	        bool hideCursor = false;
-	        DimensionMode currMode = DimensionMode_MGR.instance._dimensionMode;
+	        var dims = DimensionMode_MGR.instance;
+	        if (dims == null) return;
+	        DimensionMode currMode = dims._dimensionMode;
 	        switch (currMode){
 	            case DimensionMode.dim_uv:
 	                hideCursor = true;
 	                break;
 	            case DimensionMode.dim_gen_3d:
-	                hideCursor =  Gen3D_WorkflowOptionsRibbon_UI.instance._is_can_adjust_BG == false;
+	                hideCursor = Gen3D_WorkflowOptionsRibbon_UI.instance != null
+	                    && Gen3D_WorkflowOptionsRibbon_UI.instance._is_can_adjust_BG == false;
 	                break;
 	            case DimensionMode.dim_sd:
 	            default:
