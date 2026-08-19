@@ -178,6 +178,7 @@ def apply_camera_count() -> None:
     count = max(1, min(MAX_SLOTS, count))
     ok = _api().view_cameras.set_enabled_count(count)
     if ok:
+        _clear_pre_isolate()
         _show(f"Enabled {count} view camera(s)")
         refresh_status()
     else:
@@ -383,8 +384,10 @@ def load_global_preset() -> None:
         _show(f"Preset '{pick}' not found")
         return
     ok = _api().view_cameras.restore_povs(entry["povs"])
-    if ok and entry.get("current_index") is not None:
-        _api().view_cameras.set_current(int(entry["current_index"]))
+    if ok:
+        _clear_pre_isolate()
+        if entry.get("current_index") is not None:
+            _api().view_cameras.set_current(int(entry["current_index"]))
     _show(f"Loaded preset '{pick}'" if ok else f"Failed to load '{pick}'")
     refresh_status()
 
@@ -473,9 +476,14 @@ def register() -> None:
         _el["preset_pick"] = _panel.add_dropdown("Saved presets", _preset_names(), 0)
         _panel.add_button("Save preset", "save_global_preset")
         _panel.add_button("Load preset", "load_global_preset")
+        _panel.add_button("Delete preset", "delete_global_preset")
 
     print(f"[{ADDON_ID}] registered")
 
 
 def unregister() -> None:
-    global _panel, _el, _pre_isolate_snapsho
+    global _panel, _el, _pre_isolate_snapshot
+    _panel = None
+    _el = {}
+    _pre_isolate_snapshot = None
+    print(f"[{ADDON_ID}] unregistered")
