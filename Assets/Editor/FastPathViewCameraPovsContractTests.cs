@@ -52,8 +52,8 @@ public sealed class FastPathViewCameraPovsContractTests {
 		Assert.That(File.Exists(initPy), Is.True, initPy);
 		string src = File.ReadAllText(initPy);
 		Assert.That(src, Does.Contain("MultiviewManagerSPZ"));
-        Assert.That(src, Does.Contain("_preset_name_from_panel"));
-        Assert.That(src, Does.Contain("_pre_isolate_snapshot = None"));
+		Assert.That(src, Does.Contain("_preset_name_from_panel"));
+		Assert.That(src, Does.Contain("_pre_isolate_snapshot = None"));
 		Assert.That(src, Does.Contain("slot_bookmarks.json"));
 		Assert.That(src, Does.Contain("presets.json"));
 	}
