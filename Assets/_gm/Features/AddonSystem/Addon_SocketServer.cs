@@ -1767,7 +1767,20 @@ namespace spz {
 					}
 						
 					case "spz.cmd.export_projection_textures":
-						bool dilate = @params["is_dilate"]?.ToObject<bool>() ?? true;
+						JToken dilateTok = @params?["is_dilate"];
+						if (dilateTok == null) {
+							result["success"] = false;
+							result["error"] = "is_dilate bool required (omitting it used to fail-open as true)";
+							break;
+						}
+						bool dilate;
+						try {
+							dilate = dilateTok.ToObject<bool>();
+						} catch {
+							result["success"] = false;
+							result["error"] = "invalid is_dilate (boolean)";
+							break;
+						}
 						result["success"] = fastPath.ExportProjectionTextures(dilate);
 						break;
 						
