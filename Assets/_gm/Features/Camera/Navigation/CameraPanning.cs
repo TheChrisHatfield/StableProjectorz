@@ -68,7 +68,7 @@ namespace spz {
 
 	        if(_theCurrentlyPanning != null){ return; }
 
-	        if(DimensionMode_MGR.instance.is_3d_navigation_allowed == false){ return; }
+	        if(DimensionMode_MGR.instance == null || DimensionMode_MGR.instance.is_3d_navigation_allowed == false){ return; }
 
 		        if(pressedThisFrame && hovering){ 
 	            _theCurrentlyPanning = this;
