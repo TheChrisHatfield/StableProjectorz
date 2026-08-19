@@ -17,6 +17,12 @@ namespace spz {
 
 	    Coroutines_MGR crtnMgr => Coroutines_MGR.instance;
 
+	    /// <summary>Prefer Coroutines_MGR so fetches survive disable; local StartCoroutine if hub missing.</summary>
+	    Coroutine StartCtrlNetCrtn(IEnumerator e) {
+	        if (crtnMgr != null) return crtnMgr.StartCoroutine(e);
+	        return StartCoroutine(e);
+	    }
+
 
 	    public static string API_URL => Connection_MGR.A1111_IP_AND_PORT + "/controlnet";
 
@@ -425,7 +431,7 @@ namespace spz {
 	    void Awake(){
 	        if (instance != null){ DestroyImmediate(this);return; }
 	        instance = this;
-	        crtnMgr.StartCoroutine( FetchContiniously() );
+	        StartCtrlNetCrtn( FetchContiniously() );
 	    }
 
 
@@ -440,7 +446,7 @@ namespace spz {
 	            }
 	            DEBUG_FetchContiniously(1);
             
-	            yield return crtnMgr.StartCoroutine( Fetch_WebuiInfo_crtn() );
+	            yield return StartCtrlNetCrtn( Fetch_WebuiInfo_crtn() );
 	            yield return new WaitForSeconds(3f);
 
 	            DEBUG_FetchContiniously(2);
@@ -457,7 +463,7 @@ namespace spz {
 	            success=isSuccess;
 	            _models = CTRLnets_ModelList.CreateFromJSON(text);
 	        };
-	        yield return crtnMgr.StartCoroutine(FetchData_crtn(API_URL+"/model_list?update=true", onResult));
+	        yield return StartCtrlNetCrtn(FetchData_crtn(API_URL+"/model_list?update=true", onResult));
 	        if (!success){ yield break; }
 
 	        DEBUG_FetchInfo(2);
@@ -467,7 +473,7 @@ namespace spz {
 	            success=isSuccess;
 	            _preprocessors_list = CTRLnets_PreprocessorsList.CreateFromJSON(text);
 	        };
-	        yield return crtnMgr.StartCoroutine(FetchData_crtn(API_URL+"/module_list?alias_names=false", onResult));
+	        yield return StartCtrlNetCrtn(FetchData_crtn(API_URL+"/module_list?alias_names=false", onResult));
 	        if (!success){ yield break; }
 
 	        DEBUG_FetchInfo(3);
@@ -478,7 +484,7 @@ namespace spz {
 	            success=isSuccess;
 	            _net_types = ControlTypesResponse.CreateFromJSON(text);
 	        }; 
-	        yield return crtnMgr.StartCoroutine(FetchData_crtn(API_URL+"/control_types", onResult));
+	        yield return StartCtrlNetCrtn(FetchData_crtn(API_URL+"/control_types", onResult));
 	        //COMMENTED OUT KEPT FOR PRECAUTION:
 	        //Some people had 404 for /control_types  (these are just presets of model+preprocessor, bulletpoints).
 	        //But I'm not relying on them, so don't break and continue as if nothing happened:
@@ -488,7 +494,7 @@ namespace spz {
 
 	        int num_ctrlnetUnits = 0;
 	        System.Action<int> on_set_numUnits = (int num)=>{ num_ctrlnetUnits=num; };
-	        yield return crtnMgr.StartCoroutine( FetchData_numCtrlUnits(on_set_numUnits) );
+	        yield return StartCtrlNetCrtn( FetchData_numCtrlUnits(on_set_numUnits) );
 	        // Resolve never returns 0 under normal Neo/Forge defaults; keep guard for safety.
 	        if(num_ctrlnetUnits==0){
 	            UnityEngine.Debug.LogWarning("[ControlNet] Unit count resolved to 0; skipping EnsureExact this pass (will retry on next fetch).");
@@ -539,7 +545,7 @@ namespace spz {
 	            settingsUnits = settings != null ? settings.num_units() : 0;
 	        };
 
-	        yield return crtnMgr.StartCoroutine(FetchData_crtn(API_URL+"/settings", onResult));
+	        yield return StartCtrlNetCrtn(FetchData_crtn(API_URL+"/settings", onResult));
 	        if (settingsOk && settingsUnits > 0){
 	            on_set_numUnits( settingsUnits );
 	            DEBUG_FetchInfo(6, "success");
