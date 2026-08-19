@@ -168,6 +168,9 @@ namespace spz {
 
 	    protected override void OnDestroy(){
 	        ModelsHandler_3D.Act_onWillLoadModel -= On_will_import_3d_model;
+	        ExportSave_UI_MGR.OnExportAllArtBG_Icons_Button -= OnExportAllIcons_Button;
+	        if (_header != null)
+	            _header.onImport_BG_fromCurrView -= On_import_BG_from_currView;
 	        base.OnDestroy();
 	    }
 	}
