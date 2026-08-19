@@ -51,15 +51,36 @@ namespace spz {
 
 
 	    IEnumerator ShadowR_crtn( GenData2D originalGen ){
-	        if (StableDiffusion_Hub.instance._isGeneratingWhat != Generate_RequestingWhat.nothing){
+	        var hub = StableDiffusion_Hub.instance;
+	        if (hub == null) {
+	            Viewport_StatusText.instance?.ShowStatusText("Stable Diffusion not ready for Shadow R.", false, 4, true);
+	            yield break;
+	        }
+	        if (hub._isGeneratingWhat != Generate_RequestingWhat.nothing){
 	            string msg = "Cannot use Shadow R while StableDiffusion is already generating something";
-	            Viewport_StatusText.instance.ShowStatusText(msg, false, 4, true);
+	            Viewport_StatusText.instance?.ShowStatusText(msg, false, 4, true);
 	            yield break; 
 	        }
-	        bool isSuccess = StableDiffusion_Hub.instance.SubmitCustomWorkflow(Generate_RequestingWhat.Shadow_R_delighting, sendPayload:false);
+	        bool isSuccess = hub.SubmitCustomWorkflow(Generate_RequestingWhat.Shadow_R_delighting, sendPayload:false);
 	        if (!isSuccess){ yield break; }
 
 	        GenerateButtons_UI.OnConfirmed_StartedGenerate();
+
+	        bool finishedUi = false;
+	        void FinishShadowRUi(bool canceled) {
+	            if (finishedUi) return;
+	            finishedUi = true;
+	            GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled: canceled);
+	            StableDiffusion_Hub.instance?.MarkCustomWorkflow_Done();
+	        }
+
+	        try {
+	        var settings = Settings_MGR.instance;
+	        if (settings == null) {
+	            Viewport_StatusText.instance?.ShowStatusText("Settings not ready for Shadow R chunk size.", false, 4, true);
+	            FinishShadowRUi(canceled: true);
+	            yield break;
+	        }
 
 	        string exeDirectory = Directory.GetParent(Application.dataPath).FullName;
 	        string shadowR_path = Path.Combine(exeDirectory, "Shadow_R");
@@ -67,7 +88,7 @@ namespace spz {
 	        string runPath   = Path.Combine(shadowR_path, "run.bat");
 	        string inputDir  = Path.Combine(shadowR_path, "code","input");
 	        string outputDir = Path.Combine(shadowR_path, "code","output");
-	        string extraArgs = $"--chunk_size {Settings_MGR.instance.get_ShadowR_chunkSize()}";
+	        string extraArgs = $"--chunk_size {settings.get_ShadowR_chunkSize()}";
 	        string runCommand = $"\"{runPath}\" --input_dir \"{inputDir}\" --output_dir \"{outputDir}\"" + " " + extraArgs;
 
 	        string fullCommand = $"echo Consider closing other black windows to free more VRAM."
@@ -84,7 +105,7 @@ namespace spz {
 
 	        string message = "Shadow R started, see its window for info.  If stuck, close other black windows." +
 	            "\nEnable checkbox (Main View, top left corner).  Adjust the chunk-size in Settings.";
-	        Viewport_StatusText.instance.ShowStatusText(message, false, 10, false);
+	        Viewport_StatusText.instance?.ShowStatusText(message, false, 10, false);
 
 
 	        bool ranOk = false;
@@ -101,15 +122,16 @@ namespace spz {
 	        if (!ranOk){
 	            Viewport_StatusText.instance?.ShowStatusText(
 	                "Shadow R failed to start (see log).", false, 6, true);
-	            GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:true);
-	            StableDiffusion_Hub.instance.MarkCustomWorkflow_Done();
+	            FinishShadowRUi(canceled: true);
 	            yield break;
 	        }
 
 	        Get_OutputTextures_from_Dir(originalGen, outputDir);
 
-	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled:false);
-	        StableDiffusion_Hub.instance.MarkCustomWorkflow_Done();
+	        FinishShadowRUi(canceled: false);
+	        } finally {
+	            FinishShadowRUi(canceled: true);
+	        }
 	    }
 
 
