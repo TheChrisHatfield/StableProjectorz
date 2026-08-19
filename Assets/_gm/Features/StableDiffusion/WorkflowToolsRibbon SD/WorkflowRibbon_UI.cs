@@ -295,6 +295,10 @@ namespace spz {
 
 	    void OnDestroy(){
 	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
+	        Projections_MaskPainter.Act_OnPaintStrokeEnd -= OnBrushStrokeEnd;
+	        Inpaint_MaskPainter.Act_OnPaintStrokeEnd -= OnBrushStrokeEnd;
+	        if (EarlyUpdate_callbacks_MGR.instance != null)
+	            EarlyUpdate_callbacks_MGR.instance.onEarlyUpdate3 -= EarlyUpdate;
 	        UserCameras_Permissions.LockOrUnlock_ByType(CameraTexType.ContentUserCam, this, isLock: false);
 	        if (instance == this)
 	            instance = null;
