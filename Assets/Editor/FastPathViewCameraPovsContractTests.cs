@@ -19,6 +19,7 @@ public sealed class FastPathViewCameraPovsContractTests {
 		Assert.That(src, Does.Contain("mgr.Restore_CamerasPlacements(dummy)"));
 		Assert.That(src, Does.Contain("[\"index\"]"));
 		Assert.That(src, Does.Contain("anyParsed"));
+		Assert.That(src, Does.Contain("Restore_CamerasPlacements skips transform writes for disabled slots"));
 	}
 
 	[Test]

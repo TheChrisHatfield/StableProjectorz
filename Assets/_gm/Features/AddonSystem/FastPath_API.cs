@@ -338,6 +338,18 @@ namespace spz {
 				: Vector3.zero;
 			var dummy = new GenData2D(GenerationData_Kind.TemporaryDummyNoPics, use_many_icons: true, center, povs);
 			mgr.Restore_CamerasPlacements(dummy);
+			// Restore_CamerasPlacements skips transform writes for disabled slots; preset recall needs them.
+			for (int i = 0; i < povs.Count; i++) {
+				if (povs[i].wasEnabled) continue;
+				var vc = mgr.GetViewCamera(i);
+				if (vc == null) continue;
+				vc.transform.SetPositionAndRotation(povs[i].camera_pos, povs[i].camera_rot);
+				if (vc.fovMgr != null)
+					vc.fovMgr.Restore_FieldOfView(povs[i].camera_fov);
+				else if (vc.myCamera != null)
+					vc.myCamera.fieldOfView = povs[i].camera_fov;
+				vc.Set_ProjMat_center(povs[i].perspectiveCenter01);
+			}
 			dummy.Dispose_internal();
 			return true;
 		}
