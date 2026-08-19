@@ -160,7 +160,9 @@ namespace spz {
 	            return cpy;
 	        }
 	        if (_whatImageToSend == WhatImageToSend_CTRLNET.ContentCam){
-	            Texture2D view = UserCameras_MGR.instance.camTextures.GetDisposable_ContentCamTexture();
+	            var cams = UserCameras_MGR.instance != null ? UserCameras_MGR.instance.camTextures : null;
+	            if (cams == null) return null;
+	            Texture2D view = cams.GetDisposable_ContentCamTexture();
 	            if (view == null) return null;
 	            sourceLabel = "ContentCam";
 	            return view;
@@ -173,16 +175,17 @@ namespace spz {
 	    // For example to also show this texture in some preview-thumbnail elsewhere.
 	    // Beware, the texture might be destroyed, so your thumb might show black.
 	    public Texture getTexture_ref_ownedBySomeone( bool returnPlaceholder_ifNone=false ){
-	        if(UserCameras_MGR.instance==null){
+	        if(UserCameras_MGR.instance==null || UserCameras_MGR.instance.camTextures==null){
 	            return returnPlaceholder_ifNone ? null : _withoutImage_texture;
 	        }
+	        var cams = UserCameras_MGR.instance.camTextures;
 	        switch (_whatImageToSend){
 	            //NOTICE: return null, not a placeholder image. This is safer:
 	            case WhatImageToSend_CTRLNET.None:  return returnPlaceholder_ifNone?null : _withoutImage_texture; 
-	            case WhatImageToSend_CTRLNET.Depth:  return UserCameras_MGR.instance.camTextures._SD_depthCam_RT_R32_contrast;
-	            case WhatImageToSend_CTRLNET.Normals: return UserCameras_MGR.instance.camTextures._normalsCam_RT_ref;
-	            case WhatImageToSend_CTRLNET.VertexColors: return UserCameras_MGR.instance.camTextures._vertexColorsCam_RT_ref;
-	            case WhatImageToSend_CTRLNET.ContentCam:  return UserCameras_MGR.instance.camTextures._contentCam_RT_ref;
+	            case WhatImageToSend_CTRLNET.Depth:  return cams._SD_depthCam_RT_R32_contrast;
+	            case WhatImageToSend_CTRLNET.Normals: return cams._normalsCam_RT_ref;
+	            case WhatImageToSend_CTRLNET.VertexColors: return cams._vertexColorsCam_RT_ref;
+	            case WhatImageToSend_CTRLNET.ContentCam:  return cams._contentCam_RT_ref;
 	            case WhatImageToSend_CTRLNET.CustomFile: return _myCustomImg_from_sysFile?.tex;
 	            default:  Debug.LogError("unknown WhatImageToSend");  break;
 	        }
