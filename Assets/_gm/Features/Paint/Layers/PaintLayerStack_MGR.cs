@@ -256,6 +256,10 @@ namespace spz {
 		{
 			if (orderedTextures == null || orderedTextures.Count == 0) return false;
 			var orderedTexList = new List<Texture2D>(orderedTextures);
+			if (orderedTexList[0] == null) {
+				if (destroyWhenDone) foreach (var t in orderedTexList) if (t != null) Texture.DestroyImmediate(t);
+				return false;
+			}
 			int w = orderedTexList[0].width;
 			int h = orderedTexList[0].height;
 			var udims = UDIMs_Helper._allKnownUdims;
