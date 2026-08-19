@@ -25,7 +25,8 @@ namespace spz {
 	    public bool is_currPreprocessor_none => _dropdowns.is_currPreprocessor_none;
 
 	    public float get_processor_res(){
-	        Vector2 widthHeight = SD_InputPanel_UI.instance.widthHeight();
+	        var panel = SD_InputPanel_UI.instance;
+	        Vector2 widthHeight = panel != null ? panel.widthHeight() : new Vector2(512, 512);
 	        int maxDim = Mathf.RoundToInt(  Mathf.Max(widthHeight.x, widthHeight.y)  );
 	        if(_preprocessorRes_05.isOn){ return Mathf.RoundToInt(maxDim*0.5f); }
 	        if(_preprocessorRes_1.isOn){  return Mathf.RoundToInt(maxDim*1); }
