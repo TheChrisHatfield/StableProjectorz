@@ -143,10 +143,11 @@ namespace spz {
 	            }
 	            foreach (var tmp in root.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) {
 	                if (tmp == null) continue;
+	                Color ink = SpzUiThemeOps.InkOnControlFace(t);
 	                if (tmp.GetComponentInParent<Button>(true) != null
 	                    || tmp.GetComponentInParent<Toggle>(true) != null)
 	                    // Compact Truncate+UpperCase ate bake / options labels under Nomad.
-	                    SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, t.textPrimary, 11f);
+	                    SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(tmp, ink, 11f);
 	                else {
 	                    SpzUiThemeOps.ApplyBoundChromeTmp(tmp, t.textPrimary);
 	                    tmp.characterSpacing = 0f;
@@ -173,7 +174,7 @@ namespace spz {
 	            }
 	            var bakeLabel = _bakeColors_button.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 	            if (bakeLabel != null)
-	                SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(bakeLabel, t.textPrimary, 11f);
+	                SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(bakeLabel, SpzUiThemeOps.InkOnControlFace(t), 11f);
 	            SpzUiThemeOps.ClearNonFaceRaycastsForTheme(_bakeColors_button);
 	        }
 	    }
