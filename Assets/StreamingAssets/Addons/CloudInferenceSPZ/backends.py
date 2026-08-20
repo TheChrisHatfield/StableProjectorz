@@ -656,6 +656,8 @@ class FalBackend(CloudBackend):
             "num_images": max(1, min(4, n_img)),
             "enable_safety_checker": True,
             "output_format": "png",
+            # Prefer data-URI results so we do not depend on a second CDN fetch.
+            "sync_mode": True,
             "image_size": _pick_fal_image_size(w, h),
         }
         try:
