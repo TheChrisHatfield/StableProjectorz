@@ -530,15 +530,18 @@ class _Handler(BaseHTTPRequestHandler):
                 if not isinstance(payload, dict):
                     payload = {}
                 with st.lock:
-                    if getattr(backend, "name", "") == "fal":
-                        # fal txt2img/img2img models are hardcoded — do not pretend checkpoint/VAE swapped.
+                    if getattr(backend, "name", "") in ("fal", "demo"):
+                        # Local thick shims hardcode routes — do not pretend checkpoint/VAE swapped.
                         safe = {
                             k: v
                             for k, v in payload.items()
                             if k not in ("sd_model_checkpoint", "sd_vae")
                         }
                         st.options.update(safe)
-                        st.options["sd_model_checkpoint"] = "fal-flux-schnell"
+                        if getattr(backend, "name", "") == "fal":
+                            st.options["sd_model_checkpoint"] = "fal-flux-schnell"
+                        else:
+                            st.options["sd_model_checkpoint"] = "cloud-inference-demo"
                         st.options["sd_vae"] = "Automatic"
                     else:
                         st.options.update(payload)
@@ -557,12 +560,13 @@ class _Handler(BaseHTTPRequestHandler):
                 if is_remote:
                     self._dispatch_generate(st, backend, path, payload)
                     return
-                if getattr(backend, "name", "") == "fal":
+                # Demo solid PNG is not a real upscale — match fal honesty (501).
+                if getattr(backend, "name", "") in ("fal", "demo"):
                     self._send_json(
                         501,
                         {
-                            "detail": "fal extras/upscale is not wired yet — use Demo or Remote Forge, or skip Upscale",
-                            "error": "fal_extras_not_implemented",
+                            "detail": "Cloud Inference extras/upscale is not wired yet — use Remote Forge, or skip Upscale",
+                            "error": "cloud_extras_not_implemented",
                         },
                     )
                     return
