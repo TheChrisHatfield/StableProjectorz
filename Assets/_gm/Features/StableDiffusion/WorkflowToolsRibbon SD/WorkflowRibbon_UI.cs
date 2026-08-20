@@ -459,11 +459,13 @@ namespace spz {
 	            }
 	        }
 	        Transform iconOwner = toggle != null ? toggle.transform : modeUi.transform;
+	        // Light Nomad control_bg made PROJ MASK / COLOR / ENTIRE wash out (light ink on light plate).
+	        Color ink = SpzUiThemeOps.InkOnControlFace(t);
 	        // 14px icon + compact stacked metrics — small type, tight icon→label, truncate in-cell.
 	        SpzUiThemeOps.ApplyNomadStackedToolCell(
 	            iconOwner,
 	            glyph,
-	            t.textPrimary,
+	            ink,
 	            14f,
 	            tmp => !IsExcludedWorkflowLabel(tmp.transform, modeUi.transform));
 	        // Labels / plates / Monolith overlays must not steal mode clicks (gen path depends on workflow mode).

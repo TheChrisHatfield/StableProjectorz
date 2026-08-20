@@ -841,6 +841,15 @@ namespace spz {
 			ClearNonFaceRaycastsForTheme(selectable);
 		}
 
+		/// <summary>
+		/// Glyph/label ink for faces painted with <see cref="ThemeTokens.controlBg"/>.
+		/// Light Nomad control plates need dark ink (field_bg); dark plates keep text_primary.
+		/// </summary>
+		public static Color InkOnControlFace(ThemeTokens t) {
+			float mean = (t.controlBg.r + t.controlBg.g + t.controlBg.b) / 3f;
+			return mean >= 0.45f ? t.fieldBg : t.textPrimary;
+		}
+
 		/// <summary>True when <paramref name="img"/> is a Toggle's ON-state graphic (checkmark / tick plate).</summary>
 		public static bool IsToggleCheckmarkGraphic(Image img) {
 			if (img == null) return false;
@@ -2996,23 +3005,23 @@ namespace spz {
 					case "tab_active":
 					case "selection":
 					case "icon_tint":
-						if (!TryParseColor(property.Value, out var color)) {
-							error = $"Invalid color for token '{property.Name}'; expected #RRGGBB or #RRGGBBAA";
-							return false;
-						}
-						switch (tokenName) {
-							case "panel_bg": candidate.panelBg = color; break;
-							case "control_bg": candidate.controlBg = color; break;
-							case "field_bg": candidate.fieldBg = color; break;
-							case "accent": candidate.accent = color; break;
-							case "text_primary": candidate.textPrimary = color; break;
-							case "text_muted": candidate.textMuted = color; break;
-							case "handle": candidate.handle = color; break;
-							case "success": candidate.success = color; break;
-							case "danger": candidate.danger = color; break;
-							case "border": candidate.border = color; break;
-							case "tab_active": candidate.tabActive = color; break;
-							case "selection": candidate.selection = color; break;
+				if (!TryParseColor(property.Value, out var color)) {
+					error = $"Invalid color for token '{property.Name}'; expected #RRGGBB or #RRGGBBAA";
+					return false;
+				}
+				switch (tokenName) {
+					case "panel_bg": candidate.panelBg = color; break;
+					case "control_bg": candidate.controlBg = color; break;
+					case "field_bg": candidate.fieldBg = color; break;
+					case "accent": candidate.accent = color; break;
+					case "text_primary": candidate.textPrimary = color; break;
+					case "text_muted": candidate.textMuted = color; break;
+					case "handle": candidate.handle = color; break;
+					case "success": candidate.success = color; break;
+					case "danger": candidate.danger = color; break;
+					case "border": candidate.border = color; break;
+					case "tab_active": candidate.tabActive = color; break;
+					case "selection": candidate.selection = color; break;
 							case "icon_tint": candidate.iconTint = color; break;
 						}
 						break;
