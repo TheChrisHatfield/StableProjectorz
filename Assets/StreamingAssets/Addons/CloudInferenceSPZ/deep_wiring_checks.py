@@ -547,6 +547,9 @@ def main() -> int:
                 if state.get("force_404"):
                     self._json(404, {"detail": "model not found"})
                     return
+                delay = float(state.get("delay_post_s") or 0)
+                if delay > 0:
+                    time.sleep(delay)
                 state["auth_ok"] = True
                 body = self._read()
                 try:
@@ -694,6 +697,34 @@ def main() -> int:
 
         _slow_gen()
         check(state["cancelled"], "fal abort hits cancel_url")
+
+        # Abort mid-submit (no cancel_url yet) must still PUT cancel after request_id arrives.
+        state["delay_post_s"] = 0.2
+        state["cancelled"] = False
+        race = be.FalBackend("good-key", queue_base=f"http://127.0.0.1:{fal_port}", timeout_s=8.0)
+        box_race = {"exc": None}
+
+        def _race_gen():
+            try:
+                race.begin_job()
+                race.generate(
+                    "/sdapi/v1/txt2img",
+                    {"prompt": "race", "width": 16, "height": 16, "steps": 4},
+                )
+            except Exception as exc:
+                box_race["exc"] = exc
+
+        thr_race = threading.Thread(target=_race_gen, daemon=True)
+        thr_race.start()
+        time.sleep(0.05)
+        race.abort()
+        thr_race.join(timeout=5.0)
+        state["delay_post_s"] = 0
+        check(
+            isinstance(box_race.get("exc"), be.BackendError) and box_race["exc"].status == 499,
+            f"abort mid-submit raises interrupted ({box_race.get('exc')})",
+        )
+        check(state["cancelled"], "abort mid-submit still cancels fal after request_id")
 
         # set_backend mid-job must abort the previous fal instance (not orphan cancel_url).
         owner = be.FalBackend("good-key", queue_base=f"http://127.0.0.1:{fal_port}", timeout_s=8.0)

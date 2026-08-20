@@ -49,29 +49,35 @@ namespace spz {
 
 
 	    public void Send_StopGenerateRequest(Action onInterruptSettled = null){
-	        // Abort the live /txt2img|/img2img POST first. Stopping the coroutine alone leaves that
-	        // request on the wire, so a second Gen Art can race the abandoned job.
-	        AbortActiveRequest();
-	        StopAllCoroutines();
 	        // Interrupt must not invoke the generate OnCompleted handler — that would parse /interrupt
 	        // JSON as a txt2img result (or double-finish the cancelled job).
 	        _onProgress = null;
 	        _onCompleted = null;
 	        string url = Connection_MGR.A1111_SD_API_URL + "/interrupt";
-	        StartCoroutine( SendInterruptRequest_crtn(url, onInterruptSettled) );
+	        // Cloud Inference: POST /interrupt BEFORE Abort so fal can register cancel_url while the
+	        // generate handler is still alive. Aborting first tore down the shim worker mid-submit.
+	        var generateReq = _activeRequest;
+	        StopAllCoroutines();
+	        StartCoroutine(SendInterruptThenAbort_crtn(url, generateReq, onInterruptSettled));
 	    }
 
-	    IEnumerator SendInterruptRequest_crtn(string url, Action onInterruptSettled){
+	    IEnumerator SendInterruptThenAbort_crtn(string url, UnityWebRequest generateReq, Action onInterruptSettled){
 	        using (UnityWebRequest request = new UnityWebRequest(url, "POST")){
 	            request.downloadHandler = new DownloadHandlerBuffer();
-	            _activeRequest = request;
 	            try {
 	                yield return request.SendWebRequest();
-	            } finally {
-	                if (ReferenceEquals(_activeRequest, request))
-	                    _activeRequest = null;
+	            } finally { /* interrupt request only */ }
+	        }
+	        if (generateReq != null){
+	            try {
+	                if (!generateReq.isDone)
+	                    generateReq.Abort();
+	            } catch (Exception e) {
+	                UnityEngine.Debug.LogWarning("[SD_Generate_NetworkSender] Abort failed: " + e.Message);
 	            }
 	        }
+	        if (ReferenceEquals(_activeRequest, generateReq))
+	            _activeRequest = null;
 	        onInterruptSettled?.Invoke();
 	    }
 

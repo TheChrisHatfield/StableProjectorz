@@ -49,11 +49,16 @@ public sealed class SdCancelStopsPrepContractTests {
 		Assert.That(stop, Is.GreaterThan(0));
 		int next = src.IndexOf("IEnumerator Send_GenerateRequest_crtn", stop, StringComparison.Ordinal);
 		string body = src.Substring(stop, next - stop);
-		Assert.That(body, Does.Contain("AbortActiveRequest"),
-			"Cancel must Abort the live generate POST, not only StopAllCoroutines");
 		Assert.That(body, Does.Contain("_onCompleted = null"),
 			"/interrupt must not invoke the generate OnCompleted handler");
-		Assert.That(body, Does.Contain("SendInterruptRequest_crtn"),
-			"interrupt needs its own path so settle can finish UI without parsing as txt2img");
+		Assert.That(body, Does.Contain("SendInterruptThenAbort_crtn"),
+			"interrupt before Abort so Cloud Inference can PUT fal cancel_url while generate is alive");
+		Assert.That(body, Does.Contain("generateReq.Abort"),
+			"Cancel must still Abort the live generate POST after /interrupt");
+		int interruptAt = body.IndexOf("SendInterruptThenAbort_crtn", StringComparison.Ordinal);
+		int abortAt = body.IndexOf("generateReq.Abort", StringComparison.Ordinal);
+		Assert.That(interruptAt, Is.GreaterThan(0));
+		Assert.That(abortAt, Is.GreaterThan(interruptAt),
+			"/interrupt must run before Abort of the generate POST");
 	}
 }
