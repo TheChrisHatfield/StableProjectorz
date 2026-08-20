@@ -527,8 +527,21 @@ class _Handler(BaseHTTPRequestHandler):
                     self._send(status, raw, ct)
                     return
                 payload = self._read_json()
+                if not isinstance(payload, dict):
+                    payload = {}
                 with st.lock:
-                    st.options.update(payload)
+                    if getattr(backend, "name", "") == "fal":
+                        # fal txt2img/img2img models are hardcoded — do not pretend checkpoint/VAE swapped.
+                        safe = {
+                            k: v
+                            for k, v in payload.items()
+                            if k not in ("sd_model_checkpoint", "sd_vae")
+                        }
+                        st.options.update(safe)
+                        st.options["sd_model_checkpoint"] = "fal-flux-schnell"
+                        st.options["sd_vae"] = "Automatic"
+                    else:
+                        st.options.update(payload)
                     opts = dict(st.options)
                 self._send_json(200, opts)
                 return
