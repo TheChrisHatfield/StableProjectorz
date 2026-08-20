@@ -42,7 +42,8 @@ namespace spz {
 	        // fail-closed structure attach runs on Deny/payload (HasMeshDepthRt alone stays false until a
 	        // depth lock holder exists — would permanently disable Gen Art).
 	        bool kleinReady = IsActiveCheckpointKlein();
-	        canGenArt_ &= has_Depth_or_Norm_or_RefOnly() || kleinReady;
+	        // Cloud Inference shim has no real ControlNet models; do not hard-block Gen Art on missing Depth.
+	        canGenArt_ &= has_Depth_or_Norm_or_RefOnly() || kleinReady || Connection_MGR.is_cloud_inference;
 	    }
 
 
@@ -65,7 +66,8 @@ namespace spz {
 	            return true;
 	        }
 	        bool klein = IsActiveCheckpointKlein();
-	        if(allow_without_controlnets==false && !klein && ControlNetUnit_UI.hasAtLeastSomeModel == false){
+	        if(allow_without_controlnets==false && !klein && !Connection_MGR.is_cloud_inference
+	           && ControlNetUnit_UI.hasAtLeastSomeModel == false){
 	            bool flux2DevEmpty = false;
 	            try {
 	                string sd = SD_InputPanel_UI.instance != null
@@ -96,7 +98,7 @@ namespace spz {
 	            return true;
 	        }
 
-	        if (!klein && has_Depth_or_Norm_or_RefOnly()==false){
+	        if (!klein && !Connection_MGR.is_cloud_inference && has_Depth_or_Norm_or_RefOnly()==false){
 	            bool flux2Dev = false;
 	            try {
 	                string sd = SD_InputPanel_UI.instance != null
