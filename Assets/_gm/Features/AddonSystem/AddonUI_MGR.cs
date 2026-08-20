@@ -49,7 +49,7 @@ namespace spz {
 		static JObject BuildNomadThemeTokens(float fontScale = NomadDefaultFontScale, float spacingScale = NomadDefaultSpacingScale) {
 			return new JObject {
 				["panel_bg"] = "#1E1F23F2",
-				["control_bg"] = "#3E4048FF",
+				["control_bg"] = "#6E7280FF",
 				["field_bg"] = "#121317FF",
 				["accent"] = "#F2CA50FF",
 				["text_primary"] = "#E3E2E7FF",
@@ -57,10 +57,10 @@ namespace spz {
 				["handle"] = "#C8C5CBFF",
 				["success"] = "#7BC96FFF",
 				["danger"] = "#FFB4ABFF",
-				["border"] = "#B8B0A099",
-				["tab_active"] = "#4A4C54FF",
+				["border"] = "#D0C8B8CC",
+				["tab_active"] = "#828691FF",
 				["selection"] = "#F2CA5033",
-				["icon_tint"] = "#E8DFC8FF",
+				["icon_tint"] = "#F5EEDCFF",
 				["font_scale"] = fontScale,
 				["spacing_scale"] = spacingScale,
 				["corner_radius"] = 0,

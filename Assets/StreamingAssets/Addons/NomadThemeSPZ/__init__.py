@@ -26,11 +26,11 @@ THEME_ID = "nomad-inspired"
 THEME_LABEL = "Nomad inspired"
 
 # Pro-Studio Monolith palette from the supplied Nomad UI replication design.
-# control_bg must stay clearly above panel_bg: #292A2E sat ~11 RGB off the panel and made
-# left-column buttons (bg play, batch chips, ribbon faces) blend into charcoal.
+# control_bg must read clearly above panel_bg on the left column (dimension discs, bg swap,
+# batch chips). #292A2E and even #3E4048 still sat too close to charcoal #1E1F23.
 TOKENS: Dict[str, Any] = {
     "panel_bg": "#1E1F23F2",
-    "control_bg": "#3E4048FF",
+    "control_bg": "#6E7280FF",
     "field_bg": "#121317FF",
     "accent": "#F2CA50FF",
     "text_primary": "#E3E2E7FF",
@@ -38,13 +38,13 @@ TOKENS: Dict[str, Any] = {
     "handle": "#C8C5CBFF",
     "success": "#7BC96FFF",
     "danger": "#FFB4ABFF",
-    "border": "#B8B0A099",
-    "tab_active": "#4A4C54FF",
+    "border": "#D0C8B8CC",
+    "tab_active": "#828691FF",
     "selection": "#F2CA5033",
     "font_scale": 0.84,
     "spacing_scale": 0.94,
     "corner_radius": 0,
-    "icon_tint": "#E8DFC8FF",
+    "icon_tint": "#F5EEDCFF",
     "panel_width": 220,
     "panel_alpha": 0.92,
     "ribbon_icon_only": 1,
