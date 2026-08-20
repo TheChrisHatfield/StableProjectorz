@@ -542,6 +542,23 @@ def _forge_payload_has_active_controlnet(payload: Dict[str, Any]) -> bool:
     return False
 
 
+def _forge_payload_has_soft_inpainting(payload: Dict[str, Any]) -> bool:
+    """True when Soft Inpainting alwayson is present (fal has no translator for it)."""
+    if not isinstance(payload, dict):
+        return False
+    scripts = payload.get("alwayson_scripts") or {}
+    if not isinstance(scripts, dict):
+        return False
+    for key, val in scripts.items():
+        if "soft" in str(key).lower() and "inpaint" in str(key).lower():
+            if val is None:
+                continue
+            if isinstance(val, dict) and val.get("args") is not None:
+                return True
+            return True
+    return False
+
+
 def _fal_result_images_to_b64(data: Dict[str, Any]) -> list:
     """fal returns images[{url|file_data|...}]; Forge wants images[base64]."""
     out = []
@@ -722,6 +739,11 @@ class FalBackend(CloudBackend):
         if _forge_payload_has_active_controlnet(payload):
             raise BackendError(
                 "fal does not support ControlNet yet — disable ControlNet units or use Demo or Remote Forge",
+                status=501,
+            )
+        if _forge_payload_has_soft_inpainting(payload):
+            raise BackendError(
+                "fal does not support Soft Inpainting yet — turn Soft Inpaint off or use Demo or Remote Forge",
                 status=501,
             )
         model = self.IMG2IMG_MODEL if is_img2img else self.TXT2IMG_MODEL
