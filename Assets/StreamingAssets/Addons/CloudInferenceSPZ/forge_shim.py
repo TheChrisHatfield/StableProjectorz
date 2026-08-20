@@ -514,10 +514,19 @@ class _Handler(BaseHTTPRequestHandler):
                 return
 
             if path == "/sdapi/v1/extra-batch-images":
-                # Upscale path: Demo returns a solid PNG; remote proxies (interruptible).
+                # Upscale: Demo returns a solid PNG; remote proxies; fal has no thick extras map yet.
                 payload = self._read_json()
                 if is_remote:
                     self._dispatch_generate(st, backend, path, payload)
+                    return
+                if getattr(backend, "name", "") == "fal":
+                    self._send_json(
+                        501,
+                        {
+                            "detail": "fal extras/upscale is not wired yet — use Demo or Remote Forge, or skip Upscale",
+                            "error": "fal_extras_not_implemented",
+                        },
+                    )
                     return
                 w = _safe_int_dim(
                     payload.get("rslt_imageWidths")
