@@ -784,6 +784,11 @@ def main() -> int:
                 and "img2img=dev" in str(body[0].get("title") or ""),
                 "fal shim catalogs disclose schnell txt2img + flux/dev img2img",
             )
+            st, body = http("GET", f"http://127.0.0.1:{shim_fal_port}", "/sdapi/v1/samplers")
+            check(
+                st == 200 and isinstance(body, list) and body and body[0].get("name") == "fal default",
+                "fal shim sampler catalog is honest (fal default only)",
+            )
             st, body = http(
                 "POST",
                 f"http://127.0.0.1:{shim_fal_port}",

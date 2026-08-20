@@ -572,11 +572,17 @@ namespace spz {
 	        if (Connection_MGR.is_cloud_inference
 	            && response != null
 	            && !string.IsNullOrEmpty(response.info)
-	            && response.info.IndexOf("negative_prompt_ignored", StringComparison.Ordinal) >= 0
 	            && Viewport_StatusText.instance != null){
-	            Viewport_StatusText.instance.ShowStatusText(
-	                "Cloud Inference: negative prompt was ignored (FLUX has no negatives).",
-	                false, 5f, false);
+	            if (response.info.IndexOf("negative_prompt_ignored", StringComparison.Ordinal) >= 0){
+	                Viewport_StatusText.instance.ShowStatusText(
+	                    "Cloud Inference: negative prompt was ignored (FLUX has no negatives).",
+	                    false, 5f, false);
+	            } else if (response.info.IndexOf("sampler_ignored", StringComparison.Ordinal) >= 0
+	                       || response.info.IndexOf("steps_clamped", StringComparison.Ordinal) >= 0){
+	                Viewport_StatusText.instance.ShowStatusText(
+	                    "Cloud Inference: sampler/steps were adjusted for fal (see generation info).",
+	                    false, 4f, false);
+	            }
 	        }
 
 	        // Ensure new Gen Art is visible in viewport: clear Solo for all, and ensure this generation's group is not hidden. Then request re-render (and again after 2 frames so projection picks up the new texture).

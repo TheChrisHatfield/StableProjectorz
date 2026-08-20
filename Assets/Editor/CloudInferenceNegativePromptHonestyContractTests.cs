@@ -14,7 +14,9 @@ public sealed class CloudInferenceNegativePromptHonestyContractTests {
 		Assert.That(File.Exists(path), Is.True);
 		string src = File.ReadAllText(path);
 		Assert.That(src, Does.Contain("negative_prompt_ignored"));
+		Assert.That(src, Does.Contain("sampler_ignored"));
 		Assert.That(src, Does.Contain("Connection_MGR.is_cloud_inference"));
 		Assert.That(src, Does.Contain("negative prompt was ignored"));
+		Assert.That(src, Does.Contain("sampler/steps were adjusted"));
 	}
 }

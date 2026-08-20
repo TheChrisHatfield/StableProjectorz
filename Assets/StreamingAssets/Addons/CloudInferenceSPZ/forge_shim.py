@@ -179,6 +179,20 @@ def _demo_catalog_get(path: str, backend_name: str = "demo") -> Optional[Tuple[b
             "application/json",
         )
     if path == "/sdapi/v1/samplers":
+        if backend_name == "fal":
+            # Honesty: fal routes ignore Forge sampler choice — do not advertise Euler a / DDIM.
+            return (
+                _json_bytes(
+                    [
+                        {
+                            "name": "fal default",
+                            "aliases": ["fal"],
+                            "options": {},
+                        }
+                    ]
+                ),
+                "application/json",
+            )
         return (
             _json_bytes(
                 [
@@ -190,6 +204,21 @@ def _demo_catalog_get(path: str, backend_name: str = "demo") -> Optional[Tuple[b
             "application/json",
         )
     if path == "/sdapi/v1/schedulers":
+        if backend_name == "fal":
+            return (
+                _json_bytes(
+                    [
+                        {
+                            "name": "fal default",
+                            "label": "fal default",
+                            "aliases": [],
+                            "default_rho": 1.0,
+                            "need_inner_model": False,
+                        }
+                    ]
+                ),
+                "application/json",
+            )
         return (
             _json_bytes(
                 [
