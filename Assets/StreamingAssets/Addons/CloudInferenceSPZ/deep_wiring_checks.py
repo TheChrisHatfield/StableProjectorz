@@ -57,6 +57,15 @@ def http(method: str, base: str, path: str, payload=None, timeout=30):
 
 
 def main() -> int:
+    init_path = os.path.join(_root, "__init__.py")
+    with open(init_path, encoding="utf-8") as f:
+        init_src = f.read()
+    check("add_toggle(" in init_src, "panel uses toggle for auto-connect")
+    check("add_foldout(" in init_src, "panel folds rare actions under More")
+    check("API key / Remote URL" in init_src, "credential field accepts fal key or Forge URL")
+    check("Auto-connect (On/Off)" not in init_src, "auto-connect is not a free-text On/Off field")
+    check("fal — paste API key" in init_src, "fal backend is offered as API-key mode")
+
     host, port = "127.0.0.1", 7860
     if not shim.is_port_free(host, port):
         port = 17861
@@ -160,10 +169,10 @@ def main() -> int:
         except be.BackendError:
             check(True, "reject empty remote")
         try:
-            be.FalBackend("x").generate("/sdapi/v1/txt2img", {})
-            check(False, "fal not implemented")
+            be.FalBackend("").generate("/sdapi/v1/txt2img", {})
+            check(False, "fal empty key rejected")
         except be.BackendError as e:
-            check(e.status == 501, "fal 501")
+            check(e.status == 400, "fal empty key rejected")
 
         b = be.build_backend("demo", "")
         check(b.name == "demo", "build demo")
@@ -184,11 +193,21 @@ def main() -> int:
         dead = be.RemoteForgeBackend("http://127.0.0.1:9")
         ok_p, msg_p = dead.probe(timeout_s=0.4)
         check(not ok_p, f"probe dead remote fails ({msg_p[:80]})")
+        fal_b = be.build_backend("fal", "test-key-not-real")
+        check(fal_b.name == "fal", "build fal with key succeeds")
+        check("Key " in fal_b._auth_headers().get("Authorization", ""), "fal auth header uses Key prefix")
         try:
-            be.build_backend("fal", "key")
-            check(False, "build fal fails at connect")
+            be.build_backend("fal", "")
+            check(False, "build fal empty key fails")
         except be.BackendError as e:
-            check(e.status == 501, "build fal fails at connect")
+            check(e.status == 400, "build fal empty key fails")
+        size = be._pick_fal_image_size(1024, 768)
+        check(size == "landscape_4_3", "fal size maps 1024x768 to landscape_4_3")
+        size_custom = be._pick_fal_image_size(640, 480)
+        check(isinstance(size_custom, dict) and size_custom.get("width") == 640, "fal odd size uses custom width/height")
+        png_b64 = be._make_solid_png_b64(16, 16)
+        forged = be._fal_result_images_to_b64({"images": [{"url": f"data:image/png;base64,{png_b64}"}]})
+        check(forged == [png_b64], "fal data-URI images coerce to Forge b64")
 
         # Reconnect / already listening
         ok2, msg2 = shim.start_shim(host, port)
@@ -382,6 +401,153 @@ def main() -> int:
         up.shutdown()
     except Exception as exc:
         check(False, f"interrupt abort wiring: {exc}")
+
+    # fal thick shim against a local mock queue (no real fal key / network).
+    try:
+        from http.server import ThreadingHTTPServer
+
+        fal_port, shim_fal_port = 17931, 17932
+        png_b64 = be._make_solid_png_b64(16, 16)
+        state = {"cancelled": False, "auth_ok": False}
+
+        class _FalQueue(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                return
+
+            def _read(self):
+                n = int(self.headers.get("Content-Length") or 0)
+                return self.rfile.read(n) if n else b""
+
+            def _json(self, code, obj):
+                raw = json.dumps(obj).encode("utf-8")
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(raw)))
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.wfile.write(raw)
+
+            def do_POST(self):
+                auth = self.headers.get("Authorization") or ""
+                if auth != "Key good-key":
+                    self._json(401, {"detail": "Unauthorized"})
+                    return
+                state["auth_ok"] = True
+                body = self._read()
+                try:
+                    payload = json.loads(body.decode("utf-8")) if body else {}
+                except Exception:
+                    payload = {}
+                if not str(payload.get("prompt") or "").strip():
+                    self._json(422, {"detail": "prompt required"})
+                    return
+                rid = "req-mock-1"
+                base_q = f"http://127.0.0.1:{fal_port}/fal-ai/flux/schnell"
+                # Omit response_url on purpose so FalBackend must reconstruct …/response.
+                self._json(
+                    200,
+                    {
+                        "request_id": rid,
+                        "status_url": f"{base_q}/requests/{rid}/status",
+                        "cancel_url": f"{base_q}/requests/{rid}/cancel",
+                    },
+                )
+
+            def do_GET(self):
+                auth = self.headers.get("Authorization") or ""
+                if auth != "Key good-key":
+                    self._json(401, {"detail": "Unauthorized"})
+                    return
+                if self.path.endswith("/status") or "/status?" in self.path:
+                    self._json(200, {"status": "COMPLETED"})
+                    return
+                if self.path.endswith("/response") or "/response?" in self.path:
+                    self._json(
+                        200,
+                        {"images": [{"url": f"data:image/png;base64,{png_b64}"}], "seed": 1},
+                    )
+                    return
+                self._json(404, {"detail": "missing"})
+
+            def do_PUT(self):
+                if self.path.endswith("/cancel"):
+                    state["cancelled"] = True
+                    self._json(200, {"status": "CANCELLED"})
+                    return
+                self._json(404, {"detail": "missing"})
+
+        fal_srv = ThreadingHTTPServer(("127.0.0.1", fal_port), _FalQueue)
+        fal_thr = threading.Thread(target=fal_srv.serve_forever, daemon=True)
+        fal_thr.start()
+        time.sleep(0.05)
+
+        bad = be.FalBackend("bad-key", queue_base=f"http://127.0.0.1:{fal_port}")
+        ok_bad, msg_bad = bad.probe(timeout_s=2.0)
+        check(not ok_bad, f"fal probe rejects bad key ({msg_bad[:60]})")
+
+        good = be.FalBackend("good-key", queue_base=f"http://127.0.0.1:{fal_port}")
+        ok_good, msg_good = good.probe(timeout_s=2.0)
+        check(ok_good, f"fal probe accepts good key ({msg_good[:60]})")
+
+        result = good.generate(
+            "/sdapi/v1/txt2img",
+            {"prompt": "a cat", "width": 16, "height": 16, "steps": 4},
+        )
+        check(
+            isinstance(result.get("images"), list) and result["images"] and result["images"][0] == png_b64,
+            "fal queue txt2img returns Forge images[]",
+        )
+
+        # Interrupt cancels the live fal request URL.
+        slow = be.FalBackend("good-key", queue_base=f"http://127.0.0.1:{fal_port}", timeout_s=8.0)
+        box_f = {"exc": None}
+
+        def _slow_gen():
+            try:
+                # After submit, poll status forever if we never complete — force cancel mid-flight.
+                slow.begin_job()
+                # Manually set cancel URL then abort like interrupt does.
+                submit = slow._http_json(
+                    "POST",
+                    f"http://127.0.0.1:{fal_port}/fal-ai/flux/schnell",
+                    {"prompt": "x"},
+                    timeout_s=2.0,
+                )
+                meta = json.loads(submit[1].decode("utf-8"))
+                with slow._io_lock:
+                    slow._cancel_url = meta.get("cancel_url")
+                slow.abort()
+            except Exception as exc:
+                box_f["exc"] = exc
+
+        _slow_gen()
+        check(state["cancelled"], "fal abort hits cancel_url")
+
+        # End-to-end through the local Forge shim with fal backend.
+        if shim.is_port_free("127.0.0.1", shim_fal_port):
+            shim.get_state().set_backend(good)
+            ok_fs, msg_fs = shim.start_shim("127.0.0.1", shim_fal_port)
+            check(ok_fs, f"fal shim start: {msg_fs}")
+            st, body = http("GET", f"http://127.0.0.1:{shim_fal_port}", "/sdapi/v1/sd-models")
+            check(
+                st == 200 and isinstance(body, list) and body and body[0].get("model_name") == "fal-flux-schnell",
+                "fal shim catalogs expose fal-flux-schnell",
+            )
+            st, body = http(
+                "POST",
+                f"http://127.0.0.1:{shim_fal_port}",
+                "/sdapi/v1/txt2img",
+                {"prompt": "cloud", "width": 16, "height": 16},
+                timeout=20,
+            )
+            check(st == 200 and body.get("images") and body["images"][0] == png_b64, "fal shim txt2img")
+            shim.stop_shim()
+        else:
+            check(False, "fal shim port busy")
+
+        fal_srv.shutdown()
+    except Exception as exc:
+        check(False, f"fal thick shim wiring: {exc}")
 
     print(f"\nDeep checks: {CHECKS}  fails: {FAILS}")
     return 0 if FAILS == 0 else 1
