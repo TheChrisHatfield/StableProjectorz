@@ -32,15 +32,38 @@ class ForgeShimState:
             "sd_model_checkpoint": "cloud-inference-demo",
             "sd_vae": "Automatic",
         }
+        self.job_backend: Optional[CloudBackend] = None
 
     def set_backend(self, backend: CloudBackend) -> None:
         with self.lock:
+            prev = self.backend
+            swapping = prev is not None and prev is not backend
             self.backend = backend
             self.last_error = ""
             if getattr(backend, "name", "") == "fal":
                 self.options["sd_model_checkpoint"] = "fal-flux-schnell"
             elif getattr(backend, "name", "") == "demo":
                 self.options["sd_model_checkpoint"] = "cloud-inference-demo"
+            if swapping:
+                # Mid-job Connect must not leave the old fal cancel_url orphaned on Interrupt.
+                self.interrupt = True
+                self.job_active = False
+                self.progress = 0.0
+                self.job_backend = None
+        if swapping:
+            abort = getattr(prev, "abort", None)
+            if callable(abort):
+                try:
+                    abort()
+                except Exception:
+                    pass
+            begin = getattr(backend, "begin_job", None)
+            # New backend starts clean; do not inherit aborted epoch from a prior job.
+            if callable(begin):
+                try:
+                    begin()
+                except Exception:
+                    pass
 
     def snapshot_status(self) -> Dict[str, Any]:
         with self.lock:
@@ -383,6 +406,7 @@ class _Handler(BaseHTTPRequestHandler):
             st.progress = 0.05
             st.started_at = time.time()
             backend = st.backend
+            st.job_backend = backend
         begin = getattr(backend, "begin_job", None)
         if callable(begin):
             begin()
@@ -413,8 +437,9 @@ class _Handler(BaseHTTPRequestHandler):
         while not done_ev.wait(0.1):
             with st.lock:
                 interrupted = bool(st.interrupt)
+                job_owner = st.job_backend or st.backend
             if interrupted:
-                abort = getattr(backend, "abort", None)
+                abort = getattr(job_owner, "abort", None)
                 if callable(abort):
                     try:
                         abort()
@@ -425,6 +450,7 @@ class _Handler(BaseHTTPRequestHandler):
                     st.job_active = False
                     st.progress = 0.0
                     st.last_error = ""
+                    st.job_backend = None
                 # 500 so Unity Finish_if_ResultError treats this as cancel, not a successful empty bake.
                 self._send_json(500, {"images": [], "interrupted": True, "error": "interrupted"})
                 return
@@ -437,6 +463,7 @@ class _Handler(BaseHTTPRequestHandler):
                 st.job_active = False
                 st.progress = 0.0
                 st.last_error = "" if interrupted else str(exc)
+                st.job_backend = None
             if interrupted:
                 self._send_json(500, {"images": [], "interrupted": True, "info": str(exc), "error": "interrupted"})
                 return
@@ -450,6 +477,7 @@ class _Handler(BaseHTTPRequestHandler):
             st.job_active = False
             st.progress = 0.0 if interrupted else 1.0
             st.last_error = ""
+            st.job_backend = None
         if interrupted:
             self._send_json(500, {"images": [], "interrupted": True, "error": "interrupted"})
             return
@@ -469,7 +497,8 @@ class _Handler(BaseHTTPRequestHandler):
                     st.interrupt = True
                     st.job_active = False
                     st.progress = 0.0
-                    backend = st.backend
+                    # Abort the job owner, not a freshly swapped Connect backend.
+                    backend = st.job_backend or st.backend
                     is_remote = backend.name == "remote_forge"
                 abort = getattr(backend, "abort", None)
                 if callable(abort):

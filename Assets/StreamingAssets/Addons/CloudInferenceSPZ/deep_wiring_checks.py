@@ -646,6 +646,16 @@ def main() -> int:
         _slow_gen()
         check(state["cancelled"], "fal abort hits cancel_url")
 
+        # set_backend mid-job must abort the previous fal instance (not orphan cancel_url).
+        owner = be.FalBackend("good-key", queue_base=f"http://127.0.0.1:{fal_port}", timeout_s=8.0)
+        owner.begin_job()
+        owner._cancel_url = f"http://127.0.0.1:{fal_port}/fal-ai/flux/schnell/requests/req-mid/cancel"
+        shim.get_state().set_backend(owner)
+        state["cancelled"] = False
+        replacement = be.FalBackend("good-key", queue_base=f"http://127.0.0.1:{fal_port}")
+        shim.get_state().set_backend(replacement)
+        check(state["cancelled"], "set_backend mid-job aborts previous fal cancel_url")
+
         # End-to-end through the local Forge shim with fal backend.
         if shim.is_port_free("127.0.0.1", shim_fal_port):
             shim.get_state().set_backend(good)
