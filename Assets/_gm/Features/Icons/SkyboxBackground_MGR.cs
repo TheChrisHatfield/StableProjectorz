@@ -328,6 +328,13 @@ namespace spz {
 	        if(_skyboxMaterial_ui_copy !=null){  DestroyImmediate(_skyboxMaterial_ui_copy); }
 	        if(_skyboxMat_copy_override!=null){  DestroyImmediate(_skyboxMat_copy_override); }
 
+	        if (_currentBG_texture_clone != null) {
+	            if (RenderTexture.active == _currentBG_texture_clone)
+	                RenderTexture.active = null;
+	            DestroyImmediate(_currentBG_texture_clone);
+	            _currentBG_texture_clone = null;
+	        }
+
 	        ForgetCurrentIconUI_ifCan();
 	        IconUI.Act_OnSomeIconClicked -= OnSomeIconUI_selected;
 	        IconUI.Act_OnSomeIcon_TextureGuidsChanged -= OnSomeIcon_TextureGuidsChanged;
