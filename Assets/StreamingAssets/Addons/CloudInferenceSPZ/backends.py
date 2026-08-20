@@ -487,7 +487,7 @@ class FalBackend(CloudBackend):
             pass
 
     def probe(self, timeout_s: float = 8.0) -> Tuple[bool, str]:
-        """Cheap auth check: empty-prompt submit → 401 bad key; 4xx validation ⇒ key accepted."""
+        """Auth check without leaving a billed job: empty prompt, cancel if queued."""
         url = f"{self.queue_base}/{self.TXT2IMG_MODEL}"
         try:
             status, body, _ct = self._http_json("POST", url, {"prompt": ""}, timeout_s=float(timeout_s))
@@ -498,7 +498,29 @@ class FalBackend(CloudBackend):
             return False, f"fal key rejected (HTTP {status})"
         if status >= 500:
             return False, f"fal probe upstream error HTTP {status}: {snippet}"
-        # 200 (queued) / 422 (validation) both mean auth worked.
+        # If fal accepted and queued (HTTP 200 + request_id), cancel immediately so Connect is not a paid generate.
+        try:
+            meta = json.loads(body.decode("utf-8")) if body else {}
+        except Exception:
+            meta = {}
+        if isinstance(meta, dict):
+            cancel_url = meta.get("cancel_url") or meta.get("cancelUrl")
+            request_id = meta.get("request_id") or meta.get("requestId")
+            if not cancel_url and request_id:
+                cancel_url = f"{self.queue_base}/{self.TXT2IMG_MODEL}/requests/{request_id}/cancel"
+            if cancel_url:
+                try:
+                    req = urllib.request.Request(
+                        str(cancel_url),
+                        data=b"{}",
+                        headers=self._auth_headers(),
+                        method="PUT",
+                    )
+                    with urllib.request.urlopen(req, timeout=min(8.0, float(timeout_s))) as resp:
+                        resp.read()
+                except Exception:
+                    pass
+        # 200 (queued, now cancelled) / 422 (validation) both mean auth worked.
         return True, snippet or f"HTTP {status}"
 
     def generate(self, path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
