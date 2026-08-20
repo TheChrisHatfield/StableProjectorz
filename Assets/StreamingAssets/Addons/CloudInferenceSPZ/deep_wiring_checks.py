@@ -226,6 +226,10 @@ def main() -> int:
         check(batch.get("num_images") == 3, "fal txt2img maps Forge batch_size to num_images")
         batch_hi = fal_map._forge_payload_to_fal({"prompt": "x", "batch_size": 99, "width": 512, "height": 512}, img2img=False)
         check(batch_hi.get("num_images") == 4, "fal txt2img clamps batch_size to fal max 4")
+        n_iter = fal_map._forge_payload_to_fal(
+            {"prompt": "x", "batch_size": 1, "n_iter": 3, "width": 512, "height": 512}, img2img=False
+        )
+        check(n_iter.get("num_images") == 3, "fal txt2img honors n_iter when batch_size is 1")
         png_b64 = be._make_solid_png_b64(16, 16)
         forged = be._fal_result_images_to_b64({"images": [{"url": f"data:image/png;base64,{png_b64}"}]})
         check(forged == [png_b64], "fal data-URI images coerce to Forge b64")
