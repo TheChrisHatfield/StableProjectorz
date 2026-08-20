@@ -770,7 +770,7 @@ class FalBackend(CloudBackend):
             if aborted_sync:
                 self.abort()
                 raise BackendError("interrupted", status=499)
-            return self._to_forge_result(meta, path, payload)
+            return self._to_forge_result(meta, path, payload, fal_sent=fal_payload)
 
         request_id = meta.get("request_id") or meta.get("requestId")
         status_url = meta.get("status_url") or meta.get("statusUrl")
@@ -832,7 +832,7 @@ class FalBackend(CloudBackend):
                 if aborted_st:
                     self.abort()
                     raise BackendError("interrupted", status=499)
-                return self._to_forge_result(st_obj, path, payload)
+                return self._to_forge_result(st_obj, path, payload, fal_sent=fal_payload)
             time.sleep(0.45)
         else:
             raise BackendError("fal job timed out", status=504)
@@ -874,7 +874,7 @@ class FalBackend(CloudBackend):
         if aborted_final:
             self.abort()
             raise BackendError("interrupted", status=499)
-        return self._to_forge_result(result, path, payload)
+        return self._to_forge_result(result, path, payload, fal_sent=fal_payload)
 
     def _forge_payload_to_fal(self, payload: Dict[str, Any], img2img: bool) -> Dict[str, Any]:
         try:
@@ -937,15 +937,24 @@ class FalBackend(CloudBackend):
             out.pop("image_size", None)
         return out
 
-    def _to_forge_result(self, data: Dict[str, Any], path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _to_forge_result(
+        self,
+        data: Dict[str, Any],
+        path: str,
+        payload: Dict[str, Any],
+        fal_sent: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         images = _fal_result_images_to_b64(data)
         if not images:
             raise BackendError(f"fal returned no images: {str(data)[:240]}", status=502)
+        seed_out = payload.get("seed", -1)
+        if isinstance(data, dict) and data.get("seed") is not None:
+            seed_out = data.get("seed")
         info_obj: Dict[str, Any] = {
             "cloud_inference": "fal",
             "path": path,
             "model": self.IMG2IMG_MODEL if "img2img" in (path or "") else self.TXT2IMG_MODEL,
-            "seed": payload.get("seed", -1),
+            "seed": seed_out,
         }
         # FLUX/fal has no negative_prompt — do not pretend SPZ negatives were applied.
         neg = str((payload or {}).get("negative_prompt") or "").strip()
@@ -954,6 +963,29 @@ class FalBackend(CloudBackend):
             info_obj["negative_prompt_note"] = (
                 "fal FLUX does not support negative_prompt; field was dropped (use positive framing)"
             )
+        # Catalog lists Euler/Automatic but fal routes ignore sampler/scheduler.
+        if str((payload or {}).get("sampler_name") or "").strip() or str((payload or {}).get("scheduler") or "").strip():
+            info_obj["sampler_ignored"] = True
+        if fal_sent is not None:
+            try:
+                req_steps = int(float((payload or {}).get("steps")))
+            except (TypeError, ValueError):
+                req_steps = None
+            sent_steps = fal_sent.get("num_inference_steps")
+            if req_steps is not None and sent_steps is not None and int(req_steps) != int(sent_steps):
+                info_obj["steps_clamped"] = True
+                info_obj["steps_sent"] = int(sent_steps)
+            try:
+                bs = int(float((payload or {}).get("batch_size") or 1))
+            except (TypeError, ValueError):
+                bs = 1
+            try:
+                n_iter = int(float((payload or {}).get("n_iter") or 1))
+            except (TypeError, ValueError):
+                n_iter = 1
+            if max(1, bs) * max(1, n_iter) > 4:
+                info_obj["num_images_clamped"] = True
+                info_obj["num_images_sent"] = fal_sent.get("num_images")
         return {
             "images": images,
             "parameters": {},

@@ -671,6 +671,24 @@ def main() -> int:
             info_neg.get("negative_prompt_ignored") is True,
             "fal info marks negative_prompt as ignored (FLUX has no negatives)",
         )
+        result_samp = good.generate(
+            "/sdapi/v1/txt2img",
+            {
+                "prompt": "a cat",
+                "sampler_name": "Euler a",
+                "scheduler": "automatic",
+                "steps": 40,
+                "width": 16,
+                "height": 16,
+            },
+        )
+        try:
+            info_samp = json.loads(result_samp.get("info") or "{}")
+        except Exception:
+            info_samp = {}
+        check(info_samp.get("sampler_ignored") is True, "fal info marks sampler/scheduler ignored")
+        check(info_samp.get("steps_clamped") is True and info_samp.get("steps_sent") == 12, "fal info marks schnell steps clamped to 12")
+        check(info_samp.get("seed") == 1, "fal info uses fal result seed when present")
 
         # Poll must fail fast on missing status (not spin until timeout).
         missing = be.FalBackend("good-key", queue_base=f"http://127.0.0.1:{fal_port}", timeout_s=3.0)
