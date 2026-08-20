@@ -19,6 +19,9 @@ namespace spz {
 
 	    bool _did_init = false;
 	    public static bool is_sd_connected =>  instance?._a1111_connPanel != null && instance._a1111_connPanel.isConnected;
+	    /// <summary>SD strip ping marked Cloud Inference shim (fal/Demo/remote facade), not a local Forge.</summary>
+	    public static bool is_cloud_inference =>
+	        instance?._a1111_connPanel != null && instance._a1111_connPanel.isCloudInferenceConnected;
 	    public static bool is_3d_connected =>  instance?._3d_connPanel != null && instance._3d_connPanel.isConnected;
 
 	    public static string A1111_IP_AND_PORT => instance?._a1111_connPanel == null ? "" : "http://" + instance._a1111_connPanel.ip_and_port;
