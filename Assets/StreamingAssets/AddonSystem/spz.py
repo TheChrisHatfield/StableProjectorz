@@ -673,6 +673,11 @@ class StableDiffusionAPI:
             return result.get("connected", False)
         return False
 
+    def mark_sd_disconnected(self):
+        """Force SERV strip red / clear Cloud emblem (Cloud Inference Disconnect)."""
+        result = self._client._send_request("spz.cmd.mark_sd_disconnected", {})
+        return result.get("success", False)
+
     def get_workflow_mode(self):
         """Current workflow ribbon mode (e.g. Inpaint_Color, ProjectionsMasking)."""
         return self._client._send_request("spz.cmd.get_workflow_mode", {})

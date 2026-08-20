@@ -260,6 +260,11 @@ def connect_cloud() -> bool:
 
 def disconnect_cloud() -> bool:
     ok, msg = shim.stop_shim()
+    # Clear SERV Cloud emblem immediately — do not wait for Unity ping timeout.
+    try:
+        spz.get_api().sd.mark_sd_disconnected()
+    except Exception as e:
+        print(f"[{ADDON_ID}] mark_sd_disconnected: {e}")
     _set_status(_status_line() if ok else msg)
     _show("Cloud Inference disconnected." if ok else msg, duration=2.5)
     return ok
