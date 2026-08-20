@@ -161,19 +161,23 @@ namespace spz {
 	        _isFetchingUpscalers = true;
 	        try {
 	            UnityWebRequest request = UnityWebRequest.Get(Connection_MGR.A1111_SD_API_URL + "/upscalers");
-	            yield return request.SendWebRequest();
+	            try {
+	                yield return request.SendWebRequest();
 
-	            bool isBad = request.result == UnityWebRequest.Result.ConnectionError;
-	            isBad |= request.result == UnityWebRequest.Result.ProtocolError;
-	            if (isBad)
-	            {
-	                Debug.LogError("Error: " + request.error);
-	            }
-	            else
-	            {
-	                _upscalersListObtained = true;
-	                SDUpscalerList listOfUpscalers = SDUpscalerList.CreateFromJSON(request.downloadHandler.text);
-	                Populate_List_And_InformUI(listOfUpscalers);
+	                bool isBad = request.result == UnityWebRequest.Result.ConnectionError;
+	                isBad |= request.result == UnityWebRequest.Result.ProtocolError;
+	                if (isBad)
+	                {
+	                    Debug.LogError("Error: " + request.error);
+	                }
+	                else
+	                {
+	                    _upscalersListObtained = true;
+	                    SDUpscalerList listOfUpscalers = SDUpscalerList.CreateFromJSON(request.downloadHandler.text);
+	                    Populate_List_And_InformUI(listOfUpscalers);
+	                }
+	            } finally {
+	                request.Dispose();
 	            }
 	        } finally {
 	            _isFetchingUpscalers = false;
