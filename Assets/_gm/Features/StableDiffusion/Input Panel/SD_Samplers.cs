@@ -162,29 +162,33 @@ namespace spz {
 
 	        DEBUG_GetSamplers(0);
 	        UnityWebRequest request = UnityWebRequest.Get(Connection_MGR.A1111_SD_API_URL + "/samplers");
-	        yield return request.SendWebRequest();
+	        try {
+	            yield return request.SendWebRequest();
 
-	        DEBUG_GetSamplers(1);
+	            DEBUG_GetSamplers(1);
 
-	        bool isBad =  request.result == UnityWebRequest.Result.ConnectionError;
-	             isBad |= request.result == UnityWebRequest.Result.ProtocolError;
-	        if (isBad){
-	            DEBUG_GetSamplers(2, request.error);
-	            yield break;
+	            bool isBad =  request.result == UnityWebRequest.Result.ConnectionError;
+	                 isBad |= request.result == UnityWebRequest.Result.ProtocolError;
+	            if (isBad){
+	                DEBUG_GetSamplers(2, request.error);
+	                yield break;
+	            }
+	            DEBUG_GetSamplers(3, request.downloadHandler.text + "\n\n");
+
+	            _listOfSamplers = SamplersList.CreateFromJSON(request.downloadHandler.text);
+
+	            DEBUG_GetSamplers(4, _samplers_dropdown.options.Count.ToString());
+
+	            Populate_DropdownModels();
+
+	            #if SP_VERBOSE_SAMPLERS_DEBUG
+	            string msgStr = "";
+	            _samplers_dropdown.options.ForEach(opt=> msgStr +=opt.text + "    ");
+	            DEBUG_GetSamplers(6, msgStr);
+	            #endif
+	        } finally {
+	            request.Dispose();
 	        }
-	        DEBUG_GetSamplers(3, request.downloadHandler.text + "\n\n");
-
-	        _listOfSamplers = SamplersList.CreateFromJSON(request.downloadHandler.text);
-
-	        DEBUG_GetSamplers(4, _samplers_dropdown.options.Count.ToString());
-
-	        Populate_DropdownModels();
-
-	        #if SP_VERBOSE_SAMPLERS_DEBUG
-	        string msgStr = "";
-	        _samplers_dropdown.options.ForEach(opt=> msgStr +=opt.text + "    ");
-	        DEBUG_GetSamplers(6, msgStr);
-	        #endif
 	    }
 
 	    void Populate_DropdownModels(){

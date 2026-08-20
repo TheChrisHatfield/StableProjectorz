@@ -122,14 +122,18 @@ namespace spz {
 	        if(StableDiffusion_Hub.instance._generating){ yield break; }
 
 	        UnityWebRequest request = UnityWebRequest.Get(url);
-	        yield return request.SendWebRequest();
+	        try {
+	            yield return request.SendWebRequest();
 
-	        bool isBad = request.result == UnityWebRequest.Result.ConnectionError;
-	            isBad |= request.result == UnityWebRequest.Result.ProtocolError;
-	        if (isBad){
-	            onResult?.Invoke(false, "");
-	        }else{
-	            onResult?.Invoke(true, request.downloadHandler.text);
+	            bool isBad = request.result == UnityWebRequest.Result.ConnectionError;
+	                isBad |= request.result == UnityWebRequest.Result.ProtocolError;
+	            if (isBad){
+	                onResult?.Invoke(false, "");
+	            }else{
+	                onResult?.Invoke(true, request.downloadHandler.text);
+	            }
+	        } finally {
+	            request.Dispose();
 	        }
 	    }
 	}
