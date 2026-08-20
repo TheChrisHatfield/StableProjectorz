@@ -215,6 +215,11 @@ def main() -> int:
             check(e.status == 400, "build fal empty key fails")
         size = be._pick_fal_image_size(1024, 768)
         check(size == "landscape_4_3", "fal size maps 1024x768 to landscape_4_3")
+        size_near = be._pick_fal_image_size(1000, 760)
+        check(
+            isinstance(size_near, dict) and size_near.get("width") == 1000 and size_near.get("height") == 760,
+            "fal size does not silently snap near-preset dims",
+        )
         size_custom = be._pick_fal_image_size(640, 480)
         check(isinstance(size_custom, dict) and size_custom.get("width") == 640, "fal odd size uses custom width/height")
         fal_map = be.FalBackend("k", queue_base="http://127.0.0.1:9")
