@@ -96,6 +96,14 @@ namespace spz {
 	        EnsureLoadFromDiskButton();
 	    }
 
+	    void OnDestroy(){
+	        SD_Options_Fetcher.Act_onOptionsRetrieved -= OnOptionsReceived;
+	        SD_Options_Fetcher.Act_onWillSendOptions_AmmendPlz -= OnWillSendOptions_AmmendPlz;
+	        SD_Options_Fetcher.Act_OnSendOptions_done -= OnSendOptions_done;
+	        if (ReferenceEquals(instance, this))
+	            instance = null;
+	    }
+
 	    void EnsureLoadFromDiskButton(){
 	        if (_loadFromDiskButton == null)
 	            _loadFromDiskWired = false;
