@@ -22,13 +22,13 @@ public sealed class NomadThemeComposeTests {
 		var tokens = (JObject)method.Invoke(null, new object[] { 0.84f, 0.94f });
 		Assert.That((string)tokens["accent"], Is.EqualTo("#F2CA50FF"));
 		Assert.That((string)tokens["panel_bg"], Is.EqualTo("#1E1F23F2"));
-		Assert.That((string)tokens["control_bg"], Is.EqualTo("#3E4048FF"));
-		Assert.That((string)tokens["tab_active"], Is.EqualTo("#4A4C54FF"));
-		Assert.That((string)tokens["border"], Is.EqualTo("#B8B0A099"));
+		Assert.That((string)tokens["control_bg"], Is.EqualTo("#6E7280FF"));
+		Assert.That((string)tokens["tab_active"], Is.EqualTo("#828691FF"));
+		Assert.That((string)tokens["border"], Is.EqualTo("#D0C8B8CC"));
 		Assert.That((float)tokens["font_scale"], Is.EqualTo(0.84f).Within(0.001f));
 		Assert.That((float)tokens["spacing_scale"], Is.EqualTo(0.94f).Within(0.001f));
 		Assert.That((float)tokens["corner_radius"], Is.EqualTo(0f).Within(0.001f));
-		Assert.That((string)tokens["icon_tint"], Is.EqualTo("#E8DFC8FF"));
+		Assert.That((string)tokens["icon_tint"], Is.EqualTo("#F5EEDCFF"));
 		Assert.That((float)tokens["panel_width"], Is.EqualTo(220f).Within(0.001f));
 		Assert.That((float)tokens["panel_alpha"], Is.EqualTo(0.92f).Within(0.001f));
 		Assert.That((float)tokens["ribbon_icon_only"], Is.EqualTo(1f).Within(0.001f));
@@ -65,8 +65,8 @@ public sealed class NomadThemeComposeTests {
 		Assert.That(ColorUtility.TryParseHtmlString((string)tokens["control_bg"], out Color control), Is.True);
 		float panelMean = (panel.r + panel.g + panel.b) / 3f;
 		float controlMean = (control.r + control.g + control.b) / 3f;
-		Assert.That(controlMean - panelMean, Is.GreaterThanOrEqualTo(0.10f),
-			$"control_bg must lift ≥0.10 mean RGB above panel_bg (got {controlMean - panelMean:F3}); " +
+		Assert.That(controlMean - panelMean, Is.GreaterThanOrEqualTo(0.28f),
+			$"control_bg must lift ≥0.28 mean RGB above panel_bg (got {controlMean - panelMean:F3}); " +
 			"left-panel buttons otherwise blend into charcoal.");
 	}
 

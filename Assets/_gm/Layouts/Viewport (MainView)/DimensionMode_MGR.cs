@@ -363,9 +363,11 @@ namespace spz {
 	        // Mask / radial Filled dials must keep authored sprites (same litmus as ApplyRoundedControlSprite).
 	        if (SpzUiThemeOps.IsUiMaskGraphic(img) || img.type == Image.Type.Filled)
 	            return;
+	        // Unselected discs used plain control_bg and disappeared into panel charcoal; lift them and
+	        // keep the active chip bright (text_primary) so SD/3D/UV/BG stay obvious.
 	        Color fill = selected
-	            ? Color.Lerp(t.controlBg, t.accent, 0.22f)
-	            : t.controlBg;
+	            ? Color.Lerp(t.textPrimary, t.accent, 0.06f)
+	            : Color.Lerp(t.controlBg, t.textPrimary, 0.18f);
 	        SpzUiThemeOps.ApplyBoundChromeGraphic(img, fill);
 	        var tag = img.GetComponent<SpzUiThemeRoundedControl>();
 	        if (tag == null) {
