@@ -57,13 +57,6 @@ class ForgeShimState:
                     abort()
                 except Exception:
                     pass
-            begin = getattr(backend, "begin_job", None)
-            # New backend starts clean; do not inherit aborted epoch from a prior job.
-            if callable(begin):
-                try:
-                    begin()
-                except Exception:
-                    pass
 
     def snapshot_status(self) -> Dict[str, Any]:
         with self.lock:
