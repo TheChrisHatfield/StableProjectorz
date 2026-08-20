@@ -654,7 +654,12 @@ class FalBackend(CloudBackend):
             cancel_url = self._cancel_url
             self._cancel_url = None
             conn = self._active_conn
-            self._active_conn = None
+            # If submit has not returned a cancel_url yet, keep the fal POST socket alive so
+            # generate() can finish reading request_id and PUT cancel (closing here orphans billing).
+            if cancel_url is None:
+                conn = None
+            else:
+                self._active_conn = None
         if conn is not None:
             try:
                 conn.close()
@@ -977,11 +982,9 @@ class FalBackend(CloudBackend):
                 self._active_conn = conn
             conn.request(method.upper(), req_path, body=body, headers=headers)
             resp = conn.getresponse()
-            with self._io_lock:
-                if self._gen_epoch != epoch:
-                    raise BackendError("interrupted", status=499)
             raw = resp.read()
             ct = resp.getheader("Content-Type") or "application/json"
+            # Return body even if abort flipped mid-read — caller registers cancel_url then exits.
             return int(resp.status), raw, ct
         except BackendError:
             raise
