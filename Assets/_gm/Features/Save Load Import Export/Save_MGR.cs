@@ -958,7 +958,17 @@ namespace spz {
 	    void Start(){
 	        ExportSave_UI_MGR.OnSaveProject_Button += DoSaveProject;
 	        ExportSave_UI_MGR.OnLoadProject_Button += DoLoadProject;
-	        ExportSave_UI_MGR.OnExport3D_Button += () => { Export3D_with_textures(); };
+	        ExportSave_UI_MGR.OnExport3D_Button += OnExport3D_Button;
+	    }
+	    void OnDestroy(){
+	        ExportSave_UI_MGR.OnSaveProject_Button -= DoSaveProject;
+	        ExportSave_UI_MGR.OnLoadProject_Button -= DoLoadProject;
+	        ExportSave_UI_MGR.OnExport3D_Button -= OnExport3D_Button;
+	        if (ReferenceEquals(instance, this))
+	            instance = null;
+	    }
+	    void OnExport3D_Button(){
+	        Export3D_with_textures();
 	    }
 	    void Update(){
 	        if(Input.GetKey(KeyCode.LeftControl) && Input.GetKeyDown(KeyCode.S)){  DoSaveProject();  }
