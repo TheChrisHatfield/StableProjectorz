@@ -99,6 +99,9 @@ public sealed class ConnectionPanelCloudEmblemContractTests {
 		Assert.That(src, Does.Contain("PingJsonMarksCloudInference"));
 		Assert.That(src, Does.Contain("ApplySdInferenceEmblem"));
 		Assert.That(src, Does.Contain("downloadHandler.text"));
+		Assert.That(src, Does.Contain("isCloudInferenceConnected"));
+		Assert.That(src, Does.Contain("request.timeout = 2"),
+			"Cloud Inference ping must use a short timeout so Disconnect does not stick SERV green.");
 	}
 
 	[Test]

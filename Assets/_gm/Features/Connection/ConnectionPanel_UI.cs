@@ -163,6 +163,10 @@ namespace spz {
 	                                  && StableDiffusion_Hub.instance != null
 	                                  && StableDiffusion_Hub.instance._generating;
 	                request.timeout = generating ? 25 : request.timeout;
+	                // Cloud Inference is a local shim — keep ping short so Disconnect does not leave
+	                // SERV green for the 12–25s local-Forge trust window while :7860 is already down.
+	                if (isCloudInferenceConnected)
+	                    request.timeout = 2;
 	                yield return request.SendWebRequest();
 
 	                if (request.result == UnityWebRequest.Result.Success){//connection successful:
