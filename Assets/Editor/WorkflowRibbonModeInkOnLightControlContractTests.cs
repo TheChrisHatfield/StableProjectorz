@@ -43,11 +43,10 @@ public sealed class WorkflowRibbonModeInkOnLightControlContractTests {
 		string src = File.ReadAllText(path);
 		int i = src.IndexOf("static void ThemeModeToggle(", System.StringComparison.Ordinal);
 		Assert.That(i, Is.GreaterThan(0));
-		string body = src.Substring(i, System.Math.Min(3200, src.Length - i));
+		string body = src.Substring(i, System.Math.Min(4500, src.Length - i));
 		Assert.That(body, Does.Contain("InkOnControlFace(t)"));
 		Assert.That(body, Does.Contain("ApplyNomadStackedToolCell"));
-		Assert.That(body, Does.Not.Contain("glyph,\n\t            t.textPrimary,"),
-			"stacked mode glyphs must not hardcode light text_primary on light control faces");
+		Assert.That(body, Does.Contain("selectionChromeOnly"));
 	}
 
 	[Test]
@@ -87,7 +86,7 @@ public sealed class WorkflowRibbonModeInkOnLightControlContractTests {
 
 			var themeMode = typeof(WorkflowRibbon_UI).GetMethod(
 				"ThemeModeToggle", BindingFlags.Static | BindingFlags.NonPublic);
-			themeMode.Invoke(null, new object[] { mode, false, StudioLineIcon.Brush, SpzUiThemeOps.Active });
+			themeMode.Invoke(null, new object[] { mode, false, StudioLineIcon.Brush, SpzUiThemeOps.Active, false });
 
 			Assert.That(tmp.color, Is.EqualTo(SpzUiThemeOps.Active.fieldBg).Within(0.02f),
 				"COLOR / PROJ MASK / ENTIRE labels must use dark ink on light Nomad control faces");

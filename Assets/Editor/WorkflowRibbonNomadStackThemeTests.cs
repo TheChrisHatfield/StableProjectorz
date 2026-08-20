@@ -154,9 +154,9 @@ public sealed class WorkflowRibbonNomadStackThemeTests {
 			Assert.That(iconT, Is.Not.Null);
 			var iconRt = iconT as RectTransform;
 			Assert.That(iconRt, Is.Not.Null);
-			Assert.That(iconRt.anchoredPosition.y, Is.GreaterThan(0f), "Icon sits above center");
-			Assert.That(iconRt.anchoredPosition.y, Is.LessThan(6f),
-				"Tight icon→label leading (was Grid 8px+ lift that left a sparse gap)");
+			// Workflow uppercase stack places the glyph via anchors (0.74 band), not yLift offset.
+			Assert.That(iconRt.anchorMin.y, Is.EqualTo(0.74f).Within(0.01f), "Icon sits in upper cell band");
+			Assert.That(iconRt.anchoredPosition, Is.EqualTo(Vector2.zero));
 			Assert.That(iconT.GetComponent<Image>().sprite,
 				Is.EqualTo(UiRuntimeSprites.GetLineIcon(StudioLineIcon.Drop)));
 
@@ -224,7 +224,7 @@ public sealed class WorkflowRibbonNomadStackThemeTests {
 			var themeMode = typeof(WorkflowRibbon_UI).GetMethod(
 				"ThemeModeToggle", BindingFlags.Static | BindingFlags.NonPublic);
 			Assert.That(themeMode, Is.Not.Null);
-			themeMode.Invoke(null, new object[] { mode, true, StudioLineIcon.Camera, SpzUiThemeOps.Active });
+			themeMode.Invoke(null, new object[] { mode, true, StudioLineIcon.Camera, SpzUiThemeOps.Active, false });
 
 			Transform iconT = SpzUiThemeOps.FindDirectChildIncludingInactive(faceGo.transform, "MonolithLineIcon");
 			Assert.That(iconT, Is.Not.Null);
