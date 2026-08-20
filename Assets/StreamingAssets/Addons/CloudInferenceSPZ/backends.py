@@ -36,6 +36,120 @@ def _make_solid_png_b64(width: int = 64, height: int = 64, rgb: Tuple[int, int, 
     return base64.b64encode(png).decode("ascii")
 
 
+def _decode_png_rgb_rows(png_bytes: bytes) -> Optional[Tuple[int, int, bytes]]:
+    """Minimal 8-bit RGB/RGBA non-interlaced PNG → (w, h, filterless RGB rows)."""
+    if not png_bytes or not png_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+        return None
+    pos = 8
+    width = height = None
+    color_type = None
+    idat = bytearray()
+    while pos + 8 <= len(png_bytes):
+        length = struct.unpack(">I", png_bytes[pos : pos + 4])[0]
+        tag = png_bytes[pos + 4 : pos + 8]
+        data = png_bytes[pos + 8 : pos + 8 + length]
+        pos = pos + 12 + length
+        if tag == b"IHDR" and len(data) >= 13:
+            width, height, bit_depth, color_type = struct.unpack(">IIBB", data[:10])
+            if bit_depth != 8 or color_type not in (2, 6):
+                return None
+        elif tag == b"IDAT":
+            idat.extend(data)
+        elif tag == b"IEND":
+            break
+    if width is None or height is None or color_type is None:
+        return None
+    try:
+        raw = zlib.decompress(bytes(idat))
+    except Exception:
+        return None
+    bpp = 3 if color_type == 2 else 4
+    stride = 1 + width * bpp
+    if len(raw) < stride * height:
+        return None
+    out = bytearray(width * height * 3)
+    prev = bytearray(width * bpp)
+    for y in range(height):
+        row = raw[y * stride : (y + 1) * stride]
+        filt = row[0]
+        cur = bytearray(row[1:])
+        if filt == 1:  # Sub
+            for i in range(bpp, len(cur)):
+                cur[i] = (cur[i] + cur[i - bpp]) & 255
+        elif filt == 2:  # Up
+            for i in range(len(cur)):
+                cur[i] = (cur[i] + prev[i]) & 255
+        elif filt == 3:  # Average
+            for i in range(len(cur)):
+                left = cur[i - bpp] if i >= bpp else 0
+                cur[i] = (cur[i] + ((left + prev[i]) // 2)) & 255
+        elif filt == 4:  # Paeth
+            for i in range(len(cur)):
+                a = cur[i - bpp] if i >= bpp else 0
+                b = prev[i]
+                c = prev[i - bpp] if i >= bpp else 0
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                pr = a if pa <= pb and pa <= pc else (b if pb <= pc else c)
+                cur[i] = (cur[i] + pr) & 255
+        elif filt != 0:
+            return None
+        prev = cur
+        for x in range(width):
+            o = (y * width + x) * 3
+            i = x * bpp
+            out[o] = cur[i]
+            out[o + 1] = cur[i + 1]
+            out[o + 2] = cur[i + 2]
+    return width, height, bytes(out)
+
+
+def _png_b64_is_nearly_full_white(mask_b64: str, dark_frac_max: float = 0.02) -> bool:
+    """True when mask is solid / near-full white (SPZ full-frame img2img), not a brush silhouette."""
+    raw = (mask_b64 or "").strip()
+    if raw.startswith("data:") and "," in raw:
+        raw = raw.split(",", 1)[1]
+    raw = "".join(raw.split())
+    try:
+        png = base64.b64decode(raw, validate=False)
+    except Exception:
+        return False
+    decoded = _decode_png_rgb_rows(png)
+    if decoded is None:
+        return False
+    _w, _h, rgb = decoded
+    if not rgb:
+        return False
+    n = len(rgb) // 3
+    if n <= 0:
+        return False
+    dark = 0
+    for i in range(0, len(rgb), 3):
+        # Forge inpaint: white = edit region. Full-frame white ≈ whole plate.
+        if rgb[i] < 240 or rgb[i + 1] < 240 or rgb[i + 2] < 240:
+            dark += 1
+            if dark / n > dark_frac_max:
+                return False
+    return True
+
+
+def _make_half_mask_png_b64(width: int = 32, height: int = 32) -> str:
+    """Left half black / right half white — selective inpaint silhouette for tests."""
+    width = max(8, min(256, int(width or 32)))
+    height = max(8, min(256, int(height or 32)))
+    rows = []
+    half = width // 2
+    for _ in range(height):
+        row = b"\x00"
+        row += bytes((0, 0, 0)) * half
+        row += bytes((255, 255, 255)) * (width - half)
+        rows.append(row)
+    raw = b"".join(rows)
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    png = b"\x89PNG\r\n\x1a\n" + _png_chunk(b"IHDR", ihdr) + _png_chunk(b"IDAT", zlib.compress(raw, 9)) + _png_chunk(b"IEND", b"")
+    return base64.b64encode(png).decode("ascii")
+
+
 class BackendError(RuntimeError):
     def __init__(self, message: str, status: int = 502):
         super().__init__(message)
@@ -378,6 +492,25 @@ def _forge_payload_has_mask(payload: Dict[str, Any]) -> bool:
     return False
 
 
+def _forge_payload_has_selective_inpaint_mask(payload: Dict[str, Any]) -> bool:
+    """True only for brush/silhouette masks. SPZ always sends full-white masks for plate img2img."""
+    if not _forge_payload_has_mask(payload):
+        return False
+    mask = payload.get("mask")
+    if not isinstance(mask, str) or not mask.strip():
+        for key in ("mask_image", "inpainting_mask", "mask_b64"):
+            alt = payload.get(key)
+            if isinstance(alt, str) and alt.strip():
+                mask = alt
+                break
+    if not isinstance(mask, str) or not mask.strip():
+        return True
+    # Undecodable masks fail closed (501) — do not silently treat garbage as full-frame.
+    if _png_b64_is_nearly_full_white(mask):
+        return False
+    return True
+
+
 def _forge_payload_has_active_controlnet(payload: Dict[str, Any]) -> bool:
     """True when alwayson ControlNet units carry a real model / image / module fal cannot apply."""
     if not isinstance(payload, dict):
@@ -577,10 +710,12 @@ class FalBackend(CloudBackend):
             if self._aborted:
                 raise BackendError("interrupted", status=499)
         is_img2img = "img2img" in (path or "")
-        # Honesty: fal flux img2img has no inpaint/mask path — do not silently drop the mask.
-        if is_img2img and _forge_payload_has_mask(payload):
+        # Honesty: fal flux img2img has no selective inpaint — do not silently drop brush masks.
+        # SPZ always attaches a full-white mask for plate img2img; those are allowed (strength-only).
+        if is_img2img and _forge_payload_has_selective_inpaint_mask(payload):
             raise BackendError(
-                "fal img2img does not support inpaint masks yet — clear the mask or use Demo or Remote Forge",
+                "fal img2img does not support selective inpaint masks yet — clear the brush mask "
+                "or use full-frame img2img / Demo / Remote Forge",
                 status=501,
             )
         # Honesty: fal thick map has no ControlNet — do not silently ignore structure guidance.
