@@ -22,8 +22,8 @@ public sealed class NomadThemeComposeTests {
 		var tokens = (JObject)method.Invoke(null, new object[] { 0.84f, 0.94f });
 		Assert.That((string)tokens["accent"], Is.EqualTo("#F2CA50FF"));
 		Assert.That((string)tokens["panel_bg"], Is.EqualTo("#1E1F23F2"));
-		Assert.That((string)tokens["control_bg"], Is.EqualTo("#6E7280FF"));
-		Assert.That((string)tokens["tab_active"], Is.EqualTo("#828691FF"));
+		Assert.That((string)tokens["control_bg"], Is.EqualTo("#9A9EAAFF"));
+		Assert.That((string)tokens["tab_active"], Is.EqualTo("#A8ACB8FF"));
 		Assert.That((string)tokens["border"], Is.EqualTo("#D0C8B8CC"));
 		Assert.That((float)tokens["font_scale"], Is.EqualTo(0.84f).Within(0.001f));
 		Assert.That((float)tokens["spacing_scale"], Is.EqualTo(0.94f).Within(0.001f));
