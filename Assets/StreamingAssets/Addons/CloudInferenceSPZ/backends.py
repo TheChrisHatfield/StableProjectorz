@@ -641,9 +641,13 @@ class FalBackend(CloudBackend):
         except (TypeError, ValueError):
             h = 512
         prompt = str(payload.get("prompt") or "").strip() or " "
+        try:
+            n_img = int(float(payload.get("batch_size") or payload.get("n_iter") or 1))
+        except (TypeError, ValueError):
+            n_img = 1
         out: Dict[str, Any] = {
             "prompt": prompt,
-            "num_images": 1,
+            "num_images": max(1, min(4, n_img)),
             "enable_safety_checker": True,
             "output_format": "png",
             "image_size": _pick_fal_image_size(w, h),
