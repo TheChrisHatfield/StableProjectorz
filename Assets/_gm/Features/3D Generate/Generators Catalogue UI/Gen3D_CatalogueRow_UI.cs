@@ -32,6 +32,8 @@ namespace spz {
 
 	    Coroutine _onDownloadRepo_crtn = null;
 	    Coroutine _loadThumbnail_crtn;
+	    /// <summary>Mirror URL currently handed to <see cref="Download_MGR"/> (for cancel on disable).</summary>
+	    string _activeDownloadUrl;
 
 	    DownloadInfo _download_info;
 	    string _moreInfo_url;
@@ -125,6 +127,7 @@ namespace spz {
 	        bool downloadSuccess = false;
 	        while (!downloadSuccess && _download_info.CurrentUrlIndex < _download_info.mirrors.Length) {
 	            string currentUrl = _download_info.mirrors[_download_info.CurrentUrlIndex];
+	            _activeDownloadUrl = currentUrl;
 
 	            if (Download_MGR.instance == null) {
 	                _wholeCataloguePanel?.statusText?.ShowStatusText("Download manager unavailable", 5);
@@ -133,12 +136,16 @@ namespace spz {
 	            Download_MGR.instance.DownloadFile(
 	                currentUrl,
 	                zipPath,
-	                (progress) => _progressBar_stretchMe.localScale = new Vector3(progress * 0.8f, 1, 1),
+	                (progress) => {
+	                    float p = progress < 0f ? 0f : progress;
+	                    _progressBar_stretchMe.localScale = new Vector3(p * 0.8f, 1, 1);
+	                },
 	                false
 	            );
 	            while (Download_MGR.instance != null && Download_MGR.instance.IsDownloading(currentUrl)) {
 	                yield return null;
 	            }
+	            _activeDownloadUrl = null;
 	            if (File.Exists(zipPath)) {
 	                downloadSuccess = true;
 	                break;
@@ -267,13 +274,37 @@ namespace spz {
 	            _wholeCataloguePanel?.statusText?.ShowStatusText($"Download Cancelled", 8);
 	            Viewport_StatusText.instance?.ShowStatusText($"Download Cancelled", false, 8, false);
 
+	            CancelActiveCatalogueDownload();
 	            StopCoroutine(_onDownloadRepo_crtn);
 	            _onDownloadRepo_crtn = null;
+	            _progressBar.SetActive(false);
+	            if (_download_button != null) {
+	                _download_button.gameObject.SetActive(true);
+	                _download_button.interactable = true;
+	            }
 	        }
 	        if (_loadThumbnail_crtn != null) {
 	            StopCoroutine(_loadThumbnail_crtn);
 	            _loadThumbnail_crtn = null;
 	        }
+	    }
+
+	    /// <summary>
+	    /// Stopping the row coroutine alone left Download_MGR writing the zip; UpdateButtonStates then
+	    /// treated the partial file as a successful install (false Ready / Explorer).
+	    /// </summary>
+	    void CancelActiveCatalogueDownload() {
+	        string url = _activeDownloadUrl;
+	        _activeDownloadUrl = null;
+	        if (!string.IsNullOrEmpty(url) && Download_MGR.instance != null)
+	            Download_MGR.instance.CancelDownload(url);
+	        if (_download_info == null || string.IsNullOrEmpty(_download_info.extract_path))
+	            return;
+	        string zipPath = Path.Combine(_download_info.extract_path, _download_info.zip_name);
+	        try {
+	            if (File.Exists(zipPath))
+	                File.Delete(zipPath);
+	        } catch { /* best-effort partial cleanup */ }
 	    }
 	}
 }//end namespace
