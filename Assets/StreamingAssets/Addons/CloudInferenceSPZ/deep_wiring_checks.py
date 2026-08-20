@@ -638,6 +638,14 @@ def main() -> int:
                 timeout=10,
             )
             check(st == 501, "fal shim extras honestly returns 501 (no fake Demo PNG)")
+            st, body = http(
+                "POST",
+                f"http://127.0.0.1:{shim_fal_port}",
+                "/controlnet/detect",
+                {"controlnet_module": "depth", "controlnet_input_images": ["QUJD"]},
+                timeout=10,
+            )
+            check(st == 501, "fal shim detect honestly returns 501 (no echo fake preprocess)")
             shim.stop_shim()
         else:
             check(False, "fal shim port busy")

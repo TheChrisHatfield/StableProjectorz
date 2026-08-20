@@ -557,11 +557,21 @@ class _Handler(BaseHTTPRequestHandler):
                     status, raw, ct = backend.proxy("POST", full_path, body, dict(self.headers.items()))
                     self._send(status, raw, ct)
                     return
+                # fal has no preprocessor path — do not echo inputs as if detect ran.
+                if getattr(backend, "name", "") == "fal":
+                    self._send_json(
+                        501,
+                        {
+                            "detail": "fal ControlNet detect/preprocess is not wired yet — use Demo or Remote Forge",
+                            "error": "fal_detect_not_implemented",
+                        },
+                    )
+                    return
                 payload = self._read_json()
                 images = payload.get("controlnet_input_images") or payload.get("images") or []
                 if not isinstance(images, list):
                     images = []
-                # Echo inputs so SPZ detect callers (empty images[] = hard fail) stay wired.
+                # Echo inputs so SPZ detect callers (empty images[] = hard fail) stay wired on Demo.
                 self._send_json(
                     200,
                     {
