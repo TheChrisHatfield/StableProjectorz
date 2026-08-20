@@ -563,14 +563,21 @@ class FalBackend(CloudBackend):
             response_url = f"{self.queue_base}/{model}/requests/{request_id}"
         if not cancel_url:
             cancel_url = f"{self.queue_base}/{model}/requests/{request_id}/cancel"
+        # Register cancel URL immediately so an interrupt during submit→poll cannot miss PUT cancel.
         with self._io_lock:
             self._cancel_url = str(cancel_url)
+            aborted_already = bool(self._aborted)
+        if aborted_already:
+            self.abort()
+            raise BackendError("interrupted", status=499)
 
         deadline = time.time() + self.timeout_s
         while time.time() < deadline:
             with self._io_lock:
-                if self._aborted:
-                    raise BackendError("interrupted", status=499)
+                aborted_now = bool(self._aborted)
+            if aborted_now:
+                self.abort()
+                raise BackendError("interrupted", status=499)
             st_code, st_body, _ = self._http_json(
                 "GET",
                 status_url + ("&" if "?" in status_url else "?") + "logs=0",
@@ -604,7 +611,12 @@ class FalBackend(CloudBackend):
 
         with self._io_lock:
             if self._aborted:
-                raise BackendError("interrupted", status=499)
+                aborted_after = True
+            else:
+                aborted_after = False
+        if aborted_after:
+            self.abort()
+            raise BackendError("interrupted", status=499)
         res_code, res_body, _ = self._http_json("GET", response_url, None, timeout_s=60.0)
         if res_code == 404 and response_url.rstrip("/").endswith("/response"):
             # Some gateways advertise …/response; OpenAPI serves the bare request path.
