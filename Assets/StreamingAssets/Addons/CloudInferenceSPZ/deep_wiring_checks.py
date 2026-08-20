@@ -621,6 +621,24 @@ def main() -> int:
             isinstance(result.get("images"), list) and result["images"] and result["images"][0] == png_b64,
             "fal queue txt2img returns Forge images[]",
         )
+        result_neg = good.generate(
+            "/sdapi/v1/txt2img",
+            {
+                "prompt": "a cat",
+                "negative_prompt": "blurry, low quality",
+                "width": 16,
+                "height": 16,
+                "steps": 4,
+            },
+        )
+        try:
+            info_neg = json.loads(result_neg.get("info") or "{}")
+        except Exception:
+            info_neg = {}
+        check(
+            info_neg.get("negative_prompt_ignored") is True,
+            "fal info marks negative_prompt as ignored (FLUX has no negatives)",
+        )
 
         # Poll must fail fast on missing status (not spin until timeout).
         missing = be.FalBackend("good-key", queue_base=f"http://127.0.0.1:{fal_port}", timeout_s=3.0)

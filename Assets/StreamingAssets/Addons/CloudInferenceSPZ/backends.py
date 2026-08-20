@@ -927,17 +927,23 @@ class FalBackend(CloudBackend):
         images = _fal_result_images_to_b64(data)
         if not images:
             raise BackendError(f"fal returned no images: {str(data)[:240]}", status=502)
+        info_obj: Dict[str, Any] = {
+            "cloud_inference": "fal",
+            "path": path,
+            "model": self.IMG2IMG_MODEL if "img2img" in (path or "") else self.TXT2IMG_MODEL,
+            "seed": payload.get("seed", -1),
+        }
+        # FLUX/fal has no negative_prompt — do not pretend SPZ negatives were applied.
+        neg = str((payload or {}).get("negative_prompt") or "").strip()
+        if neg:
+            info_obj["negative_prompt_ignored"] = True
+            info_obj["negative_prompt_note"] = (
+                "fal FLUX does not support negative_prompt; field was dropped (use positive framing)"
+            )
         return {
             "images": images,
             "parameters": {},
-            "info": json.dumps(
-                {
-                    "cloud_inference": "fal",
-                    "path": path,
-                    "model": self.IMG2IMG_MODEL if "img2img" in (path or "") else self.TXT2IMG_MODEL,
-                    "seed": payload.get("seed", -1),
-                }
-            ),
+            "info": json.dumps(info_obj),
         }
 
     def _http_json(
