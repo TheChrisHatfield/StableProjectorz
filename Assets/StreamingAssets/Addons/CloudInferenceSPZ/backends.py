@@ -435,7 +435,7 @@ class RemoteForgeBackend(CloudBackend):
 
 
 def _pick_fal_image_size(width: int, height: int) -> Any:
-    """Map Forge W×H to fal size presets, or custom width/height when far from presets."""
+    """Pass exact Forge W×H to fal (custom size). Named presets only when already exact."""
     w = max(8, min(2048, int(width or 512)))
     h = max(8, min(2048, int(height or 512)))
     presets = {
@@ -446,16 +446,10 @@ def _pick_fal_image_size(width: int, height: int) -> Any:
         "landscape_4_3": (1024, 768),
         "landscape_16_9": (1024, 576),
     }
-    best = None
-    best_err = None
     for name, (pw, ph) in presets.items():
-        err = abs(pw - w) + abs(ph - h)
-        if best_err is None or err < best_err:
-            best_err = err
-            best = name
-    # Within ~128px of a preset → use the named size; else pass exact dims fal accepts.
-    if best is not None and best_err is not None and best_err <= 128:
-        return best
+        if w == pw and h == ph:
+            return name
+    # Honesty: do not silently snap ±128px — projection bake aspect must match request.
     return {"width": w, "height": h}
 
 
