@@ -735,6 +735,20 @@ def main() -> int:
                 timeout=10,
             )
             check(st == 501, "fal shim detect honestly returns 501 (no echo fake preprocess)")
+            st, body = http(
+                "POST",
+                f"http://127.0.0.1:{shim_fal_port}",
+                "/sdapi/v1/options",
+                {"sd_model_checkpoint": "some-other-ckpt", "sd_vae": "fake-vae"},
+                timeout=10,
+            )
+            check(
+                st == 200
+                and isinstance(body, dict)
+                and body.get("sd_model_checkpoint") == "fal-flux-schnell"
+                and body.get("sd_vae") == "Automatic",
+                "fal shim options refuses fake checkpoint/VAE swap",
+            )
             shim.stop_shim()
         else:
             check(False, "fal shim port busy")
