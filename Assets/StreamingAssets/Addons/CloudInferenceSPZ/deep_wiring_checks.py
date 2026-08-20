@@ -569,6 +569,14 @@ def main() -> int:
                 timeout=20,
             )
             check(st == 200 and body.get("images") and body["images"][0] == png_b64, "fal shim txt2img")
+            st, body = http(
+                "POST",
+                f"http://127.0.0.1:{shim_fal_port}",
+                "/sdapi/v1/extra-batch-images",
+                {"upscaling_resize": 2},
+                timeout=10,
+            )
+            check(st == 501, "fal shim extras honestly returns 501 (no fake Demo PNG)")
             shim.stop_shim()
         else:
             check(False, "fal shim port busy")
