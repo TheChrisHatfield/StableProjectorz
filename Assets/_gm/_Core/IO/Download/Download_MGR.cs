@@ -64,6 +64,9 @@ namespace spz {
 	                    string msg = "Downloading failed: " + request.error;
 	                    prnt(printStatusMsg, msg, request.downloadProgress, showProgress:false);
 	                }
+	                // Terminal failure: never report 1.0 — callers (ControlNet gate) treat 1.0 as "file landed".
+	                // Negative progress is the failure sentinel; Gen3D/ShadowR still use File.Exists + IsDownloading.
+	                onProgress?.Invoke(-1f);
 	            }else{
 	                string dir = Path.GetDirectoryName(absFilepath_withExten);
 	                if (!string.IsNullOrEmpty(dir))
@@ -74,8 +77,8 @@ namespace spz {
 	                    string msg = "<b>File downloaded and saved to</b> " + absFilepath_withExten;
 	                    prnt(printStatusMsg, msg, request.downloadProgress, showProgress:false);
 	                }
+	                onProgress?.Invoke(1.0f);//ensure 100% only after bytes are on disk
 	            }
-	            onProgress?.Invoke(1.0f);//once again, to ensure that defenitely reported 100% progress, to allow for completions.
 	        } finally {
 	            _url_to_Download_crtn.Remove(fileUrl);
 	            _url_to_Request.Remove(fileUrl);
