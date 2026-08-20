@@ -292,8 +292,10 @@ namespace spz {
 	        // We will use LatentNothing, and soft inpaint doesn't work with it.
 	        // For more info - see comment inside img2img_GetTextures_andFill().
 	        // Klein/Neo: Soft Inpainting scripts often stall or inflate ETA — skip on Flux.2 Klein.
+	        // Cloud Inference (fal/Demo): Soft Inpaint is not translated — skip so fal does not 501 Gen Art.
 	        SoftInpaintingArgs softInpaint_args =  WorkflowRibbon_UI.instance != null && WorkflowRibbon_UI.instance.is_allow_SoftInpaint()
 	            && !StableDiffusion_Hub.IsActiveCheckpointKlein()
+	            && !Connection_MGR.is_cloud_inference
 	            && !isMakingBackgrounds
 	            && inpaint_fill != InpaintingFill.LatentNothing
 	            && Inpaint_MaskPainter.instance != null
@@ -301,6 +303,12 @@ namespace spz {
 	        if (softInpaint_args != null){
 	            payload_.alwayson_scripts.Add("Soft Inpainting", softInpaint_args);
 	            intermediates_.isScreenMask_forSoftInpaint = true;
+	        } else if (Connection_MGR.is_cloud_inference
+	                   && SD_WorkflowOptionsRibbon_UI.instance != null
+	                   && SD_WorkflowOptionsRibbon_UI.instance.isSoftInpaint
+	                   && Viewport_StatusText.instance != null){
+	            Viewport_StatusText.instance.ShowStatusText(
+	                "Soft Inpaint skipped on Cloud Inference (not supported).", false, 3f, false);
 	        } else if (StableDiffusion_Hub.IsActiveCheckpointKlein()
 	                   && SD_WorkflowOptionsRibbon_UI.instance != null
 	                   && SD_WorkflowOptionsRibbon_UI.instance.isSoftInpaint
@@ -309,13 +317,14 @@ namespace spz {
 	                "Soft Inpaint skipped on Flux.2 Klein (Neo compatibility).", false, 3f, false);
 	        }
 	        bool kleinGenArt = !isMakingBackgrounds && StableDiffusion_Hub.IsActiveCheckpointKlein();
-	        if (!kleinGenArt){
+	        // Cloud shim has no ControlNet translator — do not attach alwayson (fal would 501).
+	        if (!kleinGenArt && !Connection_MGR.is_cloud_inference){
 	            ControlNet_NetworkArgs ctrlNets_args = SD_ControlNetsList_UI.instance != null
 	                ? SD_ControlNetsList_UI.instance.GetArgs_forGenerationRequest(intermediates_) : null;
 	            if(ctrlNets_args != null && ctrlNets_args.args != null && ctrlNets_args.args.Length > 0){
 	                payload_.alwayson_scripts.Add("controlnet", ctrlNets_args);//https://github.com/Mikubill/sd-webui-controlnet/wiki/API#examples-1
 	            }
-	        } else {
+	        } else if (kleinGenArt) {
 	            // Still heal Fun-Union / family mismatch to None so UI matches skipped CN alwayson.
 	            SD_ControlNetsList_UI.instance?.TryHealFamilyMismatchedModels();
 	            string pixelKind = "none";
