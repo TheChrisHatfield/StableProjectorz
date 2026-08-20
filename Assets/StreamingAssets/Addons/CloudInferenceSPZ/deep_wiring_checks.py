@@ -487,7 +487,8 @@ def main() -> int:
                 if self.path.endswith("/status") or "/status?" in self.path:
                     self._json(200, {"status": "COMPLETED"})
                     return
-                if self.path.endswith("/response") or "/response?" in self.path:
+                # OpenAPI result path is bare …/requests/{id}; also accept …/response.
+                if "/requests/" in self.path and not self.path.rstrip("/").endswith("/cancel"):
                     self._json(
                         200,
                         {"images": [{"url": f"data:image/png;base64,{png_b64}"}], "seed": 1},

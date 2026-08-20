@@ -558,8 +558,9 @@ class FalBackend(CloudBackend):
         if not status_url:
             status_url = f"{self.queue_base}/{model}/requests/{request_id}/status"
         if not response_url:
-            # fal queue contract: result is GET …/requests/{id}/response (not the bare request path).
-            response_url = f"{self.queue_base}/{model}/requests/{request_id}/response"
+            # fal queue OpenAPI: GET …/requests/{id} returns the result payload.
+            # Prefer server-provided response_url when present (may end in /response).
+            response_url = f"{self.queue_base}/{model}/requests/{request_id}"
         if not cancel_url:
             cancel_url = f"{self.queue_base}/{model}/requests/{request_id}/cancel"
         with self._io_lock:
@@ -593,6 +594,13 @@ class FalBackend(CloudBackend):
             if self._aborted:
                 raise BackendError("interrupted", status=499)
         res_code, res_body, _ = self._http_json("GET", response_url, None, timeout_s=60.0)
+        if res_code == 404 and response_url.rstrip("/").endswith("/response"):
+            # Some gateways advertise …/response; OpenAPI serves the bare request path.
+            alt = response_url.rstrip("/")[: -len("/response")]
+            res_code, res_body, _ = self._http_json("GET", alt, None, timeout_s=60.0)
+        elif res_code == 404 and "/requests/" in response_url and not response_url.rstrip("/").endswith("/response"):
+            alt = response_url.rstrip("/") + "/response"
+            res_code, res_body, _ = self._http_json("GET", alt, None, timeout_s=60.0)
         if res_code >= 400:
             raise BackendError(
                 res_body.decode("utf-8", errors="replace")[:500] if res_body else f"fal result HTTP {res_code}",
