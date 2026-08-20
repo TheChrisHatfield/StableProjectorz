@@ -79,7 +79,10 @@ namespace spz {
     
 	    public void Submit_CtrlnetDetectRequest( SD_ControlnetDetect_payload payload, 
 	                                             Action<SD_ControlnetDetect_Response> onDetected ){
-	        StartCoroutine( Submit_CtrlDetect_crtn(payload, onDetected) );
+	        _cancelRequested = false;
+	        ClearStuckInterruptTimer();
+	        if (_activeRequestCrtn != null){ StopCoroutine(_activeRequestCrtn); _activeRequestCrtn = null; }
+	        _activeRequestCrtn = StartCoroutine( Submit_CtrlDetect_crtn(payload, onDetected) );
 	    }
 
     
@@ -319,46 +322,64 @@ namespace spz {
 	    IEnumerator Submit_CtrlDetect_crtn( SD_ControlnetDetect_payload payload, 
 	                                        Action<SD_ControlnetDetect_Response> onDetected ){
         
-	        if(_isGeneratingWhat!=Generate_RequestingWhat.nothing){ yield break; }
+	        if(_isGeneratingWhat!=Generate_RequestingWhat.nothing){
+	            _activeRequestCrtn = null;
+	            yield break;
+	        }
 	        _cancelRequested = false;
 	        _isGeneratingWhat = Generate_RequestingWhat.ctrlnetDetect;
 
-	        _generate_sender.Send_GenerateRequest(payload, OnDone);
+	        bool finishedUi = false;
+	        try {
+	            _generate_sender.Send_GenerateRequest(payload, OnDone);
 
-	        Finalize_GenerationRequest( payload.width_spz, payload.height_spz,
-	                                    1, 1, "ctrlDetect", noSdxlAdvice: true);
+	            Finalize_GenerationRequest( payload.width_spz, payload.height_spz,
+	                                        1, 1, "ctrlDetect", noSdxlAdvice: true);
 
-	        bool isError = false;
-	        SD_ControlnetDetect_Response response = null;
+	            bool isError = false;
+	            SD_ControlnetDetect_Response response = null;
 
-	        void OnDone(UnityWebRequest req){
+	            void OnDone(UnityWebRequest req){
+	                if (_cancelRequested){
+	                    isError = true;
+	                    response = null;
+	                    return;
+	                }
+	                if(Finish_if_ResultError(req)){
+	                    isError = true;
+	                    response = null;
+	                    return;
+	                }
+	                try {
+	                    string json = req.downloadHandler != null ? req.downloadHandler.text : "";
+	                    var settings = new JsonSerializerSettings{ TypeNameHandling = TypeNameHandling.Auto, };
+	                    response = JsonConvert.DeserializeObject<SD_ControlnetDetect_Response>(json, settings);
+	                    if (response == null)
+	                        isError = true;
+	                } catch (Exception ex) {
+	                    Debug.LogWarning("[SD_GenRequests_Helper] ctrlDetect parse failed: " + ex.Message);
+	                    isError = true;
+	                    response = null;
+	                }
+	            }
+
+	            while(response == null && !isError && !_cancelRequested){ yield return null;  }
+
 	            if (_cancelRequested){
-	                isError = true;
-	                response = null;
-	                return;
+	                yield break; // OnStop already finished UI
 	            }
-	            if(Finish_if_ResultError(req)){
-	                isError = true;
-	                response = null;
-	                return;
-	            }
-	            // Use class-type information, to support inheritance of objects:
-	            string json = req.downloadHandler.text;
-	            var settings = new JsonSerializerSettings{ TypeNameHandling = TypeNameHandling.Auto, };
-	            response = JsonConvert.DeserializeObject<SD_ControlnetDetect_Response>(json, settings);
-	        }
 
-	        while(response == null && !isError && !_cancelRequested){ yield return null;  }
-
-	        if (_cancelRequested){
+	            GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled: isError);
+	            finishedUi = true;
+	            if (!isError)
+	                onDetected?.Invoke(response);
+	        } finally {
+	            // Always reopen Gen Art / hub — parse hang or StopCoroutine must not leave ctrlnetDetect sticky.
 	            _isGeneratingWhat = Generate_RequestingWhat.nothing;
-	            yield break; // OnStop already finished UI
+	            _activeRequestCrtn = null;
+	            if (!finishedUi && !_cancelRequested)
+	                GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled: true);
 	        }
-
-	        GenerateButtons_UI.OnConfirmed_FinishedGenerate(canceled: isError);
-	        _isGeneratingWhat = Generate_RequestingWhat.nothing;
-	        if (!isError)
-	            onDetected?.Invoke(response);
 	    }
 
 
