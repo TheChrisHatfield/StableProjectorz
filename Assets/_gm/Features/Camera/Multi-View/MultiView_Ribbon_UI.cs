@@ -119,6 +119,8 @@ namespace spz {
 	        _BlendCams_button_anim.Play(); //to catch user's attention.
 	    }
 
+	    void OnWorkflowMode_Changed(WorkflowRibbon_CurrMode _) => OnWorkflowMode_Toggled();
+
 
 	    void EarlyUpdate(){
 	        Vector2 cursorPos = KeyMousePenInput.cursorScreenPos();
@@ -281,7 +283,7 @@ namespace spz {
 	    }
 
 	    void Start(){
-	        WorkflowRibbon_UI._Act_OnModeChanged += (isOn)=>OnWorkflowMode_Toggled();
+	        WorkflowRibbon_UI._Act_OnModeChanged += OnWorkflowMode_Changed;
 
 	        _prevSliderValue = 0;
 	        _isEditingMode = false;
@@ -451,10 +453,17 @@ namespace spz {
 	        UserCameras_MGR._Act_OnRestoreCameraPlacements -= OnCameraPlacements_Restored;
 	        UserCameras_MGR._Act_OnTogledViewCamera -= OnViewCamera_Toggled;
 	        Settings_MGR._Act_verticalRibbonsSwapped -= OnSettings_ToolRibbonSwapped;
+	        WorkflowRibbon_UI._Act_OnModeChanged -= OnWorkflowMode_Changed;
+	        GenData2D_Archive.OnWillDispose_GenerationData -= OnWillDispose_GenerationData;
+	        GenData2D_Archive.OnWillGenerate -= On_SD_willGenerateArt;
+	        if (_sortPins_Button != null)
+	            _sortPins_Button.onClick -= OnOrderPins_Button;
 
 	        if (EarlyUpdate_callbacks_MGR.instance != null){
 	            EarlyUpdate_callbacks_MGR.instance.onEarlyUpdate3 -= EarlyUpdate;
 	        }
+	        if (ReferenceEquals(instance, this))
+	            instance = null;
 	    }
 
 
