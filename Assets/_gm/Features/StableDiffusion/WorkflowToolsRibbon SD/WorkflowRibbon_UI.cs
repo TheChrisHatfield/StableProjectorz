@@ -136,34 +136,41 @@ namespace spz {
 	    public void Set_CurrentMode(WorkflowRibbon_CurrMode mode, bool playAttentionAnim=false){
 	        if(_isSettingCurrentMode){ return; }//avoid recursion
 	        _isSettingCurrentMode = true;
+	        try {
+	            IWorkflowModeToggle toggle = null;
+	            switch (mode){
+	                case WorkflowRibbon_CurrMode.ProjectionsMasking: toggle = _projMasking; break;
+	                case WorkflowRibbon_CurrMode.Inpaint_Color:    toggle = _coloring; break;
+	                case WorkflowRibbon_CurrMode.Inpaint_NoColor: toggle = _colorless; break;
+	                case WorkflowRibbon_CurrMode.TotalObject:  toggle = _entireObj; break;
+	                case WorkflowRibbon_CurrMode.WhereEmpty: toggle = _WhereEmpty_UI; break;
+	                case WorkflowRibbon_CurrMode.AntiShade: toggle = _AntiShade_UI; break;
+	                default: break;
+	            }
+	            _projMasking.SetOffWithoutNotify();
+	            _coloring.SetOffWithoutNotify();
+	            _colorless.SetOffWithoutNotify();
+	            _entireObj.SetOffWithoutNotify();
+	            _WhereEmpty_UI.SetOffWithoutNotify();
+	            _AntiShade_UI.SetOffWithoutNotify();
+	            toggle.EnableToggle(playAttentionAnim);
 
-	        IWorkflowModeToggle toggle = null;
-	        switch (mode){
-	            case WorkflowRibbon_CurrMode.ProjectionsMasking: toggle = _projMasking; break;
-	            case WorkflowRibbon_CurrMode.Inpaint_Color:    toggle = _coloring; break;
-	            case WorkflowRibbon_CurrMode.Inpaint_NoColor: toggle = _colorless; break;
-	            case WorkflowRibbon_CurrMode.TotalObject:  toggle = _entireObj; break;
-	            case WorkflowRibbon_CurrMode.WhereEmpty: toggle = _WhereEmpty_UI; break;
-	            case WorkflowRibbon_CurrMode.AntiShade: toggle = _AntiShade_UI; break;
-	            default: break;
+	            _Act_OnModeChanged?.Invoke(mode);
+	            // Selection fills only — full ApplyThemeTokens (Roboto/stack/layout) on click made the
+	            // whole ribbon aesthetics "pop" after load when ThemeChanged had already run (or raced).
+	            RefreshModeSelectionChromeOnly();
+	        } finally {
+	            _isSettingCurrentMode = false;
 	        }
-	        _projMasking.SetOffWithoutNotify();
-	        _coloring.SetOffWithoutNotify();
-	        _colorless.SetOffWithoutNotify();
-	        _entireObj.SetOffWithoutNotify();
-	        _WhereEmpty_UI.SetOffWithoutNotify();
-	        _AntiShade_UI.SetOffWithoutNotify();
-	        toggle.EnableToggle(playAttentionAnim);
-
-	        _Act_OnModeChanged?.Invoke(mode);
-	        _isSettingCurrentMode = false;
 	    }
 
 
     
 	    void OnToggle_ValueChanged(IWorkflowModeToggle tog){
+	        // EnableToggle sets isOn and re-enters here while Set_CurrentMode holds the gate —
+	        // ignore that recurse so we do not double-apply chrome.
+	        if (_isSettingCurrentMode) return;
 	        Set_CurrentMode( GetMode_from_Toggle(tog), playAttentionAnim:false );
-	        ApplyThemeTokens();
 	        if (WorkflowRibbon_ProjMask_UI.didShowHint_thisFrame()){ return; }
 	        if (WorkflowRibbon_Colors_UI.didShowHint_thisFrame()){ return; }
 	        if (WorkflowRibbon_NoColor_UI.didShowHint_thisFrame()){ return; }//to avoid showing our own hint. (theirs is more important and rare).
@@ -293,6 +300,13 @@ namespace spz {
 	         ApplyThemeTokens();
 	    }
 
+	    void OnEnable() {
+	        // ThemeChanged while inactive can leave authored/half-Nomad cells until first click —
+	        // re-apply full stack when the ribbon becomes visible (without waiting for a mode click).
+	        if (SpzUiThemeOps.ShouldRecolorBoundChrome)
+	            ApplyThemeTokens();
+	    }
+
 	    void OnDestroy(){
 	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 	        Projections_MaskPainter.Act_OnPaintStrokeEnd -= OnBrushStrokeEnd;
@@ -338,18 +352,33 @@ namespace spz {
 	                LayoutRebuilder.ForceRebuildLayoutImmediate(holderRt);
 	        }
 	        Canvas.ForceUpdateCanvases();
-	        ThemeModeToggle(_projMasking as MonoBehaviour, _projMasking != null && _projMasking.isOn, StudioLineIcon.Camera, t);
-	        ThemeModeToggle(_coloring as MonoBehaviour, _coloring != null && _coloring.isOn, StudioLineIcon.Brush, t);
-	        ThemeModeToggle(_colorless as MonoBehaviour, _colorless != null && _colorless.isOn, StudioLineIcon.Drop, t);
-	        ThemeModeToggle(_entireObj as MonoBehaviour, _entireObj != null && _entireObj.isOn, StudioLineIcon.Mesh, t);
-	        ThemeModeToggle(_WhereEmpty_UI as MonoBehaviour, _WhereEmpty_UI != null && _WhereEmpty_UI.isOn, StudioLineIcon.Expand, t);
-	        ThemeModeToggle(_AntiShade_UI as MonoBehaviour, _AntiShade_UI != null && _AntiShade_UI.isOn, StudioLineIcon.Layers, t);
-	        // ThemeChanged can still race inactive layout — one-frame retheme matches click path.
+	        ThemeModeToggle(_projMasking as MonoBehaviour, _projMasking != null && _projMasking.isOn, StudioLineIcon.Camera, t, selectionChromeOnly: false);
+	        ThemeModeToggle(_coloring as MonoBehaviour, _coloring != null && _coloring.isOn, StudioLineIcon.Brush, t, selectionChromeOnly: false);
+	        ThemeModeToggle(_colorless as MonoBehaviour, _colorless != null && _colorless.isOn, StudioLineIcon.Drop, t, selectionChromeOnly: false);
+	        ThemeModeToggle(_entireObj as MonoBehaviour, _entireObj != null && _entireObj.isOn, StudioLineIcon.Mesh, t, selectionChromeOnly: false);
+	        ThemeModeToggle(_WhereEmpty_UI as MonoBehaviour, _WhereEmpty_UI != null && _WhereEmpty_UI.isOn, StudioLineIcon.Expand, t, selectionChromeOnly: false);
+	        ThemeModeToggle(_AntiShade_UI as MonoBehaviour, _AntiShade_UI != null && _AntiShade_UI.isOn, StudioLineIcon.Layers, t, selectionChromeOnly: false);
+	        // ThemeChanged can still race inactive layout — one-frame retheme matches settled layout.
 	        if (!_rethemeModesSkipDefer && isActiveAndEnabled && gameObject.activeInHierarchy) {
 	            if (_deferredModeChrome != null)
 	                StopCoroutine(_deferredModeChrome);
 	            _deferredModeChrome = StartCoroutine(CoRethemeModesNextFrame());
 	        }
+	    }
+
+	    /// <summary>
+	    /// Mode click / scroll: retint selected vs idle fills only. Must not rebuild stacked cells,
+	    /// Roboto, or holder layout — that is what made aesthetics jump on first PROJ MASK/COLOR click.
+	    /// </summary>
+	    void RefreshModeSelectionChromeOnly() {
+	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) return;
+	        var t = SpzUiThemeOps.Active;
+	        ThemeModeToggle(_projMasking as MonoBehaviour, _projMasking != null && _projMasking.isOn, StudioLineIcon.Camera, t, selectionChromeOnly: true);
+	        ThemeModeToggle(_coloring as MonoBehaviour, _coloring != null && _coloring.isOn, StudioLineIcon.Brush, t, selectionChromeOnly: true);
+	        ThemeModeToggle(_colorless as MonoBehaviour, _colorless != null && _colorless.isOn, StudioLineIcon.Drop, t, selectionChromeOnly: true);
+	        ThemeModeToggle(_entireObj as MonoBehaviour, _entireObj != null && _entireObj.isOn, StudioLineIcon.Mesh, t, selectionChromeOnly: true);
+	        ThemeModeToggle(_WhereEmpty_UI as MonoBehaviour, _WhereEmpty_UI != null && _WhereEmpty_UI.isOn, StudioLineIcon.Expand, t, selectionChromeOnly: true);
+	        ThemeModeToggle(_AntiShade_UI as MonoBehaviour, _AntiShade_UI != null && _AntiShade_UI.isOn, StudioLineIcon.Layers, t, selectionChromeOnly: true);
 	    }
 
 	    Coroutine _deferredModeChrome;
@@ -407,7 +436,9 @@ namespace spz {
 	    }
 
 	    /// <summary>Nomad sculpt strip: solid cell + line icon above Roboto label (BoundChrome only).</summary>
-	    static void ThemeModeToggle(MonoBehaviour modeUi, bool selected, StudioLineIcon glyph, SpzUiThemeOps.ThemeTokens t) {
+	    /// <param name="selectionChromeOnly">When true, retint face fill only — no stacked layout/font rebuild.</param>
+	    static void ThemeModeToggle(MonoBehaviour modeUi, bool selected, StudioLineIcon glyph, SpzUiThemeOps.ThemeTokens t,
+	                                bool selectionChromeOnly = false) {
 	        if (modeUi == null) return;
 	        if (!SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            RestoreWorkflowModeAuthored(modeUi);
@@ -431,6 +462,10 @@ namespace spz {
 	            toggle.colors = cb;
 	            if (toggle.targetGraphic is Image tgImg)
 	                SpzUiThemeOps.ApplyRoundedControlSprite(tgImg, markEligible: true);
+	            if (selectionChromeOnly) {
+	                SpzUiThemeOps.ClearNonFaceRaycastsForTheme(toggle);
+	                return;
+	            }
 	            // Authored checkmark is a beveled ON plate — selection = flat fill only (Brush/Multiview parity).
 	            if (toggle.graphic is Image check && check != toggle.targetGraphic)
 	                SpzUiThemeOps.HideAuthoredGraphicForTheme(check);
@@ -457,6 +492,7 @@ namespace spz {
 	                SpzUiThemeOps.ApplyBoundChromeGraphic(img, fill);
 	                SpzUiThemeOps.ApplyRoundedControlSprite(img, markEligible: true);
 	            }
+	            if (selectionChromeOnly) return;
 	        }
 	        Transform iconOwner = toggle != null ? toggle.transform : modeUi.transform;
 	        // Light Nomad control_bg made PROJ MASK / COLOR / ENTIRE wash out (light ink on light plate).
