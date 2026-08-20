@@ -97,6 +97,10 @@ namespace spz {
 	        }
 	        OnDrag_maybe();
 	        OnPointerUp_maybe();
+	        // Focus loss / Alt-Tab can skip the LMB-released-this-frame edge; without this, _isPainting
+	        // stays true and Direction Add/Erase/Smudge refuse until a later release frame.
+	        if (_isPainting && !KeyMousePenInput.isLMBpressed())
+	            EndStroke();
 
 	        OnUpdateChildren();
         
@@ -111,7 +115,7 @@ namespace spz {
 	    // This helps the user to see where the brush is about to paint.
 	    void CursorPreviewUI_Reposition(){
 	        float size01 = BrushRibbon_UI_Size.GetBrushSize01();
-	        if(KeyMousePenInput.isKey_Shift_pressed()){
+	        if(KeyMousePenInput.isKey_Shift_pressed() && !CircleSlider_Snapping_UI.IsDraggingAny){
 	            Vector2 delta =  KeyMousePenInput.delta_while_RMBpressed( normalizeByScreenDiagonal:true );
 	            float predominantAxisValue   = Mathf.Abs(delta.x) > Mathf.Abs(delta.y) ? delta.x : delta.y;
 	            float mouseMovementMagnitude = Mathf.Abs(predominantAxisValue);
@@ -219,7 +223,11 @@ namespace spz {
 	    void OnPointerUp_maybe(){
 	        if(!KeyMousePenInput.isLMBreleasedThisFrame()){ return; }
 	        if (!_isPainting){ return; }//possibly clicked somewhere else in StableProjectorz, etc.
+	        EndStroke();
+	    }
 
+	    void EndStroke(){
+	        if (!_isPainting) return;
 	        if(_currBrushPath_R8 != null){ 
 	            //To finalize the brush stroke, apply the brush stroke to the mask:
 	            OnFinal_ApplyIncomingVals_intoMask(_prevBrushPath_R8, _currBrushPath_R8);
@@ -257,6 +265,10 @@ namespace spz {
 	        // Block paint strokes while undo/redo restore runs (same global undo stack for inpaint, background, projection masks).
 	        if (PaintUndo_MGR.instance != null && PaintUndo_MGR.instance.BlocksNewStroke
 	            && (this is Inpaint_MaskPainter || this is Background_Painter || this is Projections_MaskPainter))
+		        return true;
+
+	        // Ribbon CircleSlider drag owns the pointer — don't paint with the same mouse movement.
+	        if (CircleSlider_Snapping_UI.IsDraggingAny)
 		        return true;
 
 	        return !correctMode;
