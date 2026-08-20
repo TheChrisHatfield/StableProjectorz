@@ -516,6 +516,18 @@ class _Handler(BaseHTTPRequestHandler):
                     status, raw, ct = backend.proxy("POST", full_path, body, dict(self.headers.items()))
                     self._send(status, raw, ct)
                     return
+                # Local shim: treat unload like interrupt so an in-flight fal job is cancelled.
+                with st.lock:
+                    st.interrupt = True
+                    st.job_active = False
+                    st.progress = 0.0
+                    job_owner = st.job_backend or st.backend
+                abort = getattr(job_owner, "abort", None)
+                if callable(abort):
+                    try:
+                        abort()
+                    except Exception:
+                        pass
                 self._send_json(200, {})
                 return
 
