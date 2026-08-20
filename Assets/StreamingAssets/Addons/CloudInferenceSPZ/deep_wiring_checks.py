@@ -234,11 +234,38 @@ def main() -> int:
         try:
             fal_map.generate(
                 "/sdapi/v1/img2img",
-                {"prompt": "x", "init_images": ["QUJD"], "mask": "QUJD", "width": 32, "height": 32},
+                {
+                    "prompt": "x",
+                    "init_images": ["QUJD"],
+                    "mask": be._make_half_mask_png_b64(16, 16),
+                    "width": 32,
+                    "height": 32,
+                },
             )
-            check(False, "fal img2img with mask must 501")
+            check(False, "fal img2img with selective mask must 501")
         except be.BackendError as e:
-            check(e.status == 501 and "mask" in str(e).lower(), "fal img2img with mask honestly returns 501")
+            check(
+                e.status == 501 and "mask" in str(e).lower(),
+                "fal img2img with selective mask honestly returns 501",
+            )
+        white_mask = be._make_solid_png_b64(16, 16, rgb=(255, 255, 255))
+        try:
+            fal_map.generate(
+                "/sdapi/v1/img2img",
+                {
+                    "prompt": "x",
+                    "init_images": [white_mask],
+                    "mask": white_mask,
+                    "width": 16,
+                    "height": 16,
+                },
+            )
+            check(False, "fal img2img full-white mask should pass gate (then fail upstream)")
+        except be.BackendError as e:
+            check(
+                e.status != 501,
+                f"fal img2img full-white mask must not 501 (got {e.status}: {e})",
+            )
         try:
             fal_map.generate(
                 "/sdapi/v1/txt2img",
