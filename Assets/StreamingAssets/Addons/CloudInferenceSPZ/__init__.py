@@ -8,7 +8,7 @@ shim serves /internal/ping, /sdapi/v1/*, and soft ControlNet stubs.
 Backends:
   Demo         — solid PNG (validates SPZ without GPU)
   Remote/Colab — proxy to a Forge tunnel URL (Colab, RunPod, etc.)
-  fal          — reserved (clear error until thick shim)
+  fal          — thick translator: paste API key → Flux via local Forge shim
 """
 
 from __future__ import annotations
@@ -43,9 +43,9 @@ _el: Dict[str, str] = {}
 _SETTINGS_PATH = os.path.join(_root, "settings.json")
 
 _BACKEND_LABELS = [
-    "Demo (no GPU)",
-    "Remote Forge / Colab URL",
-    "fal (soon)",
+    "Demo — try without a GPU",
+    "Remote Forge / Colab",
+    "fal — paste API key",
 ]
 
 _DEFAULT_SETTINGS = {
@@ -112,6 +112,25 @@ def _panel_value_text(key: str, default: str = "") -> str:
     return str(raw).strip()
 
 
+def _panel_value_bool(key: str, default: bool = False) -> bool:
+    if _panel is None:
+        return default
+    element = _el.get(key)
+    if not element:
+        return default
+    try:
+        raw = _panel.get_value(element)
+    except Exception:
+        return default
+    if isinstance(raw, bool):
+        return raw
+    if raw is None:
+        return default
+    if isinstance(raw, (int, float)):
+        return int(raw) != 0
+    return str(raw).strip().lower() in ("1", "true", "on", "yes")
+
+
 def _backend_index_from_panel() -> int:
     """Dropdown get_value returns an int index from AddonUI_MGR; accept label text as fallback."""
     raw = _panel_value_text("backend", "0")
@@ -134,7 +153,7 @@ def _read_settings_from_panel() -> dict:
     return {
         "backend_index": _backend_index_from_panel(),
         "credential": _panel_value_text("credential", ""),
-        "auto_connect": _panel_value_text("auto_connect", "Off").lower() in ("1", "true", "on", "yes"),
+        "auto_connect": _panel_value_bool("auto_connect", False),
     }
 
 
@@ -151,14 +170,15 @@ def _status_line() -> str:
     running = shim.is_running()
     snap = shim.get_state().snapshot_status()
     if not running:
-        return "Disconnected — press Connect (keep SPZ SD panel on 127.0.0.1:7860)"
+        return "Off — press Connect. Keep SD SERV on 127.0.0.1:7860."
     err = snap.get("last_error") or ""
-    base = f"Connected · {snap.get('backend')} · {snap.get('listen')}"
+    backend = snap.get("backend") or "backend"
+    listen = snap.get("listen") or "127.0.0.1:7860"
     if err:
-        return f"{base} · last error: {err[:120]}"
+        return f"Error · {backend} · {err[:100]}"
     if snap.get("job_active"):
-        return f"{base} · generating {float(snap.get('progress') or 0):.0%}"
-    return base + " · ready"
+        return f"On · {backend} · {listen} · generating {float(snap.get('progress') or 0):.0%}"
+    return f"On · {backend} · {listen} · ready"
 
 
 def refresh_status() -> bool:
@@ -207,7 +227,15 @@ def connect_cloud() -> bool:
             _show(detail, duration=4.5)
             return False
 
-    shim.get_state().set_backend(backend)
+    if mode == "fal":
+        ok_p, msg_p = backend.probe()
+        if not ok_p:
+            detail = f"fal key check failed: {msg_p}"
+            _set_status(f"Connect failed: {detail}")
+            _show(detail, duration=4.5)
+            return False
+
+    # Bind listener first; only claim the backend after ping proves OUR shim is up.
     ok, msg = shim.start_shim()
     if not ok:
         _set_status(msg)
@@ -222,6 +250,7 @@ def connect_cloud() -> bool:
         _show(detail, duration=4.0)
         return False
 
+    shim.get_state().set_backend(backend)
     line = _status_line()
     _set_status(line)
     _show(f"Cloud Inference ready ({backend.describe()}). Keep SD connection at 127.0.0.1:7860.", duration=3.5)
@@ -245,6 +274,11 @@ def save_settings() -> bool:
     return True
 
 
+def on_auto_connect() -> bool:
+    """Toggle callback: persist without a separate Save click."""
+    return save_settings()
+
+
 def register() -> None:
     global _panel
 
@@ -258,24 +292,32 @@ def register() -> None:
             f"[{ADDON_ID}] create_panel failed — refusing successful load so Unity tears down the ribbon shell"
         )
 
+    # Scan → configure → act → rare. Status is live copy, not a setting.
     _el["status"] = _panel.add_text_input("Status", _status_line())
     _el["backend"] = _panel.add_dropdown("Backend", _BACKEND_LABELS, ix)
     _el["credential"] = _panel.add_text_input(
-        "Key / session URL",
+        "API key / Remote URL",
         str(settings.get("credential") or ""),
     )
-    _el["auto_connect"] = _panel.add_text_input(
-        "Auto-connect (On/Off)",
-        "On" if settings.get("auto_connect") else "Off",
-    )
-
     _panel.add_button("Connect", "connect_cloud")
     _panel.add_button("Disconnect", "disconnect_cloud")
-    _panel.add_button("Refresh Status", "refresh_status")
-    _panel.add_button("Save Settings", "save_settings")
+    _el["auto_connect"] = _panel.add_toggle(
+        "Connect when this add-on loads",
+        bool(settings.get("auto_connect")),
+        "on_auto_connect",
+    )
+
+    fold_id = _panel.add_foldout("More", start_open=False)
+    if fold_id:
+        more = type(_panel)(_panel._client, fold_id, ADDON_ID)
+        more.add_button("Refresh status", "refresh_status")
+        more.add_button("Save settings", "save_settings")
+    else:
+        _panel.add_button("Refresh status", "refresh_status")
+        _panel.add_button("Save settings", "save_settings")
 
     print(f"[{ADDON_ID}] Registered")
-    _show("Cloud Inference panel ready. Demo works offline; Colab/RunPod = paste Forge URL.", duration=3.5)
+    _show("Cloud Inference ready. Demo offline · Forge URL · or fal API key.", duration=3.5)
 
     if settings.get("auto_connect"):
         try:
