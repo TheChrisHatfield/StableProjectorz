@@ -13,11 +13,14 @@ public sealed class SdCataloguePollUnityWebRequestDisposeContractTests {
 		return File.ReadAllText(path);
 	}
 
-	static void AssertFetchDisposes(string src, string methodName) {
+	static void AssertFetchDisposes(string src, string methodName, bool allowNonGet = false) {
 		int i = src.IndexOf(methodName, System.StringComparison.Ordinal);
 		Assert.That(i, Is.GreaterThan(0), methodName);
-		string window = src.Substring(i, System.Math.Min(1600, src.Length - i));
-		Assert.That(window, Does.Contain("UnityWebRequest.Get"));
+		string window = src.Substring(i, System.Math.Min(2800, src.Length - i));
+		if (!allowNonGet)
+			Assert.That(window, Does.Contain("UnityWebRequest.Get"));
+		else
+			Assert.That(window, Does.Contain("UnityWebRequest"));
 		Assert.That(window, Does.Contain("finally"), methodName + " must dispose even on yield break after error");
 		Assert.That(window, Does.Contain("request.Dispose()"), methodName);
 	}
@@ -32,6 +35,26 @@ public sealed class SdCataloguePollUnityWebRequestDisposeContractTests {
 			"IEnumerator GetSchedulers_crtn()");
 		AssertFetchDisposes(
 			Read("Assets", "_gm", "Features", "StableDiffusion", "SD_SysInfo_MGR.cs"),
+			"IEnumerator FetchData_crtn(");
+	}
+
+	[Test]
+	public void ModelsUpscalersVaeControlNet_DisposeRequests() {
+		AssertFetchDisposes(
+			Read("Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Neural_Models.cs"),
+			"IEnumerator GetModels_crtn()");
+		AssertFetchDisposes(
+			Read("Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Neural_Models.cs"),
+			"IEnumerator UnloadModelCheckpoint_crtn()",
+			allowNonGet: true);
+		AssertFetchDisposes(
+			Read("Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_Upscalers.cs"),
+			"IEnumerator GetUpscalers_crtn()");
+		AssertFetchDisposes(
+			Read("Assets", "_gm", "Features", "StableDiffusion", "Input Panel", "SD_VAE.cs"),
+			"IEnumerator GetVAEs_crtn()");
+		AssertFetchDisposes(
+			Read("Assets", "_gm", "Features", "StableDiffusion", "Controlnet", "SD_ControlNetsList_UI.cs"),
 			"IEnumerator FetchData_crtn(");
 	}
 }

@@ -515,16 +515,20 @@ namespace spz {
 
 	        DEBUG_FetchData(0);
 	        UnityWebRequest request = UnityWebRequest.Get(url);
-	        yield return request.SendWebRequest();
+	        try {
+	            yield return request.SendWebRequest();
 
-	        bool isBad = request.result == UnityWebRequest.Result.ConnectionError;
-	            isBad |= request.result == UnityWebRequest.Result.ProtocolError;
-	        if (isBad){
-	            DEBUG_FetchData(1, request.error);
-	            onResult?.Invoke(false, "");
-	        }else{
-	            DEBUG_FetchData(2, request.downloadHandler.text + "\n\n");
-	            onResult?.Invoke(true, request.downloadHandler.text);
+	            bool isBad = request.result == UnityWebRequest.Result.ConnectionError;
+	                isBad |= request.result == UnityWebRequest.Result.ProtocolError;
+	            if (isBad){
+	                DEBUG_FetchData(1, request.error);
+	                onResult?.Invoke(false, "");
+	            }else{
+	                DEBUG_FetchData(2, request.downloadHandler.text + "\n\n");
+	                onResult?.Invoke(true, request.downloadHandler.text);
+	            }
+	        } finally {
+	            request.Dispose();
 	        }
 	    }
 

@@ -63,19 +63,23 @@ namespace spz {
 
 	    IEnumerator UnloadModelCheckpoint_crtn(){
 	        UnityWebRequest request = new UnityWebRequest(Connection_MGR.A1111_SD_API_URL + "/unload-checkpoint", "POST");
-	        var packet = new SD_UnloadModelPacket(){
-	            sd_model_checkpoint = selectedModel_name,
-	        };
-	        string json = JsonUtility.ToJson(packet);
-	        byte[] jsonToSend = new System.Text.UTF8Encoding().GetBytes(json);
-	        request.uploadHandler = new UploadHandlerRaw(jsonToSend);
-	        request.downloadHandler = new DownloadHandlerBuffer();
+	        try {
+	            var packet = new SD_UnloadModelPacket(){
+	                sd_model_checkpoint = selectedModel_name,
+	            };
+	            string json = JsonUtility.ToJson(packet);
+	            byte[] jsonToSend = new System.Text.UTF8Encoding().GetBytes(json);
+	            request.uploadHandler = new UploadHandlerRaw(jsonToSend);
+	            request.downloadHandler = new DownloadHandlerBuffer();
 
-	        yield return request.SendWebRequest();
+	            yield return request.SendWebRequest();
 
-	        bool isBad = request.result == UnityWebRequest.Result.ConnectionError;
-	        isBad |= request.result == UnityWebRequest.Result.ProtocolError;
-	        Debug.Log("UnloadModelCheckpoint() result: " + request.result);
+	            bool isBad = request.result == UnityWebRequest.Result.ConnectionError;
+	            isBad |= request.result == UnityWebRequest.Result.ProtocolError;
+	            Debug.Log("UnloadModelCheckpoint() result: " + request.result);
+	        } finally {
+	            request.Dispose();
+	        }
 	    }
 
 
@@ -335,14 +339,18 @@ namespace spz {
 	        _isFetchingModels = true;
 	        try {
 	            UnityWebRequest request = UnityWebRequest.Get(Connection_MGR.A1111_SD_API_URL + "/sd-models");
-	            yield return request.SendWebRequest();
+	            try {
+	                yield return request.SendWebRequest();
 
-	            bool isBad = request.result == UnityWebRequest.Result.ConnectionError;
-	                isBad |= request.result == UnityWebRequest.Result.ProtocolError;
-	            if (!isBad){
-	                SDModelsList listOfModels = SDModelsList.CreateFromJSON(request.downloadHandler.text);
-	                Act_ListOfModelsReceived?.Invoke(listOfModels);
-	                Populate_Dropdown(listOfModels);
+	                bool isBad = request.result == UnityWebRequest.Result.ConnectionError;
+	                    isBad |= request.result == UnityWebRequest.Result.ProtocolError;
+	                if (!isBad){
+	                    SDModelsList listOfModels = SDModelsList.CreateFromJSON(request.downloadHandler.text);
+	                    Act_ListOfModelsReceived?.Invoke(listOfModels);
+	                    Populate_Dropdown(listOfModels);
+	                }
+	            } finally {
+	                request.Dispose();
 	            }
 	        } finally {
 	            _isFetchingModels = false;

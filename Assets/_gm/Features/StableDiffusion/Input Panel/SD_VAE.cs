@@ -232,20 +232,24 @@ namespace spz {
 	            string urlFallback = urlPrimary == url_vae ? url_modules : url_vae;
 
 	            UnityWebRequest request = UnityWebRequest.Get(urlPrimary);
-	            yield return request.SendWebRequest();
-
-	            bool isBad = request.result == UnityWebRequest.Result.ConnectionError;
-	                isBad |= request.result == UnityWebRequest.Result.ProtocolError;
-	            if (isBad) {
-	                request.Dispose();
-	                request = UnityWebRequest.Get(urlFallback);
+	            try {
 	                yield return request.SendWebRequest();
-	                isBad = request.result == UnityWebRequest.Result.ConnectionError;
-	                isBad |= request.result == UnityWebRequest.Result.ProtocolError;
-	            }
-	            if (!isBad){
-	                SD_VAEList list_of_VAE = SD_VAEList.CreateFromJSON(request.downloadHandler.text);
-	                Populate_Dropdown(list_of_VAE);
+
+	                bool isBad = request.result == UnityWebRequest.Result.ConnectionError;
+	                    isBad |= request.result == UnityWebRequest.Result.ProtocolError;
+	                if (isBad) {
+	                    request.Dispose();
+	                    request = UnityWebRequest.Get(urlFallback);
+	                    yield return request.SendWebRequest();
+	                    isBad = request.result == UnityWebRequest.Result.ConnectionError;
+	                    isBad |= request.result == UnityWebRequest.Result.ProtocolError;
+	                }
+	                if (!isBad){
+	                    SD_VAEList list_of_VAE = SD_VAEList.CreateFromJSON(request.downloadHandler.text);
+	                    Populate_Dropdown(list_of_VAE);
+	                }
+	            } finally {
+	                request.Dispose();
 	            }
 	        } finally {
 	            _isFetchingVAEs = false;
