@@ -765,6 +765,11 @@ class FalBackend(CloudBackend):
 
         # Sync-style response already has images (rare on queue.fal.run, common on fal.run).
         if isinstance(meta.get("images"), list) and meta["images"]:
+            with self._io_lock:
+                aborted_sync = bool(self._aborted)
+            if aborted_sync:
+                self.abort()
+                raise BackendError("interrupted", status=499)
             return self._to_forge_result(meta, path, payload)
 
         request_id = meta.get("request_id") or meta.get("requestId")
@@ -822,6 +827,11 @@ class FalBackend(CloudBackend):
                 raise BackendError(f"fal job {status_name}: {str(st_obj)[:300]}", status=502)
             # Some gateways return the final payload on the status URL.
             if isinstance(st_obj, dict) and isinstance(st_obj.get("images"), list) and st_obj["images"]:
+                with self._io_lock:
+                    aborted_st = bool(self._aborted)
+                if aborted_st:
+                    self.abort()
+                    raise BackendError("interrupted", status=499)
                 return self._to_forge_result(st_obj, path, payload)
             time.sleep(0.45)
         else:
@@ -859,6 +869,11 @@ class FalBackend(CloudBackend):
             result = result["response"]
         if "images" not in result and isinstance(result.get("data"), dict):
             result = result["data"]
+        with self._io_lock:
+            aborted_final = bool(self._aborted)
+        if aborted_final:
+            self.abort()
+            raise BackendError("interrupted", status=499)
         return self._to_forge_result(result, path, payload)
 
     def _forge_payload_to_fal(self, payload: Dict[str, Any], img2img: bool) -> Dict[str, Any]:
