@@ -481,7 +481,7 @@ class FalBackend(CloudBackend):
         self._active_conn: Any = None
 
     def describe(self) -> str:
-        return f"fal → {self.TXT2IMG_MODEL}"
+        return f"fal → txt2img={self.TXT2IMG_MODEL}; img2img={self.IMG2IMG_MODEL}"
 
     def _auth_headers(self) -> Dict[str, str]:
         return {

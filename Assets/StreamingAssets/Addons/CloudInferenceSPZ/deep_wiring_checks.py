@@ -619,8 +619,12 @@ def main() -> int:
             check(ok_fs, f"fal shim start: {msg_fs}")
             st, body = http("GET", f"http://127.0.0.1:{shim_fal_port}", "/sdapi/v1/sd-models")
             check(
-                st == 200 and isinstance(body, list) and body and body[0].get("model_name") == "fal-flux-schnell",
-                "fal shim catalogs expose fal-flux-schnell",
+                st == 200
+                and isinstance(body, list)
+                and body
+                and body[0].get("model_name") == "fal-flux-schnell"
+                and "img2img=dev" in str(body[0].get("title") or ""),
+                "fal shim catalogs disclose schnell txt2img + flux/dev img2img",
             )
             st, body = http(
                 "POST",
