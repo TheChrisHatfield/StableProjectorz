@@ -642,9 +642,15 @@ class FalBackend(CloudBackend):
             h = 512
         prompt = str(payload.get("prompt") or "").strip() or " "
         try:
-            n_img = int(float(payload.get("batch_size") or payload.get("n_iter") or 1))
+            bs = int(float(payload["batch_size"])) if payload.get("batch_size") is not None else 1
         except (TypeError, ValueError):
-            n_img = 1
+            bs = 1
+        try:
+            n_iter = int(float(payload["n_iter"])) if payload.get("n_iter") is not None else 1
+        except (TypeError, ValueError):
+            n_iter = 1
+        # Forge total images ≈ batch_size * n_iter; do not let batch_size=1 hide n_iter.
+        n_img = max(1, bs) * max(1, n_iter)
         out: Dict[str, Any] = {
             "prompt": prompt,
             "num_images": max(1, min(4, n_img)),
