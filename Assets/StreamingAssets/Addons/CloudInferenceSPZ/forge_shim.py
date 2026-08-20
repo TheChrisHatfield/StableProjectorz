@@ -141,8 +141,11 @@ def _safe_int_dim(val: Any, default: int = 64) -> int:
 def _demo_catalog_get(path: str, backend_name: str = "demo") -> Optional[Tuple[bytes, str]]:
     """Return (body, content_type) for Forge list endpoints used by SPZ dropdowns."""
     model_name = "fal-flux-schnell" if backend_name == "fal" else "cloud-inference-demo"
+    # Honesty: fal routes txt2img→schnell and img2img→flux/dev; do not imply one endpoint for both.
     model_title = (
-        "fal FLUX.1 schnell [cloud]" if backend_name == "fal" else "cloud-inference-demo [cloud]"
+        "fal FLUX (txt2img=schnell · img2img=dev) [cloud]"
+        if backend_name == "fal"
+        else "cloud-inference-demo [cloud]"
     )
     if path == "/sdapi/v1/sd-models":
         return (
