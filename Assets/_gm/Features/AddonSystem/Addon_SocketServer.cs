@@ -714,6 +714,7 @@ namespace spz {
 				"spz.cmd.get_workflow_mode", "spz.cmd.is_3d_connected",
 				"spz.cmd.is_3d_generation_in_progress", "spz.cmd.is_3d_generation_ready", "spz.cmd.is_generating",
 				"spz.cmd.is_project_operation_in_progress", "spz.cmd.is_sd_connected",
+				"spz.cmd.mark_sd_disconnected",
 				"spz.cmd.is_skybox_gradient_clear", "spz.cmd.list_ui_targets", "spz.cmd.load_project", "spz.cmd.save_project",
 				"spz.cmd.select_all_meshes", "spz.cmd.select_mesh", "spz.cmd.set_active_paint_layer",
 				"spz.cmd.set_brush_angle", "spz.cmd.set_brush_opacity", "spz.cmd.set_brush_roundness",
@@ -1729,6 +1730,10 @@ namespace spz {
 					case "spz.cmd.is_sd_connected":
 						result["success"] = true;
 						result["connected"] = fastPath.IsSDConnected();
+						break;
+
+					case "spz.cmd.mark_sd_disconnected":
+						result["success"] = fastPath.MarkSdDisconnected();
 						break;
 						
 					case "spz.cmd.is_3d_connected":

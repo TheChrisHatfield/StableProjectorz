@@ -1145,6 +1145,12 @@ namespace spz {
 			if (!_isInitialized) return false;
 			return Connection_MGR.is_sd_connected;
 		}
+
+		/// <summary>Force SERV strip disconnected (Cloud Inference Disconnect — do not wait for ping timeout).</summary>
+		public bool MarkSdDisconnected() {
+			if (!_isInitialized) return false;
+			return Connection_MGR.ForceMarkSdDisconnected();
+		}
 		
 		/// <summary>
 		/// Check if 3D generation service is connected

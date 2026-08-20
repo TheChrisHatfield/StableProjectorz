@@ -230,6 +230,16 @@ namespace spz {
 	        _dim_text.text = cloudInference ? EmblemCloud : EmblemLocal;
 	    }
 
+	    /// <summary>
+	    /// Cloud Inference Disconnect stops the local shim immediately; do not wait for the ping loop
+	    /// to time out before SERV goes red and the Cloud emblem clears (Hub CN skip uses the emblem).
+	    /// </summary>
+	    public void ForceMarkDisconnected() {
+	        isConnected = false;
+	        ApplySdInferenceEmblem(connected: false, cloudInference: false);
+	        SetStatusColor(Color.red);
+	    }
+
 	    void RememberAuthoredDimText() {
 	        if (_dim_text == null || !string.IsNullOrEmpty(_authoredDimText))
 	            return;

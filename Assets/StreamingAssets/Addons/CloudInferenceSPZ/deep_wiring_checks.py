@@ -77,6 +77,14 @@ def main() -> int:
             i_start >= 0 and i_ping >= 0 and i_set >= 0 and i_start < i_ping < i_set,
             "Connect sets backend only after start_shim + ping",
         )
+    disc_fn = init_src.find("def disconnect_cloud")
+    check(disc_fn > 0, "disconnect_cloud present")
+    if disc_fn > 0:
+        disc_body = init_src[disc_fn : init_src.find("\ndef ", disc_fn + 1)]
+        check(
+            "mark_sd_disconnected" in disc_body and "stop_shim" in disc_body,
+            "Disconnect stops shim and marks SERV disconnected",
+        )
 
     host, port = "127.0.0.1", 7860
     if not shim.is_port_free(host, port):
