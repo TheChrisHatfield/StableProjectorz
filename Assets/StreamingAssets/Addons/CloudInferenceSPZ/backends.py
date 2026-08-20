@@ -378,6 +378,37 @@ def _forge_payload_has_mask(payload: Dict[str, Any]) -> bool:
     return False
 
 
+def _forge_payload_has_active_controlnet(payload: Dict[str, Any]) -> bool:
+    """True when alwayson ControlNet units carry a real model / image / module fal cannot apply."""
+    if not isinstance(payload, dict):
+        return False
+    scripts = payload.get("alwayson_scripts") or {}
+    if not isinstance(scripts, dict):
+        return False
+    cn = scripts.get("controlnet") or scripts.get("ControlNet")
+    if not isinstance(cn, dict):
+        return False
+    args = cn.get("args") or []
+    if not isinstance(args, list):
+        return False
+    for unit in args:
+        if not isinstance(unit, dict):
+            continue
+        if unit.get("enabled") is False:
+            continue
+        model = str(unit.get("model") or "").strip().lower()
+        if model and model not in ("none", "null", "n/a"):
+            return True
+        module = str(unit.get("module") or "").strip().lower()
+        if module and module not in ("none", "null", "n/a"):
+            return True
+        for key in ("image", "input_image", "image_fg"):
+            img = unit.get(key)
+            if isinstance(img, str) and img.strip():
+                return True
+    return False
+
+
 def _fal_result_images_to_b64(data: Dict[str, Any]) -> list:
     """fal returns images[{url|file_data|...}]; Forge wants images[base64]."""
     out = []
@@ -545,7 +576,13 @@ class FalBackend(CloudBackend):
         # Honesty: fal flux img2img has no inpaint/mask path — do not silently drop the mask.
         if is_img2img and _forge_payload_has_mask(payload):
             raise BackendError(
-                "fal img2img does not support inpaint masks yet — clear the mask or use Demo/Remote Forge",
+                "fal img2img does not support inpaint masks yet — clear the mask or use Demo or Remote Forge",
+                status=501,
+            )
+        # Honesty: fal thick map has no ControlNet — do not silently ignore structure guidance.
+        if _forge_payload_has_active_controlnet(payload):
+            raise BackendError(
+                "fal does not support ControlNet yet — disable ControlNet units or use Demo or Remote Forge",
                 status=501,
             )
         model = self.IMG2IMG_MODEL if is_img2img else self.TXT2IMG_MODEL

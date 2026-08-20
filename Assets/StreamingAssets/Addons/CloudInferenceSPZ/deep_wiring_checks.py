@@ -239,6 +239,26 @@ def main() -> int:
             check(False, "fal img2img with mask must 501")
         except be.BackendError as e:
             check(e.status == 501 and "mask" in str(e).lower(), "fal img2img with mask honestly returns 501")
+        try:
+            fal_map.generate(
+                "/sdapi/v1/txt2img",
+                {
+                    "prompt": "x",
+                    "width": 32,
+                    "height": 32,
+                    "alwayson_scripts": {
+                        "controlnet": {
+                            "args": [{"enabled": True, "model": "control_v11f1p_sd15_depth", "module": "None", "image": ""}]
+                        }
+                    },
+                },
+            )
+            check(False, "fal txt2img with active ControlNet must 501")
+        except be.BackendError as e:
+            check(
+                e.status == 501 and "controlnet" in str(e).lower(),
+                "fal txt2img with ControlNet honestly returns 501",
+            )
         png_b64 = be._make_solid_png_b64(16, 16)
         forged = be._fal_result_images_to_b64({"images": [{"url": f"data:image/png;base64,{png_b64}"}]})
         check(forged == [png_b64], "fal data-URI images coerce to Forge b64")
