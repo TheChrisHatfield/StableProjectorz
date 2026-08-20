@@ -286,6 +286,24 @@ def main() -> int:
                 e.status == 501 and "controlnet" in str(e).lower(),
                 "fal txt2img with ControlNet honestly returns 501",
             )
+        try:
+            fal_map.generate(
+                "/sdapi/v1/img2img",
+                {
+                    "prompt": "x",
+                    "init_images": [be._make_solid_png_b64(8, 8)],
+                    "mask": be._make_solid_png_b64(8, 8, rgb=(255, 255, 255)),
+                    "width": 8,
+                    "height": 8,
+                    "alwayson_scripts": {"Soft Inpainting": {"args": [True, 0.5]}},
+                },
+            )
+            check(False, "fal Soft Inpainting must 501")
+        except be.BackendError as e:
+            check(
+                e.status == 501 and "soft" in str(e).lower(),
+                "fal Soft Inpainting honestly returns 501",
+            )
         png_b64 = be._make_solid_png_b64(16, 16)
         forged = be._fal_result_images_to_b64({"images": [{"url": f"data:image/png;base64,{png_b64}"}]})
         check(forged == [png_b64], "fal data-URI images coerce to Forge b64")
