@@ -142,15 +142,19 @@ namespace spz {
 	        if(StableDiffusion_Hub.instance._generating){ yield break; }
 
 	        UnityWebRequest request = UnityWebRequest.Get(Connection_MGR.A1111_SD_API_URL + "/schedulers");
-	        yield return request.SendWebRequest();
+	        try {
+	            yield return request.SendWebRequest();
 
-	        bool isBad = request.result == UnityWebRequest.Result.ConnectionError || request.result == UnityWebRequest.Result.ProtocolError;
-	        if (isBad){
-	            yield break;
+	            bool isBad = request.result == UnityWebRequest.Result.ConnectionError || request.result == UnityWebRequest.Result.ProtocolError;
+	            if (isBad){
+	                yield break;
+	            }
+
+	            _listOfSchedulers = SchedulersList.CreateFromJSON(request.downloadHandler.text);
+	            Populate_DropdownSchedulers();
+	        } finally {
+	            request.Dispose();
 	        }
-
-	        _listOfSchedulers = SchedulersList.CreateFromJSON(request.downloadHandler.text);
-	        Populate_DropdownSchedulers();
 	    }
 
 	    void Populate_DropdownSchedulers(){
