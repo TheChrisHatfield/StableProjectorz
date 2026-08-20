@@ -747,6 +747,8 @@ class FalBackend(CloudBackend):
             )
         model = self.IMG2IMG_MODEL if is_img2img else self.TXT2IMG_MODEL
         fal_payload = self._forge_payload_to_fal(payload, img2img=is_img2img)
+        # Strip honesty-only keys before fal HTTP (not part of fal schema).
+        cfg_clamped_flag = bool(fal_payload.pop("_cfg_clamped", False))
         submit_url = f"{self.queue_base}/{model}"
         status, body, _ct = self._http_json("POST", submit_url, fal_payload, timeout_s=min(60.0, self.timeout_s))
         if status in (401, 403):
@@ -770,7 +772,9 @@ class FalBackend(CloudBackend):
             if aborted_sync:
                 self.abort()
                 raise BackendError("interrupted", status=499)
-            return self._to_forge_result(meta, path, payload, fal_sent=fal_payload)
+            return self._to_forge_result(
+                meta, path, payload, fal_sent=fal_payload, cfg_clamped=cfg_clamped_flag
+            )
 
         request_id = meta.get("request_id") or meta.get("requestId")
         status_url = meta.get("status_url") or meta.get("statusUrl")
@@ -832,7 +836,9 @@ class FalBackend(CloudBackend):
                 if aborted_st:
                     self.abort()
                     raise BackendError("interrupted", status=499)
-                return self._to_forge_result(st_obj, path, payload, fal_sent=fal_payload)
+                return self._to_forge_result(
+                    st_obj, path, payload, fal_sent=fal_payload, cfg_clamped=cfg_clamped_flag
+                )
             time.sleep(0.45)
         else:
             raise BackendError("fal job timed out", status=504)
@@ -874,7 +880,9 @@ class FalBackend(CloudBackend):
         if aborted_final:
             self.abort()
             raise BackendError("interrupted", status=499)
-        return self._to_forge_result(result, path, payload, fal_sent=fal_payload)
+        return self._to_forge_result(
+            result, path, payload, fal_sent=fal_payload, cfg_clamped=cfg_clamped_flag
+        )
 
     def _forge_payload_to_fal(self, payload: Dict[str, Any], img2img: bool) -> Dict[str, Any]:
         try:
@@ -915,10 +923,17 @@ class FalBackend(CloudBackend):
         else:
             out["num_inference_steps"] = max(1, min(12, steps))
         try:
-            cfg = float(payload.get("cfg_scale") or payload.get("guidance_scale") or 3.5)
+            if payload.get("cfg_scale") is not None:
+                cfg = float(payload.get("cfg_scale"))
+            elif payload.get("guidance_scale") is not None:
+                cfg = float(payload.get("guidance_scale"))
+            else:
+                cfg = 3.5
         except (TypeError, ValueError):
             cfg = 3.5
         out["guidance_scale"] = max(1.0, min(20.0, cfg))
+        if abs(out["guidance_scale"] - cfg) > 1e-6:
+            out["_cfg_clamped"] = True
         seed = payload.get("seed")
         try:
             seed_i = int(seed)
@@ -943,6 +958,7 @@ class FalBackend(CloudBackend):
         path: str,
         payload: Dict[str, Any],
         fal_sent: Optional[Dict[str, Any]] = None,
+        cfg_clamped: bool = False,
     ) -> Dict[str, Any]:
         images = _fal_result_images_to_b64(data)
         if not images:
@@ -966,6 +982,8 @@ class FalBackend(CloudBackend):
         # Catalog lists Euler/Automatic but fal routes ignore sampler/scheduler.
         if str((payload or {}).get("sampler_name") or "").strip() or str((payload or {}).get("scheduler") or "").strip():
             info_obj["sampler_ignored"] = True
+        if cfg_clamped:
+            info_obj["cfg_clamped"] = True
         if fal_sent is not None:
             try:
                 req_steps = int(float((payload or {}).get("steps")))

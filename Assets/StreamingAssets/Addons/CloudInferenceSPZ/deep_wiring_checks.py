@@ -689,6 +689,8 @@ def main() -> int:
         check(info_samp.get("sampler_ignored") is True, "fal info marks sampler/scheduler ignored")
         check(info_samp.get("steps_clamped") is True and info_samp.get("steps_sent") == 12, "fal info marks schnell steps clamped to 12")
         check(info_samp.get("seed") == 1, "fal info uses fal result seed when present")
+        mapped = good._forge_payload_to_fal({"prompt": "x", "cfg_scale": 0, "width": 16, "height": 16}, img2img=False)
+        check(mapped.get("guidance_scale") == 1.0 and mapped.get("_cfg_clamped") is True, "fal cfg_scale 0 clamps to 1 not silent 3.5")
 
         # Poll must fail fast on missing status (not spin until timeout).
         missing = be.FalBackend("good-key", queue_base=f"http://127.0.0.1:{fal_port}", timeout_s=3.0)
