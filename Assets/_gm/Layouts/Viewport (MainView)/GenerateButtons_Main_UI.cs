@@ -45,6 +45,14 @@ namespace spz {
 	            OnFinishedGenerate_cb(canceled: true);
 	        }
 	    }
+
+	    protected override void OnDestroy() {
+	        GenerateButtons_UI._Act_OnGenerate_started -= OnStartedGenerate_cb;
+	        GenerateButtons_UI._Act_OnGenerate_finished -= OnFinishedGenerate_cb;
+	        if (ReferenceEquals(instance, this))
+	            instance = null;
+	        base.OnDestroy();
+	    }
 	}
 
 
