@@ -50,6 +50,14 @@ namespace spz {
 
 	    public bool isConnected { get; private set; } = false;
 
+	    /// <summary>Last SD ping: Cloud Inference shim vs local Forge/WebUI. Trellis unused.</summary>
+	    public bool isCloudInferenceConnected { get; private set; } = false;
+
+	    string _authoredDimText;
+	    // Sentence case + middot: keep chip identity (2D) and show source as metadata.
+	    const string EmblemCloud = "2D \u00b7 Cloud";
+	    const string EmblemLocal = "2D \u00b7 Local";
+
 
     
 	    //after we launch stableProjectorz, there is some grace-period while the CMD webui window will activate and become ready.
@@ -161,10 +169,15 @@ namespace spz {
 	                    PlayerPrefs_SaveConnDetails();
 	                    SetStatusColor( Color.green );
 	                    isConnected = true;
+	                    bool cloud = _panelKind == ConnectionPanel_Kind.StableDiffusion
+	                                 && PingJsonMarksCloudInference(request.downloadHandler != null
+	                                     ? request.downloadHandler.text : null);
+	                    ApplySdInferenceEmblem(connected: true, cloudInference: cloud);
 	                }
 	                else{//Connection failed:
 	                    SetStatusColor( isStill_warmingUp()?  pendingColor : Color.red );
 	                    isConnected = false;
+	                    ApplySdInferenceEmblem(connected: false, cloudInference: false);
 	                }
 	            }
 	            yield return new WaitForSeconds(spacing); // Check every 0.5 seconds
@@ -173,6 +186,56 @@ namespace spz {
 	    }
 
     
+	    /// <summary>
+	    /// Cloud Inference shim ping JSON includes <c>cloud_inference: true</c>. Local Forge does not.
+	    /// HTML / empty / non-JSON → not cloud (treat as local or down).
+	    /// </summary>
+	    public static bool PingJsonMarksCloudInference(string json) {
+	        if (string.IsNullOrWhiteSpace(json))
+	            return false;
+	        int brace = json.IndexOf('{');
+	        if (brace < 0)
+	            return false;
+	        try {
+	            var dto = JsonUtility.FromJson<CloudInferencePingDto>(json.Substring(brace));
+	            return dto != null && dto.cloud_inference;
+	        } catch {
+	            return false;
+	        }
+	    }
+
+	    [Serializable]
+	    class CloudInferencePingDto {
+	        public bool cloud_inference;
+	    }
+
+	    /// <summary>
+	    /// SD SERV chip: authored "2D" when down. When connected, keep 2D and append
+	    /// Cloud vs Local so health color (green/red) is not mistaken for a local GPU.
+	    /// </summary>
+	    public void ApplySdInferenceEmblem(bool connected, bool cloudInference) {
+	        if (_panelKind != ConnectionPanel_Kind.StableDiffusion || _dim_text == null)
+	            return;
+	        RememberAuthoredDimText();
+	        isCloudInferenceConnected = connected && cloudInference;
+	        if (!connected) {
+	            if (!string.IsNullOrEmpty(_authoredDimText))
+	                _dim_text.text = _authoredDimText;
+	            return;
+	        }
+	        _dim_text.text = cloudInference ? EmblemCloud : EmblemLocal;
+	    }
+
+	    void RememberAuthoredDimText() {
+	        if (_dim_text == null || !string.IsNullOrEmpty(_authoredDimText))
+	            return;
+	        string t = _dim_text.text ?? "";
+	        if (t != EmblemCloud && t != EmblemLocal)
+	            _authoredDimText = t;
+	        if (string.IsNullOrEmpty(_authoredDimText))
+	            _authoredDimText = "2D";
+	    }
+
 	    /// <summary>Missing/destroyed status graphics must not kill the ping loop (it never restarts).</summary>
 	    void SetStatusColor( Color c ){
 	        if (_dim_text != null) _dim_text.color = c;
@@ -206,6 +269,7 @@ namespace spz {
 	        if (string.IsNullOrEmpty(_ip_text.text)){ _ip_text.text = "127.0.0.1"; }
 	        if(_port_text.recentVal==0){ _port_text.SetValue( _panelKind==ConnectionPanel_Kind.StableDiffusion?"7860":"7960"); }
 	        PlayerPrefs_LoadConnDetails();
+	        RememberAuthoredDimText();
 
 	        // Add listeners for changes in the IP and port input fields:
 	        _ip_text.onValueChanged.AddListener(s=>{
@@ -300,8 +364,11 @@ namespace spz {
 	                SpzUiThemeOps.RestoreBoundChromeUnder(_resetToDefault_button.transform);
 	            // Explicit leave: status icon must not stay raycast-off after Nomad→builtin
 	            // (gen path: open SD SERV panel → connect → is_sd_connected → isCanGenerate).
-	            if (_connectionIcon != null)
+	            if (_connectionIcon != null) {
+	                SpzUiThemeOps.HideAuthoredGraphicForTheme(_connectionIcon);
 	                _connectionIcon.raycastTarget = true;
+	            }
+	            ApplySdInferenceEmblem(isConnected, isCloudInferenceConnected);
 	            return;
 	        }
 	        var t = SpzUiThemeOps.Active;
@@ -319,17 +386,23 @@ namespace spz {
 	        }
 	        // Do not recolor _dim_text / _connectionIcon — CheckConnection owns live status green/red.
 	        // Apply Nomad tracking/outline without replacing status RGB.
-	        // Live SERV status string — ReadableBody (not Compact truncate) so "SD SERV" stays legible.
+	        // Live SERV status — ReadableBody + no Ellipsis. Ellipsis on the 51px chip clipped
+	        // "2D · Local" to "2D - Lo" under the signal bars.
 	        if (_dim_text != null && SpzUiThemeOps.ShouldRecolorBoundChrome) {
 	            Color status = _dim_text.color;
-	            SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(_dim_text, status, 11f);
+	            SpzUiThemeOps.ApplyBoundChromeReadableBodyTmp(_dim_text, status, 9f);
 	            _dim_text.color = status;
 	            _dim_text.raycastTarget = false;
+	            _dim_text.enableWordWrapping = false;
+	            _dim_text.overflowMode = TextOverflowModes.Overflow;
+	            ApplySdInferenceEmblem(isConnected, isCloudInferenceConnected);
 	        }
 	        if (_connectionIcon != null) {
-	            // Snapshot BEFORE clear so Restore SPZ can unwind (never snapshot after = false).
+	            // Snapshot BEFORE hide/raycast so Restore SPZ can unwind (never snapshot after = false).
 	            SpzUiThemeOps.SnapshotAuthoredGraphicForTheme(_connectionIcon);
 	            _connectionIcon.raycastTarget = false;
+	            // Bars overlay Local/Cloud on the tiny chip; status color stays on the caption.
+	            SpzUiThemeOps.HideAuthoredGraphicForTheme(_connectionIcon);
 	        }
 	        if (_panel != null) {
 	            var panelImg = _panel.GetComponent<Image>();

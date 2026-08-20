@@ -37,6 +37,10 @@ class ForgeShimState:
         with self.lock:
             self.backend = backend
             self.last_error = ""
+            if getattr(backend, "name", "") == "fal":
+                self.options["sd_model_checkpoint"] = "fal-flux-schnell"
+            elif getattr(backend, "name", "") == "demo":
+                self.options["sd_model_checkpoint"] = "cloud-inference-demo"
 
     def snapshot_status(self) -> Dict[str, Any]:
         with self.lock:
@@ -134,18 +138,22 @@ def _safe_int_dim(val: Any, default: int = 64) -> int:
         return default
 
 
-def _demo_catalog_get(path: str) -> Optional[Tuple[bytes, str]]:
+def _demo_catalog_get(path: str, backend_name: str = "demo") -> Optional[Tuple[bytes, str]]:
     """Return (body, content_type) for Forge list endpoints used by SPZ dropdowns."""
+    model_name = "fal-flux-schnell" if backend_name == "fal" else "cloud-inference-demo"
+    model_title = (
+        "fal FLUX.1 schnell [cloud]" if backend_name == "fal" else "cloud-inference-demo [cloud]"
+    )
     if path == "/sdapi/v1/sd-models":
         return (
             _json_bytes(
                 [
                     {
-                        "title": "cloud-inference-demo [cloud]",
-                        "model_name": "cloud-inference-demo",
+                        "title": model_title,
+                        "model_name": model_name,
                         "hash": "cloud",
                         "sha256": "",
-                        "filename": "cloud-inference-demo.safetensors",
+                        "filename": f"{model_name}.safetensors",
                     }
                 ]
             ),
@@ -328,9 +336,9 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send_json(200, opts)
                 return
 
-            # Demo catalog stubs only when NOT proxying to remote Forge.
+            # Local catalog stubs when NOT proxying to remote Forge (Demo + fal thick shim).
             if not is_remote:
-                catalog = _demo_catalog_get(path)
+                catalog = _demo_catalog_get(path, getattr(backend, "name", "demo"))
                 if catalog is not None:
                     self._send(200, catalog[0], catalog[1])
                     return
