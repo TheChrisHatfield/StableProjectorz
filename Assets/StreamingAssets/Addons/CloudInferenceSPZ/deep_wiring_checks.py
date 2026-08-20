@@ -65,6 +65,18 @@ def main() -> int:
     check("API key / Remote URL" in init_src, "credential field accepts fal key or Forge URL")
     check("Auto-connect (On/Off)" not in init_src, "auto-connect is not a free-text On/Off field")
     check("fal — paste API key" in init_src, "fal backend is offered as API-key mode")
+    # Connect honesty: do not set_backend before the local shim is proven up.
+    connect_fn = init_src.find("def connect_cloud")
+    check(connect_fn > 0, "connect_cloud present")
+    if connect_fn > 0:
+        body = init_src[connect_fn: init_src.find("\ndef disconnect_cloud", connect_fn)]
+        i_start = body.find("shim.start_shim(")
+        i_ping = body.find("_ping_local_shim(")
+        i_set = body.find("set_backend(")
+        check(
+            i_start >= 0 and i_ping >= 0 and i_set >= 0 and i_start < i_ping < i_set,
+            "Connect sets backend only after start_shim + ping",
+        )
 
     host, port = "127.0.0.1", 7860
     if not shim.is_port_free(host, port):
