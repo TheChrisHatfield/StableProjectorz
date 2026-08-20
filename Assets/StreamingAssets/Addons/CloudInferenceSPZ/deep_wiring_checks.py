@@ -485,10 +485,16 @@ def main() -> int:
                     self._json(401, {"detail": "Unauthorized"})
                     return
                 if self.path.endswith("/status") or "/status?" in self.path:
+                    if "does-not-exist" in self.path:
+                        self._json(404, {"detail": "not found"})
+                        return
                     self._json(200, {"status": "COMPLETED"})
                     return
                 # OpenAPI result path is bare …/requests/{id}; also accept …/response.
                 if "/requests/" in self.path and not self.path.rstrip("/").endswith("/cancel"):
+                    if "does-not-exist" in self.path:
+                        self._json(404, {"detail": "not found"})
+                        return
                     self._json(
                         200,
                         {"images": [{"url": f"data:image/png;base64,{png_b64}"}], "seed": 1},
@@ -526,6 +532,23 @@ def main() -> int:
             isinstance(result.get("images"), list) and result["images"] and result["images"][0] == png_b64,
             "fal queue txt2img returns Forge images[]",
         )
+
+        # Poll must fail fast on missing status (not spin until timeout).
+        missing = be.FalBackend("good-key", queue_base=f"http://127.0.0.1:{fal_port}", timeout_s=3.0)
+        try:
+            # Force a status URL that 404s by patching after a normal submit shape.
+            missing.begin_job()
+            t0 = time.time()
+            st_code, st_body, _ = missing._http_json(
+                "GET",
+                f"http://127.0.0.1:{fal_port}/fal-ai/flux/schnell/requests/does-not-exist/status",
+                None,
+                timeout_s=2.0,
+            )
+            check(st_code == 404, "fal missing status returns HTTP 404")
+            check(time.time() - t0 < 2.5, "fal status 404 does not hang")
+        except be.BackendError as exc:
+            check("404" in str(exc) or "not found" in str(exc).lower(), f"fal status 404 surfaces ({exc})")
 
         # Interrupt cancels the live fal request URL.
         slow = be.FalBackend("good-key", queue_base=f"http://127.0.0.1:{fal_port}", timeout_s=8.0)

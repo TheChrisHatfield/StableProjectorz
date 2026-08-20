@@ -571,14 +571,26 @@ class FalBackend(CloudBackend):
             with self._io_lock:
                 if self._aborted:
                     raise BackendError("interrupted", status=499)
-            st_code, st_body, _ = self._http_json("GET", status_url + ("&" if "?" in status_url else "?") + "logs=0", None, timeout_s=30.0)
+            st_code, st_body, _ = self._http_json(
+                "GET",
+                status_url + ("&" if "?" in status_url else "?") + "logs=0",
+                None,
+                timeout_s=30.0,
+            )
+            if st_code in (401, 403):
+                raise BackendError("fal API key rejected while polling status", status=st_code)
+            if st_code == 404:
+                raise BackendError("fal job status not found (expired request_id?)", status=404)
+            if st_code >= 500:
+                time.sleep(0.45)
+                continue
             try:
                 st_obj = json.loads(st_body.decode("utf-8")) if st_body else {}
             except Exception:
                 st_obj = {}
             status_name = ""
             if isinstance(st_obj, dict):
-                status_name = str(st_obj.get("status") or st_obj.get("detail") or "")
+                status_name = str(st_obj.get("status") or "")
             if status_name.upper() in ("COMPLETED", "OK", "SUCCESS"):
                 break
             if status_name.upper() in ("FAILED", "ERROR", "CANCELLED", "CANCELED"):
