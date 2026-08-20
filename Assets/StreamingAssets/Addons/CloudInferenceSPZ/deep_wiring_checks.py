@@ -85,6 +85,14 @@ def main() -> int:
             "mark_sd_disconnected" in disc_body and "stop_shim" in disc_body,
             "Disconnect stops shim and marks SERV disconnected",
         )
+    unreg_fn = init_src.find("def unregister")
+    check(unreg_fn > 0, "unregister present")
+    if unreg_fn > 0:
+        unreg_body = init_src[unreg_fn:]
+        check(
+            "mark_sd_disconnected" in unreg_body and "stop_shim" in unreg_body,
+            "unregister stops shim and marks SERV disconnected",
+        )
 
     host, port = "127.0.0.1", 7860
     if not shim.is_port_free(host, port):
@@ -150,14 +158,22 @@ def main() -> int:
         st, body = http("POST", base, "/sdapi/v1/img2img", {"width": 32, "height": 32, "init_images": []})
         check(st == 200 and body.get("images"), "img2img")
         st, body = http("POST", base, "/sdapi/v1/extra-batch-images", {"resize_width": 48, "resize_height": 48})
-        check(st == 200 and body.get("images"), "extra-batch-images")
+        check(st == 501, "demo extras honestly returns 501 (no fake upscale PNG)")
         st, body = http(
             "POST",
             base,
             "/sdapi/v1/extra-batch-images",
             {"resize_width": 32.0, "resize_height": "32", "rslt_imageWidths": 96, "rslt_imageHeights": 96},
         )
-        check(st == 200 and body.get("images"), "extra-batch float/string/SPZ rslt dims")
+        check(st == 501, "demo extras float/string dims still 501")
+        st, body = http("POST", base, "/sdapi/v1/options", {"sd_model_checkpoint": "fake-ckpt", "sd_vae": "fake-vae"})
+        check(
+            st == 200
+            and isinstance(body, dict)
+            and body.get("sd_model_checkpoint") == "cloud-inference-demo"
+            and body.get("sd_vae") == "Automatic",
+            "demo options refuses fake checkpoint/VAE swap",
+        )
         st, body = http("GET", base, "/sdapi/v1/progress")
         check(st == 200 and "progress" in body, "progress")
         check("eta_relative" in body and "state" in body, "progress eta/state fields")

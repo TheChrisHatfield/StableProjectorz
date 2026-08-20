@@ -337,6 +337,10 @@ def unregister() -> None:
         shim.stop_shim()
     except Exception as e:
         print(f"[{ADDON_ID}] stop_shim on unregister: {e}")
+    try:
+        spz.get_api().sd.mark_sd_disconnected()
+    except Exception as e:
+        print(f"[{ADDON_ID}] mark_sd_disconnected on unregister: {e}")
     _el.clear()
     _panel = None
     print(f"[{ADDON_ID}] Unregistered")
