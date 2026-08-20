@@ -48,37 +48,59 @@ namespace spz {
 	    IEnumerator Generate_PanoramicHDR_crtn( GenData2D genData_from,  Guid guid_originalTex ){
 
 	        yield return StartCoroutine( GuessDepthFromArt_crtn(genData_from, guid_originalTex) );
+	        if (_guessedDepth == null){
+	            // Nested coroutine may yield-break on detect failure; outer must not continue into RTs/SD.
+	            yield break;
+	        }
 
 	        Texture2D depth = genData_from._byproductsOfRequest.depth_disposableTex;
-	        RenderTexture combinedDepth  = Combine_Depth_and_GuessedDepth(depth, _guessedDepth);
-	        RenderTexture depthWithSphere;
-	        RenderTexture maskWithSphere;
-	        PutSphere_onto_Depth(combinedDepth, out depthWithSphere, out maskWithSphere);
-
-	        _depth_DEBUG = depth;
-	        _combinedDepth_DEBUG = combinedDepth;
-	        _depthWithSphere_DEBUG = depthWithSphere;
-	        _maskWithSphere_DEBUG = maskWithSphere;
-
-	        SD_WorkflowOptionsRibbon_UI.instance.SetIsTileable_from_script(false);
-	        SD_WorkflowOptionsRibbon_UI.instance.SetIsSoftInpaint_from_script(false);
-
-	        _sphere_renders.Clear();
-	        _latestGenData = null;
-
-	        SD_GenRequestArgs_byproducts intermediates;
-	        SD_img2img_payload payload = make_i2i_payload( genData_from,  guid_originalTex,
-	                                                       depthWithSphere, maskWithSphere,  out intermediates );
-	        payload.negative_prompt = "matte, diffuse, flat, dull";
-
-	        for (int i=0; i<2; i++){
-	            yield return StartCoroutine( Wait_SphereGenerate_iteration( genData_from.kind, isDark:true,  
-	                                                                        payload, intermediates) );
-
-	            yield return StartCoroutine( Wait_SphereGenerate_iteration( genData_from.kind, isDark:false, 
-	                                                                        payload, intermediates) );
+	        if (depth == null){
+	            Viewport_StatusText.instance?.ShowStatusText(
+	                "HDR sphere: missing depth byproduct — aborting.", false, 5f, false);
+	            yield break;
 	        }
-	        DestroyImmediate( combinedDepth );
+
+	        RenderTexture combinedDepth = null;
+	        RenderTexture depthWithSphere = null;
+	        RenderTexture maskWithSphere = null;
+	        try {
+	            combinedDepth = Combine_Depth_and_GuessedDepth(depth, _guessedDepth);
+	            PutSphere_onto_Depth(combinedDepth, out depthWithSphere, out maskWithSphere);
+
+	            _depth_DEBUG = depth;
+	            _combinedDepth_DEBUG = combinedDepth;
+	            _depthWithSphere_DEBUG = depthWithSphere;
+	            _maskWithSphere_DEBUG = maskWithSphere;
+
+	            SD_WorkflowOptionsRibbon_UI.instance.SetIsTileable_from_script(false);
+	            SD_WorkflowOptionsRibbon_UI.instance.SetIsSoftInpaint_from_script(false);
+
+	            _sphere_renders.Clear();
+	            _latestGenData = null;
+
+	            SD_GenRequestArgs_byproducts intermediates;
+	            SD_img2img_payload payload = make_i2i_payload( genData_from,  guid_originalTex,
+	                                                           depthWithSphere, maskWithSphere,  out intermediates );
+	            payload.negative_prompt = "matte, diffuse, flat, dull";
+
+	            for (int i=0; i<2; i++){
+	                yield return StartCoroutine( Wait_SphereGenerate_iteration( genData_from.kind, isDark:true,
+	                                                                            payload, intermediates) );
+	                if (_sphereGen_error) yield break;
+
+	                yield return StartCoroutine( Wait_SphereGenerate_iteration( genData_from.kind, isDark:false,
+	                                                                            payload, intermediates) );
+	                if (_sphereGen_error) yield break;
+	            }
+	        } finally {
+	            // Sphere RTs were allocated with new RenderTexture and never released (VRAM leak on repeat HDR).
+	            if (combinedDepth != null) DestroyImmediate(combinedDepth);
+	            if (depthWithSphere != null) DestroyImmediate(depthWithSphere);
+	            if (maskWithSphere != null) DestroyImmediate(maskWithSphere);
+	            _combinedDepth_DEBUG = null;
+	            _depthWithSphere_DEBUG = null;
+	            _maskWithSphere_DEBUG = null;
+	        }
 	    }
 
 
