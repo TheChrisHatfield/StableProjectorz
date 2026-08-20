@@ -47,7 +47,7 @@ Hovering a strip tab shows its name (useful in icon-only mode). Auto-resolve use
 
 ## Palette (defaults)
 
-Colors as Pro-Studio Monolith; `corner_radius` 0 (solid-square litmus); `icon_tint` muted; `panel_width` 220; `panel_alpha` 0.92; `font_scale` 0.84; `spacing_scale` 0.94.
+Colors as Pro-Studio Monolith; `control_bg` `#3E4048` stays clearly above `panel_bg` `#1E1F23` so left-column faces remain readable; `corner_radius` 0 (solid-square litmus); `icon_tint` warm; `panel_width` 220; `panel_alpha` 0.92; `font_scale` 0.84; `spacing_scale` 0.94.
 
 Native Unity fallback (`AddonUI_MGR`) mirrors the same path when Python HTTP is down.
 
