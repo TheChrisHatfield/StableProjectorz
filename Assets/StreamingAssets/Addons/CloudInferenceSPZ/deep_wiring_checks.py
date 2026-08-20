@@ -486,6 +486,9 @@ def main() -> int:
                 if auth != "Key good-key":
                     self._json(401, {"detail": "Unauthorized"})
                     return
+                if state.get("force_404"):
+                    self._json(404, {"detail": "model not found"})
+                    return
                 state["auth_ok"] = True
                 body = self._read()
                 try:
@@ -560,6 +563,10 @@ def main() -> int:
         check(ok_good, f"fal probe accepts good key ({msg_good[:60]})")
         check(state["probe_queued"] and state["cancelled"], "fal probe cancels accidental queue on Connect")
         state["cancelled"] = False
+        state["force_404"] = True
+        ok_404, msg_404 = good.probe(timeout_s=2.0)
+        check(not ok_404 and "404" in msg_404, f"fal probe fails closed on unexpected 404 ({msg_404[:80]})")
+        state["force_404"] = False
 
         result = good.generate(
             "/sdapi/v1/txt2img",

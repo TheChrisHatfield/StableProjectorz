@@ -454,7 +454,7 @@ def _download_url_b64(url: str, timeout_s: float = 60.0) -> str:
 class FalBackend(CloudBackend):
     """Thick fal→Forge translator: API key Connect, queue txt2img/img2img, cancel on interrupt.
 
-    Catalogs stay local stubs (Forge dropdowns). ControlNet detect stays Demo echo.
+    Catalogs stay local stubs (Forge dropdowns). Unsupported ControlNet/mask/detect fail closed (501).
     """
 
     name = "fal"
@@ -543,6 +543,10 @@ class FalBackend(CloudBackend):
             return False, f"fal key rejected (HTTP {status})"
         if status >= 500:
             return False, f"fal probe upstream error HTTP {status}: {snippet}"
+        # Auth-ok signals only: queued (200) or schema validation (422). Other 4xx (404 model,
+        # 429 rate limit, 400 opaque) must not open Connect as if the key worked.
+        if status not in (200, 422):
+            return False, f"fal probe unexpected HTTP {status}: {snippet}"
         # If fal accepted and queued (HTTP 200 + request_id), cancel immediately so Connect is not a paid generate.
         try:
             meta = json.loads(body.decode("utf-8")) if body else {}
