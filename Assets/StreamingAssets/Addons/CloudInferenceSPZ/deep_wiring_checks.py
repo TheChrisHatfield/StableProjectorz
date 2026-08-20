@@ -408,7 +408,7 @@ def main() -> int:
 
         fal_port, shim_fal_port = 17931, 17932
         png_b64 = be._make_solid_png_b64(16, 16)
-        state = {"cancelled": False, "auth_ok": False}
+        state = {"cancelled": False, "auth_ok": False, "probe_queued": False}
 
         class _FalQueue(BaseHTTPRequestHandler):
             def log_message(self, *a):
@@ -438,11 +438,20 @@ def main() -> int:
                     payload = json.loads(body.decode("utf-8")) if body else {}
                 except Exception:
                     payload = {}
-                if not str(payload.get("prompt") or "").strip():
-                    self._json(422, {"detail": "prompt required"})
-                    return
+                prompt = str(payload.get("prompt") or "")
                 rid = "req-mock-1"
                 base_q = f"http://127.0.0.1:{fal_port}/fal-ai/flux/schnell"
+                # Empty prompt: simulate a gateway that still queues (must be cancelled by probe).
+                if not prompt.strip():
+                    state["probe_queued"] = True
+                    self._json(
+                        200,
+                        {
+                            "request_id": rid + "-probe",
+                            "cancel_url": f"{base_q}/requests/{rid}-probe/cancel",
+                        },
+                    )
+                    return
                 # Omit response_url on purpose so FalBackend must reconstruct …/response.
                 self._json(
                     200,
@@ -488,6 +497,8 @@ def main() -> int:
         good = be.FalBackend("good-key", queue_base=f"http://127.0.0.1:{fal_port}")
         ok_good, msg_good = good.probe(timeout_s=2.0)
         check(ok_good, f"fal probe accepts good key ({msg_good[:60]})")
+        check(state["probe_queued"] and state["cancelled"], "fal probe cancels accidental queue on Connect")
+        state["cancelled"] = False
 
         result = good.generate(
             "/sdapi/v1/txt2img",
