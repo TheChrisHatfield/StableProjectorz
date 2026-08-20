@@ -27,6 +27,8 @@ namespace spz {
 	    /// <summary>Second arg is false when the download never started (or failed), so listeners can
 	    /// restore their chrome without claiming the model was installed.</summary>
 	    public static Action<ControlNetUnit_DownloadHelper, bool> _onSomeUnit_stoppedDownloadModel { get; set; } = null;
+	    /// <summary>Unit that currently holds <see cref="isSomeUnit_downloadingModels"/> (null when free).</summary>
+	    static ControlNetUnit_DownloadHelper _downloadGateOwner;
 
 	    /// <summary>True when <paramref name="t"/> lives under the "download more" slide-out ownership root.</summary>
 	    public bool OwnsTransform(Transform t) {
@@ -71,6 +73,7 @@ namespace spz {
 	        } catch { /* fall through to SD1.5 depth download */ }
 
 	        ControlNetUnit_DownloadHelper.isSomeUnit_downloadingModels = true;//will prevent other controlnet units from downloading.
+	        _downloadGateOwner = this;
 
 	        _onSomeUnit_startedDownloadModel?.Invoke(this);
 	        if (_downloadModel_ifNotExist == null){
@@ -85,9 +88,15 @@ namespace spz {
 	        }
 
 	        void onProgress(float pcnt01){
+	            // Download_MGR reports -1 on network/write failure (never 1.0 unless bytes landed).
+	            if (pcnt01 < 0f) {
+	                AbortDownloadGate("ControlNet download failed — use Download More instead.");
+	                return;
+	            }
 	            _onSomeUnit_downloadModelPcnt?.Invoke(this, pcnt01);
 	            if(pcnt01<1.0f){ return;}
 	            ControlNetUnit_DownloadHelper.isSomeUnit_downloadingModels = false;
+	            _downloadGateOwner = null;
 	            _onSomeUnit_stoppedDownloadModel?.Invoke(this, true);
 	        }
 	    }
@@ -95,6 +104,7 @@ namespace spz {
 	    // Reopens the shared gate and hands every unit back its chrome after a download that never began.
 	    void AbortDownloadGate(string userMessage){
 	        ControlNetUnit_DownloadHelper.isSomeUnit_downloadingModels = false;
+	        _downloadGateOwner = null;
 	        _onSomeUnit_stoppedDownloadModel?.Invoke(this, false);
 	        if (Viewport_StatusText.instance != null)
 	            Viewport_StatusText.instance.ShowStatusText(userMessage, false, 5f, false);
@@ -164,6 +174,10 @@ namespace spz {
 	    }
 
 	    void OnDestroy(){
+	        // Mid-flight destroy of the gate owner left Gen Art blocked forever (Hub reads the static flag).
+	        // Abort while still subscribed so peer units + this unit restore interactable chrome.
+	        if (ReferenceEquals(_downloadGateOwner, this))
+	            AbortDownloadGate("ControlNet download cancelled — unit closed.");
 	        SpzUiThemeOps.ThemeChanged -= ApplyThemeTokens;
 	        _onSomeUnit_startedDownloadModel -= OnSomeUnit_StartDownloadModel;
 	        _onSomeUnit_stoppedDownloadModel -= OnSomeUnit_StopDownloadModel;

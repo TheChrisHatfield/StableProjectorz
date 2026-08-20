@@ -96,6 +96,46 @@ public sealed class ControlNetDownloadGateReleaseContractTests {
 	}
 
 	[Test]
+	public void FailedNetworkDownload_DoesNotReportProgressOneAsSuccess() {
+		string mgr = Read("Assets", "_gm", "_Core", "IO", "Download", "Download_MGR.cs");
+		Assert.That(mgr, Does.Contain("onProgress?.Invoke(-1f)"),
+			"network failure must not look like a completed download to gate owners");
+		Assert.That(mgr, Does.Contain("onProgress?.Invoke(1.0f)"),
+			"success still reports 1.0 after bytes land");
+
+		// Failure invoke must not share the success branch's unconditional 1.0.
+		int fail = mgr.IndexOf("Downloading failed:", StringComparison.Ordinal);
+		Assert.That(fail, Is.GreaterThan(0));
+		string failWindow = mgr.Substring(fail, Math.Min(700, mgr.Length - fail));
+		Assert.That(failWindow, Does.Contain("Invoke(-1f)"));
+		Assert.That(failWindow, Does.Not.Contain("Invoke(1.0f)"),
+			"the failure branch must not also fire the success completion progress");
+	}
+
+	[Test]
+	public void ProgressNegative_ReopensGateAsFailure() {
+		string src = DownloadHelperSrc();
+		Assert.That(src, Does.Contain("if (pcnt01 < 0f)"),
+			"ControlNet must treat Download_MGR failure sentinel as abort, not success");
+		Assert.That(src, Does.Contain("AbortDownloadGate(\"ControlNet download failed"),
+			"failed download must reopen the gate and not claim restart-SPZ");
+	}
+
+	[Test]
+	public void DestroyWhileDownloading_ReleasesGateOwnedByThisUnit() {
+		string src = DownloadHelperSrc();
+		Assert.That(src, Does.Contain("_downloadGateOwner"),
+			"only the owner may clear the shared Gen Art gate");
+		Assert.That(src, Does.Contain("ReferenceEquals(_downloadGateOwner, this)"),
+			"peer unit destroy must not clear another unit's in-flight download");
+		int destroy = src.IndexOf("void OnDestroy()", StringComparison.Ordinal);
+		Assert.That(destroy, Is.GreaterThan(0));
+		string body = src.Substring(destroy, Math.Min(500, src.Length - destroy));
+		Assert.That(body, Does.Contain("AbortDownloadGate("),
+			"owner destroy must reopen the gate before Hub permanently blocks Gen Art");
+	}
+
+	[Test]
 	public void OtherSubscriberMatchesTheStoppedSignature() {
 		string src = Read("Assets", "_gm", "Features", "StableDiffusion", "Controlnet",
 			"ControlNetUnit_Dropdowns.cs");
