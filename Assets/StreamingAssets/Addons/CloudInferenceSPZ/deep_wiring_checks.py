@@ -231,6 +231,14 @@ def main() -> int:
         )
         check(n_iter.get("num_images") == 3, "fal txt2img honors n_iter when batch_size is 1")
         check(batch.get("sync_mode") is True, "fal requests sync_mode data-URI images")
+        try:
+            fal_map.generate(
+                "/sdapi/v1/img2img",
+                {"prompt": "x", "init_images": ["QUJD"], "mask": "QUJD", "width": 32, "height": 32},
+            )
+            check(False, "fal img2img with mask must 501")
+        except be.BackendError as e:
+            check(e.status == 501 and "mask" in str(e).lower(), "fal img2img with mask honestly returns 501")
         png_b64 = be._make_solid_png_b64(16, 16)
         forged = be._fal_result_images_to_b64({"images": [{"url": f"data:image/png;base64,{png_b64}"}]})
         check(forged == [png_b64], "fal data-URI images coerce to Forge b64")

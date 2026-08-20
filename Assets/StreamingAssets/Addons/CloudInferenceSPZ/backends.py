@@ -363,6 +363,21 @@ def _forge_init_to_data_uri(payload: Dict[str, Any]) -> str:
     return "data:image/png;base64," + raw
 
 
+def _forge_payload_has_mask(payload: Dict[str, Any]) -> bool:
+    """True when Forge img2img carries a non-empty inpaint mask that fal would otherwise drop."""
+    if not isinstance(payload, dict):
+        return False
+    mask = payload.get("mask")
+    if isinstance(mask, str) and mask.strip():
+        return True
+    # Some clients nest under mask_image / inpainting_mask.
+    for key in ("mask_image", "inpainting_mask", "mask_b64"):
+        alt = payload.get(key)
+        if isinstance(alt, str) and alt.strip():
+            return True
+    return False
+
+
 def _fal_result_images_to_b64(data: Dict[str, Any]) -> list:
     """fal returns images[{url|file_data|...}]; Forge wants images[base64]."""
     out = []
@@ -527,6 +542,12 @@ class FalBackend(CloudBackend):
             if self._aborted:
                 raise BackendError("interrupted", status=499)
         is_img2img = "img2img" in (path or "")
+        # Honesty: fal flux img2img has no inpaint/mask path — do not silently drop the mask.
+        if is_img2img and _forge_payload_has_mask(payload):
+            raise BackendError(
+                "fal img2img does not support inpaint masks yet — clear the mask or use Demo/Remote Forge",
+                status=501,
+            )
         model = self.IMG2IMG_MODEL if is_img2img else self.TXT2IMG_MODEL
         fal_payload = self._forge_payload_to_fal(payload, img2img=is_img2img)
         submit_url = f"{self.queue_base}/{model}"
