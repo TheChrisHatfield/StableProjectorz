@@ -358,9 +358,8 @@ def _forge_init_to_data_uri(payload: Dict[str, Any]) -> str:
     raw = raw.strip()
     if raw.startswith("data:"):
         return raw
-    # Strip optional data-url / whitespace noise from SPZ.
-    if "," in raw and raw.lower().startswith("data:"):
-        return raw
+    # Forge sometimes embeds whitespace/newlines in base64 blobs.
+    raw = "".join(raw.split())
     return "data:image/png;base64," + raw
 
 
@@ -630,11 +629,12 @@ class FalBackend(CloudBackend):
             "image_size": _pick_fal_image_size(w, h),
         }
         try:
-            steps = int(float(payload.get("steps") or (28 if img2img else 4)))
+            steps = int(float(payload.get("steps") or (40 if img2img else 4)))
         except (TypeError, ValueError):
-            steps = 28 if img2img else 4
+            steps = 40 if img2img else 4
         if img2img:
-            out["num_inference_steps"] = max(1, min(50, steps))
+            # fal-ai/flux/dev/image-to-image OpenAPI: num_inference_steps minimum is 10.
+            out["num_inference_steps"] = max(10, min(50, steps))
         else:
             out["num_inference_steps"] = max(1, min(12, steps))
         try:
@@ -652,10 +652,12 @@ class FalBackend(CloudBackend):
         if img2img:
             out["image_url"] = _forge_init_to_data_uri(payload)
             try:
-                strength = float(payload.get("denoising_strength") or payload.get("strength") or 0.75)
+                strength = float(payload.get("denoising_strength") or payload.get("strength") or 0.95)
             except (TypeError, ValueError):
-                strength = 0.75
+                strength = 0.95
             out["strength"] = max(0.01, min(1.0, strength))
+            # image-to-image schema has no image_size; drop txt2img-only field.
+            out.pop("image_size", None)
         return out
 
     def _to_forge_result(self, data: Dict[str, Any], path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
