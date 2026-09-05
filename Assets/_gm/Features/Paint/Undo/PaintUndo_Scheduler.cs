@@ -47,7 +47,7 @@ namespace spz {
 		/// <summary>Hitch threshold (ms, max over window) for capture Bernoulli success.</summary>
 		public float captureSuccessMaxHitchMs = 12f;
 
-		/// <summary>Thompson over two smudge write targets (layer stack vs mesh/SD accumulation), same <see cref="QuantizeContextBucket"/> as capture/restore. Observations from stroke end only.</summary>
+		/// <summary>Thompson over two smudge <em>underlay</em> policies (full multi-layer under pass vs skip that pass for cheaper sampling). Does not select Art UV vs mesh accumulation vs layer <em>write</em> target — see <see cref="SmudgeStrokeRouter"/>. Same <see cref="QuantizeContextBucket"/> as capture/restore. Observations from stroke end only.</summary>
 		public bool smudgeRouteBanditEnabled = true;
 
 		public int smudgeRouteMinPullsPerBucket = 3;
