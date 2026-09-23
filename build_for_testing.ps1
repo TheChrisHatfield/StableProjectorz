@@ -163,8 +163,23 @@ function Wait-ForBuildExe {
     return $null
 }
 
+function Test-LogFromThisLaunch {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -ErrorAction SilentlyContinue)) { return $false }
+    if (-not $script:SpzUnityLaunchTime) { return $true }
+    $written = (Get-Item -LiteralPath $Path).LastWriteTime
+    return ($written -ge $script:SpzUnityLaunchTime.AddSeconds(-5))
+}
+
 function RunUnityBuild {
     param([string]$ExtraArgs)
+
+    # A previous build_log_temp.txt must not count as this launch. Unity -logFile
+    # usually overwrites, but a failed start leaves the old success marker in place.
+    $script:SpzUnityLaunchTime = Get-Date
+    if (Test-Path -LiteralPath $LogTemp -ErrorAction SilentlyContinue) {
+        Remove-Item -LiteralPath $LogTemp -Force -ErrorAction SilentlyContinue
+    }
     
     $arguments = "$ExtraArgs -quit -projectPath `"$ProjectPath`" -executeMethod BuildForTesting.BuildWin64 -logFile `"$LogTemp`""
     Write-Host "  Unity command: $UnityExe $arguments"
@@ -288,8 +303,8 @@ if ($exitCode -eq 198) {
     $exitCode = RunUnityBuild ""
 }
 
-# Copy log
-if (Test-Path $LogTemp -ErrorAction SilentlyContinue) {
+# Copy log only when this launch wrote it. A leftover file is a previous build.
+if ((Test-Path $LogTemp -ErrorAction SilentlyContinue) -and (Test-LogFromThisLaunch $LogTemp)) {
     Copy-Item $LogTemp $LogFile -Force -ErrorAction SilentlyContinue
 }
 
@@ -299,7 +314,7 @@ Write-Host "  *** BUILD FINISHED. Unity exit code: $exitCode ***"
 Write-Host ""
 
 # Immediate exit with almost no log = project lock / second instance, not a compile error.
-if ($exitCode -ne 0 -and (Test-Path $LogFile -ErrorAction SilentlyContinue)) {
+if ($exitCode -ne 0 -and (Test-LogFromThisLaunch $LogFile)) {
     $logLen = (Get-Item $LogFile -ErrorAction SilentlyContinue).Length
     $hasBuildMarker = $false
     try {
@@ -314,9 +329,12 @@ if ($exitCode -ne 0 -and (Test-Path $LogFile -ErrorAction SilentlyContinue)) {
     }
 }
 
-# Ground truth: BuildForTesting success marker in log (preferred), then exit code fallback.
-$logIndicatesSuccess = Test-BuildSucceededFromLog $LogFile
-if (-not $logIndicatesSuccess -and (Test-Path $LogTemp -ErrorAction SilentlyContinue)) {
+# Ground truth: BuildForTesting success marker in this launch's log, then exit code fallback.
+$logIndicatesSuccess = $false
+if (Test-LogFromThisLaunch $LogFile) {
+    $logIndicatesSuccess = Test-BuildSucceededFromLog $LogFile
+}
+if (-not $logIndicatesSuccess -and (Test-LogFromThisLaunch $LogTemp)) {
     $logIndicatesSuccess = Test-BuildSucceededFromLog $LogTemp
 }
 $resolvedBuildPath = $BuildPath
