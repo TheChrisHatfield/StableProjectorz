@@ -19,9 +19,11 @@ set "PROJECT_PATH_NO_TRAIL=%~dp0"
 set "PROJECT_PATH_NO_TRAIL=%PROJECT_PATH_NO_TRAIL:~0,-1%"
 set "LOG_TEMP=%~dp0build_log_temp.txt"
 set "LOG_FILE=%~dp0build_output.txt"
-if not defined UNITY_EXE set "UNITY_EXE=C:\Program Files\Unity\Hub\Editor\6000.3.6f1\Editor\Unity.exe"
-if not exist "%UNITY_EXE%" set "UNITY_EXE=D:\PROGRAM_FILES\UNITY\Editor\Unity.exe"
-if not exist "%UNITY_EXE%" (echo ERROR: Unity not found. & pause & exit /b 1)
+if not defined UNITY_EXE (
+    for /f "usebackq delims=" %%U in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\Get-SpzUnityExe.ps1" 2^>nul`) do set "UNITY_EXE=%%U"
+)
+if not defined UNITY_EXE (echo ERROR: Unity not found. Set UNITY_EXE or copy build_for_testing.local.ps1.example to build_for_testing.local.ps1 & pause & exit /b 1)
+if not exist "%UNITY_EXE%" (echo ERROR: Unity not found at "%UNITY_EXE%". & pause & exit /b 1)
 if exist "%~dp0Library\lock" del /f /q "%~dp0Library\lock" 2>nul
 echo Launching Unity...
 "%UNITY_EXE%" -batchmode -quit -projectPath "%PROJECT_PATH_NO_TRAIL%" -executeMethod BuildForTesting.BuildWin64 -logFile "%LOG_TEMP%"

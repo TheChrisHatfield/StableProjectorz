@@ -143,6 +143,7 @@ Thumbs.db
 .env
 .env.local
 *.local
+build_for_testing.local.ps1
 *.bak
 *~
 /[Ll]ocal/

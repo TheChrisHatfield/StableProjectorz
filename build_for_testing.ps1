@@ -14,16 +14,12 @@ $LogRef = Join-Path $ProjectRoot "build_output_reference.txt"
 $BuildDir = Join-Path $ProjectRoot "Build_IL2CPP"
 $LockFile = Join-Path $ProjectRoot "Library\lock"
 
-# Find Unity
-$UnityExe = $env:UNITY_EXE
-if (-not $UnityExe -or -not (Test-Path $UnityExe -ErrorAction SilentlyContinue)) {
-    $UnityExe = "C:\Program Files\Unity\Hub\Editor\6000.3.6f1\Editor\Unity.exe"
-}
-if (-not (Test-Path $UnityExe -ErrorAction SilentlyContinue)) {
-    $UnityExe = "D:\PROGRAM_FILES\UNITY\Editor\Unity.exe"
-}
-if (-not (Test-Path $UnityExe -ErrorAction SilentlyContinue)) {
-    Write-Host "ERROR: Unity not found. Set UNITY_EXE or install to default path."
+# Find Unity (ProjectVersion + Hub, UNITY_EXE, or build_for_testing.local.ps1)
+. (Join-Path $ProjectRoot "scripts\Resolve-SpzUnityEditor.ps1")
+try {
+    $UnityExe = Resolve-SpzUnityEditor -ProjectRoot $ProjectRoot
+} catch {
+    Write-Host "ERROR: $($_.Exception.Message)"
     Read-Host "Press Enter to close"
     exit 1
 }

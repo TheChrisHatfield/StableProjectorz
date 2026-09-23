@@ -13,15 +13,17 @@ git add Assets Packages ProjectSettings External README.md LICENSE BUILD_INSTRUC
 Optional helpers if you intentionally want them on the remote:
 
 ```bat
-git add build_for_testing.bat build_for_testing.ps1 build_minimal_test.bat
+git add build_for_testing.bat build_for_testing.ps1 build_for_testing.local.ps1.example build_minimal_test.bat scripts/
 ```
+
+Do **not** commit `build_for_testing.local.ps1` (machine-specific Unity path; gitignored).
 
 **Do not** run `git add .` — that can stage local-only trees (`cartridge/`, `tools/`, `docs/`, `.hive/`, `context-library/`, `Build_IL2CPP/`, etc.). Those paths are in `.gitignore` for a reason.
 
 ## Safe push flow
 
 ```bat
-cd "D:\DRIVE_DOWNLOADS\Stable_Projectoz_Dev_Build\StableProjectorz"
+cd "F:\DRIVE_DOWNLOADS\Stable_Projectoz_Dev_Build\StableProjectorz"
 
 git status
 git add Assets Packages ProjectSettings External README.md LICENSE BUILD_INSTRUCTIONS.md CHANGELOG.md CHANGELOG.txt .gitignore .vsconfig Run_with_Addons.bat GITHUB_PUSH_README.md

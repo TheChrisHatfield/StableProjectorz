@@ -6,14 +6,11 @@ Since you've resolved the IL2CPP installation, here's how to build:
 
 ### Method 1: Using Unity Editor (Recommended)
 
-1. **Open Unity Hub:**
-   ```
-   D:\PROGRAM_FILES\UNITY_HUB\Unity Hub\Unity Hub.exe
-   ```
+1. **Open Unity Hub** (Start menu or your Hub install path).
 
 2. **Open the Project:**
    - In Unity Hub, click "Open" or "Add"
-   - Navigate to: `D:\DRIVE_DOWNLOADS\Stable_Projectoz_Dev_Build\StableProjectorz`
+   - Select this repository folder (the directory that contains `Assets` and `ProjectSettings`)
    - Click "Open"
 
 3. **Wait for Unity Editor to Load:**
@@ -30,18 +27,20 @@ Since you've resolved the IL2CPP installation, here's how to build:
    - Check `Build_IL2CPP\` folder for `StableProjectorz.exe`
    - The executable should be ready to run
 
-### Method 2: Command Line Build (If Unity.exe is accessible)
+### Method 2: One-click script (Windows)
 
-If you can locate Unity.exe, you can build from command line:
+Double-click **`build_for_testing.bat`** (or run `.\build_for_testing.ps1`). The script finds Unity using `ProjectSettings/ProjectVersion.txt` and the Unity Hub install folder under Program Files.
+
+**Machine-specific path (optional, not for GitHub):** copy `build_for_testing.local.ps1.example` to `build_for_testing.local.ps1` and set `$SpzUnityEditorPath`, or set environment variable `UNITY_EXE`.
+
+### Method 3: Manual command line
+
+Use the Editor version from `ProjectSettings/ProjectVersion.txt` (e.g. `6000.3.6f1`):
 
 ```powershell
-& "D:\PROGRAM_FILES\UNITY\Editor\Unity.exe" `
-  -batchmode `
-  -quit `
-  -projectPath "D:\DRIVE_DOWNLOADS\Stable_Projectoz_Dev_Build\StableProjectorz" `
-  -buildTarget Win64 `
-  -buildWindows64Player "D:\DRIVE_DOWNLOADS\Stable_Projectoz_Dev_Build\StableProjectorz\Build_IL2CPP\StableProjectorz.exe" `
-  -logFile "build_output.txt"
+$Project = (Get-Location).Path
+$Unity = "${env:ProgramFiles}\Unity\Hub\Editor\6000.3.6f1\Editor\Unity.exe"
+& $Unity -batchmode -quit -projectPath $Project -executeMethod BuildForTesting.BuildWin64 -logFile "build_output.txt"
 ```
 
 ## Build Output Location

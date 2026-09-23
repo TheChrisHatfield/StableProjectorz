@@ -6,9 +6,11 @@ cd /d "%~dp0"
 set "DEBUG_LOG=%~dp0build_debug.txt"
 set "LOG_TEMP=%~dp0build_log_temp.txt"
 
-if not defined UNITY_EXE set "UNITY_EXE=C:\Program Files\Unity\Hub\Editor\6000.3.6f1\Editor\Unity.exe"
-if not exist "%UNITY_EXE%" set "UNITY_EXE=D:\PROGRAM_FILES\UNITY\Editor\Unity.exe"
-if not exist "%UNITY_EXE%" (echo Unity not found & pause & exit /b 1)
+if not defined UNITY_EXE (
+    for /f "usebackq delims=" %%U in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\Get-SpzUnityExe.ps1" 2^>nul`) do set "UNITY_EXE=%%U"
+)
+if not defined UNITY_EXE (echo Unity not found. Set UNITY_EXE or build_for_testing.local.ps1 & pause & exit /b 1)
+if not exist "%UNITY_EXE%" (echo Unity not found at "%UNITY_EXE%" & pause & exit /b 1)
 
 set "PROJECT_PATH_NO_TRAIL=%~dp0"
 set "PROJECT_PATH_NO_TRAIL=%PROJECT_PATH_NO_TRAIL:~0,-1%"
