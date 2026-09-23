@@ -29,7 +29,22 @@ Write-Host "Building StableProjectorz for testing..."
 Write-Host "Project: $ProjectPath"
 Write-Host "Output: $BuildPath"
 Write-Host "Log: $LogFile"
+Write-Host "Unity: $UnityExe"
 Write-Host ""
+
+# Refuse before any Library mutation. Deleting Library\lock while the Editor is open
+# drops the project lock and lets a second Unity attach to the same project.
+if (-not $env:SPZ_BUILD_ALLOW_UNITY_RUNNING) {
+    $unityProcs = Get-Process -Name "Unity" -ErrorAction SilentlyContinue
+    if ($unityProcs) {
+        Write-Host "ERROR: Unity is already running (PID(s): $(($unityProcs | ForEach-Object { $_.Id }) -join ', '))."
+        Write-Host "Close the Unity Editor (and any other Unity using this project), then run the build again."
+        Write-Host "Advanced: set env SPZ_BUILD_ALLOW_UNITY_RUNNING=1 to skip this check (build may still fail)."
+        Write-Host ""
+        Read-Host "Press Enter to close"
+        exit 1
+    }
+}
 
 # Close running build exe so the next build can overwrite (avoids "user-mapped section open")
 $procs = Get-Process -Name "StableProjectorz" -ErrorAction SilentlyContinue
@@ -53,20 +68,6 @@ if ($Clean) {
 if (Test-Path $LockFile -ErrorAction SilentlyContinue) {
     Remove-Item $LockFile -Force -ErrorAction SilentlyContinue
     Write-Host "Removed Library\lock"
-}
-
-# If the Editor (or any Unity) already has this project, batchmode often exits immediately
-# (tiny log, no "[BuildForTesting]" lines, return code 1).
-if (-not $env:SPZ_BUILD_ALLOW_UNITY_RUNNING) {
-    $unityProcs = Get-Process -Name "Unity" -ErrorAction SilentlyContinue
-    if ($unityProcs) {
-        Write-Host "ERROR: Unity is already running (PID(s): $(($unityProcs | ForEach-Object { $_.Id }) -join ', '))."
-        Write-Host "Close the Unity Editor (and any other Unity using this project), then run the build again."
-        Write-Host "Advanced: set env SPZ_BUILD_ALLOW_UNITY_RUNNING=1 to skip this check (build may still fail)."
-        Write-Host ""
-        Read-Host "Press Enter to close"
-        exit 1
-    }
 }
 
 # Stale UPM "resolved" state can register PackageCache paths with no files on disk.
