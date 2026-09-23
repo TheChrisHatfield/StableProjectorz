@@ -5,6 +5,15 @@
 param([switch]$Clean)
 
 $ErrorActionPreference = "Continue"
+
+function Wait-SpzBuildClose {
+    # A failed pause must not turn a successful build into a failed exit code.
+    if ($env:CI -or $env:GITHUB_ACTIONS -or $env:TF_BUILD) { return }
+    try {
+        Read-Host "Press Enter to close" | Out-Null
+    } catch { }
+}
+
 $ProjectRoot = $PSScriptRoot
 $ProjectPath = $ProjectRoot.TrimEnd('\', '/')
 $BuildPath = Join-Path $ProjectRoot "Build_IL2CPP\StableProjectorz.exe"
@@ -20,7 +29,7 @@ try {
     $UnityExe = Resolve-SpzUnityEditor -ProjectRoot $ProjectRoot
 } catch {
     Write-Host "ERROR: $($_.Exception.Message)"
-    Read-Host "Press Enter to close"
+    Wait-SpzBuildClose
     exit 1
 }
 
@@ -41,7 +50,7 @@ if (-not $env:SPZ_BUILD_ALLOW_UNITY_RUNNING) {
         Write-Host "Close the Unity Editor (and any other Unity using this project), then run the build again."
         Write-Host "Advanced: set env SPZ_BUILD_ALLOW_UNITY_RUNNING=1 to skip this check (build may still fail)."
         Write-Host ""
-        Read-Host "Press Enter to close"
+        Wait-SpzBuildClose
         exit 1
     }
 }
@@ -95,13 +104,13 @@ if ($pkgCount -lt 10) {
     if (-not $resolveProc.HasExited) {
         Write-Host "ERROR: Package resolve Unity is still running after 5 minutes. Stopping it so the project lock is released."
         try { Stop-Process -Id $resolveProc.Id -Force -ErrorAction SilentlyContinue } catch { }
-        Read-Host "Press Enter to close"
+        Wait-SpzBuildClose
         exit 1
     }
     $pkgCount = @(Get-ChildItem $packageCacheDir -Directory -ErrorAction SilentlyContinue).Count
     if ($pkgCount -lt 10) {
         Write-Host "ERROR: PackageCache still empty after resolve ($pkgCount). Check network / $resolveLog"
-        Read-Host "Press Enter to close"
+        Wait-SpzBuildClose
         exit 1
     }
     Write-Host "PackageCache restored ($pkgCount packages)."
@@ -366,7 +375,7 @@ if ($buildLooksSuccessful -and (Test-Path $resolvedBuildPath -ErrorAction Silent
     Write-Host ""
     Write-Host "Done. Build completed successfully."
     Write-Host ""
-    Read-Host "Press Enter to close"
+    Wait-SpzBuildClose
     exit 0
 }
 
@@ -384,7 +393,7 @@ if (Test-Path $BuildPath -ErrorAction SilentlyContinue) {
         Write-Host "--- end ---"
     }
     Write-Host ""
-    Read-Host "Press Enter to close"
+    Wait-SpzBuildClose
     exit 1
 }
 
@@ -406,5 +415,5 @@ if (Test-Path $LogFile -ErrorAction SilentlyContinue) {
     Write-Host "No log file was produced. Unity may have crashed before writing any output."
 }
 Write-Host ""
-Read-Host "Press Enter to close"
+Wait-SpzBuildClose
 exit 1
