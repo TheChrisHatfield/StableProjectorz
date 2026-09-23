@@ -93,7 +93,8 @@ if ($pkgCount -lt 10) {
     $resolveProc = Start-Process -FilePath $UnityExe -ArgumentList $resolveArgs -PassThru
     Wait-Process -Id $resolveProc.Id -Timeout 300 -ErrorAction SilentlyContinue
     if (-not $resolveProc.HasExited) {
-        Write-Host "ERROR: Package resolve Unity is still running; close it and retry."
+        Write-Host "ERROR: Package resolve Unity is still running after 5 minutes. Stopping it so the project lock is released."
+        try { Stop-Process -Id $resolveProc.Id -Force -ErrorAction SilentlyContinue } catch { }
         Read-Host "Press Enter to close"
         exit 1
     }
