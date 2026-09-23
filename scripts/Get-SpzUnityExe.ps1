@@ -1,5 +1,6 @@
-# Prints resolved Unity.exe path to stdout (for .bat fallbacks). Exit 0 on success, 1 on failure.
-$ErrorActionPreference = "Stop"
+# Prints resolved Unity.exe path to stdout. Exit 0 on success, 1 on failure.
+# Used by build_minimal_test.bat. build_for_testing.ps1 calls Resolve-SpzUnityEditor directly.
+$ErrorActionPreference = "Continue"
 $ProjectRoot = Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot "Resolve-SpzUnityEditor.ps1")
 try {
@@ -7,6 +8,7 @@ try {
     Write-Output $exe
     exit 0
 } catch {
-    Write-Error $_.Exception.Message
+    # Write-Error is terminating when ErrorAction is Stop, and that skips exit 1.
+    [Console]::Error.WriteLine($_.Exception.Message)
     exit 1
 }

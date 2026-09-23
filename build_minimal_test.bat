@@ -7,7 +7,7 @@ set "DEBUG_LOG=%~dp0build_debug.txt"
 set "LOG_TEMP=%~dp0build_log_temp.txt"
 
 if not defined UNITY_EXE (
-    for /f "usebackq delims=" %%U in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\Get-SpzUnityExe.ps1" 2^>nul`) do set "UNITY_EXE=%%U"
+    for /f "usebackq delims=" %%U in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\Get-SpzUnityExe.ps1"`) do set "UNITY_EXE=%%U"
 )
 if not defined UNITY_EXE (echo Unity not found. Set UNITY_EXE or build_for_testing.local.ps1 & pause & exit /b 1)
 if not exist "%UNITY_EXE%" (echo Unity not found at "%UNITY_EXE%" & pause & exit /b 1)
