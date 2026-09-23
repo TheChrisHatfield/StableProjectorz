@@ -24,6 +24,15 @@ if not defined UNITY_EXE (
 )
 if not defined UNITY_EXE (echo ERROR: Unity not found. Set UNITY_EXE or copy build_for_testing.local.ps1.example to build_for_testing.local.ps1 & pause & exit /b 1)
 if not exist "%UNITY_EXE%" (echo ERROR: Unity not found at "%UNITY_EXE%". & pause & exit /b 1)
+if not defined SPZ_BUILD_ALLOW_UNITY_RUNNING (
+    tasklist /FI "IMAGENAME eq Unity.exe" 2>nul | find /I "Unity.exe" >nul
+    if not errorlevel 1 (
+        echo ERROR: Unity is already running. Close it before building.
+        echo This fallback does not delete Library\lock while the Editor is open.
+        pause
+        exit /b 1
+    )
+)
 if exist "%~dp0Library\lock" del /f /q "%~dp0Library\lock" 2>nul
 echo Launching Unity...
 "%UNITY_EXE%" -batchmode -quit -projectPath "%PROJECT_PATH_NO_TRAIL%" -executeMethod BuildForTesting.BuildWin64 -logFile "%LOG_TEMP%"
