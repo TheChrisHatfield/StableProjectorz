@@ -37,51 +37,34 @@ function Resolve-SpzUnityEditor {
     }
 
     $editorVersion = Get-SpzProjectEditorVersion -ProjectRoot $ProjectRoot
-
-    if ($editorVersion) {
-        $hubExact = Join-Path ${env:ProgramFiles} "Unity\Hub\Editor\$editorVersion\Editor\Unity.exe"
-        if (Test-Path $hubExact -ErrorAction SilentlyContinue) {
-            return (Resolve-Path $hubExact).Path
-        }
-    }
-
-    $hubRoot = Join-Path ${env:ProgramFiles} "Unity\Hub\Editor"
-    if (Test-Path $hubRoot -ErrorAction SilentlyContinue) {
-        $installs = Get-ChildItem $hubRoot -Directory -ErrorAction SilentlyContinue |
-            Sort-Object { $_.Name } -Descending
-
-        if ($editorVersion) {
-            foreach ($dir in $installs) {
-                if ($dir.Name -ne $editorVersion) { continue }
-                $exe = Join-Path $dir.FullName "Editor\Unity.exe"
-                if (Test-Path $exe -ErrorAction SilentlyContinue) {
-                    return (Resolve-Path $exe).Path
-                }
-            }
-
-            $major = ($editorVersion -split '\.')[0]
-            foreach ($dir in $installs) {
-                if ($dir.Name -notlike "$major*") { continue }
-                $exe = Join-Path $dir.FullName "Editor\Unity.exe"
-                if (Test-Path $exe -ErrorAction SilentlyContinue) {
-                    Write-Warning "Using Unity $($dir.Name); project requests $editorVersion (install matching version via Hub when possible)."
-                    return (Resolve-Path $exe).Path
-                }
-            }
-        }
-
-        foreach ($dir in $installs) {
-            $exe = Join-Path $dir.FullName "Editor\Unity.exe"
-            if (Test-Path $exe -ErrorAction SilentlyContinue) {
-                Write-Warning "Using newest Hub Unity $($dir.Name) (no ProjectVersion match)."
-                return (Resolve-Path $exe).Path
-            }
-        }
-    }
-
-    $hint = if ($editorVersion) { " Install Unity $editorVersion via Unity Hub." } else { "" }
-    throw @"
-Unity Editor not found.$hint
+    if (-not $editorVersion) {
+        throw @"
+ProjectSettings\ProjectVersion.txt has no m_EditorVersion.
 Set environment variable UNITY_EXE, or copy build_for_testing.local.ps1.example to build_for_testing.local.ps1 and set `$SpzUnityEditorPath.
+"@
+    }
+
+    # Exact Hub folder only. A different editor version rewrites ProjectSettings / Library.
+    $hubRoots = @()
+    foreach ($envName in @("ProgramW6432", "ProgramFiles", "ProgramFiles(x86)")) {
+        $base = [Environment]::GetEnvironmentVariable($envName)
+        if ($base) {
+            $hubRoots += (Join-Path $base "Unity\Hub\Editor")
+        }
+    }
+    $seen = @{}
+    foreach ($hubRoot in $hubRoots) {
+        if ($seen.ContainsKey($hubRoot)) { continue }
+        $seen[$hubRoot] = $true
+        $hubExact = Join-Path $hubRoot "$editorVersion\Editor\Unity.exe"
+        if (Test-Path -LiteralPath $hubExact -PathType Leaf -ErrorAction SilentlyContinue) {
+            return (Resolve-Path -LiteralPath $hubExact).Path
+        }
+    }
+
+    throw @"
+Unity $editorVersion was not found under Unity Hub (Program Files).
+Install that exact editor version. A different Unity version is not used automatically.
+Or set UNITY_EXE, or copy build_for_testing.local.ps1.example to build_for_testing.local.ps1 and set `$SpzUnityEditorPath.
 "@
 }
