@@ -20,7 +20,7 @@ set "PROJECT_PATH_NO_TRAIL=%PROJECT_PATH_NO_TRAIL:~0,-1%"
 set "LOG_TEMP=%~dp0build_log_temp.txt"
 set "LOG_FILE=%~dp0build_output.txt"
 if not defined UNITY_EXE (
-    for /f "usebackq delims=" %%U in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\Get-SpzUnityExe.ps1" 2^>nul`) do set "UNITY_EXE=%%U"
+    for /f "usebackq delims=" %%U in (`call "%~dp0scripts\resolve_unity_editor.cmd"`) do set "UNITY_EXE=%%U"
 )
 if not defined UNITY_EXE (echo ERROR: Unity not found. Set UNITY_EXE or copy build_for_testing.local.ps1.example to build_for_testing.local.ps1 & pause & exit /b 1)
 if not exist "%UNITY_EXE%" (echo ERROR: Unity not found at "%UNITY_EXE%". & pause & exit /b 1)
@@ -40,9 +40,8 @@ if exist "%~dp0Build_IL2CPP\StableProjectorz.exe" (
 echo ERROR: No exe produced. Check build_output.txt for errors.
 echo.
 if exist "%LOG_FILE%" (
-    echo --- Last lines of build_output.txt ---
-    powershell -NoProfile -Command "Get-Content '%LOG_FILE%' -Tail 10" 2>nul
-    echo --- end ---
+    echo Full log: %LOG_FILE%
+    echo PowerShell is unavailable, so this window does not print a log tail.
 )
 pause
 exit /b 1
