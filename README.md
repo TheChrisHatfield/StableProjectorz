@@ -16,11 +16,12 @@ Our Discord server: [here](https://discord.gg/aWbnX2qan2)
 </p>
 
 ## 🛠️ Setup & Building
-*   **Requirements:** Unity 6 (6000.x). Unity Personal is free and includes the full Editor.
+*   **Requirements:** Unity 6 (6000.x). Unity Personal is free and includes the full Editor. Install the **Windows Build Support (IL2CPP)** module in Unity Hub for the same editor version as `ProjectSettings/ProjectVersion.txt`.
 *   **Codebase:** Located entirely in `Assets/_gm`.
-*   **Build:** Press `Ctrl + Shift + B` → **Build and Run**.
+*   **Windows one-click build:** Double-click **`build_for_testing.bat`** in the repo root (same folder as `Assets`). First run often takes 10–30 minutes. Output: `Build_IL2CPP\StableProjectorz.exe`. Full steps and troubleshooting: **[BUILD_INSTRUCTIONS.md](BUILD_INSTRUCTIONS.md)**.
+*   **Build in the Editor:** Open the project in Unity Hub → `Ctrl + Shift + B` → **Build and Run**.
 *   **Note:** Keep "Development Build" unchecked for performance.
-*   **License:** If you see "No valid Unity Editor license found", open this project once in Unity (Hub → Open), let it load, then close. That activates your free Personal license so builds (including command-line) work.
+*   **License:** If you see "No valid Unity Editor license found", open this project once in Unity (Hub → Open), let it load, then close. That activates your free Personal license so `build_for_testing.bat` and other builds work.
 
 ## 📝 Contribution Rules
 1.  **Nested Prefabs:** Keep UI separated in Prefabs. Don't modify prefabs externally. Save your work directly inside a deepest prefab itself, to prevent merge conflicts.

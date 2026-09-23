@@ -1,9 +1,10 @@
 @echo off
 cd /d "%~dp0"
 
-REM Launches PowerShell build script (progress bar + ~15s heartbeat while Unity runs).
-REM Double-click or: build_for_testing.bat [clean]
-REM If PowerShell not found, falls back to running Unity directly (no heartbeat).
+REM One-click IL2CPP build -> Build_IL2CPP\StableProjectorz.exe
+REM User guide: BUILD_INSTRUCTIONS.md (section "Using build_for_testing.bat")
+REM Double-click, or: build_for_testing.bat [clean]
+REM If PowerShell is missing, falls back to Unity directly (no progress bar).
 
 if /i "%~1"=="clean" (
     powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0build_for_testing.ps1" -Clean
