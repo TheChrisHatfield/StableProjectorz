@@ -17,11 +17,20 @@ set "LOCAL=%ROOT%\build_for_testing.local.ps1"
 if exist "%LOCAL%" (
   for /f "usebackq tokens=2 delims='" %%P in (`findstr /C:"$SpzUnityEditorPath" "%LOCAL%"`) do (
     if /I "%%~nxP"=="Unity.exe" (
-      if exist "%%~P" (
-        echo %%~P
-        exit /b 0
+      echo %%~P | findstr /C:":" >nul
+      if not errorlevel 1 (
+        if exist "%%~P" (
+          echo %%~P
+          exit /b 0
+        )
+        echo WARNING: local override is not an existing Unity.exe: %%~P 1>&2
+      ) else (
+        if exist "%ROOT%\%%~P" (
+          echo %ROOT%\%%~P
+          exit /b 0
+        )
+        echo WARNING: local override is not an existing Unity.exe: %ROOT%\%%~P 1>&2
       )
-      echo WARNING: local override is not an existing Unity.exe: %%~P 1>&2
     )
   )
 )

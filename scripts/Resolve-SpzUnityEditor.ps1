@@ -15,6 +15,15 @@ function Get-SpzProjectEditorVersion {
     return $null
 }
 
+function ConvertTo-SpzRootedPath {
+    param([string]$ProjectRoot, [string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $null }
+    if (-not [System.IO.Path]::IsPathRooted($Path)) {
+        return (Join-Path $ProjectRoot $Path)
+    }
+    return $Path
+}
+
 function Test-SpzUnityExecutable {
     param([string]$Path)
     if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
@@ -42,6 +51,7 @@ function Resolve-SpzUnityEditor {
     }
 
     if ($overridePath) {
+        $overridePath = ConvertTo-SpzRootedPath -ProjectRoot $ProjectRoot -Path $overridePath
         if (Test-SpzUnityExecutable $overridePath) {
             return (Resolve-Path -LiteralPath $overridePath).Path
         }
@@ -49,10 +59,11 @@ function Resolve-SpzUnityEditor {
     }
 
     if ($env:UNITY_EXE) {
-        if (Test-SpzUnityExecutable $env:UNITY_EXE) {
-            return (Resolve-Path -LiteralPath $env:UNITY_EXE).Path
+        $envUnity = ConvertTo-SpzRootedPath -ProjectRoot $ProjectRoot -Path $env:UNITY_EXE
+        if (Test-SpzUnityExecutable $envUnity) {
+            return (Resolve-Path -LiteralPath $envUnity).Path
         }
-        Write-Warning "UNITY_EXE is '$env:UNITY_EXE', which is not an existing Unity.exe. Ignoring it."
+        Write-Warning "UNITY_EXE is '$envUnity', which is not an existing Unity.exe. Ignoring it."
     }
 
     $editorVersion = Get-SpzProjectEditorVersion -ProjectRoot $ProjectRoot
