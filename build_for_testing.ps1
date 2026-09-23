@@ -60,9 +60,13 @@ if ($Clean) {
     $backupDir = Join-Path $BuildDir "StableProjectorz_BackUpThisFolder_ButDontShipItWithYourGame"
     if (Test-Path $dataDir) { Remove-Item $dataDir -Recurse -Force -ErrorAction SilentlyContinue }
     if (Test-Path $backupDir) { Remove-Item $backupDir -Recurse -Force -ErrorAction SilentlyContinue }
-    Write-Host "Clean: removed Data and BackUp folders."
+    Write-Host "Clean: removed Data and BackUp folders before Unity starts."
 } else {
-    Write-Host "Keeping existing Data. Use -Clean for full clean rebuild."
+    # BuildForTesting.BuildWin64 forces a clean whenever Unity is in batch mode.
+    # WebUI folders under Build_IL2CPP are preserved by that clean. -Clean only
+    # deletes Data/BackUp earlier, so a locked exe can be removed before Unity opens.
+    Write-Host "Batch mode cleans Build_IL2CPP inside Unity (WebUI folders are kept)."
+    Write-Host "Use -Clean to delete Data and BackUp before Unity starts."
 }
 
 if (Test-Path $LockFile -ErrorAction SilentlyContinue) {
