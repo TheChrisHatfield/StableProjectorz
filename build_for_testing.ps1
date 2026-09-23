@@ -121,7 +121,10 @@ if (Test-Path $LogRef -ErrorAction SilentlyContinue) {
     $refSize = (Get-Item $LogRef -ErrorAction SilentlyContinue).Length
 }
 $estTotalSec = 25 * 60
-$maxWaitMin = 40
+# Kill only when the Unity log stops growing, or when an absolute cap is hit.
+# A fixed 40-minute kill was stopping live IL2CPP builds on slower machines.
+$stallKillMin = 20
+$absoluteCapMin = 180
 
 function Test-BuildSucceededFromLog {
     param([string]$Path)
@@ -188,12 +191,28 @@ function RunUnityBuild {
     $start = Get-Date
     $heartbeat = 0
     $code = $null
+    $lastLogSize = -1
+    $lastGrowth = Get-Date
 
     while ($p -and -not $p.HasExited) {
         $elapsedMin = ((Get-Date) - $start).TotalMinutes
-        if ($elapsedMin -ge $maxWaitMin) {
+
+        $curSize = 0
+        if (Test-Path $LogTemp -ErrorAction SilentlyContinue) {
+            $curSize = (Get-Item $LogTemp -ErrorAction SilentlyContinue).Length
+        }
+        if ($curSize -ne $lastLogSize) {
+            $lastLogSize = $curSize
+            $lastGrowth = Get-Date
+        }
+        $stallMin = ((Get-Date) - $lastGrowth).TotalMinutes
+        if ($stallMin -ge $stallKillMin -or $elapsedMin -ge $absoluteCapMin) {
             Write-Host ""
-            Write-Host "  (Timeout: $maxWaitMin min - Unity still running; stopping process. Build did not finish in time.)"
+            if ($elapsedMin -ge $absoluteCapMin) {
+                Write-Host "  (Timeout: $absoluteCapMin min absolute cap - stopping Unity.)"
+            } else {
+                Write-Host "  (Timeout: Unity log has not grown for $stallKillMin min - stopping process.)"
+            }
             try {
                 if (-not $p.HasExited) {
                     $p.Kill()
@@ -204,11 +223,6 @@ function RunUnityBuild {
             }
             $code = 124
             break
-        }
-
-        $curSize = 0
-        if (Test-Path $LogTemp -ErrorAction SilentlyContinue) {
-            $curSize = (Get-Item $LogTemp -ErrorAction SilentlyContinue).Length
         }
 
         if ($refSize -gt 1000 -and $curSize -gt 0) {
