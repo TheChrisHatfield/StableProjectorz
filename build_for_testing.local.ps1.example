@@ -1,8 +1,5 @@
 # Machine-specific Unity path (optional).
 # Copy this file to: build_for_testing.local.ps1  (that file is gitignored — not uploaded to GitHub)
 #
-# Uncomment and set your Editor executable:
-# $SpzUnityEditorPath = 'D:\PROGRAM_FILES\UNITY\Editor\Unity.exe'
-#
-# Or use Hub layout:
-# $SpzUnityEditorPath = 'C:\Program Files\Unity\Hub\Editor\6000.3.6f1\Editor\Unity.exe'
+# Use single quotes. The value must be an existing file named Unity.exe.
+# $SpzUnityEditorPath = 'C:\Path\To\Your\Unity\Editor\Unity.exe'

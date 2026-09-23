@@ -15,6 +15,13 @@ function Get-SpzProjectEditorVersion {
     return $null
 }
 
+function Test-SpzUnityExecutable {
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf -ErrorAction SilentlyContinue)) { return $false }
+    return ([System.IO.Path]::GetFileName($Path) -eq "Unity.exe")
+}
+
 function Resolve-SpzUnityEditor {
     param(
         [Parameter(Mandatory = $true)]
@@ -24,16 +31,28 @@ function Resolve-SpzUnityEditor {
     $ProjectRoot = $ProjectRoot.TrimEnd('\', '/')
 
     $localOverride = Join-Path $ProjectRoot "build_for_testing.local.ps1"
-    if (Test-Path $localOverride -ErrorAction SilentlyContinue) {
-        . $localOverride
+    $overridePath = $null
+    if (Test-Path -LiteralPath $localOverride -PathType Leaf -ErrorAction SilentlyContinue) {
+        # Child scope so the override file cannot replace $ProjectRoot or other locals.
+        $overridePath = & {
+            $SpzUnityEditorPath = $null
+            . $localOverride
+            $SpzUnityEditorPath
+        }
     }
 
-    if ($SpzUnityEditorPath -and (Test-Path $SpzUnityEditorPath -ErrorAction SilentlyContinue)) {
-        return (Resolve-Path $SpzUnityEditorPath).Path
+    if ($overridePath) {
+        if (Test-SpzUnityExecutable $overridePath) {
+            return (Resolve-Path -LiteralPath $overridePath).Path
+        }
+        Write-Warning "build_for_testing.local.ps1 set SpzUnityEditorPath to '$overridePath', which is not an existing Unity.exe. Ignoring it."
     }
 
-    if ($env:UNITY_EXE -and (Test-Path $env:UNITY_EXE -ErrorAction SilentlyContinue)) {
-        return (Resolve-Path $env:UNITY_EXE).Path
+    if ($env:UNITY_EXE) {
+        if (Test-SpzUnityExecutable $env:UNITY_EXE) {
+            return (Resolve-Path -LiteralPath $env:UNITY_EXE).Path
+        }
+        Write-Warning "UNITY_EXE is '$env:UNITY_EXE', which is not an existing Unity.exe. Ignoring it."
     }
 
     $editorVersion = Get-SpzProjectEditorVersion -ProjectRoot $ProjectRoot
